@@ -56,6 +56,9 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   top: var(--sp-l);
   display: grid;
   gap: var(--sp-l);
+  overflow-y: auto;
+  max-height: calc(100vh - var(--sp-xl));
+  scrollbar-width: thin;
 }
 
 /* --- guide switcher --- */
@@ -306,6 +309,24 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 }
 .rw-app .docs-article blockquote > :first-child { margin-top: 0; }
 .rw-app .docs-article blockquote > :last-child { margin-bottom: 0; }
+.rw-app .docs-article table {
+  width: 100%;
+  max-width: var(--measure-wide);
+  border-spacing: 0;
+  border-collapse: collapse;
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.rw-app .docs-article th,
+.rw-app .docs-article td {
+  padding: var(--sp-s);
+  border: 1px solid var(--seam-soft);
+  color: var(--ink-2);
+  text-align: left;
+  vertical-align: top;
+}
+.rw-app .docs-article th { background: var(--well); color: var(--ink); }
+.rw-app .docs-article img { max-width: 100%; height: auto; }
 .rw-app .docs-screenshot { max-width: var(--measure-wide); margin-block: var(--sp-xl); }
 .rw-app .docs-screenshot picture { display: block; }
 .rw-app .docs-screenshot picture[data-docs-screenshot-theme="dark"] { display: none; }
@@ -356,13 +377,13 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   letter-spacing: -.01em;
 }
 .rw-app .docs-cta p { margin: 3px 0 0; color: var(--ink-3); font-size: .78rem; }
-.rw-app .docs-cta-actions { display: flex; flex: none; gap: var(--sp-s); }
+.rw-app .docs-cta-actions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-s); }
 .rw-app .docs-cta .btn { text-decoration: none; }
 
 /* --- responsive --- */
 @media (max-width: 860px) {
   .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
-  .rw-app .docs-rails { position: static; gap: var(--sp-s); }
+  .rw-app .docs-rails { position: static; overflow: visible; max-height: none; gap: var(--sp-s); }
   /* Both rails become horizontal strips here, so the switcher drops its card
      chrome and the two read as one navigation zone rather than two widgets. */
   .rw-app .guide-nav { border: 0; border-radius: 0; background: none; }
@@ -437,6 +458,7 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
     padding: var(--sp-m);
     overflow-x: visible;
   }
+  .rw-app .docs-article table { display: block; overflow-x: auto; }
   /* No hanging indent for wrapped lines: `text-indent` on a `pre` applies once
      to the block, not per line, so it shifts every real line of the command as
      well and invents nesting that is not in the source. The trailing `\` is

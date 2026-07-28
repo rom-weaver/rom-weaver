@@ -16,6 +16,7 @@ const workflowMockState = {
 };
 
 let mountedRoot = null;
+const originalFetch = globalThis.fetch;
 
 const createDeferred = () => {
   let resolve;
@@ -230,11 +231,30 @@ beforeEach(() => {
   workflowMockState.originalStateOverrides = {};
   workflowMockState.runDeferred = createDeferred();
   workflowMockState.runCalls = 0;
+  window.history.replaceState(null, "", "/create");
 });
 
 afterEach(() => {
   mountedRoot?.unmount?.();
   mountedRoot = null;
+  globalThis.fetch = originalFetch;
+});
+
+test("guided Create URL starts and loads the sample tutorial", async () => {
+  window.history.replaceState(null, "", "/create?guide=create");
+  const requested = [];
+  globalThis.fetch = async (url) => {
+    requested.push(String(url));
+    return new Response(new Uint8Array([0, 1, 2, 3]));
+  };
+
+  mount(createElement(CreatePatchForm, withCreateWorkflowMock()));
+
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-dialog")?.textContent || "")
+    .toContain("loading two tiny ROMs");
+  await expect.poll(() => requested.length).toBe(2);
+  expect(requested).toEqual(["/hello-world.nes", "/modified-world.nes"]);
 });
 
 test("create output edits stay enabled while queued and cancel the queued run", async () => {

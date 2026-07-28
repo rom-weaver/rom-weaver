@@ -27,6 +27,7 @@ const docsScreenshotNames = [
   "create-mobile-dark.png",
   "create-mobile-light.png",
   "first-sample-hello-world.png",
+  "first-sample-modified-world.png",
   "first-sample-modified-rom.png",
   "weave-desktop-dark.png",
   "weave-desktop-light.png",

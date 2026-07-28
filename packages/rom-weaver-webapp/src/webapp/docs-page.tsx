@@ -69,10 +69,10 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
         <a href="/weave">{SITE_NAME}</a>
         <span aria-hidden="true">/</span>
         {hub ? (
-          <span aria-current="page">Guides</span>
+          <span aria-current="page">Documentation</span>
         ) : (
           <>
-            <a href="/docs">Guides</a>
+            <a href="/docs">Documentation</a>
             <span aria-hidden="true">/</span>
             <span aria-current="page">{route.label}</span>
           </>
@@ -80,8 +80,8 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
       </nav>
       <div className="docs-layout">
         <div className="docs-rails">
-          <nav aria-label="Guides" className="guide-nav">
-            <span className="guide-nav-title">Guides</span>
+          <nav aria-label="Documentation" className="guide-nav">
+            <span className="guide-nav-title">Documentation</span>
             <ul className="guide-nav-list">
               {DOC_ROUTES.map((entry) => (
                 <li key={entry.slug}>
@@ -105,15 +105,18 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
           />
           <aside className="docs-cta">
             <div>
-              <h2>Try it in the browser</h2>
-              <p>Nothing uploads. rom-weaver reads and writes your files on this device.</p>
+              <h2>Try rom-weaver</h2>
+              <p>Use a guided browser sample, or copy a CLI install command.</p>
             </div>
             <div className="docs-cta-actions">
-              <a className="btn primary" href="/weave">
-                Apply patches
+              <a className="btn primary" href="/weave?guide=apply">
+                Guided Apply
               </a>
-              <a className="btn" href="/create">
-                Create a patch
+              <a className="btn" href="/create?guide=create">
+                Guided Create
+              </a>
+              <a className="btn" href="/docs/cli#install">
+                Install the CLI
               </a>
             </div>
           </aside>

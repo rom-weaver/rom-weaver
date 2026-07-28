@@ -29,6 +29,7 @@ const docsScreenshotNames = [
   "create-mobile-dark.png",
   "create-mobile-light.png",
   "first-sample-hello-world.png",
+  "first-sample-modified-world.png",
   "first-sample-modified-rom.png",
   "weave-desktop-dark.png",
   "weave-desktop-light.png",
@@ -62,6 +63,9 @@ for (const url of [
   "https://rom-weaver.com/weave",
   "https://rom-weaver.com/create",
   "https://rom-weaver.com/docs",
+  "https://rom-weaver.com/docs/cli",
+  "https://rom-weaver.com/docs/self-hosting",
+  "https://rom-weaver.com/docs/architecture",
   "https://github.com/rom-weaver/rom-weaver",
 ]) {
   assertIncludes(llmsTxt, `](${url})`, "llms.txt links");
@@ -168,24 +172,26 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
   const legalPage = route.slug === "docs/notices" || route.slug === "docs/privacy";
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);
-  assertIncludes(docsHtml, 'href="/weave"', `${route.slug} patcher link`);
-  assertIncludes(docsHtml, 'href="/create"', `${route.slug} creator link`);
+  assertIncludes(docsHtml, 'href="/weave?guide=apply"', `${route.slug} guided Apply link`);
+  assertIncludes(docsHtml, 'href="/create?guide=create"', `${route.slug} guided Create link`);
+  assertIncludes(docsHtml, 'href="/docs/cli#install"', `${route.slug} CLI installation link`);
   assertIncludes(docsHtml, `href="/${route.slug}#`, `${route.slug} in-page links`);
   assertIncludes(docsHtml, 'aria-label="On this page"', `${route.slug} section rail`);
   for (const section of route.sections) {
     assertIncludes(docsHtml, `href="/${route.slug}#${section.id}"`, `${route.slug} rail link for ${section.id}`);
     assertIncludes(docsHtml, `<h2 id="${section.id}"`, `${route.slug} heading for rail entry ${section.id}`);
   }
-  // Guide links are authored repository-relative; every one of them must have
+  // Documentation links are authored repository-relative; every one of them must have
   // been rewritten to a route or an absolute repository URL.
   const unrewritten = docsHtml.match(/href="(?!https?:)[^"]*\.md(?:#[^"]*)?"/g);
   if (unrewritten) throw new Error(`${route.slug} has unrewritten Markdown links: ${unrewritten.join(", ")}`);
-  // Guide body links to the app must be root-relative, so beta, nightly, and PR
+  // Documentation links to the app must be root-relative, so beta, nightly, and PR
   // previews keep the reader on the deployment they are already reading. Only
   // the page metadata below may name the production origin.
   const crossChannel = route.html.match(/href="https:\/\/rom-weaver\.com[^"]*"/g);
   if (crossChannel) throw new Error(`${route.slug} links to production: ${crossChannel.join(", ")}`);
-  const minimumWords = route.slug === "docs" || legalPage ? 250 : 500;
+  const guide = route.source.startsWith("docs/guides/");
+  const minimumWords = guide ? (route.slug === "docs" || legalPage ? 250 : 500) : 150;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {
     throw new Error(`${route.slug} has ${wordCount} visible words; expected at least ${minimumWords}`);

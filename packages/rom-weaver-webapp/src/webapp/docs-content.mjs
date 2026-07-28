@@ -6,7 +6,7 @@ import { DOC_SOURCES, SITE_ORIGIN } from "./docs-routing.mjs";
 // tooling sits outside the webapp's shipped dependency graph, so anything
 // imported here is absent from the generated attribution inventories.
 
-const REPOSITORY_DOCS_URL = "https://github.com/rom-weaver/rom-weaver/blob/main/docs";
+const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver/blob/main";
 
 /**
  * @typedef {{ id: string, label: string }} DocSection
@@ -80,30 +80,38 @@ const headingSlug = (value) =>
  * PR preview keeps the reader on that deployment instead of bouncing them to
  * production.
  *
- * @param {string} href @param {string} slug
+ * @param {string} href @param {string} slug @param {string} sourceFile
  */
-const rewriteDocHref = (href, slug) => {
-  for (const route of DOC_SOURCES) {
-    if (href === route.file || href.startsWith(`${route.file}#`)) {
-      return `/${route.slug}${href.slice(route.file.length)}`;
-    }
-  }
+const rewriteDocHref = (href, slug, sourceFile) => {
   if (href.startsWith(`${SITE_ORIGIN}/`)) return href.slice(SITE_ORIGIN.length);
   if (href.startsWith("#")) return `/${slug}${href}`;
-  if (href === "../cli.md" || href.startsWith("../cli.md#")) {
-    return `${REPOSITORY_DOCS_URL}/cli.md${href.slice("../cli.md".length)}`;
-  }
-  if (href === "../README.md" || href.startsWith("../README.md#")) {
-    return `${REPOSITORY_DOCS_URL}/README.md${href.slice("../README.md".length)}`;
+  if (/^(?:[a-z]+:|\/\/)/i.test(href)) return href;
+
+  const resolved = new URL(href, `https://repository.invalid/docs/${sourceFile}`);
+  if (!resolved.pathname.endsWith(".md")) return href;
+  const repositoryPath = resolved.pathname.slice(1);
+  const docsPath = repositoryPath.startsWith("docs/") ? repositoryPath.slice("docs/".length) : "";
+  const route = DOC_SOURCES.find((entry) => entry.file === docsPath);
+  if (route) return `/${route.slug}${resolved.hash}`;
+  return `${REPOSITORY_URL}/${repositoryPath}${resolved.hash}`;
+};
+
+/** @param {string} href @param {string} sourceFile */
+const rewriteDocImage = (href, sourceFile) => {
+  if (/^(?:[a-z]+:|\/\/|data:)/i.test(href)) return href;
+  const resolved = new URL(href, `https://repository.invalid/docs/${sourceFile}`);
+  const repositoryPath = resolved.pathname.slice(1);
+  if (repositoryPath.startsWith("packages/rom-weaver-webapp/design/")) {
+    return `/docs/screenshots/${repositoryPath.split("/").at(-1)}`;
   }
   return href;
 };
 
 /**
- * @param {string} markdown @param {string} slug
+ * @param {string} markdown @param {string} slug @param {string} sourceFile
  * @returns {{ html: string, sections: DocSection[] }}
  */
-const renderMarkdown = (markdown, slug) => {
+const renderMarkdown = (markdown, slug, sourceFile) => {
   const seen = new Map();
   /** @type {DocSection[]} */
   const sections = [];
@@ -124,7 +132,8 @@ const renderMarkdown = (markdown, slug) => {
       },
     },
     walkTokens(token) {
-      if (token.type === "link") token.href = rewriteDocHref(token.href, slug);
+      if (token.type === "link") token.href = rewriteDocHref(token.href, slug, sourceFile);
+      if (token.type === "image") token.href = rewriteDocImage(token.href, sourceFile);
     },
   });
   return { html: parser.parse(stripDoctoc(markdown), { async: false }), sections };
@@ -143,14 +152,14 @@ const createDocRoute = ({ file, label, slug }, markdown) => {
     .map(stripMarkdown)
     .find((block) => block && !block.startsWith("#") && !block.startsWith("<!--"));
   if (!description) throw new Error(`${file} must start with a descriptive paragraph`);
-  const { html, sections } = renderMarkdown(markdown, slug);
+  const { html, sections } = renderMarkdown(markdown, slug, file);
   return Object.freeze({
     description,
     html,
     label,
     sections: Object.freeze(sections),
     slug,
-    source: `docs/guides/${file}`,
+    source: `docs/${file}`,
     title: stripMarkdown(title),
   });
 };

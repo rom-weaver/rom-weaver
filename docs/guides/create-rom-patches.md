@@ -31,10 +31,10 @@ insisting you write down which original you used.
 
 ## Practice on the sample first
 
-No pair of files handy? Open the
-[Create page](https://rom-weaver.com/create) and choose **Start guided
-Create**. It loads two tiny practice ROMs, then walks through the original,
-modified, file picker, and output controls.
+No pair of files handy? Open
+[guided Create](https://rom-weaver.com/create?guide=create). It loads two tiny
+practice ROMs, then walks through the original, modified, file picker, and
+output controls.
 
 Want the files without the guide? Choose **Download the sample ROMs** on that
 page, or [download `first-create.zip`](https://rom-weaver.com/first-create.zip)

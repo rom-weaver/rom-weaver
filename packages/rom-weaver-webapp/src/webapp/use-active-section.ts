@@ -16,6 +16,10 @@ const useActiveSection = (sections: readonly { id: string }[], active: boolean):
     let frame = 0;
     const readActiveSection = () => {
       frame = 0;
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+        setActiveId(sections.at(-1)?.id ?? "");
+        return;
+      }
       let current = "";
       for (const { id } of sections) {
         const heading = document.getElementById(id);

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { fireEvent, render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import type {
   DialogController,
@@ -108,6 +108,9 @@ const renderView = ({
 };
 
 describe("apply workflow view - empty bench", () => {
+  beforeEach(() => window.history.replaceState(null, "", "/weave"));
+  afterEach(() => vi.unstubAllGlobals());
+
   it("renders only the 0x01 hero", () => {
     const { container } = renderView({ ui: createEmptyPatcherUiState() });
     // 0x01 hero with the stable unified-input id
@@ -139,7 +142,23 @@ describe("apply workflow view - empty bench", () => {
     const [files] = onUnifiedDrop.mock.calls[0] as [File[]];
     expect(fetchMock).toHaveBeenCalledWith("/first-weave.zip");
     expect(files[0]?.name).toBe("first-weave.zip");
-    vi.unstubAllGlobals();
+  });
+
+  it("starts the sample tutorial from a guided Apply URL", async () => {
+    window.history.replaceState(null, "", "/weave?guide=apply");
+    const onUnifiedDrop = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        blob: () => Promise.resolve(new Blob(["sample"], { type: "application/zip" })),
+        ok: true,
+      }),
+    );
+
+    renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
+
+    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
+    await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
   });
 
   it("shapes an identifying archive like the patch card it will most likely become", () => {

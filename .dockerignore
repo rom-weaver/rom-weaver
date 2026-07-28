@@ -12,8 +12,8 @@ third_party
 
 # Not build inputs. These change often (CI, most docs, and browser-test
 # commits), and anything left here invalidates the `COPY . .` layer and with it
-# the whole wasm+cargo build. The Markdown usage guides are an exception: Vite
-# renders them into the webapp. Root *.md stays: several are read at build time
+# the whole wasm+cargo build. Published Markdown is an exception: Vite renders
+# it into the webapp. Root *.md stays: several are read at build time
 # (README as the workspace `readme`, CHANGELOG by the webapp version script's
 # fallbacks).
 #
@@ -25,4 +25,12 @@ third_party
 docs/*
 !docs/guides
 !docs/guides/**
+!docs/ARCHITECTURE.md
+!docs/cli.md
+!docs/development.md
+!docs/env-vars.md
+!docs/references.md
+!docs/self-hosting.md
+!docs/webapp-integration.md
+!docs/webapp-runtime-status.md
 packages/rom-weaver-webapp/tests

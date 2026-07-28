@@ -12,13 +12,25 @@ const SITE_ORIGIN = "https://rom-weaver.com";
 
 /** @type {readonly DocSource[]} */
 const DOC_SOURCES = Object.freeze([
-  Object.freeze({ file: "README.md", label: "Overview", slug: "docs" }),
-  Object.freeze({ file: "apply-rom-patches.md", label: "Apply patches", slug: "docs/apply-rom-patches" }),
-  Object.freeze({ file: "create-rom-patches.md", label: "Create patches", slug: "docs/create-rom-patches" }),
-  Object.freeze({ file: "fix-checksum-errors.md", label: "Fix checksum errors", slug: "docs/fix-checksum-errors" }),
-  Object.freeze({ file: "patch-formats.md", label: "Patch formats", slug: "docs/patch-formats" }),
-  Object.freeze({ file: "notices.md", label: "Notices", slug: "docs/notices" }),
-  Object.freeze({ file: "privacy.md", label: "Privacy", slug: "docs/privacy" }),
+  Object.freeze({ file: "guides/README.md", label: "Overview", slug: "docs" }),
+  Object.freeze({ file: "guides/apply-rom-patches.md", label: "Apply patches", slug: "docs/apply-rom-patches" }),
+  Object.freeze({ file: "guides/create-rom-patches.md", label: "Create patches", slug: "docs/create-rom-patches" }),
+  Object.freeze({
+    file: "guides/fix-checksum-errors.md",
+    label: "Fix checksum errors",
+    slug: "docs/fix-checksum-errors",
+  }),
+  Object.freeze({ file: "guides/patch-formats.md", label: "Patch formats", slug: "docs/patch-formats" }),
+  Object.freeze({ file: "cli.md", label: "CLI and installation", slug: "docs/cli" }),
+  Object.freeze({ file: "self-hosting.md", label: "Self-hosting", slug: "docs/self-hosting" }),
+  Object.freeze({ file: "webapp-integration.md", label: "Webapp integration", slug: "docs/webapp-integration" }),
+  Object.freeze({ file: "env-vars.md", label: "Environment variables", slug: "docs/environment-variables" }),
+  Object.freeze({ file: "webapp-runtime-status.md", label: "Webapp status", slug: "docs/webapp-status" }),
+  Object.freeze({ file: "ARCHITECTURE.md", label: "Architecture", slug: "docs/architecture" }),
+  Object.freeze({ file: "development.md", label: "Development", slug: "docs/development" }),
+  Object.freeze({ file: "references.md", label: "References", slug: "docs/references" }),
+  Object.freeze({ file: "guides/notices.md", label: "Notices", slug: "docs/notices" }),
+  Object.freeze({ file: "guides/privacy.md", label: "Privacy", slug: "docs/privacy" }),
 ]);
 
 /**

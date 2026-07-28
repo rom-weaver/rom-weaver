@@ -32,6 +32,18 @@ type SampleTutorialAction =
   | "reorder"
   | "swap"
   | "toggle";
+
+const useGuidedSampleStart = (guide: "apply" | "create", onStart: () => void) => {
+  const onStartRef = useRef(onStart);
+  const startedRef = useRef(false);
+  onStartRef.current = onStart;
+  useEffect(() => {
+    if (startedRef.current || new URLSearchParams(window.location.search).get("guide") !== guide) return;
+    startedRef.current = true;
+    onStartRef.current();
+  }, [guide]);
+};
+
 type SampleTutorialStep = {
   actions?: readonly (readonly [action: SampleTutorialAction, label: string])[];
   body: string;
@@ -455,4 +467,4 @@ const SampleTutorial = ({
   return createPortal(layer, portalTarget);
 };
 
-export { SampleTutorial, SampleTutorialStart, type SampleTutorialStep };
+export { SampleTutorial, SampleTutorialStart, type SampleTutorialStep, useGuidedSampleStart };

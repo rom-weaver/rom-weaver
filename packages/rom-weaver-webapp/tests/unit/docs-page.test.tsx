@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { render, screen } from "@testing-library/react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
 import { DocsPage } from "../../src/webapp/docs-page.tsx";
 
@@ -31,6 +31,7 @@ describe("DocsPage", () => {
       <link rel="canonical" href="">
     `;
   });
+  afterEach(() => vi.restoreAllMocks());
 
   it("restores docs metadata when its kept-alive panel becomes active again", () => {
     const { rerender } = render(<DocsPage active slug="docs" />);
@@ -67,6 +68,16 @@ describe("DocsPage", () => {
     expect(screen.queryByRole("heading", { name: "Table of contents" })).toBeNull();
   });
 
+  it("marks the final section current when the document reaches its scroll limit", async () => {
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(1_000);
+    vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(1_600);
+    render(<DocsPage active slug="docs/create-rom-patches" />);
+
+    const links = [...screen.getByRole("navigation", { name: "On this page" }).querySelectorAll("a")];
+    await vi.waitFor(() => expect(links.at(-1)?.getAttribute("aria-current")).toBe("true"));
+  });
+
   it("rewrites guide links to routes, including ones carrying an anchor", () => {
     render(<DocsPage active slug="docs/apply-rom-patches" />);
 
@@ -92,7 +103,7 @@ describe("DocsPage", () => {
 
   it("renders headings, links, and code through parser hooks", () => {
     const route = createDocRoute(
-      { file: "fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "guides/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
@@ -116,6 +127,28 @@ echo hi
     expect(route.html).toContain('href="/docs/patch-formats#ips"');
     expect(route.html).toContain('href="/docs/fixture#a-and-b"');
     expect(route.html).toContain('<pre tabindex="0"><code class="language-sh">');
+  });
+
+  it("resolves hosted documents, repository-only documents, and published images from their source file", () => {
+    const route = createDocRoute(
+      { file: "guides/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## Resources
+
+[Install](../cli.md#install)
+[Maintainer notes](../mobile-safari-verification.md)
+![Sample](../../packages/rom-weaver-webapp/design/first-sample-modified-world.png)
+`,
+    );
+
+    expect(route.html).toContain('href="/docs/cli#install"');
+    expect(route.html).toContain(
+      'href="https://github.com/rom-weaver/rom-weaver/blob/main/docs/mobile-safari-verification.md"',
+    );
+    expect(route.html).toContain('src="/docs/screenshots/first-sample-modified-world.png"');
   });
 
   it.each([

@@ -19,11 +19,11 @@ the game into a new, patched file you can play.
 
 ## Practice on the sample first
 
-New to this? Do not start with a game you care about. Open the
-[Weave page](https://rom-weaver.com/weave) and choose **Start guided Apply**.
-It loads a tiny practice ROM and two patches shipped with the project, then
-walks through the ROM, patch stack, file picker, and output controls. The first
-patch changes `HELLO` to `MODIFIED`; the second changes `WORLD` to `ROM`.
+New to this? Do not start with a game you care about. Open
+[guided Apply](https://rom-weaver.com/weave?guide=apply). It loads a tiny
+practice ROM and two patches shipped with the project, then walks through the
+ROM, patch stack, file picker, and output controls. The first patch changes
+`HELLO` to `MODIFIED`; the second changes `WORLD` to `ROM`.
 
 <figure class="docs-screenshot-pair" aria-label="The sample ROM before and after both patches">
   <figure class="docs-screenshot">
@@ -53,6 +53,8 @@ rom-weaver checksum --input modified-rom.nes --algo sha256
 That last command should print
 `e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`. If it
 does, patching works on your machine and you can move on to the real thing.
+If rom-weaver is not installed yet, copy an install command from the hosted
+[CLI installation guide](../cli.md#install).
 
 ## What you need
 

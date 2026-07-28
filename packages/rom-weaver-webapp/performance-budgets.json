@@ -15,19 +15,19 @@
         "directory": "assets",
         "extension": ".js",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 1327000,
-        "maxRawBytes": 1394000,
-        "expectedBrotliBytes": 341000,
-        "maxBrotliBytes": 358100
+        "expectedRawBytes": 1473000,
+        "maxRawBytes": 1547000,
+        "expectedBrotliBytes": 377500,
+        "maxBrotliBytes": 396400
       },
       {
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 148500,
+        "expectedRawBytes": 149300,
         "maxRawBytes": 156000,
-        "expectedBrotliBytes": 22900,
+        "expectedBrotliBytes": 23100,
         "maxBrotliBytes": 24050
       },
       {

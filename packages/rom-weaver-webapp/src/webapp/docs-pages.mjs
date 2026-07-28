@@ -4,12 +4,12 @@ import { createDocRoute, DOC_SOURCES } from "./docs-content.mjs";
 import { createDocsSeoMetadata, SITE_ORIGIN } from "./docs-routing.mjs";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
-const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs/guides");
+const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs");
 
 /** @param {{ file: string }} source */
 const docSourcePath = (source) => path.join(docsDirectory, source.file);
 
-/** Read and render every guide from disk. The dev plugin re-runs this on edit. */
+/** Read and render every published document from disk. The dev plugin re-runs this on edit. */
 const readDocRoutes = () =>
   Object.freeze(DOC_SOURCES.map((source) => createDocRoute(source, fs.readFileSync(docSourcePath(source), "utf8"))));
 

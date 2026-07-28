@@ -51,11 +51,11 @@ Nothing to install, no account to make.
 [Create](https://rom-weaver.com/create) makes them.
 
 Want to watch it work before you touch your own files? Open
-[Weave](https://rom-weaver.com/weave) and choose **Start guided Apply**. It
-loads a tiny practice ROM and two patches, then walks through the important
-controls with nothing of yours at stake. Create has its own guided practice
-run too. Both pages also let you download their sample files without starting
-the guide.
+[guided Apply](https://rom-weaver.com/weave?guide=apply). It loads a tiny
+practice ROM and two patches, then walks through the important controls with
+nothing of yours at stake. [Guided Create](https://rom-weaver.com/create?guide=create)
+does the same with an original and modified ROM. Both pages also let you
+download their sample files without starting the guide.
 
 You can also install the site as an app from your browser menu. Once it has
 saved its own files, it keeps working with no connection.
@@ -64,8 +64,9 @@ saved its own files, it keeps working with no connection.
 
 The command-line tool does the same jobs. Reach for it when you want to repeat
 a task or script it. Install it with Homebrew, Scoop, the install script, npm,
-Cargo, or Docker. The [CLI guide](../cli.md) covers every install route,
-command, and option.
+Cargo, or Docker. Start with [Install the CLI](../cli.md#install), then copy
+the complete [First weave](../cli.md#first-weave) practice run. The CLI guide
+also covers every command and option.
 
 Check that it is there:
 
