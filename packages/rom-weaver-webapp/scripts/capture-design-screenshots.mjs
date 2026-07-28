@@ -32,9 +32,18 @@ const assertNoDevBadge = async (page) => {
 };
 
 const waitForStableContent = (page) =>
-  page.waitForFunction(() => !/(Reading|Checksumming)(?:…|\.\.\.)/.test(document.body.innerText), undefined, {
-    timeout: 30_000,
-  });
+  page.waitForFunction(
+    () => {
+      if (/(Reading|Checksumming)(?:…|\.\.\.)/.test(document.body.innerText)) {
+        globalThis.__romWeaverScreenshotStableAt = undefined;
+        return false;
+      }
+      globalThis.__romWeaverScreenshotStableAt ??= performance.now();
+      return performance.now() - globalThis.__romWeaverScreenshotStableAt >= 500;
+    },
+    undefined,
+    { polling: 50, timeout: 30_000 },
+  );
 
 const capture = async () => {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -58,6 +67,9 @@ const capture = async () => {
           if (captureCase.click) await page.getByRole("button", { name: captureCase.click, exact: true }).click();
           await page.getByText(captureCase.waitFor, { exact: true }).last().waitFor({ state: "visible" });
           await waitForStableContent(page);
+          // Chromium's full-page compositor can paint this translated, visually
+          // hidden fixed link in a later capture tile.
+          await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
           const outputPath = path.join(OUTPUT_DIR, `${captureCase.name}-${viewport.name}-${theme}.png`);
           const shot = await page.screenshot({ animations: "disabled", fullPage: true, type: "png" });
           // These are committed docs assets; Chrome's encoder leaves ~25% on
