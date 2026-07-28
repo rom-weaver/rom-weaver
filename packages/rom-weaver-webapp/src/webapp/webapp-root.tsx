@@ -21,7 +21,7 @@ import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
-import { APP_BUILD_VERSION, APP_DISPLAY_VERSION } from "./build-version.ts";
+import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
 import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
@@ -416,8 +416,11 @@ function WebappRoot({
         <div className="app">
           <Masthead
             channelBadge={CHANNEL_BADGE}
+            commitHash={COMMIT_HASH}
+            commitsSinceVersion={COMMITS_SINCE_VERSION}
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={state.currentView}
+            dirty={Boolean(DIRTY_HASH)}
             donateHref={DONATE_URL}
             githubHref={GITHUB_URL}
             onOpenLog={() => setLogOpen(true)}
@@ -438,7 +441,7 @@ function WebappRoot({
             tabsControlPanels={!notFound}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
             threads={resolveThreads(threads)}
-            version={APP_DISPLAY_VERSION}
+            version={APP_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
           />
           <UpdateBanner

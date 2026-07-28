@@ -177,8 +177,11 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
 
 const Masthead = ({
   channelBadge,
+  commitHash,
+  commitsSinceVersion,
   tabs,
   currentTab,
+  dirty,
   onSelectTab,
   onOpenLog,
   onPreloadLog,
@@ -197,8 +200,11 @@ const Masthead = ({
 }: {
   /** Deploy channel marker; empty on production, which wears the plain brand. */
   channelBadge?: string;
+  commitHash?: string;
+  commitsSinceVersion?: number | null;
   tabs: WorkflowTab[];
   currentTab: string;
+  dirty?: boolean;
   onSelectTab: (id: string) => void;
   onOpenLog: () => void;
   onPreloadLog?: () => void;
@@ -238,6 +244,13 @@ const Masthead = ({
       if (accepted) window.open(href, "_blank", "noopener,noreferrer");
     });
   };
+  const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
+  const versionHref = version && githubBaseHref ? `${githubBaseHref}releases/tag/v${version}` : undefined;
+  const commitHref = commitHash && githubBaseHref ? `${githubBaseHref}commit/${commitHash}` : undefined;
+  const commitDistance =
+    typeof commitsSinceVersion === "number" && Number.isInteger(commitsSinceVersion) && commitsSinceVersion > 0
+      ? commitsSinceVersion
+      : 0;
   return (
     <>
       <a className="skip-link" href="#main-content">
@@ -245,19 +258,55 @@ const Masthead = ({
       </a>
       <header className="masthead">
         <span className="brand">
-          <BrandMark />
+          <a aria-label="Home" className="brand-mark-link" href="/">
+            <BrandMark />
+          </a>
           <span className="brand-copy">
             <span className="brand-line">
-              <BrandHeading className="brand-word">
-                rom<span className="brand-hy">-</span>
-                <b>weaver</b>
-              </BrandHeading>
+              <a aria-label="rom-weaver home" href="/">
+                <BrandHeading className="brand-word">
+                  rom<span className="brand-hy">-</span>
+                  <b>weaver</b>
+                </BrandHeading>
+              </a>
               {channelBadge ? <span className="channel-badge">{channelBadge}</span> : null}
             </span>
             {version ? (
               <span className="masthead-version mono">
                 <span className="build-version-label" title={versionTitle}>
-                  {version}
+                  {versionHref ? (
+                    <a
+                      className="build-version-link"
+                      href={versionHref}
+                      onClick={(event) => guardExternalClick(event, versionHref)}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      v{version}
+                      {commitDistance ? `+${commitDistance}` : null}
+                    </a>
+                  ) : (
+                    `v${version}${commitDistance ? `+${commitDistance}` : ""}`
+                  )}
+                  {commitHash ? (
+                    <>
+                      <span aria-hidden="true"> · </span>
+                      {commitHref ? (
+                        <a
+                          className="build-version-link"
+                          href={commitHref}
+                          onClick={(event) => guardExternalClick(event, commitHref)}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {commitHash.slice(0, 7)}
+                        </a>
+                      ) : (
+                        commitHash.slice(0, 7)
+                      )}
+                      {dirty ? "*" : null}
+                    </>
+                  ) : null}
                 </span>
                 <span
                   className="masthead-threads"

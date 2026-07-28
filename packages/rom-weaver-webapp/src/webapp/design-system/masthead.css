@@ -9,6 +9,7 @@
 
 .rw-app .masthead { display: flex; align-items: center; gap: var(--sp-l); padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
 .rw-app .brand { display: inline-flex; align-items: center; gap: var(--sp-m); flex: none; }
+.rw-app .brand-mark-link { display: flex; flex: none; border-radius: 8px; }
 .rw-app .brand-copy { display: flex; flex-direction: column; min-width: 0; }
 /* brand sizes ride one fluid scale: 30px @360 → ~40px @720 (the old phone
    values) → 44px cap on desktop; no discrete jumps */
@@ -104,6 +105,14 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tool:active { background: var(--plate-2); }
 .rw-app .tool svg { width: 17px; height: 17px; }
 .rw-app .build-version-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-app .build-version-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: inherit;
+  text-decoration: underline dotted var(--ink-4);
+  text-underline-offset: 2px;
+}
 /* the tools are icon-only everywhere; the title/aria-label carries the name
    (the spans stay in the DOM so the localized names remain available) */
 .rw-app .tool-text { display: none; }

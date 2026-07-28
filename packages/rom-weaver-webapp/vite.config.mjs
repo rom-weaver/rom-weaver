@@ -448,10 +448,11 @@ const writeCloudflareHeadersAsset = (channel) => {
   return {
     apply: "build",
     closeBundle() {
-      const headers =
-        channel === "prod"
-          ? crossOriginIsolationHeaders
-          : { ...crossOriginIsolationHeaders, "X-Robots-Tag": "noindex, nofollow" };
+      const headers = {
+        ...crossOriginIsolationHeaders,
+        "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
+        ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
+      };
       const headerLines = Object.entries(headers)
         .map(([name, value]) => `  ${name}: ${value}`)
         .join("\n");
@@ -770,6 +771,7 @@ export default defineConfig(({ command }) => {
   const appVersion =
     process.env.ROM_WEAVER_APP_VERSION || buildInfo.version || process.env.npm_package_version || "0.1.0";
   const commitHash = process.env.ROM_WEAVER_COMMIT_HASH || buildInfo.commitHash || "unknown";
+  const commitsSinceVersion = buildInfo.commitsSinceVersion ?? null;
   const dirtyHash = process.env.ROM_WEAVER_DIRTY_HASH ?? buildInfo.dirtyHash ?? "";
   const gitBranch = process.env.ROM_WEAVER_GIT_BRANCH ?? buildInfo.gitBranch ?? "";
   const versionIsTagged = (buildInfo.isVersionTag ?? false) && !dirtyHash;
@@ -819,6 +821,7 @@ export default defineConfig(({ command }) => {
       __APP_CHANNEL_LABEL__: JSON.stringify(appChannelLabel),
       __APP_VERSION__: JSON.stringify(appVersion),
       __COMMIT_HASH__: JSON.stringify(commitHash),
+      __COMMITS_SINCE_VERSION__: JSON.stringify(commitsSinceVersion),
       __DIRTY_HASH__: JSON.stringify(dirtyHash),
       __GIT_BRANCH__: JSON.stringify(gitBranch),
       __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
