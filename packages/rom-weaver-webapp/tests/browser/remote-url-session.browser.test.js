@@ -250,7 +250,9 @@ test("sample action stays in-page and flows through the drop pipeline to a green
   expect(location.href).toBe(href);
 
   await expect.poll(() => getInputStackRows().length, { timeout: 30000 }).toBe(1);
-  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["first-weave.ips"]);
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["hello-to-modified.ips", "world-to-rom.ips"]);
   await expect
     .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length, {
       timeout: 30000,

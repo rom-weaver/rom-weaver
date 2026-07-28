@@ -334,18 +334,19 @@ so there is nothing else to supply.
 
 ```bash
 curl --fail --location --output first-weave.zip https://rom-weaver.com/first-weave.zip
-rom-weaver weave --input first-weave.zip --output modified-world.nes --no-compress
-rom-weaver checksum --input modified-world.nes --algo sha256
+rom-weaver weave --input first-weave.zip --output modified-rom.nes --no-compress
+rom-weaver checksum --input modified-rom.nes --algo sha256
 ```
 
-The original ROM displays `HELLO WORLD`; the IPS patch changes it to
-`MODIFIED WORLD`. The final SHA-256 should be
-`f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e`.
+The original ROM displays `HELLO WORLD`; the first IPS patch changes `HELLO`
+to `MODIFIED`, and the second changes `WORLD` to `ROM`. The final ROM displays
+`MODIFIED ROM`. The final SHA-256 should be
+`e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`.
 Open the result in any NES emulator to run it.
 
-| Original ROM | Patched ROM |
+| Original ROM | After the first patch |
 | :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The patched sample ROM displaying MODIFIED WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) |
 
 ## Common workflows
 

@@ -115,7 +115,8 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
     expect(container.querySelector(".drop.hero .formats .fmt")).toBeTruthy();
     const sample = container.querySelector(".first-weave-demo button") as HTMLButtonElement;
-    expect(sample.textContent).toContain("Try a sample apply");
+    expect(sample.textContent).toContain("Start guided Apply");
+    expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
     // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
     expect(numbers).toEqual(["0x01"]);
@@ -132,6 +133,7 @@ describe("apply workflow view - empty bench", () => {
     const { container } = renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
 
     fireEvent.click(container.querySelector(".first-weave-demo button") as HTMLButtonElement);
+    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
 
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
     const [files] = onUnifiedDrop.mock.calls[0] as [File[]];

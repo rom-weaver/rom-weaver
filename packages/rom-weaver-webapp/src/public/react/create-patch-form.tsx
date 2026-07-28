@@ -16,6 +16,7 @@ import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./
 import { Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
+import { SampleTutorial, SampleTutorialStart, type SampleTutorialStep } from "./components/ds/sample-tutorial.tsx";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { CreatePatchFormView, type CreatePatchFormViewModel } from "./create-patch-form-view.tsx";
@@ -37,28 +38,6 @@ import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import { createCreateOutputCompressionOptions, createCreatePatchFormatOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
-
-const finishCreateRoleStaging = (
-  role: "modified" | "original",
-  roleGeneration: number,
-  isCurrentStaging: () => boolean,
-  isCurrentRoleStaging: (role: "modified" | "original", roleGeneration: number) => boolean,
-  commit: () => void,
-  clearProgress: () => void,
-) => {
-  if (!isCurrentStaging()) return false;
-  if (!isCurrentRoleStaging(role, roleGeneration)) return true;
-  commit();
-  clearProgress();
-  return true;
-};
-
-// Bare names, resolved against the app's base at fetch time: a root-absolute
-// path breaks any deployment that is not served from the domain root.
-const CREATE_SAMPLE_ASSETS = [
-  ["hello-world.nes", "hello-world.nes"],
-  ["modified-world.nes", "modified-world.nes"],
-] as const;
 import {
   getCreateSettingsOutputName,
   getDefaultCompressionArchive,
@@ -94,6 +73,76 @@ import {
 } from "./workflow-run-hooks.ts";
 import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 
+const finishCreateRoleStaging = (
+  role: "modified" | "original",
+  roleGeneration: number,
+  isCurrentStaging: () => boolean,
+  isCurrentRoleStaging: (role: "modified" | "original", roleGeneration: number) => boolean,
+  commit: () => void,
+  clearProgress: () => void,
+) => {
+  if (!isCurrentStaging()) return false;
+  if (!isCurrentRoleStaging(role, roleGeneration)) return true;
+  commit();
+  clearProgress();
+  return true;
+};
+
+// Bare names, resolved against the app's base at fetch time: a root-absolute
+// path breaks any deployment that is not served from the domain root.
+const CREATE_SAMPLE_ASSETS = [
+  ["hello-world.nes", "hello-world.nes"],
+  ["modified-world.nes", "modified-world.nes"],
+] as const;
+// The pair as one download; the guided path fetches the two ROMs individually.
+const CREATE_SAMPLE_ARCHIVE = "first-create.zip";
+const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+  {
+    actions: [
+      ["checks", "Checks"],
+      ["remove", "Remove"],
+    ],
+    body: "The Original card keeps the starting file's name, remove control, and checksums together.",
+    openDrawers: true,
+    target: "#patch-builder-row-original",
+    title: "Start with the original",
+  },
+  {
+    actions: [
+      ["swap", "Swap"],
+      ["checks", "Checks"],
+      ["remove", "Remove"],
+    ],
+    body: "Modified is the version the new patch should reproduce. Dropped them the wrong way round? Swap trades the two in one click.",
+    lift: ".swap-row",
+    openDrawers: true,
+    target: "#patch-builder-row-modified",
+    title: "Compare the modified ROM",
+  },
+  {
+    actions: [
+      ["drop", "Drop files"],
+      ["drop", "Browse"],
+    ],
+    body: "The compact 0x01 row stays available after setup for adding files by drag and drop or the file picker.",
+    target: "#patch-builder-row-unified-drop",
+    title: "Add files at any time",
+  },
+  {
+    actions: [
+      ["options", "Options"],
+      ["archive", "Archive"],
+      ["create", "Create & download"],
+    ],
+    body: "Choose the patch name, format, archive, and compression settings. Then press CREATE & DOWNLOAD PATCH.",
+    cta: ".btn.run",
+    openDrawers: true,
+    placement: "top",
+    target: "#patch-builder-row-output",
+    title: "Create the patch",
+  },
+];
+
 type InternalCreatePatchFormProps = CreatePatchFormProps & {
   createWorkflow?: typeof CreateWorkflow;
   getCreatePatchFormatCandidates?: typeof getCreatePatchFormatCandidates;
@@ -127,6 +176,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     useState<CreatePatchFormatCandidateState | null>(null);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
+  const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [createQueued, setCreateQueued] = useState(false);
   const [stagingRole, setStagingRole] = useState<"modified" | "original" | null>(null);
@@ -414,6 +464,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       );
       handleUnifiedDrop(files);
     } catch {
+      setSampleTutorialActive(false);
       setSampleError("Could not load the sample. Try again.");
     } finally {
       setSampleLoading(false);
@@ -825,28 +876,40 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const createFileInputAccept = getFileInputAcceptAttributes();
   const createSourcesActuallyEmpty = !(original || modified || createPreparationPending);
   const createSourcesEmpty = useFlatTransitionFlag(createSourcesActuallyEmpty);
+  const sampleTutorialReady = createSourcesReady && !createPreparationPending;
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
 
   const createModel = (): CreatePatchFormViewModel => ({
-    dialog: candidateSelectionDialog,
+    dialog: (
+      <>
+        {candidateSelectionDialog}
+        {sampleTutorialActive ? (
+          <SampleTutorial
+            loadingBody="RomWeaver is loading two tiny ROMs, then fingerprinting the untouched and edited versions."
+            onClose={() => setSampleTutorialActive(false)}
+            ready={sampleTutorialReady}
+            steps={CREATE_SAMPLE_TUTORIAL_STEPS}
+          />
+        ) : null}
+      </>
+    ),
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
       addLabel: "Add or replace a ROM",
       afterDropZone: createSourcesActuallyEmpty ? (
-        <div className="first-weave-demo">
-          <span>New here?</span>
-          <button
-            aria-busy={sampleLoading}
-            className="btn ghost slim"
-            disabled={sampleLoading}
-            onClick={() => void loadCreateSample()}
-            type="button"
-          >
-            {sampleLoading ? "Loading sample…" : "Start with sample assets"}
-          </button>
-          {sampleError ? <span role="status">{sampleError}</span> : null}
-        </div>
+        <SampleTutorialStart
+          downloadHref={resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE)}
+          downloadName={CREATE_SAMPLE_ARCHIVE}
+          downloadLabel="Download the sample ROMs"
+          error={sampleError}
+          label="Start guided Create"
+          loading={sampleLoading}
+          onStart={() => {
+            setSampleTutorialActive(true);
+            void loadCreateSample();
+          }}
+        />
       ) : null,
       big: createSourcesEmpty,
       disabled: uploadDisabled,
@@ -938,6 +1001,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       format: patchType,
       formatId: "patch-builder-select-patch-type",
       formatOptions: patchFormatOptions,
+      id: "patch-builder-row-output",
       info: (
         <InfoPopover title="Output options">
           <strong>Output</strong>

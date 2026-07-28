@@ -20,6 +20,7 @@ import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
 import { OutputField } from "./components/ds/output-card.tsx";
+import { SampleTutorial, SampleTutorialStart, type SampleTutorialStep } from "./components/ds/sample-tutorial.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
@@ -139,6 +140,7 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
 );
 
 const ApplyDropAfter = ({
+  downloadHref,
   onLoadSample,
   pendingDrops,
   sampleError,
@@ -146,6 +148,7 @@ const ApplyDropAfter = ({
   workflowEmpty,
 }: {
   onLoadSample: () => void;
+  downloadHref: string;
   pendingDrops: PendingDrop[];
   sampleError: string;
   sampleLoading: boolean;
@@ -164,21 +167,66 @@ const ApplyDropAfter = ({
   }
   if (!workflowEmpty) return null;
   return (
-    <div className="first-weave-demo">
-      <span>New here?</span>
-      <button
-        aria-busy={sampleLoading}
-        className="btn ghost slim"
-        disabled={sampleLoading}
-        onClick={onLoadSample}
-        type="button"
-      >
-        {sampleLoading ? "Loading sample…" : "Try a sample apply"}
-      </button>
-      {sampleError ? <span role="status">{sampleError}</span> : null}
-    </div>
+    <SampleTutorialStart
+      downloadHref={downloadHref}
+      downloadLabel="Download the bundle"
+      downloadName={FIRST_WEAVE_ASSET}
+      error={sampleError}
+      label="Start guided Apply"
+      loading={sampleLoading}
+      onStart={onLoadSample}
+    />
   );
 };
+
+const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+  {
+    actions: [
+      ["checks", "Checks"],
+      ["remove", "Remove"],
+    ],
+    body: "The ROM card keeps its name, source files, checksums, and file controls together.",
+    openDrawers: true,
+    target: "#rom-weaver-row-file-rom",
+    title: "Start with the ROM",
+  },
+  {
+    actions: [
+      ["reorder", "Reorder"],
+      ["toggle", "Toggle On / Off"],
+      ["header", "Header options"],
+      ["checks", "Checks"],
+      ["menu", "Menu: edit · replace · remove"],
+    ],
+    body: "Both IPS patches run in order: HELLO → MODIFIED, then WORLD → ROM. Use the numbered handles to reorder, the On/Off toggles to skip a patch, scissors for header handling, Checks for checksums, and the 3-dot menu to edit, replace, or remove.",
+    openDrawers: true,
+    openMenu: true,
+    target: "#rom-weaver-row-patch-stack",
+    title: "Build the two-patch stack",
+  },
+  {
+    actions: [
+      ["drop", "Drop files"],
+      ["drop", "Browse"],
+    ],
+    body: "The compact 0x01 row stays available after setup for more ROMs, patches, bundles, or archives.",
+    target: "#rom-weaver-row-unified-drop",
+    title: "Add files at any time",
+  },
+  {
+    actions: [
+      ["options", "Options"],
+      ["package", "Bundle"],
+      ["apply", "Apply & download"],
+    ],
+    body: "Choose the output name, format, compression, header, and bundle settings. Then press WEAVE & DOWNLOAD to apply both patches.",
+    cta: ".btn.run",
+    openDrawers: true,
+    placement: "top",
+    target: "#rom-weaver-row-output-file-name",
+    title: "Apply both patches",
+  },
+];
 
 /**
  * Purely presentational apply-workflow view: renders the step layout from the
@@ -1291,6 +1339,7 @@ function ApplyWorkflowFormView({
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
+  const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
   const loadFirstWeave = async () => {
     setSampleLoading(true);
     setSampleError("");
@@ -1300,6 +1349,7 @@ function ApplyWorkflowFormView({
       const blob = await response.blob();
       handleUnifiedDrop([new File([blob], "first-weave.zip", { type: "application/zip" })]);
     } catch {
+      setSampleTutorialActive(false);
       setSampleError("Could not load the sample. Try again.");
     } finally {
       setSampleLoading(false);
@@ -1310,6 +1360,13 @@ function ApplyWorkflowFormView({
   // continues on its existing schedule behind the transition.
   const [dropStarted, setDropStarted] = useState(false);
   const workflowHasContent = romInputs.length > 0 || patches.length > 0 || pendingDrops.length > 0 || inputsStaging;
+  const sampleTutorialReady =
+    romInputs.length > 0 &&
+    patches.length > 0 &&
+    pendingDrops.length === 0 &&
+    !inputsStaging &&
+    romInputs.every((input) => !input.progress) &&
+    patches.every((patch) => !patch.progress);
   const formReady = pendingDrops.length === 0 && (romInputs.length > 0 || patches.length > 0 || inputsStaging);
   useEffect(() => {
     if (dropStarted && workflowHasContent) setDropStarted(false);
@@ -1374,7 +1431,11 @@ function ApplyWorkflowFormView({
         addLabel="Replace the ROM or add patches"
         afterDropZone={
           <ApplyDropAfter
-            onLoadSample={() => void loadFirstWeave()}
+            downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
+            onLoadSample={() => {
+              setSampleTutorialActive(true);
+              void loadFirstWeave();
+            }}
             pendingDrops={pendingDrops}
             sampleError={sampleError}
             sampleLoading={sampleLoading}
@@ -1563,6 +1624,14 @@ function ApplyWorkflowFormView({
         </>
       )}
 
+      {sampleTutorialActive ? (
+        <SampleTutorial
+          loadingBody="RomWeaver is unpacking one tiny ROM and two patches, then checking what each file is."
+          onClose={() => setSampleTutorialActive(false)}
+          ready={sampleTutorialReady}
+          steps={APPLY_SAMPLE_TUTORIAL_STEPS}
+        />
+      ) : null}
       <SharedArchiveDialog controller={controllers.dialog} />
     </section>
   );

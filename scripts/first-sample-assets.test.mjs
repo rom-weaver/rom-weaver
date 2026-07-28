@@ -47,19 +47,25 @@ test("generated first-create and first-weave archives contain a runnable NES pat
   assert.deepEqual([...createEntries.keys()], ["hello-world.nes", "modified-world.nes"]);
   assert.deepEqual(
     [...weaveEntries.keys()],
-    ["rom-weaver-bundle.json", "hello-world.nes", "first-weave.ips"],
+    ["rom-weaver-bundle.json", "hello-world.nes", "hello-to-modified.ips", "world-to-rom.ips"],
   );
   assert.equal(createEntries.get("hello-world.nes")?.subarray(0, 4).toString("hex"), "4e45531a");
   assert.deepEqual(createEntries.get("hello-world.nes"), assets.originalRom);
   assert.deepEqual(createEntries.get("modified-world.nes"), assets.modifiedRom);
   assert.deepEqual(
-    applyIps(assets.originalRom, weaveEntries.get("first-weave.ips")),
+    applyIps(assets.originalRom, weaveEntries.get("hello-to-modified.ips")),
     assets.modifiedRom,
   );
+  assert.deepEqual(applyIps(assets.modifiedRom, weaveEntries.get("world-to-rom.ips")), assets.wovenRom);
 
   const manifest = JSON.parse(weaveEntries.get("rom-weaver-bundle.json"));
   assert.equal(manifest.rom.path, "hello-world.nes");
-  assert.equal(manifest.output.name, "modified-world.nes");
+  assert.deepEqual(
+    manifest.patches.map((patch) => patch.path),
+    ["hello-to-modified.ips", "world-to-rom.ips"],
+  );
+  assert.deepEqual(manifest.patches[0].outputChecks, manifest.patches[1].inputChecks);
+  assert.equal(manifest.output.name, "modified-rom.nes");
 
   const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-first-samples-"));
   context.after(() => fs.rmSync(outputDirectory, { force: true, recursive: true }));

@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
+import { SwapIcon } from "./components/ds/swap-icon.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
@@ -64,9 +65,7 @@ const CreatePatchFormView = ({
                 title="Swap original and modified"
                 type="button"
               >
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M16 4.5 20 8.5l-4 4M20 8.5H7M8 19.5l-4-4 4-4M4 15.5h13" />
-                </svg>
+                <SwapIcon />
                 Swap
               </button>
             </div>
