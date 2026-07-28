@@ -1,8 +1,8 @@
 /* RomWeaver (complete webapp implementation) v20240809 - Marc Robledo 2016-2024 - http://www.marcrobledo.com/license */
 
-import { createElement } from "react";
+import { createElement, useLayoutEffect } from "react";
 import { flushSync } from "react-dom";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
@@ -12,9 +12,8 @@ import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
-import { LOCAL_STORAGE_SETTINGS_ID, type SettingsState } from "./settings/settings-state.ts";
+import { getDefaultSettings, LOCAL_STORAGE_SETTINGS_ID, type SettingsState } from "./settings/settings-state.ts";
 import { captureShellClicks, replayShellClicks } from "./shell-click-replay.ts";
-import { captureShellHeroHover, restoreShellHeroHover } from "./shell-hover-carryover.ts";
 import {
   getDiscardSettingsConfirmationMessage,
   getUnloadConfirmationMessage,
@@ -22,10 +21,14 @@ import {
   shouldWarnBeforeUnload,
 } from "./unload-guard.ts";
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
-import { createWebappRootController, readWorkflowViewFromPath } from "./webapp-controller.ts";
+import { createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath } from "./webapp-controller.ts";
 import { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { preloadWorkflowRoute } from "./workflow-routes.tsx";
-import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
+import {
+  type ConfirmationDialogState,
+  createEmptyConfirmationDialogState,
+  type WebappRootProps,
+} from "./webapp-root-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
 // localStorage.setItem(LOCAL_STORAGE_SETTINGS_ID, JSON.stringify(settings))
@@ -145,7 +148,7 @@ else serviceWorkerClient.initialize();
 const urlSessionParse =
   typeof window === "undefined"
     ? { request: null, warnings: [] }
-    : readUrlSessionRequest(window.location.search, window.location.href);
+    : readUrlSessionRequest(window.location.search, readAppBaseUrl());
 for (const warning of urlSessionParse.warnings) {
   logger.warn(`url session: ${warning}`);
 }
@@ -173,38 +176,25 @@ const webappController = createWebappRootController({
 applySettingsToRuntime(webappController.getState().settings);
 logger.info("Browser environment", collectBrowserInfo());
 
-// The landing tab's workflow form is its own chunk. Start it here, at module
-// evaluation, so it downloads while the boot yield below lets the prerendered
-// shell paint; the first mount then renders the real form synchronously instead
-// of committing a Suspense fallback over the shell the browser just painted.
-// A failed load resolves anyway - the route's Suspense boundary owns the error.
+// The landing tab's workflow form is its own chunk. Start it at module
+// evaluation, then wait for it before hydration so React does not commit a
+// Suspense fallback over the prerendered form. A failed load resolves anyway -
+// the route's Suspense boundary owns the error.
 const initialWorkflowRoute = isNotFoundPage
   ? Promise.resolve()
   : preloadWorkflowRoute(webappController.getState().currentView).catch(() => undefined);
+let initialWorkflowRouteReady = false;
+void initialWorkflowRoute.then(() => {
+  initialWorkflowRouteReady = true;
+  renderWebappRoot();
+});
 
 let webappRootInitialized = false;
 let appRoot: Root | null = null;
-// Whether index.html shipped the prerendered boot shell (rom-weaver-prerender-shell)
-// inside #webapp-root; recorded before createRoot wipes it on the first render.
+let appRootHydrating = false;
+let renderQueuedWhileHydrating = false;
+// Whether index.html shipped the prerendered boot shell inside #webapp-root.
 let hadPrerenderedShell = false;
-// Clocks of the shell's infinite ambient animations (format-pill ticker, weave
-// drift), captured just before the first render replaces their nodes so the
-// remounted copies can continue in phase instead of visibly snapping to zero.
-let shellAnimationPhases: Map<string, number[]> | null = null;
-
-const isInfiniteCssAnimation = (animation: Animation): animation is CSSAnimation =>
-  animation instanceof CSSAnimation && animation.effect?.getTiming().iterations === Infinity;
-
-const captureShellAnimationPhases = (appRootElement: HTMLElement) => {
-  const phases = new Map<string, number[]>();
-  for (const animation of appRootElement.getAnimations({ subtree: true })) {
-    if (!isInfiniteCssAnimation(animation) || typeof animation.currentTime !== "number") continue;
-    const clocks = phases.get(animation.animationName) || [];
-    clocks.push(animation.currentTime);
-    phases.set(animation.animationName, clocks);
-  }
-  shellAnimationPhases = phases.size > 0 ? phases : null;
-};
 
 const markWebappMounted = () => {
   const appRootElement = document.getElementById("webapp-root");
@@ -218,29 +208,15 @@ const markWebappMounted = () => {
 };
 
 const settleShellHandoff = (appRootElement: HTMLElement) => {
-  // The replacement also dropped the pointer's :hover off the hero drop zone;
-  // hand it back before this frame paints.
-  restoreShellHeroHover(appRootElement);
-  // The first mount replaced the prerendered shell with identical markup, which
-  // restarts every CSS animation on it. Settle them before this frame paints:
-  // force the style recalc that creates the animations (the flushSync render
-  // finished, but styles have not been computed yet), then jump each entry
-  // animation to its finished (natural) state - the shell already played the
-  // entrance - and hand each infinite ambient animation its captured clock.
-  const phases = shellAnimationPhases;
-  shellAnimationPhases = null;
+  // Removing aria-busy enables the mounted tree's entry animations. The shell
+  // has already painted in its natural state, so finish only those animations
+  // before the next frame. Hydration preserves the ambient animation nodes and
+  // their clocks without any manual carryover.
   void appRootElement.offsetWidth;
   for (const animation of appRootElement.getAnimations({ subtree: true })) {
     if (!(animation instanceof CSSAnimation)) continue;
     try {
-      if (ENTRY_ANIMATIONS.has(animation.animationName)) {
-        animation.finish();
-        continue;
-      }
-      if (isInfiniteCssAnimation(animation)) {
-        const clock = phases?.get(animation.animationName)?.shift();
-        if (typeof clock === "number") animation.currentTime = clock;
-      }
+      if (ENTRY_ANIMATIONS.has(animation.animationName)) animation.finish();
     } catch (error) {
       logger.trace("Unable to settle animation across the first mount", {
         animationName: animation.animationName,
@@ -248,6 +224,18 @@ const settleShellHandoff = (appRootElement: HTMLElement) => {
       });
     }
   }
+};
+
+const WebappClientRoot = (props: WebappRootProps) => {
+  useLayoutEffect(() => {
+    const wasHydrating = appRootHydrating;
+    appRootHydrating = false;
+    markWebappMounted();
+    if (!(wasHydrating || renderQueuedWhileHydrating)) return;
+    renderQueuedWhileHydrating = false;
+    queueMicrotask(renderWebappRoot);
+  }, []);
+  return createElement(WebappRoot, props);
 };
 
 const patcherSessionHasFormChanges = (session: ReturnType<typeof webappController.getState>["patcherSession"]) =>
@@ -327,135 +315,135 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
   deferViteReload({ label: payload?.path, source: "vite" });
 });
 
-// The prerendered shell baked into index.html (rom-weaver-prerender-shell) can
-// only paint if the browser gets a rendering opportunity before the first
-// flushSync mount replaces it - the bundle otherwise runs straight from parse
-// into React render with no paint in between. One rAF + macrotask yield
-// guarantees that paint; renders requested while waiting coalesce into the
-// deferred first mount, and everything after it stays synchronous.
-let firstMountYield: "pending" | "scheduled" | "done" = "pending";
-
 const renderWebappRoot = (): undefined => {
   // Suppress all renders (including reactive ones from the service worker state machine) while the boot
   // gate is closed, so the un-isolated first document stays on the static background until the SW reload.
   if (serviceWorkerBootGate.isGated()) return undefined;
-  if (firstMountYield !== "done") {
-    if (firstMountYield === "pending") {
-      firstMountYield = "scheduled";
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          void initialWorkflowRoute.then(() => {
-            firstMountYield = "done";
-            renderWebappRoot();
-          });
-        }, 0);
-      });
-    }
+  if (!initialWorkflowRouteReady) return undefined;
+  if (appRootHydrating) {
+    renderQueuedWhileHydrating = true;
     return undefined;
   }
+  let appRootElement: HTMLElement | null = null;
+  let shouldHydrate = false;
   if (!appRoot) {
-    const appRootElement = document.getElementById("webapp-root");
+    appRootElement = document.getElementById("webapp-root");
     if (appRootElement) {
       hadPrerenderedShell = appRootElement.childElementCount > 0;
       // Always drained, shell or not, so the inline capture listener stops here.
       captureShellClicks();
-      if (hadPrerenderedShell) {
-        captureShellAnimationPhases(appRootElement);
-        captureShellHeroHover(appRootElement);
-      }
-      appRoot = createRoot(appRootElement);
+      shouldHydrate = hadPrerenderedShell;
+      if (!shouldHydrate) appRoot = createRoot(appRootElement);
     }
   }
-  const root = appRoot;
-  if (!root) return undefined;
   const serviceWorkerCache = serviceWorkerClient.getState();
-  flushSync(() => {
-    root.render(
-      createElement(WebappRoot, {
-        actions: {
-          onCancelConfirmation: () => closeConfirmationDialog(false),
-          onCloseSettings: () => {
-            const state = webappController.getState();
-            if (!shouldConfirmDiscardSettings(state)) {
-              webappController.closeSettings();
-              return;
-            }
-            void (async () => {
-              const accepted = await requestConfirmation({
-                cancelLabel: "Keep editing",
-                confirmLabel: "Discard changes",
-                level: "warning",
-                message: getDiscardSettingsConfirmationMessage(),
-                title: "Discard settings changes?",
-              });
-              if (accepted) webappController.discardDraftSettings();
-            })();
-          },
-          onConfirmConfirmation: () => closeConfirmationDialog(true),
-          onConfirmExternalNavigation: async () => {
-            const navigationGuardState = getNavigationGuardState();
-            if (!shouldWarnBeforeUnload(navigationGuardState)) return true;
-            return requestConfirmation({
-              cancelLabel: "Stay here",
-              confirmLabel: "Open link",
-              level: "warning",
-              message: "Leaving the app may lose your staged files and finished output. Open the link anyway?",
-              title: "Leave and lose work?",
-            });
-          },
-          onCreatorModifiedChange: (file) => webappController.setCreatorModifiedState(file),
-          onCreatorOriginalChange: (file) => webappController.setCreatorOriginalState(file),
-          onCreatorPatchTypeChange: (patchType) => webappController.setCreatorPatchType(patchType),
-          onCreatorSettingsChange: (settings) => webappController.setCreatorSettingsState(settings),
-          onDraftChange: (field, value) =>
-            webappController.updateDraftSetting(
-              field as Parameters<typeof webappController.updateDraftSetting>[0],
-              value,
-            ),
-          onLogLevelChange: (level) => webappController.setLogLevel(level),
-          onOpenSettings: () => webappController.openSettings(),
-          onPatcherBundlePackageChange: (value) => webappController.setBundlePackage(value),
-          onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),
-          onPatcherPatchesChange: (patches) => webappController.setPatcherPatchState(patches),
-          onPatcherSettingsChange: (settings) => webappController.setPatcherSettingsState(settings),
-          onReloadUpdate: () => {
-            void reloadPendingUpdate();
-          },
-          onReset: () => {
-            void (async () => {
-              const accepted = await requestConfirmation({
-                cancelLabel: "Stay here",
-                confirmLabel: "Reload page",
-                level: "warning",
-                message: "Reloading will clear the current page state. Continue?",
-                title: "Reset the page?",
-              });
-              if (accepted) window.location.reload();
-            })();
-          },
-          onRestoreDefaults: () => webappController.restoreDefaults(),
-          onSaveClose: () => {
-            webappController.saveDraftSettings();
-          },
-          onSelectView: (view) => webappController.selectView(view),
-          onToolsSessionChange: (active) => webappController.setToolsSessionState(active),
-          onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),
-          onTrimSettingsChange: (settings) => webappController.setTrimSettingsState(settings),
-          onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
-        },
-        confirmationDialog: confirmationDialogState,
-        notFound: isNotFoundPage,
-        pageUpdate: getPageUpdateState({
+  const state = webappController.getState();
+  const hydrationSettings = shouldHydrate
+    ? { ...getDefaultSettings(), threads: state.settings.threads }
+    : state.settings;
+  const rootState: WebappRootProps["state"] = shouldHydrate
+    ? {
+        ...state,
+        currentView: state.currentView === "creator" ? "creator" : "patcher",
+        draftSettings: { ...hydrationSettings },
+        settings: hydrationSettings,
+        startup: { message: "", status: "ready" as const },
+      }
+    : state;
+  const webappRoot = createElement(WebappClientRoot, {
+    actions: {
+      onCancelConfirmation: () => closeConfirmationDialog(false),
+      onCloseSettings: () => {
+        const state = webappController.getState();
+        if (!shouldConfirmDiscardSettings(state)) {
+          webappController.closeSettings();
+          return;
+        }
+        void (async () => {
+          const accepted = await requestConfirmation({
+            cancelLabel: "Keep editing",
+            confirmLabel: "Discard changes",
+            level: "warning",
+            message: getDiscardSettingsConfirmationMessage(),
+            title: "Discard settings changes?",
+          });
+          if (accepted) webappController.discardDraftSettings();
+        })();
+      },
+      onConfirmConfirmation: () => closeConfirmationDialog(true),
+      onConfirmExternalNavigation: async () => {
+        const navigationGuardState = getNavigationGuardState();
+        if (!shouldWarnBeforeUnload(navigationGuardState)) return true;
+        return requestConfirmation({
+          cancelLabel: "Stay here",
+          confirmLabel: "Open link",
+          level: "warning",
+          message: "Leaving the app may lose your staged files and finished output. Open the link anyway?",
+          title: "Leave and lose work?",
+        });
+      },
+      onCreatorModifiedChange: (file) => webappController.setCreatorModifiedState(file),
+      onCreatorOriginalChange: (file) => webappController.setCreatorOriginalState(file),
+      onCreatorPatchTypeChange: (patchType) => webappController.setCreatorPatchType(patchType),
+      onCreatorSettingsChange: (settings) => webappController.setCreatorSettingsState(settings),
+      onDraftChange: (field, value) =>
+        webappController.updateDraftSetting(field as Parameters<typeof webappController.updateDraftSetting>[0], value),
+      onLogLevelChange: (level) => webappController.setLogLevel(level),
+      onOpenSettings: () => webappController.openSettings(),
+      onPatcherBundlePackageChange: (value) => webappController.setBundlePackage(value),
+      onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),
+      onPatcherPatchesChange: (patches) => webappController.setPatcherPatchState(patches),
+      onPatcherSettingsChange: (settings) => webappController.setPatcherSettingsState(settings),
+      onReloadUpdate: () => {
+        void reloadPendingUpdate();
+      },
+      onReset: () => {
+        void (async () => {
+          const accepted = await requestConfirmation({
+            cancelLabel: "Stay here",
+            confirmLabel: "Reload page",
+            level: "warning",
+            message: "Reloading will clear the current page state. Continue?",
+            title: "Reset the page?",
+          });
+          if (accepted) window.location.reload();
+        })();
+      },
+      onRestoreDefaults: () => webappController.restoreDefaults(),
+      onSaveClose: () => {
+        webappController.saveDraftSettings();
+      },
+      onSelectView: (view) => webappController.selectView(view),
+      onToolsSessionChange: (active) => webappController.setToolsSessionState(active),
+      onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),
+      onTrimSettingsChange: (settings) => webappController.setTrimSettingsState(settings),
+      onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
+    },
+    confirmationDialog: confirmationDialogState,
+    notFound: isNotFoundPage,
+    pageUpdate: shouldHydrate
+      ? getPageUpdateState({
+          serviceWorkerCache: { updateReady: false },
+          vite: createEmptyVitePageUpdateState(),
+        })
+      : getPageUpdateState({
           serviceWorkerCache,
           vite: vitePageUpdateState,
         }),
-        serviceWorkerCache,
-        state: webappController.getState(),
-        urlSession: urlSessionParse.request ? urlSessionParse : null,
-      }),
-    );
+    serviceWorkerCache,
+    state: rootState,
+    urlSession: shouldHydrate ? null : urlSessionParse.request ? urlSessionParse : null,
   });
-  markWebappMounted();
+  if (shouldHydrate && appRootElement) {
+    appRootHydrating = true;
+    appRoot = hydrateRoot(appRootElement, webappRoot);
+    return undefined;
+  }
+  const root = appRoot;
+  if (!root) return undefined;
+  flushSync(() => {
+    root.render(webappRoot);
+  });
   return undefined;
 };
 renderWebappRootIfReady = renderWebappRoot;

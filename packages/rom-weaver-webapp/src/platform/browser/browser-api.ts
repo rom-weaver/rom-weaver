@@ -129,7 +129,6 @@ class CreateWorkflow extends CreateWorkflowController<BrowserSourceRef, BrowserS
   constructor(options: WorkflowOptions<CreateSettings> = {}) {
     super(browserRuntime, options, assertPublicSources);
     configureBrowserAssetBaseUrl(options.assetBaseUrl);
-    void preloadBrowserRuntime({ threads: options.settings?.workers?.threads });
   }
 }
 
@@ -145,7 +144,6 @@ class ApplyWorkflow extends ApplyWorkflowController<BrowserSourceRef, BrowserSav
   constructor(options: WorkflowOptions<ApplySettings> = {}) {
     super(browserRuntime, options, assertPublicSources);
     configureBrowserAssetBaseUrl(options.assetBaseUrl);
-    void preloadBrowserRuntime({ threads: options.settings?.workers?.threads });
   }
 }
 
@@ -153,7 +151,6 @@ class TrimWorkflow extends TrimWorkflowController<BrowserSourceRef, BrowserSaveD
   constructor(options: WorkflowOptions<CreateSettings> = {}) {
     super(browserRuntime, options, assertPublicSources);
     configureBrowserAssetBaseUrl(options.assetBaseUrl);
-    void preloadBrowserRuntime({ threads: options.settings?.workers?.threads });
   }
 }
 

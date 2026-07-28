@@ -42,7 +42,8 @@ import { inertUiController } from "./patcher-form-session.ts";
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
 import { ArchiveDialog as SharedArchiveDialog } from "./patcher-react-shared.tsx";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
-import { useUiLocalizer } from "./settings-context.tsx";
+import { resolveAssetUrl } from "./asset-url.ts";
+import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -139,6 +140,7 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
 );
 
 const ApplyDropAfter = ({
+  downloadHref,
   onLoadSample,
   pendingDrops,
   sampleError,
@@ -146,6 +148,7 @@ const ApplyDropAfter = ({
   workflowEmpty,
 }: {
   onLoadSample: () => void;
+  downloadHref: string;
   pendingDrops: PendingDrop[];
   sampleError: string;
   sampleLoading: boolean;
@@ -165,7 +168,7 @@ const ApplyDropAfter = ({
   if (!workflowEmpty) return null;
   return (
     <SampleTutorialStart
-      downloadHref={FIRST_WEAVE_URL}
+      downloadHref={downloadHref}
       downloadLabel="Download the bundle"
       error={sampleError}
       label="Start guided Apply"
@@ -844,7 +847,9 @@ type PatchEnablement = {
 // The apply view is a singleton in the webapp; a stable per-workflow key keeps
 // its activity slot separate from the create/trim forms in the shared store.
 const APPLY_ACTIVITY_KEY = "react-apply-view";
-const FIRST_WEAVE_URL = "/first-weave.zip";
+// Bare name, resolved against the app's base at fetch time: a root-absolute
+// path breaks any deployment that is not served from the domain root.
+const FIRST_WEAVE_ASSET = "first-weave.zip";
 
 const getBundleVerificationError = (bundleMeta: Array<BundlePatchMeta | undefined>, patches: PatchStackItemState[]) => {
   const lengths: Record<string, number> = { crc32: 8, md5: 32, sha1: 40 };
@@ -1330,6 +1335,7 @@ function ApplyWorkflowFormView({
   // Unified drop: bare files stage immediately; each archive shows an
   // "identifying" placeholder until its ROM-vs-patch bucket is classified.
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
+  const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
   const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
@@ -1337,7 +1343,7 @@ function ApplyWorkflowFormView({
     setSampleLoading(true);
     setSampleError("");
     try {
-      const response = await fetch(FIRST_WEAVE_URL);
+      const response = await fetch(resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
       handleUnifiedDrop([new File([blob], "first-weave.zip", { type: "application/zip" })]);
@@ -1424,6 +1430,7 @@ function ApplyWorkflowFormView({
         addLabel="Replace the ROM or add patches"
         afterDropZone={
           <ApplyDropAfter
+            downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
             onLoadSample={() => {
               setSampleTutorialActive(true);
               void loadFirstWeave();

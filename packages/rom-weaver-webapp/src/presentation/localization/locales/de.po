@@ -450,6 +450,11 @@ msgstr "Download der geteilten Sitzung fehlgeschlagen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.common.skipToMain"
+msgstr "Zum Hauptinhalt springen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Speicher ist nicht verfügbar."
 

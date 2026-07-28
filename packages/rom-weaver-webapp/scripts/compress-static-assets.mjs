@@ -33,6 +33,7 @@ const PRECOMPRESSED_EXTENSIONS = new Set([
 
 const writeIfSmaller = (filePath, compressed, source) => {
   if (compressed.byteLength < source.byteLength) fs.writeFileSync(filePath, compressed);
+  else fs.rmSync(filePath, { force: true });
 };
 
 // Brotli only. A `.gz` sibling set costs ~2.8 MB in the image and only ever
@@ -44,8 +45,16 @@ const writeIfSmaller = (filePath, compressed, source) => {
 // far too slow to serve on demand, and sws caches no compressed response.
 const compressFile = (filePath) => {
   const source = fs.readFileSync(filePath);
+  const outputPath = `${filePath}.br`;
+  if (fs.existsSync(outputPath)) {
+    try {
+      if (zlib.brotliDecompressSync(fs.readFileSync(outputPath)).equals(source)) return;
+    } catch {
+      // Replace an invalid or stale sidecar below.
+    }
+  }
   writeIfSmaller(
-    `${filePath}.br`,
+    outputPath,
     zlib.brotliCompressSync(source, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }),
     source,
   );

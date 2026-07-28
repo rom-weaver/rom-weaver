@@ -177,6 +177,7 @@ const Masthead = ({
   onOpenLog,
   onPreloadLog,
   onOpenSettings,
+  onPreloadSettings,
   onReset,
   tabsControlPanels = true,
   serviceWorkerStatus,
@@ -196,6 +197,7 @@ const Masthead = ({
   onOpenLog: () => void;
   onPreloadLog?: () => void;
   onOpenSettings: () => void;
+  onPreloadSettings?: () => void;
   onReset: () => void;
   tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
@@ -212,15 +214,8 @@ const Masthead = ({
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const isPwa = readPwaState();
-  const serviceWorkerLabel =
-    serviceWorkerStatus === "active"
-      ? "sw"
-      : serviceWorkerStatus === "ready"
-        ? "sw ok"
-        : serviceWorkerStatus
-          ? `sw ${serviceWorkerStatus}`
-          : null;
-  const runtimeStatus = serviceWorkerLabel ? `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}` : null;
+  const serviceWorkerLabel = serviceWorkerStatus === "off" ? "sw off" : "sw";
+  const runtimeStatus = `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}`;
   const runtimeStatusTitle =
     serviceWorkerStatus === "active"
       ? "This page is controlled by the service worker and its offline cache is available."
@@ -237,130 +232,134 @@ const Masthead = ({
     });
   };
   return (
-    <header className="masthead">
-      <span className="brand">
-        <BrandMark />
-        <span className="brand-copy">
-          <span className="brand-line">
-            <h1 className="brand-word">
-              rom<span className="brand-hy">-</span>
-              <b>weaver</b>
-            </h1>
-            {channelBadge ? <span className="channel-badge">{channelBadge}</span> : null}
-          </span>
-          {version ? (
-            <span className="masthead-version mono">
-              <span className="build-version-label" title={versionTitle}>
-                {version}
-              </span>
-              <span
-                className="masthead-threads"
-                data-thread-label={threadsLabel}
-                title={threads ? `${threads} ${threadsLabel}` : undefined}
-              >
-                {threads ? (
-                  <>
-                    <span aria-hidden="true" className="masthead-threads-full">
-                      · {threads} {threadsLabel}
-                    </span>
-                    <span aria-hidden="true" className="masthead-threads-short">
-                      · {threads}T
-                    </span>
-                    <span className="sr-only">
-                      {threads} {threadsLabel}
-                    </span>
-                  </>
-                ) : null}
-              </span>
-              {runtimeStatus ? (
+    <>
+      <a className="skip-link" href="#main-content">
+        {localizer.message("ui.common.skipToMain")}
+      </a>
+      <header className="masthead">
+        <span className="brand">
+          <BrandMark />
+          <span className="brand-copy">
+            <span className="brand-line">
+              <h1 className="brand-word">
+                rom<span className="brand-hy">-</span>
+                <b>weaver</b>
+              </h1>
+              {channelBadge ? <span className="channel-badge">{channelBadge}</span> : null}
+            </span>
+            {version ? (
+              <span className="masthead-version mono">
+                <span className="build-version-label" title={versionTitle}>
+                  {version}
+                </span>
+                <span
+                  className="masthead-threads"
+                  data-thread-label={threadsLabel}
+                  title={threads ? `${threads} ${threadsLabel}` : undefined}
+                >
+                  {threads ? (
+                    <>
+                      <span aria-hidden="true" className="masthead-threads-full">
+                        {`· ${threads} ${threadsLabel}`}
+                      </span>
+                      <span aria-hidden="true" className="masthead-threads-short">
+                        {`· ${threads}T`}
+                      </span>
+                      <span className="sr-only">{`${threads} ${threadsLabel}`}</span>
+                    </>
+                  ) : null}
+                </span>
                 <span className="masthead-runtime" title={runtimeStatusTitle}>
                   {runtimeStatus}
                 </span>
-              ) : null}
-            </span>
-          ) : null}
+              </span>
+            ) : null}
+          </span>
         </span>
-      </span>
-      <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
-      <div className="masthead-tools">
-        {githubHref ? (
-          <a
-            aria-label="GitHub"
+        <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
+        <div className="masthead-tools">
+          {githubHref ? (
+            <a
+              aria-label="GitHub"
+              className="tool"
+              href={githubHref}
+              onClick={(event) => guardExternalClick(event, githubHref)}
+              rel="noreferrer"
+              target="_blank"
+              title="GitHub"
+            >
+              <Github aria-hidden="true" />
+              <span aria-hidden="true" className="tool-text">
+                GitHub
+              </span>
+            </a>
+          ) : null}
+          {donateHref ? (
+            <a
+              aria-label={localizer.message("ui.footer.donate")}
+              className="tool masthead-donate"
+              href={donateHref}
+              onClick={(event) => guardExternalClick(event, donateHref)}
+              rel="noreferrer"
+              target="_blank"
+              title={localizer.message("ui.footer.donate")}
+            >
+              <Heart aria-hidden="true" />
+              <span aria-hidden="true" className="tool-text">
+                {localizer.message("ui.footer.donate")}
+              </span>
+            </a>
+          ) : null}
+          {githubHref || donateHref ? <span aria-hidden="true" className="tools-sep" /> : null}
+          <button
+            aria-label={localizer.message("ui.settings.reset")}
             className="tool"
-            href={githubHref}
-            onClick={(event) => guardExternalClick(event, githubHref)}
-            rel="noreferrer"
-            target="_blank"
-            title="GitHub"
+            onClick={onReset}
+            title={localizer.message("ui.settings.reset")}
+            type="button"
           >
-            <Github aria-hidden="true" />
+            <RotateCcw aria-hidden="true" />
             <span aria-hidden="true" className="tool-text">
-              GitHub
+              {localizer.message("ui.settings.reset")}
             </span>
-          </a>
-        ) : null}
-        {donateHref ? (
-          <a
-            aria-label={localizer.message("ui.footer.donate")}
-            className="tool masthead-donate"
-            href={donateHref}
-            onClick={(event) => guardExternalClick(event, donateHref)}
-            rel="noreferrer"
-            target="_blank"
-            title={localizer.message("ui.footer.donate")}
+          </button>
+          <ThemeToggle localizer={localizer} />
+          <button
+            aria-haspopup="dialog"
+            aria-label={logLabel}
+            className="tool"
+            onClick={onOpenLog}
+            onFocus={onPreloadLog}
+            onPointerDown={onPreloadLog}
+            onPointerEnter={onPreloadLog}
+            title={logLabel}
+            type="button"
           >
-            <Heart aria-hidden="true" />
+            <ScrollText aria-hidden="true" />
             <span aria-hidden="true" className="tool-text">
-              {localizer.message("ui.footer.donate")}
+              {logLabel}
             </span>
-          </a>
-        ) : null}
-        {githubHref || donateHref ? <span aria-hidden="true" className="tools-sep" /> : null}
-        <button
-          aria-label={localizer.message("ui.settings.reset")}
-          className="tool"
-          onClick={onReset}
-          title={localizer.message("ui.settings.reset")}
-          type="button"
-        >
-          <RotateCcw aria-hidden="true" />
-          <span aria-hidden="true" className="tool-text">
-            {localizer.message("ui.settings.reset")}
-          </span>
-        </button>
-        <ThemeToggle localizer={localizer} />
-        <button
-          aria-haspopup="dialog"
-          aria-label={logLabel}
-          className="tool"
-          onClick={onOpenLog}
-          onFocus={onPreloadLog}
-          onPointerDown={onPreloadLog}
-          onPointerEnter={onPreloadLog}
-          title={logLabel}
-          type="button"
-        >
-          <ScrollText aria-hidden="true" />
-          <span aria-hidden="true" className="tool-text">
-            {logLabel}
-          </span>
-        </button>
-        <button
-          aria-expanded={settingsOpen}
-          aria-haspopup="dialog"
-          aria-label={settingsLabel}
-          className="tool"
-          onClick={onOpenSettings}
-          title={settingsLabel}
-          type="button"
-        >
-          <Settings aria-hidden="true" />
-          <span aria-hidden="true" className="tool-text">
-            {settingsLabel}
-          </span>
-        </button>
-      </div>
-    </header>
+          </button>
+          <button
+            aria-expanded={settingsOpen}
+            aria-haspopup="dialog"
+            aria-label={settingsLabel}
+            className="tool"
+            onClick={onOpenSettings}
+            onFocus={onPreloadSettings}
+            onPointerDown={onPreloadSettings}
+            onPointerEnter={onPreloadSettings}
+            title={settingsLabel}
+            type="button"
+          >
+            <Settings aria-hidden="true" />
+            <span aria-hidden="true" className="tool-text">
+              {settingsLabel}
+            </span>
+          </button>
+        </div>
+      </header>
+    </>
   );
 };
 

@@ -4,9 +4,9 @@
 # `--build-arg DIST=prebuilt` serves `prebuilt/` out of the build context
 # instead, skipping the whole builder stage below - rustup, the WASI SDK,
 # binaryen and a cold wasm compile included. The release fan-out fills it with
-# the same raw bundle it publishes as `rom-weaver-webapp.tar.gz`, then generates
-# the compressed siblings needed by its static server. A plain `docker build`
-# still builds from source. BuildKit builds
+# the same bundle it publishes as `rom-weaver-webapp.tar.gz`, then fills in
+# compression siblings for files Vite deliberately leaves raw. A plain
+# `docker build` still builds from source. BuildKit builds
 # only the stages the selected one depends on, so the unused half costs nothing
 # - and `prebuilt/` only has to exist for the build that asks for it.
 #
@@ -165,8 +165,8 @@ COPY prebuilt/ /
 # hadolint ignore=DL3006
 FROM dist-${DIST} AS dist
 
-# Compression is a Docker image concern: release and npm webapp bundles stay
-# raw, while static-web-server gets the siblings it serves from this stage.
+# Fill in sidecars for mutable root files and other bundle entries that Vite
+# deliberately leaves uncompressed. Existing hashed-asset sidecars are kept.
 FROM node:22-bookworm-slim AS compressed
 COPY --from=dist / /dist
 COPY packages/rom-weaver-webapp/scripts/compress-static-assets.mjs /usr/local/bin/

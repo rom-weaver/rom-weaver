@@ -1,4 +1,12 @@
 /* ═══ masthead ═══ */
+.rw-app .skip-link {
+  position: fixed; inset-block-start: var(--sp-s); inset-inline-start: var(--gutter); z-index: 10001;
+  padding: var(--sp-s) var(--sp-m); border: 1px solid var(--thread); border-radius: var(--r-s);
+  background: var(--plate); color: var(--ink); box-shadow: var(--overlay-shadow);
+  transform: translateY(calc(-100% - var(--sp-l))); transition: transform .18s var(--ease);
+}
+.rw-app .skip-link:focus-visible { transform: none; }
+
 .rw-app .masthead { display: flex; align-items: center; gap: var(--sp-l); padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
 .rw-app .brand { display: inline-flex; align-items: center; gap: var(--sp-m); flex: none; }
 .rw-app .brand-copy { display: flex; flex-direction: column; min-width: 0; }

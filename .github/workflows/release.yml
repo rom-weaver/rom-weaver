@@ -455,17 +455,14 @@ jobs:
           ROM_WEAVER_CHANNEL: ${{ contains(needs.release.outputs.version, '-') && 'beta' || 'prod' }}
         run: |
           npm --prefix packages/rom-weaver-webapp run build
-          if find packages/rom-weaver-webapp/dist -type f \( -name '*.br' -o -name '*.gz' \) | grep -q .; then
-            echo 'webapp release build unexpectedly contains .br/.gz sidecars' >&2
-            exit 1
-          fi
           tar --create --gzip \
             --file rom-weaver-webapp.tar.gz \
             --directory packages/rom-weaver-webapp/dist .
 
       # Consumed by the webapp image, which would otherwise install rustup, the
       # WASI SDK and binaryen and rebuild the same bundle from scratch. Sharing
-      # it also lets Docker generate its own server-side compression siblings.
+      # it also gives Docker the same precompressed assets as every other
+      # webapp bundle.
       - name: Upload static webapp bundle for the container build
         uses: actions/upload-artifact@v7
         with:

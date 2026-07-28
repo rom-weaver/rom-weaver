@@ -18,7 +18,9 @@ import type { PageFileDrop } from "../public/react/public-types.ts";
 import { RomWeaverSettingsProvider } from "../public/react/settings-context.tsx";
 import { setActiveSelectionForm } from "../public/react/input-selection-handler.ts";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
+import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
+import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_DISPLAY_VERSION } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
 import { Masthead, UpdateBanner } from "./components/shell.tsx";
@@ -29,7 +31,6 @@ import { getSettingsUiState } from "./settings/settings-state.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
-import { SettingsPanel } from "./webapp-settings.tsx";
 import { ApplyPatchRoute, CreatePatchRoute, ToolsRouteForm, TrimPatchRoute } from "./workflow-routes.tsx";
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
@@ -45,6 +46,8 @@ const WORKFLOW_TABS = [
 // the masthead and idle post-boot preload can fetch the same promise.
 const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog }));
 const LogDialog = lazy(loadLogDialog);
+const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
+const SettingsPanel = lazy(loadSettingsPanel);
 
 const logger = createLogger("webapp-root");
 
@@ -220,22 +223,37 @@ function WebappRoot({
   useEffect(() => {
     if (notFound) return;
     let cancelled = false;
-    const preloadLogWhenIdle = () => {
+    const preloadDialogsWhenIdle = () => {
       if (cancelled) return;
       void loadLogDialog().catch(() => undefined);
+      void loadSettingsPanel().catch(() => undefined);
     };
-    void preloadBrowserRuntime({ threads }).then(() => {
+    const preload = () => {
       if (cancelled) return;
-      if (typeof requestIdleCallback === "function") {
-        requestIdleCallback(preloadLogWhenIdle, { timeout: 2000 });
-      } else {
-        window.setTimeout(preloadLogWhenIdle, 0);
-      }
-    });
+      void preloadBrowserRuntime({ threads }).then(() => {
+        if (cancelled) return;
+        if (typeof requestIdleCallback === "function") {
+          requestIdleCallback(preloadDialogsWhenIdle, { timeout: 2000 });
+        } else {
+          window.setTimeout(preloadDialogsWhenIdle, 0);
+        }
+      });
+    };
+    const cancelPreload = scheduleBrowserRuntimePreload(preload);
     return () => {
       cancelled = true;
+      cancelPreload();
     };
   }, [notFound, threads]);
+  const preloadSettingsPanel = useCallback(() => {
+    void loadSettingsPanel().catch(() => undefined);
+  }, []);
+  const openSettings = useCallback(() => {
+    void loadSettingsPanel().then(
+      () => actions.onOpenSettings(),
+      () => actions.onOpenSettings(),
+    );
+  }, [actions]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
@@ -371,7 +389,7 @@ function WebappRoot({
     : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator");
 
   return (
-    <RomWeaverSettingsProvider settings={state.settings}>
+    <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
         <div className="app">
           <Masthead
@@ -382,7 +400,8 @@ function WebappRoot({
             githubHref={GITHUB_URL}
             onOpenLog={() => setLogOpen(true)}
             onPreloadLog={preloadLogDialog}
-            onOpenSettings={actions.onOpenSettings}
+            onOpenSettings={openSettings}
+            onPreloadSettings={preloadSettingsPanel}
             onReset={actions.onReset}
             onSelectTab={(id) => {
               if (notFound) {
@@ -417,7 +436,7 @@ function WebappRoot({
           />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLockNotice />
-          <main className={notFound ? "workbench is-not-found" : "workbench"}>
+          <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
             {notFound ? (
               <section aria-labelledby="not-found-title" className="not-found-page">
                 <div className="not-found-content">
@@ -506,15 +525,17 @@ function WebappRoot({
           title="Settings"
           variant="settings-modal"
         >
-          <SettingsPanel
-            draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-            onClose={actions.onCloseSettings}
-            onDraftChange={actions.onDraftChange}
-            onRestoreDefaults={actions.onRestoreDefaults}
-            onSaveClose={actions.onSaveClose}
-            uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
-            validation={state.validation}
-          />
+          <Suspense fallback={null}>
+            <SettingsPanel
+              draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
+              onClose={actions.onCloseSettings}
+              onDraftChange={actions.onDraftChange}
+              onRestoreDefaults={actions.onRestoreDefaults}
+              onSaveClose={actions.onSaveClose}
+              uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
+              validation={state.validation}
+            />
+          </Suspense>
         </Modal>
         <ConfirmDialog
           body={confirmationDialog.message}

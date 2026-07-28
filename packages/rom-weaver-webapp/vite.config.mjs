@@ -299,12 +299,14 @@ const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 // The tab title and the iOS home-screen label are the two places the channel has
 // to show up before the bundle has even booted. Non-production deployments also
 // opt out of indexing here; the deployed response repeats the policy as a header.
-const stampChannelIdentity = (channel, channelLabel) => ({
+const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
   name: "rom-weaver-channel-identity",
   transformIndexHtml: {
     handler(html) {
       const accent = CHANNEL_DEFAULT_ACCENTS[channel] || CHANNEL_DEFAULT_ACCENTS.dev;
-      const stampedHtml = accent === "madder" ? html : html.replace("<html ", `<html data-accent="${accent}" `);
+      const serviceWorkerHtml = html.replace("<html ", `<html data-service-worker-enabled="${serviceWorkerEnabled}" `);
+      const stampedHtml =
+        accent === "madder" ? serviceWorkerHtml : serviceWorkerHtml.replace("<html ", `<html data-accent="${accent}" `);
       if (channel === "prod") return stampedHtml;
       return stampedHtml
         .replace(`<title>${SITE_NAME}`, `<title>${SITE_NAME} ${channelLabel}`)
@@ -315,7 +317,14 @@ const stampChannelIdentity = (channel, channelLabel) => ({
   },
 });
 
-const PRERENDER_ROOT = (shell) => `<div id="webapp-root" aria-busy="true">${shell}</div>`;
+const PRERENDER_RUNTIME_SLOT = '<span class="masthead-runtime">· web · sw</span>';
+const PRERENDER_RUNTIME_RESOLVER =
+  "<script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}finally{document.currentScript.remove()}</script>";
+const PRERENDER_ROOT = (shell) =>
+  `<div id="webapp-root" aria-busy="true">${shell.replace(
+    PRERENDER_RUNTIME_SLOT,
+    `${PRERENDER_RUNTIME_SLOT}${PRERENDER_RUNTIME_RESOLVER}`,
+  )}</div>`;
 
 const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, routePreloadLinks) => {
   let outDir = "dist";
@@ -429,32 +438,24 @@ const writeCloudflareHeadersAsset = (channel) => {
   };
 };
 
-// Deploy-only (ROM_WEAVER_PAGES_BROTLI=1): stage quality-11 brotli sidecars
-// for every hashed asset where q11 measurably beats Cloudflare's on-the-fly
-// recompression (~640 KB on the wasm, ~50 KB on the main JS bundle), and
-// write a _routes.json scoping Pages Function invocation
-// (functions/assets/[name].js) to exactly the sidecar-backed URLs. The wasm
-// sidecar is the prebuilt artifact, byte-verified against the emitted asset;
-// everything else is compressed here and kept only when it saves >=2% -
-// already-compressed formats (woff2, png, zip) fail that bar and stay on the
-// static path. Only /assets/* is eligible: those URLs are content-hashed and
-// immutable, while the mutable root files (index.html, the service worker,
-// changelog.json) must keep their no-cache semantics and never route through
-// the function's immutable-cache response. Off in plain builds on purpose:
-// the release tarball asserts dist holds no compression sidecars (the Docker
-// image generates its own), and unmatched routes must stay on Pages'
-// unmetered static path.
+// Every webapp bundle carries quality-11 brotli sidecars for hashed assets
+// where q11 saves at least 2%. Cloudflare's Pages Function uses _routes.json
+// to serve those exact URLs; Docker and self-hosters can serve the same static
+// siblings directly. Already-compressed formats (woff2, png, zip) fail the
+// savings bar and stay on the ordinary static path. Only /assets/* is eligible:
+// mutable root files (index.html, the service worker, changelog.json) must keep
+// their no-cache semantics and never route through the function's immutable
+// response.
 const PAGES_BROTLI_MIN_SAVINGS = 0.02;
 // _routes.json rejects more than 100 combined include/exclude entries; leave
 // headroom so an asset-count creep fails the build before Cloudflare does.
 const PAGES_ROUTES_MAX_INCLUDES = 90;
 
-const writePagesBrotliSidecars = () => {
+const writeBrotliSidecars = () => {
   let outDir = "dist";
   return {
     apply: "build",
     closeBundle() {
-      if (process.env.ROM_WEAVER_PAGES_BROTLI !== "1") return;
       const distDir = path.resolve(rootDir, outDir);
       const assetsDir = path.join(distDir, "assets");
       const wasmNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".wasm"));
@@ -463,16 +464,12 @@ const writePagesBrotliSidecars = () => {
       }
       const sourceWasm = path.join(rootDir, "src", "wasm", "rom-weaver-app.wasm");
       const sourceSidecar = `${sourceWasm}.br`;
-      if (!fs.existsSync(sourceSidecar)) {
-        throw new Error(
-          `ROM_WEAVER_PAGES_BROTLI=1 but ${sourceSidecar} is missing; build the prod wasm artifact first`,
-        );
-      }
       const emittedWasm = path.join(assetsDir, wasmNames[0]);
       if (!fs.readFileSync(emittedWasm).equals(fs.readFileSync(sourceWasm))) {
         throw new Error(`${emittedWasm} does not match ${sourceWasm}; refusing to stage a mismatched brotli sidecar`);
       }
-      fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
+      if (fs.existsSync(sourceSidecar)) fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
+      else brotliCompressFile({ inputPath: emittedWasm, outputPath: `${emittedWasm}.br`, quality: 11 });
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
       for (const name of fs.readdirSync(assetsDir)) {
         if (name.endsWith(".wasm") || name.endsWith(".br")) continue;
@@ -499,7 +496,7 @@ const writePagesBrotliSidecars = () => {
     configResolved(config) {
       outDir = config.build.outDir;
     },
-    name: "rom-weaver-pages-brotli-sidecars",
+    name: "rom-weaver-brotli-sidecars",
   };
 };
 
@@ -551,7 +548,7 @@ const writeChangelogAsset = () => {
 // paint it as soon as the stylesheet arrives, instead of a blank page until the
 // bundle executes and React mounts. Rendered from the actual components via
 // react-dom/server (scripts/prerender.mjs), so there is no hand-copied markup
-// to drift. The client keeps createRoot and replaces the shell on first mount.
+// to drift. The client hydrates the shell in place.
 const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
 
 // Which prerendered variant a dev request gets, mirroring readWorkflowViewFromPath
@@ -803,14 +800,14 @@ export default defineConfig(({ command }) => {
       serveRootStaticAssets(appChannel, appChannelLabel),
       serveChangelogAsset(),
       deferDevHotUpdates(),
-      stampChannelIdentity(appChannel, appChannelLabel),
+      stampChannelIdentity(appChannel, appChannelLabel, serviceWorkerEnabled),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
       prerenderWebappShell(prerenderedShells),
       preloadWorkflowRouteChunks(routePreloadLinks),
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),
       writeChangelogAsset(),
       writeCloudflareHeadersAsset(appChannel),
-      writePagesBrotliSidecars(),
+      writeBrotliSidecars(),
       VitePWA({
         devOptions: {
           disableRuntimeConfig: true,

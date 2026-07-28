@@ -59,10 +59,9 @@
     </script>
     <script>
       // Seed --wall-clock (epoch seconds) before first paint so the prerendered
-      // hero's extension ticker sits at its wall-clock phase - the same phase
-      // the client stamps per mount (layout.tsx) - and the createRoot swap
-      // continues the marquee seamlessly instead of jumping. See formats-ticker
-      // in dropzone.css.
+      // hero's extension ticker starts at its wall-clock phase. Hydration keeps
+      // that node and clock; later ticker mounts refresh the phase in layout.tsx.
+      // See formats-ticker in dropzone.css.
       document.documentElement.style.setProperty("--wall-clock", `${Date.now() / 1000}s`);
     </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -102,8 +101,8 @@
       // mount attaches any handler - without this they are silently swallowed.
       // Has to be inline: the bundle is a module, so it only runs after the HTML
       // is parsed, while the shell is painted and clickable well before that.
-      // Nodes are kept as-is; src/webapp/shell-click-replay.ts reads their
-      // identity off them (they survive detachment) and replays what it can.
+      // src/webapp/shell-click-replay.ts describes the targets before hydration
+      // and replays what it can once React's handlers are attached.
       (function () {
         function record(event) {
           if (buffer.clicks.length < 4) buffer.clicks.push({ target: event.target, time: Date.now() });
@@ -118,17 +117,17 @@
         document.addEventListener("click", record, true);
       })();
     </script>
-    <script type="module" src="./src/webapp/main.tsx"></script>
-  </head>
-  <body>
-    <div id="webapp-root" aria-busy="true"></div>
     <script>
-      // Fill the prerendered environment slot with the same resolved value as
-      // WebappRoot before first paint. The shell is replaced, not hydrated, so
-      // a mismatch here is visible as a fast thread-count change.
-      (function () {
+      // Called by the tiny parser-blocking script injected immediately after
+      // the prerendered masthead metadata. It resolves both slots before the
+      // rest of the shell can paint, and produces the exact text React hydrates.
+      window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY = function () {
         const slot = document.querySelector(".masthead-threads");
-        if (!slot) return;
+        const full = slot?.querySelector(".masthead-threads-full");
+        const short = slot?.querySelector(".masthead-threads-short");
+        const accessible = slot?.querySelector(".sr-only");
+        const runtimeSlot = document.querySelector(".masthead-runtime");
+        if (!(slot && full && short && accessible && runtimeSlot)) return;
 
         const hardwareConcurrency = navigator.hardwareConcurrency;
         const hardwareThreads =
@@ -159,20 +158,43 @@
           // Fall back to the browser default; the app does the same for bad storage.
         }
 
-        if (!threads) return;
         const label = slot.dataset.threadLabel || "threads";
-        const full = slot.querySelector(".masthead-threads-full");
-        const short = slot.querySelector(".masthead-threads-short");
-        const accessible = slot.querySelector(".sr-only");
-        if (full && short && accessible) {
-          full.textContent = `· ${threads} ${label}`;
-          short.textContent = `· ${threads}T`;
-          accessible.textContent = `${threads} ${label}`;
-        } else {
-          slot.textContent = `· ${threads} ${label}`;
-        }
+        full.textContent = `· ${threads} ${label}`;
+        short.textContent = `· ${threads}T`;
+        accessible.textContent = `${threads} ${label}`;
         slot.title = `${threads} ${label}`;
-      })();
+
+        const displayModes = ["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"];
+        const displayModeMatches =
+          typeof window.matchMedia === "function" &&
+          displayModes.some((mode) => window.matchMedia(`(display-mode: ${mode})`).matches);
+        const iosStandalone = navigator.standalone === true;
+        const launchSurface = displayModeMatches || iosStandalone ? "pwa" : "web";
+        const serviceWorkerEnabled = document.documentElement.dataset.serviceWorkerEnabled === "true";
+        const setRuntimeStatus = (status) => {
+          const label = status === "off" ? "sw off" : "sw";
+          runtimeSlot.textContent = `· ${launchSurface} · ${label}`;
+          const title =
+            status === "active"
+              ? "This page is controlled by the service worker and its offline cache is available."
+              : status === "ready"
+                ? "A service worker is installed and ready to take control."
+                : status === "off"
+                  ? "Service-worker offline support is unavailable."
+                  : "";
+          if (title) runtimeSlot.title = title;
+          else runtimeSlot.removeAttribute("title");
+        };
+
+        if (!(serviceWorkerEnabled && navigator.serviceWorker)) setRuntimeStatus("off");
+        else if (navigator.serviceWorker.controller)
+          setRuntimeStatus(typeof MessageChannel === "function" ? "active" : "ready");
+        else setRuntimeStatus(null);
+      };
     </script>
+    <script type="module" src="./src/webapp/main.tsx"></script>
+  </head>
+  <body>
+    <div id="webapp-root" aria-busy="true"></div>
   </body>
 </html>
