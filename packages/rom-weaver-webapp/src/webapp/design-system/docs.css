@@ -168,6 +168,26 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 }
 .rw-app .docs-article blockquote > :first-child { margin-top: 0; }
 .rw-app .docs-article blockquote > :last-child { margin-bottom: 0; }
+.rw-app .docs-screenshot { margin: var(--sp-xl) 0; }
+.rw-app .docs-screenshot picture { display: block; }
+.rw-app .docs-screenshot picture[data-docs-screenshot-theme="dark"] { display: none; }
+:root[data-theme="dark"] .rw-app .docs-screenshot picture[data-docs-screenshot-theme="light"] { display: none; }
+:root[data-theme="dark"] .rw-app .docs-screenshot picture[data-docs-screenshot-theme="dark"] { display: block; }
+.rw-app .docs-screenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--well);
+}
+.rw-app .docs-screenshot figcaption {
+  margin-top: var(--sp-s);
+  color: var(--ink-3);
+  font-size: .72rem;
+  line-height: 1.5;
+  text-align: center;
+}
 .rw-app .docs-cta {
   display: flex;
   align-items: center;

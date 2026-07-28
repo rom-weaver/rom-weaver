@@ -20,6 +20,19 @@ const repoRoot = path.resolve(rootDir, "../..");
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
+const docsScreenshotNames = [
+  "create-desktop-dark.png",
+  "create-desktop-light.png",
+  "create-mobile-dark.png",
+  "create-mobile-light.png",
+  "weave-desktop-dark.png",
+  "weave-desktop-light.png",
+  "weave-mobile-dark.png",
+  "weave-mobile-light.png",
+];
+const docsScreenshotSources = Object.fromEntries(
+  docsScreenshotNames.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),
+);
 
 // A manifest's icons are read at install time, so an installed PWA's icon can
 // only follow the build channel - unlike the in-app mark, which follows the
@@ -41,6 +54,7 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/logo.svg": channelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
   "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
+  ...docsScreenshotSources,
 });
 const generatedSampleAssetPaths = new Set([
   "/first-create.zip",

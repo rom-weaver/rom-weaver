@@ -23,6 +23,16 @@ const countVisibleWords = (source) =>
     .replace(/<[^>]+>/g, " ")
     .trim()
     .split(/\s+/).length;
+const docsScreenshotNames = [
+  "create-desktop-dark.png",
+  "create-desktop-light.png",
+  "create-mobile-dark.png",
+  "create-mobile-light.png",
+  "weave-desktop-dark.png",
+  "weave-desktop-light.png",
+  "weave-mobile-dark.png",
+  "weave-mobile-light.png",
+];
 
 const weaveHtml = read("index.html");
 const notFoundHtml = read("404.html");
@@ -104,6 +114,26 @@ assertIncludes(
 );
 assertIncludes(weaveHtml, 'href="docs"', "weave docs navigation");
 assertIncludes(createHtml, 'href="docs"', "create docs navigation");
+
+for (const name of docsScreenshotNames) {
+  const screenshotPath = path.join(distDir, "docs", "screenshots", name);
+  if (!fs.statSync(screenshotPath).isFile()) throw new Error(`docs screenshot is missing: ${name}`);
+}
+for (const [slug, workflow] of [
+  ["docs/apply-rom-patches", "weave"],
+  ["docs/create-rom-patches", "create"],
+]) {
+  const docsHtml = read(`${slug}.html`);
+  for (const viewport of ["desktop", "mobile"]) {
+    for (const theme of ["dark", "light"]) {
+      assertIncludes(
+        docsHtml,
+        `/docs/screenshots/${workflow}-${viewport}-${theme}.png`,
+        `${slug} ${viewport} ${theme} screenshot`,
+      );
+    }
+  }
+}
 
 assertIncludes(weaveHtml, '"@type":"SoftwareApplication"', "weave SoftwareApplication JSON-LD");
 assertIncludes(weaveHtml, '"@type":"WebSite"', "weave WebSite JSON-LD");

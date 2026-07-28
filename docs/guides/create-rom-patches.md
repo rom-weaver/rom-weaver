@@ -46,6 +46,18 @@ Do not compare two archives when you mean to compare the files inside them.
 The original, modified file, and generated patch remain on your device. The
 browser app does not upload them.
 
+<figure class="docs-screenshot">
+  <picture data-docs-screenshot-theme="light">
+    <source media="(max-width: 520px)" srcset="/docs/screenshots/create-mobile-light.png">
+    <img src="/docs/screenshots/create-desktop-light.png" alt="The Create workflow filled with the first-create sample assets" loading="lazy" decoding="async">
+  </picture>
+  <picture data-docs-screenshot-theme="dark">
+    <source media="(max-width: 520px)" srcset="/docs/screenshots/create-mobile-dark.png">
+    <img src="/docs/screenshots/create-desktop-dark.png" alt="The Create workflow filled with the first-create sample assets" loading="lazy" decoding="async">
+  </picture>
+  <figcaption>The docs build captures this filled workflow from the bundled <code>first-create.zip</code> sample.</figcaption>
+</figure>
+
 ## Create a patch with the CLI
 
 The corresponding command is:

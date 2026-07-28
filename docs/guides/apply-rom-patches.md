@@ -45,6 +45,18 @@ habit makes updates, optional patches, and troubleshooting much easier.
 Files are processed locally in the browser. rom-weaver does not upload the ROM,
 patches, or output to a server.
 
+<figure class="docs-screenshot">
+  <picture data-docs-screenshot-theme="light">
+    <source media="(max-width: 520px)" srcset="/docs/screenshots/weave-mobile-light.png">
+    <img src="/docs/screenshots/weave-desktop-light.png" alt="The Weave workflow filled with the first-weave sample ROM and patch" loading="lazy" decoding="async">
+  </picture>
+  <picture data-docs-screenshot-theme="dark">
+    <source media="(max-width: 520px)" srcset="/docs/screenshots/weave-mobile-dark.png">
+    <img src="/docs/screenshots/weave-desktop-dark.png" alt="The Weave workflow filled with the first-weave sample ROM and patch" loading="lazy" decoding="async">
+  </picture>
+  <figcaption>The docs build captures this filled workflow from the bundled <code>first-weave.zip</code> sample.</figcaption>
+</figure>
+
 Supported archives can be opened for you. If an archive contains several
 possible ROMs or patches, rom-weaver asks which entry to use. Selecting a file
 with a familiar name is still not a substitute for matching the expected

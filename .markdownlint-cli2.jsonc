@@ -13,7 +13,8 @@
     // markdown the moment a worktree has node_modules and any .md is staged.
     "**/node_modules/**",
     "CHANGELOG.md",
-    "crates/rom-weaver-containers/libarchive/vendor/**/*.md"
+    "crates/rom-weaver-containers/libarchive/vendor/**/*.md",
+    "packages/**/node_modules/**"
   ],
   "config": {
     "default": true,
@@ -28,6 +29,8 @@
         "br",
         "code",
         "details",
+        "figcaption",
+        "figure",
         "h1",
         "img",
         "p",

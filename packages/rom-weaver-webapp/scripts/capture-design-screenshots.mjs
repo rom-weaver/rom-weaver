@@ -14,7 +14,7 @@ const CASES = [
   {
     name: "weave",
     route: "/weave?bundle=first-weave.zip",
-    waitFor: "The woven result will be verified against the expected output.",
+    waitFor: "Changes the message displayed by the NES ROM.",
   },
   { name: "create", route: "/create", waitFor: "Checksum from extract", click: "Start with sample assets" },
 ];
