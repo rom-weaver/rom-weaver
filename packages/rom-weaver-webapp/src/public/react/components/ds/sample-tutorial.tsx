@@ -1,14 +1,61 @@
+import {
+  Archive,
+  ArrowUpDown,
+  EllipsisVertical,
+  GitCompare,
+  ListChecks,
+  Package,
+  Scissors,
+  SlidersHorizontal,
+  ToggleRight,
+  Upload,
+  X,
+} from "lucide-react";
+import type { ComponentType } from "react";
 import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
+import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
+import { SwapIcon } from "./swap-icon.tsx";
 
+type SampleTutorialAction =
+  | "apply"
+  | "archive"
+  | "checks"
+  | "create"
+  | "drop"
+  | "header"
+  | "menu"
+  | "options"
+  | "package"
+  | "remove"
+  | "reorder"
+  | "swap"
+  | "toggle";
 type SampleTutorialStep = {
-  actions?: readonly (readonly [symbol: string, label: string])[];
+  actions?: readonly (readonly [action: SampleTutorialAction, label: string])[];
   body: string;
   openDrawers?: boolean;
+  openMenu?: boolean;
   placement?: "bottom" | "top";
   scrollBlock?: ScrollLogicalPosition;
   target?: string;
   title: string;
+};
+
+const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: string }>> = {
+  apply: ApplyBandaidIcon,
+  archive: Archive,
+  checks: ListChecks,
+  create: GitCompare,
+  drop: Upload,
+  header: Scissors,
+  menu: EllipsisVertical,
+  options: SlidersHorizontal,
+  package: Package,
+  remove: X,
+  reorder: ArrowUpDown,
+  swap: SwapIcon,
+  toggle: ToggleRight,
 };
 
 const SampleTutorialStart = ({
@@ -65,6 +112,7 @@ const SampleTutorial = ({
     let stage: HTMLElement | null = null;
     let previousDescription: string | null = null;
     let observer: MutationObserver | null = null;
+    let openedMenu: HTMLButtonElement | null = null;
     let frame = 0;
     const connect = () => {
       if (target) return true;
@@ -79,6 +127,10 @@ const SampleTutorial = ({
         for (const drawer of target.querySelectorAll<HTMLButtonElement>(".cks > .cks-head[aria-expanded='false']")) {
           drawer.click();
         }
+      }
+      if (step.openMenu) {
+        openedMenu = target.querySelector<HTMLButtonElement>(".patch-menu-btn[aria-expanded='false']");
+        openedMenu?.click();
       }
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       target.scrollIntoView?.({ behavior: reducedMotion ? "auto" : "smooth", block: step.scrollBlock ?? "center" });
@@ -95,6 +147,7 @@ const SampleTutorial = ({
     return () => {
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
+      if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
       target?.classList.remove("sample-tutorial-target");
       stage?.classList.remove("sample-tutorial-stage");
       if (target) {
@@ -129,14 +182,17 @@ const SampleTutorial = ({
           <p id={bodyId}>{ready ? step.body : loadingBody}</p>
           {ready && step.actions?.length ? (
             <ul aria-label="Available actions" className="sample-tutorial-action-list">
-              {step.actions.map(([symbol, label]) => (
-                <li key={label}>
-                  <span aria-hidden="true" className="sample-tutorial-action-symbol">
-                    {symbol}
-                  </span>
-                  {label}
-                </li>
-              ))}
+              {step.actions.map(([action, label]) => {
+                const Icon = ACTION_ICONS[action];
+                return (
+                  <li key={label}>
+                    <span aria-hidden="true" className="sample-tutorial-action-icon">
+                      <Icon />
+                    </span>
+                    {label}
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
         </div>

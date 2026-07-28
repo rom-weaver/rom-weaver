@@ -6,9 +6,10 @@ import { SampleTutorial, type SampleTutorialStep } from "../../src/public/react/
 
 const STEPS: readonly SampleTutorialStep[] = [
   {
-    actions: [["✓", "Checks"]],
+    actions: [["checks", "Checks"]],
     body: "Review the first section.",
     openDrawers: true,
+    openMenu: true,
     target: "#tutorial-first",
     title: "First section",
   },
@@ -16,6 +17,7 @@ const STEPS: readonly SampleTutorialStep[] = [
 ];
 
 const TutorialSection = ({ id, label }: { id: string; label: string }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
   const [open, setOpen] = useState(false);
   return (
     <section id={id}>
@@ -24,6 +26,14 @@ const TutorialSection = ({ id, label }: { id: string; label: string }) => {
           {label}
         </button>
       </div>
+      <button
+        aria-expanded={menuOpen}
+        className="patch-menu-btn"
+        onClick={() => setMenuOpen((current) => !current)}
+        type="button"
+      >
+        Actions
+      </button>
     </section>
   );
 };
@@ -42,7 +52,10 @@ describe("sample tutorial", () => {
     const first = document.querySelector("#tutorial-first") as HTMLElement;
     await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
     expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("list", { name: "Available actions" }).textContent).toContain("✓Checks");
+    expect(first.querySelector(".patch-menu-btn")?.getAttribute("aria-expanded")).toBe("true");
+    const actions = screen.getByRole("list", { name: "Available actions" });
+    expect(actions.textContent).toContain("Checks");
+    expect(actions.querySelector("svg")).toBeTruthy();
     fireEvent.click(first);
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));

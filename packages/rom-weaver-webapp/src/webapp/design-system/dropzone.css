@@ -362,9 +362,12 @@
   border: 1px solid var(--seam-strong); border-radius: 3px;
   background: var(--well); color: var(--ink-2); font-size: .69rem; font-weight: 650;
 }
-.rw-app .sample-tutorial-action-symbol {
-  min-width: 1.1em; color: var(--thread-text); font-family: var(--mono); font-size: .82rem;
-  font-weight: 850; line-height: 1; text-align: center;
+.rw-app .sample-tutorial-action-icon {
+  display: grid; place-items: center; width: 14px; height: 14px; color: var(--thread-text); flex: none;
+}
+.rw-app .sample-tutorial-action-icon svg {
+  width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round;
+  stroke-width: 2;
 }
 .rw-app .sample-tutorial-actions {
   display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-s);

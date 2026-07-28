@@ -176,9 +176,8 @@ const ApplyDropAfter = ({
 const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
     actions: [
-      ["✓", "Checks"],
-      ["↻", "Replace"],
-      ["×", "Remove"],
+      ["checks", "Checks"],
+      ["remove", "Remove"],
     ],
     body: "The ROM card keeps its name, source files, checksums, and file controls together.",
     openDrawers: true,
@@ -187,21 +186,22 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [
-      ["↕", "Reorder"],
-      ["✎", "Edit"],
-      ["✓", "Checks"],
-      ["↻", "Replace"],
-      ["×", "Remove"],
+      ["reorder", "Reorder"],
+      ["toggle", "Toggle On / Off"],
+      ["header", "Header options"],
+      ["checks", "Checks"],
+      ["menu", "Menu: edit · replace · remove"],
     ],
-    body: "Both IPS patches run in order: HELLO → MODIFIED, then WORLD → ROM. The second patch's input checks match the first patch's output.",
+    body: "Both IPS patches run in order: HELLO → MODIFIED, then WORLD → ROM. Use the numbered handles to reorder, the On/Off toggles to skip a patch, scissors for header handling, Checks for checksums, and the 3-dot menu to edit, replace, or remove.",
     openDrawers: true,
+    openMenu: true,
     target: "#rom-weaver-row-patch-stack",
     title: "Build the two-patch stack",
   },
   {
     actions: [
-      ["⇩", "Drop files"],
-      ["＋", "Browse"],
+      ["drop", "Drop files"],
+      ["drop", "Browse"],
     ],
     body: "The compact 0x01 row stays available after setup for more ROMs, patches, bundles, or archives.",
     target: "#rom-weaver-row-unified-drop",
@@ -209,9 +209,9 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [
-      ["⚙", "Options"],
-      ["▣", "Bundle"],
-      ["▶", "Apply & download"],
+      ["options", "Options"],
+      ["package", "Bundle"],
+      ["apply", "Apply & download"],
     ],
     body: "Choose the output name, format, compression, header, and bundle settings. Then press WEAVE & DOWNLOAD to apply both patches.",
     openDrawers: true,

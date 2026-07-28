@@ -60,9 +60,8 @@ const CREATE_SAMPLE_ASSETS = [
 const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
     actions: [
-      ["✓", "Checks"],
-      ["↻", "Replace"],
-      ["×", "Remove"],
+      ["checks", "Checks"],
+      ["remove", "Remove"],
     ],
     body: "The Original card keeps the starting file's name, remove control, and checksums together.",
     openDrawers: true,
@@ -71,10 +70,9 @@ const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [
-      ["⇄", "Swap"],
-      ["✓", "Checks"],
-      ["↻", "Replace"],
-      ["×", "Remove"],
+      ["swap", "Swap"],
+      ["checks", "Checks"],
+      ["remove", "Remove"],
     ],
     body: "Modified is the version the new patch should reproduce. Swap corrects the file order in one click.",
     openDrawers: true,
@@ -83,18 +81,18 @@ const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [
-      ["⇩", "Drop files"],
-      ["＋", "Browse"],
+      ["drop", "Drop files"],
+      ["drop", "Browse"],
     ],
-    body: "The compact 0x01 row stays available after setup for replacing either file.",
+    body: "The compact 0x01 row stays available after setup for adding files by drag and drop or the file picker.",
     target: "#patch-builder-row-unified-drop",
-    title: "Replace files at any time",
+    title: "Add files at any time",
   },
   {
     actions: [
-      ["⚙", "Options"],
-      ["▣", "Archive"],
-      ["↓", "Create & download"],
+      ["options", "Options"],
+      ["archive", "Archive"],
+      ["create", "Create & download"],
     ],
     body: "Choose the patch name, format, archive, and compression settings. Then press CREATE & DOWNLOAD PATCH.",
     openDrawers: true,
