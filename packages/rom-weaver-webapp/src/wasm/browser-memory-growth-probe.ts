@@ -33,6 +33,9 @@ const DEFAULT_STEP_MIB = 32;
 // result is durable.
 const MIN_STEP_MIB = 8;
 const MAX_STEP_MIB = 128;
+// Pause after each durability write so WebKit has a window to flush localStorage to disk before the
+// next step risks the tab. A zero timeout yields to the event loop but not to the flush.
+const SETTLE_MS = 150;
 
 type GrowthRecord = {
   committedMib: number;
@@ -70,7 +73,14 @@ const readRecord = (): GrowthRecord | null => {
   }
 };
 
-/** Synchronous by design: it has to be durable before the step that might kill the tab runs. */
+/**
+ * Persist progress before the step that might kill the tab.
+ *
+ * The `setItem` call is synchronous but the flush to disk is NOT - WebKit batches it - so a jetsam
+ * kill can still drop the most recent write. That is why the loop waits {@link SETTLE_MS} after each
+ * write instead of yielding with a zero timeout: it trades a little wall clock for the flush window.
+ * Treat a recovered figure as a lower bound, accurate to within one step.
+ */
 const writeRecord = (record: GrowthRecord): void => {
   try {
     storage()?.setItem(STORAGE_KEY, JSON.stringify(record));
@@ -100,14 +110,11 @@ const commitRegion = (memory: WebAssembly.Memory, fromPages: number, toPages: nu
   }
 };
 
-const yieldToPage = () => new Promise((resolve) => setTimeout(resolve, 0));
+const yieldToPage = () => new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
 
-/** Report a record left `running` by a previous load - the device died mid-run. */
-const reportPreviousRun = (addStep: (step: BrowserFormatMatrixStep) => void): void => {
-  const previous = readRecord();
-  if (!previous) return;
+const describePreviousRun = (previous: GrowthRecord): BrowserFormatMatrixStep => {
   const died = previous.status === "running";
-  addStep({
+  return {
     command: `committed=${previous.committedMib} MiB target=${previous.targetMib} MiB step=${previous.stepMib} MiB started=${previous.startedAt}`,
     durationMs: 0,
     name: died ? "previous run: DEVICE DIED mid-probe" : `previous run: ${previous.status}`,
@@ -116,7 +123,28 @@ const reportPreviousRun = (addStep: (step: BrowserFormatMatrixStep) => void): vo
     ...(died
       ? { error: `the tab was killed after committing ${previous.committedMib} MiB; that is the device's real ceiling` }
       : {}),
-  });
+  };
+};
+
+/**
+ * Surface a record left behind by a previous load, for the page to render at startup.
+ *
+ * This has to run on load rather than only inside the probe: the run that gets killed is exactly the
+ * run that never reports, and requiring the user to start another (also-killed) run to see the last
+ * result loses the measurement every time. Mirrors `getInterruptedArchiveStressCase`.
+ *
+ * Non-destructive - the record is cleared when the next run starts, so reloading repeatedly keeps
+ * showing the same result instead of erasing it on first read.
+ */
+export function getInterruptedMemoryGrowthRun(): BrowserFormatMatrixStep | null {
+  const previous = readRecord();
+  return previous ? describePreviousRun(previous) : null;
+}
+
+/** Report a record left `running` by a previous load - the device died mid-run. */
+const reportPreviousRun = (addStep: (step: BrowserFormatMatrixStep) => void): void => {
+  const previous = readRecord();
+  if (previous) addStep(describePreviousRun(previous));
 };
 
 export async function runBrowserMemoryGrowthProbe(callbacks: {
@@ -203,7 +231,7 @@ export async function runBrowserMemoryGrowthProbe(callbacks: {
       status: "succeeded",
       timestamp: new Date().toISOString(),
     });
-    // Let the page paint and the write settle; a tight loop can be killed before either happens.
+    // Let the page paint and the write reach disk; a tight loop can be killed before either happens.
     await yieldToPage();
   }
 

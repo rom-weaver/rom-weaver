@@ -13,7 +13,7 @@ import {
   runBrowserFullFormatMatrix,
   summarizeBrowserFormatMatrixResult,
 } from "../wasm/browser-format-matrix.ts";
-import { runBrowserMemoryGrowthProbe } from "../wasm/browser-memory-growth-probe.ts";
+import { getInterruptedMemoryGrowthRun, runBrowserMemoryGrowthProbe } from "../wasm/browser-memory-growth-probe.ts";
 import { runBrowserSharedMemoryProbe } from "../wasm/browser-shared-memory-probe.ts";
 import { runBrowserThreadSweep } from "../wasm/browser-thread-sweep.ts";
 import type { RomWeaverRunJsonEvent } from "../wasm/rom-weaver-types.d.ts";
@@ -408,6 +408,26 @@ if (interrupted) {
   };
   state.steps = state.result.steps;
   appendLog(`interrupted archive case detected: ${interrupted.id}`);
+  setRunning(false);
+  renderSummary();
+}
+
+// Surface a growth run the device killed. This has to happen on load: the run that gets killed is
+// the run that never reports, and it stays visible across reloads because the record is only cleared
+// when the next growth run starts.
+const interruptedGrowth = getInterruptedMemoryGrowthRun();
+if (interruptedGrowth) {
+  state.profile = "growth";
+  state.status = interruptedGrowth.status === "failed" ? "failed" : "passed";
+  state.result = {
+    durationMs: 0,
+    failedSteps: interruptedGrowth.status === "failed" ? 1 : 0,
+    passedSteps: interruptedGrowth.status === "failed" ? 0 : 1,
+    steps: [interruptedGrowth],
+  };
+  state.steps = state.result.steps;
+  appendLog(`${interruptedGrowth.name} ${interruptedGrowth.command}`);
+  if (interruptedGrowth.error) appendLog(interruptedGrowth.error);
   setRunning(false);
   renderSummary();
 }

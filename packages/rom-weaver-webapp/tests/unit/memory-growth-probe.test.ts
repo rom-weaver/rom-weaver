@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runBrowserMemoryGrowthProbe } from "../../src/wasm/browser-memory-growth-probe.ts";
+import {
+  getInterruptedMemoryGrowthRun,
+  runBrowserMemoryGrowthProbe,
+} from "../../src/wasm/browser-memory-growth-probe.ts";
 
 const MIB = 1024 * 1024;
 const WASM_PAGE_BYTES = 64 * 1024;
@@ -129,6 +132,50 @@ describe("runBrowserMemoryGrowthProbe", () => {
     expect(previous?.name).toBe("previous run: DEVICE DIED mid-probe");
     expect(previous?.error).toContain("768 MiB");
     expect(previous?.status).toBe("failed");
+  });
+
+  it("exposes a killed run at page load without needing another run", async () => {
+    storage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        committedMib: 832,
+        startedAt: "2026-07-28T20:00:00.000Z",
+        status: "running",
+        stepMib: 32,
+        targetMib: 2048,
+        userAgent: "previous",
+      }),
+    );
+
+    // The bug this covers: reporting only from inside the probe meant a killed run showed nothing on
+    // reload, and starting another run to see it wiped the log and risked another kill.
+    const step = getInterruptedMemoryGrowthRun();
+
+    expect(step?.name).toBe("previous run: DEVICE DIED mid-probe");
+    expect(step?.error).toContain("832 MiB");
+  });
+
+  it("keeps a killed run readable across repeated reloads", () => {
+    storage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        committedMib: 512,
+        startedAt: "2026-07-28T20:00:00.000Z",
+        status: "running",
+        stepMib: 32,
+        targetMib: 2048,
+        userAgent: "previous",
+      }),
+    );
+
+    // Non-destructive read: the archive-stress equivalent clears on read, which would make the
+    // result vanish if the page reloaded twice.
+    expect(getInterruptedMemoryGrowthRun()?.error).toContain("512 MiB");
+    expect(getInterruptedMemoryGrowthRun()?.error).toContain("512 MiB");
+  });
+
+  it("returns nothing at load when no run was interrupted", () => {
+    expect(getInterruptedMemoryGrowthRun()).toBeNull();
   });
 
   it("clamps an absurd step size rather than trusting the query string", async () => {
