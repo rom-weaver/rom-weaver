@@ -112,8 +112,8 @@ assertIncludes(
   `name="robots" content="${production ? "index, follow" : "noindex, nofollow"}"`,
   "weave robots metadata",
 );
-assertIncludes(weaveHtml, 'href="docs"', "weave docs navigation");
-assertIncludes(createHtml, 'href="docs"', "create docs navigation");
+assertIncludes(weaveHtml, 'aria-label="Guides" class="tool" href="/docs"', "weave guides link");
+assertIncludes(createHtml, 'aria-label="Guides" class="tool" href="/docs"', "create guides link");
 
 for (const name of docsScreenshotNames) {
   const screenshotPath = path.join(distDir, "docs", "screenshots", name);
@@ -156,7 +156,8 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
   if ((docsHtml.match(/<h1\b/g) || []).length !== 1) throw new Error(`${route.slug} must contain exactly one h1`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
-  assertIncludes(docsHtml, 'aria-selected="true" class="mode" data-mode="docs"', `${route.slug} React docs route`);
+  assertIncludes(docsHtml, 'aria-current="page" aria-label="Guides"', `${route.slug} masthead guides link`);
+  if (docsHtml.includes('data-mode="docs"')) throw new Error(`${route.slug} must not render a docs workflow tab`);
   assertIncludes(
     docsHtml,
     '<button aria-label="Switch to light theme" class="tool"',

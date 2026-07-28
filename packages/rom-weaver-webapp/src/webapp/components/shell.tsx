@@ -1,4 +1,4 @@
-import { createLucideIcon, Heart, Moon, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
+import { BookOpen, createLucideIcon, Heart, Moon, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
 import { useLayoutEffect, useRef } from "react";
@@ -78,9 +78,15 @@ const ModeRail = ({
     return () => window.removeEventListener("resize", reposition);
   }, []);
 
+  // The guides are a document route, not a tab, so no tab is selected while one
+  // is open. A tablist still needs exactly one tabIndex 0 to stay reachable, so
+  // the roving focus falls back to the first tab.
+  const selectedIndex = tabs.findIndex((tab) => tab.id === current);
+  const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
+
   const handleKeyDown = (event: React.KeyboardEvent) => {
     const order = tabs.map((tab) => tab.id);
-    const currentIndex = order.indexOf(current);
+    const currentIndex = focusIndex;
     let next = -1;
     if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (currentIndex + 1) % order.length;
     if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (currentIndex + order.length - 1) % order.length;
@@ -104,7 +110,7 @@ const ModeRail = ({
         role="tablist"
       >
         <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
-        {tabs.map((tab) => (
+        {tabs.map((tab, index) => (
           <a
             aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
             aria-selected={tab.id === current}
@@ -119,7 +125,7 @@ const ModeRail = ({
               onSelect(tab.id);
             }}
             role="tab"
-            tabIndex={tab.id === current ? 0 : -1}
+            tabIndex={index === focusIndex ? 0 : -1}
           >
             {tab.icon}
             <span>{tab.label}</span>
@@ -182,6 +188,7 @@ const Masthead = ({
   tabsControlPanels = true,
   serviceWorkerStatus,
   confirmExternalNavigation,
+  docsHref,
   githubHref,
   donateHref,
   settingsOpen,
@@ -202,6 +209,8 @@ const Masthead = ({
   tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  /** Guides live at a real URL, so this is a plain link rather than a tab. */
+  docsHref?: string;
   githubHref?: string;
   donateHref?: string;
   settingsOpen?: boolean;
@@ -279,6 +288,20 @@ const Masthead = ({
         </span>
         <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
         <div className="masthead-tools">
+          {docsHref ? (
+            <a
+              aria-current={currentTab === "docs" ? "page" : undefined}
+              aria-label="Guides"
+              className="tool"
+              href={docsHref}
+              title="Guides"
+            >
+              <BookOpen aria-hidden="true" />
+              <span aria-hidden="true" className="tool-text">
+                Guides
+              </span>
+            </a>
+          ) : null}
           {githubHref ? (
             <a
               aria-label="GitHub"

@@ -159,7 +159,6 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /weave/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /create/i })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /docs/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /tools/i })).toBeInTheDocument();
 
   await romInput.upload(await loadFixtureFile(ONE_ROM_ZIP, "application/zip"));
@@ -185,11 +184,13 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
-test("WebappRoot shows Docs by default while Trim and Tools stay behind the beta flag", async () => {
+test("WebappRoot keeps Trim and Tools behind the beta flag and Guides out of the workflow rail", async () => {
   mountWebappRoot();
   await expect
     .poll(() => [...document.querySelectorAll('.mode-rail [role="tab"]')].map((tab) => tab.textContent))
-    .toEqual(["Weave", "Create", "Docs"]);
+    .toEqual(["Weave", "Create"]);
+  // Guides are a document route, so they live with the masthead tools.
+  await expect.element(page.getByRole("link", { name: "Guides" })).toBeInTheDocument();
 });
 
 test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {
