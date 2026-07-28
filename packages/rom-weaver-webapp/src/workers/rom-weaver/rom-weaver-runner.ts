@@ -104,6 +104,7 @@ const resolveWarmIdleRunners = (): number => {
 // Seed forwarded to freshly created runners so their initial worker-shell pool matches the resolved
 // "auto" thread count; set by warmup and reused for on-demand runner creation.
 let runnerCreateThreads: RuntimeValue | undefined;
+let runnerWarmupPromise: Promise<RomWeaverRunnerReadyMetadata> | null = null;
 
 let runnerPool: RunnerPool<RomWeaverRunner, RunnerCreateOptions> | null = null;
 let operationScheduler: OperationScheduler | null = null;
@@ -614,6 +615,9 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
 
   const dispatchRun = async (assignedThreads: number): Promise<RomWeaverRunnerRunJsonResult> => {
     if (signal?.aborted) throw createRunnerAbortError();
+    // Warmup releases its lease when ready, allowing the first real operation to reuse that runner.
+    await runnerWarmupPromise?.catch(() => undefined);
+    if (signal?.aborted) throw createRunnerAbortError();
     const lease = await getRunnerPool().acquire({ threads: runnerCreateThreads });
     if (signal?.aborted) {
       lease.terminate();
@@ -832,21 +836,29 @@ const invokeRomWeaverPlanExtractBatchWorker = async (input: {
 const normalizeThreadsSeed = (value: RuntimeValue | undefined): string =>
   value == null ? "" : String(value).trim().toLowerCase();
 
-const warmupRomWeaverRunner = async (threads?: RuntimeValue) => {
-  if (!isBrowserRuntime()) throw new Error("rom-weaver wasm runner is only available in browser runtimes");
-  // A thread-budget change must not silently reuse the old warm pool: getRunnerPool().acquire reuses a
-  // warm idle runner regardless of the requested thread count, so without this the next op keeps the
-  // stale-sized pool and grows it on demand. Drop the pooled runners when the seed changes so a fresh
-  // runner is created at the new budget and self-pre-warms to it - keeping ops warm after a thread change.
-  const seedChanged = normalizeThreadsSeed(runnerCreateThreads) !== normalizeThreadsSeed(threads);
-  runnerCreateThreads = threads;
-  if (seedChanged) markRomWeaverRunnerStale();
-  const lease = await getRunnerPool().acquire({ threads });
-  try {
-    return lease.runner.ready;
-  } finally {
-    lease.release();
-  }
+const warmupRomWeaverRunner = (threads?: RuntimeValue) => {
+  const warmupPromise = (async () => {
+    if (!isBrowserRuntime()) throw new Error("rom-weaver wasm runner is only available in browser runtimes");
+    // A thread-budget change must not silently reuse the old warm pool: getRunnerPool().acquire reuses a
+    // warm idle runner regardless of the requested thread count, so without this the next op keeps the
+    // stale-sized pool and grows it on demand. Drop the pooled runners when the seed changes so a fresh
+    // runner is created at the new budget and self-pre-warms to it - keeping ops warm after a thread change.
+    const seedChanged = normalizeThreadsSeed(runnerCreateThreads) !== normalizeThreadsSeed(threads);
+    runnerCreateThreads = threads;
+    if (seedChanged) markRomWeaverRunnerStale();
+    const lease = await getRunnerPool().acquire({ threads });
+    try {
+      return lease.runner.ready;
+    } finally {
+      lease.release();
+    }
+  })();
+  runnerWarmupPromise = warmupPromise;
+  const clearWarmup = () => {
+    if (runnerWarmupPromise === warmupPromise) runnerWarmupPromise = null;
+  };
+  void warmupPromise.then(clearWarmup, clearWarmup);
+  return warmupPromise;
 };
 
 const getRomWeaverRunnerMetadata = async () => {
