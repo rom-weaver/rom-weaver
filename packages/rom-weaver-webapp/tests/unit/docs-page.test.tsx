@@ -127,6 +127,24 @@ echo hi
     expect(route.html).toContain('href="/docs/patch-formats#ips"');
     expect(route.html).toContain('href="/docs/fixture#a-and-b"');
     expect(route.html).toContain('<pre tabindex="0"><code class="language-sh">');
+    expect(route.html).toContain(
+      '<h2 id="a-and-b"><span aria-hidden="true" class="docs-section-index">01</span><span class="docs-section-title">A &amp; <code>B</code></span>',
+    );
+    expect(route.html).toContain(
+      '<h2 id="a-and-b-1"><span aria-hidden="true" class="docs-section-index">02</span><span class="docs-section-title">A &amp; <code>B</code></span>',
+    );
+  });
+
+  it("publishes the bundle guide as numbered, collapsible sections", () => {
+    render(<DocsPage active slug="docs/create-bundles" />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Create and share a patch bundle" })).toBeTruthy();
+    expect(document.querySelectorAll(".docs-article > h2 .docs-section-index")).toHaveLength(
+      routeFor("docs/create-bundles").sections.length,
+    );
+    expect(document.querySelectorAll(".docs-article details.docs-disclosure")).toHaveLength(
+      routeFor("docs/create-bundles").sections.length,
+    );
   });
 
   it("resolves hosted documents, repository-only documents, and published images from their source file", () => {

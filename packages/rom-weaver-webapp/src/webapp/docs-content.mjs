@@ -127,7 +127,11 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
         const count = seen.get(base) ?? 0;
         seen.set(base, count + 1);
         const id = count === 0 ? base : `${base}-${count}`;
-        if (depth === 2) sections.push({ id, label: plainHeading(text) });
+        if (depth === 2) {
+          sections.push({ id, label: plainHeading(text) });
+          const index = String(sections.length).padStart(2, "0");
+          return `<h2 id="${id}"><span aria-hidden="true" class="docs-section-index">${index}</span><span class="docs-section-title">${this.parser.parseInline(tokens)}</span></h2>\n`;
+        }
         return `<h${depth} id="${id}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
       },
     },

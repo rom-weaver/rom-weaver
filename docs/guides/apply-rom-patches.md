@@ -186,6 +186,9 @@ rom-weaver weave --bundle rom-weaver-bundle.json
 In the browser, open a bundle the way you would open any other file. Check any
 optional patches before you run it.
 
+Publishing your own multi-patch release? [Create a bundle](create-bundles.md)
+shows the Weave webapp and CLI workflows.
+
 ## When rom-weaver says the file does not match
 
 Stop. Do not keep forcing it.

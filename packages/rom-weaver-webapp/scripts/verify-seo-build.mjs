@@ -64,6 +64,7 @@ for (const url of [
   "https://rom-weaver.com/create",
   "https://rom-weaver.com/docs",
   "https://rom-weaver.com/docs/cli",
+  "https://rom-weaver.com/docs/create-bundles",
   "https://rom-weaver.com/docs/self-hosting",
   "https://rom-weaver.com/docs/architecture",
   "https://github.com/rom-weaver/rom-weaver",

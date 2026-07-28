@@ -15,6 +15,7 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "guides/README.md", label: "Overview", slug: "docs" }),
   Object.freeze({ file: "guides/apply-rom-patches.md", label: "Apply patches", slug: "docs/apply-rom-patches" }),
   Object.freeze({ file: "guides/create-rom-patches.md", label: "Create patches", slug: "docs/create-rom-patches" }),
+  Object.freeze({ file: "guides/create-bundles.md", label: "Create bundles", slug: "docs/create-bundles" }),
   Object.freeze({
     file: "guides/fix-checksum-errors.md",
     label: "Fix checksum errors",

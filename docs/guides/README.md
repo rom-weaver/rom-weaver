@@ -37,6 +37,8 @@ game data, and no patch works without the right starting file.
   want to play it.
 - [Create a patch](create-rom-patches.md) if you changed a game and want to
   share that change.
+- [Create a bundle](create-bundles.md) if a release has several patches,
+  optional choices, or checksums you want rom-weaver to carry for users.
 - [Fix a checksum error](fix-checksum-errors.md) if rom-weaver says your file
   is not the one the patch expects.
 - [Pick a patch format](patch-formats.md) if you are publishing and cannot
@@ -114,9 +116,10 @@ results under new names. Only use files you are allowed to have.
 
 ## Where to go next
 
-These guides cover the usual path: a clean file in, a checked file out. For
-scripting, archives, compression, bundles, JSON output, and the full command
-reference, read the [CLI guide](../cli.md). To build or deploy rom-weaver
+These guides cover the usual path: a clean file in, a checked file out. For a
+repeatable multi-patch release, read [Create a bundle](create-bundles.md). For
+scripting, archives, compression, JSON output, and the full command reference,
+read the [CLI guide](../cli.md). To build or deploy rom-weaver
 itself, start at the [documentation index](../README.md).
 
 ## Legal and privacy

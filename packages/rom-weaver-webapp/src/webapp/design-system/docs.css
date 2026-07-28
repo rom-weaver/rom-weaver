@@ -205,11 +205,21 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   font-stretch: 92%;
 }
 .rw-app .docs-article h2 {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: var(--sp-s);
+  align-items: baseline;
   margin: clamp(44px, 7vw, 68px) 0 var(--sp-m);
   font-size: clamp(1.3rem, 1.08rem + .9vw, 1.6rem);
   font-weight: 720;
   font-stretch: 96%;
   scroll-margin-top: 5.5rem;
+}
+.rw-app .docs-section-index {
+  color: var(--weft);
+  font: 600 .7rem/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
 .rw-app .docs-article h3 {
   margin: var(--sp-xl) 0 var(--sp-s);
@@ -249,6 +259,29 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   .rw-app .docs-article a:hover { text-decoration-color: var(--thread); }
 }
 .rw-app .docs-article a:active { text-decoration-color: var(--thread); }
+
+.rw-app .docs-disclosure {
+  max-width: var(--measure-wide);
+  margin-block: 0 var(--sp-xl);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+}
+.rw-app .docs-disclosure > summary {
+  padding: var(--sp-m) var(--sp-l);
+  color: var(--ink);
+  font-size: .86rem;
+  font-weight: 700;
+  line-height: 1.45;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .rw-app .docs-disclosure > summary:hover { color: var(--thread-text); }
+}
+.rw-app .docs-disclosure > summary:active { color: var(--thread-text); }
+.rw-app .docs-disclosure[open] > summary { border-bottom: 1px solid var(--seam-soft); }
+.rw-app .docs-disclosure > :not(summary) { margin-inline: var(--sp-l); }
+.rw-app .docs-disclosure > :last-child { margin-bottom: var(--sp-l); }
 
 /* The hub's workflow chooser is the reason most people open the guides, so it
    reads as a set of destinations rather than a bulleted list. Keyed off the
@@ -428,12 +461,16 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   .rw-app .warp-rail-title { padding: 0 0 var(--sp-xs); }
   .rw-app .warp-rail-list { gap: var(--sp-m); padding-bottom: .4rem; }
   .rw-app .warp-rail-list::before { inset: auto 0 2px; width: auto; height: 1px; }
-  .rw-app .warp-rail-list li { max-width: 12rem; }
+  .rw-app .warp-rail-list li { max-width: 15rem; }
   .rw-app .warp-rail-list a {
     grid-template-columns: auto minmax(0, 1fr);
     gap: .4rem;
     padding: 0 0 .5rem;
     white-space: nowrap;
+  }
+  .rw-app .warp-rail-list .warp-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .rw-app .warp-pick {
     top: auto;

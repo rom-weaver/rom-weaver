@@ -184,7 +184,9 @@ Ship these details with every release:
 For a release made of several patches, ship a rom-weaver bundle. It records
 the order, which patches are optional, the checksums, and the output name, so
 your users do not have to get any of that right by hand. The
-[CLI guide](../cli.md#bundles) documents bundles and their file format.
+[bundle creation guide](create-bundles.md) walks through both the Weave webapp
+and CLI. The [CLI guide](../cli.md#bundles) documents every flag and the file
+format.
 
 ## Releasing an update
 
