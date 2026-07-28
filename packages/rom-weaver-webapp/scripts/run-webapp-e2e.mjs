@@ -12,14 +12,22 @@ import { fileURLToPath } from "node:url";
 import { chromium, webkit } from "playwright";
 import { DOC_SOURCES } from "../src/webapp/docs-routing.mjs";
 import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
+import { summarizeCssCoverage } from "./css-coverage.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE_DIR = path.join(PACKAGE_DIR, "tests", "fixtures");
 const AXE_SCRIPT_PATH = path.join(PACKAGE_DIR, "node_modules", "axe-core", "axe.min.js");
+const CSS_COVERAGE_BUDGET = JSON.parse(
+  fs.readFileSync(path.join(PACKAGE_DIR, "performance-budgets.json"), "utf8"),
+).cssCoverage;
 const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb";
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
 // Derived from the route table, so a new guide is audited without a second edit.
 const DOCS_ROUTES = DOC_SOURCES.map((source) => source.slug);
+const A11Y_VIEWPORTS = [
+  { height: 720, label: "desktop", width: 1280 },
+  { height: 844, label: "mobile", width: 390 },
+];
 const DOWNLOAD_TIMEOUT_MS = 60_000;
 const ARCHIVE_STRESS_TIMEOUT_MS = 240_000;
 const MANY_ENTRIES_COUNT = 2048;
@@ -240,67 +248,201 @@ const scanLiveApp = async (page, label) => {
   process.stdout.write(`PASS accessibility ${label}\n`);
 };
 
+const checkCssCoverage = (entries) => {
+  const coverage = summarizeCssCoverage(entries);
+  if (coverage.stylesheetCount === 0) throw new Error("CSS coverage did not include a bundled stylesheet");
+  const usedPercent = ((coverage.usedBytes / coverage.totalBytes) * 100).toFixed(1);
+  const label =
+    `${coverage.unusedBytes.toLocaleString()} unused of ${coverage.totalBytes.toLocaleString()} CSS bytes` +
+    ` (${usedPercent}% used; maximum ${CSS_COVERAGE_BUDGET.maxUnusedBytes.toLocaleString()} unused)`;
+  if (coverage.unusedBytes > CSS_COVERAGE_BUDGET.maxUnusedBytes)
+    throw new Error(`CSS coverage budget failed: ${label}`);
+  process.stdout.write(`PASS CSS coverage: ${label}\n`);
+};
+
 const runAccessibilityAudit = async (createContext, baseUrl) => {
   const context = await createContext({ ignoreHTTPSErrors: true });
-  const page = await context.newPage();
+  let page = await context.newPage();
+  const cssCoverageEntries = [];
   const failures = [];
-  page.on("pageerror", (error) => failures.push(error.stack || error.message));
+  const watchPageErrors = () => page.on("pageerror", (error) => failures.push(error.stack || error.message));
+  watchPageErrors();
   const setTheme = async (theme) => {
     if ((await page.locator("html").getAttribute("data-theme")) !== theme) {
       await page.locator('button[aria-label^="Switch to "]').click();
       await page.waitForFunction((expected) => document.documentElement.dataset.theme === expected, theme);
     }
   };
+  const scanVariants = async (label) => {
+    const originalTheme = await page.locator("html").getAttribute("data-theme");
+    const originalViewport = page.viewportSize();
+    try {
+      for (const viewport of A11Y_VIEWPORTS) {
+        await page.setViewportSize(viewport);
+        for (const theme of ["light", "dark"]) {
+          await page.locator("html").evaluate((html, nextTheme) => {
+            html.dataset.theme = nextTheme;
+          }, theme);
+          await scanLiveApp(page, `${label} (${viewport.label}, ${theme})`);
+        }
+      }
+    } finally {
+      await page.locator("html").evaluate((html, theme) => {
+        html.dataset.theme = theme;
+      }, originalTheme);
+      if (originalViewport) await page.setViewportSize(originalViewport);
+    }
+  };
+  const installAuditTools = async () => {
+    await page.addScriptTag({ path: AXE_SCRIPT_PATH });
+    await page.addStyleTag({
+      content:
+        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}",
+    });
+  };
 
   try {
-    // Both are per-document, so every navigation below has to re-arm them:
-    // axe to scan at all, and the freeze so a scan never samples a colour
-    // mid theme-transition and reports a phantom contrast failure.
-    const armPage = async () => {
-      await page.addScriptTag({ path: AXE_SCRIPT_PATH });
-      await page.addStyleTag({
-        content:
-          "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}",
-      });
-    };
+    if (browserName === "chromium") await page.coverage.startCSSCoverage();
+    await page.goto(new URL("404.html", baseUrl).href, { waitUntil: "domcontentloaded" });
+    await page.locator(".not-found-page").waitFor({ state: "visible" });
+    await installAuditTools();
+    await scanVariants("not found");
+    if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
+    await page.close();
 
+    page = await context.newPage();
+    watchPageErrors();
+    if (browserName === "chromium") await page.coverage.startCSSCoverage();
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
-    await armPage();
+    await installAuditTools();
 
-    for (const theme of ["light", "dark"]) {
-      await setTheme(theme);
-      await scanLiveApp(page, `empty Apply (${theme})`);
-    }
-
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("dialog").waitFor({ state: "visible" });
-    await scanLiveApp(page, "Settings (dark)");
-    const betaTools = page.locator("#settings-beta-tools-enabled");
-    if (!(await betaTools.isChecked())) await betaTools.check();
-    await page.getByRole("button", { exact: true, name: "Save" }).click();
-    await setTheme("light");
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("dialog").waitFor({ state: "visible" });
-    await scanLiveApp(page, "Settings (light)");
-    await page.getByRole("button", { exact: true, name: "Save" }).click();
-
-    for (const tab of ["patcher", "creator", "trim"]) {
-      await page.locator(`[role="tab"][data-mode="${tab}"]`).click();
-      await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
+    for (const viewport of A11Y_VIEWPORTS) {
+      await page.setViewportSize(viewport);
       for (const theme of ["light", "dark"]) {
         await setTheme(theme);
-        await scanLiveApp(page, `${tab} (${theme})`);
+        await page.getByRole("button", { name: "Settings" }).click();
+        await page.getByRole("dialog").waitFor({ state: "visible" });
+        await scanLiveApp(page, `Settings (${viewport.label}, ${theme})`);
+        const betaTools = page.locator("#settings-beta-tools-enabled");
+        if (!(await betaTools.isChecked())) await betaTools.check();
+        await page.getByRole("button", { exact: true, name: "Save" }).click();
+      }
+      for (const tab of ["patcher", "creator", "trim", "tools"]) {
+        await page.locator(`[role="tab"][data-mode="${tab}"]`).click();
+        await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
+        for (const theme of ["light", "dark"]) {
+          await setTheme(theme);
+          await scanLiveApp(page, `${tab} (${viewport.label}, ${theme})`);
+        }
       }
     }
-    // The guides are served as their own prerendered documents, so each one is
-    // loaded for real rather than switched to in-app: that is the only way a
-    // hydration mismatch against the served HTML shows up as a page error.
+
+    await page.setViewportSize(A11Y_VIEWPORTS[0]);
+    await setTheme("light");
+    await page.locator('[role="tab"][data-mode="patcher"]').click();
+
+    const infoButton = page.locator(".info-btn").first();
+    await infoButton.click();
+    await page.locator(".info-pop").waitFor({ state: "visible" });
+    await scanVariants("info popover");
+    await infoButton.click();
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    const codecCombobox = page.locator(".codec-combobox input").first();
+    await codecCombobox.click();
+    await page.locator(".codec-combobox-list").waitFor({ state: "visible" });
+    await scanVariants("codec combobox");
+    await page.locator(".codec-combobox-option").first().click();
+    await page.getByRole("button", { exact: true, name: "Save" }).click();
+
+    await page.getByRole("button", { name: "Log" }).click();
+    const logDialog = page.locator("dialog.log-dlg");
+    await logDialog.waitFor({ state: "visible" });
+    await scanVariants("log dialog");
+    await logDialog.getByRole("button", { name: "Close" }).click();
+
+    await page.getByRole("button", { name: "Reset" }).click();
+    await page.getByRole("dialog", { name: "Reset the page?" }).waitFor({ state: "visible" });
+    await scanLiveApp(page, "reset confirmation (desktop, light)");
+    await page.getByRole("button", { name: "Stay here" }).click();
+
+    const romFixture = fs.readFileSync(path.join(FIXTURE_DIR, "archive_sources", "game.bin"));
+    await page.locator("#rom-weaver-input-file-unified").setInputFiles([
+      { buffer: romFixture, mimeType: "application/octet-stream", name: "alpha.bin" },
+      { buffer: romFixture, mimeType: "application/octet-stream", name: "beta.bin" },
+    ]);
+    const selectionDialog = page.locator(".rw-modal.select-modal");
+    await selectionDialog.waitFor({ state: "visible", timeout: 60_000 });
+    await scanVariants("candidate selection");
+    await selectionDialog.locator("button.dlg-x").click();
+    await selectionDialog.waitFor({ state: "hidden" });
+
+    await page.setViewportSize(A11Y_VIEWPORTS[0]);
+    await setTheme("light");
+    const guidedApply = page.getByRole("button", { name: "Start guided Apply" });
+    await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
+    await guidedApply.click();
+    const tutorial = page.locator(".sample-tutorial-dialog");
+    await tutorial.waitFor({ state: "visible" });
+    await scanLiveApp(page, "guided Apply loading (desktop, light)");
+    for (let step = 1; step <= 4; step += 1) {
+      await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
+      await scanVariants(`guided Apply ${step}/4`);
+      await tutorial.getByRole("button", { name: step === 4 ? "Done" : "Continue" }).click();
+    }
+    await tutorial.waitFor({ state: "hidden" });
+
+    await page.setViewportSize(A11Y_VIEWPORTS[0]);
+    await setTheme("light");
+    const firstPatchMenu = page.getByRole("button", { name: "Patch actions" }).first();
+    await firstPatchMenu.click();
+    await page.getByRole("menuitem", { name: "Edit details" }).click();
+    await page.getByRole("button", { name: "Done editing patch details" }).waitFor({ state: "visible" });
+    await scanVariants("patch details editor");
+    await page.getByRole("button", { name: "Done editing patch details" }).click();
+
+    await page.setViewportSize(A11Y_VIEWPORTS[0]);
+    await setTheme("light");
+    const firstPatchHandle = page.getByRole("button", { name: /^Patch 1 of 2\./ });
+    await firstPatchHandle.focus();
+    await firstPatchHandle.press("ArrowDown");
+    await page
+      .getByRole("button", { name: /^Patch 2 of 2\./ })
+      .first()
+      .waitFor({ state: "visible" });
+    await scanLiveApp(page, "reordered patches (desktop, light)");
+    const editablePatchHandle = page.getByRole("button", { name: /^Patch 1 of 2\./ });
+    await editablePatchHandle.click();
+    await page.getByRole("spinbutton", { name: /^Edit patch position/ }).waitFor({ state: "visible" });
+    await scanVariants("patch position editor");
+    await page.getByRole("spinbutton", { name: /^Edit patch position/ }).press("Escape");
+
+    await page.setViewportSize(A11Y_VIEWPORTS[0]);
+    await setTheme("light");
+    await page.locator('[role="tab"][data-mode="creator"]').click();
+    const guidedCreate = page.getByRole("button", { name: "Start guided Create" });
+    await guidedCreate.waitFor({ state: "visible" });
+    await guidedCreate.click();
+    await tutorial.waitFor({ state: "visible" });
+    await scanLiveApp(page, "guided Create loading (desktop, light)");
+    for (let step = 1; step <= 4; step += 1) {
+      await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
+      await scanVariants(`guided Create ${step}/4`);
+      await tutorial.getByRole("button", { name: step === 4 ? "Done" : "Continue" }).click();
+    }
+    await tutorial.waitFor({ state: "hidden" });
+
+    // Last, because each guide is its own served document: the audits above all
+    // run against the app page and would have to re-enter it afterwards.
+    // Loading them for real rather than switching to them in-app is the only
+    // way a hydration mismatch against the served HTML surfaces as a page error.
     let retargetedSamples = 0;
     for (const slug of DOCS_ROUTES) {
       await page.goto(`${baseUrl.replace(/\/$/, "")}/${slug}`, { waitUntil: "domcontentloaded" });
       await page.locator(".docs-article h1").waitFor({ state: "visible" });
-      await armPage();
+      await installAuditTools();
       const headings = await page.locator("h1").count();
       if (headings !== 1) throw new Error(`${slug} rendered ${headings} level-one headings; expected exactly 1`);
       // This origin is not production, so once the page is live every sample
@@ -318,16 +460,18 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       if (samples.production)
         throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
       retargetedSamples += samples.local;
-      for (const theme of ["light", "dark"]) {
-        await setTheme(theme);
-        await scanLiveApp(page, `${slug} (${theme})`);
-      }
+      await scanVariants(slug);
     }
     // Without this the checks above pass just as happily when the swap stops
     // running and no guide offers a sample download at all.
     if (!retargetedSamples) throw new Error("no guide sample was retargeted to the serving origin");
     process.stdout.write(`PASS docs samples retargeted (${retargetedSamples} blocks)\n`);
+
     if (failures.length) throw new Error(`live app accessibility audit page errors:\n${failures.join("\n")}`);
+    if (browserName === "chromium") {
+      cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
+      checkCssCoverage(cssCoverageEntries);
+    }
   } finally {
     await context.close();
   }
@@ -530,7 +674,7 @@ const main = async () => {
     );
     try {
       await runHydrationAudit(createContext, previewBaseUrl);
-      await runAccessibilityAudit(createContext, devBaseUrl);
+      await runAccessibilityAudit(createContext, previewBaseUrl);
       if (A11Y_ONLY) return;
       await runApplyJourney(createContext, devBaseUrl, "raw apply/download", [
         "archive_sources/game.bin",

@@ -6,7 +6,7 @@
 import axeModule from "axe-core";
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { CandidateSelectionDialog } from "../../src/public/react/candidate-selection.tsx";
@@ -22,6 +22,7 @@ import { createEmptyPatcherUiState, createInitialDialogState } from "../../src/p
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
+import { ChangelogDialog } from "../../src/webapp/components/changelog-dialog.tsx";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
 import { Masthead, UpdateBanner, WakeLockBanner } from "../../src/webapp/components/shell.tsx";
 import {
@@ -57,6 +58,7 @@ const setViewport = (viewport) => page.viewport(viewport.width, viewport.height)
 let mountedRoot = null;
 let host = null;
 let noMotion = null;
+let fetchSpy = null;
 
 // Kill entrance/expand animation + transition timing so colours are sampled at
 // their settled values, never a mid-fade frame (matching the live-app audit).
@@ -72,9 +74,17 @@ beforeEach(() => {
   host = document.createElement("div");
   document.body.replaceChildren(host);
   mountedRoot = createRoot(host);
+  fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+    async () =>
+      new Response(JSON.stringify([{ date: "2026-07-28T00:00:00Z", hash: "incoming", subject: "New release" }]), {
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
 });
 
 afterEach(async () => {
+  fetchSpy?.mockRestore();
+  fetchSpy = null;
   mountedRoot?.unmount?.();
   mountedRoot = null;
   document.documentElement.removeAttribute("data-theme");
@@ -784,15 +794,15 @@ const DIALOGS = {
   "candidate (multi-select)": () => candidateDialog(true),
   confirm: () =>
     createElement(ConfirmDialog, {
-      body: "This overwrites the existing output file. Continue?",
-      cancelLabel: "Cancel",
-      confirmLabel: "Overwrite",
-      danger: true,
+      body: "Reloading will clear staged files and finished output.",
+      cancelLabel: "Stay here",
+      confirmLabel: "Reload now",
       onCancel: noop,
       onConfirm: noop,
       open: true,
-      title: "Overwrite output?",
+      title: "Reload and lose changes?",
     }),
+  "update changelog": () => createElement(ChangelogDialog, { onClose: noop, onReload: noop, open: true }),
   log: () => createElement(LogDialog, { onClose: noop, open: true }),
   settings: () =>
     createElement(

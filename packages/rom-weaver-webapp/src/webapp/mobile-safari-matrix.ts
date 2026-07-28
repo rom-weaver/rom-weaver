@@ -13,12 +13,14 @@ import {
   runBrowserFullFormatMatrix,
   summarizeBrowserFormatMatrixResult,
 } from "../wasm/browser-format-matrix.ts";
+import { getInterruptedMemoryGrowthRun, runBrowserMemoryGrowthProbe } from "../wasm/browser-memory-growth-probe.ts";
+import { runBrowserSharedMemoryProbe } from "../wasm/browser-shared-memory-probe.ts";
 import { runBrowserThreadSweep } from "../wasm/browser-thread-sweep.ts";
 import type { RomWeaverRunJsonEvent } from "../wasm/rom-weaver-types.d.ts";
 import { type BrowserRuntimeDiagnostics, collectBrowserRuntimeDiagnostics } from "./browser-runtime-diagnostics.ts";
 
 type MobileSafariMatrixStatus = "idle" | "running" | "passed" | "failed" | "diagnostics failed";
-type MobileSafariMatrixProfile = BrowserFormatMatrixProfile | "stress" | "threads";
+type MobileSafariMatrixProfile = BrowserFormatMatrixProfile | "growth" | "memory" | "stress" | "threads";
 
 type MobileSafariMatrixState = {
   diagnostics: BrowserRuntimeDiagnostics | null;
@@ -61,10 +63,19 @@ const runButton = document.getElementById("matrix-run");
 const exhaustiveButton = document.getElementById("matrix-run-exhaustive");
 const stressButton = document.getElementById("matrix-run-stress");
 const threadsButton = document.getElementById("matrix-run-threads");
+const memoryButton = document.getElementById("matrix-run-memory");
+const growthButton = document.getElementById("matrix-run-growth");
 const copyButton = document.getElementById("matrix-copy");
 const downloadButton = document.getElementById("matrix-download");
 
-const MOBILE_SAFARI_MATRIX_PROFILES: readonly MobileSafariMatrixProfile[] = ["exhaustive", "fast", "stress", "threads"];
+const MOBILE_SAFARI_MATRIX_PROFILES: readonly MobileSafariMatrixProfile[] = [
+  "exhaustive",
+  "fast",
+  "growth",
+  "memory",
+  "stress",
+  "threads",
+];
 
 const readProfileFromLocation = (): MobileSafariMatrixProfile => {
   const requested = new URLSearchParams(location.search).get("profile");
@@ -207,6 +218,8 @@ const setRunning = (running: boolean) => {
   if (exhaustiveButton instanceof HTMLButtonElement) exhaustiveButton.disabled = running;
   if (stressButton instanceof HTMLButtonElement) stressButton.disabled = running;
   if (threadsButton instanceof HTMLButtonElement) threadsButton.disabled = running;
+  if (memoryButton instanceof HTMLButtonElement) memoryButton.disabled = running;
+  if (growthButton instanceof HTMLButtonElement) growthButton.disabled = running;
   if (copyButton instanceof HTMLButtonElement) copyButton.disabled = running || !state.result;
   if (downloadButton instanceof HTMLButtonElement) downloadButton.disabled = running || !state.result;
 };
@@ -259,6 +272,8 @@ const runProfile = async (
 ): Promise<BrowserFormatMatrixSummary> => {
   if (profile === "stress") return runBrowserArchiveStress({ ...callbacks, caseIds: readStressCaseIdsFromLocation() });
   if (profile === "threads") return runBrowserThreadSweep(callbacks);
+  if (profile === "memory") return runBrowserSharedMemoryProbe(callbacks);
+  if (profile === "growth") return runBrowserMemoryGrowthProbe(callbacks);
   return runBrowserFullFormatMatrix({ ...callbacks, prefix: "rom-weaver-ios-safari-matrix-", profile });
 };
 
@@ -353,6 +368,12 @@ stressButton?.addEventListener("click", () => {
 threadsButton?.addEventListener("click", () => {
   runMatrix("threads");
 });
+memoryButton?.addEventListener("click", () => {
+  runMatrix("memory");
+});
+growthButton?.addEventListener("click", () => {
+  runMatrix("growth");
+});
 copyButton?.addEventListener("click", () => {
   copyReport().catch((error) => {
     appendLog(`copy failed ${error instanceof Error ? error.message : String(error)}`);
@@ -387,6 +408,26 @@ if (interrupted) {
   };
   state.steps = state.result.steps;
   appendLog(`interrupted archive case detected: ${interrupted.id}`);
+  setRunning(false);
+  renderSummary();
+}
+
+// Surface a growth run the device killed. This has to happen on load: the run that gets killed is
+// the run that never reports, and it stays visible across reloads because the record is only cleared
+// when the next growth run starts.
+const interruptedGrowth = getInterruptedMemoryGrowthRun();
+if (interruptedGrowth) {
+  state.profile = "growth";
+  state.status = interruptedGrowth.status === "failed" ? "failed" : "passed";
+  state.result = {
+    durationMs: 0,
+    failedSteps: interruptedGrowth.status === "failed" ? 1 : 0,
+    passedSteps: interruptedGrowth.status === "failed" ? 0 : 1,
+    steps: [interruptedGrowth],
+  };
+  state.steps = state.result.steps;
+  appendLog(`${interruptedGrowth.name} ${interruptedGrowth.command}`);
+  if (interruptedGrowth.error) appendLog(interruptedGrowth.error);
   setRunning(false);
   renderSummary();
 }

@@ -149,6 +149,20 @@ export function resolveMemoryCeilingBytes(root: DeviceMemoryRoot | null = global
   return ceiling;
 }
 
+/**
+ * Whether this is a phone/tablet web runtime - every iOS/iPadOS WebKit plus Android and any other
+ * engine carrying the `Mobile/<build>` marker.
+ *
+ * Distinct from {@link resolveAppleMobileSharedMemoryMaximumPages}, which answers a narrower,
+ * Apple-specific question (does this engine reserve a shared-memory `maximum`'s whole address range
+ * up front). Runner *lifecycle* policy - how many warm runners to keep, when to terminate one after
+ * a heavy op - is about the wasm heap only ever growing, which is true of every engine, so it keys
+ * off this instead.
+ */
+export function isMobileRuntime(root: DeviceMemoryRoot | null = globalThis as DeviceMemoryRoot): boolean {
+  return isMobileWebRuntime(root?.navigator);
+}
+
 export function resolveAppleMobileSharedMemoryMaximumPages(
   root: DeviceMemoryRoot | null = globalThis as DeviceMemoryRoot,
 ): number | undefined {

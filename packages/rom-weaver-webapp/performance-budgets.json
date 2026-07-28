@@ -42,6 +42,9 @@
       }
     ]
   },
+  "cssCoverage": {
+    "maxUnusedBytes": 52000
+  },
   "lighthouse": {
     "runs": 3,
     "routes": [

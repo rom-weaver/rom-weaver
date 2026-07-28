@@ -4,22 +4,11 @@
 
 body{
 	--rom-weaver-color-background:oklch(0.23 0.022 292);
-	--rom-weaver-color-surface-muted:oklch(0.936 0.022 302);
-	--rom-weaver-color-border-strong:oklch(0.66 0.055 302);
 	--rom-weaver-color-text:oklch(0.33 0.026 299);
 	--rom-weaver-color-text-soft:oklch(0.46 0.028 300);
 	--rom-weaver-color-primary:oklch(0.66 0.16 303);
 	--rom-weaver-color-primary-hover:oklch(0.71 0.16 304);
-	--rom-weaver-color-primary-focus:oklch(0.87 0.09 303 / .5);
 	--rom-weaver-color-muted:var(--rom-weaver-color-text-soft);
-}
-
-html,
-body{
-	height:100%;
-}
-
-body{
 	margin:0;
 	/* follow the active loom theme (which defaults to the OS preference) */
 	background-color:var(--chassis, var(--rom-weaver-color-background));
@@ -30,6 +19,11 @@ body{
 	cursor:default;
 	text-rendering:optimizeLegibility;
 	-webkit-font-smoothing:antialiased;
+}
+
+html,
+body{
+	height:100%;
 }
 
 #webapp-root{
@@ -78,60 +72,6 @@ input::placeholder,
 textarea::placeholder{
 	color:var(--rom-weaver-color-muted);
 	opacity:.95;
-}
-
-input[type=checkbox].styled{
-	appearance:none;
-	position:relative;
-	box-sizing:border-box;
-	display:inline-block;
-	width:20px;
-	height:20px;
-	border:1px solid var(--rom-weaver-color-border-strong);
-	border-radius:6px;
-	background-color:var(--rom-weaver-color-surface-muted);
-	vertical-align:middle;
-	transition:border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
-}
-
-input[type=checkbox].styled::after{
-	position:absolute;
-	top:50%;
-	left:50%;
-	width:5px;
-	height:9px;
-	border-right:2px solid oklch(1 0 0 / .95);
-	border-bottom:2px solid oklch(1 0 0 / .95);
-	opacity:0;
-	transform:translate(-50%, -56%) rotate(45deg) scale(.74);
-	transform-origin:center;
-	transition:opacity .18s ease, transform .18s ease;
-	content:"";
-}
-
-input[type=checkbox].styled:focus:not(:disabled){
-	box-shadow:var(--rom-weaver-color-primary-focus) 0 0 0 2px;
-}
-
-@media (hover: hover){
-	input[type=checkbox].styled:hover:not(:disabled){
-		border-color:var(--rom-weaver-color-primary-hover);
-		cursor:pointer;
-	}
-
-	input[type=checkbox].styled:hover:checked:not(:disabled){
-		background-color:var(--rom-weaver-color-primary-hover);
-	}
-}
-
-input[type=checkbox].styled:checked{
-	border-color:var(--rom-weaver-color-primary);
-	background-color:var(--rom-weaver-color-primary);
-}
-
-input[type=checkbox].styled:checked::after{
-	opacity:1;
-	transform:translate(-50%, -56%) rotate(45deg) scale(1);
 }
 
 #rom-weaver-dialog-zip::backdrop{

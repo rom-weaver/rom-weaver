@@ -1135,6 +1135,7 @@ const BundleOutputFields = ({
         labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
       >
         <select
+          aria-label="Bundle"
           className="select"
           disabled={bundleExport.busy}
           id="rom-weaver-bundle-export-format"

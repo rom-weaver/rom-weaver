@@ -82,8 +82,10 @@
   transition: grid-template-rows .3s cubic-bezier(.22, .9, .26, 1), visibility .3s;
 }
 .rw-app .cks.is-open > .cks-body { grid-template-rows: 1fr; visibility: visible; }
+/* Query the drawer width; elements cannot query their own size. */
 .rw-app .cks > .cks-body > .cks-inner {
   min-height: 0; min-width: 0; overflow: clip;
+  container: cks-inner / inline-size;
   opacity: 0; translate: 0 -4px; transition: opacity .16s, translate .2s var(--ease);
 }
 .rw-app .cks.is-open > .cks-body > .cks-inner { opacity: 1; translate: 0 0; transition: opacity .22s .08s, translate .26s .08s var(--ease); }
@@ -112,15 +114,14 @@
 /* Verification marks stay outside the readout-chip family. */
 .rw-app .cks > .cks-head .rb-mark { flex: none; display: inline-flex; align-items: center; }
 .rw-app .cks > .cks-head .rb-mark svg { width: 16px; height: 16px; }
-.rw-app .cks > .cks-head .rb-mark.ok { color: var(--verified); }
-.rw-app .cks > .cks-head .rb-mark.ok { position: relative; }
+.rw-app .cks > .cks-head .rb-mark.ok { color: var(--verified); position: relative; }
 .rw-app .cks > .cks-head .rb-mark.ok::after {
   content: ""; position: absolute; inset-inline: 1px; bottom: -3px; height: 1px;
   background: repeating-linear-gradient(90deg, color-mix(in oklab, var(--verified) 70%, transparent) 0 3px, transparent 3px 5px);
 }
 .rw-app .cks > .cks-head .rb-mark.bad { color: var(--fault); }
 /* Checksum rows bleed to the drawer edges; requirement rows stay inset. */
-.rw-app .ckrows { margin: 0; display: flex; flex-direction: column; gap: 0; }
+.rw-app .ckrows { margin: 0; display: flex; flex-direction: column; gap: 0; container-type: inline-size; }
 .rw-app .ckrows.patch-check-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); column-gap: var(--sp-s); }
 .rw-app .cks .ckrows.patch-check-columns > .ck-group { margin-block-start: 6px; }
 .rw-app .cks > .cks-body > .cks-inner > .ckrows { margin-block: 0; }
@@ -167,9 +168,6 @@
   margin: 0; color: var(--weft); white-space: nowrap; text-transform: uppercase; letter-spacing: .03em;
   font-size: clamp(.46rem, calc((100cqi - 85px) / 25.2), .97rem);
 }
-.rw-app .ckrows { container-type: inline-size; }
-/* Query the drawer width; elements cannot query their own size. */
-.rw-app .cks > .cks-body > .cks-inner { container: cks-inner / inline-size; }
 /* Pair short checksum rows while full rows and groups span both tracks. */
 .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) {
   display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; align-items: start;
@@ -289,13 +287,13 @@
 .rw-app .info { position: relative; display: inline-flex; flex: none; align-self: center; vertical-align: middle; font-size: .8rem; }
 .rw-app .step-head .info { margin-inline-start: 0; font-size: .76rem; }
 .rw-app .info-btn {
-  position: relative; appearance: none; cursor: pointer; width: 1em; height: 1em; padding: 0;
+  position: relative; appearance: none; cursor: pointer; width: 24px; height: 24px; padding: 0;
   border: 0; background: none; color: var(--ink-4);
   display: grid; place-items: center;
   transition: color .15s;
 }
 .rw-app .info-btn svg { width: 1em; height: 1em; }
-/* Enlarge the small glyph's hit target. */
+/* Add breathing room around the already-compliant 24px control. */
 .rw-app .info-btn::after { content: ""; position: absolute; inset: -7px; }
 @media (hover: hover) {
   .rw-app .info-btn:hover { color: var(--ink-2); }
