@@ -24,6 +24,20 @@ impl CliApp {
         }
     }
 
+    /// The rom-specific container the source should compress into, or `None` when the
+    /// recommender lands on the generic 7z fallback. Gating here keeps the host free to apply
+    /// its own extension heuristics for everything that is not a disc/3DS image, and is the
+    /// single definition of "rom-specific" shared by the early probe-manifest event and the
+    /// end-of-run per-asset stamp.
+    pub(super) fn rom_specific_recommended_format(format_name: &str) -> Option<&'static str> {
+        match format_name {
+            "chd" => Some("chd"),
+            "rvz" => Some("rvz"),
+            "z3ds" => Some("z3ds"),
+            _ => None,
+        }
+    }
+
     pub(super) fn append_recommended_compress_label(
         mut report: OperationReport,
         recommendation: Option<&CompressFormatRecommendation>,

@@ -57,8 +57,15 @@ pub(crate) fn emit_container_indeterminate_progress(
 
 /// Emit a decoded output's detected platform identity mid-extraction as a `probe-identity`
 /// progress event so the host can light the ROM-type tag before the file completes. The payload
-/// mirrors the early `probe-manifest` shape (`details.probe_manifest.{platform,disc_format}`)
-/// so the host consumes both through one path.
+/// mirrors the early `probe-manifest` shape
+/// (`details.probe_manifest.{platform,disc_format,recommended_format}`) so the host consumes both
+/// through one path.
+///
+/// This is the only early identity signal an *archived* ROM gets: the container's own
+/// `probe-manifest` resolves identity from the archive file, which tells it nothing about the ROM
+/// inside, and decoding a prefix of the payload up front measurably slowed every extract. Carrying
+/// the recommended container here lets the host settle its automatic output format as soon as the
+/// payload is recognized rather than at completion.
 pub(crate) fn emit_extract_identity(
     context: &OperationContext,
     format: &str,
@@ -68,6 +75,18 @@ pub(crate) fn emit_extract_identity(
     identity.write_into(&mut manifest);
     if manifest.is_empty() {
         return;
+    }
+    let recommendation = crate::recommend_container_for_identity(
+        identity.platform,
+        identity.disc_format.map(|medium| medium.label()),
+    );
+    // Only the rom-specific containers are surfaced; the generic 7z fallback stays absent so the
+    // host keeps applying its own extension heuristics. Mirrors the ingest per-asset stamp.
+    if matches!(recommendation.format_name, "chd" | "rvz" | "z3ds") {
+        manifest.insert(
+            "recommended_format".to_string(),
+            Value::String(recommendation.format_name.to_string()),
+        );
     }
     let mut details = Map::new();
     details.insert("probe_manifest".to_string(), Value::Object(manifest));
