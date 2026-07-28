@@ -66,6 +66,7 @@ const WASM_BINDGEN_WRITE_FUNCTIONS: &[&str] = &[
     "archive_write_set_format_7zip",
     "archive_write_set_format_zip",
     "archive_write_add_filter_none",
+    "archive_write_set_bytes_in_last_block",
     "archive_write_set_format_7zip_progress_callback",
     "archive_write_set_format_7zip_size_hint",
     "archive_write_open",
