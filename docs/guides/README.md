@@ -65,7 +65,7 @@ rom-weaver checksum --input woven.bin --algo sha256
 ```
 
 The final SHA-256 should be
-`43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb`.
+`f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e`.
 
 ## Before working with a real patch
 

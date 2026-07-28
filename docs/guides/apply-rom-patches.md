@@ -7,6 +7,7 @@ repeatable commands and automation.
 <!-- START doctoc -->
 ## Table of contents
 
+- [Try it with the sample](#try-it-with-the-sample)
 - [What you need](#what-you-need)
 - [Apply a patch in the webapp](#apply-a-patch-in-the-webapp)
 - [Apply a patch with the CLI](#apply-a-patch-with-the-cli)
@@ -15,6 +16,27 @@ repeatable commands and automation.
 - [When the patch does not match](#when-the-patch-does-not-match)
 
 <!-- END doctoc -->
+
+## Try it with the sample
+
+If you do not have a patch to hand, open the
+[sample weave](https://rom-weaver.com/weave?bundle=first-weave.zip). It loads a
+tiny synthetic NES ROM and patch supplied by the project, so you can follow
+every step below without selecting a personal file. The patched result prints
+`MODIFIED WORLD` instead of `HELLO WORLD`.
+
+The same sample runs from the command line:
+
+```bash
+curl --fail --location --output first-weave.zip \
+  https://rom-weaver.com/first-weave.zip
+rom-weaver weave --input first-weave.zip --output woven.bin --no-compress
+rom-weaver checksum --input woven.bin --algo sha256
+```
+
+That SHA-256 should be
+`f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e`. If it
+matches, your installation applies patches correctly.
 
 ## What you need
 

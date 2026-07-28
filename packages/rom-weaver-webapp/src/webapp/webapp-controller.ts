@@ -44,17 +44,25 @@ const isBetaWorkflowView = (view: WebappView): boolean => view === "trim" || vie
 const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
 
+// The guides are a document route people reach by URL or search, not a
+// workflow with in-progress state to come back to. Storing one would make the
+// site root resume it, so reading a guide would quietly redirect `/` to /docs.
+// Read is guarded too, to retire a value stored before this rule existed.
+const isResumableWorkflowView = (view: WebappView): boolean => view !== "docs";
+
 /** Restore the last-used workflow tab so a reload returns to the same tab. */
 const loadPersistedWorkflowView = (storage?: ControllerOptions["storage"]): WebappView => {
   try {
     const stored = storage && typeof storage.getItem === "function" ? storage.getItem(ACTIVE_VIEW_STORAGE_KEY) : null;
-    return normalizeWorkflowView(stored) || DEFAULT_WORKFLOW_VIEW;
+    const view = normalizeWorkflowView(stored);
+    return view && isResumableWorkflowView(view) ? view : DEFAULT_WORKFLOW_VIEW;
   } catch {
     return DEFAULT_WORKFLOW_VIEW;
   }
 };
 
 const persistWorkflowView = (storage: ControllerOptions["storage"] | undefined, view: WebappView): void => {
+  if (!isResumableWorkflowView(view)) return;
   try {
     if (storage && typeof storage.setItem === "function") storage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
   } catch {

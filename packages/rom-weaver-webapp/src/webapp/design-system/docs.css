@@ -247,6 +247,37 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 }
 .rw-app .docs-article a:active { text-decoration-color: var(--thread); }
 
+/* The hub's workflow chooser is the reason most people open the guides, so it
+   reads as a set of destinations rather than a bulleted list. Keyed off the
+   heading's own id: if that section is renamed the list simply renders plain.
+   The marker is emptied rather than removed with `list-style: none`, which is
+   what strips list semantics from VoiceOver. */
+.rw-app .docs-article #choose-a-workflow + ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--sp-m);
+  max-width: var(--measure-wide);
+  margin-block: var(--sp-l);
+  padding-inline-start: 0;
+}
+.rw-app .docs-article #choose-a-workflow + ul li {
+  margin: 0;
+  padding: var(--sp-l);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+  font-size: .84rem;
+  line-height: 1.6;
+}
+.rw-app .docs-article #choose-a-workflow + ul li::marker { content: ""; }
+.rw-app .docs-article #choose-a-workflow + ul a {
+  display: block;
+  margin-bottom: .15rem;
+  font-size: .95rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 /* --- code, figures, quotes: allowed past the prose measure --- */
 .rw-app .docs-article code {
   padding: .1rem .3rem;

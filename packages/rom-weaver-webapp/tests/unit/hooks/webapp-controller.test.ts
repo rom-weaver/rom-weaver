@@ -191,4 +191,38 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(session.romFilePresent).toBe(true);
     expect(session.patchCount).toBe(1);
   });
+
+  // Reading a guide must not decide where the site root lands: docs is a
+  // document route, not a workflow tab with state to resume.
+  it("never stores the guides as the tab to resume", () => {
+    const storage = createStorage();
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+
+    controller.selectView("creator");
+    expect(storage.getItem("rom-weaver-active-view")).toBe("creator");
+
+    controller.selectView("docs");
+    expect(controller.getState().currentView).toBe("docs");
+    expect(storage.getItem("rom-weaver-active-view")).toBe("creator");
+  });
+
+  it("ignores a guides value stored before that rule existed", () => {
+    const storage = createStorage();
+    storage.setItem("rom-weaver-active-view", "docs");
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+
+    expect(controller.getState().currentView).toBe("patcher");
+  });
 });

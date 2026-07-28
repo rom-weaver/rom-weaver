@@ -7,6 +7,7 @@ the command line without packaging the original ROM into the patch.
 <!-- START doctoc -->
 ## Table of contents
 
+- [Try it with the sample](#try-it-with-the-sample)
 - [Prepare the two inputs](#prepare-the-two-inputs)
 - [Create a patch in the webapp](#create-a-patch-in-the-webapp)
 - [Create a patch with the CLI](#create-a-patch-with-the-cli)
@@ -16,6 +17,28 @@ the command line without packaging the original ROM into the patch.
 - [Update an existing patch](#update-an-existing-patch)
 
 <!-- END doctoc -->
+
+## Try it with the sample
+
+If you do not have a pair of files to hand, the project publishes the two
+synthetic NES ROMs its own screenshots are built from. They differ only in the
+text they display, so the patch you produce is easy to reason about:
+
+```bash
+curl --fail --location --output hello-world.nes \
+  https://rom-weaver.com/hello-world.nes
+curl --fail --location --output modified-world.nes \
+  https://rom-weaver.com/modified-world.nes
+rom-weaver patch create \
+  --original hello-world.nes \
+  --modified modified-world.nes \
+  --output first.bps
+```
+
+Apply `first.bps` back onto `hello-world.nes` and the result should match
+`modified-world.nes` byte for byte. In the browser, drop the same two files
+into the [Create workflow](https://rom-weaver.com/create) as **Original** and
+**Modified**.
 
 ## Prepare the two inputs
 
