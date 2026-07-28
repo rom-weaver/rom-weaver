@@ -273,6 +273,15 @@ impl WriteArchive {
             file,
             on_bytes_written: Box::new(on_bytes_written),
         });
+        // `archive_write_open_filename` decides this for us - no padding for a
+        // regular file, pad only for a device or FIFO - but opening through
+        // callbacks skips that, leaving libarchive's `-1` default, which pads
+        // the final block out to `bytes_per_block` (10240). That tail of zeros
+        // is legal in every container written here and readers ignore it, but
+        // it inflates each archive by up to 10239 bytes for nothing.
+        unsafe {
+            archive_write_set_bytes_in_last_block(self.as_ptr(), 1);
+        }
         let status = unsafe {
             archive_write_open(
                 self.as_ptr(),
