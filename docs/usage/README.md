@@ -66,8 +66,8 @@ saved its own files, it keeps working with no connection.
 
 The command-line tool does the same jobs. Reach for it when you want to repeat
 a task or script it. Install it with Homebrew, Scoop, the install script, npm,
-Cargo, or Docker. Start with [Install the CLI](../cli.md#install), then copy
-the complete [First weave](../cli.md#first-weave) practice run. The CLI guide
+Cargo, or Docker. Start with [Install the CLI](../hosting/cli.md#install), then copy
+the complete [First weave](../hosting/cli.md#first-weave) practice run. The CLI guide
 also covers every command and option.
 
 Check that it is there:
@@ -119,12 +119,12 @@ results under new names. Only use files you are allowed to have.
 These guides cover the usual path: a clean file in, a checked file out. For a
 repeatable multi-patch release, read [Create a bundle](create-bundles.md). For
 scripting, archives, compression, JSON output, and the full command reference,
-read the [CLI guide](../cli.md). To build or deploy rom-weaver
+read the [CLI guide](../hosting/cli.md). To build or deploy rom-weaver
 itself, start at the [documentation index](../README.md).
 
 ## Legal and privacy
 
-- [Notices](notices.md) covers the project license and the open-source
+- [Notices](../legal/notices.md) covers the project license and the open-source
   components in each build.
-- [Privacy](privacy.md) covers what stays on your device, what your browser
+- [Privacy](../legal/privacy.md) covers what stays on your device, what your browser
   keeps, and what leaves.

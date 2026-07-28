@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
@@ -103,7 +103,7 @@ describe("DocsPage", () => {
 
   it("renders headings, links, and code through parser hooks", () => {
     const route = createDocRoute(
-      { file: "guides/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
@@ -149,22 +149,22 @@ echo hi
 
   it("resolves hosted documents, repository-only documents, and published images from their source file", () => {
     const route = createDocRoute(
-      { file: "guides/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
 
 ## Resources
 
-[Install](../cli.md#install)
-[Maintainer notes](../mobile-safari-verification.md)
+[Install](../hosting/cli.md#install)
+[Maintainer notes](../development/mobile-safari-verification.md)
 ![Sample](../../packages/rom-weaver-webapp/design/first-sample-modified-world.png)
 `,
     );
 
     expect(route.html).toContain('href="/docs/cli#install"');
     expect(route.html).toContain(
-      'href="https://github.com/rom-weaver/rom-weaver/blob/main/docs/mobile-safari-verification.md"',
+      'href="https://github.com/rom-weaver/rom-weaver/blob/main/docs/development/mobile-safari-verification.md"',
     );
     expect(route.html).toContain('src="/docs/screenshots/first-sample-modified-world.png"');
   });
@@ -179,5 +179,114 @@ Fixture description.
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe(
       `https://rom-weaver.com/${slug}`,
     );
+  });
+
+  it("shelves every route under the folder it lives in", () => {
+    render(<DocsPage active slug="docs/cli" />);
+
+    const nav = document.querySelector(".docs-rails .guide-nav");
+    expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual([
+      "Usage",
+      "Install & hosting",
+      "Development",
+      "Legal",
+    ]);
+    // Every published route reaches the nav, so a new guide can never be
+    // stranded off the shelves.
+    expect(nav?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+    expect(nav?.querySelector('a[aria-current="page"]')?.textContent).toBe("CLI and installation");
+  });
+
+  it("carries this guide's outline and every other page into the sheet", () => {
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    const sections = routeFor("docs/apply-rom-patches").sections;
+    // One warp tick per section: the gauge is the shape of the document.
+    expect(document.querySelectorAll(".warp-gauge i")).toHaveLength(sections.length);
+
+    fireEvent.click(screen.getByRole("button", { name: /Open docs navigation/ }));
+    const sheet = document.querySelector(".rw-modal.guide-sheet");
+    expect(sheet).toBeTruthy();
+    expect(sheet?.querySelectorAll(".warp-rail-list a")).toHaveLength(sections.length);
+    expect(sheet?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+  });
+
+  it("tracks the reading position as the reader scrolls", () => {
+    // happy-dom lays nothing out, so the geometry the hook reads is supplied
+    // here: headings every 500px down a 5000px article.
+    const SPACING = 500;
+    let scrollTop = 0;
+    const sections = routeFor("docs/apply-rom-patches").sections;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollTop);
+    // Stubbed by id, which is how the hook finds them.
+    const layOutHeadings = () => {
+      sections.forEach((section, index) => {
+        const heading = document.getElementById(section.id);
+        if (heading)
+          heading.getBoundingClientRect = () => ({ bottom: 0, top: (index + 1) * SPACING - scrollTop }) as DOMRect;
+      });
+      const article = document.querySelector(".docs-article");
+      if (article) article.getBoundingClientRect = () => ({ bottom: 5000 - scrollTop, top: 0 }) as DOMRect;
+    };
+    vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(5400);
+    window.innerHeight = 800;
+    // The hook reads inside an animation frame; run them inline so a scroll is
+    // observable in the same tick. The handle must be 0: the callback runs
+    // before the hook stores it, so a truthy one would latch its coalescing
+    // guard and swallow every later scroll.
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 0;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+    layOutHeadings();
+
+    const readAt = (scrollY: number) => {
+      scrollTop = scrollY;
+      layOutHeadings();
+      // Resize re-measures before reading; scroll alone reuses the cached
+      // geometry, which was taken before these rects existed.
+      fireEvent(window, new Event("resize"));
+      return {
+        index: document.querySelector(".weft-bar-index")?.textContent,
+        label: document.querySelector(".weft-bar-label")?.textContent,
+        weft: (document.querySelector(".warp-gauge-weft") as HTMLElement | null)?.style.width,
+      };
+    };
+
+    // Reading line is 108px, so the second heading (1000px) becomes current
+    // once the page has scrolled just past 892.
+    expect(readAt(0).index).toBe("01");
+    expect(readAt(950).index).toBe("02");
+    expect(readAt(950).label).toBe(sections[1]?.label);
+    // 2000 puts the fourth heading exactly on the line and leaves the fifth
+    // 500px below it.
+    expect(readAt(2000).index).toBe("04");
+    // The last section stays reachable at the scroll limit even though its
+    // heading never crosses the reading line.
+    const atLimit = readAt(4600);
+    expect(atLimit.index).toBe(String(sections.length).padStart(2, "0"));
+    expect(atLimit.weft).toBe("100%");
+  });
+
+  it("indexes every other page on the hub, and no page on a guide", () => {
+    const { unmount } = render(<DocsPage active slug="docs" />);
+
+    const index = document.querySelector(".docs-index");
+    expect([...(index?.querySelectorAll("h2") ?? [])].map((shelf) => shelf.textContent)).toEqual([
+      "Usage",
+      "Install & hosting",
+      "Development",
+      "Legal",
+    ]);
+    // Everything but the hub itself, so the landing page never links to itself.
+    expect(index?.querySelectorAll("a")).toHaveLength(DOC_ROUTES.length - 1);
+    expect(index?.querySelector(".docs-index-blurb")?.textContent).toBe(routeFor("docs/apply-rom-patches").description);
+
+    unmount();
+    render(<DocsPage active slug="docs/cli" />);
+    expect(document.querySelector(".docs-index")).toBeNull();
   });
 });

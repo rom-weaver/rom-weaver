@@ -1,5 +1,5 @@
 import { createWorkerRequestId } from "../shared/worker-request-id.ts";
-// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/ARCHITECTURE.md.
+// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/development/ARCHITECTURE.md.
 import BUNDLED_STAGING_WORKER_URL from "../storage/browser-opfs-staging.worker.ts?worker&url";
 
 type WorkerAssetRoot = typeof globalThis & {

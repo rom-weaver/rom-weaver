@@ -48,7 +48,7 @@ const WORKFLOW_TABS = [
   // Reference rather than a workflow, but it earns a slot because the people it
   // is written for are the least likely to go looking in an icon tray. It is
   // still never persisted as the tab to resume - see `isResumableWorkflowView`.
-  { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Guides" },
+  { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];

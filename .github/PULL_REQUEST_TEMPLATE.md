@@ -27,7 +27,7 @@ section when the change has none.
 
 ## Checklist
 
-- [ ] The pull request title follows the [commit conventions](https://github.com/rom-weaver/rom-weaver/blob/main/docs/commits.md).
+- [ ] The pull request title follows the [commit conventions](https://github.com/rom-weaver/rom-weaver/blob/main/docs/development/commits.md).
 - [ ] Relevant tests and documentation are updated.
 - [ ] No copyrighted ROMs, disc images, firmware, keys, or personal files are included.
 - [ ] I have read the [contribution guide](https://github.com/rom-weaver/rom-weaver/blob/main/CONTRIBUTING.md) and [code of conduct](https://github.com/rom-weaver/rom-weaver/blob/main/.github/CODE_OF_CONDUCT.md).

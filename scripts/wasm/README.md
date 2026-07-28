@@ -13,7 +13,7 @@ Use `run-browser-cli.mjs` when a smoke test must run in a real browser. It is a
 developer tool, not a supported application API. Use the native Rust CLI for
 command-line work.
 
-The [development guide](../../docs/development.md#build-and-run-the-webapp)
+The [development guide](../../docs/development/development.md#build-and-run-the-webapp)
 explains the toolchain and build flow. The
 [browser WASM runtime guide](../../packages/rom-weaver-webapp/src/wasm/README.md)
 documents the TypeScript worker and OPFS APIs. Keeping those API examples in

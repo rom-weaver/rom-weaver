@@ -274,7 +274,7 @@ run = "node {{ config_root }}/scripts/run-ci.mjs"
 
 # Benchmarks are not part of `ci`: they need a corpus of real disc images, which
 # is not redistributable and so cannot live in the repository. Point BENCH_CORPUS
-# at your own. See docs/performance.md.
+# at your own. See docs/development/performance.md.
 [tasks.bench-chd]
 description = "Benchmark CHD compress/extract against chdman (needs BENCH_CORPUS, hyperfine, chdman)"
 run = "node {{ config_root }}/scripts/bench-disc-tools.mjs --suite chd --corpus '{{ env.BENCH_CORPUS }}'"

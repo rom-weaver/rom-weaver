@@ -1,5 +1,5 @@
 import { Marked, Renderer } from "marked";
-import { DOC_SOURCES, SITE_ORIGIN } from "./docs-routing.mjs";
+import { docGroupTitle, DOC_SOURCES, SITE_ORIGIN } from "./docs-routing.mjs";
 
 // Build-time only. `marked` must never reach a browser bundle: the client
 // imports already-rendered HTML from `virtual:rom-weaver-docs` instead. Build
@@ -12,6 +12,7 @@ const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver/blob/main";
  * @typedef {{ id: string, label: string }} DocSection
  * @typedef {{
  *   description: string,
+ *   group: string,
  *   html: string,
  *   label: string,
  *   sections: readonly DocSection[],
@@ -165,6 +166,7 @@ const createDocRoute = ({ file, label, slug }, markdown) => {
   const { html, sections } = renderMarkdown(markdown, slug, file);
   return Object.freeze({
     description,
+    group: docGroupTitle(file),
     html,
     label,
     sections: Object.freeze(sections),

@@ -134,7 +134,7 @@ worker.terminate();
 
 ## Build and package
 
-The [development guide](../../../../docs/development.md#build-and-run-the-webapp)
+The [development guide](../../../../docs/development/development.md#build-and-run-the-webapp)
 owns the WASM build and dev-server procedure. Build artifacts are written to
 this directory by default.
 

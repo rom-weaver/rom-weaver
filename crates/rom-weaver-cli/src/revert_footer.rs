@@ -1,6 +1,6 @@
 use super::*;
 
-// Revert footer format: see `docs/trim-revert-footer.md` for the full specification.
+// Revert footer format: see `docs/development/trim-revert-footer.md` for the full specification.
 /// 4-byte magic + version identifying a rom-weaver revert footer (`"RWT"` + version `0x01`).
 pub(super) const REVERT_FOOTER_MAGIC: &[u8; 4] = b"RWT\x01";
 /// Total on-disk size of the revert footer: magic+version(4) + pad_byte(1) + pad_len(5, 40-bit LE)

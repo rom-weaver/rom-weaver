@@ -11,7 +11,7 @@ from the repository root unless a section says otherwise.
 ## Set up a clean checkout
 
 The pinned versions are Node.js 24.18 and Rust 1.95. Install the system tools,
-including WASI SDK, from the [development guide](../../../docs/development.md#prerequisites).
+including WASI SDK, from the [development guide](../../../docs/development/development.md#prerequisites).
 Then install dependencies and build the browser WASM artifact:
 
 ```bash

@@ -186,11 +186,11 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps Trim and Tools behind the beta flag and Guides in front of it", async () => {
   mountWebappRoot();
-  // Guides is reference rather than a workflow, but it rides in the rail so the
+  // Docs is reference rather than a workflow, but it rides in the rail so the
   // readers it is written for do not have to go hunting for it.
   await expect
     .poll(() => [...document.querySelectorAll('.mode-rail [role="tab"]')].map((tab) => tab.textContent))
-    .toEqual(["Weave", "Create", "Guides"]);
+    .toEqual(["Weave", "Create", "Docs"]);
 });
 
 test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {

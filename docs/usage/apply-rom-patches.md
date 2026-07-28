@@ -54,7 +54,7 @@ That last command should print
 `e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`. If it
 does, patching works on your machine and you can move on to the real thing.
 If rom-weaver is not installed yet, copy an install command from the hosted
-[CLI installation guide](../cli.md#install).
+[CLI installation guide](../hosting/cli.md#install).
 
 ## What you need
 

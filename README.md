@@ -100,7 +100,7 @@ general speed claim.
 - **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS,
   GBA, and 3DS can be reverted, with an opt-in footer that restores the
   original file byte-for-byte.
-- **Share workflows.** Distributable [`rom-weaver-bundle.json`](docs/rom-weaver-bundle-v1.schema.json)
+- **Share workflows.** Distributable [`rom-weaver-bundle.json`](./docs/rom-weaver-bundle-v1.schema.json)
   bundles pin patch order, checksums, and output naming so others can replay
   the exact workflow.
 - **Local-first and private.** Everything runs on your machine. The webapp is
@@ -109,7 +109,7 @@ general speed claim.
   and the threaded WASM webapp, with line-delimited JSON output for scripting.
 
 The complete format, codec, and checksum compatibility tables are maintained
-in the [CLI guide](docs/cli.md#supported-formats).
+in the [CLI guide](./docs/hosting/cli.md#supported-formats).
 
 ## Notices
 
@@ -175,7 +175,7 @@ with a tiny original homebrew NES ROM and two patches that change “HELLO WORLD
 The Docker source build serves the full webapp: it builds the WASM module, adds
 cross-origin isolation headers, supports client-side routes, and precompresses
 assets. The
-[self-hosting guide](docs/self-hosting.md) covers reverse proxies, subpath
+[self-hosting guide](./docs/hosting/self-hosting.md) covers reverse proxies, subpath
 routing, HTTPS certificates, service-worker scope, and the required COOP/COEP
 headers.
 
@@ -310,7 +310,7 @@ docker run --rm \
 Mount your ROM directory at `/work` and pass paths under it. `--user` matters:
 bind-mounted files keep their host ownership, so without it the container cannot
 read files it does not own and leaves anything it writes owned by an unknown uid.
-See [Run in Docker](docs/cli.md#run-in-docker).
+See [Run in Docker](./docs/hosting/cli.md#run-in-docker).
 
 </details>
 
@@ -332,14 +332,14 @@ toolchain.
 </details>
 
 Hitting `Permission denied`? See
-[File permissions](docs/cli.md#file-permissions).
+[File permissions](./docs/hosting/cli.md#file-permissions).
 
-The [development guide](docs/development.md) covers the full toolchain setup,
+The [development guide](./docs/development/development.md) covers the full toolchain setup,
 webapp builds, and tests.
 
 ## Screenshots
 
-[View every screenshot at full size.](docs/screenshots.md)
+[View every screenshot at full size.](./docs/development/screenshots.md)
 
 <table>
   <thead>
@@ -390,7 +390,7 @@ webapp builds, and tests.
 
 ## Documentation
 
-The [documentation index](docs/README.md) routes to the CLI, deployment,
+The [documentation index](./docs/README.md) routes to the CLI, deployment,
 integration, development, architecture, and format-reference guides.
 
 ## Contributing and support

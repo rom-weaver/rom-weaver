@@ -125,7 +125,7 @@ Patterns that matter when touching this code:
   reference tools (chdman, dolphin-tool). Performance changes to encode paths
   must keep outputs byte-identical; tests assert this.
 
-`docs/browser-concurrency.md` covers the browser-side concurrency rules in
+`docs/development/browser-concurrency.md` covers the browser-side concurrency rules in
 more depth.
 
 ## Browser I/O paths
@@ -382,7 +382,7 @@ entry checks-only. Create re-parses before writing, so it can never emit
   fields live in each patch's Options drawer; output naming, bundle format,
   ROM inclusion, export progress, and the Export action live in Output. The
   public URL and same-origin OPFS host APIs are documented in
-  [Webapp integration](webapp-integration.md).
+  [Webapp integration](../hosting/webapp-integration.md).
 
 ## Rust ⇄ TypeScript boundary
 
@@ -513,5 +513,5 @@ checks pre-commit, scoped by changed paths.
 
 ## Other docs
 
-See the [documentation index](README.md) for runtime configuration, browser
+See the [documentation index](../README.md) for runtime configuration, browser
 protocols, verification guides, implementation notes, and format references.

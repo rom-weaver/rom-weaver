@@ -11,7 +11,7 @@ import { runMain } from "../run-main.mjs";
 // One leg per image *per architecture*, each on a runner of that architecture.
 // Building arm64 under QEMU on an amd64 runner took 81 minutes for the CLI
 // image and just over two hours for the webapp's source build; natively they
-// are roughly five and nine. See docs/ci.md ("Docker images").
+// are roughly five and nine. See docs/development/ci.md ("Docker images").
 const ARCHES = [
   { arch: "amd64", runner: "ubuntu-24.04" },
   { arch: "arm64", runner: "ubuntu-24.04-arm" },

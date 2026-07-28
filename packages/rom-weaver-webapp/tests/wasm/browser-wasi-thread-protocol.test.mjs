@@ -20,7 +20,7 @@ import {
   waitForThreadStartAck,
 } from "../../src/wasm/browser-wasi-thread-protocol.ts";
 
-// Unit coverage for the WASI thread-start protocol helpers (see docs/browser-concurrency.md). These
+// Unit coverage for the WASI thread-start protocol helpers (see docs/development/browser-concurrency.md). These
 // run on the browser main thread, so they only exercise paths that do NOT call Atomics.wait (which
 // throws on a thread that cannot block). The blocking ack/poll loops are covered end-to-end by
 // browser-worker-client.test.mjs against the real threaded wasm module.

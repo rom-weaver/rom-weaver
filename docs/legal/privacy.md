@@ -86,4 +86,4 @@ way that matters, this page should change in the same release.
 Questions and corrections go to the
 [public issue tracker](https://github.com/rom-weaver/rom-weaver/issues).
 
-Back to the [guide index](README.md).
+Back to the [guide index](../usage/README.md).
