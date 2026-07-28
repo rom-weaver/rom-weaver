@@ -3,6 +3,7 @@ use std::{
     ffi::OsString,
     fs::{self, DirBuilder, File, OpenOptions},
     io::{BufReader, BufWriter, Read, Write},
+    ops::Range,
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -752,6 +753,77 @@ fn libarchive_extract_achievable_threads(
     } else {
         file_task_count.max(1)
     }
+}
+
+// A worker is only worth spawning if it has real decode work. Each one opens its own reader over the
+// source and walks it from the start, so on a solid archive (7z's default) it re-decodes everything
+// before its first assigned entry - a chunk holding only trailing metadata costs a full pass over the
+// archive to produce a few hundred bytes. Requiring this much per chunk keeps those chunks merged into
+// their predecessor instead of buying a redundant decode.
+const LIBARCHIVE_EXTRACT_MIN_CHUNK_BYTES: u64 = 4 << 20;
+
+// Split tasks into contiguous, byte-balanced chunks - one per worker. Chunks must stay contiguous and
+// in index order because each worker walks the archive sequentially to reach its entries.
+//
+// Balancing by byte weight rather than by task count is what keeps redundant decoding down: an even
+// count-split of `[dir, 2 MB, 2 MB, 1190 MB, 384 B, 198 B]` hands the two trailing metadata entries to
+// their own worker, which must decode all 1.19 GB to reach them. Weighting by bytes leaves them with
+// the chunk already decoding that data.
+fn libarchive_extract_chunks(
+    tasks: &[LibarchiveExtractTask],
+    worker_count: usize,
+) -> Vec<&[LibarchiveExtractTask]> {
+    let workers = worker_count.max(1);
+    if tasks.is_empty() {
+        return Vec::new();
+    }
+    if workers == 1 {
+        return vec![tasks];
+    }
+    let total_bytes = libarchive_extract_total_logical_bytes(tasks);
+    if total_bytes == 0 {
+        // No size information to balance against (directory-only, or a header without sizes); fall back
+        // to an even split by count.
+        return tasks.chunks(tasks.len().div_ceil(workers).max(1)).collect();
+    }
+    // Give each chunk an equal share of bytes, but never less than the minimum that justifies a worker.
+    let target_bytes = (total_bytes / workers as u64).max(LIBARCHIVE_EXTRACT_MIN_CHUNK_BYTES);
+    let chunk_bytes_of = |range: &Range<usize>| {
+        tasks[range.clone()]
+            .iter()
+            .map(|task| task.logical_bytes.unwrap_or(0))
+            .fold(0u64, |total, bytes| total.saturating_add(bytes))
+    };
+
+    let mut ranges: Vec<Range<usize>> = Vec::new();
+    let mut start = 0usize;
+    let mut chunk_bytes = 0u64;
+    for (offset, task) in tasks.iter().enumerate() {
+        chunk_bytes = chunk_bytes.saturating_add(task.logical_bytes.unwrap_or(0));
+        let is_last = offset + 1 == tasks.len();
+        // Stop growing this chunk once it carries its share, unless it is the final chunk we can afford -
+        // the remaining tasks must then all land here rather than spilling into an extra worker.
+        let chunks_remaining = workers.saturating_sub(ranges.len());
+        if is_last || (chunk_bytes >= target_bytes && chunks_remaining > 1) {
+            ranges.push(start..offset + 1);
+            start = offset + 1;
+            chunk_bytes = 0;
+        }
+    }
+
+    // Fold undersized chunks back into their predecessor. The greedy pass above only closes a chunk once
+    // it reaches `target_bytes`, so the trailing remainder can be arbitrarily small - on the Dreamcast
+    // GDI shape that is a `.cue` plus a `.gdi` (under a KB) whose worker would re-decode the entire solid
+    // block to reach them. Merging back costs that chunk's parallelism and saves a whole redundant pass.
+    let mut merged: Vec<Range<usize>> = Vec::with_capacity(ranges.len());
+    for range in ranges {
+        let undersized = chunk_bytes_of(&range) < LIBARCHIVE_EXTRACT_MIN_CHUNK_BYTES;
+        match merged.last_mut() {
+            Some(previous) if undersized => previous.end = range.end,
+            _ => merged.push(range),
+        }
+    }
+    merged.into_iter().map(|range| &tasks[range]).collect()
 }
 
 #[derive(Debug)]
@@ -1898,7 +1970,13 @@ pub(crate) fn extract_regular_archive_with_libarchive(
             // top of these workers, not subtracted from them, so a configured budget of N decodes
             // with N workers.
             let worker_count = execution.effective_threads.max(1);
-            let chunk_size = tasks.len().div_ceil(worker_count).max(1);
+            let task_chunks = libarchive_extract_chunks(&tasks, worker_count);
+            trace!(
+                format = format_name,
+                worker_count,
+                chunks = task_chunks.len(),
+                "libarchive parallel extract chunk split"
+            );
             let (sender, receiver) = mpsc::sync_channel::<LibarchiveExtractOutput>(
                 bounded_items_for_threads(execution.effective_threads),
             );
@@ -1917,7 +1995,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                         pool.as_ref()
                             .expect("parallel extract builds a worker pool")
                             .install(|| {
-                                tasks.par_chunks(chunk_size).try_for_each_with(
+                                task_chunks.into_par_iter().try_for_each_with(
                                     sender,
                                     |sender, chunk| {
                                         extract_libarchive_task_chunk_to_sender(
@@ -2498,5 +2576,123 @@ mod tests {
         );
         assert!(!outside.join("escaped.bin").exists());
         fs::remove_dir_all(&dir).ok();
+    }
+
+    const MB: u64 = 1 << 20;
+
+    fn sized_task(index: usize, logical_bytes: u64, is_dir: bool) -> LibarchiveExtractTask {
+        let relative_path = PathBuf::from(format!("entry-{index}"));
+        LibarchiveExtractTask {
+            index,
+            archive_name: relative_path.to_string_lossy().into_owned(),
+            output_path: relative_path.clone(),
+            write_path: relative_path.clone(),
+            relative_path,
+            is_dir,
+            logical_bytes: (!is_dir).then_some(logical_bytes),
+        }
+    }
+
+    fn chunk_indices(chunks: &[&[LibarchiveExtractTask]]) -> Vec<Vec<usize>> {
+        chunks
+            .iter()
+            .map(|chunk| chunk.iter().map(|task| task.index).collect())
+            .collect()
+    }
+
+    // The Dreamcast GDI shape that motivated byte-balanced chunking: three tracks plus a `.cue` and a
+    // `.gdi` of a few hundred bytes. An even split by task count hands the trailing metadata its own
+    // worker, which must re-decode the whole solid block to reach it.
+    #[test]
+    fn extract_chunks_keep_trailing_metadata_out_of_their_own_worker() {
+        let tasks = [
+            sized_task(0, 0, true),
+            sized_task(1, 2 * MB, false),
+            sized_task(2, 2 * MB, false),
+            sized_task(3, 1130 * MB, false),
+            sized_task(4, 384, false),
+            sized_task(5, 198, false),
+        ];
+
+        let chunks = libarchive_extract_chunks(&tasks, 5);
+
+        assert_eq!(
+            chunk_indices(&chunks),
+            vec![vec![0, 1, 2, 3, 4, 5]],
+            "one dominant entry plus sub-threshold remainder must not buy a second redundant decode"
+        );
+    }
+
+    #[test]
+    fn extract_chunks_split_evenly_sized_entries_across_workers() {
+        let tasks: Vec<_> = (0..4)
+            .map(|index| sized_task(index, 300 * MB, false))
+            .collect();
+
+        let chunks = libarchive_extract_chunks(&tasks, 4);
+
+        assert_eq!(
+            chunk_indices(&chunks),
+            vec![vec![0], vec![1], vec![2], vec![3]],
+            "entries that each justify a worker must still parallelise"
+        );
+    }
+
+    #[test]
+    fn extract_chunks_never_exceed_the_worker_count() {
+        let tasks: Vec<_> = (0..32)
+            .map(|index| sized_task(index, 64 * MB, false))
+            .collect();
+
+        for workers in 1..=8 {
+            let chunks = libarchive_extract_chunks(&tasks, workers);
+            assert!(
+                chunks.len() <= workers,
+                "{workers} workers must not receive {} chunks",
+                chunks.len()
+            );
+        }
+    }
+
+    // Every worker walks the archive sequentially, so chunks must stay contiguous, ordered, and cover
+    // every task exactly once - a dropped or reordered task silently loses output.
+    #[test]
+    fn extract_chunks_cover_every_task_contiguously() {
+        let sizes = [0, 5 * MB, 1, 900 * MB, 7 * MB, 2, 64 * MB, 3];
+        let tasks: Vec<_> = sizes
+            .iter()
+            .enumerate()
+            .map(|(index, bytes)| sized_task(index, *bytes, index == 0))
+            .collect();
+
+        for workers in 1..=6 {
+            let chunks = libarchive_extract_chunks(&tasks, workers);
+            let covered: Vec<usize> = chunks
+                .iter()
+                .flat_map(|chunk| chunk.iter().map(|task| task.index))
+                .collect();
+            assert_eq!(
+                covered,
+                (0..tasks.len()).collect::<Vec<_>>(),
+                "chunks for {workers} workers must cover every task in order"
+            );
+            assert!(
+                chunks.iter().all(|chunk| !chunk.is_empty()),
+                "empty chunks would spawn a worker with no decode work"
+            );
+        }
+    }
+
+    #[test]
+    fn extract_chunks_fall_back_to_count_split_without_sizes() {
+        let tasks: Vec<_> = (0..4).map(|index| sized_task(index, 0, false)).collect();
+
+        let chunks = libarchive_extract_chunks(&tasks, 2);
+
+        assert_eq!(
+            chunk_indices(&chunks),
+            vec![vec![0, 1], vec![2, 3]],
+            "a header without sizes must still split rather than collapse to one worker"
+        );
     }
 }
