@@ -297,6 +297,9 @@
 .rw-app .sample-tutorial-scrim {
   position: fixed; inset: 0; z-index: 1000; pointer-events: none;
   background: color-mix(in oklab, var(--scrim) 78%, transparent);
+  /* Pushes the un-highlighted workbench back so the lifted row reads as the
+     only thing in focus; the row sits above this layer and stays crisp. */
+  backdrop-filter: blur(1.5px);
 }
 .rw-app .sample-tutorial-stage {
   position: relative !important;
@@ -307,13 +310,25 @@
   background: linear-gradient(90deg, color-mix(in oklab, var(--thread) 18%, transparent), transparent 72%);
   box-shadow: inset 4px 0 0 var(--thread);
 }
+/* Lift only - the row rides above the scrim so it stays crisp. Its frame is the
+   portal-rendered ring below, because the row's own ancestors are overflow:clip
+   and would shear an outline drawn here. */
 .rw-app .sample-tutorial-target {
   position: relative !important; z-index: 1002 !important; overflow: visible !important;
-  outline: 3px solid color-mix(in oklab, var(--thread) 88%, var(--thread-hi)); outline-offset: 7px;
+}
+.rw-app .sample-tutorial-ring {
+  position: fixed; z-index: 1002; pointer-events: none;
+  border: 3px solid color-mix(in oklab, var(--thread) 88%, var(--thread-hi)); border-radius: var(--r-m);
   box-shadow:
-    0 0 0 13px color-mix(in oklab, var(--thread) 22%, transparent),
-    0 18px 46px color-mix(in oklab, var(--scrim) 48%, transparent);
-  animation: sample-tutorial-target-in .24s var(--ease) both;
+    0 0 0 6px color-mix(in oklab, var(--thread) 20%, transparent),
+    0 0 34px 6px color-mix(in oklab, var(--thread) 34%, transparent);
+  animation:
+    sample-tutorial-ring-in .24s var(--ease) both,
+    sample-tutorial-ring-breathe 2.8s var(--ease) .24s infinite;
+}
+/* Only when stepping - scroll tracking must stay locked to the row. */
+.rw-app .sample-tutorial-ring[data-glide="true"] {
+  transition: top .34s var(--ease), left .34s var(--ease), width .34s var(--ease), height .34s var(--ease);
 }
 .rw-app .sample-tutorial-dialog {
   position: fixed; z-index: 1003; inset-inline: var(--gutter);
@@ -332,6 +347,16 @@
 .rw-app .sample-tutorial-dialog[data-placement="top"] {
   top: max(18px, env(safe-area-inset-top));
   bottom: auto;
+}
+/* Anchored beside its row on desktop: the component supplies left/top, so the
+   viewport-pinned insets have to release or the box stays over-constrained. */
+.rw-app .sample-tutorial-dialog[data-anchored="true"] {
+  inset-inline: auto; bottom: auto; margin-inline: 0;
+}
+/* Only when moving between steps. Scroll tracking sets no glide, so the card
+   stays locked to its row instead of rubber-banding behind it. */
+.rw-app .sample-tutorial-dialog[data-glide="true"] {
+  transition: top .34s var(--ease), left .34s var(--ease);
 }
 .rw-app .sample-tutorial-beacon {
   display: grid; place-items: center; width: 48px; height: 48px;
@@ -373,10 +398,19 @@
   display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-s);
 }
 .rw-app .sample-tutorial-actions .btn { white-space: nowrap; }
-@keyframes sample-tutorial-target-in {
+@keyframes sample-tutorial-ring-in {
   from {
-    outline-color: transparent;
+    border-color: transparent;
     box-shadow: 0 0 0 2px transparent;
+  }
+}
+/* Slow enough to guide the eye without nagging. */
+@keyframes sample-tutorial-ring-breathe {
+  50% {
+    border-color: var(--thread-hi);
+    box-shadow:
+      0 0 0 10px color-mix(in oklab, var(--thread) 14%, transparent),
+      0 0 46px 10px color-mix(in oklab, var(--thread) 44%, transparent);
   }
 }
 @keyframes sample-tutorial-dialog-in {
@@ -401,10 +435,14 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .sample-tutorial-target,
+  .rw-app .sample-tutorial-ring,
   .rw-app .sample-tutorial-dialog,
   .rw-app .sample-tutorial-copy {
     animation: none;
+  }
+  .rw-app .sample-tutorial-ring[data-glide="true"],
+  .rw-app .sample-tutorial-dialog[data-glide="true"] {
+    transition: none;
   }
 }
 

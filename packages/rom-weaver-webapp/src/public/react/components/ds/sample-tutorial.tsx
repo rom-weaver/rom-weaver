@@ -37,7 +37,6 @@ type SampleTutorialStep = {
   openDrawers?: boolean;
   openMenu?: boolean;
   placement?: "bottom" | "top";
-  scrollBlock?: ScrollLogicalPosition;
   target?: string;
   title: string;
 };
@@ -56,6 +55,73 @@ const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: str
   reorder: ArrowUpDown,
   swap: SwapIcon,
   toggle: ToggleRight,
+};
+
+const GUIDE_GAP = 14;
+const GUIDE_MARGIN = 12;
+/** Drawers expand over .3s, so the row keeps growing after a step opens. */
+const GUIDE_SETTLE_MS = 360;
+/** Caps the re-reveal so later layout shifts never yank the page around. */
+const GUIDE_REVEALS = 3;
+/** How far the ring sits outside the row it frames. */
+const GUIDE_RING_INSET = 7;
+
+type GuideGeometry = {
+  card: { left: number; top: number } | null;
+  glide: boolean;
+  ring: { height: number; left: number; top: number; width: number };
+};
+
+/**
+ * The row's own ancestors are `overflow: clip`, so an outline drawn on the row
+ * gets cut off. The ring is rendered in the guide's portal instead and simply
+ * tracks the row's box.
+ */
+const ringAroundTarget = (target: HTMLElement) => {
+  const rect = target.getBoundingClientRect();
+  return {
+    height: rect.height + GUIDE_RING_INSET * 2,
+    left: rect.left - GUIDE_RING_INSET,
+    top: rect.top - GUIDE_RING_INSET,
+    width: rect.width + GUIDE_RING_INSET * 2,
+  };
+};
+/** Desktop only - below 641px the card stays the full-width bar pinned by CSS. */
+const GUIDE_ANCHOR_QUERY = "(min-width: 641px)";
+
+const clampWithin = (value: number, limit: number) =>
+  Math.min(Math.max(value, GUIDE_MARGIN), Math.max(GUIDE_MARGIN, limit));
+
+/**
+ * Places the guide card beside the row it describes: under it when there is
+ * room, above it otherwise, horizontally centred on the row and always kept
+ * inside the viewport.
+ */
+const anchorToTarget = (target: HTMLElement, dialog: HTMLElement, prefer: "bottom" | "top") => {
+  const rect = target.getBoundingClientRect();
+  const { height, width } = dialog.getBoundingClientRect();
+  const below = rect.bottom + GUIDE_GAP;
+  const above = rect.top - GUIDE_GAP - height;
+  const fitsBelow = below + height <= window.innerHeight - GUIDE_MARGIN;
+  const fitsAbove = above >= GUIDE_MARGIN;
+  const placeAbove = prefer === "top" ? fitsAbove : !fitsBelow && fitsAbove;
+  return {
+    left: clampWithin(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - GUIDE_MARGIN),
+    top: clampWithin(placeAbove ? above : below, window.innerHeight - height - GUIDE_MARGIN),
+  };
+};
+
+/**
+ * How far to scroll so the row and its guide card are both fully on screen,
+ * centred as a pair when the viewport can hold them. Without this the card gets
+ * clamped back over the very row it is describing.
+ */
+const scrollDeltaForPair = (target: HTMLElement, dialog: HTMLElement | null, prefer: "bottom" | "top") => {
+  const rect = target.getBoundingClientRect();
+  const cardHeight = dialog?.getBoundingClientRect().height ?? 0;
+  const pair = rect.height + GUIDE_GAP + cardHeight;
+  const slack = Math.max(GUIDE_MARGIN, (window.innerHeight - pair) / 2);
+  return rect.top - (prefer === "top" ? slack + cardHeight + GUIDE_GAP : slack);
 };
 
 const SampleTutorialStart = ({
@@ -96,6 +162,8 @@ const SampleTutorial = ({
   const titleId = useId();
   const dialogRef = useRef<HTMLElement>(null);
   const [stepIndex, setStepIndex] = useState(0);
+  const [targetEl, setTargetEl] = useState<HTMLElement | null>(null);
+  const [geometry, setGeometry] = useState<GuideGeometry | null>(null);
   const step = steps[stepIndex];
   // Resolved once: re-querying per render hands createPortal a different
   // container the moment .rw-app appears, which tears the whole overlay down
@@ -142,6 +210,7 @@ const SampleTutorial = ({
       target = document.querySelector<HTMLElement>(targetSelector);
       if (!target) return false;
       stage = target.closest<HTMLElement>(".step");
+      setTargetEl(target);
       previousDescription = target.getAttribute("aria-describedby");
       target.classList.add("sample-tutorial-target");
       stage?.classList.add("sample-tutorial-stage");
@@ -156,8 +225,6 @@ const SampleTutorial = ({
         openedMenu = target.querySelector<HTMLButtonElement>(".patch-menu-btn[aria-expanded='false']");
         openedMenu?.click();
       }
-      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      target.scrollIntoView?.({ behavior: reducedMotion ? "auto" : "smooth", block: step.scrollBlock ?? "center" });
       return true;
     };
     frame = window.requestAnimationFrame(() => {
@@ -171,6 +238,7 @@ const SampleTutorial = ({
     return () => {
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
+      setTargetEl(null);
       if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
       for (const drawer of openedDrawers) {
         if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
@@ -184,20 +252,97 @@ const SampleTutorial = ({
     };
   }, [bodyId, ready, step]);
 
+  // Keep the card beside its row as the page scrolls or resizes. The step's own
+  // scrollIntoView animates, so this re-measures per frame while that settles.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!(targetEl && dialog)) {
+      setGeometry(null);
+      return;
+    }
+    const prefer = step?.placement ?? "bottom";
+    const desktop = window.matchMedia(GUIDE_ANCHOR_QUERY);
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    let frame = 0;
+    let settle = 0;
+    let revealsLeft = GUIDE_REVEALS;
+    const place = (glide: boolean) => {
+      frame = 0;
+      setGeometry({
+        // Below 641px the card stays the CSS-pinned bar; the ring still tracks.
+        card: desktop.matches ? anchorToTarget(targetEl, dialog, prefer) : null,
+        glide,
+        ring: ringAroundTarget(targetEl),
+      });
+    };
+    // Scroll and resize must track exactly - gliding there would leave the card
+    // lagging behind the row it points at while the page is still moving.
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(() => place(false));
+    };
+    const reveal = () => {
+      const top = scrollDeltaForPair(targetEl, dialog, prefer);
+      if (Math.abs(top) > 1) window.scrollBy({ behavior, top });
+    };
+    // The row grows as its drawers expand, so re-reveal once each size change
+    // has stopped - otherwise the card ends up sitting over the row it explains.
+    const onResize = () => {
+      schedule();
+      if (revealsLeft <= 0) return;
+      window.clearTimeout(settle);
+      settle = window.setTimeout(() => {
+        revealsLeft -= 1;
+        reveal();
+      }, GUIDE_SETTLE_MS);
+    };
+    const observer = new ResizeObserver(onResize);
+    place(true);
+    reveal();
+    observer.observe(targetEl);
+    observer.observe(dialog);
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, { capture: true, passive: true });
+    desktop.addEventListener("change", schedule);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.clearTimeout(settle);
+      observer.disconnect();
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, { capture: true });
+      desktop.removeEventListener("change", schedule);
+    };
+  }, [step, targetEl]);
+
   if (!(portalTarget && step)) return null;
   const finalStep = ready && stepIndex === steps.length - 1;
   const copyKey = ready ? stepIndex : "loading";
   const layer = (
     <div className="sample-tutorial-layer">
       <div aria-hidden="true" className="sample-tutorial-scrim" />
+      {geometry ? (
+        <div
+          aria-hidden="true"
+          className="sample-tutorial-ring"
+          data-glide={geometry.glide ? "true" : undefined}
+          style={{
+            height: `${geometry.ring.height}px`,
+            left: `${geometry.ring.left}px`,
+            top: `${geometry.ring.top}px`,
+            width: `${geometry.ring.width}px`,
+          }}
+        />
+      ) : null}
       <aside
         aria-describedby={bodyId}
         aria-labelledby={titleId}
         aria-modal="false"
         className="sample-tutorial-dialog"
+        data-anchored={geometry?.card ? "true" : undefined}
+        data-glide={geometry?.card && geometry.glide ? "true" : undefined}
         data-placement={ready ? (step.placement ?? "bottom") : "bottom"}
         ref={dialogRef}
         role="dialog"
+        style={geometry?.card ? { left: `${geometry.card.left}px`, top: `${geometry.card.top}px` } : undefined}
         tabIndex={-1}
       >
         <span aria-hidden="true" className="sample-tutorial-beacon">

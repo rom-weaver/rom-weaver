@@ -54,6 +54,33 @@ const renderGuidedWorkbench = ({ onClose = vi.fn() }: { onClose?: () => void } =
   return { endGuide: () => rerender(workbench(false)) };
 };
 
+const stubRect = (element: HTMLElement, box: { height: number; left: number; top: number; width: number }) => {
+  element.getBoundingClientRect = () =>
+    ({
+      bottom: box.top + box.height,
+      height: box.height,
+      left: box.left,
+      right: box.left + box.width,
+      top: box.top,
+      width: box.width,
+      x: box.left,
+      y: box.top,
+    }) as DOMRect;
+};
+
+// happy-dom reports zero-sized rects, so the geometry has to be stubbed after
+// mount and a resize fired to re-measure. Viewport is 1024x768.
+const renderAnchored = async (row: { height: number; left: number; top: number; width: number }) => {
+  renderGuidedWorkbench();
+  const target = document.querySelector("#tutorial-first") as HTMLElement;
+  const guide = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+  await waitFor(() => expect(target.classList.contains("sample-tutorial-target")).toBe(true));
+  stubRect(target, row);
+  stubRect(guide, { height: 200, left: 0, top: 0, width: 720 });
+  fireEvent.resize(window);
+  return guide;
+};
+
 describe("sample tutorial", () => {
   it("highlights live sections, opens their drawers, and keeps progression in the guide", async () => {
     const onClose = vi.fn();
@@ -116,6 +143,22 @@ describe("sample tutorial", () => {
     guide.focus();
     fireEvent.keyDown(guide, { bubbles: true, key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("anchors the card under its row on desktop", async () => {
+    const guide = await renderAnchored({ height: 100, left: 200, top: 200, width: 600 });
+
+    // Row bottom (300) + the 14px gap; centred on the row: 200 + 600/2 - 720/2.
+    await waitFor(() => expect(guide.style.top).toBe("314px"));
+    expect(guide.style.left).toBe("140px");
+    expect(guide.dataset.anchored).toBe("true");
+  });
+
+  it("flips above the row when there is no room below", async () => {
+    // Row bottom 700 + 14 + 200 overflows the 768px viewport, so it sits above.
+    const guide = await renderAnchored({ height: 100, left: 200, top: 600, width: 600 });
+
+    await waitFor(() => expect(guide.style.top).toBe("386px"));
   });
 
   it("re-closes the drawers it opened when the guide ends", async () => {

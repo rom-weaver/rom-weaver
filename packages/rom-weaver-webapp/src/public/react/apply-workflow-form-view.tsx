@@ -216,7 +216,6 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     body: "Choose the output name, format, compression, header, and bundle settings. Then press WEAVE & DOWNLOAD to apply both patches.",
     openDrawers: true,
     placement: "top",
-    scrollBlock: "end",
     target: "#rom-weaver-row-output-file-name",
     title: "Apply both patches",
   },

@@ -131,7 +131,6 @@ const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     body: "Choose the patch name, format, archive, and compression settings. Then press CREATE & DOWNLOAD PATCH.",
     openDrawers: true,
     placement: "top",
-    scrollBlock: "end",
     target: "#patch-builder-row-output",
     title: "Create the patch",
   },
