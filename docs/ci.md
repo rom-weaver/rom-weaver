@@ -253,6 +253,7 @@ changes ─────┼── rust-macos ────┼── rust (aggregat
              ├── rust-windows ──┤
              └── cli-platforms ─┘ (9 release targets; 4 on a pull request)
 
+changes ── webapp-static-prebuild ── cached WASM hit: build overlaps `wasm`
          ┌── webapp-static ───┐
          ├── webapp-browser ──┼── webapp (aggregate check name)
          │   (2 shards)       │
@@ -438,13 +439,17 @@ security ── advisories (warn only, always green)
   without any commit of ours, and letting that turn every open pull request red
   blocks unrelated work. Findings surface as warnings via
   `scripts/warn-only.mjs`; the job stays green.
+- **`webapp-static-prebuild`** restores the exact production WASM cache and,
+  on a hit, builds the static webapp bundle while the main `wasm` job verifies
+  and uploads that same module. A cache miss does no work here; it cannot safely
+  build against bytes that do not exist yet.
 - **`webapp-static`**, **`webapp-browser`**, **`webapp-wasm-e2e`**, and
   **`webapp-webkit-e2e`** consume
   the prebuilt module and compile no Rust. The work is split three ways so the
   parallel browser suite - the single longest webapp step - is never
   serialized behind the rest: `webapp-static` is the node-only work (build
-  script tests, lint, unit tests, vite build, performance budgets; no
-  Playwright install),
+  script tests, lint, unit tests, the cached-WASM bundle or fallback vite build,
+  performance budgets; no Playwright install),
   `webapp-browser` is the parallel browser suite alone and uses Chrome from the
   Ubuntu runner image, while `webapp-wasm-e2e` is the remaining Playwright work
   (icon check, wasm browser suite, webapp E2E); the WebKit leg runs the

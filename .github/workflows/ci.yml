@@ -833,15 +833,63 @@ jobs:
           'rust-windows=${{ needs.rust-windows.result }}'
 
   # The webapp work consumes the prebuilt wasm module and compiles no Rust of
-  # its own. It is split into four jobs so the slow parallel browser suite is
-  # never serialized behind lint or the other suites, and the node-only work
+  # its own. It is split into four downstream jobs so the slow parallel browser
+  # suite is never serialized behind lint or the other suites, and the node-only work
   # skips the Playwright install entirely; the `webapp` aggregate below gives
   # branch protection one stable name for all of it.
+  #
+  # The cache-hit prebuild below overlaps Vite with the wasm job. It is only
+  # allowed to use the bundle when the exact source-keyed wasm cache restored;
+  # a miss falls back to the real build in `webapp-static` after `wasm` uploads
+  # the current module.
+  webapp-static-prebuild:
+    name: Webapp (static, cached WASM prebuild)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: changes
+    if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+    outputs:
+      built: ${{ steps.build.outputs.built }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Restore built WASM module
+        id: wasm-cache
+        uses: ./.github/actions/wasm-cache
+        with:
+          variant: prod
+          # This job never builds WASM or claims a cache key on a miss.
+          save: "false"
+
+      - uses: ./.github/actions/setup-build-env
+        if: steps.wasm-cache.outputs.cache-hit == 'true'
+        with:
+          tools: node
+          cargo-cache: "false"
+          webapp-deps: "true"
+
+      - name: Build webapp from cached WASM
+        id: build
+        if: steps.wasm-cache.outputs.cache-hit == 'true'
+        run: |
+          npm --prefix packages/rom-weaver-webapp run build
+          echo "built=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload cached-WASM webapp bundle
+        if: steps.build.outputs.built == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: webapp-dist-cached-wasm
+          path: packages/rom-weaver-webapp/dist
+          if-no-files-found: error
+          include-hidden-files: true
+
   webapp-static:
     name: Webapp (static)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: [changes, wasm]
+    needs: [changes, wasm, webapp-static-prebuild]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     permissions:
       contents: read
@@ -875,7 +923,15 @@ jobs:
       - name: Unit tests
         run: npm --prefix packages/rom-weaver-webapp run test:unit
 
+      - name: Download cached-WASM webapp bundle
+        if: needs.webapp-static-prebuild.outputs.built == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: webapp-dist-cached-wasm
+          path: packages/rom-weaver-webapp/dist
+
       - name: Build
+        if: needs.webapp-static-prebuild.outputs.built != 'true'
         run: npm --prefix packages/rom-weaver-webapp run build
 
       # Audits the bundle built above, served by the repository's own preview
