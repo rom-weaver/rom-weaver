@@ -36,7 +36,6 @@ type SettingsState = {
   language: string;
   logLevel: string;
   bundlePackage: string;
-  betaToolsEnabled: boolean;
   fixChecksum: boolean;
   requireInputChecksumMatch: boolean;
   compressionProfile: string;
@@ -162,7 +161,6 @@ const SETTINGS_FIELD_ORDER = [
   "accent",
   "language",
   "logLevel",
-  "betaToolsEnabled",
   "fixChecksum",
   "requireInputChecksumMatch",
   "bundlePackage",
@@ -230,15 +228,6 @@ const ZIP_ZSTD_CODEC =
   COMPRESSION_DEFAULTS.zipCodec;
 
 const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<K> } = {
-  betaToolsEnabled: {
-    defaultValue: false,
-    id: "settings-beta-tools-enabled",
-    key: "betaToolsEnabled",
-    kind: "checkbox",
-    label: getSettingsLabel("betaToolsEnabled"),
-    labelDataLocalize: "Enable beta tools (Trim and Tools)",
-    layout: "large",
-  },
   bundlePackage: {
     defaultValue: "",
     id: "settings-bundle-package",

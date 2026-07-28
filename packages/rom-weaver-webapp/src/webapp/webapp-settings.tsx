@@ -53,15 +53,7 @@ type FieldRenderProps = SettingsFieldShared & {
 
 const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }> = [
   {
-    fields: [
-      "accent",
-      "language",
-      "logLevel",
-      "bundlePackage",
-      "betaToolsEnabled",
-      "fixChecksum",
-      "requireInputChecksumMatch",
-    ],
+    fields: ["accent", "language", "logLevel", "bundlePackage", "fixChecksum", "requireInputChecksumMatch"],
     title: "General",
   },
   { fields: ["defaultCompression", "compressionProfile", "threads"], title: "Compression" },

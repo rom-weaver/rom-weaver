@@ -39,11 +39,6 @@ const normalizeWorkflowView = (value: unknown): WebappView | null => {
   return VALID_WORKFLOW_VIEWS.includes(normalized as WebappView) ? (normalized as WebappView) : null;
 };
 
-const isBetaWorkflowView = (view: WebappView): boolean => view === "trim" || view === "tools";
-
-const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
-  !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
-
 /** Restore the last-used workflow tab so a reload returns to the same tab. */
 const loadPersistedWorkflowView = (storage?: ControllerOptions["storage"]): WebappView => {
   try {
@@ -213,10 +208,7 @@ const createWebappRootController = (options: ControllerOptions) => {
   // Before the React tree renders, so the accent tokens resolve on first paint.
   applyAccent(settings.accent);
   // The URL path wins (deep links / reload), then the last persisted tab, then the default.
-  const initialView = normalizeWorkflowViewForSettings(
-    readWorkflowViewFromPath() || loadPersistedWorkflowView(options.storage),
-    settings,
-  );
+  const initialView = readWorkflowViewFromPath() || loadPersistedWorkflowView(options.storage);
   writeWorkflowViewToPath(initialView, options.initialHistoryMode ?? "replace");
   const store = createStore<WebappState>(() => ({
     creatorSession: createEmptyCreatorSessionState(),
@@ -265,20 +257,13 @@ const createWebappRootController = (options: ControllerOptions) => {
       validation?: ValidationState;
     },
   ) => {
-    const currentView = store.getState().currentView;
-    const nextCurrentView = normalizeWorkflowViewForSettings(currentView, nextSettings);
     const nextState: Partial<WebappState> = {
       settings: copySettings(nextSettings),
     };
-    if (nextCurrentView !== currentView) nextState.currentView = nextCurrentView;
     if (optionsForApply?.draftSettings) nextState.draftSettings = optionsForApply.draftSettings;
     if (optionsForApply?.syncDraftSettings) nextState.draftSettings = copySettings(nextSettings);
     if (optionsForApply?.validation) nextState.validation = optionsForApply.validation;
     setState(nextState);
-    if (nextCurrentView !== currentView) {
-      persistWorkflowView(options.storage, nextCurrentView);
-      writeWorkflowViewToPath(nextCurrentView, "replace");
-    }
     emitCommittedSettings();
     applyAccent(nextSettings.accent);
     options.onLocalizationChange(nextSettings.language);
@@ -400,7 +385,6 @@ const createWebappRootController = (options: ControllerOptions) => {
     selectView(mode: string, optionsForSelection?: { fallbackOnError?: boolean; historyMode?: RouteHistoryMode }) {
       const state = store.getState();
       let nextView = normalizeWorkflowView(mode) || DEFAULT_WORKFLOW_VIEW;
-      nextView = normalizeWorkflowViewForSettings(nextView, state.settings);
       if (
         nextView !== state.currentView &&
         typeof options.onConfirmViewLeave === "function" &&

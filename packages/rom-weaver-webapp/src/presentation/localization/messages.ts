@@ -46,7 +46,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "error.WORKER_UNAVAILABLE",
     message: "Required worker support is unavailable.",
   }),
-  "settings.betaToolsEnabled": msg({ id: "settings.betaToolsEnabled", message: "Enable beta tools (Trim and Tools)" }),
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
   "settings.compressionProfile": msg({ id: "settings.compressionProfile", message: "Level" }),

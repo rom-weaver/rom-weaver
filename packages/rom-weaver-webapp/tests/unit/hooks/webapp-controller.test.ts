@@ -53,26 +53,14 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/missing");
   });
 
-  it("hides beta workflow views until enabled", () => {
+  it.each([
+    ["/trim", "trim"],
+    ["/tools", "tools"],
+  ])("loads workflow route %s by default", (route, view) => {
+    window.history.replaceState({}, "", route);
     const controller = createController();
-    expect(controller.selectView("trim")).toBe("patcher");
-    expect(controller.getState().currentView).toBe("patcher");
-
-    controller.updateDraftSetting("betaToolsEnabled", true);
-    expect(controller.saveDraftSettings()).toBe(true);
-    expect(controller.selectView("trim")).toBe("trim");
-    expect(controller.getState().currentView).toBe("trim");
-
-    controller.updateDraftSetting("betaToolsEnabled", false);
-    expect(controller.saveDraftSettings()).toBe(true);
-    expect(controller.getState().currentView).toBe("patcher");
-  });
-
-  it("falls back from a disabled beta route in the initial path", () => {
-    window.history.replaceState({}, "", "/tools");
-    const controller = createController();
-    expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/weave");
+    expect(controller.getState().currentView).toBe(view);
+    expect(window.location.pathname).toBe(route);
   });
 
   it("loads the create workflow from its path", () => {
@@ -129,8 +117,6 @@ describe("createWebappRootController over the vanilla store", () => {
 
   it("routes and tracks the tools workflow", () => {
     const controller = createController();
-    controller.updateDraftSetting("betaToolsEnabled", true);
-    expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.selectView("tools")).toBe("tools");
     expect(window.location.pathname).toBe("/tools");
     controller.setToolsSessionState(true);

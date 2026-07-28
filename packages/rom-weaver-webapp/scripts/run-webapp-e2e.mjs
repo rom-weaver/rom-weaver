@@ -28,7 +28,6 @@ const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
 const HYDRATION_SETTINGS = JSON.stringify({
   apply: { compression: { threads: 3 } },
-  common: { betaToolsEnabled: true },
   create: { compression: { threads: 3 } },
   version: 5,
 });
@@ -266,8 +265,6 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.getByRole("button", { name: "Settings" }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
     await scanLiveApp(page, "Settings (dark)");
-    const betaTools = page.locator("#settings-beta-tools-enabled");
-    if (!(await betaTools.isChecked())) await betaTools.check();
     await page.getByRole("button", { exact: true, name: "Save" }).click();
     await setTheme("light");
     await page.getByRole("button", { name: "Settings" }).click();

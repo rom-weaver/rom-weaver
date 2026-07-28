@@ -275,11 +275,9 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
 const injectLdJson = (html, route, includeWebsite = false) =>
   html.replace("</head>", `  ${createStructuredDataLdJson(route, includeWebsite)}\n  </head>`);
 
-// The Trim and Tools tabs are still beta - they navigate in production but must
-// not be indexed, and they inherit the Weave page's markup, so strip the shared
-// index directive to noindex and point their canonical at themselves (rather
-// than leaking a /weave canonical that would fold them into the patcher page).
-const makeBetaRouteNoindex = (html, slug) =>
+// Trim and Tools inherit the Weave page's markup, so keep the duplicate pages
+// out of search and point their canonical at themselves.
+const makeUtilityRouteNoindex = (html, slug) =>
   html
     .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
     .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1https://rom-weaver.com/${slug}$2`);
@@ -411,8 +409,8 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       for (const [slug, html] of [
         ["weave", weaveHtml],
         ["create", createHtml],
-        ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
-        ["tools", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
+        ["trim", withRoutePreloadLinks(makeUtilityRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
+        ["tools", withRoutePreloadLinks(makeUtilityRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });
