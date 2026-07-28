@@ -743,6 +743,11 @@ fn libarchive_extract_total_logical_bytes(tasks: &[LibarchiveExtractTask]) -> u6
 
 // Worker count for a libarchive extract: serial below the MT floor, otherwise one per file entry (the
 // thread negotiator then clamps to the configured budget). Mirrors 7z create's `lzma2_achievable_blocks`.
+// A single large file still plans two threads: decode is inherently serial for one entry, but the
+// pipeline's second thread (the consumer that writes and hashes every extracted byte) is real work
+// that otherwise runs inline on the decode thread and extends the critical path by the full write
+// cost. Reference extractors overlap the same way (7zz decodes and checks/writes on separate
+// threads), so the inline-serial single-file path measurably loses to them on wall clock alone.
 fn libarchive_extract_achievable_threads(
     total_logical_bytes: u64,
     file_task_count: usize,
@@ -750,7 +755,7 @@ fn libarchive_extract_achievable_threads(
     if total_logical_bytes <= LIBARCHIVE_EXTRACT_MT_THRESHOLD_BYTES {
         1
     } else {
-        file_task_count.max(1)
+        file_task_count.max(2)
     }
 }
 
