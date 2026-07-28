@@ -161,6 +161,29 @@ describe("sample tutorial", () => {
     await waitFor(() => expect(guide.style.top).toBe("386px"));
   });
 
+  it("marks the button the final step asks for and clears it on close", async () => {
+    const ctaSteps: readonly SampleTutorialStep[] = [
+      { body: "Press it.", cta: ".btn.run", target: "#tutorial-cta", title: "Finish" },
+    ];
+    const workbench = (guided: boolean) => (
+      <div className="rw-app">
+        <section id="tutorial-cta">
+          <button className="btn run" type="button">
+            Weave
+          </button>
+        </section>
+        {guided ? <SampleTutorial loadingBody="Loading." onClose={vi.fn()} ready steps={ctaSteps} /> : null}
+      </div>
+    );
+    const { rerender } = render(workbench(false));
+    rerender(workbench(true));
+
+    const button = screen.getByRole("button", { name: "Weave" });
+    await waitFor(() => expect(button.dataset.guideCta).toBe("true"));
+    rerender(workbench(false));
+    expect(button.dataset.guideCta).toBeUndefined();
+  });
+
   it("re-closes the drawers it opened when the guide ends", async () => {
     const { endGuide } = renderGuidedWorkbench();
 

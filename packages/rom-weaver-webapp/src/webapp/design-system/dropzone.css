@@ -326,6 +326,11 @@
     sample-tutorial-ring-in .24s var(--ease) both,
     sample-tutorial-ring-breathe 2.8s var(--ease) .24s infinite;
 }
+/* The button the final step asks for. Skipped while disabled - nothing should
+   beckon at a control that cannot be pressed. */
+.rw-app .btn[data-guide-cta="true"]:not(:disabled) {
+  animation: sample-tutorial-cta-pulse 1.9s var(--ease) infinite;
+}
 /* Only when stepping - scroll tracking must stay locked to the row. */
 .rw-app .sample-tutorial-ring[data-glide="true"] {
   transition: top .34s var(--ease), left .34s var(--ease), width .34s var(--ease), height .34s var(--ease);
@@ -413,6 +418,10 @@
       0 0 46px 10px color-mix(in oklab, var(--thread) 44%, transparent);
   }
 }
+@keyframes sample-tutorial-cta-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--thread) 60%, transparent); }
+  70% { box-shadow: 0 0 0 14px color-mix(in oklab, var(--thread) 0%, transparent); }
+}
 @keyframes sample-tutorial-dialog-in {
   from { opacity: 0; translate: 0 12px; }
 }
@@ -437,7 +446,8 @@
 @media (prefers-reduced-motion: reduce) {
   .rw-app .sample-tutorial-ring,
   .rw-app .sample-tutorial-dialog,
-  .rw-app .sample-tutorial-copy {
+  .rw-app .sample-tutorial-copy,
+  .rw-app .btn[data-guide-cta="true"]:not(:disabled) {
     animation: none;
   }
   .rw-app .sample-tutorial-ring[data-glide="true"],

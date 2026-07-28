@@ -34,6 +34,8 @@ type SampleTutorialAction =
 type SampleTutorialStep = {
   actions?: readonly (readonly [action: SampleTutorialAction, label: string])[];
   body: string;
+  /** Selector, within the target, for the button this step asks you to press. */
+  cta?: string;
   openDrawers?: boolean;
   openMenu?: boolean;
   placement?: "bottom" | "top";
@@ -203,6 +205,7 @@ const SampleTutorial = ({
     let previousDescription: string | null = null;
     let observer: MutationObserver | null = null;
     let openedMenu: HTMLButtonElement | null = null;
+    let cta: HTMLElement | null = null;
     const openedDrawers: HTMLButtonElement[] = [];
     let frame = 0;
     const connect = () => {
@@ -225,6 +228,12 @@ const SampleTutorial = ({
         openedMenu = target.querySelector<HTMLButtonElement>(".patch-menu-btn[aria-expanded='false']");
         openedMenu?.click();
       }
+      if (step.cta) {
+        // A data attribute, not a class: React rewrites this button's className
+        // whenever its download state changes and would drop a class we added.
+        cta = target.querySelector<HTMLElement>(step.cta);
+        cta?.setAttribute("data-guide-cta", "true");
+      }
       return true;
     };
     frame = window.requestAnimationFrame(() => {
@@ -243,6 +252,7 @@ const SampleTutorial = ({
       for (const drawer of openedDrawers) {
         if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
       }
+      cta?.removeAttribute("data-guide-cta");
       target?.classList.remove("sample-tutorial-target");
       stage?.classList.remove("sample-tutorial-stage");
       if (target) {
