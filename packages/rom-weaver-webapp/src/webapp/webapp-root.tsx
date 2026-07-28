@@ -20,6 +20,7 @@ import { setActiveSelectionForm } from "../public/react/input-selection-handler.
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
+import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_DISPLAY_VERSION } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
 import { Masthead, UpdateBanner } from "./components/shell.tsx";
@@ -388,7 +389,7 @@ function WebappRoot({
     : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator");
 
   return (
-    <RomWeaverSettingsProvider settings={state.settings}>
+    <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
         <div className="app">
           <Masthead
