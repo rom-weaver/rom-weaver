@@ -165,6 +165,8 @@ const ApplyDropAfter = ({
   if (!workflowEmpty) return null;
   return (
     <SampleTutorialStart
+      downloadHref={FIRST_WEAVE_URL}
+      downloadLabel="Download the bundle"
       error={sampleError}
       label="Start guided Apply"
       loading={sampleLoading}

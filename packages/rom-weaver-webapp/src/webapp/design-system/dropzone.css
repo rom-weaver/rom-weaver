@@ -282,6 +282,14 @@
   border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
   color: var(--thread-text);
 }
+/* The download leads; the guided run is the alternative beside it. */
+.rw-app .sample-tutorial-start-download {
+  border-style: solid; text-decoration: none;
+  border-color: color-mix(in oklab, var(--thread) 70%, var(--seam-strong));
+  background: color-mix(in oklab, var(--thread) 10%, var(--plate));
+}
+.rw-app .sample-tutorial-start-download svg { width: 14px; height: 14px; }
+.rw-app .sample-tutorial-start-or { color: var(--ink-4); font-size: .72rem; }
 .rw-app .sample-tutorial-start-beacon {
   display: inline-grid; place-items: center; width: 24px; height: 18px;
   border: 1px solid color-mix(in oklab, var(--thread) 65%, var(--seam-strong)); border-radius: 3px;

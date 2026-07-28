@@ -2,7 +2,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { SampleTutorial, type SampleTutorialStep } from "../../src/public/react/components/ds/sample-tutorial.tsx";
+import {
+  SampleTutorial,
+  SampleTutorialStart,
+  type SampleTutorialStep,
+} from "../../src/public/react/components/ds/sample-tutorial.tsx";
 
 const STEPS: readonly SampleTutorialStep[] = [
   {
@@ -80,6 +84,29 @@ const renderAnchored = async (row: { height: number; left: number; top: number; 
   fireEvent.resize(window);
   return guide;
 };
+
+describe("sample tutorial start", () => {
+  it("offers the bundle as a download alongside the guided run", () => {
+    const onStart = vi.fn();
+    render(
+      <SampleTutorialStart
+        downloadHref="/first-weave.zip"
+        downloadLabel="Download the bundle"
+        error=""
+        label="Start guided Apply"
+        loading={false}
+        onStart={onStart}
+      />,
+    );
+
+    const download = screen.getByRole("link", { name: /Download the bundle/ });
+    expect(download.getAttribute("href")).toBe("/first-weave.zip");
+    expect(download.hasAttribute("download")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: /Start guided Apply/ }));
+    expect(onStart).toHaveBeenCalledOnce();
+  });
+});
 
 describe("sample tutorial", () => {
   it("highlights live sections, opens their drawers, and keeps progression in the guide", async () => {

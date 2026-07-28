@@ -1,6 +1,7 @@
 import {
   Archive,
   ArrowUpDown,
+  Download,
   EllipsisVertical,
   GitCompare,
   ListChecks,
@@ -65,6 +66,8 @@ const GUIDE_MARGIN = 12;
 const GUIDE_SETTLE_MS = 360;
 /** Caps the re-reveal so later layout shifts never yank the page around. */
 const GUIDE_REVEALS = 3;
+/** Above this share of the viewport a row is anchored from its top edge. */
+const GUIDE_TALL_ROW_RATIO = 0.45;
 /** How far the ring sits outside the row it frames. */
 const GUIDE_RING_INSET = 7;
 
@@ -95,43 +98,61 @@ const clampWithin = (value: number, limit: number) =>
   Math.min(Math.max(value, GUIDE_MARGIN), Math.max(GUIDE_MARGIN, limit));
 
 /**
- * Places the guide card beside the row it describes: under it when there is
- * room, above it otherwise, horizontally centred on the row and always kept
- * inside the viewport.
+ * Which side of the row the card sits on. A row taller than a chunk of the
+ * viewport anchors from its top, so the card lands beside the header the step
+ * is describing instead of hundreds of pixels below it - and when the pair
+ * cannot fit at all, keeping the row's top on screen matters more than its tail.
+ */
+const shouldPlaceAbove = (rowHeight: number, prefer: "bottom" | "top") =>
+  prefer === "top" || rowHeight > window.innerHeight * GUIDE_TALL_ROW_RATIO;
+
+/**
+ * Places the guide card against the row it describes, horizontally centred on
+ * it and always kept inside the viewport.
  */
 const anchorToTarget = (target: HTMLElement, dialog: HTMLElement, prefer: "bottom" | "top") => {
   const rect = target.getBoundingClientRect();
   const { height, width } = dialog.getBoundingClientRect();
-  const below = rect.bottom + GUIDE_GAP;
   const above = rect.top - GUIDE_GAP - height;
-  const fitsBelow = below + height <= window.innerHeight - GUIDE_MARGIN;
+  const below = rect.bottom + GUIDE_GAP;
   const fitsAbove = above >= GUIDE_MARGIN;
-  const placeAbove = prefer === "top" ? fitsAbove : !fitsBelow && fitsAbove;
+  const fitsBelow = below + height <= window.innerHeight - GUIDE_MARGIN;
+  // The reveal scroll parks the row so the preferred side fits, but the user
+  // can scroll it anywhere afterwards - take the other side rather than clamp
+  // the card back over the row.
+  const preferred = shouldPlaceAbove(rect.height, prefer);
+  const placeAbove = preferred ? fitsAbove || !fitsBelow : !(fitsBelow || !fitsAbove);
+  const top = placeAbove ? above : below;
   return {
     left: clampWithin(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - GUIDE_MARGIN),
-    top: clampWithin(placeAbove ? above : below, window.innerHeight - height - GUIDE_MARGIN),
+    top: clampWithin(top, window.innerHeight - height - GUIDE_MARGIN),
   };
 };
 
 /**
- * How far to scroll so the row and its guide card are both fully on screen,
- * centred as a pair when the viewport can hold them. Without this the card gets
- * clamped back over the very row it is describing.
+ * How far to scroll so the row and its card sit together, centred as a pair
+ * when the viewport can hold them. A row too tall to fit alongside the card
+ * gives up its bottom edge rather than its top.
  */
 const scrollDeltaForPair = (target: HTMLElement, dialog: HTMLElement | null, prefer: "bottom" | "top") => {
   const rect = target.getBoundingClientRect();
   const cardHeight = dialog?.getBoundingClientRect().height ?? 0;
   const pair = rect.height + GUIDE_GAP + cardHeight;
   const slack = Math.max(GUIDE_MARGIN, (window.innerHeight - pair) / 2);
-  return rect.top - (prefer === "top" ? slack + cardHeight + GUIDE_GAP : slack);
+  const desiredTop = shouldPlaceAbove(rect.height, prefer) ? slack + cardHeight + GUIDE_GAP : slack;
+  return rect.top - desiredTop;
 };
 
 const SampleTutorialStart = ({
+  downloadHref,
+  downloadLabel,
   error,
   label,
   loading,
   onStart,
 }: {
+  downloadHref: string;
+  downloadLabel: string;
   error: string;
   label: string;
   loading: boolean;
@@ -139,6 +160,11 @@ const SampleTutorialStart = ({
 }) => (
   <div className="first-weave-demo sample-tutorial-start">
     <span>New here?</span>
+    <a className="btn slim sample-tutorial-start-download" download href={downloadHref}>
+      <Download aria-hidden="true" />
+      {downloadLabel}
+    </a>
+    <span className="sample-tutorial-start-or">or</span>
     <button aria-busy={loading} className="btn ghost slim" disabled={loading} onClick={onStart} type="button">
       <span aria-hidden="true" className="sample-tutorial-start-beacon">
         0x

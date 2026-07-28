@@ -91,6 +91,8 @@ const CREATE_SAMPLE_ASSETS = [
   ["/hello-world.nes", "hello-world.nes"],
   ["/modified-world.nes", "modified-world.nes"],
 ] as const;
+// The pair as one download; the guided path fetches the two ROMs individually.
+const CREATE_SAMPLE_ARCHIVE_URL = "/first-create.zip";
 const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
     actions: [
@@ -893,6 +895,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       addLabel: "Add or replace a ROM",
       afterDropZone: createSourcesActuallyEmpty ? (
         <SampleTutorialStart
+          downloadHref={CREATE_SAMPLE_ARCHIVE_URL}
+          downloadLabel="Download the sample ROMs"
           error={sampleError}
           label="Start guided Create"
           loading={sampleLoading}
