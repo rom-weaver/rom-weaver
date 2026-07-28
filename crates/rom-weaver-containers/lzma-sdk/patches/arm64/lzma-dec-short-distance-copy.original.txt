@@ -1,0 +1,8 @@
+# ---------- COPY MATCH FAST ----------
+    # t0_R : src_pos
+        p2_add  t0_R, dic
+        ldrb    sym, [t0_R]
+        p2_add  t0_R, cnt_R
+        p1_neg  cnt_R
+
+copy_common:

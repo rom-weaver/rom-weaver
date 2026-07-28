@@ -141,9 +141,9 @@ whatever 7z reader is on `PATH`, and copies only the files the coders need
 (`VENDORED_FILES` in the script): LZMA1/LZMA2 encode+decode, the match finders,
 the SDK's `Threads`/`MtCoder`/`MtDec` layer, and the shared headers. Everything
 else in the SDK's `C/` directory - AES, PPMd, BCJ2, the 7z archive reader, the
-sample programs - stays out of the tree. The copy is **verbatim**: portable
-patches live outside `vendor/` and apply only to staged sources under `OUT_DIR`,
-so a refresh stays a copy rather than a merge. Keep it that way.
+sample programs - stays out of the tree. The copy is **verbatim**: local C and
+assembly patches live outside `vendor/` and apply only to staged sources under
+`OUT_DIR`, so a refresh stays a copy rather than a merge. Keep it that way.
 
 Build wiring lives in `libarchive/build.rs`:
 
@@ -166,8 +166,10 @@ Build wiring lives in `libarchive/build.rs`:
   upstream C loop.
 - The SDK's hand-written decode loop (`vendor/Asm/`, selected with
   `Z7_LZMA_DEC_OPT`) replaces `LzmaDec.c`'s C loop wherever it can be
-  assembled. It is the same bitstream and is what `7zz` itself runs; it is worth
-  ~26% of a 1 GiB LZMA1 extract. Which platforms get it is the matrix below.
+  assembled. Its staged ARM64 source caches the same distance-2 through
+  distance-8 periods as the portable loop. It is the same bitstream and is what
+  `7zz` itself runs; the upstream loop is worth ~26% of a 1 GiB LZMA1 extract
+  before these short-period copies. Which platforms get it is the matrix below.
 
 The portable fill was measured separately because it is deliberately narrower
 than the assembly port. On an arm64 native build forced onto the C decoder, a
@@ -183,6 +185,13 @@ cached-pattern copy to periods 3 through 8 cut native decoder CPU by 2.3x to
 improved by 2.2% to 6.5%; period 1, period 2, periodic 4 KiB, and random-data
 controls stayed within run-to-run variation. These are targeted
 microbenchmarks, not a claim that every archive gets faster.
+
+The assembly version was measured end-to-end on native ARM64 over ten runs per
+case. Against the unmodified SDK assembly loop, 512 MiB period-2 through
+period-8 archives were 1.67x to 2.49x faster by median wall time; period 1 was
+unchanged, and literal-heavy random data was within 2%. The x86 assembly loop
+stays unpatched: its port of these copies is staged separately so it can be
+reviewed and measured on x86 hardware on its own.
 
 ### One 7z LZMA backend policy
 
@@ -237,13 +246,13 @@ without setting an archive error and the writer falls through to liblzma.
 
 | Target | Decode loop | Why |
 | --- | --- | --- |
-| `aarch64-*` except Windows | assembly, always | `Asm/arm64/LzmaDecOpt.S` is GNU-as syntax; clang assembles it with no extra tool |
-| `aarch64-pc-windows-*` | portable C with distance-1 fill | The MSVC build path does not assemble the SDK's GNU-as `.S` file |
+| `aarch64-*` except Windows | assembly, always | The staged `Asm/arm64/LzmaDecOpt.S` is GNU-as syntax; clang assembles it with no extra tool |
+| `aarch64-pc-windows-*` | portable C with short-period copies | The MSVC build path does not assemble the SDK's GNU-as `.S` file |
 | `x86_64-*-linux-*`, BSDs | assembly when a MASM-compatible assembler is on `PATH` | `Asm/x86/LzmaDecOpt.asm` is MASM syntax and no C compiler reads it. `-elf64 -DABI_LINUX` |
 | `x86_64-pc-windows-*` | assembly when `ml64` (or jwasm/asmc/uasm) is on `PATH` | MSVC's own `ml64` is already there under `VsDevCmd`. `-win64` |
-| `x86_64-apple-darwin` | portable C with distance-1 fill | Nothing in reach emits Mach-O: jwasm has no Mach-O writer, asmc only bootstraps on an x86 host, and uasm's tree does not compile on a current Unix host |
-| `i686-*`, other arches | portable C with distance-1 fill | The SDK ships no loop this build uses for them |
-| `wasm32-*` | portable C with distance-1 fill | No assembler; clang lowers the fill to `memory.fill` |
+| `x86_64-apple-darwin` | portable C with short-period copies | Nothing in reach emits Mach-O: jwasm has no Mach-O writer, asmc only bootstraps on an x86 host, and uasm's tree does not compile on a current Unix host |
+| `i686-*`, other arches | portable C with short-period copies | The SDK ships no loop this build uses for them |
+| `wasm32-*` | portable C with short-period copies | No assembler; clang lowers the fill to `memory.fill` and the cached periods to fixed loads/stores |
 
 `build.rs` probes `jwasm`, `asmc`, `asmc64`, `uasm`, then `ml64`, or takes an
 explicit path from `ROM_WEAVER_LZMA_ASM` (`ROM_WEAVER_UASM` is accepted as an

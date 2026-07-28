@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
-const LZMA_SDK_PORTABLE_PATCH_ROOT: &str = "lzma-sdk/patches/portable";
+const LZMA_SDK_PATCH_ROOT: &str = "lzma-sdk/patches";
 const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
 const VENDORED_LZMA_SDK: &str = "lzma-sdk/vendor/C";
 // rom-weaver's own opaque wrapper over the SDK. libarchive ships its own
@@ -39,8 +39,9 @@ const LZMA_SDK_THREADED_SOURCES: &[&str] = &["LzFindMt.c", "MtCoder.c", "MtDec.c
 // probes for one and the build silently falls back to the C loop when there is
 // none. See docs/development/vendor-code.md for the per-platform matrix.
 const VENDORED_LZMA_SDK_ASM: &str = "lzma-sdk/vendor/Asm";
-const LZMA_SDK_ARM64_ASM_SOURCES: &[&str] = &["arm64/LzmaDecOpt.S"];
-const LZMA_SDK_X86_ASM_SOURCE: &str = "x86/LzmaDecOpt.asm";
+const LZMA_SDK_ARM64_ASM_SOURCE: &str = "LzmaDecOpt.S";
+const LZMA_SDK_ARM64_ASM_INCLUDE: &str = "7zAsm.S";
+const LZMA_SDK_X86_ASM_SOURCE: &str = "LzmaDecOpt.asm";
 // Probed in order. jwasm is first because it is the one that builds from source
 // on any host in seconds (Sybase Open Watcom licence, plain C), which is what
 // the Docker/CI images install. asmc is upstream's own default and ships a
@@ -59,9 +60,11 @@ const WASM_PATCH_FILES: &[&str] = &[
     "archive_util_tempdir.replacement.txt",
     "cmakelists_drop_entries.txt",
 ];
-const LZMA_SDK_PORTABLE_PATCH_FILES: &[&str] = &[
-    "lzma-dec-short-distance-copy.original.txt",
-    "lzma-dec-short-distance-copy.replacement.txt",
+const LZMA_SDK_PATCH_FILES: &[&str] = &[
+    "portable/lzma-dec-short-distance-copy.original.txt",
+    "portable/lzma-dec-short-distance-copy.replacement.txt",
+    "arm64/lzma-dec-short-distance-copy.original.txt",
+    "arm64/lzma-dec-short-distance-copy.replacement.txt",
 ];
 
 const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
@@ -332,7 +335,7 @@ fn lzma_sdk_asm_candidates() -> Vec<String> {
 /// static library. Every failure path returns `None` after a `cargo:warning`:
 /// the assembler is an optimisation, and a machine without one must still get a
 /// working build.
-fn lzma_sdk_x86_asm_object(asm_dir: &Path, out_dir: &Path) -> Option<PathBuf> {
+fn lzma_sdk_x86_asm_object(source: &Path, out_dir: &Path) -> Option<PathBuf> {
     let format_flags = match lzma_sdk_x86_asm_format() {
         Some(flags) => flags,
         None => {
@@ -345,7 +348,6 @@ docs/development/vendor-code.md."
         }
     };
 
-    let source = asm_dir.join(LZMA_SDK_X86_ASM_SOURCE);
     if !source.is_file() {
         println!(
             "cargo:warning=lzma-sdk: {} is missing; 7z decode uses the portable C loop.",
@@ -383,7 +385,7 @@ docs/development/vendor-code.md."
                 .arg(format!("-I{}", include_dir.display()))
                 .arg(format!("-Fo{}", object.display()));
         }
-        command.arg(&source);
+        command.arg(source);
 
         let _ = fs::remove_file(&object);
         match command.output() {
@@ -425,10 +427,8 @@ uses the portable C loop (slower than 7zz). Install jwasm or set ROM_WEAVER_LZMA
     None
 }
 
-fn lzma_sdk_portable_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
-    manifest_dir
-        .join(LZMA_SDK_PORTABLE_PATCH_ROOT)
-        .join(relative_path)
+fn lzma_sdk_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
+    manifest_dir.join(LZMA_SDK_PATCH_ROOT).join(relative_path)
 }
 
 fn prepare_lzma_sdk_portable_decoder(
@@ -441,11 +441,49 @@ fn prepare_lzma_sdk_portable_decoder(
         .expect("failed to stage the portable LZMA SDK decoder");
     replace_file_fragment(
         &staged,
-        &lzma_sdk_portable_patch_path(manifest_dir, "lzma-dec-short-distance-copy.original.txt"),
-        &lzma_sdk_portable_patch_path(manifest_dir, "lzma-dec-short-distance-copy.replacement.txt"),
+        &lzma_sdk_patch_path(
+            manifest_dir,
+            "portable/lzma-dec-short-distance-copy.original.txt",
+        ),
+        &lzma_sdk_patch_path(
+            manifest_dir,
+            "portable/lzma-dec-short-distance-copy.replacement.txt",
+        ),
         "portable LZMA SDK short-distance match copy",
     )
     .expect("failed to patch the portable LZMA SDK decoder");
+    staged
+}
+
+fn prepare_lzma_sdk_asm_decoder(
+    manifest_dir: &Path,
+    asm_dir: &Path,
+    out_dir: &Path,
+    architecture: &str,
+    source_name: &str,
+    include_name: &str,
+) -> PathBuf {
+    let source_dir = asm_dir.join(architecture);
+    let staged_dir = out_dir.join(format!("lzma-sdk-{architecture}-asm"));
+    fs::create_dir_all(&staged_dir).expect("failed to create staged LZMA SDK assembly directory");
+    fs::copy(source_dir.join(include_name), staged_dir.join(include_name))
+        .expect("failed to stage the LZMA SDK assembly include");
+    let staged = staged_dir.join(source_name);
+    fs::copy(source_dir.join(source_name), &staged)
+        .expect("failed to stage the LZMA SDK assembly decoder");
+    replace_file_fragment(
+        &staged,
+        &lzma_sdk_patch_path(
+            manifest_dir,
+            &format!("{architecture}/lzma-dec-short-distance-copy.original.txt"),
+        ),
+        &lzma_sdk_patch_path(
+            manifest_dir,
+            &format!("{architecture}/lzma-dec-short-distance-copy.replacement.txt"),
+        ),
+        &format!("{architecture} LZMA SDK short-distance match copy"),
+    )
+    .expect("failed to patch the LZMA SDK assembly decoder");
     staged
 }
 
@@ -501,19 +539,27 @@ fn build_lzma_sdk(
     }
 
     if lzma_sdk_arm64_asm_enabled() {
+        let source = prepare_lzma_sdk_asm_decoder(
+            manifest_dir,
+            asm_dir,
+            out_dir,
+            "arm64",
+            LZMA_SDK_ARM64_ASM_SOURCE,
+            LZMA_SDK_ARM64_ASM_INCLUDE,
+        );
         build.define("Z7_LZMA_DEC_OPT", None);
-        build.include(asm_dir.join("arm64"));
-        for source in LZMA_SDK_ARM64_ASM_SOURCES {
-            build.file(asm_dir.join(source));
+        build.include(source.parent().unwrap());
+        build.file(source);
+    } else if is_x86_64_target() {
+        let source = asm_dir.join("x86").join(LZMA_SDK_X86_ASM_SOURCE);
+        if let Some(object) =
+            lzma_sdk_x86_asm_object(&source, &PathBuf::from(env::var("OUT_DIR").unwrap()))
+        {
+            // Assembled ahead of cc's own invocation because it is MASM syntax that
+            // no C compiler driver understands; the object just joins the archive.
+            build.define("Z7_LZMA_DEC_OPT", None);
+            build.object(object);
         }
-    } else if is_x86_64_target()
-        && let Some(object) =
-            lzma_sdk_x86_asm_object(asm_dir, &PathBuf::from(env::var("OUT_DIR").unwrap()))
-    {
-        // Assembled ahead of cc's own invocation because it is MASM syntax that
-        // no C compiler driver understands; the object just joins the archive.
-        build.define("Z7_LZMA_DEC_OPT", None);
-        build.object(object);
     }
 
     build.compile("lzma_sdk");
@@ -602,10 +648,10 @@ fn emit_vendor_patch_rerun_if_changed(manifest_dir: &Path) {
             wasm_patch_path(manifest_dir, patch_file).display()
         );
     }
-    for patch_file in LZMA_SDK_PORTABLE_PATCH_FILES {
+    for patch_file in LZMA_SDK_PATCH_FILES {
         println!(
             "cargo:rerun-if-changed={}",
-            lzma_sdk_portable_patch_path(manifest_dir, patch_file).display()
+            lzma_sdk_patch_path(manifest_dir, patch_file).display()
         );
     }
 }
