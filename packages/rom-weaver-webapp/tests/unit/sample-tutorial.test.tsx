@@ -92,6 +92,7 @@ describe("sample tutorial start", () => {
       <SampleTutorialStart
         downloadHref="/first-weave.zip"
         downloadLabel="Download the bundle"
+        downloadName="first-weave.zip"
         error=""
         label="Start guided Apply"
         loading={false}

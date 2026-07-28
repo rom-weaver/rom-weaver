@@ -113,7 +113,8 @@ const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
       ["checks", "Checks"],
       ["remove", "Remove"],
     ],
-    body: "Modified is the version the new patch should reproduce. Swap corrects the file order in one click.",
+    body: "Modified is the version the new patch should reproduce. Dropped them the wrong way round? Swap trades the two in one click.",
+    lift: ".swap-row",
     openDrawers: true,
     target: "#patch-builder-row-modified",
     title: "Compare the modified ROM",
@@ -899,6 +900,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       afterDropZone: createSourcesActuallyEmpty ? (
         <SampleTutorialStart
           downloadHref={resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE)}
+          downloadName={CREATE_SAMPLE_ARCHIVE}
           downloadLabel="Download the sample ROMs"
           error={sampleError}
           label="Start guided Create"

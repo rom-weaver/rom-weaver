@@ -37,6 +37,9 @@ type SampleTutorialStep = {
   body: string;
   /** Selector, within the target, for the button this step asks you to press. */
   cta?: string;
+  /** Document-level selector for a control that sits outside the target but
+      belongs to the step - it is lifted clear of the scrim alongside it. */
+  lift?: string;
   openDrawers?: boolean;
   openMenu?: boolean;
   placement?: "bottom" | "top";
@@ -146,6 +149,7 @@ const scrollDeltaForPair = (target: HTMLElement, dialog: HTMLElement | null, pre
 const SampleTutorialStart = ({
   downloadHref,
   downloadLabel,
+  downloadName,
   error,
   label,
   loading,
@@ -153,27 +157,35 @@ const SampleTutorialStart = ({
 }: {
   downloadHref: string;
   downloadLabel: string;
+  downloadName: string;
   error: string;
   label: string;
   loading: boolean;
   onStart: () => void;
-}) => (
-  <div className="first-weave-demo sample-tutorial-start">
-    <span>New here?</span>
-    <a className="btn slim sample-tutorial-start-download" download href={downloadHref}>
-      <Download aria-hidden="true" />
-      {downloadLabel}
-    </a>
-    <span className="sample-tutorial-start-or">or</span>
-    <button aria-busy={loading} className="btn ghost slim" disabled={loading} onClick={onStart} type="button">
-      <span aria-hidden="true" className="sample-tutorial-start-beacon">
-        0x
-      </span>
-      {loading ? "Loading practice files…" : label}
-    </button>
-    {error ? <span role="status">{error}</span> : null}
-  </div>
-);
+}) => {
+  // The resolved href depends on where the app is served, which the prerender
+  // cannot know. Render the root-relative form the server emits, then upgrade
+  // after hydration so a sub-path deployment still links correctly.
+  const [href, setHref] = useState(`/${downloadName}`);
+  useEffect(() => setHref(downloadHref), [downloadHref]);
+  return (
+    <div className="first-weave-demo sample-tutorial-start">
+      <span>New here?</span>
+      <a className="btn slim sample-tutorial-start-download" download href={href}>
+        <Download aria-hidden="true" />
+        {downloadLabel}
+      </a>
+      <span className="sample-tutorial-start-or">or</span>
+      <button aria-busy={loading} className="btn ghost slim" disabled={loading} onClick={onStart} type="button">
+        <span aria-hidden="true" className="sample-tutorial-start-beacon">
+          0x
+        </span>
+        {loading ? "Loading practice files…" : label}
+      </button>
+      {error ? <span role="status">{error}</span> : null}
+    </div>
+  );
+};
 
 const SampleTutorial = ({
   loadingBody,
@@ -232,6 +244,7 @@ const SampleTutorial = ({
     let observer: MutationObserver | null = null;
     let openedMenu: HTMLButtonElement | null = null;
     let cta: HTMLElement | null = null;
+    let lifted: HTMLElement | null = null;
     const openedDrawers: HTMLButtonElement[] = [];
     let frame = 0;
     const connect = () => {
@@ -253,6 +266,13 @@ const SampleTutorial = ({
       if (step.openMenu) {
         openedMenu = target.querySelector<HTMLButtonElement>(".patch-menu-btn[aria-expanded='false']");
         openedMenu?.click();
+      }
+      if (step.lift) {
+        // The swap control lives between two rows, so no single target can hold
+        // it. Lift its row, not the button: .swap-row sets a z-index of its own,
+        // so a lift on the button would be scoped inside that stacking context.
+        lifted = document.querySelector<HTMLElement>(step.lift);
+        lifted?.classList.add("sample-tutorial-lift");
       }
       if (step.cta) {
         // A data attribute, not a class: React rewrites this button's className
@@ -279,6 +299,7 @@ const SampleTutorial = ({
         if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
       }
       cta?.removeAttribute("data-guide-cta");
+      lifted?.classList.remove("sample-tutorial-lift");
       target?.classList.remove("sample-tutorial-target");
       stage?.classList.remove("sample-tutorial-stage");
       if (target) {

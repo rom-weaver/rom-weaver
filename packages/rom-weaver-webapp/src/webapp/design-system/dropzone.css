@@ -316,6 +316,10 @@
 .rw-app .sample-tutorial-target {
   position: relative !important; z-index: 1002 !important; overflow: visible !important;
 }
+/* A control that belongs to the step but sits outside its row. */
+.rw-app .sample-tutorial-lift {
+  position: relative !important; z-index: 1002 !important;
+}
 .rw-app .sample-tutorial-ring {
   position: fixed; z-index: 1002; pointer-events: none;
   border: 3px solid color-mix(in oklab, var(--thread) 88%, var(--thread-hi)); border-radius: var(--r-m);
