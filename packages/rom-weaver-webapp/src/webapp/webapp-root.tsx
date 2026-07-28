@@ -1,4 +1,4 @@
-import { GitCompare, House, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
+import { BookOpen, GitCompare, House, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -45,6 +45,10 @@ const WORKFLOW_TABS = [
   // "Weave": the tab both applies patch chains and edits/exports them as bundles.
   { href: "weave", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Weave" },
   { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
+  // Reference rather than a workflow, but it earns a slot because the people it
+  // is written for are the least likely to go looking in an icon tray. It is
+  // still never persisted as the tab to resume - see `isResumableWorkflowView`.
+  { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Guides" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
@@ -404,7 +408,7 @@ function WebappRoot({
     ) : null;
   const visibleTabs = state.settings.betaToolsEnabled
     ? WORKFLOW_TABS
-    : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator");
+    : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator" || tab.id === "docs");
 
   return (
     <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
@@ -429,7 +433,6 @@ function WebappRoot({
               }
               selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]));
             }}
-            docsHref="/docs"
             settingsOpen={state.settingsDialogOpen}
             tabs={notFound ? visibleTabs.map((tab) => ({ ...tab, href: `/${tab.href}` })) : visibleTabs}
             tabsControlPanels={!notFound}

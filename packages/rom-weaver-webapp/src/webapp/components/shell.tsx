@@ -1,4 +1,4 @@
-import { BookOpen, createLucideIcon, Heart, Moon, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
+import { createLucideIcon, Heart, Moon, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
 import { useLayoutEffect, useRef } from "react";
@@ -78,9 +78,9 @@ const ModeRail = ({
     return () => window.removeEventListener("resize", reposition);
   }, []);
 
-  // The guides are a document route, not a tab, so no tab is selected while one
-  // is open. A tablist still needs exactly one tabIndex 0 to stay reachable, so
-  // the roving focus falls back to the first tab.
+  // A tablist needs exactly one tabIndex 0 to stay keyboard reachable, and the
+  // current view is not always one of these tabs - the 404 shell renders the
+  // rail with nothing selected. Roving focus falls back to the first tab.
   const selectedIndex = tabs.findIndex((tab) => tab.id === current);
   const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
 
@@ -188,7 +188,6 @@ const Masthead = ({
   tabsControlPanels = true,
   serviceWorkerStatus,
   confirmExternalNavigation,
-  docsHref,
   githubHref,
   donateHref,
   settingsOpen,
@@ -209,8 +208,6 @@ const Masthead = ({
   tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
-  /** Guides live at a real URL, so this is a plain link rather than a tab. */
-  docsHref?: string;
   githubHref?: string;
   donateHref?: string;
   settingsOpen?: boolean;
@@ -288,20 +285,6 @@ const Masthead = ({
         </span>
         <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
         <div className="masthead-tools">
-          {docsHref ? (
-            <a
-              aria-current={currentTab === "docs" ? "page" : undefined}
-              aria-label="Guides"
-              className="tool"
-              href={docsHref}
-              title="Guides"
-            >
-              <BookOpen aria-hidden="true" />
-              <span aria-hidden="true" className="tool-text">
-                Guides
-              </span>
-            </a>
-          ) : null}
           {githubHref ? (
             <a
               aria-label="GitHub"

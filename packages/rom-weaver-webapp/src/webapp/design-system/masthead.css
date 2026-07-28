@@ -45,6 +45,7 @@ html.vt-theme .mode-thumb { view-transition-name: none !important; }
 .rw-app .mode-rail .mode:nth-of-type(2) { view-transition-name: vt-tab-2; }
 .rw-app .mode-rail .mode:nth-of-type(3) { view-transition-name: vt-tab-3; }
 .rw-app .mode-rail .mode:nth-of-type(4) { view-transition-name: vt-tab-4; }
+.rw-app .mode-rail .mode:nth-of-type(5) { view-transition-name: vt-tab-5; }
 html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* where CSS anchors exist, the thumb pins itself to the selected tab -
    placement survives resize/font-swap with no JS measuring at all */
@@ -101,8 +102,6 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   .rw-app .tool:hover { color: var(--ink); background: var(--well); border-color: var(--seam); }
 }
 .rw-app .tool:active { background: var(--plate-2); }
-/* Guides is the one tool that marks a place rather than firing an action. */
-.rw-app .tool[aria-current="page"] { color: var(--thread-text); }
 .rw-app .tool svg { width: 17px; height: 17px; }
 .rw-app .build-version-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the tools are icon-only everywhere; the title/aria-label carries the name
