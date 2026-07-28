@@ -67,6 +67,13 @@ type BaseWorkflowSnapshot = {
  * ({@link subscribe} + {@link getSnapshot}). Subclasses keep only their workflow-specific source
  * cardinality, output naming, execution options, run logic, and {@link computeSnapshot}.
  */
+
+// Upper bound on how long dispose waits for an aborted operation to stop, and how
+// often it re-checks when there is no queued promise to await. Matches the runner's
+// own dispose grace: teardown must never hang behind a wedged operation.
+const MUTATION_SETTLE_GRACE_MS = 2000;
+const MUTATION_SETTLE_POLL_MS = 10;
+
 abstract class BaseWorkflowController<
   TSource,
   TSettings extends CommonSettings,
@@ -270,6 +277,37 @@ abstract class BaseWorkflowController<
       }
     });
     return run;
+  }
+
+  /**
+   * Wait for in-flight operations to stop running. Call after {@link abort} and
+   * before releasing anything the workflow owns.
+   *
+   * The disposal check runs once, as an operation starts. Everything after that
+   * - including staging its inputs - happens inside the callback, so aborting
+   * does not unwind an operation that is already past the check. Releasing
+   * while one is still going leaves whatever it stages afterwards with no owner
+   * to release it, and a staged input holds its visible name: the next input of
+   * the same name is quietly renamed to `name-2.ext`, and anything referring to
+   * the original name stops resolving.
+   *
+   * Bounded, because a wedged operation must not hang teardown behind it. On
+   * expiry the caller proceeds and the stale copies are left to time out, which
+   * is the old behaviour rather than a new failure.
+   */
+  protected async settleMutations(graceMs = MUTATION_SETTLE_GRACE_MS): Promise<void> {
+    const deadline = Date.now() + graceMs;
+    while (this.mutationQueue || this.activeMutation !== null) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return;
+      const queued = this.mutationQueue;
+      // `runExclusiveMutation` sets `activeMutation` without queueing, so with
+      // nothing on the chain to await, poll until it clears.
+      await Promise.race([
+        queued ? queued.catch(() => undefined) : new Promise((resolve) => setTimeout(resolve, MUTATION_SETTLE_POLL_MS)),
+        new Promise((resolve) => setTimeout(resolve, remaining)),
+      ]);
+    }
   }
 
   protected rearmAbortController(operationSignal: AbortSignal): void {
