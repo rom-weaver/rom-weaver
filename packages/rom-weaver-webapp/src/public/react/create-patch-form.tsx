@@ -10,6 +10,7 @@ import {
 } from "../../platform/browser/browser-api.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
+import { resolveAssetUrl } from "./asset-url.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
@@ -52,9 +53,11 @@ const finishCreateRoleStaging = (
   return true;
 };
 
+// Bare names, resolved against the app's base at fetch time: a root-absolute
+// path breaks any deployment that is not served from the domain root.
 const CREATE_SAMPLE_ASSETS = [
-  ["/hello-world.nes", "hello-world.nes"],
-  ["/modified-world.nes", "modified-world.nes"],
+  ["hello-world.nes", "hello-world.nes"],
+  ["modified-world.nes", "modified-world.nes"],
 ] as const;
 import {
   getCreateSettingsOutputName,
@@ -403,8 +406,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setSampleError("");
     try {
       const files = await Promise.all(
-        CREATE_SAMPLE_ASSETS.map(async ([url, name]) => {
-          const response = await fetch(url);
+        CREATE_SAMPLE_ASSETS.map(async ([asset, name]) => {
+          const response = await fetch(resolveAssetUrl(resolvedAssetBaseUrl, asset));
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return new File([await response.blob()], name, { type: "application/octet-stream" });
         }),

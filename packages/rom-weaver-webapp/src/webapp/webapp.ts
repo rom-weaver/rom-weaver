@@ -21,7 +21,7 @@ import {
   shouldWarnBeforeUnload,
 } from "./unload-guard.ts";
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
-import { createWebappRootController, readWorkflowViewFromPath } from "./webapp-controller.ts";
+import { createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath } from "./webapp-controller.ts";
 import { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { preloadWorkflowRoute } from "./workflow-routes.tsx";
 import {
@@ -148,7 +148,7 @@ else serviceWorkerClient.initialize();
 const urlSessionParse =
   typeof window === "undefined"
     ? { request: null, warnings: [] }
-    : readUrlSessionRequest(window.location.search, window.location.href);
+    : readUrlSessionRequest(window.location.search, readAppBaseUrl());
 for (const warning of urlSessionParse.warnings) {
   logger.warn(`url session: ${warning}`);
 }

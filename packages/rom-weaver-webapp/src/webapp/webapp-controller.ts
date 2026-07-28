@@ -89,19 +89,33 @@ const readWorkflowViewFromPath = (): WorkflowView | null => {
   return ROUTE_SLUG_TO_VIEW[slug] || null;
 };
 
+/**
+ * Where the app itself is served, with the route segment stripped: `/weave/`
+ * and `/create` both resolve to `/`, and a sub-path deployment keeps its
+ * prefix. Anything the app addresses by a bare name - route links, `?bundle=`
+ * targets, sample assets - has to resolve against this rather than
+ * `location.href`, which points inside the current route.
+ */
+const readAppBaseUrl = (): string => {
+  if (typeof window === "undefined") return "/";
+  const baseUrl = new URL(window.location.href);
+  const pathSegments = baseUrl.pathname.split("/");
+  while (pathSegments.at(-1) === "") pathSegments.pop();
+  if (pathSegments.at(-1) === "index.html") pathSegments.pop();
+  const currentSlug = (pathSegments.at(-1) || "").toLowerCase();
+  if (ROUTE_SLUG_TO_VIEW[currentSlug]) pathSegments.pop();
+  baseUrl.pathname = `${pathSegments.join("/")}/`;
+  baseUrl.hash = "";
+  baseUrl.search = "";
+  return baseUrl.href;
+};
+
 type RouteHistoryMode = "none" | "push" | "replace";
 
 const writeWorkflowViewToPath = (view: WorkflowView, historyMode: RouteHistoryMode): void => {
   if (typeof window === "undefined") return;
   if (historyMode === "none") return;
-  const baseUrl = new URL(window.location.href);
-  const pathSegments = baseUrl.pathname.split("/");
-  while (pathSegments.at(-1) === "") pathSegments.pop();
-  if (pathSegments.at(-1) === "index.html") pathSegments.pop();
-  const currentSlug = pathSegments.at(-1) || "";
-  if (ROUTE_SLUG_TO_VIEW[currentSlug]) pathSegments.pop();
-  baseUrl.pathname = `${pathSegments.join("/")}/`;
-  const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], baseUrl);
+  const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
   nextUrl.search = window.location.search;
   if (nextUrl.href === window.location.href) return;
   window.history[historyMode === "push" ? "pushState" : "replaceState"](window.history.state, "", nextUrl);
@@ -499,4 +513,4 @@ const createWebappRootController = (options: ControllerOptions) => {
   };
 };
 
-export { areSettingsEqual, createWebappRootController, readWorkflowViewFromPath };
+export { areSettingsEqual, createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath };
