@@ -280,7 +280,6 @@
   border-color: color-mix(in oklab, var(--thread) 70%, var(--seam-strong));
   background: color-mix(in oklab, var(--thread) 10%, var(--plate));
 }
-.rw-app .sample-tutorial-start-download svg { width: 14px; height: 14px; }
 .rw-app .sample-tutorial-start-or { color: var(--ink-4); font-size: .72rem; }
 .rw-app .sample-tutorial-start-beacon {
   display: inline-grid; place-items: center; width: 24px; height: 18px;
@@ -313,12 +312,10 @@
 /* Lift only - the row rides above the scrim so it stays crisp. Its frame is the
    portal-rendered ring below, because the row's own ancestors are overflow:clip
    and would shear an outline drawn here. */
-.rw-app .sample-tutorial-target {
-  position: relative !important; z-index: 1002 !important; overflow: visible !important;
-}
-/* A control that belongs to the step but sits outside its row. */
+/* The row, plus any control that belongs to the step but sits outside it. */
+.rw-app .sample-tutorial-target,
 .rw-app .sample-tutorial-lift {
-  position: relative !important; z-index: 1002 !important;
+  position: relative !important; z-index: 1002 !important; overflow: visible !important;
 }
 .rw-app .sample-tutorial-ring {
   position: fixed; z-index: 1002; pointer-events: none;
