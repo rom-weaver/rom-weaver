@@ -52,7 +52,17 @@ the WebAssembly module, fonts, and these pages. As with any website, whoever
 hosts and routes that traffic can see ordinary request information: an IP
 address, a browser user agent, the path requested, and a timestamp.
 
-There are no analytics, advertising, or tracking scripts in the deployed app.
+The hosted production deployment at [rom-weaver.com](https://rom-weaver.com/)
+uses [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/)
+to measure page-load performance and Core Web Vitals. Its browser beacon sends
+performance timing data to Cloudflare; it does not receive your ROMs, patches,
+archives, workflow contents, or downloaded results. Cloudflare describes Web
+Analytics as not collecting visitors' personal data, and its [privacy
+policy](https://www.cloudflare.com/privacypolicy/) governs Cloudflare's own
+processing.
+
+The nightly, preview, local, and self-hosted builds do not include this
+analytics script unless the host explicitly enables it.
 
 If you open a sample workflow, a bundle from a URL, or any other remote file,
 your browser fetches that one thing from wherever it lives, and that server
