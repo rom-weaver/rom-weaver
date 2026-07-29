@@ -48,7 +48,8 @@
   .rw-app .setgroup .setrow { grid-template-columns: minmax(0, 1fr); gap: var(--sp-xs); }
 }
 .rw-app .setrow .sctl { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: var(--sp-xs); }
-.rw-app .setrow .sctl .select, .rw-app .setrow .sctl .input { height: 34px; font-size: .85rem; }
+.rw-app .setrow .sctl .select { height: 34px; font-size: var(--dropdown-fs, .85rem); }
+.rw-app .setrow .sctl .input { height: 34px; font-size: .85rem; }
 .rw-app .setrow .slabel label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-app .setrow .slabel small { flex-basis: 100%; font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
 .rw-app .settings-placeholder-value { color: var(--ink-3); font-style: italic; font-weight: 450; }
@@ -76,9 +77,10 @@
 .rw-app .codec-combobox { position: relative; width: 100%; z-index: 1; }
 .rw-app .ofld:focus-within, .rw-app .setrow:focus-within { position: relative; z-index: 90; }
 .rw-app .codec-combobox::after { content: ""; position: absolute; inset-inline-end: 10px; top: 50%; width: 12px; height: 12px; pointer-events: none; transform: translateY(-50%); background: no-repeat center / 12px 12px var(--chevron); }
-.rw-app .codec-combobox .input { padding-inline-end: 30px; }
+.rw-app .codec-combobox .input { padding-inline-end: 30px; font-size: var(--dropdown-fs, .82rem); }
+.rw-app .setrow .sctl .codec-combobox .input { font-size: var(--dropdown-fs, .85rem); }
 .codec-combobox-list { box-sizing: border-box; position: fixed; z-index: 10000; left: 0; top: 0; overflow: auto; padding: 4px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--plate); box-shadow: var(--overlay-shadow); }
-.codec-combobox-option { min-height: 28px; display: flex; align-items: center; padding: 0 8px; border-radius: 4px; color: var(--ink); cursor: pointer; font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codec-combobox-option { min-height: 28px; display: flex; align-items: center; padding: 0 8px; border-radius: 4px; color: var(--ink); cursor: pointer; font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; font-size: var(--dropdown-fs, .8rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .codec-combobox-option.active { background: var(--plate-2); color: var(--thread-text); }
 
 /* Prevent iOS focus zoom without disabling pinch zoom. */
@@ -91,10 +93,6 @@
     .rw-app .ofld .select,
     .rw-app .fname .select, .rw-app .fname .outname { font-size: max(16px, 1em); }
   }
-}
-@media (max-width: 720px) {
-  /* Keep every native and custom dropdown label the same size on phones. */
-  .rw-app select, .codec-combobox-option, .rw-app .patch-menu-item { font-size: .72rem !important; }
 }
 /* Enlarge touch targets without changing visual layout. */
 @media (pointer: coarse) {

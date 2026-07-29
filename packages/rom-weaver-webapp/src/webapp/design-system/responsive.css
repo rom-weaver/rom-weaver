@@ -7,6 +7,7 @@
   .rw-app .mode { flex: 1; justify-content: center; }
 }
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app { --dropdown-fs: .72rem; }
   .rw-app .masthead { row-gap: var(--sp-xs); padding-block: 5px 3px; }
   .rw-app .brand { gap: var(--sp-s); }
   .rw-app .hero-lead {

@@ -76,7 +76,7 @@
 }
 .rw-app .log-filter-bar .log-filter { flex: 1 1 auto; min-inline-size: 0; height: 30px; width: auto; font-size: .76rem; padding-block: 0; }
 .rw-app .log-filter-bar .loglevel { display: flex; flex: 0 0 auto; }
-.rw-app .log-filter-bar .loglevel .select { width: max-content; height: 30px; font-size: .76rem; padding-block: 0; }
+.rw-app .log-filter-bar .loglevel .select { width: max-content; height: 30px; font-size: var(--dropdown-fs, .76rem); padding-block: 0; }
 .rw-app .log-body { padding: 0; flex: 1 1 auto; display: flex; min-height: 0; }
 .rw-app .log-dlg .tracelog {
   flex: 1 1 auto; max-height: none; height: auto; min-height: 0;
@@ -136,7 +136,8 @@
 .rw-app .setrow { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; gap: var(--sp-m); padding-block: 4px; }
 .rw-app .slabel { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .8rem; color: var(--ink-2); }
 .rw-app .gtitle .info { margin-inline-start: 8px; }
-.rw-app .setrow .select, .rw-app .setrow .input { height: 34px; font-size: .85rem; }
+.rw-app .setrow .select { height: 34px; font-size: var(--dropdown-fs, .85rem); }
+.rw-app .setrow .input { height: 34px; font-size: .85rem; }
 .rw-app .setchecks { display: flex; flex-direction: column; gap: var(--sp-s); padding-block-start: 4px; }
 .rw-app .setchecks .popt { font-size: .82rem; }
 .rw-app .set-about .about-line { font-size: .78rem; color: var(--ink-3); }
