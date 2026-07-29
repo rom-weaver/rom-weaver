@@ -518,13 +518,30 @@ Lighthouse always audits the local build through `scripts/dev-server.mjs
 preview`, using Lighthouse's default mobile emulation, on every event, including
 forks. A Lighthouse runtime collection error gets one fresh-browser retry;
 threshold failures are never retried. The server speaks HTTP/2, serves the q11
-sidecars, and holds each asset in memory after the first read, which is what
+sidecars, applies the built `dist/_headers`, and holds each asset in memory after
+the first read, which is what
 makes it a fair stand-in for the edge - measured against the hosted Cloudflare
 bundle it scores slightly *better*, because HTTP/1.1's ~6-connection cap was the
 only thing that had made a local audit look slow. Auditing the deployed preview
 instead would gate a required check on `deploy-preview-fast`, which is
 `continue-on-error: true` precisely so a Cloudflare outage cannot redden a
 build, and which is not ordered ahead of this job anyway.
+
+Applying `dist/_headers` is what puts the `Link:` preload hints in front of the
+audit, and the preview server replays them in a real `103` ahead of each HTML
+response the way the edge does - without that, Lighthouse would grade a
+discovery path for the render-critical CSS and entry module that production does
+not have. `scripts/pages-headers.mjs` parses the file; documents get the `103`,
+subresources do not, since a subresource ignores the hint and the extra
+informational response would only add to what the audit measures.
+
+`wrangler pages dev` is the closer emulator for everything else - it runs
+`_routes.json` and the sidecar Function for real - but it cannot serve this gate:
+Early Hints is a zone-level CDN feature rather than part of the Pages runtime, so
+wrangler never emits a `103`, and it speaks HTTP/1.1 only, which reintroduces
+exactly the ~6-connection cap this server exists to avoid. It is the right tool
+for checking `_headers`/`_routes.json`/Function behaviour by hand, just not for
+timing.
 
 Both tables land in the job summary, and all three runs per route are
 downloadable as HTML and JSON from the 14-day `lighthouse-reports` artifact,
@@ -588,10 +605,17 @@ server think time; browsers that ignore `103` still act on the header when the
 document response lands, which is earlier than the parser either way. They ride
 in the `/*` block rather than an enumerated route list, so every prerendered
 route, every docs slug, and any route added later is covered without upkeep;
-subresource responses carry the header too and ignore it. The
-hinted URLs are read back out of the built `index.html`, and
-`scripts/verify-seo-build.mjs` fails the build if they drift from the ones the
-document actually requests.
+subresource responses carry the header too and ignore it. Both use `rel=preload`
+(`as=style` and `as=script`) rather than `rel=modulepreload` for the entry:
+Cloudflare only replays `preload` and `preconnect` in the `103`, so a
+`modulepreload` line still works on the document response but is dropped from
+the Early Hints, which is the half worth having. Chrome starts the entry fetch
+from the `as=script` hint and the module script reuses it, so nothing
+double-fetches. The hinted URLs are read back out of the built `index.html` by
+`packages/rom-weaver-webapp/scripts/critical-asset-hints.mjs`, which the build
+and `scripts/verify-seo-build.mjs` share so the emitted header and the check
+guarding it cannot drift; the verifier fails the build if either drifts from the
+URL the document actually requests.
 
 Pages has no precompressed-sibling convention and recompresses assets on the
 fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse

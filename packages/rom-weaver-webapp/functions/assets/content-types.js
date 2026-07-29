@@ -7,9 +7,13 @@
 // fails the build if it stages a sidecar for an extension that is missing here,
 // so a new sidecar-backed file type cannot ship without its type. Extend it in
 // the same commit that widens the sidecar set.
+// These have to match what Pages serves on the static path: the same file is served by
+// this function when the client accepts br and by Pages when it does not, and the two
+// answering with different types is a difference with no cause. `text/javascript` is also
+// the form RFC 9239 settles on - `application/javascript` is obsolete.
 export const SIDECAR_CONTENT_TYPES = {
   ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript",
+  ".js": "text/javascript; charset=utf-8",
   ".wasm": "application/wasm",
 };
 

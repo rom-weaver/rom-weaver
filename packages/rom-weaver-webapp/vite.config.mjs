@@ -8,6 +8,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
+import { criticalAssetLinkHeaders } from "./scripts/critical-asset-hints.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
@@ -440,34 +441,13 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
   };
 };
 
-// The stylesheet and entry module are the only two render-critical subresources, and the
-// parser cannot discover either until the document has been fetched and parsed. Emitting
-// them as `Link` response headers lets Cloudflare replay them in a 103 Early Hints
-// response, so both fetches start during server think time instead of after HTML parse.
-// Browsers that ignore 103 still honour the header on the document response itself, which
-// is earlier than the parser either way. Read out of the built index.html rather than the
-// bundle so the hinted URLs are byte-for-byte the ones the document requests.
-//
-// These ride in the `/*` block rather than an enumerated route list: every document in the
-// build - the prerendered workflow routes, 404.html, every docs slug, and any route added
-// later - loads the same two assets, and a list would silently stop covering new ones. The
-// hint also lands on subresource responses, which ignore it.
-const readCriticalAssetLinks = (distDir) => {
-  const indexHtml = fs.readFileSync(path.join(distDir, "index.html"), "utf8");
-  const stylesheet = indexHtml.match(/<link[^>]+rel="stylesheet"[^>]+href="\.(\/assets\/[^"]+\.css)"/)?.[1];
-  const entryScript = indexHtml.match(/<script[^>]+type="module"[^>]+src="\.(\/assets\/[^"]+\.js)"/)?.[1];
-  if (!(stylesheet && entryScript)) {
-    throw new Error(
-      `rom-weaver-cloudflare-headers-asset: could not find the stylesheet (${stylesheet ?? "missing"}) and entry module (${entryScript ?? "missing"}) in dist/index.html`,
-    );
-  }
-  // Both are fetched in CORS mode (the stylesheet link and the module script both carry
-  // `crossorigin`), so the hints have to match or the browser fetches each asset twice.
-  return [
-    `Link: <${stylesheet}>; rel=preload; as=style; crossorigin`,
-    `Link: <${entryScript}>; rel=modulepreload; crossorigin`,
-  ];
-};
+// See scripts/critical-asset-hints.mjs for why these are emitted and why both use
+// `rel=preload`. They ride in the `/*` block rather than an enumerated route list: every
+// document in the build - the prerendered workflow routes, 404.html, every docs slug, and
+// any route added later - loads the same two assets, and a list would silently stop
+// covering new ones. The hint also lands on subresource responses, which ignore it.
+const readCriticalAssetLinks = (distDir) =>
+  criticalAssetLinkHeaders(fs.readFileSync(path.join(distDir, "index.html"), "utf8"));
 
 // Cloudflare Pages serves dist/_headers on every response, so deployed pages are cross-origin
 // isolated from the first network load instead of round-tripping through the service worker's
