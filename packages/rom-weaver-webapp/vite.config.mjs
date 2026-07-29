@@ -654,13 +654,20 @@ const prerenderWebappShell = (prerenderedShells) => ({
         // prerendered shell paints styled. Dev serves CSS as HMR'd JS modules
         // that only apply after the bundle runs, which would flash the shell
         // unstyled. Inject the same stylesheets render-blocking (Vite serves
-        // ?direct as real text/css) - order mirrors vite-entry.ts's imports.
+        // ?direct as real text/css). index.css pulls in style.css and declares
+        // the layer order; the deferred and docs sheets load lazily in
+        // production but are linked here so every dev shell paints complete -
+        // cascade layers make the double application harmless.
         // These links are outside the module graph, so a CSS edit only reaches
         // them on a full reload; until then the HMR'd <style> (appended after
         // them, so it wins) carries the change and a *deleted* rule lingers.
         return {
           html: routeHtml.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(shell)),
-          tags: ["/src/webapp/style.css", "/src/webapp/design-system/index.css"].map((href) => ({
+          tags: [
+            "/src/webapp/design-system/index.css",
+            "/src/webapp/design-system/deferred.css",
+            "/src/webapp/design-system/docs-route.css",
+          ].map((href) => ({
             attrs: { href: `${href}?direct`, rel: "stylesheet" },
             injectTo: "head",
             tag: "link",
@@ -730,6 +737,22 @@ const collectStaticImportClosure = (bundle, entryFileNames) => {
 
 const renderRoutePreloadLinks = (fileNames) =>
   fileNames.map((fileName) => `  <link rel="modulepreload" crossorigin href="./${fileName}" />`).join("\n");
+
+// CSS carried by a route's chunks (docs.css rides the docs chunk) is render-critical on
+// that route's prerendered document: without a render-blocking link the shell paints
+// unstyled until the chunk loads. Emitted before the modulepreloads. When the chunk later
+// lazy-loads on an in-app navigation, cascade layers make the runtime-injected duplicate
+// link harmless.
+const renderRouteStylesheetLinks = (fileNames) =>
+  fileNames.map((fileName) => `  <link rel="stylesheet" crossorigin href="./${fileName}" />`).join("\n");
+
+const collectChunkCss = (bundle, chunkFileNames) => {
+  const css = new Set();
+  for (const fileName of chunkFileNames) {
+    for (const cssFileName of bundle[fileName]?.viteMetadata?.importedCss ?? []) css.add(cssFileName);
+  }
+  return css;
+};
 
 // `?worker&url` makes Vite bundle each worker entry in its own isolated rolldown
 // build, so two workers that share a runtime each ship a private copy of it -
@@ -824,6 +847,7 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
       const entryFileName = html.match(/<script[^>]*\ssrc="\.\/([^"]+\.js)"/)?.[1];
       if (!entryFileName) throw new Error("rom-weaver-preload-workflow-route-chunks: entry script not found");
       const alreadyLoaded = collectStaticImportClosure(bundle, [entryFileName]);
+      const entryCss = collectChunkCss(bundle, alreadyLoaded);
       for (const [view, moduleSuffix] of Object.entries(WORKFLOW_ROUTE_MODULES)) {
         const routeChunk = findChunkForModule(bundle, moduleSuffix);
         if (!routeChunk)
@@ -831,7 +855,11 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
         const routeFiles = [...collectStaticImportClosure(bundle, [routeChunk])]
           .filter((fileName) => !alreadyLoaded.has(fileName))
           .sort();
-        routePreloadLinks.set(view, renderRoutePreloadLinks(routeFiles));
+        const routeCss = [...collectChunkCss(bundle, routeFiles)].filter((fileName) => !entryCss.has(fileName)).sort();
+        const links = [renderRouteStylesheetLinks(routeCss), renderRoutePreloadLinks(routeFiles)]
+          .filter(Boolean)
+          .join("\n");
+        routePreloadLinks.set(view, links);
       }
       return html.replace(
         "</head>",

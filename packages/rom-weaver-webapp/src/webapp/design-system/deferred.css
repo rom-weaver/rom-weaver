@@ -1,0 +1,9 @@
+/* Surfaces that cannot appear before the visitor interacts - drawers, dialogs, modals,
+   and the run-result/progress readouts - so none of this needs to block first paint.
+   Loaded after hydration (see webapp.ts); the layer order declared in index.css keeps
+   each file's cascade priority, not its load order. */
+@import "./drawers.css" layer(drawers);
+@import "./weave-meter.css" layer(weave-meter);
+@import "./result.css" layer(result);
+@import "./dialogs.css" layer(dialogs);
+@import "./webapp-modals.css" layer(webapp-modals);

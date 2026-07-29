@@ -8,6 +8,9 @@ import { getDefaultSettings } from "../../src/webapp/settings/settings-state.ts"
 import { WebappRoot } from "../../src/webapp/webapp-root.tsx";
 import { createEmptyConfirmationDialogState } from "../../src/webapp/webapp-root-types.ts";
 import "../../src/webapp/design-system/index.css";
+// deferred.css ships lazily in production (webapp.ts loads it at boot); the dialog and
+// drawer surfaces under test live in it.
+import "../../src/webapp/design-system/deferred.css";
 import {
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
