@@ -259,6 +259,15 @@ const getChangelog = (limit = 50, releaseVersion = "", gitLogReader = readGitLog
         .filter((entry) => entry.hash)
     : [];
   const release = readReleaseNotes(releaseVersion);
+  // Parsing CHANGELOG.md couples this to release-please's entry format. A silent
+  // miss would ship an empty "What's new" dialog and nobody would notice until a
+  // user opened it, so a release-channel build that cannot read its own notes
+  // fails here instead. Local and dev builds pass no version and skip this.
+  if (releaseVersion && !release) {
+    throw new Error(
+      `No release notes for v${releaseVersion} in ${changelogPath}. Either that section is missing, or release-please's entry format changed and readReleaseNotes() in ${import.meta.url} can no longer parse it.`,
+    );
+  }
   if (!release) return entries;
   // The release rides on the newest entry to preserve the array shape running
   // older bundles expect; they ignore the extra field. With no git log - the

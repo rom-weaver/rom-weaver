@@ -145,6 +145,16 @@ describe("getChangelog", () => {
     expect(getChangelog(1)[0]).not.toHaveProperty("release");
   });
 
+  // The parser is coupled to release-please's entry format; this is the tripwire
+  // that turns a format change into a failed build instead of an empty dialog.
+  it("fails a release build whose version has no parseable section", () => {
+    expect(() => getChangelog(1, "0.0.0-not-in-changelog")).toThrow(/No release notes for v0\.0\.0-not-in-changelog/);
+  });
+
+  it("does not fail a local build, which requests no release version", () => {
+    expect(() => getChangelog(1)).not.toThrow();
+  });
+
   it("carries the notes on a placeholder entry when no git log is available", () => {
     const entries = getChangelog(1, packageVersion, () => "");
     expect(entries).toHaveLength(1);
