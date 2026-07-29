@@ -1,7 +1,6 @@
 /* RomWeaver (complete webapp implementation) v20240809 - Marc Robledo 2016-2024 - http://www.marcrobledo.com/license */
 
 import { createElement, useLayoutEffect } from "react";
-import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
@@ -518,13 +517,17 @@ const renderWebappRoot = (): undefined => {
   }
   const root = appRoot;
   if (!root) return undefined;
-  // Redundant under preact/compat, whose `root.render` already commits synchronously - kept because
-  // the boot sequence above is written against a synchronous commit (see the first-paint handoff
-  // notes), and dropping it would silently reintroduce an async first mount if the Preact alias in
-  // preact-aliases.mjs is ever removed.
-  flushSync(() => {
-    root.render(webappRoot);
-  });
+  // Deliberately NOT wrapped in `flushSync`, which is what this call used under React.
+  //
+  // preact/compat's `root.render` already commits synchronously, so the wrapper buys nothing - and it
+  // actively breaks. `flushSync` swaps `options.debounceRendering` for a pass-through, so a component
+  // that updates the controller during render re-enters this subscriber and calls `render()` on a
+  // container that is still mid-render. Preact's renderer is not re-entrant: instead of diffing, it
+  // commits a second copy of the tree. The reset-confirmation accessibility audit catches it as a
+  // duplicate `#rom-weaver-input-file-unified` id (two file inputs, same id).
+  //
+  // Preact's default microtask batching is what keeps that nested update out of the current render.
+  root.render(webappRoot);
   return undefined;
 };
 renderWebappRootIfReady = renderWebappRoot;
