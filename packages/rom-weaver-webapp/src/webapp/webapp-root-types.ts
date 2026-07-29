@@ -7,7 +7,7 @@ import type {
   StartupState,
   TrimSessionState,
   ValidationState,
-  WorkflowView,
+  WebappView,
 } from "./webapp-state-types.ts";
 
 type ConfirmationDialogState = {
@@ -29,11 +29,12 @@ const createEmptyConfirmationDialogState = (): ConfirmationDialogState => ({
 });
 
 type WebappRootProps = {
+  docsSlug?: string;
   /** Render the normal app chrome with a not-found workbench. */
   notFound?: boolean;
   state: {
     creatorSession: CreatorSessionState;
-    currentView: WorkflowView;
+    currentView: WebappView;
     patcherSession: PatcherSessionState;
     toolsSession: { active: boolean };
     trimSession: TrimSessionState;
@@ -58,7 +59,7 @@ type WebappRootProps = {
   /** Boot-time `?bundle=` / `?rom=&patch=` session request, when present. */
   urlSession?: UrlSessionParseResult | null;
   actions: {
-    onSelectView: (view: WorkflowView) => void;
+    onSelectView: (view: WebappView) => void;
     onDraftChange: (field: string, value: string | boolean) => void;
     onLogLevelChange: (level: string) => void;
     onOpenSettings: () => void;

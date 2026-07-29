@@ -8,6 +8,7 @@ import { configureLogger, createLogger } from "../lib/logging.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
 import { markRomWeaverRunnerStale } from "../workers/rom-weaver/rom-weaver-runner.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
+import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
@@ -29,6 +30,7 @@ import {
   createEmptyConfirmationDialogState,
   type WebappRootProps,
 } from "./webapp-root-types.ts";
+import type { WebappView } from "./webapp-state-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
 // localStorage.setItem(LOCAL_STORAGE_SETTINGS_ID, JSON.stringify(settings))
@@ -162,6 +164,10 @@ const applySettingsToRuntime = (settings: SettingsState) => {
 };
 
 const isNotFoundPage = document.documentElement.dataset.page === "not-found";
+// Which static document the host actually served, captured before the
+// controller runs: restoring a persisted tab rewrites the path, which would
+// otherwise erase the only evidence of what is in the DOM.
+const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "patcher";
 const webappController = createWebappRootController({
   initialHistoryMode: isNotFoundPage ? "none" : "replace",
   onApplySettings: applySettingsToRuntime,
@@ -315,6 +321,17 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
   deferViteReload({ label: payload?.path, source: "vite" });
 });
 
+// Views the build emits a prerendered shell for. Trim and Tools deliberately
+// inherit the patcher's markup, so they hydrate as "patcher" - that is what is
+// actually in the document.
+const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs"]);
+
+// Hydration has to start from the view the *served document* was rendered as,
+// or React discards the whole shell - never from controller state, which may
+// already have restored a persisted tab the document knows nothing about.
+const readHydrationView = (): WebappView =>
+  PRERENDERED_VIEWS.has(servedDocumentView) ? servedDocumentView : "patcher";
+
 const renderWebappRoot = (): undefined => {
   // Suppress all renders (including reactive ones from the service worker state machine) while the boot
   // gate is closed, so the un-isolated first document stays on the static background until the SW reload.
@@ -344,7 +361,7 @@ const renderWebappRoot = (): undefined => {
   const rootState: WebappRootProps["state"] = shouldHydrate
     ? {
         ...state,
-        currentView: state.currentView === "creator" ? "creator" : "patcher",
+        currentView: readHydrationView(),
         draftSettings: { ...hydrationSettings },
         settings: hydrationSettings,
         startup: { message: "", status: "ready" as const },
@@ -420,6 +437,7 @@ const renderWebappRoot = (): undefined => {
       onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
     },
     confirmationDialog: confirmationDialogState,
+    docsSlug: readDocsSlugFromPathname(window.location.pathname),
     notFound: isNotFoundPage,
     pageUpdate: shouldHydrate
       ? getPageUpdateState({

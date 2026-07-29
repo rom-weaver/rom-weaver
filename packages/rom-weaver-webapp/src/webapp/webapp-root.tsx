@@ -1,4 +1,4 @@
-import { GitCompare, House, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
+import { BookOpen, GitCompare, House, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -28,16 +28,27 @@ import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
 import { getSettingsUiState } from "./settings/settings-state.ts";
+import type { WebappView } from "./webapp-state-types.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
-import { ApplyPatchRoute, CreatePatchRoute, ToolsRouteForm, TrimPatchRoute } from "./workflow-routes.tsx";
+import {
+  ApplyPatchRoute,
+  CreatePatchRoute,
+  DocsPageRoute,
+  ToolsRouteForm,
+  TrimPatchRoute,
+} from "./workflow-routes.tsx";
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS = [
   // "Weave": the tab both applies patch chains and edits/exports them as bundles.
   { href: "weave", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Weave" },
   { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
+  // Reference rather than a workflow, but it earns a slot because the people it
+  // is written for are the least likely to go looking in an icon tray. It is
+  // still never persisted as the tab to resume - see `isResumableWorkflowView`.
+  { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Guides" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
@@ -51,7 +62,8 @@ const SettingsPanel = lazy(loadSettingsPanel);
 
 const logger = createLogger("webapp-root");
 
-const syncWorkflowSeoMetadata = (view: WorkflowView) => {
+const syncWorkflowSeoMetadata = (view: WebappView) => {
+  if (view === "docs") return;
   const route =
     view === "creator" ? WORKFLOW_SEO_ROUTES.creator : view === "patcher" ? WORKFLOW_SEO_ROUTES.patcher : null;
   if (!route) {
@@ -67,6 +79,7 @@ const syncWorkflowSeoMetadata = (view: WorkflowView) => {
   document
     .querySelector<HTMLMetaElement>('meta[property="og:description"]')
     ?.setAttribute("content", route.description);
+  document.querySelector<HTMLMetaElement>('meta[property="og:type"]')?.setAttribute("content", "website");
   document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.setAttribute("content", canonicalUrl);
   document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')?.setAttribute("content", title);
   document
@@ -118,8 +131,6 @@ const isFileDragTransfer = (dataTransfer: DataTransfer | null) =>
 
 const isInsideLocalDropZone = (target: EventTarget | null) =>
   target instanceof Element && !!target.closest(".rw-app .drop");
-
-type WorkflowView = WebappRootProps["state"]["currentView"];
 
 /* "auto" must resolve exactly the way the runtime and the Threads setting's
    `auto (N)` placeholder resolve it - raw hardwareConcurrency disagrees with
@@ -195,6 +206,7 @@ function WebappRoot({
   actions,
   serviceWorkerCache,
   urlSession,
+  docsSlug = "docs",
   notFound = false,
 }: WebappRootProps) {
   useEntryAnimationLock();
@@ -206,7 +218,7 @@ function WebappRoot({
   // forms stay mounted, so without this the last-mounted form would own prompts.
   useEffect(() => {
     if (notFound) return;
-    setActiveSelectionForm(state.currentView);
+    setActiveSelectionForm(state.currentView === "docs" ? undefined : state.currentView);
   }, [notFound, state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
   const [logOpen, setLogOpen] = useState(false);
@@ -215,7 +227,7 @@ function WebappRoot({
   // finished outputs) in component state, so unmounting on tab switch would
   // silently discard the user's work. Each form mounts on first visit and then
   // stays mounted but hidden, which preserves state across tab switches.
-  const [visitedViews, setVisitedViews] = useState<readonly WorkflowView[]>([state.currentView]);
+  const [visitedViews, setVisitedViews] = useState<readonly WebappView[]>([state.currentView]);
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
@@ -228,23 +240,30 @@ function WebappRoot({
       void loadLogDialog().catch(() => undefined);
       void loadSettingsPanel().catch(() => undefined);
     };
-    const preload = () => {
+    const scheduleDialogPreload = () => {
       if (cancelled) return;
-      void preloadBrowserRuntime({ threads }).then(() => {
-        if (cancelled) return;
-        if (typeof requestIdleCallback === "function") {
-          requestIdleCallback(preloadDialogsWhenIdle, { timeout: 2000 });
-        } else {
-          window.setTimeout(preloadDialogsWhenIdle, 0);
-        }
-      });
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(preloadDialogsWhenIdle, { timeout: 2000 });
+      } else {
+        window.setTimeout(preloadDialogsWhenIdle, 0);
+      }
     };
-    const cancelPreload = scheduleBrowserRuntimePreload(preload);
+    // A guide never reaches the ROM engine, so it warms the dialogs and leaves
+    // the runtime preload to the workflow tabs.
+    let cancelPreload: () => void = () => undefined;
+    if (state.currentView === "docs") {
+      scheduleDialogPreload();
+    } else {
+      cancelPreload = scheduleBrowserRuntimePreload(() => {
+        if (cancelled) return;
+        void preloadBrowserRuntime({ threads }).then(scheduleDialogPreload);
+      });
+    }
     return () => {
       cancelled = true;
       cancelPreload();
     };
-  }, [notFound, threads]);
+  }, [notFound, state.currentView, threads]);
   const preloadSettingsPanel = useCallback(() => {
     void loadSettingsPanel().catch(() => undefined);
   }, []);
@@ -296,13 +315,16 @@ function WebappRoot({
   useEffect(() => {
     setVisitedViews((previous) => (previous.includes(state.currentView) ? previous : [...previous, state.currentView]));
   }, [state.currentView]);
-  const isViewMounted = (view: WorkflowView) => state.currentView === view || visitedViews.includes(view);
+  const isViewMounted = (view: WebappView) => state.currentView === view || visitedViews.includes(view);
 
   // Arm the dropzones while a file is dragged anywhere over the page. `dragover`
   // fires continuously, so a short debounce clears the flag once it stops (drag
   // left the window or dropped) - `dragleave`/`dragend` are unreliable here.
   useEffect(() => {
-    if (notFound) return;
+    if (notFound || state.currentView === "docs") {
+      setPageDragging(false);
+      return undefined;
+    }
     let clearTimer: ReturnType<typeof setTimeout> | undefined;
     const onDragOver = (event: DragEvent) => {
       if (!isFileDragTransfer(event.dataTransfer)) return;
@@ -321,12 +343,12 @@ function WebappRoot({
       document.removeEventListener("dragover", onDragOver);
       document.removeEventListener("drop", stop);
     };
-  }, [notFound]);
+  }, [notFound, state.currentView]);
 
   // Page-level drag: dropping a file anywhere on the page (outside a dropzone
   // box) forwards it to the active tab's unified drop handler via `pageDrop`.
   useEffect(() => {
-    if (notFound) return;
+    if (notFound || state.currentView === "docs") return undefined;
     const handlePageDragOver = (event: DragEvent) => {
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
@@ -369,7 +391,7 @@ function WebappRoot({
     };
   }, [confirmationDialog.open, notFound, state.currentView, state.settingsDialogOpen]);
 
-  const workflowPanel = (view: WorkflowView, form: React.ReactNode) =>
+  const workflowPanel = (view: WebappView, form: React.ReactNode) =>
     isViewMounted(view) ? (
       <section
         aria-labelledby={`tab-${view}`}
@@ -386,7 +408,7 @@ function WebappRoot({
     ) : null;
   const visibleTabs = state.settings.betaToolsEnabled
     ? WORKFLOW_TABS
-    : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator");
+    : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator" || tab.id === "docs");
 
   return (
     <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
@@ -481,6 +503,7 @@ function WebappRoot({
                     pageDrop={activePageDrop}
                   />,
                 )}
+                {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute
@@ -494,7 +517,7 @@ function WebappRoot({
                   "tools",
                   <ToolsRouteForm onSessionChange={actions.onToolsSessionChange} pageDrop={activePageDrop} />,
                 )}
-                <DropVeil />
+                {state.currentView === "docs" ? null : <DropVeil />}
               </>
             )}
           </main>

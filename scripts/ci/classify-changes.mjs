@@ -62,6 +62,7 @@ export function classifyChanges(paths, all = false) {
 
     if (
       path.startsWith("packages/rom-weaver-webapp/") ||
+      path.startsWith("docs/guides/") ||
       path === "package.json" ||
       path === "package-lock.json" ||
       /^scripts\/.*\.mjs$/.test(path) ||

@@ -60,8 +60,8 @@ describe("Masthead", () => {
     expect(tabs[1]?.getAttribute("href")).toBe("create");
     fireEvent.click(tabs[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    // the external links (GitHub then Tip) lead the row; a separator fences
-    // them off from the app tools (Reset, Theme, Log, Settings) that trail
+    // The external links (GitHub, Tip) lead the row; a separator
+    // fences them off from the app tools (Reset, Theme, Log, Settings) that trail
     expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
     expect(container.querySelector(".language-tool")).toBeNull();
     expect(getByRole("button", { name: "Log" })).toBeTruthy();

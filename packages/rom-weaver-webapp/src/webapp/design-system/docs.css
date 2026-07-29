@@ -1,0 +1,515 @@
+/* Guides.
+   The app chrome is a loom: condensed type, hairline seams, warp strung across
+   waiting surfaces. Long-form reading extends that rather than replacing it.
+   The warp is a piece's lengthwise structure, which is exactly what a document
+   outline is - so the section list becomes a warp rail, and the section being
+   read is marked by a weft pick crossing it. That rail is the only loud thing
+   on the page; the prose stays quiet and opens up (font-stretch 100% against
+   the app's 94%) to signal a reading mode rather than a working mode. */
+
+html:has(.docs-workbench) { scroll-behavior: smooth; }
+
+.rw-app .docs-workbench {
+  /* Prose sits at a comfortable measure; code and screenshots may run wider,
+     because a wrapped command line and a squinting screenshot both cost more
+     than the extra width does. */
+  --measure: 35rem;
+  --measure-wide: 39rem;
+  --article-pad: clamp(22px, 4.5vw, 44px);
+  max-width: 62rem;
+  margin-inline: auto;
+  padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
+}
+
+/* --- breadcrumbs --- */
+.rw-app .docs-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-s);
+  margin: 0 0 var(--sp-l);
+  color: var(--ink-3);
+  font-size: .69rem;
+  font-weight: 650;
+  font-stretch: 88%;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.rw-app .docs-breadcrumbs a { color: var(--ink-3); text-decoration: none; }
+@media (hover: hover) {
+  .rw-app .docs-breadcrumbs a:hover { color: var(--thread-text); }
+}
+.rw-app .docs-breadcrumbs a:active { color: var(--thread-text); }
+
+/* --- layout --- */
+.rw-app .docs-layout {
+  display: grid;
+  /* The article column is exactly as wide as the panel can be, so the pair
+     centres as one block instead of stranding a gutter inside the card. */
+  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
+  align-items: start;
+  justify-content: center;
+  gap: clamp(18px, 3vw, 30px);
+}
+.rw-app .docs-rails {
+  position: sticky;
+  top: var(--sp-l);
+  display: grid;
+  gap: var(--sp-l);
+  overflow-y: auto;
+  max-height: calc(100vh - var(--sp-xl));
+  scrollbar-width: thin;
+}
+
+/* --- guide switcher --- */
+.rw-app .guide-nav {
+  overflow: hidden;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate);
+}
+.rw-app .guide-nav-title,
+.rw-app .warp-rail-title {
+  display: block;
+  color: var(--ink-3);
+  font-size: .655rem;
+  font-weight: 700;
+  font-stretch: 86%;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.rw-app .guide-nav-title {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--seam-soft);
+}
+.rw-app .guide-nav-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+}
+.rw-app .guide-nav-list li { margin: 0; }
+.rw-app .guide-nav-list a {
+  display: block;
+  padding: 7px 9px;
+  border-radius: var(--r-s);
+  color: var(--ink-2);
+  font-size: .78rem;
+  font-weight: 600;
+  font-stretch: 92%;
+  line-height: 1.3;
+  text-decoration: none;
+}
+@media (hover: hover) {
+  .rw-app .guide-nav-list a:hover { background: var(--well); color: var(--ink); }
+}
+.rw-app .guide-nav-list a:active { background: var(--well); color: var(--ink); }
+.rw-app .guide-nav-list a[aria-current="page"] {
+  background: var(--warp-lines), color-mix(in oklab, var(--thread) 10%, var(--well));
+  color: var(--thread-text);
+}
+
+/* --- warp rail: the signature --- */
+.rw-app .warp-rail { padding-inline: 2px; }
+.rw-app .warp-rail-title { padding: 0 0 var(--sp-s) 2.35rem; }
+.rw-app .warp-rail-list {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* the warp thread the whole outline hangs from */
+.rw-app .warp-rail-list::before {
+  position: absolute;
+  inset-block: .55rem;
+  left: .4rem;
+  width: 1px;
+  background: var(--seam);
+  content: "";
+}
+.rw-app .warp-rail-list li { margin: 0; }
+.rw-app .warp-rail-list a {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.2rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: .45rem;
+  padding: .3rem 0 .3rem 1.15rem;
+  color: var(--ink-3);
+  font-size: .755rem;
+  font-weight: 600;
+  font-stretch: 90%;
+  line-height: 1.35;
+  text-decoration: none;
+}
+/* the weft pick: one crossing thread, travelling down the warp as you read */
+.rw-app .warp-pick {
+  position: absolute;
+  top: .84rem;
+  left: 0;
+  width: .95rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--thread);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform .3s var(--ease);
+}
+.rw-app .warp-index {
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: .66rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.rw-app .warp-label { min-width: 0; }
+@media (hover: hover) {
+  .rw-app .warp-rail-list a:hover { color: var(--ink); }
+  .rw-app .warp-rail-list a:hover .warp-index { color: var(--weft); }
+}
+.rw-app .warp-rail-list a:active { color: var(--ink); }
+.rw-app .warp-rail-list a:active .warp-index { color: var(--weft); }
+.rw-app .warp-rail-list a[aria-current="true"] { color: var(--ink); font-weight: 700; }
+.rw-app .warp-rail-list a[aria-current="true"] .warp-index { color: var(--weft); }
+.rw-app .warp-rail-list a[aria-current="true"] .warp-pick { transform: scaleX(1); }
+
+/* --- article --- */
+.rw-app .docs-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-l);
+  background: var(--plate);
+  box-shadow: 0 18px 50px -38px rgb(0 0 0 / .7);
+}
+.rw-app .docs-article {
+  padding: var(--article-pad);
+  /* long-form opens up; the surrounding app chrome stays condensed */
+  font-stretch: 100%;
+}
+.rw-app .docs-article > * { max-width: var(--measure); }
+.rw-app .docs-article h1,
+.rw-app .docs-article h2,
+.rw-app .docs-article h3 {
+  color: var(--ink);
+  letter-spacing: -.022em;
+  line-height: 1.14;
+  text-wrap: balance;
+}
+.rw-app .docs-article h1 {
+  max-width: 17ch;
+  margin: 0 0 var(--sp-l);
+  font-size: clamp(2rem, 1.4rem + 2.6vw, 2.9rem);
+  font-weight: 780;
+  font-stretch: 92%;
+}
+.rw-app .docs-article h2 {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: var(--sp-s);
+  align-items: baseline;
+  margin: clamp(44px, 7vw, 68px) 0 var(--sp-m);
+  font-size: clamp(1.3rem, 1.08rem + .9vw, 1.6rem);
+  font-weight: 720;
+  font-stretch: 96%;
+  scroll-margin-top: 5.5rem;
+}
+.rw-app .docs-section-index {
+  color: var(--weft);
+  font: 600 .7rem/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.rw-app .docs-article h3 {
+  margin: var(--sp-xl) 0 var(--sp-s);
+  font-size: 1.02rem;
+  font-weight: 700;
+  scroll-margin-top: 5.5rem;
+}
+/* the standfirst: the paragraph that answers "is this the right page?" */
+.rw-app .docs-article h1 + p {
+  margin: 0;
+  padding-bottom: var(--sp-xl);
+  border-bottom: 1px solid var(--seam-soft);
+  color: var(--ink-2);
+  font-size: 1.06rem;
+  line-height: 1.6;
+}
+.rw-app .docs-article p,
+.rw-app .docs-article li {
+  color: var(--ink-2);
+  line-height: 1.72;
+}
+.rw-app .docs-article p { margin-block: var(--sp-l); }
+.rw-app .docs-article ul,
+.rw-app .docs-article ol { margin-block: var(--sp-l); padding-inline-start: 1.15rem; }
+.rw-app .docs-article li { margin-block: var(--sp-s); padding-inline-start: .3rem; }
+.rw-app .docs-article li::marker { color: var(--seam-strong); }
+.rw-app .docs-article strong { color: var(--ink); font-weight: 700; }
+.rw-app .docs-article a {
+  color: var(--thread-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--thread) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .17em;
+}
+@media (hover: hover) {
+  .rw-app .docs-article a:hover { text-decoration-color: var(--thread); }
+}
+.rw-app .docs-article a:active { text-decoration-color: var(--thread); }
+
+.rw-app .docs-disclosure {
+  max-width: var(--measure-wide);
+  margin-block: 0 var(--sp-xl);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+}
+.rw-app .docs-disclosure > summary {
+  padding: var(--sp-m) var(--sp-l);
+  color: var(--ink);
+  font-size: .86rem;
+  font-weight: 700;
+  line-height: 1.45;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .rw-app .docs-disclosure > summary:hover { color: var(--thread-text); }
+}
+.rw-app .docs-disclosure > summary:active { color: var(--thread-text); }
+.rw-app .docs-disclosure[open] > summary { border-bottom: 1px solid var(--seam-soft); }
+.rw-app .docs-disclosure > :not(summary) { margin-inline: var(--sp-l); }
+.rw-app .docs-disclosure > :last-child { margin-bottom: var(--sp-l); }
+
+/* The hub's workflow chooser is the reason most people open the guides, so it
+   reads as a set of destinations rather than a bulleted list. Keyed off the
+   heading's own id: if that section is renamed the list simply renders plain.
+   The marker is emptied rather than removed with `list-style: none`, which is
+   what strips list semantics from VoiceOver. */
+.rw-app .docs-article #choose-a-workflow + ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--sp-m);
+  max-width: var(--measure-wide);
+  margin-block: var(--sp-l);
+  padding-inline-start: 0;
+}
+.rw-app .docs-article #choose-a-workflow + ul li {
+  margin: 0;
+  padding: var(--sp-l);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+  font-size: .84rem;
+  line-height: 1.6;
+}
+.rw-app .docs-article #choose-a-workflow + ul li::marker { content: ""; }
+.rw-app .docs-article #choose-a-workflow + ul a {
+  display: block;
+  margin-bottom: .15rem;
+  font-size: .95rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* --- code, figures, quotes: allowed past the prose measure --- */
+.rw-app .docs-article code {
+  padding: .1rem .3rem;
+  border: 1px solid var(--seam-soft);
+  border-radius: 4px;
+  background: var(--well);
+  color: var(--weft);
+  font: .85em/1.5 var(--mono);
+}
+.rw-app .docs-article :not(pre) > code { overflow-wrap: anywhere; }
+.rw-app .docs-article pre {
+  overflow-x: auto;
+  max-width: var(--measure-wide);
+  margin-block: var(--sp-xl);
+  padding: var(--sp-l);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--well);
+}
+.rw-app .docs-article pre code { padding: 0; border: 0; background: transparent; color: var(--ink-2); }
+.rw-app .docs-article blockquote {
+  margin-block: var(--sp-xl);
+  padding: var(--sp-xs) 0 var(--sp-xs) var(--sp-l);
+  border-left: 2px solid var(--thread);
+  color: var(--ink-2);
+}
+.rw-app .docs-article blockquote > :first-child { margin-top: 0; }
+.rw-app .docs-article blockquote > :last-child { margin-bottom: 0; }
+.rw-app .docs-article table {
+  width: 100%;
+  max-width: var(--measure-wide);
+  border-spacing: 0;
+  border-collapse: collapse;
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.rw-app .docs-article th,
+.rw-app .docs-article td {
+  padding: var(--sp-s);
+  border: 1px solid var(--seam-soft);
+  color: var(--ink-2);
+  text-align: left;
+  vertical-align: top;
+}
+.rw-app .docs-article th { background: var(--well); color: var(--ink); }
+.rw-app .docs-article img { max-width: 100%; height: auto; }
+.rw-app .docs-screenshot { max-width: var(--measure-wide); margin-block: var(--sp-xl); }
+.rw-app .docs-screenshot picture { display: block; }
+.rw-app .docs-screenshot picture[data-docs-screenshot-theme="dark"] { display: none; }
+:root[data-theme="dark"] .rw-app .docs-screenshot picture[data-docs-screenshot-theme="light"] { display: none; }
+:root[data-theme="dark"] .rw-app .docs-screenshot picture[data-docs-screenshot-theme="dark"] { display: block; }
+.rw-app .docs-screenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--well);
+}
+.rw-app .docs-screenshot figcaption {
+  margin-top: var(--sp-s);
+  color: var(--ink-3);
+  font-size: .72rem;
+  font-stretch: 92%;
+  line-height: 1.5;
+}
+.rw-app .docs-screenshot-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-l);
+  max-width: var(--measure-wide);
+  margin-block: var(--sp-xl);
+}
+.rw-app .docs-screenshot-pair .docs-screenshot { margin-block: 0; }
+@media (max-width: 600px) {
+  .rw-app .docs-screenshot-pair { grid-template-columns: 1fr; }
+}
+
+/* --- closing call to action --- */
+.rw-app .docs-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-l);
+  padding: var(--sp-l) clamp(24px, 4.5vw, 46px);
+  border-top: 1px solid var(--seam);
+  background: var(--warp-lines), color-mix(in oklab, var(--thread) 4%, var(--plate-2));
+}
+.rw-app .docs-cta h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.rw-app .docs-cta p { margin: 3px 0 0; color: var(--ink-3); font-size: .78rem; }
+.rw-app .docs-cta-actions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-s); }
+.rw-app .docs-cta .btn { text-decoration: none; }
+
+/* --- responsive --- */
+@media (max-width: 860px) {
+  .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
+  .rw-app .docs-rails { position: static; overflow: visible; max-height: none; gap: var(--sp-s); }
+  /* Both rails become horizontal strips here, so the switcher drops its card
+     chrome and the two read as one navigation zone rather than two widgets. */
+  .rw-app .guide-nav { border: 0; border-radius: 0; background: none; }
+  /* the breadcrumb sitting one line above already reads ". . . / Guides" */
+  .rw-app .guide-nav-title { display: none; }
+
+  /* Shared strip behaviour. A scrollbar under each strip stacked two grey bars
+     into the first screen, so the overflow is signalled by a fade at the edge
+     the content runs past instead - a clipped label reads as "keep going"
+     rather than as a rendering fault. The trailing padding is what the last
+     item scrolls into, so nothing sits permanently under the fade. */
+  .rw-app .guide-nav-list,
+  .rw-app .warp-rail-list {
+    display: flex;
+    overflow-x: auto;
+    padding-inline: 0 2.75rem;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 2.75rem), transparent);
+  }
+  .rw-app .guide-nav-list::-webkit-scrollbar,
+  .rw-app .warp-rail-list::-webkit-scrollbar { display: none; }
+  .rw-app .guide-nav-list li,
+  .rw-app .warp-rail-list li { flex: none; scroll-snap-align: start; }
+
+  .rw-app .guide-nav-list { gap: var(--sp-xs); padding-block: 0; }
+  .rw-app .guide-nav-list a { white-space: nowrap; }
+  /* the warp weave reads as cloth across a full-width row; at chip width it is
+     just noise, so the current guide takes a flat dye instead. The dye stops at
+     12%: --thread-text over it is 4.62:1 on the weakest accent, and 18% put the
+     default accent under 4.5:1 with nothing else to lift it - the desktop row
+     has the weave to read against, this chip has only the dye. */
+  .rw-app .guide-nav-list a[aria-current="page"] {
+    background: color-mix(in oklab, var(--thread) 12%, var(--well));
+  }
+
+  /* The warp turns with the cloth: the threads lie along the top edge. The
+     numbering stays on - it is what keeps the outline legible as an outline
+     next to the chips above, which are the same words in the same direction. */
+  .rw-app .warp-rail {
+    overflow: hidden;
+    padding: var(--sp-s) 0 0;
+    border-top: 1px solid var(--seam-soft);
+  }
+  .rw-app .warp-rail-title { padding: 0 0 var(--sp-xs); }
+  .rw-app .warp-rail-list { gap: var(--sp-m); padding-bottom: .4rem; }
+  .rw-app .warp-rail-list::before { inset: auto 0 2px; width: auto; height: 1px; }
+  .rw-app .warp-rail-list li { max-width: 15rem; }
+  .rw-app .warp-rail-list a {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: .4rem;
+    padding: 0 0 .5rem;
+    white-space: nowrap;
+  }
+  .rw-app .warp-rail-list .warp-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rw-app .warp-pick {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+  }
+}
+
+@media (max-width: 520px) {
+  .rw-app .docs-workbench { --article-pad: 18px; }
+  .rw-app .docs-article { padding: 22px 18px 26px; }
+  .rw-app .docs-cta { align-items: stretch; flex-direction: column; padding: 18px; }
+  .rw-app .docs-cta-actions { display: grid; grid-template-columns: 1fr; }
+  /* Commands wrap rather than scroll at this width. Scrolled sideways they cut
+     off mid-flag with nothing to say so - and these guides exist to be copied,
+     so a command that looks complete but is not is the worst thing on the page.
+     Wrapping also keeps a sideways scroller out of the middle of a page the
+     reader is scrolling down. */
+  .rw-app .docs-article pre {
+    padding: var(--sp-m);
+    overflow-x: visible;
+  }
+  .rw-app .docs-article table { display: block; overflow-x: auto; }
+  /* No hanging indent for wrapped lines: `text-indent` on a `pre` applies once
+     to the block, not per line, so it shifts every real line of the command as
+     well and invents nesting that is not in the source. The trailing `\` is
+     what marks a continuation here. */
+  .rw-app .docs-article pre code {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:has(.docs-workbench) { scroll-behavior: auto; }
+  .rw-app .warp-pick { transition: none; }
+}

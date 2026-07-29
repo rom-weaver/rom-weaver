@@ -5,30 +5,30 @@
       {
         "name": "HTML shell",
         "path": "index.html",
-        "expectedRawBytes": 56000,
-        "maxRawBytes": 58800,
-        "expectedBrotliBytes": 10800,
-        "maxBrotliBytes": 11350
+        "expectedRawBytes": 56600,
+        "maxRawBytes": 59400,
+        "expectedBrotliBytes": 10900,
+        "maxBrotliBytes": 11450
       },
       {
         "name": "JavaScript",
         "directory": "assets",
         "extension": ".js",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 1275000,
-        "maxRawBytes": 1339000,
-        "expectedBrotliBytes": 327000,
-        "maxBrotliBytes": 343500
+        "expectedRawBytes": 1493500,
+        "maxRawBytes": 1568500,
+        "expectedBrotliBytes": 380000,
+        "maxBrotliBytes": 399000
       },
       {
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 138000,
-        "maxRawBytes": 145000,
-        "expectedBrotliBytes": 21400,
-        "maxBrotliBytes": 22500
+        "expectedRawBytes": 150200,
+        "maxRawBytes": 157800,
+        "expectedBrotliBytes": 23200,
+        "maxBrotliBytes": 24350
       },
       {
         "name": "WASM",

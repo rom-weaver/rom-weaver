@@ -16,7 +16,12 @@ import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./
 import { Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
-import { SampleTutorial, SampleTutorialStart, type SampleTutorialStep } from "./components/ds/sample-tutorial.tsx";
+import {
+  SampleTutorial,
+  SampleTutorialStart,
+  type SampleTutorialStep,
+  useGuidedSampleStart,
+} from "./components/ds/sample-tutorial.tsx";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { CreatePatchFormView, type CreatePatchFormViewModel } from "./create-patch-form-view.tsx";
@@ -470,6 +475,10 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       setSampleLoading(false);
     }
   };
+  useGuidedSampleStart("create", () => {
+    setSampleTutorialActive(true);
+    void loadCreateSample();
+  });
   const swapCreateSources = () => {
     const workflow = stagedCreateWorkflowRef.current;
     const bothStaged = !!workflow && originalState?.status === "ready" && modifiedState?.status === "ready";

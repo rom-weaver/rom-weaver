@@ -225,13 +225,15 @@ jobs:
         if: steps.release-pr.outputs.found == 'true'
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
-      - name: Build production webapp for screenshots
+      - name: Build production webapp for docs screenshots
         if: steps.release-pr.outputs.found == 'true'
         env:
           ROM_WEAVER_CHANNEL: prod
         run: npm --prefix packages/rom-weaver-webapp run build
 
-      - name: Capture release screenshots
+      # capture:screenshots loads first-weave.zip and the first-create sample
+      # assets, so the published guides show reproducible, copyright-safe data.
+      - name: Capture docs screenshots from bundled samples
         if: steps.release-pr.outputs.found == 'true'
         run: |
           set -euo pipefail
@@ -252,7 +254,7 @@ jobs:
           fi
           npm --prefix packages/rom-weaver-webapp run capture:screenshots
 
-      - name: Commit release screenshots
+      - name: Commit docs screenshots
         if: steps.release-pr.outputs.found == 'true'
         env:
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}

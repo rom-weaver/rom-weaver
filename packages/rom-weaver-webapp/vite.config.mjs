@@ -7,8 +7,11 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
+import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
+import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
+import { readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
@@ -18,6 +21,22 @@ const repoRoot = path.resolve(rootDir, "../..");
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
+const docsScreenshotNames = [
+  "create-desktop-dark.png",
+  "create-desktop-light.png",
+  "create-mobile-dark.png",
+  "create-mobile-light.png",
+  "first-sample-hello-world.png",
+  "first-sample-modified-world.png",
+  "first-sample-modified-rom.png",
+  "weave-desktop-dark.png",
+  "weave-desktop-light.png",
+  "weave-mobile-dark.png",
+  "weave-mobile-light.png",
+];
+const docsScreenshotSources = Object.fromEntries(
+  docsScreenshotNames.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),
+);
 
 // A manifest's icons are read at install time, so an installed PWA's icon can
 // only follow the build channel - unlike the in-app mark, which follows the
@@ -39,6 +58,7 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/logo.svg": channelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
   "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
+  ...docsScreenshotSources,
 });
 const generatedSampleAssetPaths = new Set([
   "/first-create.zip",
@@ -293,6 +313,7 @@ const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://rom-weaver.com/weave</loc></url>
   <url><loc>https://rom-weaver.com/create</loc></url>
+${DOC_ROUTES.map(({ slug }) => `  <url><loc>https://rom-weaver.com/${slug}</loc></url>`).join("\n")}
 </urlset>
 `;
 
@@ -376,6 +397,21 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         WORKFLOW_SEO_ROUTES.creator,
       );
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
+      for (const route of DOC_ROUTES) {
+        const docsShell = prerenderedShells.get(route.slug);
+        if (!docsShell) throw new Error(`rom-weaver-static-assets: no prerendered shell for ${route.slug}`);
+        const routeShellHtml = withRoutePreloadLinks(
+          indexHtml.replace(patcherRoot, PRERENDER_ROOT(docsShell)),
+          routePreloadLinks.get("docs"),
+        );
+        const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
+        const extensionlessPath = path.join(distDir, `${route.slug}.html`);
+        const directoryIndexPath = path.join(distDir, route.slug, "index.html");
+        fs.mkdirSync(path.dirname(extensionlessPath), { recursive: true });
+        fs.mkdirSync(path.dirname(directoryIndexPath), { recursive: true });
+        fs.writeFileSync(extensionlessPath, docsHtml);
+        fs.writeFileSync(directoryIndexPath, docsHtml);
+      }
       for (const [slug, html] of [
         ["weave", weaveHtml],
         ["create", createHtml],
@@ -552,20 +588,17 @@ const writeChangelogAsset = () => {
 // to drift. The client hydrates the shell in place.
 const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
 
-// Which prerendered variant a dev request gets, mirroring readWorkflowViewFromPath
-// in webapp-controller.ts: the last path segment picks the workflow. Only the
-// creator has a shell of its own (the build emits create.html and
-// create/index.html from it); trim and tools inherit the patcher markup, exactly
-// as writeWebappStaticAssets emits them.
-const devPrerenderView = (url) => {
-  const segments = String(url || "")
-    .split(/[?#]/)[0]
-    .toLowerCase()
-    .split("/")
-    .filter(Boolean);
+// Which prerendered variant a dev request gets, mirroring the app router.
+const devPrerenderRoute = (url) => {
+  const pathname = String(url || "").split(/[?#]/)[0];
+  const segments = pathname.toLowerCase().split("/").filter(Boolean);
   if (segments.at(-1) === "index.html") segments.pop();
   const slug = segments.at(-1) || "";
-  return slug === "create" || slug === "create.html" ? "creator" : "patcher";
+  if (segments.includes("docs")) return { docsSlug: readDocsSlugFromPathname(pathname), view: "docs" };
+  return {
+    docsSlug: "docs",
+    view: slug === "create" || slug === "create.html" ? "creator" : "patcher",
+  };
 };
 
 const prerenderWebappShell = (prerenderedShells) => ({
@@ -586,8 +619,9 @@ const prerenderWebappShell = (prerenderedShells) => ({
       // production locally. Build renders the creator variant too, which
       // writeWebappStaticAssets emits as a second static entry point.
       if (ctx.server) {
-        const view = devPrerenderView(ctx.originalUrl ?? ctx.path);
-        const shell = await prerender.renderLandingShellWithServer(ctx.server, view);
+        const route = devPrerenderRoute(ctx.originalUrl ?? ctx.path);
+        const shell = await prerender.renderLandingShellWithServer(ctx.server, route.view, false, route.docsSlug);
+        const routeHtml = route.view === "docs" ? html.replace("<head>", '<head>\n    <base href="/" />') : html;
         // Production ships the bundled CSS as a render-blocking <link>, so its
         // prerendered shell paints styled. Dev serves CSS as HMR'd JS modules
         // that only apply after the bundle runs, which would flash the shell
@@ -597,7 +631,7 @@ const prerenderWebappShell = (prerenderedShells) => ({
         // them on a full reload; until then the HMR'd <style> (appended after
         // them, so it wins) carries the change and a *deleted* rule lingers.
         return {
-          html: html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(shell)),
+          html: routeHtml.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(shell)),
           tags: ["/src/webapp/style.css", "/src/webapp/design-system/index.css"].map((href) => ({
             attrs: { href: `${href}?direct`, rel: "stylesheet" },
             injectTo: "head",
@@ -605,12 +639,19 @@ const prerenderWebappShell = (prerenderedShells) => ({
           })),
         };
       }
-      const patcherShell = await prerender.renderLandingShell("patcher");
-      const creatorShell = await prerender.renderLandingShell("creator");
-      const notFoundShell = await prerender.renderLandingShell("patcher", true);
-      prerenderedShells.set("patcher", patcherShell);
-      prerenderedShells.set("creator", creatorShell);
-      prerenderedShells.set("notFound", notFoundShell);
+      // One SSR server renders every shell the build needs; spinning one up per
+      // shell would cost more than the rendering does.
+      const patcherShell = await prerender.withPrerenderServer(async (server) => {
+        const render = (view, notFound, docsSlug) =>
+          prerender.renderLandingShellWithServer(server, view, notFound, docsSlug);
+        prerenderedShells.set("patcher", await render("patcher"));
+        prerenderedShells.set("creator", await render("creator"));
+        prerenderedShells.set("notFound", await render("patcher", true));
+        for (const route of DOC_ROUTES) {
+          prerenderedShells.set(route.slug, await render("docs", false, route.slug));
+        }
+        return prerenderedShells.get("patcher");
+      });
       return html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(patcherShell));
     },
     order: "post",
@@ -632,6 +673,7 @@ const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
 
 const WORKFLOW_ROUTE_MODULES = {
   creator: "src/public/react/create-patch-form.tsx",
+  docs: "src/webapp/docs-page.tsx",
   patcher: "src/public/react/apply-patch-form.tsx",
   tools: "src/webapp/components/tools-form.tsx",
   trim: "src/public/react/trim-form.tsx",
@@ -800,6 +842,7 @@ export default defineConfig(({ command }) => {
       ],
     },
     plugins: [
+      docsVirtualModule(),
       serveRootStaticAssets(appChannel, appChannelLabel),
       serveChangelogAsset(),
       deferDevHotUpdates(),

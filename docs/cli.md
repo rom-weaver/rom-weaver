@@ -344,9 +344,9 @@ to `MODIFIED`, and the second changes `WORLD` to `ROM`. The final ROM displays
 `e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`.
 Open the result in any NES emulator to run it.
 
-| Original ROM | After the first patch |
-| :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) |
+| Original ROM | After the first patch | After both patches |
+| :---: | :---: | :---: |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) | ![The sample ROM displaying MODIFIED ROM after both patches](../packages/rom-weaver-webapp/design/first-sample-modified-rom.png) |
 
 ## Common workflows
 
@@ -614,6 +614,8 @@ naming. The machine-readable schema is
 [`rom-weaver-bundle-v1.schema.json`](rom-weaver-bundle-v1.schema.json); its `$id`
 resolves to the public GitHub copy at
 `https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json`.
+For an end-to-end release workflow in either the Weave webapp or terminal,
+start with [Create and share a patch bundle](guides/create-bundles.md).
 Print the current schema to stdout with `bundle schema`, then redirect it to a
 file or point an editor at it:
 

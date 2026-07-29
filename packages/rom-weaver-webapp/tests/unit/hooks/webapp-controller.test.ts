@@ -99,6 +99,17 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/rom-weaver/weave");
   });
 
+  it("keeps nested docs routes and returns to the app root", () => {
+    window.history.replaceState({}, "", "/rom-weaver/docs/apply-rom-patches");
+    const controller = createController();
+    expect(controller.getState().currentView).toBe("docs");
+    expect(readWorkflowViewFromPath()).toBe("docs");
+    expect(window.location.pathname).toBe("/rom-weaver/docs/apply-rom-patches");
+
+    controller.selectView("creator");
+    expect(window.location.pathname).toBe("/rom-weaver/create");
+  });
+
   it("preserves URL session parameters without emitting hash routes", () => {
     window.history.replaceState({}, "", "/weave?bundle=first-weave.zip");
     const controller = createController();
@@ -179,5 +190,39 @@ describe("createWebappRootController over the vanilla store", () => {
     const session = controller.getState().patcherSession;
     expect(session.romFilePresent).toBe(true);
     expect(session.patchCount).toBe(1);
+  });
+
+  // Reading a guide must not decide where the site root lands: docs is a
+  // document route, not a workflow tab with state to resume.
+  it("never stores the guides as the tab to resume", () => {
+    const storage = createStorage();
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+
+    controller.selectView("creator");
+    expect(storage.getItem("rom-weaver-active-view")).toBe("creator");
+
+    controller.selectView("docs");
+    expect(controller.getState().currentView).toBe("docs");
+    expect(storage.getItem("rom-weaver-active-view")).toBe("creator");
+  });
+
+  it("ignores a guides value stored before that rule existed", () => {
+    const storage = createStorage();
+    storage.setItem("rom-weaver-active-view", "docs");
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+
+    expect(controller.getState().currentView).toBe("patcher");
   });
 });

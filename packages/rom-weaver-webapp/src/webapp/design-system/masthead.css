@@ -36,6 +36,9 @@
   view-transition-name: vt-thumb;
 }
 html.vt-theme .mode-thumb { view-transition-name: none !important; }
+/* No workflow is selected while a guide is open, so the thumb has nothing to
+   sit under. Hidden rather than parked on a tab that is not current. */
+.rw-app .mode-rail:not(:has(.mode[aria-selected="true"])) .mode-thumb { opacity: 0; }
 /* the tab labels get their own groups so they PAINT ABOVE the sliding thumb
    during the mode-switch transition - without this the thumb's group renders
    over the root snapshot and the orange briefly covers the tab text */
@@ -43,6 +46,7 @@ html.vt-theme .mode-thumb { view-transition-name: none !important; }
 .rw-app .mode-rail .mode:nth-of-type(2) { view-transition-name: vt-tab-2; }
 .rw-app .mode-rail .mode:nth-of-type(3) { view-transition-name: vt-tab-3; }
 .rw-app .mode-rail .mode:nth-of-type(4) { view-transition-name: vt-tab-4; }
+.rw-app .mode-rail .mode:nth-of-type(5) { view-transition-name: vt-tab-5; }
 html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* where CSS anchors exist, the thumb pins itself to the selected tab -
    placement survives resize/font-swap with no JS measuring at all */

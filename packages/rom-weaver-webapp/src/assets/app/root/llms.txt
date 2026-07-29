@@ -6,6 +6,11 @@
 
 - [Apply ROM patches](https://rom-weaver.com/weave): Apply patches with format detection, checksum validation, and ordered patch chains.
 - [Create ROM patches](https://rom-weaver.com/create): Create patches with format-aware settings and distributable bundles.
+- [Documentation](https://rom-weaver.com/docs): Step-by-step guides plus the project documentation index.
+- [CLI and installation](https://rom-weaver.com/docs/cli): Install rom-weaver, run the first sample, and use the complete command reference.
+- [Create bundles](https://rom-weaver.com/docs/create-bundles): Package an ordered patch workflow in the Weave webapp or CLI.
+- [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
+- [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
 
 ## Documentation
 

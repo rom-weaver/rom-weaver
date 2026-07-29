@@ -1,4 +1,5 @@
 import { coverageConfigDefaults, defineConfig } from "vitest/config";
+import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 
 // Coverage is collected by the v8 provider in browser mode (V8 precise coverage
 // over CDP - low overhead, not source instrumentation). It is gated on
@@ -34,6 +35,8 @@ export default defineConfig({
       runtime: "automatic",
     },
   },
+  // The docs route imports its rendered guides from `virtual:rom-weaver-docs`.
+  plugins: [docsVirtualModule()],
   publicDir: false,
   test: {
     hookTimeout: 60000,

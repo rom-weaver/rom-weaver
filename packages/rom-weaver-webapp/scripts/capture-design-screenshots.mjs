@@ -14,9 +14,15 @@ const CASES = [
   {
     name: "weave",
     route: "/weave?bundle=first-weave.zip",
-    waitFor: "The woven result will be verified against the expected output.",
+    waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
   },
-  { name: "create", route: "/create", waitFor: "Checksum from extract", click: "Start with sample assets" },
+  {
+    name: "create",
+    route: "/create",
+    waitFor: "Checksum from extract",
+    click: "Start guided Create",
+    dismissGuide: true,
+  },
 ];
 const VIEWPORTS = [
   { name: "desktop", viewport: { width: 1164, height: 100 }, deviceScaleFactor: 1, isMobile: false },
@@ -32,9 +38,18 @@ const assertNoDevBadge = async (page) => {
 };
 
 const waitForStableContent = (page) =>
-  page.waitForFunction(() => !/(Reading|Checksumming)(?:…|\.\.\.)/.test(document.body.innerText), undefined, {
-    timeout: 30_000,
-  });
+  page.waitForFunction(
+    () => {
+      if (/(Reading|Checksumming)(?:…|\.\.\.)/.test(document.body.innerText)) {
+        globalThis.__romWeaverScreenshotStableAt = undefined;
+        return false;
+      }
+      globalThis.__romWeaverScreenshotStableAt ??= performance.now();
+      return performance.now() - globalThis.__romWeaverScreenshotStableAt >= 500;
+    },
+    undefined,
+    { polling: 50, timeout: 30_000 },
+  );
 
 const capture = async () => {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -54,10 +69,14 @@ const capture = async () => {
           const page = await context.newPage();
           await page.goto(pageUrl(captureCase.route), { waitUntil: "domcontentloaded" });
           await page.locator("body").waitFor({ state: "visible" });
-          await assertNoDevBadge(page);
           if (captureCase.click) await page.getByRole("button", { name: captureCase.click, exact: true }).click();
           await page.getByText(captureCase.waitFor, { exact: true }).last().waitFor({ state: "visible" });
+          if (captureCase.dismissGuide) await page.getByRole("button", { name: "End guide", exact: true }).click();
           await waitForStableContent(page);
+          await assertNoDevBadge(page);
+          // Chromium's full-page compositor can paint this translated, visually
+          // hidden fixed link in a later capture tile.
+          await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
           const outputPath = path.join(OUTPUT_DIR, `${captureCase.name}-${viewport.name}-${theme}.png`);
           const shot = await page.screenshot({ animations: "disabled", fullPage: true, type: "png" });
           // These are committed docs assets; Chrome's encoder leaves ~25% on
