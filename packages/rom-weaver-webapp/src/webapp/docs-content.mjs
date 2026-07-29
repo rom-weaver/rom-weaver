@@ -186,11 +186,11 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
 };
 
 /**
- * @param {{ file: string, label: string, slug: string }} source
+ * @param {{ file: string, group?: string, label: string, slug: string }} source
  * @param {string} markdown
  * @returns {Readonly<DocRoute>}
  */
-const createDocRoute = ({ file, label, slug }, markdown) => {
+const createDocRoute = ({ file, group, label, slug }, markdown) => {
   const title = markdown.match(/^#\s+(.+)$/m)?.[1];
   if (!title) throw new Error(`${file} must have one level-one heading`);
   const description = stripDoctoc(markdown)
@@ -201,7 +201,7 @@ const createDocRoute = ({ file, label, slug }, markdown) => {
   const { html, sections } = renderMarkdown(markdown, slug, file);
   return Object.freeze({
     description,
-    group: docGroupTitle(file),
+    group: group ?? docGroupTitle(file),
     html,
     label,
     sections: Object.freeze(sections),

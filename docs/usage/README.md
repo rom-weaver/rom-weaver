@@ -124,7 +124,7 @@ itself, start at the [documentation index](../README.md).
 
 ## Legal and privacy
 
-- [Notices](../legal/notices.md) covers the project license and the open-source
+- [Notices](https://rom-weaver.com/docs/notices) covers the project license and the open-source
   components in each build.
 - [Privacy](../legal/privacy.md) covers what stays on your device, what your browser
   keeps, and what leaves.

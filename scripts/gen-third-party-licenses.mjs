@@ -24,6 +24,78 @@ const WEBAPP_ROOT = path.join(REPO_ROOT, "packages", "rom-weaver-webapp");
 const WEBAPP_LOCKFILE = path.join(WEBAPP_ROOT, "package-lock.json");
 const TARGETS = new Set(["all", "cli", "webapp"]);
 const NOTICE_FILES = { combined: "NOTICE", cli: "CLI_NOTICE", webapp: "WEBAPP_NOTICE" };
+const PROJECT_NOTICE = [
+  "rom-weaver",
+  "Copyright (C) 2026 Brandon Casey and rom-weaver contributors",
+  "",
+  "First-party rom-weaver code is available under either:",
+  "",
+  "1. GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)",
+  "2. Separate commercial terms available from Brandon Casey",
+  "",
+  "You may use first-party rom-weaver code under the terms of either license. See",
+  "LICENSE and COMMERCIAL_LICENSE.md.",
+  "",
+  "Bundled third-party components remain subject to their own licenses. Release",
+  "artifacts include the applicable third-party attribution and license inventory.",
+].join("\n");
+const WEBAPP_NOTICES_PAGE = `# Notices
+
+rom-weaver is free and open-source, and it is built from other people's
+open-source work. This page says where to find the license for both.
+
+<!-- START doctoc -->
+## Table of contents
+
+- [The project license](#the-project-license)
+- [Other people's code](#other-peoples-code)
+- [The full lists](#the-full-lists)
+- [Something looks wrong](#something-looks-wrong)
+
+<!-- END doctoc -->
+
+## The project license
+
+rom-weaver is licensed under the
+[GNU Affero General Public License version 3 or later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
+The source code, the full history, the build setup, and the released files all
+live in the
+[rom-weaver repository](https://github.com/rom-weaver/rom-weaver).
+
+The license text is what actually governs your rights and obligations. This
+page is a signpost to it and changes nothing about it.
+
+## Other people's code
+
+The browser app and the command-line tool are built on open-source components:
+React, marked, nod, libarchive, chd-rs, several compression libraries, and
+everything those depend on in turn. Each of those keeps its own license and
+copyright notice.
+
+Those notices are generated from the dependencies that actually go into a
+build, rather than typed up by hand. A hand-kept list drifts out of date the
+first time somebody adds a dependency and forgets. A generated one cannot.
+
+## The full lists
+
+The [webapp notice file](/WEBAPP_NOTICE) lists everything shipped in this
+browser build. The [combined notice file](/NOTICE) adds the components used by
+the command-line tool and the shared engine underneath both.
+
+Each entry names the component, its version, its license, where the project
+lives, and the license or notice files that came with it. They are plain text,
+so release tooling, package managers, and automated license checks read
+exactly what you are reading.
+
+## Something looks wrong
+
+The generator and the dependency policy are both in the public repository. If
+a component, a copyright line, a source link, or a license looks wrong, please
+[open an issue](https://github.com/rom-weaver/rom-weaver/issues) and say which
+release version and which entry.
+
+Back to the [guide index](../usage/README.md).
+`;
 // License text file name prefixes (matched case-insensitively, files only).
 const LICENSE_FILE_RE = /^(licen[sc]e|copying|unlicense|notice)/i;
 const NO_ATTRIBUTION_FILE_RE = /(0bsd|cc0|mit[-_ ]?0|unlicense|wtfpl|public[-_ ]?domain)/i;
@@ -337,7 +409,7 @@ function removeDir(dir) {
 
 /** Build one notice containing the project terms and third-party inventory. */
 function renderNotice(rows, scope) {
-  const lines = [fs.readFileSync(path.join(REPO_ROOT, "NOTICE"), "utf8").trimEnd()];
+  const lines = [PROJECT_NOTICE];
   lines.push("");
   lines.push("Third-party components");
   lines.push("");
@@ -466,6 +538,11 @@ function main() {
       path.join(OUTPUT_DIR, NOTICE_FILES[scope]),
       renderNotice(rowsByScope[scope], scope),
     );
+  }
+  if (target === "cli") {
+    fs.rmSync(path.join(OUTPUT_DIR, "notices.md"), { force: true });
+  } else {
+    fs.writeFileSync(path.join(OUTPUT_DIR, "notices.md"), WEBAPP_NOTICES_PAGE);
   }
   for (const filename of Object.values(NOTICE_FILES)) {
     if (!scopes.some((scope) => NOTICE_FILES[scope] === filename)) {

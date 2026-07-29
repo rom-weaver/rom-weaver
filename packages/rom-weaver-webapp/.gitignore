@@ -6,4 +6,5 @@ src/wasm/*.wasm.br
 src/wasm/*.wasm.prod.sha256
 src/wasm/NOTICE
 src/wasm/WEBAPP_NOTICE
+src/wasm/notices.md
 src/wasm/third_party/
