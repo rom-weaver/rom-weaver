@@ -27,6 +27,7 @@ import {
   type CheckAlgorithm,
   type CheckField,
   isHalfRowField,
+  isHashRowField,
   isValidCheckValue,
   normalizeCheckInput,
 } from "./components/ds/check-fields.ts";
@@ -455,7 +456,10 @@ const EditableCheckRow = ({
 }) => {
   const errorId = `${id}-err`;
   return (
-    <div className={join("verification-row", isHalfRowField(field) && "ck-half")} key={`${id}:${value}`}>
+    <div
+      className={join("verification-row", isHalfRowField(field) && "ck-half", isHashRowField(field) && "ck-hash")}
+      key={`${id}:${value}`}
+    >
       <label className="ofld-l" htmlFor={id}>
         {CHECK_LABELS[field]}
       </label>

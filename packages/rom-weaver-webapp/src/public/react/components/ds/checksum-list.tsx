@@ -17,9 +17,15 @@ import { useClipboardCopy } from "./use-clipboard-copy.ts";
 const FIT_VALUE_MIN_CHARS = 16;
 
 /* The two short rows (crc32 + byte count) carry the ck-half marker so wide
-   drawers can pair them onto one grid row; every other label keeps the full
-   row. Derived from the label so real and pending rows agree. */
-const isHalfRowLabel = (label: ReactNode): boolean => label === "CRC32" || label === "BYTES";
+   drawers can pair them onto one grid row; the two long hashes (md5 + sha-1)
+   carry ck-hash, which only pairs once the drawer is wide enough for a
+   40-character value to stay legible at half width. Every other label keeps the
+   full row. Derived from the label so real and pending rows agree. */
+const pairMarkerClass = (label: ReactNode): string | false => {
+  if (label === "CRC32" || label === "BYTES") return "ck-half";
+  if (label === "MD5" || label === "SHA-1") return "ck-hash";
+  return false;
+};
 
 /** A single label/value checksum row. Click (or Enter/Space) copies `copyValue`.
  * `mark` renders a per-row verified/mismatch verdict (expected-vs-computed rows). */
@@ -43,7 +49,7 @@ const ChecksumRow = ({
   return (
     <button
       aria-label={`Copy ${typeof label === "string" ? label : "value"}`}
-      className={join("ck mono", (bad || mark === "bad") && "bad", isHalfRowLabel(label) && "ck-half")}
+      className={join("ck mono", (bad || mark === "bad") && "bad", pairMarkerClass(label))}
       onClick={copy}
       type="button"
     >
@@ -69,7 +75,7 @@ const ChecksumRow = ({
  * shift when the hash lands). Non-interactive.
  */
 const PendingChecksumRow = ({ label, length }: { label: ReactNode; length: number }) => (
-  <div className={join("ck mono pending", isHalfRowLabel(label) && "ck-half")}>
+  <div className={join("ck mono pending", pairMarkerClass(label))}>
     <span className="ck-k">{label}</span>
     <span className={join("ck-v", length >= FIT_VALUE_MIN_CHARS && "ck-fit")}>
       <span className="pend">{"0".repeat(Math.max(1, length))}</span>
