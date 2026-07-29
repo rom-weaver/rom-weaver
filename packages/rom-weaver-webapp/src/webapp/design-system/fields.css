@@ -80,8 +80,13 @@
 .rw-app .ck-mark svg { width: 13px; height: 13px; }
 .rw-app .ck-mark.ok { color: var(--verified); }
 .rw-app .ck-mark.bad { color: var(--fault); }
-/* Reserve a fourth cell for the match mark. */
-.rw-app .ck:not(.req):has(> .ck-mark) { grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto auto; }
+/* Reserve a fourth cell for the match mark, and take its width (13px glyph +
+   gap) out of the value's fit budget so a SHA-1 shrinks instead of running
+   under the mark. */
+.rw-app .ck:not(.req):has(> .ck-mark) {
+  grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto auto;
+  --ck-v-reserve: calc(85px + 13px + var(--sp-s));
+}
 .rw-app .ck-group-head .ck-mark { margin-inline-start: var(--sp-s); vertical-align: -2px; }
 .rw-app .ck-group-head .ck-head-note { margin-inline-start: var(--sp-s); color: var(--ink-4); font-weight: 500; text-transform: none; letter-spacing: .02em; }
 /* Distinguish expected bundle values from computed readouts. */
