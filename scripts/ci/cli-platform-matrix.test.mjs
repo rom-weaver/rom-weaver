@@ -26,8 +26,8 @@ test("rejects an empty list rather than emitting a matrix with no legs", () => {
 });
 
 // The release fan-out's `plan` job passes no EVENT_NAME. If the default ever
-// became the subset, a release would publish four of the nine platform
-// packages and the other five would resolve to a version that does not exist.
+// became the subset, a release would publish one of the nine platform packages
+// and the other eight would resolve to a version that does not exist.
 test("defaults to the full matrix when no event is given", () => {
   assert.deepEqual(selectPlatformMatrix(platforms, undefined), platforms);
   assert.deepEqual(selectPlatformMatrix(platforms, ""), platforms);
@@ -42,24 +42,18 @@ test("keeps the full matrix on push and workflow_dispatch", () => {
 test("narrows to the pr-marked subset on pull_request", () => {
   const subset = selectPlatformMatrix(platforms, "pull_request");
   assert.deepEqual(
-    subset.map((platform) => platform.package).sort(),
-    ["darwin-arm64", "linux-arm64-musl", "linux-x64-gnu", "win32-x64-msvc"],
+    subset.map((platform) => platform.package),
+    ["linux-x64-gnu"],
   );
   assert.ok(subset.length < platforms.length, "the subset must actually be smaller");
 });
 
-// cli-platforms uploads ci-cli-linux-arm64-musl from this leg, cli-linux-arm64
-// downloads it, and the `rust` aggregate asserts that job succeeded whenever
-// the rust stack is selected. Dropping the leg from the subset would leave the
-// downloader failing on every pull request.
-test("the pull_request subset keeps the leg cli-linux-arm64 downloads from", () => {
-  const subset = selectPlatformMatrix(platforms, "pull_request");
-  assert.ok(subset.some((platform) => platform.package === "linux-arm64-musl"));
-});
-
 test("refuses to emit an empty matrix when nothing is marked for pull requests", () => {
   const unmarked = platforms.map(({ pr, ...rest }) => ({ ...rest, pr: false }));
-  assert.throws(() => selectPlatformMatrix(unmarked, "pull_request"), /refusing to emit an empty matrix/);
+  assert.throws(
+    () => selectPlatformMatrix(unmarked, "pull_request"),
+    /refusing to emit an empty matrix/,
+  );
 });
 
 test("every platform declares the fields the matrices consume", () => {
@@ -74,7 +68,11 @@ test("every platform declares the fields the matrices consume", () => {
     assert.equal(platform.binary.endsWith(".exe"), windows, `${platform.package} binary extension`);
     // VsDevCmd.bat puts the cross-arch MSVC toolchain on PATH; without both
     // arguments the Windows legs build for the wrong architecture or not at all.
-    assert.equal(typeof platform.msvc_arch === "string" && typeof platform.msvc_host === "string", windows, `${platform.package} MSVC arguments`);
+    assert.equal(
+      typeof platform.msvc_arch === "string" && typeof platform.msvc_host === "string",
+      windows,
+      `${platform.package} MSVC arguments`,
+    );
   }
 });
 
@@ -83,6 +81,11 @@ test("every platform declares the fields the matrices consume", () => {
 // target present in only one of them is a release that silently ships eight
 // platforms, or a package nothing ever fills with a binary.
 test("the platform list matches the published platform packages", () => {
-  const published = readdirSync(join(repoRoot, "packages/rom-weaver-cli-platforms"), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  const published = readdirSync(join(repoRoot, "packages/rom-weaver-cli-platforms"), {
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
   assert.deepEqual(platforms.map((platform) => platform.package).sort(), published);
 });

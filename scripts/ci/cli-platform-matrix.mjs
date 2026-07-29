@@ -9,14 +9,14 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 export function readPlatformMatrix(file = resolve(repoRoot, ".github/cli-platforms.json")) {
   const matrix = JSON.parse(readFileSync(file, "utf8"));
-  if (!Array.isArray(matrix) || matrix.length === 0) throw new Error(`${file} lists no CLI platforms; refusing to emit an empty matrix`);
+  if (!Array.isArray(matrix) || matrix.length === 0)
+    throw new Error(`${file} lists no CLI platforms; refusing to emit an empty matrix`);
   return matrix;
 }
 
-// Pull requests build one representative leg per OS family - the entries marked
-// `"pr": true` - instead of all nine. Every push to main still builds the full
-// set, and every main commit is a release candidate, so nothing ever ships on
-// coverage a pull request skipped.
+// Pull requests build one representative Linux release package - the entry
+// marked `"pr": true` - instead of repeating the macOS and Windows builds that
+// every push to main runs before anything can ship.
 //
 // Only `pull_request` narrows, and an absent EVENT_NAME means the full matrix:
 // a caller that does not pass one (the release fan-out's `plan` job in
@@ -24,7 +24,8 @@ export function readPlatformMatrix(file = resolve(repoRoot, ".github/cli-platfor
 export function selectPlatformMatrix(matrix, eventName) {
   if (eventName !== "pull_request") return matrix;
   const subset = matrix.filter((platform) => platform.pr === true);
-  if (subset.length === 0) throw new Error('no CLI platform is marked "pr": true; refusing to emit an empty matrix');
+  if (subset.length === 0)
+    throw new Error('no CLI platform is marked "pr": true; refusing to emit an empty matrix');
   return subset;
 }
 

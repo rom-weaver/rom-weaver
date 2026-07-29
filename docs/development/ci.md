@@ -246,18 +246,19 @@ from source (~6.5 min). Merging the release pull request is what sets
 ## `ci.yml` - the required gate
 
 ```text
-changes ── changed paths -> rust / webapp / security / repo_lint / docker legs
+changes ── changed paths -> rust / webapp / wasm_runtime / security / repo_lint / docker legs
 
              ┌── rust-host ─────┐
 changes ─────┼── rust-macos ────┼── rust (aggregate check name)
-             ├── rust-windows ──┤
-             └── cli-platforms ─┘ (9 release targets; 4 on a pull request)
+             ├── rust-windows ──┤   (macOS/Windows on main, not PRs)
+             └── cli-platforms ─┘   (9 release targets; 1 on a pull request)
 
-         ┌── webapp-static ───┐
-         ├── webapp-browser ──┼── webapp (aggregate check name)
-         │   (2 shards)       │
-         ├── webapp-wasm-e2e ─┤
-         ├── webapp-webkit-e2e┘
+         ┌── webapp-static ───────┐
+         ├── webapp-browser ──────┼── webapp (aggregate check name)
+         │   (2 shards)           │
+         ├── webapp-wasm-browser ─┤ (runtime inputs only)
+         ├── webapp-e2e ──────────┤
+         ├── webapp-webkit-e2e ───┘
 wasm ────┤
          └── deploy ── Cloudflare Pages, one leg per channel (non-gating)
                  ↑
@@ -279,12 +280,15 @@ security ── advisories (warn only, always green)
 ### Jobs
 
 - **`changes`** classifies the pull request or push diff once. Rust and
-  vendored C changes select Rust, webapp integration, and the CLI image build -
+  vendored C changes select Rust, webapp integration, and the direct WASM
+  browser suite -
   except Rust test, bench, and example sources, which select the Rust jobs
   alone because they enter neither the WASM module nor the release binary;
-  webapp-only changes select the webapp while restoring the exact cached WASM
-  module; dependency manifests select the advisory scanners; workflows, composite
-  actions, shell scripts, Dockerfiles, and Markdown select the plumbing lint.
+  browser runtime/worker/storage changes additionally select that direct WASM
+  suite, while UI-only changes do not. Webapp-only changes restore the exact
+  cached WASM module; dependency manifests select the advisory scanners;
+  workflows, composite actions, shell scripts, Dockerfiles, and Markdown select
+  the plumbing lint.
   Documentation changes select only that lint stack, not the expensive compiled
   stacks. Manual runs and changes to
   CI, coverage, the toolchain, or the classifier run everything. It also plans
@@ -303,11 +307,14 @@ security ── advisories (warn only, always green)
   blocks, which is why both are in its `tools:` list.
 - **`docker`** builds the CLI and webapp images **from source**, so a broken
   Dockerfile fails here rather than at the moment it
-  blocks a release publish. The CLI leg runs for Cargo workspace sources and
-  manifests as well as its image plumbing, so the required check builds the
-  image whenever its binary changes. An unselected leg is absent from the
-  matrix entirely rather than starting a runner to skip its own steps, which is
-  why the required check name is the `plumbing` aggregate and not the legs.
+  blocks a release publish. A pull request selects the CLI leg for its
+  Dockerfile, Cargo manifests, toolchain configuration, and shared image
+  plumbing - not for an ordinary `.rs` edit that the Linux release-package leg
+  already compiles. A production Rust push to `main` selects it again so the
+  nightly CLI image still tracks every binary change. An unselected leg is
+  absent from the matrix entirely rather than starting a runner to skip its own
+  steps, which is why the required check name is the `plumbing` aggregate and
+  not the legs.
   Each selected image expands to one leg per architecture - amd64 on
   `ubuntu-24.04`, arm64 on `ubuntu-24.04-arm` - so nothing here runs under
   emulation; see [Multi-arch images](#multi-arch-images).
@@ -356,10 +363,11 @@ security ── advisories (warn only, always green)
   job wraps the exact artifact `deploy` ships to nightly.rom-weaver.com, so the
   image and the site are the same bundle. On `main` it pushes
   `ghcr.io/rom-weaver/rom-weaver-webapp:nightly`. The CLI equivalent
-  stays in the image-gated `docker` leg instead of starting a separate runner
-  after every Rust or webapp change. It builds per architecture like `docker`
-  above: the bundle is architecture-independent, but the image around it is not
-  (a Node.js compression stage, an Alpine runtime).
+  stays in the image-gated `docker` leg instead of starting a separate prebuilt
+  runner. Pull requests build amd64 only to prove the release COPY/compression
+  path; `main` builds amd64 and arm64 for the nightly manifest. The bundle is
+  architecture-independent, but the image around it is not (a Node.js
+  compression stage, an Alpine runtime).
 - **`docker-nightly`** and **`docker-prebuilt-nightly`** run on `main` pushes
   only. The build legs above push tagless digests; these join each image's two
   digests into the manifest list that actually claims `:nightly`, then attest
@@ -381,14 +389,12 @@ security ── advisories (warn only, always green)
   round-trips ZIP, 7z, and Z3DS; extracts fixed CHD, RVZ, TAR, and RAR fixtures;
   and creates/applies fourteen patch formats on its target architecture. Native
   arm64 runners and OS emulation cover the 32-bit x86 targets. The matrix runs
-  only when Rust or native-package inputs change. **Pull requests build four of
-  the nine** - the entries marked `pr` in
-  ([`.github/cli-platforms.json`](#githubcli-platformsjson)): one representative
-  leg per OS family plus `linux-arm64-musl`, whose artifact `cli-linux-arm64`
-  consumes. Nine legs put ~7.5 minutes of Windows and macOS compile on the
-  critical path of every Rust pull request; pushes to main and manual dispatches
-  still build all nine, and every main commit is a release candidate, so full
-  coverage always lands before a release. Both the target list
+  only when Rust or native-package inputs change. **Pull requests build only
+  `linux-x64-gnu`** - the entry marked `pr` in
+  ([`.github/cli-platforms.json`](#githubcli-platformsjson)). Pushes to `main`
+  and manual dispatches still build all nine, run the native arm64 artifact,
+  and every main commit is a release candidate, so full coverage always lands
+  before a release. Both the target list
   ([`.github/cli-platforms.json`](#githubcli-platformsjson)) and the build
   itself ([`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform))
   are shared with the release fan-out, so this job cannot cover a different set
@@ -399,7 +405,8 @@ security ── advisories (warn only, always green)
   default features), and whose cache key covers every input that could break
   it - so a cache hit means nothing checkable changed. The check remains part
   of the broad local `mise run ci` gate.
-- **`rust-macos`** runs the Rust test suite on `macos-15` (arm64) - the
+- **`rust-macos`** runs the Rust test suite on `macos-15` (arm64) after merge
+  to `main` (and on manual runs) - the
   platform the release fan-out ships CLI binaries for, but that nothing
   previously tested. The fan-out builds the shipped `darwin-arm64` binary on a
   newer image than this leg tests on (`.github/cli-platforms.json`); what keeps
@@ -407,7 +414,8 @@ security ── advisories (warn only, always green)
   version - see [macOS support floor](#macos-support-floor). It uses the same
   mise/setup-build-env path as the Linux jobs. fmt, clippy, typegen, and the
   policy checks are platform-independent and already gate in `rust-host`.
-- **`rust-windows`** runs the Rust test suite on `windows-2025`. It installs
+- **`rust-windows`** runs the Rust test suite on `windows-2025` after merge to
+  `main` (and on manual runs). It installs
   the toolchain with `dtolnay/rust-toolchain` (pin read from `.config/mise.toml`)
   rather than mise, whose `[env]` exec templates assume a POSIX shell; the
   release jobs already prove this route on the same image. Because it bypasses
@@ -438,16 +446,15 @@ security ── advisories (warn only, always green)
   without any commit of ours, and letting that turn every open pull request red
   blocks unrelated work. Findings surface as warnings via
   `scripts/warn-only.mjs`; the job stays green.
-- **`webapp-static`**, **`webapp-browser`**, **`webapp-wasm-e2e`**, and
-  **`webapp-webkit-e2e`** consume
-  the prebuilt module and compile no Rust. The work is split three ways so the
-  parallel browser suite - the single longest webapp step - is never
-  serialized behind the rest: `webapp-static` is the node-only work (build
-  script tests, lint, unit tests, vite build, performance budgets; no
-  Playwright install),
-  `webapp-browser` is the parallel browser suite alone and uses Chrome from the
-  Ubuntu runner image, while `webapp-wasm-e2e` is the remaining Playwright work
-  (icon check, wasm browser suite, webapp E2E); the WebKit leg runs the
+- **`webapp-static`**, **`webapp-browser`**, **`webapp-wasm-browser`**,
+  **`webapp-e2e`**, and **`webapp-webkit-e2e`** consume the prebuilt module and
+  compile no Rust. Independent suites run in parallel: `webapp-static` is the
+  node-only work (build script tests, lint, unit tests, vite build, performance
+  budgets; no Playwright install), `webapp-browser` is the two-shard browser
+  suite and uses Chrome from the Ubuntu runner image, `webapp-wasm-browser` is
+  the direct WASM/browser contract selected only for conservative runtime
+  inputs, and `webapp-e2e` runs the channel-icon check plus Chromium journeys.
+  The WebKit leg runs the
   supported Safari-family implementation on macOS. It must stay on `macos-15`
   or newer: Playwright freezes WebKit at revision 2251 on `mac14`/`mac14-arm64`
   via `revisionOverrides`, so that build no longer gains the protocol settings
@@ -460,7 +467,7 @@ security ── advisories (warn only, always green)
   lighter shard - their sizes, and runtimes, are very uneven. A matrix
   dependency reports one combined result, so the `webapp` aggregate needs no
   change: any failing shard fails the check.
-- **`webapp`** is the aggregator for those four, mirroring `rust`: one stable
+- **`webapp`** is the aggregator for those jobs, mirroring `rust`: one stable
   check name (`Webapp`) while the suites run in parallel.
 - **`deploy-plan`** turns the ref into the list of channels to publish (below).
   It exists as its own job because a matrix can only be fed by an upstream
@@ -795,10 +802,8 @@ They differ for `linux-arm64-musl`, which cross-builds on x64, and for both
 Darwin targets, which build on the newest macOS image and are executed back on
 the oldest one still offered - see below.
 
-`pr` marks the four entries a pull request builds: `linux-x64-gnu`,
-`darwin-arm64`, `win32-x64-msvc` (one fast leg per OS family) and
-`linux-arm64-musl`, whose artifact `cli-linux-arm64` downloads. The script
-narrows to them only when `EVENT_NAME=pull_request`; every other caller -
+`pr` marks the one entry a pull request builds: `linux-x64-gnu`. The script
+narrows to it only when `EVENT_NAME=pull_request`; every other caller -
 including the release fan-out's `plan` job, which passes no event at all - gets
 all nine.
 
@@ -820,7 +825,7 @@ inheriting each image's retirement. `macos-14`'s
 is what forced this arrangement.
 
 Two checks keep it honest. The deployment-target assertion above runs on every
-CI build, so a regression fails in the pull request. Then the release fan-out's
+`main`, manual, and release build. Then the release fan-out's
 `platform-dry-run` leg runs the full `scripts/verify-cli-platform.mjs` suite
 against the exact staged artifact on every target's `native_runner` - which for
 Darwin is the oldest macOS still offered - so a binary that will not run there
@@ -842,15 +847,21 @@ counts as passing, so the aggregate has to fail explicitly - which means telling
 
 ### `scripts/ci/classify-changes.mjs`
 
-Maps changed paths to the Rust, webapp, dependency-scanning, plumbing-lint, and
-per-image Docker stacks.
+Maps changed paths to the Rust, webapp, direct WASM-runtime, dependency-scanning,
+plumbing-lint, and per-image Docker stacks.
 Rust and vendored C imply webapp integration, while webapp-only
 changes do not imply Rust. Rust test, bench, and example trees are the one
 exception: they select the Rust jobs but not the webapp or CLI-image stacks,
 because they enter neither the production WASM module nor the release binary -
 `.github/actions/wasm-cache` excludes the identical list from its cache key, so
 selecting the webapp there could only ever buy a guaranteed cache hit followed
-by four browser jobs that cannot observe the edit. Keep the two lists in step.
+by browser jobs that cannot observe the edit. The narrower `wasm_runtime` flag
+selects direct WASM browser tests for production Rust; the webapp's runtime,
+worker, storage, browser-platform, and shared type layers; dependencies; the
+suite's fixtures/config; and all fail-open CI/toolchain inputs. Ordinary Rust
+sources select CLI source Docker after merge, while Docker/Cargo/toolchain
+inputs select it on a pull request too. Keep these boundaries covered by the
+classifier tests.
 Changes to CI, coverage, toolchain setup, or the
 classifier fail open by selecting every stack.
 `scripts/ci/classify-changes.test.mjs` pins these boundaries.
