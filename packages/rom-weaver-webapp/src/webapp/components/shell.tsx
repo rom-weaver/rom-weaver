@@ -1,7 +1,7 @@
 import { createLucideIcon, Heart, Moon, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { viewTransitionsUnavailable } from "../../public/react/components/ds/flat-transition.ts";
@@ -175,6 +175,33 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   );
 };
 
+/**
+ * The prerendered shells ship a placeholder runtime status that the parser-time
+ * resolver in `index.html` rewrites before React loads - that is what stops the
+ * value visibly changing at hydration. The resolver decides synchronously, from
+ * the isolation flag and `navigator.serviceWorker.controller`; the store's
+ * status arrives from an async registration and reads "off" until it lands.
+ *
+ * So the first render has to answer the way the resolver already did, or React
+ * hydrates "sw off" against the DOM's "sw", throws, and discards the server
+ * HTML for the whole page. Keep this in step with the resolver in `index.html`.
+ */
+const readResolvedServiceWorkerStatus = (): ServiceWorkerStatus | null => {
+  if (typeof document === "undefined" || typeof navigator === "undefined") return null;
+  const enabled = document.documentElement.dataset.serviceWorkerEnabled === "true";
+  const serviceWorker = navigator.serviceWorker;
+  if (!(enabled && serviceWorker)) return "off";
+  if (serviceWorker.controller) return typeof MessageChannel === "function" ? "active" : "ready";
+  return null;
+};
+
+const useHydratedServiceWorkerStatus = (status: ServiceWorkerStatus | null | undefined) => {
+  const [resolved] = useState(readResolvedServiceWorkerStatus);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  return hydrated ? status : resolved;
+};
+
 const Masthead = ({
   channelBadge,
   commitHash,
@@ -227,14 +254,15 @@ const Masthead = ({
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const isPwa = readPwaState();
-  const serviceWorkerLabel = serviceWorkerStatus === "off" ? "sw off" : "sw";
+  const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
+  const serviceWorkerLabel = hydratedStatus === "off" ? "sw off" : "sw";
   const runtimeStatus = `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}`;
   const runtimeStatusTitle =
-    serviceWorkerStatus === "active"
+    hydratedStatus === "active"
       ? "This page is controlled by the service worker and its offline cache is available."
-      : serviceWorkerStatus === "ready"
+      : hydratedStatus === "ready"
         ? "A service worker is installed and ready to take control."
-        : serviceWorkerStatus === "off"
+        : hydratedStatus === "off"
           ? "Service-worker offline support is unavailable."
           : undefined;
   const guardExternalClick = (event: { preventDefault: () => void }, href: string) => {
