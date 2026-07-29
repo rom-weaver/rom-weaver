@@ -588,10 +588,17 @@ server think time; browsers that ignore `103` still act on the header when the
 document response lands, which is earlier than the parser either way. They ride
 in the `/*` block rather than an enumerated route list, so every prerendered
 route, every docs slug, and any route added later is covered without upkeep;
-subresource responses carry the header too and ignore it. The
-hinted URLs are read back out of the built `index.html`, and
-`scripts/verify-seo-build.mjs` fails the build if they drift from the ones the
-document actually requests.
+subresource responses carry the header too and ignore it. Both use `rel=preload`
+(`as=style` and `as=script`) rather than `rel=modulepreload` for the entry:
+Cloudflare only replays `preload` and `preconnect` in the `103`, so a
+`modulepreload` line still works on the document response but is dropped from
+the Early Hints, which is the half worth having. Chrome starts the entry fetch
+from the `as=script` hint and the module script reuses it, so nothing
+double-fetches. The hinted URLs are read back out of the built `index.html` by
+`packages/rom-weaver-webapp/scripts/critical-asset-hints.mjs`, which the build
+and `scripts/verify-seo-build.mjs` share so the emitted header and the check
+guarding it cannot drift; the verifier fails the build if either drifts from the
+URL the document actually requests.
 
 Pages has no precompressed-sibling convention and recompresses assets on the
 fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse

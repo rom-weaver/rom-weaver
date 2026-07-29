@@ -57,7 +57,7 @@ describe("pages brotli sidecar function", () => {
   });
 
   it.each([
-    ["https://rom-weaver.com/assets/index-DXHhOtA-.js", "application/javascript"],
+    ["https://rom-weaver.com/assets/index-DXHhOtA-.js", "text/javascript; charset=utf-8"],
     ["https://rom-weaver.com/assets/index-DqvtWSeD.css", "text/css; charset=utf-8"],
   ])("serves %s as %s", async (url, contentType) => {
     const { context } = makeContext({ url, sidecarResponse: brSidecar() });

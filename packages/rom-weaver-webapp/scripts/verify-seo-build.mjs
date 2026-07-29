@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
+import { criticalAssetLinkHeaders } from "./critical-asset-hints.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
@@ -55,13 +56,9 @@ assertIncludes(
 assertIncludes(headers, "/cache-service-worker.js\n  Cache-Control: no-cache", "service worker cache headers");
 // The Early Hints preload has to name the exact hashed URLs the document requests; a stale
 // hint would fetch a dead asset and leave the real ones on the post-parse critical path.
-for (const [pattern, label] of [
-  [/<link[^>]+rel="stylesheet"[^>]+href="\.(\/assets\/[^"]+\.css)"/, "stylesheet"],
-  [/<script[^>]+type="module"[^>]+src="\.(\/assets\/[^"]+\.js)"/, "entry module"],
-]) {
-  const href = weaveHtml.match(pattern)?.[1];
-  if (!href) throw new Error(`index.html is missing its ${label}`);
-  assertIncludes(headers, `Link: <${href}>;`, `${label} preload hint`);
+// Derived from the same module the build emits from, so the check cannot drift from it.
+for (const link of criticalAssetLinkHeaders(weaveHtml)) {
+  assertIncludes(headers, link, "critical asset preload hint");
 }
 assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 robots metadata");
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
