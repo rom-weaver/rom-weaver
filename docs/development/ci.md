@@ -580,12 +580,15 @@ promptly. The `Content-Signal` header permits agent input on every channel,
 permits search use only on production, and declines AI training. Non-production
 channels add their `X-Robots-Tag` in the same file.
 
-Every document path also carries `Link:` preload headers for the two
+Every response also carries `Link:` preload headers for the two
 render-critical subresources - the stylesheet and the entry module. Neither is
 discoverable until the document has been fetched and parsed, so Cloudflare
 replays them in a `103 Early Hints` response and both fetches start during
 server think time; browsers that ignore `103` still act on the header when the
-document response lands, which is earlier than the parser either way. The
+document response lands, which is earlier than the parser either way. They ride
+in the `/*` block rather than an enumerated route list, so every prerendered
+route, every docs slug, and any route added later is covered without upkeep;
+subresource responses carry the header too and ignore it. The
 hinted URLs are read back out of the built `index.html`, and
 `scripts/verify-seo-build.mjs` fails the build if they drift from the ones the
 document actually requests.

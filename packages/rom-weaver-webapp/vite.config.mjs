@@ -439,12 +439,6 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
   };
 };
 
-// Document paths that should carry the critical-asset `Link` preload headers. Every
-// prerendered route serves the same stylesheet and entry chunk, so one hint set covers
-// them all. The trailing `*` picks up each route's `/index.html` twin; it also matches the
-// screenshots under /docs, which are subresources and ignore the hint.
-const PRELOAD_HINT_PATHS = ["/", "/index.html", "/404.html", "/weave*", "/create*", "/trim*", "/tools*", "/docs*"];
-
 // The stylesheet and entry module are the only two render-critical subresources, and the
 // parser cannot discover either until the document has been fetched and parsed. Emitting
 // them as `Link` response headers lets Cloudflare replay them in a 103 Early Hints
@@ -452,6 +446,11 @@ const PRELOAD_HINT_PATHS = ["/", "/index.html", "/404.html", "/weave*", "/create
 // Browsers that ignore 103 still honour the header on the document response itself, which
 // is earlier than the parser either way. Read out of the built index.html rather than the
 // bundle so the hinted URLs are byte-for-byte the ones the document requests.
+//
+// These ride in the `/*` block rather than an enumerated route list: every document in the
+// build - the prerendered workflow routes, 404.html, every docs slug, and any route added
+// later - loads the same two assets, and a list would silently stop covering new ones. The
+// hint also lands on subresource responses, which ignore it.
 const readCriticalAssetLinks = (distDir) => {
   const indexHtml = fs.readFileSync(path.join(distDir, "index.html"), "utf8");
   const stylesheet = indexHtml.match(/<link[^>]+rel="stylesheet"[^>]+href="\.(\/assets\/[^"]+\.css)"/)?.[1];
@@ -483,15 +482,14 @@ const writeCloudflareHeadersAsset = (channel) => {
         "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
         ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
       };
-      const headerLines = Object.entries(headers)
-        .map(([name, value]) => `  ${name}: ${value}`)
-        .join("\n");
       const distDir = path.resolve(rootDir, outDir);
       const outputPath = path.join(distDir, "_headers");
-      const criticalAssetLinks = readCriticalAssetLinks(distDir);
-      const preloadHints = PRELOAD_HINT_PATHS.map(
-        (hintPath) => `${hintPath}\n${criticalAssetLinks.map((link) => `  ${link}`).join("\n")}\n`,
-      ).join("\n");
+      const headerLines = [
+        ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
+        ...readCriticalAssetLinks(distDir),
+      ]
+        .map((line) => `  ${line}`)
+        .join("\n");
       // The attribution files are named `LICENSE-APACHE`, `COPYING`, `NOTICE`
       // and so on. With no extension Cloudflare types them as a binary
       // download, which both skips its on-the-fly compression (2.1 MB of text
@@ -500,7 +498,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n\n${preloadHints}\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {
