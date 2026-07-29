@@ -232,7 +232,31 @@ const runHydrationAudit = async (createContext, baseUrl) => {
   }
 };
 
+/**
+ * axe measures composited colour, so an element caught mid-fade reads as a
+ * contrast failure that does not exist once the animation lands - and a
+ * transition is not something Playwright's "visible" waits on. Settle the
+ * finite animations before scanning; the looping ones (the guide's breathing
+ * ring, the CTA pulse, the weave drift) never finish and are skipped. Repeated
+ * because one animation commonly starts the next - the guide card's arrival
+ * begins as its exit ends.
+ */
+const settleAnimations = async (page) => {
+  for (let pass = 0; pass < 3; pass += 1) {
+    const settled = await page.evaluate(async () => {
+      const running = document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Number.POSITIVE_INFINITY);
+      if (running.length === 0) return true;
+      await Promise.all(running.map((animation) => animation.finished.catch(() => undefined)));
+      return false;
+    });
+    if (settled) return;
+  }
+};
+
 const scanLiveApp = async (page, label) => {
+  await settleAnimations(page);
   const violations = await page.evaluate(async (tags) => {
     const results = await window.axe.run(document, {
       resultTypes: ["violations"],
