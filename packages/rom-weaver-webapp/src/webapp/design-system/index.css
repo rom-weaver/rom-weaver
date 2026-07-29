@@ -4,8 +4,8 @@
    slots into the priority this list gives it. `style` is src/webapp/style.css, the
    pre-design-system base that everything below may override. */
 @layer style, tokens, accents, base, masthead, banners, workbench, not-found, dropzone,
-  file-cards, drawers, notices, fields, buttons, weave-meter, result, dialogs, docs,
-  keyframes, responsive, webapp-modals, phone-dock;
+  file-cards, inline-help, drawers, notices, fields, buttons, weave-meter, result, dialogs,
+  docs, keyframes, responsive, webapp-modals, phone-dock;
 
 @import "../style.css" layer(style);
 @import "./tokens.css" layer(tokens);
@@ -17,9 +17,13 @@
 @import "./not-found.css" layer(not-found);
 @import "./dropzone.css" layer(dropzone);
 @import "./file-cards.css" layer(file-cards);
+@import "./inline-help.css" layer(inline-help);
 @import "./notices.css" layer(notices);
 @import "./fields.css" layer(fields);
 @import "./buttons.css" layer(buttons);
 @import "./keyframes.css" layer(keyframes);
 @import "./responsive.css" layer(responsive);
+/* Misnamed but render-critical: carries the wide-screen `.app` layout and workflow step
+   rails alongside its modal styles - deferring it reflows the page (see deferred.css). */
+@import "./webapp-modals.css" layer(webapp-modals);
 @import "./phone-dock.css" layer(phone-dock);

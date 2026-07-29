@@ -298,46 +298,6 @@
   .rw-app .pfault-title svg { animation: none; }
 }
 
-/* Inline help */
-.rw-app .info { position: relative; display: inline-flex; flex: none; align-self: center; vertical-align: middle; font-size: .8rem; }
-.rw-app .step-head .info { margin-inline-start: 0; font-size: .76rem; }
-.rw-app .info-btn {
-  position: relative; appearance: none; cursor: pointer; width: 24px; height: 24px; padding: 0;
-  border: 0; background: none; color: var(--ink-4);
-  display: grid; place-items: center;
-  transition: color .15s;
-}
-.rw-app .info-btn svg { width: 1em; height: 1em; }
-/* Add breathing room around the already-compliant 24px control. */
-.rw-app .info-btn::after { content: ""; position: absolute; inset: -7px; }
-@media (hover: hover) {
-  .rw-app .info-btn:hover { color: var(--ink-2); }
-}
-.rw-app .info-btn:active { color: var(--ink-2); }
-.rw-app .info-btn[aria-expanded="true"] { color: var(--thread-text); }
-.rw-app .info-pop {
-  position: absolute; top: calc(100% + 7px); inset-inline-start: -6px; z-index: 70;
-  width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
-  padding: var(--sp-m);
-  border: 1px solid var(--seam-strong); border-radius: var(--r-m); background: var(--plate-2);
-  box-shadow: var(--overlay-shadow);
-  font-size: .78rem; font-weight: 500; line-height: 1.5; color: var(--ink-2);
-  letter-spacing: 0; text-transform: none; white-space: normal; text-align: start;
-  animation: drop-in .2s var(--ease);
-}
-.rw-app .step-meta .info-pop { inset-inline-start: auto; inset-inline-end: -6px; }
-.rw-app .info-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-xs); }
-.rw-app .info-list li { position: relative; padding-inline-start: 14px; }
-.rw-app .info-list li::before {
-  content: ""; position: absolute; inset-inline-start: 3px; top: .55em;
-  width: 4px; height: 4px; border-radius: 50%; background: var(--thread-text);
-}
-.rw-app .info-support { display: flex; flex-direction: column; gap: var(--sp-s); }
-.rw-app .info-list + .info-support { margin-block-start: 9px; padding-block-start: 9px; border-block-start: 1px solid var(--seam); }
-.rw-app .info-support p { margin: 0; }
-.rw-app .info-support b { display: block; color: var(--ink); font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; }
-.rw-app .info-support .mono { color: var(--ink-3); font-size: .72rem; overflow-wrap: anywhere; }
-
 /* Keep cue text selectable by placing copy in the heading. */
 .rw-app .cue-sub { border: 1px solid var(--seam); border-radius: var(--r-s); background: var(--chassis); overflow: hidden; }
 .rw-app .cks .cks-inner > .cue-sub { margin-block-start: 6px; }
