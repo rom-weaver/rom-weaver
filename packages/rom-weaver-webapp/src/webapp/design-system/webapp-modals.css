@@ -92,6 +92,10 @@
     .rw-app .fname .select, .rw-app .fname .outname { font-size: max(16px, 1em); }
   }
 }
+@media (max-width: 720px) {
+  /* Keep the native bundle picker compact on phones, including iOS. */
+  .rw-app .export-type-field .select { font-size: .72rem; }
+}
 /* Enlarge touch targets without changing visual layout. */
 @media (pointer: coarse) {
   .rw-app .ck .copy, .rw-app .cue-copy, .rw-app .info-btn { position: relative; }
