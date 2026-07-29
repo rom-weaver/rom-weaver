@@ -85,7 +85,7 @@
    under the mark. */
 .rw-app .ck:not(.req):has(> .ck-mark) {
   grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto auto;
-  --ck-v-reserve: calc(85px + 13px + var(--sp-s));
+  --ck-v-reserve: calc(var(--ck-v-base) + 13px + var(--sp-s));
 }
 .rw-app .ck-group-head .ck-mark { margin-inline-start: var(--sp-s); vertical-align: -2px; }
 .rw-app .ck-group-head .ck-head-note { margin-inline-start: var(--sp-s); color: var(--ink-4); font-weight: 500; text-transform: none; letter-spacing: .02em; }
