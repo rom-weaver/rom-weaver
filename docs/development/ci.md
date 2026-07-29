@@ -603,10 +603,15 @@ only when it saves at least 2% (already-compressed formats such as woff2/png
 fail that bar and stay static), and writes a `_routes.json` routing exactly
 the sidecar-backed URLs through the Pages Function in
 `packages/rom-weaver-webapp/functions/assets/[name].js`. The function takes
-the content type from a headers-only probe of the static asset (no hand-kept
-extension map) and serves the sidecar bytes with `Content-Encoding: br`
+the content type from `functions/assets/content-types.js` and serves the
+sidecar bytes with `Content-Encoding: br`
 (`encodeBody: "manual"`) to br-capable clients, falling through to static
-serving otherwise; unrouted requests never invoke it. Because function
+serving otherwise; unrouted requests never invoke it. That table is the one
+place the mapping lives - `writeBrotliSidecars` imports it and fails the build
+if it stages a sidecar for an extension the table does not cover, so it cannot
+go stale. It replaced a headers-only probe of the static asset, which was a
+second subrequest the sidecar fetch had to wait behind and so put a serialized
+round trip in front of the render-critical CSS and entry module. Because function
 responses bypass `_headers`, the function restates the immutable cache rule
 and the cross-origin-isolation headers - COEP in particular, which
 dedicated-worker scripts must carry on a cross-origin-isolated page. Only

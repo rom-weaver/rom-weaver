@@ -7,6 +7,7 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
+import { sidecarContentType } from "./functions/assets/content-types.js";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
@@ -540,7 +541,17 @@ const writeBrotliSidecars = () => {
       }
       if (fs.existsSync(sourceSidecar)) fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
       else brotliCompressFile({ inputPath: emittedWasm, outputPath: `${emittedWasm}.br`, quality: 11 });
+      // The Pages Function reads the type from SIDECAR_CONTENT_TYPES instead of probing
+      // the static asset, so a staged sidecar whose extension is missing there would
+      // silently fall back to Pages' own compression. Fail the build instead.
+      const assertSidecarTypeIsKnown = (assetUrl) => {
+        if (sidecarContentType(assetUrl)) return;
+        throw new Error(
+          `${assetUrl} has a brotli sidecar but no entry in SIDECAR_CONTENT_TYPES (functions/assets/content-types.js); add its content type there`,
+        );
+      };
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
+      assertSidecarTypeIsKnown(sidecarUrls[0]);
       for (const name of fs.readdirSync(assetsDir)) {
         if (name.endsWith(".wasm") || name.endsWith(".br")) continue;
         const assetPath = path.join(assetsDir, name);
@@ -553,6 +564,7 @@ const writeBrotliSidecars = () => {
           fs.rmSync(`${assetPath}.br`);
           continue;
         }
+        assertSidecarTypeIsKnown(`/assets/${name}`);
         sidecarUrls.push(`/assets/${name}`);
       }
       if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {
