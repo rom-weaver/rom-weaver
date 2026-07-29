@@ -6,6 +6,7 @@ import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
+import { resetBrowserTransientOpfs } from "../storage/browser/browser-opfs-cleanup.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/rom-weaver-runner.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
@@ -59,6 +60,11 @@ let renderWebappRootIfReady = () => undefined;
 let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
 let pageResetKey = 0;
+if (typeof window !== "undefined") {
+  void resetBrowserTransientOpfs().catch((error: unknown) => {
+    logger.warn("Initial OPFS cleanup failed", { message: error instanceof Error ? error.message : String(error) });
+  });
+}
 // Suppresses the first render until cross-origin isolation settles so the un-isolated first document
 // never flashes before the service worker reloads the page. Decided synchronously at construction.
 const serviceWorkerBootGate = createServiceWorkerBootGate({
@@ -429,6 +435,11 @@ const renderWebappRoot = (): undefined => {
           webappController.resetPage();
           pageResetKey += 1;
           renderWebappRoot();
+          await resetBrowserTransientOpfs().catch((error: unknown) => {
+            logger.warn("Reset OPFS cleanup failed", {
+              message: error instanceof Error ? error.message : String(error),
+            });
+          });
         })();
       },
       onRestoreDefaults: () => webappController.restoreDefaults(),

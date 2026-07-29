@@ -1,13 +1,12 @@
-import { getManagedOpfsFileHandle } from "../protocol/opfs-path.ts";
+import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
 import { getWorkerErrorMessage, postCloneSafeWorkerMessage } from "../shared/worker-message-utils.ts";
 
-// OPFS write/truncate worker. Input staging (copying a Blob into OPFS) was retired - browser inputs now
-// read directly via the per-thread FileReaderSync fast path or the OPFS proxy handle (see
-// browser-opfs-source-ref). This worker only services output-side writes and truncates. The
-// "stage-error" response action is kept as the generic failure reply for every action.
+// OPFS write/truncate/cleanup worker. Input staging (copying a Blob into OPFS) was retired - browser
+// inputs now read directly via the per-thread FileReaderSync fast path or the OPFS proxy handle (see
+// browser-opfs-source-ref). The "stage-error" response action is kept as the generic failure reply.
 
 type StorageRequest = {
-  action: "truncate" | "write";
+  action: "remove" | "truncate" | "write";
   bytes?: Uint8Array;
   filePath?: string;
   position?: number;
@@ -16,7 +15,7 @@ type StorageRequest = {
 };
 
 type StorageResponse = {
-  action: "stage-error" | "truncate-complete" | "write-complete";
+  action: "remove-complete" | "stage-error" | "truncate-complete" | "write-complete";
   error?: { message: string };
   filePath?: string;
   requestId?: string;
@@ -25,6 +24,8 @@ type StorageResponse = {
 };
 
 const workerScope = self as DedicatedWorkerGlobalScope;
+
+const REMOVE_BUSY_RETRY_DELAYS_MS = [25, 50, 100, 200, 400, 800];
 
 type SyncAccessMode = "readwrite" | "readwrite-unsafe";
 type SyncCapableFileHandle = FileSystemFileHandle & {
@@ -163,10 +164,32 @@ const writeBytesToOpfsPath = async (request: StorageRequest): Promise<StorageRes
   };
 };
 
+const removeOpfsPath = async (request: StorageRequest): Promise<StorageResponse> => {
+  const filePath = String(request.filePath || "").trim();
+  if (!filePath) throw new Error("Browser OPFS remove requires a path");
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await removeManagedOpfsPath(filePath, navigator, { ignoreErrors: false });
+      return {
+        action: "remove-complete",
+        filePath,
+        requestId: request.requestId,
+        success: true,
+      };
+    } catch (error) {
+      const delay = REMOVE_BUSY_RETRY_DELAYS_MS[attempt];
+      if ((error as { name?: string } | null)?.name !== "NoModificationAllowedError" || delay === undefined)
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+};
+
 workerScope.onmessage = (event: MessageEvent<StorageRequest>) => {
   const request = event.data || ({} as StorageRequest);
   let run: Promise<StorageResponse>;
-  if (request.action === "truncate") run = truncateOpfsPath(request);
+  if (request.action === "remove") run = removeOpfsPath(request);
+  else if (request.action === "truncate") run = truncateOpfsPath(request);
   else if (request.action === "write") run = writeBytesToOpfsPath(request);
   else run = Promise.reject(new Error(`unsupported OPFS storage action: ${String(request.action)}`));
   run
