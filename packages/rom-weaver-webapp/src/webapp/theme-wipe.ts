@@ -16,6 +16,9 @@ const logger = createLogger("theme-wipe");
 
 const WIPE_MS = 420;
 const EASE = "cubic-bezier(.4, 0, .2, 1)";
+/* Transitions stay off until the flipped page has painted; see dialogs.css. */
+const SETTLE_CLASS = "theme-wipe-settle";
+const SETTLE_TIMEOUT_MS = 200;
 /* Live state the clone cannot inherit from cloneNode alone. */
 const STATEFUL = "input, textarea, select, details, dialog, video, audio";
 
@@ -128,12 +131,24 @@ const runThemeWipeFallback = (origin: WipeOrigin, applyTheme: () => void) => {
   const finish = () => {
     if (settled) return;
     settled = true;
-    // Flip and drop the clone in one task: the page underneath already looks
-    // like the clone, so no frame shows a mismatch.
-    applyTheme();
-    veil.remove();
     if (settleActiveWipe === finish) settleActiveWipe = null;
-    logger.trace("theme wipe finished", { next });
+    const root = document.documentElement;
+    // Flip with transitions off, and keep the clone up until the page beneath
+    // has painted the new theme - lifting the veil on the same frame uncovers
+    // surfaces still showing the outgoing colours.
+    root.classList.add(SETTLE_CLASS);
+    applyTheme();
+    let lifted = false;
+    const lift = () => {
+      if (lifted) return;
+      lifted = true;
+      veil.remove();
+      root.classList.remove(SETTLE_CLASS);
+      logger.trace("theme wipe finished", { next });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(lift));
+    // rAF stalls in a backgrounded tab; never strand the clone on screen.
+    setTimeout(lift, SETTLE_TIMEOUT_MS);
   };
   settleActiveWipe = finish;
 

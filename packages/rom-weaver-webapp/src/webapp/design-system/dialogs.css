@@ -161,6 +161,12 @@
    containing block for the cloned UI's fixed elements and shift them. */
 .theme-veil { position: fixed; inset: 0; z-index: 2000; overflow: hidden; pointer-events: none; background: var(--chassis); }
 .theme-veil-stage { position: absolute; }
+/* The flip happens under the veil. Surfaces that transition their colours
+   (body, buttons, cards) would otherwise ease out of the outgoing theme once
+   the veil lifts, replaying it in full view. */
+:root.theme-wipe-settle *,
+:root.theme-wipe-settle *::before,
+:root.theme-wipe-settle *::after { transition: none !important; }
 @keyframes theme-wipe {
   from { clip-path: circle(0px at var(--wipe-x, 50%) var(--wipe-y, 0%)); }
   to { clip-path: circle(var(--wipe-r, 150vmax) at var(--wipe-x, 50%) var(--wipe-y, 0%)); }

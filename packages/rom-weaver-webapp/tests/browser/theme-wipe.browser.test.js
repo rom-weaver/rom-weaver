@@ -77,6 +77,34 @@ describe("theme wipe fallback", () => {
     await settle();
   });
 
+  test("flips with transitions suppressed and only then lifts the clone", async () => {
+    const root = document.documentElement;
+    // Colour transitions would otherwise replay the outgoing theme in full
+    // view the moment the veil lifts.
+    const suppressedWithVeilUp = [];
+    const observer = new MutationObserver(() => {
+      if (root.classList.contains("theme-wipe-settle")) {
+        suppressedWithVeilUp.push({
+          theme: root.getAttribute("data-theme"),
+          veilUp: veils().length === 1,
+          bodyTransition: getComputedStyle(document.body).transitionProperty,
+        });
+      }
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+
+    runThemeWipeFallback(ORIGIN, flipTo("light"));
+    await settle();
+    observer.disconnect();
+
+    expect(suppressedWithVeilUp).toHaveLength(1);
+    // The flip lands under a clone that is still covering the viewport.
+    expect(suppressedWithVeilUp[0]).toMatchObject({ theme: "light", veilUp: true, bodyTransition: "none" });
+    expect(root.classList.contains("theme-wipe-settle")).toBe(false);
+    expect(getComputedStyle(document.body).transitionProperty).not.toBe("none");
+    expect(veils()).toHaveLength(0);
+  });
+
   test("a second wipe settles the first instead of stacking veils", async () => {
     let flips = 0;
     const toggle = () => {
@@ -86,7 +114,10 @@ describe("theme wipe fallback", () => {
     };
     runThemeWipeFallback(ORIGIN, toggle);
     runThemeWipeFallback(ORIGIN, toggle);
-    expect(veils()).toHaveLength(1);
+    // The first wipe is settled on the spot - flipped, and lifting on its own
+    // two-frame delay - so the second one starts from the theme it landed on.
+    expect(flips).toBe(1);
+    expect(veils()[veils().length - 1].getAttribute("data-theme")).toBe("dark");
 
     await settle();
     expect(flips).toBe(2);
