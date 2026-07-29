@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { marked } from "marked";
+import { Marked } from "marked";
 
 const LINE_BREAK_REGEX = /\r?\n/;
 
@@ -146,39 +146,105 @@ const buildVersionString = (baseVersion, gitMetadata) => {
 // so newline-per-record splitting is safe.
 const CHANGELOG_FIELD_SEP = "\x1f";
 const RELEASE_URL = "https://github.com/rom-weaver/rom-weaver/releases/tag/v";
+// Never 404s. The tag link does, briefly: nightly deploys on the release PR's
+// merge commit, but `vX.Y.Z` only exists once the fan-out publishes the draft.
+const CHANGELOG_URL = "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md";
+// A client a few releases behind gets every section it missed, not just the
+// newest. Capped like the commit list is, and low: a release section runs ~11 KB
+// and the dialog re-fetches this asset uncached every time it opens. Anyone
+// further behind gets the ellipsis and the full-changelog link instead.
+const RELEASE_NOTES_LIMIT = 3;
+// Line-anchored: an unanchored search would also match the string inside a
+// section body or a deeper heading.
+const RELEASE_HEADING_REGEX = /^## \[([^\]]+)\]/gm;
 
-const getReleaseChangelog = (version) => {
-  if (!(version && fs.existsSync(changelogPath))) return undefined;
-  const changelog = fs.readFileSync(changelogPath, "utf8");
-  const headingStart = changelog.indexOf(`## [${version}]`);
-  if (headingStart < 0) return undefined;
-  const bodyStart = changelog.indexOf("\n", headingStart) + 1;
-  const nextHeading = changelog.indexOf("\n## ", bodyStart);
-  const body = changelog.slice(bodyStart, nextHeading < 0 ? undefined : nextHeading).trim();
-  if (!body) return undefined;
+const escapeHtml = (value) =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+// The dialog injects this HTML with `dangerouslySetInnerHTML` and the app ships
+// no CSP, so raw markup must not survive. CHANGELOG.md is generated from merged
+// PR titles, which commitlint does not screen for `<`, so "committed Markdown"
+// is not the same as "authored by a maintainer": escape HTML rather than render
+// it. Links are rewritten to open in a new tab so a click from inside the modal
+// does not navigate the app away.
+const releaseMarked = new Marked({
+  renderer: {
+    html({ text }) {
+      return escapeHtml(text);
+    },
+    link(token) {
+      return `<a href="${escapeHtml(token.href)}" rel="noreferrer" target="_blank">${this.parser.parseInline(token.tokens)}</a>`;
+    },
+  },
+});
+
+// Every `## [version]` section, newest first, paired with its body.
+const readChangelogSections = (sourcePath) => {
+  if (!fs.existsSync(sourcePath)) return [];
+  const changelog = fs.readFileSync(sourcePath, "utf8");
+  const headings = [...changelog.matchAll(RELEASE_HEADING_REGEX)];
+  return headings.map((heading, index) => {
+    const bodyStart = changelog.indexOf("\n", heading.index) + 1;
+    const nextHeading = headings[index + 1];
+    return {
+      body: changelog.slice(bodyStart, nextHeading ? nextHeading.index : undefined).trim(),
+      version: heading[1],
+    };
+  });
+};
+
+const renderReleaseNote = (section) => ({
+  html: releaseMarked.parse(section.body, { async: false }),
+  url: `${RELEASE_URL}${encodeURIComponent(section.version)}`,
+  version: section.version,
+});
+
+// The requested version's section plus the ones below it, so a client several
+// releases behind can render everything it missed.
+const renderReleaseSections = (version, sourcePath = changelogPath) => {
+  if (!version) return undefined;
+  const sections = readChangelogSections(sourcePath);
+  const start = sections.findIndex((section) => section.version === version);
+  if (start < 0) return undefined;
+  const notes = sections
+    .slice(start, start + RELEASE_NOTES_LIMIT)
+    .filter((section) => section.body)
+    .map(renderReleaseNote);
+  if (!notes.length) return undefined;
   return {
-    html: marked.parse(body, { async: false }),
-    url: `${RELEASE_URL}${encodeURIComponent(version)}`,
-    version,
+    changelogUrl: CHANGELOG_URL,
+    notes,
+    truncated: sections.length > start + RELEASE_NOTES_LIMIT,
+    url: notes[0].url,
+    version: notes[0].version,
   };
 };
 
 // Recent commit log for the in-app "What's new" dialog. Capped so the emitted
 // asset stays flat-sized forever - anyone more than `limit` builds behind falls
 // off the tail, which the dialog covers with an "earlier" note.
-const getChangelog = (limit = 50, releaseVersion = "") => {
-  const raw = runGit(`git log -n ${limit} --pretty=format:%h${CHANGELOG_FIELD_SEP}%s${CHANGELOG_FIELD_SEP}%cI`);
-  if (!raw) return [];
+const readGitLog = (limit) =>
+  runGit(`git log -n ${limit} --pretty=format:%h${CHANGELOG_FIELD_SEP}%s${CHANGELOG_FIELD_SEP}%cI`);
+
+const getChangelog = (limit = 50, releaseVersion = "", gitLogReader = readGitLog) => {
+  const raw = gitLogReader(limit);
   const entries = raw
-    .split(LINE_BREAK_REGEX)
-    .map((line) => {
-      const [hash, subject, date] = line.split(CHANGELOG_FIELD_SEP);
-      return { date: date || "", hash: hash || "", subject: subject || "" };
-    })
-    .filter((entry) => entry.hash);
-  const release = getReleaseChangelog(releaseVersion);
-  // Preserve the array shape for running older bundles; they ignore the extra field.
-  return release ? entries.map((entry, index) => (index === 0 ? { ...entry, release } : entry)) : entries;
+    ? raw
+        .split(LINE_BREAK_REGEX)
+        .map((line) => {
+          const [hash, subject, date] = line.split(CHANGELOG_FIELD_SEP);
+          return { date: date || "", hash: hash || "", subject: subject || "" };
+        })
+        .filter((entry) => entry.hash)
+    : [];
+  const release = renderReleaseSections(releaseVersion);
+  if (!release) return entries;
+  // The release rides on the newest entry to preserve the array shape running
+  // older bundles expect; they ignore the extra field. With no git log - the
+  // Docker build excludes `.git` - there is no entry to ride on, so carry the
+  // notes on a subject-less placeholder the dialog skips rather than drop them.
+  if (!entries.length) return [{ date: "", hash: `v${releaseVersion}`, release, subject: "" }];
+  return entries.map((entry, index) => (index === 0 ? { ...entry, release } : entry));
 };
 
 const getBuildInfo = () => {
@@ -203,4 +269,4 @@ const getBuildInfo = () => {
   };
 };
 
-export { getBuildInfo, getChangelog };
+export { getBuildInfo, getChangelog, renderReleaseSections };

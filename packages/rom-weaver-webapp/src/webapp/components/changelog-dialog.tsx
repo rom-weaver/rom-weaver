@@ -15,7 +15,8 @@ import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../build-version.ts
 
 const logger = createLogger("changelog-dialog");
 
-type ReleaseChangelog = { html: string; url: string; version: string };
+type ReleaseNote = { html: string; url: string; version: string };
+type ReleaseChangelog = { changelogUrl: string; notes: ReleaseNote[]; truncated: boolean; version: string };
 type ChangelogEntry = { hash: string; subject: string; date: string; release?: unknown };
 
 type FetchState =
@@ -32,12 +33,28 @@ const commitsSinceCurrent = (entries: ChangelogEntry[]): { entries: ChangelogEnt
   return { entries: entries.slice(0, index), truncated: false };
 };
 
+const isReleaseNote = (value: unknown): value is ReleaseNote => {
+  if (!value || typeof value !== "object") return false;
+  const note = value as ReleaseNote;
+  return typeof note.html === "string" && typeof note.url === "string" && typeof note.version === "string";
+};
+
 const readReleaseChangelog = (value: unknown): ReleaseChangelog | undefined => {
   if (!value || typeof value !== "object") return undefined;
   const release = value as ReleaseChangelog;
-  return typeof release.html === "string" && typeof release.url === "string" && typeof release.version === "string"
-    ? release
-    : undefined;
+  const hasNotes = Array.isArray(release.notes) && release.notes.length > 0 && release.notes.every(isReleaseNote);
+  const hasMeta = typeof release.version === "string" && typeof release.changelogUrl === "string";
+  return hasNotes && hasMeta ? release : undefined;
+};
+
+// Sections between the running version and the incoming one - everything the
+// client actually missed. A running version outside the window means it is
+// further behind than the build embedded (or is a dev build), so show the whole
+// window and point at the full changelog for the rest.
+const releaseNotesSince = (release: ReleaseChangelog): { notes: ReleaseNote[]; truncated: boolean } => {
+  const index = release.notes.findIndex((note) => note.version === APP_VERSION);
+  if (index === -1) return { notes: release.notes, truncated: Boolean(release.truncated) || release.notes.length > 1 };
+  return { notes: release.notes.slice(0, index), truncated: false };
 };
 
 const fetchChangelog = async (): Promise<{ entries: ChangelogEntry[]; release?: ReleaseChangelog }> => {
@@ -49,10 +66,53 @@ const fetchChangelog = async (): Promise<{ entries: ChangelogEntry[]; release?: 
     (entry): entry is ChangelogEntry =>
       typeof entry === "object" && entry !== null && typeof (entry as ChangelogEntry).hash === "string",
   );
-  return { entries, release: readReleaseChangelog(entries[0]?.release) };
+  // A subject-less entry is the placeholder a git-less build uses to carry the
+  // release notes; it is not a commit, so keep it out of the commit list.
+  return { entries: entries.filter((entry) => entry.subject), release: readReleaseChangelog(entries[0]?.release) };
 };
 
 const formatDate = (iso: string) => iso.split("T")[0] || "";
+
+const ReleaseNotes = ({ release }: { release: ReleaseChangelog }) => {
+  const { notes, truncated } = releaseNotesSince(release);
+  return (
+    <>
+      <div className="release-changelog-version">
+        {/* role="img" so the arrow is announced as the transition it means rather
+            than by its glyph name. */}
+        <span
+          aria-label={`updating from version ${APP_VERSION} to version ${release.version}`}
+          className="mono"
+          role="img"
+        >
+          v{APP_VERSION} → v{release.version}
+        </span>
+        <a href={release.changelogUrl} rel="noreferrer" target="_blank">
+          Full changelog
+        </a>
+      </div>
+      {notes.map((note) => (
+        <section className="release-changelog-section" key={note.version}>
+          {notes.length > 1 ? (
+            <h3 className="release-changelog-heading">
+              <a href={note.url} rel="noreferrer" target="_blank">
+                v{note.version}
+              </a>
+            </h3>
+          ) : null}
+          <div
+            className="release-changelog"
+            // The same-origin asset holds committed CHANGELOG.md rendered at build time,
+            // with raw HTML escaped by the build's `marked` renderer (scripts/version.mjs).
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: build-escaped release Markdown
+            dangerouslySetInnerHTML={{ __html: note.html }}
+          />
+        </section>
+      ))}
+      {truncated ? <div className="changelog-note">…</div> : null}
+    </>
+  );
+};
 
 const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: () => void; onReload: () => void }) => {
   const localizer = useUiLocalizer();
@@ -102,27 +162,7 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
       ) : null}
       {state.status === "loaded" ? (
         state.release ? (
-          <>
-            <div className="release-changelog-version">
-              <span className="mono">
-                v{APP_VERSION} → v{state.release.version}
-              </span>
-              <a
-                aria-label={`GitHub release v${state.release.version}`}
-                href={state.release.url}
-                rel="noreferrer"
-                target="_blank"
-              >
-                GitHub
-              </a>
-            </div>
-            <div
-              className="release-changelog"
-              // The same-origin asset contains committed CHANGELOG.md rendered at build time.
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the release source
-              dangerouslySetInnerHTML={{ __html: state.release.html }}
-            />
-          </>
+          <ReleaseNotes release={state.release} />
         ) : (
           <>
             <ul className="changelog">

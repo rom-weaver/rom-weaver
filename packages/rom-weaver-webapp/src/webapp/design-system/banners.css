@@ -50,6 +50,8 @@
 .rw-app .changelog-meta { font-size: .72rem; color: var(--ink-3); }
 .rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: var(--sp-s) 0; }
 .rw-app .release-changelog-version { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-m); margin-block-end: var(--sp-m); }
+.rw-app .release-changelog-section + .release-changelog-section { margin-block-start: var(--sp-l); border-block-start: 1px solid var(--seam-soft); padding-block-start: var(--sp-l); }
+.rw-app .release-changelog-heading { margin-block: 0 var(--sp-s); font-size: .82rem; color: var(--ink-3); font-weight: 650; }
 .rw-app .release-changelog { font-size: .88rem; line-height: 1.5; }
 .rw-app .release-changelog > :first-child { margin-block-start: 0; }
 .rw-app .release-changelog > :last-child { margin-block-end: 0; }
