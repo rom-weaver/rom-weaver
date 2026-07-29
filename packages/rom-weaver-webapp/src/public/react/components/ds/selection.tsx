@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { flushSync } from "react-dom";
 import { join } from "./cx.ts";
 
 /**
@@ -93,7 +94,9 @@ const SelectionCheckList = ({
   if (selection.key !== candidateKey) setSelection({ ids: initialSelectedIds, key: candidateKey });
   const selectedIds = selection.key === candidateKey ? selection.ids : initialSelectedIds;
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
-  const setSelectedIds = (ids: string[]) => setSelection({ ids, key: candidateKey });
+  const setSelectedIds = (ids: string[]) => {
+    flushSync(() => setSelection({ ids, key: candidateKey }));
+  };
   const toggle = (id: string) =>
     setSelectedIds(selectedIds.includes(id) ? selectedIds.filter((value) => value !== id) : [...selectedIds, id]);
   const toggleAll = () => setSelectedIds(allSelected ? [] : selectableIds);

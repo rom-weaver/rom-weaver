@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkWorkerRuntimeChunk } from "../../scripts/check-size-budget.mjs";
+import { checkReactRuntimeExclusion, checkWorkerRuntimeChunk } from "../../scripts/check-size-budget.mjs";
 
 // These fixtures stand in for a production build. The guard they exercise is what stops a silent
 // Vite/rolldown regression from re-duplicating the worker runtime or putting it on the first-paint
@@ -19,6 +19,15 @@ const writeDist = (chunks: Chunks, documentChunks: string[]): string => {
   for (const [name, code] of Object.entries(chunks)) fs.writeFileSync(path.join(assetsDir, name), code);
   const links = documentChunks.map((name) => `<link rel="modulepreload" href="./assets/${name}" />`).join("");
   fs.writeFileSync(path.join(distDir, "index.html"), `<html><head>${links}</head></html>`);
+  return distDir;
+};
+
+const writeSourceMapDist = (sources: string[]): string => {
+  const distDir = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-runtime-guard-"));
+  temporaryDirectories.push(distDir);
+  const assetsDir = path.join(distDir, "assets");
+  fs.mkdirSync(assetsDir);
+  fs.writeFileSync(path.join(assetsDir, "index-test.js.map"), JSON.stringify({ sources, version: 3 }));
   return distDir;
 };
 
@@ -80,5 +89,25 @@ describe("checkWorkerRuntimeChunk", () => {
       `const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./${RUNTIME}"])))=>i.map(i=>d[i]);` +
       `import{a}from"./${SHARED}";const load=()=>import("./${RUNTIME}");`;
     expect(checkWorkerRuntimeChunk(writeDist(chunks, [INDEX, SHARED])).failures).toBe(0);
+  });
+});
+
+describe("checkReactRuntimeExclusion", () => {
+  it("passes when source maps contain only Preact compat", () => {
+    const distDir = writeSourceMapDist(["../../node_modules/preact/compat/src/index.js", "../../src/webapp/main.tsx"]);
+    expect(checkReactRuntimeExclusion(distDir)).toEqual({ failures: 0, problems: [] });
+  });
+
+  it("fails when React or Scheduler enters a bundle", () => {
+    const distDir = writeSourceMapDist([
+      "../../node_modules/react-dom/client.js",
+      "../../node_modules/scheduler/index.js",
+    ]);
+    const result = checkReactRuntimeExclusion(distDir);
+    expect(result.failures).toBe(2);
+    expect(result.problems).toEqual([
+      expect.stringContaining("react-dom was bundled"),
+      expect.stringContaining("scheduler was bundled"),
+    ]);
   });
 });

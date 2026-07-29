@@ -13,9 +13,15 @@ const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
 const assertIncludes = (source, expected, label) => {
   if (!source.includes(expected)) throw new Error(`${label} is missing ${JSON.stringify(expected)}`);
 };
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const assertTagAttributes = (source, tag, attributes, label) => {
-  const pattern = new RegExp(`<${tag}\\b${attributes.map((attribute) => `(?=[^>]*\\b${attribute})`).join("")}[^>]*>`);
-  if (!pattern.test(source)) throw new Error(`${label} is missing`);
+  const pattern = new RegExp(
+    `<${escapeRegExp(tag)}\\b${attributes.map((attribute) => `(?=[^>]*\\b${escapeRegExp(attribute)})`).join("")}[^>]*>`,
+  );
+  if (!pattern.test(source))
+    throw new Error(
+      `${label} is missing <${tag}> with attributes ${attributes.map((attribute) => JSON.stringify(attribute)).join(", ")}`,
+    );
 };
 const assertCount = (source, expected, count, label) => {
   const actual = source.split(expected).length - 1;

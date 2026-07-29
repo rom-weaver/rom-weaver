@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { playwright } from "@vitest/browser-playwright";
 import { mergeConfig } from "vitest/config";
+import { createPreactAliases } from "./preact-aliases.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import baseConfig, { coverageBase } from "./vitest.config.base.mjs";
 
@@ -101,12 +102,7 @@ export default mergeConfig(baseConfig, {
   resolve: {
     alias: [
       { find: "virtual:pwa-register", replacement: VIRTUAL_PWA_REGISTER_STUB },
-      { find: /^react\/jsx-dev-runtime$/, replacement: "preact/jsx-dev-runtime" },
-      { find: /^react\/jsx-runtime$/, replacement: "preact/jsx-runtime" },
-      { find: /^react-dom\/client$/, replacement: "preact/compat/client" },
-      { find: /^react-dom\/server$/, replacement: "preact/compat/server" },
-      { find: /^react-dom$/, replacement: "preact/compat" },
-      { find: /^react$/, replacement: PREACT_REACT_STUB },
+      ...createPreactAliases(PREACT_REACT_STUB),
     ],
     preserveSymlinks: true,
   },

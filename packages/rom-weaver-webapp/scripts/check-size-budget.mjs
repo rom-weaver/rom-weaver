@@ -25,6 +25,7 @@ const listFiles = (directory) =>
 // itself. See the "Workers share one runtime chunk" bullet in docs/development/ARCHITECTURE.md.
 const RUNTIME_CHUNK_PATTERN = /^wasm-runtime-[\w-]+\.js$/;
 const WORKER_ENTRY_CHUNK_PATTERNS = [/^browser-runner-worker-[\w-]+\.js$/, /^browser-wasi-thread-worker-[\w-]+\.js$/];
+const FORBIDDEN_RUNTIME_SOURCE_PATTERN = /(?:^|\/)node_modules\/(react-dom|react|scheduler)(?:\/|$)/;
 // Static ESM imports only, at a statement boundary. `import("./x.js")` (dynamic) and the plain
 // strings inside Vite's `__vite__mapDeps` array must not match - neither costs a first-paint fetch.
 const STATIC_IMPORT_PATTERN = /(?:^|[;}\n])import\s*(?:[\w$*{},\s]+?\s*from\s*)?"([^"]+)"/g;
@@ -109,6 +110,29 @@ export function checkWorkerRuntimeChunk(distDir = DIST_DIR) {
     );
   }
 
+  return { failures: problems.length, problems };
+}
+
+export function checkReactRuntimeExclusion(distDir = DIST_DIR) {
+  const assetsDir = path.join(distDir, "assets");
+  const sourceMapNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".js.map"));
+  if (sourceMapNames.length === 0)
+    return { failures: 1, problems: [`expected JavaScript source maps in ${assetsDir}, found none`] };
+  const bundledPackages = new Map();
+  for (const sourceMapName of sourceMapNames) {
+    const sourceMap = JSON.parse(fs.readFileSync(path.join(assetsDir, sourceMapName), "utf8"));
+    for (const source of sourceMap.sources || []) {
+      const packageName = String(source).replaceAll("\\", "/").match(FORBIDDEN_RUNTIME_SOURCE_PATTERN)?.[1];
+      if (!packageName) continue;
+      const sourceMaps = bundledPackages.get(packageName) ?? new Set();
+      sourceMaps.add(sourceMapName);
+      bundledPackages.set(packageName, sourceMaps);
+    }
+  }
+  const problems = [...bundledPackages].map(
+    ([packageName, sourceMaps]) =>
+      `${packageName} was bundled into ${[...sourceMaps].sort().join(", ")}; production must use only Preact compat`,
+  );
   return { failures: problems.length, problems };
 }
 
@@ -199,12 +223,26 @@ export function reportWorkerRuntimeChunk(distDir = DIST_DIR) {
   return failures;
 }
 
+export function reportReactRuntimeExclusion(distDir = DIST_DIR) {
+  const { failures, problems } = checkReactRuntimeExclusion(distDir);
+  if (failures === 0) {
+    process.stdout.write("PASS    Preact runtime: no React, React DOM, or Scheduler modules bundled\n");
+    return 0;
+  }
+  for (const problem of problems) {
+    process.stdout.write(`ERROR   Preact runtime: ${problem}\n`);
+    process.stdout.write(`::error title=Preact runtime::${problem}. Check preact-aliases.mjs.\n`);
+  }
+  return failures;
+}
+
 export function main() {
   const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
   const result = runSizeBudget(config);
   const chunkFailures = reportWorkerRuntimeChunk();
+  const runtimeFailures = reportReactRuntimeExclusion();
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary(result.rows));
-  return result.failures + chunkFailures === 0 ? 0 : 1;
+  return result.failures + chunkFailures + runtimeFailures === 0 ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = main();

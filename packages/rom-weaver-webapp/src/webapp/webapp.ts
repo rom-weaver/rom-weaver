@@ -1,7 +1,6 @@
 /* RomWeaver (complete webapp implementation) v20240809 - Marc Robledo 2016-2024 - http://www.marcrobledo.com/license */
 
 import { createElement, useLayoutEffect } from "react";
-import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
@@ -518,9 +517,7 @@ const renderWebappRoot = (): undefined => {
   }
   const root = appRoot;
   if (!root) return undefined;
-  flushSync(() => {
-    root.render(webappRoot);
-  });
+  root.render(webappRoot);
   return undefined;
 };
 renderWebappRootIfReady = renderWebappRoot;
