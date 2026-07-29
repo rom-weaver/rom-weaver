@@ -20,13 +20,12 @@
 .rw-modal .modal-head .dlg-x { align-self: flex-start; margin-inline-end: calc(-1 * var(--sp-2xs)); }
 .rw-modal .modal-head .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
 .rw-modal .modal-body { padding: var(--sp-l); overflow-y: auto; overscroll-behavior: contain; }
-.rw-modal.changelog-modal .rw-modal-card { width: min(520px, 100%); }
-.rw-modal.changelog-modal .changelog-version {
-  padding-block: 2px 9px;
-  overflow-wrap: anywhere;
-  font-size: .8rem;
-  text-align: start;
-}
+.rw-modal.changelog-modal .rw-modal-card { width: min(720px, 100%); }
+/* The version transition and full-changelog link ride in the title bar. They sit
+   on the title's baseline while they fit, and drop to their own right-aligned
+   row (the auto margin survives the wrap) once the head runs out of width. */
+.rw-modal.changelog-modal .modal-head { flex-wrap: wrap; align-items: baseline; row-gap: var(--sp-2xs); }
+.rw-modal.changelog-modal .changelog-head-meta { flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
 /* Viewport units avoid a cyclic width under inline-size containment. */
 .rw-modal.settings-modal .rw-modal-card {
   width: min(820px, calc(100vw - 32px));

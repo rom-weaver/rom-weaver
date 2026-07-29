@@ -235,9 +235,8 @@
 
   .rw-modal.changelog-modal .modal-head { padding: var(--sp-m); }
   .rw-modal.changelog-modal .modal-body { padding: var(--sp-m); }
-  .rw-modal.changelog-modal .changelog { gap: var(--sp-s); }
-  .rw-modal.changelog-modal .changelog-subject { font-size: .95rem; }
-  .rw-modal.changelog-modal .changelog-version { padding-block: 0 7px; font-size: .76rem; }
+  /* Below the title rather than beside it - the head has no width left to share. */
+  .rw-modal.changelog-modal .changelog-head-meta { flex: 1 0 100%; justify-content: space-between; }
   .rw-modal.changelog-modal .changelog-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
