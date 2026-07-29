@@ -39,6 +39,7 @@ jobs:
       wasm_runtime: ${{ steps.classify.outputs.wasm_runtime }}
       security: ${{ steps.classify.outputs.security }}
       docker_matrix: ${{ steps.docker-matrix.outputs.matrix }}
+      docker_prebuilt: ${{ steps.classify.outputs.docker_prebuilt }}
       repo_lint: ${{ steps.classify.outputs.repo_lint }}
       full: ${{ steps.classify.outputs.full }}
       cli_platforms: ${{ steps.cli-platforms.outputs.matrix }}
@@ -71,11 +72,18 @@ jobs:
       # leg has to be absent from the matrix rather than started and skipped -
       # that is the whole saving. `[]` means neither image is selected; the job
       # guards on it, since an empty matrix is a hard error.
+      #
+      # The `_arm64` flags select each image's second architecture separately: a
+      # pull request that changed only compile inputs builds amd64 alone, since
+      # the arm64 leg is another full release compile that cannot fail for a
+      # reason amd64 did not. Editing an image definition still builds both.
       - name: Plan the Docker image matrix
         id: docker-matrix
         env:
           CLI_SELECTED: ${{ steps.classify.outputs.docker_cli }}
+          CLI_ARM64: ${{ steps.classify.outputs.docker_cli_arm64 }}
           WEBAPP_SELECTED: ${{ steps.classify.outputs.docker_webapp }}
+          WEBAPP_ARM64: ${{ steps.classify.outputs.docker_webapp_arm64 }}
         run: node scripts/ci/docker-matrix.mjs
 
   # Static analysis of the repository's own plumbing - workflows, Node.js
@@ -284,7 +292,10 @@ jobs:
   #
   # This is the only place the webapp `nightly` image can come from: it wraps
   # the `webapp-dist` artifact that `deploy` ships to nightly.rom-weaver.com,
-  # so the image and the site are the same bundle.
+  # so the image and the site are the same bundle. That is why main runs it for
+  # the whole webapp stack while a pull request needs an image-side reason: the
+  # job runs no builder stage, so on a pull request nothing about it can fail
+  # for a bundle reason, but on main every new bundle owes nightly an image.
   docker-prebuilt:
     name: Docker build (webapp, prebuilt, ${{ matrix.arch }})
     # The matrix below only ever holds amd64 and arm64, so this reads as a pair
@@ -292,8 +303,8 @@ jobs:
     # runner.
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 20
-    needs: webapp-static
-    if: github.ref_type != 'tag'
+    needs: [changes, webapp-static]
+    if: github.ref_type != 'tag' && needs.changes.outputs.docker_prebuilt == 'true'
     permissions:
       contents: read
       # Only exercised on the main push below; a fork pull request receives a
@@ -462,10 +473,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Three calls rather than one: unlike `rust` and `webapp`, these jobs do
-      # not share a selection flag, and the script's contract is one flag per
-      # group. Every group is evaluated before exiting so one skip-mismatch
-      # does not hide the others.
+      # One call per selection flag rather than one for the job: unlike `rust`
+      # and `webapp`, these jobs do not share a flag, and the script's contract
+      # is one flag per group. The prebuilt smoke has a flag of its own because
+      # a pull request skips it for a webapp change that touched no image file,
+      # which the webapp flag would report as a missing job. Every group is
+      # evaluated before exiting so one skip-mismatch does not hide the others.
       - name: Verify plumbing jobs
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
@@ -475,6 +488,7 @@ jobs:
           DOCKER_RESULT: ${{ needs.docker.result }}
           WEBAPP_SELECTED: ${{ needs.changes.outputs.webapp }}
           WASM_RESULT: ${{ needs.wasm.result }}
+          DOCKER_PREBUILT_SELECTED: ${{ needs.changes.outputs.docker_prebuilt }}
           DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
         run: node scripts/ci/assert-job-groups.mjs
 
