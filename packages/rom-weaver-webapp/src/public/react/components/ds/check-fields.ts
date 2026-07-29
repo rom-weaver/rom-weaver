@@ -18,6 +18,10 @@ type CheckField = (typeof CHECK_FIELDS)[number];
 /** The two fields short enough to share a grid row; the rest take the full width. */
 const isHalfRowField = (field: CheckField): boolean => field === "crc32" || field === "bytes";
 
+/** The two long hashes, which share a grid row only on drawers wide enough to
+ * hold a 40-character value at half width. */
+const isHashRowField = (field: CheckField): boolean => field === "md5" || field === "sha1";
+
 const normalizeCheckInput = (raw: string) => raw.trim().toLowerCase().replace(/^0x/, "");
 
 const isValidCheckValue = (algorithm: CheckAlgorithm, value: string) =>
@@ -32,6 +36,7 @@ export {
   type CheckAlgorithm,
   type CheckField,
   isHalfRowField,
+  isHashRowField,
   isValidCheckValue,
   normalizeCheckInput,
 };

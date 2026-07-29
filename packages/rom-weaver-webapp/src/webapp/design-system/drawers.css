@@ -176,29 +176,49 @@
 .rw-app .ck:active { background: color-mix(in oklab, var(--thread) 7%, var(--well)); }
 .rw-app .ck.bad { background: color-mix(in oklab, var(--fault) 10%, var(--well)); }
 .rw-app .ck .ck-k { font-size: .74rem; color: var(--ink-4); margin: 0; text-transform: lowercase; letter-spacing: .02em; }
-/* Scale all values together so a 40-character SHA-1 stays on one line. */
+/* Scale all values together so a 40-character SHA-1 stays on one line.
+   --ck-v-span is the slice of the container the row spans: a full row reads the
+   whole width, a paired row only half of it. */
 .rw-app .ck .ck-v {
   margin: 0; color: var(--weft); white-space: nowrap; text-transform: uppercase; letter-spacing: .03em;
-  font-size: clamp(.46rem, calc((100cqi - var(--ck-fit-reserve) - var(--ck-mark-reserve)) / 25.2), .97rem);
+  font-size: clamp(.46rem, calc((var(--ck-v-span, 100cqi) - var(--ck-fit-reserve) - var(--ck-mark-reserve)) / 25.2), .97rem);
 }
 /* Pair short checksum rows while full rows and groups span both tracks. */
-.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) {
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) {
   display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; align-items: start;
   margin-inline: -10px;
 }
-.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) > * { grid-column: 1 / -1; min-width: 0; }
-.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) .ck:not(.req) { margin-inline: 0; width: 100%; }
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) > * { grid-column: 1 / -1; min-width: 0; }
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) .ck:not(.req) { margin-inline: 0; width: 100%; }
 .rw-app .ckrows .ck-group { display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; }
 .rw-app .ckrows .ck-group > * { grid-column: 1 / -1; min-width: 0; }
 .rw-app .ckrows .ck-group .ck:not(.req) { margin-inline: 0; width: 100%; }
 /* Read-only and editable rows pair identically, so the patch card's short
    checks sit two-up exactly like the ROM card's. */
-.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) > :is(.ck, .verification-row).ck-half:not(.req),
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) > :is(.ck, .verification-row).ck-half:not(.req),
 .rw-app .ckrows:not(.patch-check-columns) .ck-group > :is(.ck, .verification-row).ck-half:not(.req) { grid-column: auto / span 1; }
 /* Restore the seam that stacked-row border collapse removed. */
 .rw-app .ckrows:not(.patch-check-columns) :is(.ck, .verification-row).ck-half:not(.req) + :is(.ck, .verification-row).ck-half:not(.req) {
   border-inline-start: 1px solid var(--ck-seam);
   border-block-start-color: var(--ck-seam);
+}
+
+/* Pair MD5 with SHA-1 the way CRC32 pairs with BYTES, but only once half the
+   row still fits a 40-character hash near the unpaired size - below that the
+   two long values are better off owning a full row each. Only an adjacent
+   md5/sha-1 pair halves, so a lone hash never leaves a dead half-row beside it. */
+@container (min-width: 900px) {
+  .rw-app .ckrows:not(.patch-check-columns) :is(.ck, .verification-row).ck-hash:not(.req):has(+ :is(.ck, .verification-row).ck-hash:not(.req)),
+  .rw-app .ckrows:not(.patch-check-columns) :is(.ck, .verification-row).ck-hash:not(.req) + :is(.ck, .verification-row).ck-hash:not(.req) { grid-column: auto / span 1; }
+  .rw-app .ckrows:not(.patch-check-columns) :is(.ck, .verification-row).ck-hash:not(.req) + :is(.ck, .verification-row).ck-hash:not(.req) {
+    border-inline-start: 1px solid var(--ck-seam);
+    border-block-start-color: var(--ck-seam);
+  }
+  /* Paired rows only get half the container, so the whole list re-sizes off
+     half of it - values keep one shared size the way they do unpaired. */
+  .rw-app .ckrows:not(.patch-check-columns):has(:is(.ck, .verification-row).ck-hash:not(.req) + :is(.ck, .verification-row).ck-hash:not(.req)) :is(.ck, .verification-row):not(.req) {
+    --ck-v-span: 50cqi;
+  }
 }
 
 /* Split multiple groups into independently sized columns on wide drawers. */

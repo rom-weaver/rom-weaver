@@ -166,7 +166,7 @@
   margin-inline: -4px 0; width: calc(100% + 4px);
   background: transparent; border: 1px solid transparent; border-radius: 5px;
   font-family: var(--mono); font-stretch: revert; letter-spacing: .03em;
-  font-size: clamp(.46rem, calc((100cqi - var(--ck-fit-reserve, 96px) - var(--ck-mark-reserve, 0px)) / 25.2), .97rem);
+  font-size: clamp(.46rem, calc((var(--ck-v-span, 100cqi) - var(--ck-fit-reserve, 96px) - var(--ck-mark-reserve, 0px)) / 25.2), .97rem);
   color: var(--weft); text-transform: uppercase;
   transition: border-color .08s, background-color .08s;
 }
