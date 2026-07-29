@@ -963,6 +963,10 @@ export default defineConfig(({ command }) => {
     },
     clearScreen: false,
     css: {
+      // Dev-only: build-time CSS sourcemaps do not exist in (rolldown-)vite - build.sourcemap
+      // only covers JS (vitejs/vite#2830) - but dev serves compiled CSS, and this maps it
+      // back to the design-system source files in devtools.
+      devSourcemap: true,
       transformer: "lightningcss",
     },
     define: {
