@@ -225,7 +225,8 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         // so its Drop can't delete the very file the flag protects.
         let cleanup = ChdOutputCleanup::new();
         let mut output = BufWriter::new(cleanup.create_output(&output_path, request.overwrite)?);
-        let mut output_checksum = create_extract_checksum(context)?;
+        let mut output_checksum =
+            create_extract_checksum(context, request.containing_archive.is_none())?;
         chd.stream_with_progress(
             execution.effective_threads,
             Some(&extract_progress),
