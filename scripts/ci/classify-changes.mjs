@@ -18,6 +18,19 @@ const EMPTY = {
   security: false,
   docker_cli: false,
   docker_webapp: false,
+  // "Also build this image's arm64 leg." A pull request that changed only an
+  // image's compile inputs - a lock bump, an arch-neutral runtime config - gets
+  // the amd64 leg alone, because the second architecture is a second full
+  // release compile and cannot fail for a reason the first one did not.
+  // Whatever an architecture can break on its own lives in the image
+  // definition, so editing one still builds both. Every non-pull-request event
+  // builds both regardless; see the tail of `classifyChanges`.
+  docker_cli_arm64: false,
+  docker_webapp_arm64: false,
+  // The webapp prebuilt smoke: it wraps whatever bundle `webapp-static` built,
+  // so on a pull request it can only fail for an image reason. Derived at the
+  // tail of `classifyChanges` rather than per path.
+  docker_prebuilt: false,
   repo_lint: false,
   full: false,
 };
@@ -130,19 +143,29 @@ export function classifyChanges(paths, all = false, eventName = undefined) {
     )
       result.security = true;
 
+    // The CLI image pins its own `rust:` builder tag, independent of the
+    // toolchain `cli-platforms` compiles with, so a manifest or lock change can
+    // break this image and nothing else. It is still only worth one
+    // architecture on a pull request - see `docker_cli_arm64` above.
     if (
       path === "Dockerfile" ||
       /^\.cargo\//.test(path) ||
       /^(?:Cargo\.toml|Cargo\.lock)$/.test(path)
     ) {
       result.docker_cli = true;
+      if (path === "Dockerfile") result.docker_cli_arm64 = true;
     }
     if (
       path === "packages/rom-weaver-webapp/Dockerfile" ||
       path === "packages/rom-weaver-webapp/sws.toml" ||
       path === "packages/rom-weaver-webapp/scripts/compress-static-assets.mjs"
-    )
+    ) {
       result.docker_webapp = true;
+      // The webapp image pins an arm64 WASI SDK and binaryen by sha256 that no
+      // amd64 build ever resolves, so its Dockerfile is exactly the file whose
+      // arm64 leg has to run.
+      if (path === "packages/rom-weaver-webapp/Dockerfile") result.docker_webapp_arm64 = true;
+    }
     if (
       path === ".dockerignore" ||
       path === "docker-compose.yml" ||
@@ -153,6 +176,10 @@ export function classifyChanges(paths, all = false, eventName = undefined) {
     ) {
       result.docker_cli = true;
       result.docker_webapp = true;
+      // These decide the build context, the exporter, and the per-arch cache
+      // ref, all of which are architecture-specific.
+      result.docker_cli_arm64 = true;
+      result.docker_webapp_arm64 = true;
     }
 
     // `repo-lint` lints every tracked file of these kinds rather than the diff,
@@ -179,10 +206,31 @@ export function classifyChanges(paths, all = false, eventName = undefined) {
     result.security = true;
     result.docker_cli = true;
     result.docker_webapp = true;
+    // Fail open all the way down: a change to CI or the toolchain can break one
+    // architecture and not the other, so this narrows nothing either.
+    result.docker_cli_arm64 = true;
+    result.docker_webapp_arm64 = true;
     result.repo_lint = true;
   }
   // Every runtime test consumes the production module and webapp dependencies.
   if (result.wasm_runtime) result.webapp = true;
+
+  // Only a pull request narrows an image to one architecture. Every other event
+  // - a push to main, whose legs feed the `nightly` manifest lists, and a
+  // dispatch - builds every architecture of whatever it selected at all.
+  if (eventName !== "pull_request") {
+    result.docker_cli_arm64 = result.docker_cli;
+    result.docker_webapp_arm64 = result.docker_webapp;
+  }
+
+  // The prebuilt smoke needs a bundle, so it can never outrun the webapp stack.
+  // On a pull request it additionally needs an image-side reason: it copies
+  // `webapp-static`'s artifact into the image and runs no builder stage, so
+  // which bundle it copied cannot change the outcome. On main it is also the
+  // only publisher of the webapp `nightly` image, so the webapp stack alone
+  // selects it there.
+  result.docker_prebuilt =
+    result.webapp && (eventName !== "pull_request" || result.docker_webapp);
   return result;
 }
 

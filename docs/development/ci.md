@@ -269,7 +269,8 @@ wasm ────┤
              ┌── repo-lint ───────────┐
 changes ─────┼── docker (0-4 legs) ───┼── plumbing (aggregate check name)
              ├── wasm ────────────────┤
-             └── docker-prebuilt ─────┘ (via webapp-static: the release COPY path)
+             └── docker-prebuilt ─────┘ (via webapp-static: the release COPY path;
+                                          PRs need an image-side change)
                     │      │
                     │      └── docker-prebuilt-nightly ┐ manifest list + attest
                     └───────── docker-nightly ─────────┘ (main pushes only)
@@ -318,6 +319,17 @@ security ── advisories (warn only, always green)
   Each selected image expands to one leg per architecture - amd64 on
   `ubuntu-24.04`, arm64 on `ubuntu-24.04-arm` - so nothing here runs under
   emulation; see [Multi-arch images](#multi-arch-images).
+  On a **pull request** the two architectures are selected separately: editing an
+  image definition (its Dockerfile, `.dockerignore`, `docker-compose.yml`,
+  `docker-publish.yml`, or a shared Docker action) builds both, while a change to
+  an image's compile inputs alone - a lock bump, an arch-neutral runtime config -
+  builds amd64 and stops there. Whatever an architecture can break on its own
+  lives in the image definition: the webapp image's arm64 WASI SDK and binaryen
+  checksums, the per-arch cache ref, the exporter. The second leg is otherwise a
+  second full release compile of the same source, and it cannot fail for a reason
+  the first one did not. Every other event - a push to `main`, whose legs feed the
+  `nightly` manifest lists, and a manual dispatch - builds both architectures of
+  whatever it selected at all.
   The webapp source leg runs only when its
   image plumbing changes (the Dockerfile, `.dockerignore`,
   `docker-compose.yml`, `sws.toml`, the Docker compression script, `ci.yml`,
@@ -365,7 +377,15 @@ security ── advisories (warn only, always green)
   `ghcr.io/rom-weaver/rom-weaver-webapp:nightly`. The CLI equivalent
   stays in the image-gated `docker` leg instead of starting a separate prebuilt
   runner. Pull requests build amd64 only to prove the release COPY/compression
-  path; `main` builds amd64 and arm64 for the nightly manifest. The bundle is
+  path; `main` builds amd64 and arm64 for the nightly manifest.
+  The two refs also gate it differently, because the job means a different thing
+  on each. It runs no builder stage - it copies `webapp-static`'s artifact into
+  the image - so on a pull request it can only fail for an image reason, and it
+  needs one: the same image-plumbing selection the webapp source leg takes. A
+  Rust or UI change that rebuilds the bundle and touches no image file skips it.
+  On `main` the webapp stack alone selects it, because there it is not a smoke
+  test but the sole publisher of the webapp `nightly` image, and every new bundle
+  owes that channel one. The bundle is
   architecture-independent, but the image around it is not (a Node.js
   compression stage, an Alpine runtime).
 - **`docker-nightly`** and **`docker-prebuilt-nightly`** run on `main` pushes
@@ -431,8 +451,11 @@ security ── advisories (warn only, always green)
   separate `cargo test --doc` pass rather than silently shrinking the suite.
 - **`plumbing`** is an aggregator over `repo-lint`, `docker`,
   `docker-prebuilt`, and `wasm`, on the same `scripts/ci/assert-jobs.mjs` as
-  `rust` below - three calls, because those jobs do not share one selection
-  flag. All four are skippable, and a matrix leg that is not planned reports no
+  `rust` below - one call per selection flag, because those jobs do not share
+  one. `docker-prebuilt` has a flag of its own (`docker_prebuilt`) rather than
+  riding the webapp flag beside `wasm`: a pull request skips it for a webapp
+  change that touched no image file, which the webapp flag would report as a
+  missing job. All four are skippable, and a matrix leg that is not planned reports no
   status at all, so `Plumbing` is the only name branch protection can safely
   require for them.
 - **`rust`** is an aggregator: it fails unless selected jobs succeeded and
@@ -903,7 +926,7 @@ update this section, and say so in the release notes.
 Backs the `rust`, `webapp`, and `plumbing` aggregate checks, which present one
 stable name to branch protection over a fan-out of parallel jobs. It takes one
 selection flag per call, so `plumbing` - whose jobs do not share a flag - calls
-it once per group. On GitHub a skipped check
+it once per flag. On GitHub a skipped check
 counts as passing, so the aggregate has to fail explicitly - which means telling
 "skipped because the path filter said this change cannot affect it" apart from
 "skipped because something upstream failed".
@@ -924,6 +947,16 @@ platform, worker, storage, and shared type layers; dependencies; the
 suite's fixtures/config; and all fail-open CI/toolchain inputs. Ordinary Rust
 sources select CLI source Docker after merge, while Docker/Cargo/toolchain
 inputs select it on a pull request too.
+
+Three of its outputs exist to keep a Docker job from running for a change it
+cannot report on. `docker_cli_arm64` and `docker_webapp_arm64` select each
+image's second architecture separately, so a pull request that changed only an
+image's compile inputs pays one release compile instead of two; editing an image
+definition, and every event other than a pull request, still selects both.
+`docker_prebuilt` gates the webapp prebuilt smoke, which needs a bundle on any
+ref and an image-side change as well on a pull request - see
+[`docker-prebuilt`](#jobs).
+
 Changes to CI, coverage, toolchain setup, or the
 classifier fail open by selecting every stack. So does the event name: only
 `pull_request` narrows anything, so an absent `EVENT_NAME` costs time rather
@@ -1303,6 +1336,7 @@ mise run ci                                                  # broad local gate
 
 mise run actionlint ::: docs-lint ::: shellcheck ::: hadolint # repo-lint
 node --test scripts/ci/classify-changes.test.mjs             # change boundaries
+node --test scripts/ci/docker-matrix.test.mjs                # image/arch leg planning
 node --test scripts/ci/wasm-runtime-coverage.test.mjs        # wasm_runtime vs. the suite
 mise run fmt ::: clippy ::: typegen-check ::: whitespace ::: thread-guards
 mise run test-rust ::: licenses-check ::: deny-policy ::: machete # rust-host

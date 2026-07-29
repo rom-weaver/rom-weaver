@@ -22,6 +22,9 @@ test("documentation changes skip compiled stacks", () =>
     security: "false",
     docker_cli: "false",
     docker_webapp: "false",
+    docker_cli_arm64: "false",
+    docker_webapp_arm64: "false",
+    docker_prebuilt: "false",
     repo_lint: "true",
     full: "false",
   }));
@@ -113,6 +116,9 @@ test("Rust test-only changes select nothing but Rust", () => {
         security: "false",
         docker_cli: "false",
         docker_webapp: "false",
+        docker_cli_arm64: "false",
+        docker_webapp_arm64: "false",
+        docker_prebuilt: "false",
         repo_lint: "false",
         full: "false",
       },
@@ -153,6 +159,63 @@ test("an absent or unknown event keeps the full selection", () => {
   for (const eventName of [undefined, "", "push", "workflow_dispatch", "merge_group"]) {
     assert.equal(classifyFor(eventName, path).docker_cli, "true", String(eventName));
   }
+});
+
+// A second architecture is a second full release compile of the same source. It
+// can only fail for a reason the first one did not when the failure is
+// architecture-specific, and everything that is - the SDK pins, the exporter,
+// the per-arch cache ref - lives in the image definition and the shared build
+// action, not in a lock file.
+test("a pull request builds arm64 only for image definition changes", () => {
+  for (const [path, cliArm64, webappArm64] of [
+    ["Dockerfile", "true", "false"],
+    ["packages/rom-weaver-webapp/Dockerfile", "false", "true"],
+    [".github/actions/docker-build-arch/action.yml", "true", "true"],
+    [".dockerignore", "true", "true"],
+    // A CI or toolchain change fails open all the way down - it can break one
+    // architecture and not the other.
+    [".github/workflows/ci.yml", "true", "true"],
+    // Compile inputs and arch-neutral runtime config: amd64 proves them.
+    ["Cargo.lock", "false", "false"],
+    ["Cargo.toml", "false", "false"],
+    ["packages/rom-weaver-webapp/sws.toml", "false", "false"],
+    ["packages/rom-weaver-webapp/scripts/compress-static-assets.mjs", "false", "false"],
+  ]) {
+    const result = classifyFor("pull_request", path);
+    assert.equal(result.docker_cli_arm64, cliArm64, path);
+    assert.equal(result.docker_webapp_arm64, webappArm64, path);
+  }
+});
+
+// Only a pull request narrows: main's legs feed the `nightly` manifest lists, so
+// an image it selected at all owes both architectures.
+test("every other event builds both architectures of whatever it selected", () => {
+  for (const eventName of [undefined, "", "push", "workflow_dispatch", "merge_group"]) {
+    const result = classifyFor(eventName, "Cargo.lock");
+    assert.equal(result.docker_cli_arm64, "true", String(eventName));
+    // Still not selected at all, so still no arm64 leg.
+    assert.equal(result.docker_webapp, "false", String(eventName));
+    assert.equal(result.docker_webapp_arm64, "false", String(eventName));
+  }
+});
+
+test("the prebuilt smoke needs an image reason on a pull request, a bundle on main", () => {
+  const webappOnly = "packages/rom-weaver-webapp/src/index.tsx";
+  const rustOnly = "crates/rom-weaver-containers/src/chd/decode/frames.rs";
+  for (const path of [webappOnly, rustOnly]) {
+    assert.equal(classifyFor("pull_request", path).webapp, "true", path);
+    assert.equal(classifyFor("pull_request", path).docker_prebuilt, "false", path);
+    // Every bundle main builds owes the webapp `nightly` channel an image.
+    assert.equal(classifyFor("push", path).docker_prebuilt, "true", path);
+  }
+  // An image-side change selects it on a pull request too.
+  assert.equal(
+    classifyFor("pull_request", "packages/rom-weaver-webapp/Dockerfile").docker_prebuilt,
+    "true",
+  );
+  // No bundle, no smoke - it wraps `webapp-static`'s artifact.
+  assert.equal(classifyFor("push", "Dockerfile").webapp, "false");
+  assert.equal(classifyFor("push", "Dockerfile").docker_prebuilt, "false");
 });
 
 test("plumbing lint runs only for the file kinds it lints", () => {
@@ -199,6 +262,9 @@ test("native package changes build every CLI platform", () => {
         security: "false",
         docker_cli: "false",
         docker_webapp: "false",
+        docker_cli_arm64: "false",
+        docker_webapp_arm64: "false",
+        docker_prebuilt: "true",
         repo_lint: repoLint,
         full: "false",
       },
@@ -215,6 +281,9 @@ test("dependency and CI changes select their broader checks", () => {
     security: "true",
     docker_cli: "true",
     docker_webapp: "false",
+    docker_cli_arm64: "true",
+    docker_webapp_arm64: "false",
+    docker_prebuilt: "true",
     repo_lint: "false",
     full: "false",
   });
@@ -233,6 +302,9 @@ test("dependency and CI changes select their broader checks", () => {
         security: "true",
         docker_cli: "true",
         docker_webapp: "true",
+        docker_cli_arm64: "true",
+        docker_webapp_arm64: "true",
+        docker_prebuilt: "true",
         repo_lint: "true",
         full: "true",
       },
