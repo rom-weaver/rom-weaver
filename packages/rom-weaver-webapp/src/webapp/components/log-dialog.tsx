@@ -69,7 +69,7 @@ const formatOpfsSize = (size: number | undefined) => (size === undefined ? "—"
 const formatOpfsEntry = (entry: BrowserOpfsEntry) =>
   `${entry.kind.padEnd(9)} ${formatOpfsSize(entry.size).padStart(12)} ${entry.path}`;
 
-const IS_DEVELOPMENT = import.meta.env.DEV;
+const OPFS_REFRESH_INTERVAL_MS = 1000;
 
 const EMPTY_ENTRIES: readonly LogStoreEntry[] = [];
 // While the dialog is closed there is nothing to show, so subscribe to a no-op
@@ -148,7 +148,7 @@ const LogDialog = ({
   const previousEntries = useMemo(() => getLastSessionEntries(), []);
   const hasPrevious = previousEntries.length > 0;
   const showingPrevious = view === "previous" && hasPrevious;
-  const showingOpfs = IS_DEVELOPMENT && view === "opfs";
+  const showingOpfs = view === "opfs";
   const refreshOpfs = useCallback(async () => {
     setOpfsLoading(true);
     setOpfsError(null);
@@ -161,7 +161,10 @@ const LogDialog = ({
     }
   }, []);
   useEffect(() => {
-    if (open && showingOpfs) void refreshOpfs();
+    if (!(open && showingOpfs)) return;
+    void refreshOpfs();
+    const interval = window.setInterval(() => void refreshOpfs(), OPFS_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(interval);
   }, [open, refreshOpfs, showingOpfs]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
@@ -240,34 +243,30 @@ const LogDialog = ({
           <h2 className="dlg-title" id="log-title">
             {localizer.message("ui.log.viewLabel")}
           </h2>
-          {hasPrevious || IS_DEVELOPMENT ? (
-            <fieldset className="logview">
-              <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
+          <fieldset className="logview">
+            <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
+            <button
+              aria-pressed={view === "current"}
+              className="seg-btn"
+              onClick={() => setView("current")}
+              type="button"
+            >
+              {localizer.message("ui.log.viewCurrent")}
+            </button>
+            {hasPrevious ? (
               <button
-                aria-pressed={view === "current"}
+                aria-pressed={showingPrevious}
                 className="seg-btn"
-                onClick={() => setView("current")}
+                onClick={() => setView("previous")}
                 type="button"
               >
-                {localizer.message("ui.log.viewCurrent")}
+                {localizer.message("ui.log.viewPrevious")}
               </button>
-              {hasPrevious ? (
-                <button
-                  aria-pressed={showingPrevious}
-                  className="seg-btn"
-                  onClick={() => setView("previous")}
-                  type="button"
-                >
-                  {localizer.message("ui.log.viewPrevious")}
-                </button>
-              ) : null}
-              {IS_DEVELOPMENT ? (
-                <button aria-pressed={showingOpfs} className="seg-btn" onClick={() => setView("opfs")} type="button">
-                  OPFS
-                </button>
-              ) : null}
-            </fieldset>
-          ) : null}
+            ) : null}
+            <button aria-pressed={showingOpfs} className="seg-btn" onClick={() => setView("opfs")} type="button">
+              OPFS
+            </button>
+          </fieldset>
           <div className="dlg-actions log-actions">
             <button
               aria-label={localizer.message("ui.common.copy")}
