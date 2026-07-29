@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { playwright } from "@vitest/browser-playwright";
 import { mergeConfig } from "vitest/config";
-import { createPreactAliases } from "./preact-aliases.mjs";
+import { createPreactAliases } from "./scripts/preact-aliases.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import baseConfig, { coverageBase } from "./vitest.config.base.mjs";
 

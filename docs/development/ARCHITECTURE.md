@@ -467,7 +467,7 @@ committed and drift-checked.
 The webapp's source is written against the React API, but the runtime that ships
 is **Preact via `preact/compat`**. Nothing imports `preact` directly: every file
 still says `react` / `react-dom` / `react-dom/client` / `react-dom/server`, and
-`packages/rom-weaver-webapp/preact-aliases.mjs` rewrites those specifiers (plus
+`packages/rom-weaver-webapp/scripts/preact-aliases.mjs` rewrites those specifiers (plus
 both JSX runtimes) at resolve time. That one helper is shared by the production
 Vite build, the browser suite, and the node unit suite so all three resolve the
 same runtime.

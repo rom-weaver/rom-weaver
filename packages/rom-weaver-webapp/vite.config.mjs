@@ -9,7 +9,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
-import { createPreactAliases } from "./preact-aliases.mjs";
+import { createPreactAliases } from "./scripts/preact-aliases.mjs";
 import { criticalAssetLinkHeaders } from "./scripts/critical-asset-hints.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";

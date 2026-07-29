@@ -175,11 +175,18 @@ test("local bundle remote sources remain live until the workflow owner is dispos
   try {
     mount(createElement(ApplyPatchForm, { onProgress: progressSpy, pageDrop: { files: [bundleFile], id: 1 } }));
     await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips"]);
-    // Waiting for the first progress event waits for the form to own the staged workflow. Unmounting
-    // before that point leaves the remote files below undisposed for good - the patch stack and the
-    // enabled apply button are both reached earlier than ownership under preact, where they were not
-    // under React. That ordering gap is worth closing in the workflow layer; until it is, this is the
-    // barrier that keeps the disposal assertion meaningful rather than accidentally passing.
+    // This barrier is load-bearing, and what it covers for is a real gap rather than a slow await.
+    // Traced through the unmount path: the form's cleanup DOES run under preact (the
+    // `useEffect(() => () => resetWorkflow())` in apply-patch-form.tsx fires exactly once), but
+    // `workflowRef.current` is already null by then even with the bundle fully staged and the apply
+    // button enabled - so its `workflow?.dispose()` is a no-op here, and the session hook's own
+    // unmount cleanup only cancels the operation and disposes the active OUTPUT, not staged sources.
+    // No unmount path releases the staged remote files, which is why the release below is
+    // timing-dependent and this wait is what makes the assertion mean anything.
+    //
+    // Deliberately not "fixed" by adding a dispose call: releaseSources in browser-runtime-vfs.ts
+    // documents live races with in-flight readers, so an extra release risks freeing a source another
+    // drop still holds. Needs an owner for the staged-source lifetime, not another call site.
     await expect.poll(() => progressSpy.mock.calls.length).toBeGreaterThan(0);
     await waitForApplyButtonEnabled();
     const remotePaths = truncateSpy.mock.calls

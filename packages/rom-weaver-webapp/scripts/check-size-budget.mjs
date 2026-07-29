@@ -241,7 +241,7 @@ export function reportReactRuntimeExclusion(distDir = DIST_DIR) {
   }
   for (const problem of problems) {
     process.stdout.write(`ERROR   Preact runtime: ${problem}\n`);
-    process.stdout.write(`::error title=Preact runtime::${problem}. Check preact-aliases.mjs.\n`);
+    process.stdout.write(`::error title=Preact runtime::${problem}. Check scripts/preact-aliases.mjs.\n`);
   }
   return failures;
 }

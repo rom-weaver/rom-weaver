@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { mergeConfig } from "vitest/config";
-import { createPreactAliases } from "./preact-aliases.mjs";
+import { createPreactAliases } from "./scripts/preact-aliases.mjs";
 import baseConfig, { coverageBase } from "./vitest.config.base.mjs";
 
 const PREACT_REACT_STUB = fileURLToPath(new URL("./tests/browser/stubs/preact-react.mjs", import.meta.url));
