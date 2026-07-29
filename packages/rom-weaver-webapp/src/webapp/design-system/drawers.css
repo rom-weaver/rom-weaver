@@ -48,12 +48,12 @@
 .rw-app .dry-apply-pop p { margin: 6px 0 0; }
 .rw-app .cks.is-open { background: color-mix(in oklab, var(--well) 45%, transparent); }
 /* Dark-theme drawers need a stronger seam against the card. */
-:root[data-theme="dark"] .cks, .theme-veil.theme-veil[data-theme="dark"] .cks { border-color: var(--seam-strong); background: color-mix(in oklab, var(--plate-2) 45%, var(--well)); }
-:root[data-theme="dark"] .cks.is-open, .theme-veil.theme-veil[data-theme="dark"] .cks.is-open { background: color-mix(in oklab, var(--plate-2) 30%, var(--well)); }
-:root[data-theme="dark"] .cks.is-open > .cks-head, .theme-veil.theme-veil[data-theme="dark"] .cks.is-open > .cks-head { border-block-end-color: var(--seam-strong); }
+:root[data-theme="dark"] .cks { border-color: var(--seam-strong); background: color-mix(in oklab, var(--plate-2) 45%, var(--well)); }
+:root[data-theme="dark"] .cks.is-open { background: color-mix(in oklab, var(--plate-2) 30%, var(--well)); }
+:root[data-theme="dark"] .cks.is-open > .cks-head { border-block-end-color: var(--seam-strong); }
 /* Use a solid light-theme well so open drawers remain distinct. */
-:root[data-theme="light"] .cks.is-open, .theme-veil.theme-veil[data-theme="light"] .cks.is-open { background: var(--well); border-color: var(--seam-strong); }
-:root[data-theme="light"] .cks.is-open > .cks-head, .theme-veil.theme-veil[data-theme="light"] .cks.is-open > .cks-head { border-block-end-color: var(--seam-strong); }
+:root[data-theme="light"] .cks.is-open { background: var(--well); border-color: var(--seam-strong); }
+:root[data-theme="light"] .cks.is-open > .cks-head { border-block-end-color: var(--seam-strong); }
 .rw-app .cks > .cks-head {
   appearance: none; border: 0; background: transparent; color: inherit; font: inherit; text-align: start;
   width: 100%; cursor: pointer; display: flex; align-items: center; gap: var(--sp-xs);
@@ -226,10 +226,10 @@
     text-shadow: 0 0 10px color-mix(in oklab, var(--verified) 70%, transparent);
   }
 }
-:root[data-theme="dark"] .ck .ck-v, :root[data-theme="dark"] .ck.req .ck-v, .theme-veil.theme-veil[data-theme="dark"] .ck .ck-v, .theme-veil.theme-veil[data-theme="dark"] .ck.req .ck-v { color: var(--thread-text); }
-:root[data-theme="light"] .ck, .theme-veil.theme-veil[data-theme="light"] .ck { --ck-seam: var(--seam-strong); border-color: var(--ck-seam); }
+:root[data-theme="dark"] .ck .ck-v, :root[data-theme="dark"] .ck.req .ck-v { color: var(--thread-text); }
+:root[data-theme="light"] .ck { --ck-seam: var(--seam-strong); border-color: var(--ck-seam); }
 /* Preserve label contrast over tinted light-theme rows. */
-:root[data-theme="light"] .ck .ck-k, .theme-veil.theme-veil[data-theme="light"] .ck .ck-k { color: var(--ink-2); }
+:root[data-theme="light"] .ck .ck-k { color: var(--ink-2); }
 .rw-app .ck .copy { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--ink-4); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 5px; opacity: .6; transition: transform .12s, color .15s, opacity .15s; }
 @media (hover: hover) {
   .rw-app .ck:hover .copy { opacity: 1; color: var(--thread-text); }

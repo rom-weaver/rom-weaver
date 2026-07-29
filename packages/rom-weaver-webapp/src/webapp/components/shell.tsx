@@ -4,10 +4,9 @@ import type { ReactNode } from "react";
 import { useLayoutEffect, useRef } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
-import { prefersReducedMotion, viewTransitionsUnavailable } from "../../public/react/components/ds/flat-transition.ts";
+import { viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
-import { runThemeWipeFallback, wipeOrigin } from "../theme-wipe.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
 const Github = createLucideIcon("github", [
@@ -135,6 +134,11 @@ const ModeRail = ({
  * Theme toggle with the loom circle-wipe: the new theme clip-reveals from the
  * button via a view transition. The wipe itself is the CSS `theme-wipe`
  * keyframe; this only feeds the origin custom properties and flips the theme.
+ *
+ * Gated on `viewTransitionsUnsupported`, not `viewTransitionsUnavailable`:
+ * iOS WebKit is excluded from the latter because named elements misbehave
+ * mid-capture, and `html.vt-theme` suppresses every name, so the wipe is a
+ * plain root snapshot there.
  */
 const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   const { theme, toggleTheme } = useTheme();
@@ -142,19 +146,17 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   const label = localizer.message(theme === "dark" ? "ui.theme.toLight" : "ui.theme.toDark");
   const handleClick = () => {
     const root = document.documentElement;
-    const origin = wipeOrigin(buttonRef.current?.getBoundingClientRect());
-    if (prefersReducedMotion()) {
+    if (viewTransitionsUnsupported()) {
       toggleTheme();
       return;
     }
-    // iOS WebKit has no usable view transitions; it gets the hand-painted wipe.
-    if (viewTransitionsUnavailable()) {
-      runThemeWipeFallback(origin, toggleTheme);
-      return;
-    }
-    root.style.setProperty("--wipe-x", `${origin.x}px`);
-    root.style.setProperty("--wipe-y", `${origin.y}px`);
-    root.style.setProperty("--wipe-r", `${origin.radius}px`);
+    const rect = buttonRef.current?.getBoundingClientRect();
+    const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    const cy = rect ? rect.top + rect.height / 2 : 0;
+    const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
+    root.style.setProperty("--wipe-x", `${cx}px`);
+    root.style.setProperty("--wipe-y", `${cy}px`);
+    root.style.setProperty("--wipe-r", `${radius}px`);
     root.classList.add("vt-theme");
     const transition = document.startViewTransition(() => toggleTheme());
     transition.ready.catch(() => undefined);

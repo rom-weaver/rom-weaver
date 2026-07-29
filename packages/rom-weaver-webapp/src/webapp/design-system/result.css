@@ -29,8 +29,8 @@
 .rw-app .step-meta .rb.done-chip { animation: chip-in .3s var(--ease) backwards; }
 .rw-app .step-meta .rb.verified { color: var(--verified); background: color-mix(in oklab, var(--verified) 12%, var(--well)); border-color: color-mix(in oklab, var(--verified) 36%, var(--seam-soft)); }
 /* Limit the light-theme tint to preserve 4.5:1 label contrast. */
-:root[data-theme="light"] .step-meta .rb.verified, .theme-veil.theme-veil[data-theme="light"] .step-meta .rb.verified { background: color-mix(in oklab, var(--verified) 6%, var(--well)); }
-:root[data-theme="light"] .step-meta .rb.verified .k, .theme-veil.theme-veil[data-theme="light"] .step-meta .rb.verified .k { color: var(--ink-2); }
+:root[data-theme="light"] .step-meta .rb.verified { background: color-mix(in oklab, var(--verified) 6%, var(--well)); }
+:root[data-theme="light"] .step-meta .rb.verified .k { color: var(--ink-2); }
 .rw-app .step-meta .rb.verified svg { width: 14px; height: 14px; }
 .rw-app .step-meta .rb .k { color: var(--ink-3); }
 .rw-app .step-meta .rb .t { color: var(--thread-text); }
@@ -66,8 +66,8 @@
 .rw-app .tracelog .ln.copy-failed { background: color-mix(in oklab, var(--fault) 16%, transparent); }
 .rw-app .tracelog .ts { color: #6aa8c0; flex: none; }
 .rw-app .tracelog .caller { color: #b594d6; flex: none; font-stretch: 90%; }
-:root[data-theme="light"] .tracelog .ts, .theme-veil.theme-veil[data-theme="light"] .tracelog .ts { color: #2a6f8a; }
-:root[data-theme="light"] .tracelog .caller, .theme-veil.theme-veil[data-theme="light"] .tracelog .caller { color: #7a4fb0; }
+:root[data-theme="light"] .tracelog .ts { color: #2a6f8a; }
+:root[data-theme="light"] .tracelog .caller { color: #7a4fb0; }
 .rw-app .tracelog .lv { flex: none; width: 6ch; font-weight: 650; text-transform: uppercase; font-size: .92em; }
 .rw-app .tracelog .lv.trace { color: var(--ink-4); } .rw-app .tracelog .lv.debug { color: var(--ink-3); }
 .rw-app .tracelog .lv.info { color: var(--verified); } .rw-app .tracelog .lv.warn { color: var(--care); } .rw-app .tracelog .lv.error { color: var(--fault); }

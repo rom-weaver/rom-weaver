@@ -30,18 +30,26 @@ const prefersReducedMotion = () =>
 const isIosWebKit = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("-webkit-touch-callout", "none");
 
-/**
- * iOS WebKit's view transitions are unreliable: the old/new snapshots flash
- * content in and out of existence mid-transition, and infinite animations
- * inside named elements (the hero formats ticker) freeze during capture and
- * never resume. Every caller falls back to an instant update there.
- */
-const viewTransitionsUnavailable = (): boolean => {
+/** Engine-level check: no support, or the user asked for less motion. */
+const viewTransitionsUnsupported = (): boolean => {
   if (typeof document.startViewTransition !== "function") return true;
   if (prefersReducedMotion()) {
     logger.trace("view transition skipped: prefers-reduced-motion");
     return true;
   }
+  return false;
+};
+
+/**
+ * iOS WebKit's view transitions are unreliable: the old/new snapshots flash
+ * content in and out of existence mid-transition, and infinite animations
+ * inside named elements (the hero formats ticker) freeze during capture and
+ * never resume. Callers that name elements fall back to an instant update
+ * there; the theme wipe suppresses every name (see `html.vt-theme` in
+ * dialogs.css), so it uses `viewTransitionsUnsupported` and keeps the wipe.
+ */
+const viewTransitionsUnavailable = (): boolean => {
+  if (viewTransitionsUnsupported()) return true;
   if (isIosWebKit()) {
     logger.trace("view transition skipped: iOS WebKit");
     return true;
@@ -93,4 +101,4 @@ const useFlatTransitionFlag = (actual: boolean): boolean => {
   return displayed;
 };
 
-export { prefersReducedMotion, runFlatViewTransition, useFlatTransitionFlag, viewTransitionsUnavailable };
+export { runFlatViewTransition, useFlatTransitionFlag, viewTransitionsUnsupported };

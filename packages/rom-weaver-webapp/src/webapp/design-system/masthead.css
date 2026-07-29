@@ -13,7 +13,7 @@
 /* brand sizes ride one fluid scale: 30px @360 → ~40px @720 (the old phone
    values) → 44px cap on desktop; no discrete jumps */
 .rw-app .brand-mark { width: clamp(30px, 2.7vw + 20.6px, 44px); aspect-ratio: 1; height: auto; border-radius: 8px; }
-:root[data-theme="dark"] .brand-mark, .theme-veil.theme-veil[data-theme="dark"] .brand-mark {
+:root[data-theme="dark"] .brand-mark {
   filter:
     drop-shadow(0 1px 0 rgb(255 255 255 / .45))
     drop-shadow(0 -1px 0 rgb(255 255 255 / .45))
@@ -107,7 +107,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tools-sep { display: block; flex: none; width: 1px; height: 20px; margin-inline: 5px; align-self: center; background: var(--seam); }
 /* sun/moon cross-morph */
 .rw-app .tool .ico-sun, .rw-app .tool .ico-moon { grid-area: 1 / 1; transition: transform .4s var(--ease), opacity .3s; }
-:root[data-theme="dark"] .ico-sun, .theme-veil.theme-veil[data-theme="dark"] .ico-sun { opacity: 0; transform: rotate(90deg) scale(.5); }
-:root[data-theme="dark"] .ico-moon, .theme-veil.theme-veil[data-theme="dark"] .ico-moon { opacity: 1; transform: none; }
-:root[data-theme="light"] .ico-sun, .theme-veil.theme-veil[data-theme="light"] .ico-sun { opacity: 1; transform: none; }
-:root[data-theme="light"] .ico-moon, .theme-veil.theme-veil[data-theme="light"] .ico-moon { opacity: 0; transform: rotate(-90deg) scale(.5); }
+:root[data-theme="dark"] .ico-sun { opacity: 0; transform: rotate(90deg) scale(.5); }
+:root[data-theme="dark"] .ico-moon { opacity: 1; transform: none; }
+:root[data-theme="light"] .ico-sun { opacity: 1; transform: none; }
+:root[data-theme="light"] .ico-moon { opacity: 0; transform: rotate(-90deg) scale(.5); }

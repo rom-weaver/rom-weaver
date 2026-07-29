@@ -1,12 +1,4 @@
-/* Tokens and themes
-
-   Every `:root[data-theme=...]` rule carries a `.theme-veil.theme-veil[...]`
-   twin: the iOS theme wipe (theme-wipe.ts) renders a clone of the UI in the
-   incoming theme inside `.theme-veil`, and a subtree can only pick up theme
-   styling through a selector that is not anchored to `:root`. The class is
-   doubled on purpose - during the wipe the clone also matches the outgoing
-   `:root[data-theme=...]` rules, so the twin has to out-specify them.
-   Enforced by `npm run lint:theme-veil-styles`. */
+/* Tokens and themes */
 :root {
   --thread: #d9690f;
   --thread-ink: #1c1206;        /* text on a thread-colored surface */
@@ -36,7 +28,7 @@
   --chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23889' stroke-width='2.4'><path d='m6 9 6 6 6-6'/></svg>");
 }
 
-:root[data-theme="dark"], .theme-veil.theme-veil[data-theme="dark"] {
+:root[data-theme="dark"] {
   color-scheme: dark;
   --chassis: #0c0f13;           /* console shell */
   --plate: #161b21;             /* mounted plate */
@@ -52,7 +44,7 @@
   --overlay-shadow: 0 24px 64px -24px rgb(0 0 0 / .7), 0 4px 16px rgb(0 0 0 / .35);
   --scrim: rgb(4 6 9 / .62);
 }
-:root[data-theme="light"], .theme-veil.theme-veil[data-theme="light"] {
+:root[data-theme="light"] {
   color-scheme: light;
   --chassis: #ece9e1;           /* warm gallery paper */
   --plate: #ffffff;
