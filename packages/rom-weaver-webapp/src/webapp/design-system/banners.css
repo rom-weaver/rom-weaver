@@ -121,9 +121,10 @@
   mask-image: var(--weave-mask); mask-size: 28px 28px;
   opacity: .07;
   --drift: 0 28px;
-  animation: weave-drift 1.6s linear infinite;
+  animation: weave-drift 1.6s linear infinite paused;
 }
 .rw-app.rw-page-dragging .dropveil { opacity: 1; visibility: visible; }
+.rw-app.rw-page-dragging .dropveil::before { animation-play-state: running; }
 .rw-app .dropveil-text {
   position: relative; display: inline-flex; align-items: center; gap: var(--sp-m);
   font-size: 1.05rem; font-weight: 700; color: var(--ink);
