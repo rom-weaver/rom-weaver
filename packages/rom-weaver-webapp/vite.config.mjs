@@ -59,7 +59,9 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/llms.txt": path.join(rootAssetDir, "llms.txt"),
   "/logo.svg": channelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
+  "/social-preview.avif": path.join(rootDir, "design", "social-preview.avif"),
   "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
+  "/social-preview.webp": path.join(rootDir, "design", "social-preview.webp"),
   ...docsScreenshotSources,
 });
 const generatedSampleAssetPaths = new Set([
@@ -122,6 +124,7 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   if (requestPath.endsWith(".html")) res.setHeader("Content-Type", "text/html; charset=utf-8");
   else if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
   else if (requestPath.endsWith(".txt")) res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  else if (requestPath.endsWith(".avif")) res.setHeader("Content-Type", "image/avif");
   else if (requestPath.endsWith(".png")) res.setHeader("Content-Type", "image/png");
   else if (requestPath.endsWith(".zip")) res.setHeader("Content-Type", "application/zip");
   else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");
