@@ -86,20 +86,28 @@ const GUIDE_TALL_ROW_RATIO = 0.45;
 /** How far the ring sits outside the row it frames. */
 const GUIDE_RING_INSET = 7;
 
+type GuideRect = { bottom: number; height: number; left: number; top: number; width: number };
+
+/** The same row, seen from the viewport a pending reveal scroll is about to land on. */
+const shiftRect = (rect: GuideRect, by: number): GuideRect => ({
+  bottom: rect.bottom - by,
+  height: rect.height,
+  left: rect.left,
+  top: rect.top - by,
+  width: rect.width,
+});
+
 /**
  * The row's own ancestors are `overflow: clip`, so an outline drawn on the row
  * gets cut off. The ring is rendered in the guide's portal instead and simply
- * tracks the row's box.
+ * frames the row's box.
  */
-const ringAroundTarget = (target: HTMLElement) => {
-  const rect = target.getBoundingClientRect();
-  return {
-    height: rect.height + GUIDE_RING_INSET * 2,
-    left: rect.left - GUIDE_RING_INSET,
-    top: rect.top - GUIDE_RING_INSET,
-    width: rect.width + GUIDE_RING_INSET * 2,
-  };
-};
+const ringAroundTarget = (rect: GuideRect) => ({
+  height: rect.height + GUIDE_RING_INSET * 2,
+  left: rect.left - GUIDE_RING_INSET,
+  top: rect.top - GUIDE_RING_INSET,
+  width: rect.width + GUIDE_RING_INSET * 2,
+});
 /** Desktop only - below 641px the card stays the full-width bar pinned by CSS. */
 const GUIDE_ANCHOR_QUERY = "(min-width: 641px)";
 
@@ -119,8 +127,7 @@ const shouldPlaceAbove = (rowHeight: number, prefer: "bottom" | "top") =>
  * Places the guide card against the row it describes, horizontally centred on
  * it and always kept inside the viewport.
  */
-const anchorToTarget = (target: HTMLElement, dialog: HTMLElement, prefer: "bottom" | "top") => {
-  const rect = target.getBoundingClientRect();
+const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: "bottom" | "top") => {
   const { height, width } = dialog.getBoundingClientRect();
   const above = rect.top - GUIDE_GAP - height;
   const below = rect.bottom + GUIDE_GAP;
@@ -143,8 +150,7 @@ const anchorToTarget = (target: HTMLElement, dialog: HTMLElement, prefer: "botto
  * when the viewport can hold them. A row too tall to fit alongside the card
  * gives up its bottom edge rather than its top.
  */
-const scrollDeltaForPair = (target: HTMLElement, dialog: HTMLElement | null, prefer: "bottom" | "top") => {
-  const rect = target.getBoundingClientRect();
+const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, prefer: "bottom" | "top") => {
   const cardHeight = dialog?.getBoundingClientRect().height ?? 0;
   const pair = rect.height + GUIDE_GAP + cardHeight;
   const slack = Math.max(GUIDE_MARGIN, (window.innerHeight - pair) / 2);
@@ -315,11 +321,17 @@ const SampleTutorial = ({
     };
   }, [bodyId, ready, step]);
 
-  // Keep the card and its ring locked to the row as the page scrolls or
-  // resizes. Both boxes are written straight to the DOM inside the scroll
-  // handler: routing them through React state defers the write past the paint
-  // that already moved the row, so every frame of a scroll lands the ring one
-  // step behind and it shakes against the row until the scroll stops.
+  // Pins the ring and the card to the row in *document* coordinates, so the
+  // page scrolls all three together on the compositor and this runs no code
+  // per scroll frame at all.
+  //
+  // Tracking the scroll instead - measure on the event, write a fixed-position
+  // box - is what made the ring shake. A scroll is composited without waiting
+  // for the main thread, so the row is already painted at its new offset while
+  // any JS-driven box still holds the previous one; the highlight rides a frame
+  // or more behind the row for the whole gesture and only lines back up once
+  // the page stops. No amount of measuring earlier fixes that. Nothing here may
+  // re-place on scroll.
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
     const ring = ringRef.current;
@@ -345,16 +357,25 @@ const SampleTutorial = ({
       if (glide) element.dataset.glide = "true";
       else delete element.dataset.glide;
     };
-    const place = (glide: boolean) => {
-      // Below 641px the card stays the CSS-pinned bar; the ring still tracks.
-      const card = desktop.matches ? anchorToTarget(targetEl, dialog, prefer) : null;
-      // Every box is measured before anything is written, so a placement never
-      // interleaves reads and writes into a forced reflow per frame.
-      const box = ringAroundTarget(targetEl);
+    /**
+     * `shift` is the reveal scroll this placement is about to be followed by:
+     * which side of the row the card takes, and the clamp that keeps it on
+     * screen, are decided against the viewport that scroll lands on rather than
+     * the one being left behind.
+     */
+    const place = (glide: boolean, shift = 0) => {
+      const rect = targetEl.getBoundingClientRect();
+      // Below 641px the card stays the CSS-pinned bar; the ring still frames.
+      const card = desktop.matches ? anchorToTarget(shiftRect(rect, shift), dialog, prefer) : null;
+      const box = ringAroundTarget(rect);
+      // Viewport to document. Every box is measured before anything is written,
+      // so a placement never interleaves reads and writes into a forced reflow.
+      const originX = window.scrollX;
+      const originY = window.scrollY;
       setGlide(ring, glide);
       ring.style.height = `${box.height}px`;
-      ring.style.left = `${box.left}px`;
-      ring.style.top = `${box.top}px`;
+      ring.style.left = `${box.left + originX}px`;
+      ring.style.top = `${box.top + originY}px`;
       ring.style.width = `${box.width}px`;
       setGlide(dialog, glide && card !== null);
       if (!card) {
@@ -362,16 +383,20 @@ const SampleTutorial = ({
         return;
       }
       dialog.dataset.anchored = "true";
-      dialog.style.left = `${card.left}px`;
-      dialog.style.top = `${card.top}px`;
+      dialog.style.left = `${card.left + originX}px`;
+      // The card was placed in the post-shift viewport, which is `shift` further
+      // down the document than the current one.
+      dialog.style.top = `${card.top + originY + shift}px`;
     };
-    // Scroll and resize must track exactly - gliding there would leave the card
-    // lagging behind the row it points at while the page is still moving.
+    // Park the row and its card together, and place them for where that scroll
+    // is headed - once placed they ride the page, so this is the only chance.
+    const placeAndReveal = (glide: boolean) => {
+      const top = scrollDeltaForPair(targetEl.getBoundingClientRect(), dialog, prefer);
+      const shift = Math.abs(top) > 1 ? top : 0;
+      place(glide, shift);
+      if (shift) window.scrollBy({ behavior, top: shift });
+    };
     const track = () => place(false);
-    const reveal = () => {
-      const top = scrollDeltaForPair(targetEl, dialog, prefer);
-      if (Math.abs(top) > 1) window.scrollBy({ behavior, top });
-    };
     // A re-reveal that lands while the user is scrolling fights them for the
     // scroll position, and the page - ring and all - shakes until one of the
     // two wins. Deliberate scroll input retires the rest of this step's
@@ -394,16 +419,14 @@ const SampleTutorial = ({
       window.clearTimeout(settle);
       settle = window.setTimeout(() => {
         revealsLeft -= 1;
-        reveal();
+        placeAndReveal(false);
       }, GUIDE_SETTLE_MS);
     };
     const observer = new ResizeObserver(onResize);
-    place(true);
-    reveal();
+    placeAndReveal(true);
     observer.observe(targetEl);
     observer.observe(dialog);
     window.addEventListener("resize", track);
-    window.addEventListener("scroll", track, { capture: true, passive: true });
     window.addEventListener("wheel", yieldToUser, { passive: true });
     window.addEventListener("touchmove", yieldToUser, { passive: true });
     window.addEventListener("keydown", yieldToUser);
@@ -412,7 +435,6 @@ const SampleTutorial = ({
       window.clearTimeout(settle);
       observer.disconnect();
       window.removeEventListener("resize", track);
-      window.removeEventListener("scroll", track, { capture: true });
       window.removeEventListener("wheel", yieldToUser);
       window.removeEventListener("touchmove", yieldToUser);
       window.removeEventListener("keydown", yieldToUser);

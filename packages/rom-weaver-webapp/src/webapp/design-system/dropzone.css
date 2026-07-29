@@ -317,8 +317,13 @@
 .rw-app .sample-tutorial-lift {
   position: relative !important; z-index: 1002 !important; overflow: visible !important;
 }
+/* Absolute, in document coordinates, so the page scrolls the ring along with
+   the row it frames - on the compositor, with no main-thread work per frame. A
+   fixed ring has to be re-placed from a scroll handler, which can only ever
+   trail the composited scroll, and the highlight shakes the whole way down.
+   .rw-app is static and untransformed, so this resolves against the document. */
 .rw-app .sample-tutorial-ring {
-  position: fixed; z-index: 1002; pointer-events: none;
+  position: absolute; z-index: 1002; pointer-events: none;
   border: 3px solid color-mix(in oklab, var(--thread) 88%, var(--thread-hi)); border-radius: var(--r-m);
   box-shadow:
     0 0 0 6px color-mix(in oklab, var(--thread) 20%, transparent),
@@ -355,9 +360,11 @@
   bottom: auto;
 }
 /* Anchored beside its row on desktop: the component supplies left/top, so the
-   viewport-pinned insets have to release or the box stays over-constrained. */
+   viewport-pinned insets have to release or the box stays over-constrained.
+   Absolute for the same reason as the ring - the card rides the page rather
+   than chasing it, so the pair never drifts apart mid-scroll. */
 .rw-app .sample-tutorial-dialog[data-anchored="true"] {
-  inset-inline: auto; bottom: auto; margin-inline: 0;
+  position: absolute; inset-inline: auto; bottom: auto; margin-inline: 0;
 }
 /* Only when moving between steps. Scroll tracking sets no glide, so the card
    stays locked to its row instead of rubber-banding behind it. */

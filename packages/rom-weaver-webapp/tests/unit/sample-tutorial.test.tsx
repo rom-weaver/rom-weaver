@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SampleTutorial,
   SampleTutorialStart,
@@ -71,6 +71,15 @@ const stubRect = (element: HTMLElement, box: { height: number; left: number; top
       y: box.top,
     }) as DOMRect;
 };
+
+// The guide converts viewport boxes to document ones, so the page offset is
+// part of every placement assertion.
+const scrolledTo = (top: number) => {
+  Object.defineProperty(window, "scrollY", { configurable: true, value: top, writable: true });
+  Object.defineProperty(window, "scrollX", { configurable: true, value: 0, writable: true });
+};
+
+afterEach(() => scrolledTo(0));
 
 // happy-dom reports zero-sized rects, so the geometry has to be stubbed after
 // mount and a resize fired to re-measure. Viewport is 1024x768.
@@ -189,25 +198,37 @@ describe("sample tutorial", () => {
     await waitFor(() => expect(guide.style.top).toBe("386px"));
   });
 
-  it("tracks a scroll in the scroll event itself so the ring cannot lag its row", async () => {
+  it("places the pair in document coordinates so the page scrolls it along", async () => {
+    scrolledTo(900);
     const guide = await renderAnchored({ height: 100, left: 200, top: 200, width: 600 });
     const ring = document.querySelector(".sample-tutorial-ring") as HTMLElement;
-    // Row box plus the 7px ring inset on every side.
-    expect(ring.style.top).toBe("193px");
-    expect(ring.style.height).toBe("114px");
 
-    const target = document.querySelector("#tutorial-first") as HTMLElement;
-    stubRect(target, { height: 100, left: 200, top: 120, width: 600 });
+    // Row box plus the 7px ring inset on every side, offset by the scroll: the
+    // ring is absolute, so these are document coordinates, not viewport ones.
+    expect(ring.style.top).toBe(`${193 + 900}px`);
+    expect(ring.style.height).toBe("114px");
+    expect(guide.style.top).toBe(`${314 + 900}px`);
+  });
+
+  it("does not re-place on scroll - the composited page already moves the pair", async () => {
+    const guide = await renderAnchored({ height: 100, left: 200, top: 200, width: 600 });
+    const ring = document.querySelector(".sample-tutorial-ring") as HTMLElement;
+    const before = [ring.style.top, guide.style.top];
+
+    // The row's viewport box has moved because the page scrolled under it. A
+    // scroll handler that rewrote the boxes here could only ever trail the
+    // composited scroll, which is exactly the shake - the document coordinates
+    // are unchanged, so there is nothing to do.
+    scrolledTo(400);
+    stubRect(document.querySelector("#tutorial-first") as HTMLElement, {
+      height: 100,
+      left: 200,
+      top: -200,
+      width: 600,
+    });
     fireEvent.scroll(window);
 
-    // Deliberately not awaited: deferring these writes to a frame or a React
-    // commit paints them against a page that has already scrolled, which is
-    // what made the ring shake.
-    expect(ring.style.top).toBe("113px");
-    expect(guide.style.top).toBe("234px");
-    // Gliding here would rubber-band the pair behind the moving page.
-    expect(ring.dataset.glide).toBeUndefined();
-    expect(guide.dataset.glide).toBeUndefined();
+    expect([ring.style.top, guide.style.top]).toEqual(before);
   });
 
   it("stops re-revealing the row once the user takes over the scroll", async () => {
