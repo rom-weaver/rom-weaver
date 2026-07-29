@@ -6,8 +6,21 @@ import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-co
 import { APP_VERSION } from "../../../src/webapp/build-version.ts";
 import { ChangelogDialog } from "../../../src/webapp/components/changelog-dialog.tsx";
 
-const CHANGELOG_URL = "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md";
-const tagUrl = (version: string) => `https://github.com/rom-weaver/rom-weaver/releases/tag/v${version}`;
+const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver";
+const CHANGELOG_URL = `${REPOSITORY_URL}/blob/main/CHANGELOG.md`;
+
+const releaseOf = (version: string, notes: unknown[], truncated = false) => ({
+  changelogUrl: CHANGELOG_URL,
+  notes,
+  repositoryUrl: REPOSITORY_URL,
+  truncated,
+  version,
+});
+
+const noteOf = (version: string, entries: unknown[], title = "Features") => ({
+  groups: [{ entries, title }],
+  version,
+});
 
 const withSettings = (children: ReactNode) => (
   <RomWeaverSettingsProvider settings={{}}>{children}</RomWeaverSettingsProvider>
@@ -28,23 +41,14 @@ const renderDialog = () => render(withSettings(<ChangelogDialog onClose={vi.fn()
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ChangelogDialog", () => {
-  it("shows the full release notes and links to the changelog", async () => {
+  it("renders the release notes as text and links the changelog", async () => {
     mockChangelog([
       {
         date: "2026-07-29T00:00:00Z",
         hash: "release",
-        release: {
-          changelogUrl: CHANGELOG_URL,
-          notes: [
-            {
-              html: "<h3>Features</h3><ul><li>Shiny release feature</li></ul>",
-              url: tagUrl("9.9.9"),
-              version: "9.9.9",
-            },
-          ],
-          truncated: false,
-          version: "9.9.9",
-        },
+        release: releaseOf("9.9.9", [
+          noteOf("9.9.9", [{ pr: "3", scope: "webapp", summary: "Shiny release feature" }]),
+        ]),
         subject: "release",
       },
     ]);
@@ -52,9 +56,45 @@ describe("ChangelogDialog", () => {
     renderDialog();
 
     expect(await screen.findByText(`v${APP_VERSION} → v9.9.9`)).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 3, name: "Features" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Features" })).toBeTruthy();
     expect(screen.getByText("Shiny release feature")).toBeTruthy();
+    expect(screen.getByText("webapp:")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "#3" }).getAttribute("href")).toBe(`${REPOSITORY_URL}/pull/3`);
     expect(screen.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(CHANGELOG_URL);
+  });
+
+  it("treats markup in a summary as text, never as HTML", async () => {
+    const summary = '<img src=x onerror="alert(1)"> markup';
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [noteOf("9.9.9", [{ pr: "3", summary }])]),
+        subject: "release",
+      },
+    ]);
+
+    renderDialog();
+
+    expect(await screen.findByText(summary)).toBeTruthy();
+    expect(document.querySelector("img")).toBeNull();
+  });
+
+  it("links the commit when an entry has no pull request", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [noteOf("9.9.9", [{ commit: "abc1234", summary: "No PR here" }])]),
+        subject: "release",
+      },
+    ]);
+
+    renderDialog();
+
+    expect((await screen.findByRole("link", { name: "abc1234" })).getAttribute("href")).toBe(
+      `${REPOSITORY_URL}/commit/abc1234`,
+    );
   });
 
   it("renders every release the running build skipped, newest first", async () => {
@@ -62,16 +102,11 @@ describe("ChangelogDialog", () => {
       {
         date: "2026-07-29T00:00:00Z",
         hash: "release",
-        release: {
-          changelogUrl: CHANGELOG_URL,
-          notes: [
-            { html: "<p>newest</p>", url: tagUrl("9.9.9"), version: "9.9.9" },
-            { html: "<p>skipped</p>", url: tagUrl("9.8.0"), version: "9.8.0" },
-            { html: "<p>already running</p>", url: tagUrl(APP_VERSION), version: APP_VERSION },
-          ],
-          truncated: false,
-          version: "9.9.9",
-        },
+        release: releaseOf("9.9.9", [
+          noteOf("9.9.9", [{ summary: "newest" }]),
+          noteOf("9.8.0", [{ summary: "skipped" }]),
+          noteOf(APP_VERSION, [{ summary: "already running" }]),
+        ]),
         subject: "release",
       },
     ]);
@@ -82,15 +117,16 @@ describe("ChangelogDialog", () => {
     expect(screen.getByText("skipped")).toBeTruthy();
     // The running version's own notes are not "what you're about to get".
     expect(screen.queryByText("already running")).toBeNull();
-    expect(screen.getByRole("link", { name: "v9.8.0" }).getAttribute("href")).toBe(tagUrl("9.8.0"));
+    expect(screen.getByRole("link", { name: "v9.8.0" }).getAttribute("href")).toBe(
+      `${REPOSITORY_URL}/releases/tag/v9.8.0`,
+    );
   });
 
   it.each([
-    ["a release with no notes", { changelogUrl: CHANGELOG_URL, notes: [], version: "9.9.9" }],
-    [
-      "a note missing its html",
-      { changelogUrl: CHANGELOG_URL, notes: [{ url: "u", version: "9.9.9" }], version: "9.9.9" },
-    ],
+    ["a release with no notes", releaseOf("9.9.9", [])],
+    ["a note whose entries lack a summary", releaseOf("9.9.9", [noteOf("9.9.9", [{ pr: "3" }])])],
+    ["a note with no groups array", releaseOf("9.9.9", [{ version: "9.9.9" }])],
+    ["a release missing its repository url", { changelogUrl: CHANGELOG_URL, notes: [noteOf("9.9.9", [])] }],
     ["a non-object release", "release notes"],
   ])("ignores %s and shows commits instead", async (_label, release) => {
     mockChangelog([
@@ -109,11 +145,7 @@ describe("ChangelogDialog", () => {
       {
         date: "2026-07-29T00:00:00Z",
         hash: "nightly",
-        release: {
-          changelogUrl: CHANGELOG_URL,
-          notes: [{ html: "<h3>Previous release</h3>", url: tagUrl(APP_VERSION), version: APP_VERSION }],
-          version: APP_VERSION,
-        },
+        release: releaseOf(APP_VERSION, [noteOf(APP_VERSION, [{ summary: "Previous release" }])]),
         subject: "Nightly change",
       },
       { date: "2026-07-28T00:00:00Z", hash: "dev", subject: "Current build" },
@@ -130,11 +162,7 @@ describe("ChangelogDialog", () => {
       {
         date: "",
         hash: "v9.9.9",
-        release: {
-          changelogUrl: CHANGELOG_URL,
-          notes: [{ html: "<p>docker release</p>", url: tagUrl("9.9.9"), version: "9.9.9" }],
-          version: "9.9.9",
-        },
+        release: releaseOf("9.9.9", [noteOf("9.9.9", [{ summary: "docker release" }])]),
         subject: "",
       },
     ]);

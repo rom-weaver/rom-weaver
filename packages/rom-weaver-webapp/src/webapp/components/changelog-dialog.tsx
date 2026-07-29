@@ -15,8 +15,16 @@ import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../build-version.ts
 
 const logger = createLogger("changelog-dialog");
 
-type ReleaseNote = { html: string; url: string; version: string };
-type ReleaseChangelog = { changelogUrl: string; notes: ReleaseNote[]; truncated: boolean; version: string };
+type ReleaseEntry = { commit?: string; pr?: string; scope?: string; summary: string };
+type ReleaseGroup = { entries: ReleaseEntry[]; title: string };
+type ReleaseNote = { groups: ReleaseGroup[]; version: string };
+type ReleaseChangelog = {
+  changelogUrl: string;
+  notes: ReleaseNote[];
+  repositoryUrl: string;
+  truncated: boolean;
+  version: string;
+};
 type ChangelogEntry = { hash: string; subject: string; date: string; release?: unknown };
 
 type FetchState =
@@ -33,17 +41,26 @@ const commitsSinceCurrent = (entries: ChangelogEntry[]): { entries: ChangelogEnt
   return { entries: entries.slice(0, index), truncated: false };
 };
 
+const isReleaseGroup = (value: unknown): value is ReleaseGroup => {
+  if (!value || typeof value !== "object") return false;
+  const group = value as ReleaseGroup;
+  if (typeof group.title !== "string" || !Array.isArray(group.entries)) return false;
+  return group.entries.every((entry) => entry && typeof entry.summary === "string");
+};
+
 const isReleaseNote = (value: unknown): value is ReleaseNote => {
   if (!value || typeof value !== "object") return false;
   const note = value as ReleaseNote;
-  return typeof note.html === "string" && typeof note.url === "string" && typeof note.version === "string";
+  return typeof note.version === "string" && Array.isArray(note.groups) && note.groups.every(isReleaseGroup);
 };
 
 const readReleaseChangelog = (value: unknown): ReleaseChangelog | undefined => {
   if (!value || typeof value !== "object") return undefined;
   const release = value as ReleaseChangelog;
   const hasNotes = Array.isArray(release.notes) && release.notes.length > 0 && release.notes.every(isReleaseNote);
-  const hasMeta = typeof release.version === "string" && typeof release.changelogUrl === "string";
+  const hasMeta = [release.version, release.changelogUrl, release.repositoryUrl].every(
+    (field) => typeof field === "string",
+  );
   return hasNotes && hasMeta ? release : undefined;
 };
 
@@ -73,6 +90,21 @@ const fetchChangelog = async (): Promise<{ entries: ChangelogEntry[]; release?: 
 
 const formatDate = (iso: string) => iso.split("T")[0] || "";
 
+const entryRef = (entry: ReleaseEntry, repositoryUrl: string) => {
+  const ref = entry.pr
+    ? { href: `${repositoryUrl}/pull/${entry.pr}`, label: `#${entry.pr}` }
+    : entry.commit && { href: `${repositoryUrl}/commit/${entry.commit}`, label: entry.commit.slice(0, 7) };
+  if (!ref) return null;
+  return (
+    <>
+      {" "}
+      <a className="release-changelog-ref mono" href={ref.href} rel="noreferrer" target="_blank">
+        {ref.label}
+      </a>
+    </>
+  );
+};
+
 const ReleaseNotes = ({ release }: { release: ReleaseChangelog }) => {
   const { notes, truncated } = releaseNotesSince(release);
   return (
@@ -95,18 +127,27 @@ const ReleaseNotes = ({ release }: { release: ReleaseChangelog }) => {
         <section className="release-changelog-section" key={note.version}>
           {notes.length > 1 ? (
             <h3 className="release-changelog-heading">
-              <a href={note.url} rel="noreferrer" target="_blank">
+              <a href={`${release.repositoryUrl}/releases/tag/v${note.version}`} rel="noreferrer" target="_blank">
                 v{note.version}
               </a>
             </h3>
           ) : null}
-          <div
-            className="release-changelog"
-            // The same-origin asset holds committed CHANGELOG.md rendered at build time,
-            // with raw HTML escaped by the build's `marked` renderer (scripts/version.mjs).
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: build-escaped release Markdown
-            dangerouslySetInnerHTML={{ __html: note.html }}
-          />
+          {note.groups.map((group) => (
+            <div className="release-changelog" key={`${note.version}:${group.title}`}>
+              {group.title ? <h4 className="release-changelog-group">{group.title}</h4> : null}
+              <ul className="release-changelog-entries">
+                {group.entries.map((entry) => (
+                  <li key={`${entry.commit || ""}:${entry.summary}`}>
+                    {entry.scope ? <strong>{entry.scope}: </strong> : null}
+                    {entry.summary}
+                    {/* The PR is the readable reference; fall back to the commit so an
+                        entry release-please recorded without a PR still links somewhere. */}
+                    {entryRef(entry, release.repositoryUrl)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </section>
       ))}
       {truncated ? <div className="changelog-note">…</div> : null}

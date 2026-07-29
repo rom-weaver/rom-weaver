@@ -3,7 +3,6 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Marked } from "marked";
 
 const LINE_BREAK_REGEX = /\r?\n/;
 
@@ -145,38 +144,27 @@ const buildVersionString = (baseVersion, gitMetadata) => {
 // Unit separator between fields; %s (subject) and %cI (ISO date) are single-line,
 // so newline-per-record splitting is safe.
 const CHANGELOG_FIELD_SEP = "\x1f";
-const RELEASE_URL = "https://github.com/rom-weaver/rom-weaver/releases/tag/v";
+const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver";
 // Never 404s. The tag link does, briefly: nightly deploys on the release PR's
 // merge commit, but `vX.Y.Z` only exists once the fan-out publishes the draft.
-const CHANGELOG_URL = "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md";
+const CHANGELOG_URL = `${REPOSITORY_URL}/blob/main/CHANGELOG.md`;
 // A client a few releases behind gets every section it missed, not just the
-// newest. Capped like the commit list is, and low: a release section runs ~11 KB
-// and the dialog re-fetches this asset uncached every time it opens. Anyone
-// further behind gets the ellipsis and the full-changelog link instead.
-const RELEASE_NOTES_LIMIT = 3;
+// newest. Capped like the commit list is: the dialog re-fetches this asset
+// uncached every time it opens. Anyone further behind gets the ellipsis and the
+// full-changelog link instead.
+const RELEASE_NOTES_LIMIT = 5;
 // Line-anchored: an unanchored search would also match the string inside a
 // section body or a deeper heading.
 const RELEASE_HEADING_REGEX = /^## \[([^\]]+)\]/gm;
-
-const escapeHtml = (value) =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-// The dialog injects this HTML with `dangerouslySetInnerHTML` and the app ships
-// no CSP, so raw markup must not survive. CHANGELOG.md is generated from merged
-// PR titles, which commitlint does not screen for `<`, so "committed Markdown"
-// is not the same as "authored by a maintainer": escape HTML rather than render
-// it. Links are rewritten to open in a new tab so a click from inside the modal
-// does not navigate the app away.
-const releaseMarked = new Marked({
-  renderer: {
-    html({ text }) {
-      return escapeHtml(text);
-    },
-    link(token) {
-      return `<a href="${escapeHtml(token.href)}" rel="noreferrer" target="_blank">${this.parser.parseInline(token.tokens)}</a>`;
-    },
-  },
-});
+const GROUP_HEADING_REGEX = /^### +(.+?) *$/;
+// release-please's entry shape. Everything after the summary is optional: a
+// hand-written `BREAKING CHANGES` line carries no links at all, and a squashed
+// commit with no PR carries only the trailing commit link.
+const ENTRY_REGEX =
+  /^\* +(?:\*\*(?<scope>[^*]+?):\*\* +)?(?<summary>.+?)(?: +\(\[#(?<pr>\d+)\]\([^)]*\)\))?(?: +\(\[(?<commit>[0-9a-f]{7,40})\]\([^)]*\)\))?(?:, +closes.*)?$/;
+// Any link left inside a summary keeps its text and drops its target - the
+// dialog renders plain strings, so a raw URL would just be noise.
+const INLINE_LINK_REGEX = /\[([^\]]*)\]\([^)]*\)/g;
 
 // Every `## [version]` section, newest first, paired with its body.
 const readChangelogSections = (sourcePath) => {
@@ -193,29 +181,62 @@ const readChangelogSections = (sourcePath) => {
   });
 };
 
-const renderReleaseNote = (section) => ({
-  html: releaseMarked.parse(section.body, { async: false }),
-  url: `${RELEASE_URL}${encodeURIComponent(section.version)}`,
-  version: section.version,
-});
+// Structured rather than rendered HTML: the dialog builds the DOM itself, so
+// nothing from a merged PR title can reach it as markup, and dropping the
+// repeated github.com URLs shrinks the asset several times over.
+const parseEntry = (line) => {
+  const match = ENTRY_REGEX.exec(line);
+  if (!match) return undefined;
+  const { commit, pr, scope, summary } = match.groups;
+  const text = summary.replace(INLINE_LINK_REGEX, "$1").trim();
+  if (!text) return undefined;
+  // Only one reference is rendered and the PR reads better, so the commit is
+  // carried only when release-please recorded the entry without a PR.
+  const reference = pr ? { pr } : {};
+  if (!pr && commit) reference.commit = commit;
+  return { ...reference, ...(scope ? { scope } : {}), summary: text };
+};
+
+const parseEntryGroups = (body) => {
+  const groups = [];
+  let current = null;
+  for (const line of body.split(LINE_BREAK_REGEX)) {
+    const heading = GROUP_HEADING_REGEX.exec(line);
+    if (heading) {
+      current = { entries: [], title: heading[1] };
+      groups.push(current);
+      continue;
+    }
+    const entry = line.startsWith("*") ? parseEntry(line) : undefined;
+    if (!entry) continue;
+    // An entry before any `###` heading is still worth showing; give it a home.
+    if (!current) {
+      current = { entries: [], title: "" };
+      groups.push(current);
+    }
+    current.entries.push(entry);
+  }
+  return groups.filter((group) => group.entries.length);
+};
 
 // The requested version's section plus the ones below it, so a client several
 // releases behind can render everything it missed.
-const renderReleaseSections = (version, sourcePath = changelogPath) => {
+const readReleaseNotes = (version, sourcePath = changelogPath) => {
   if (!version) return undefined;
   const sections = readChangelogSections(sourcePath);
   const start = sections.findIndex((section) => section.version === version);
   if (start < 0) return undefined;
   const notes = sections
     .slice(start, start + RELEASE_NOTES_LIMIT)
-    .filter((section) => section.body)
-    .map(renderReleaseNote);
+    .map((section) => ({ groups: parseEntryGroups(section.body), version: section.version }))
+    .filter((note) => note.groups.length);
   if (!notes.length) return undefined;
   return {
     changelogUrl: CHANGELOG_URL,
     notes,
+    // Stored once and joined client-side; per-entry these were most of the bytes.
+    repositoryUrl: REPOSITORY_URL,
     truncated: sections.length > start + RELEASE_NOTES_LIMIT,
-    url: notes[0].url,
     version: notes[0].version,
   };
 };
@@ -237,7 +258,7 @@ const getChangelog = (limit = 50, releaseVersion = "", gitLogReader = readGitLog
         })
         .filter((entry) => entry.hash)
     : [];
-  const release = renderReleaseSections(releaseVersion);
+  const release = readReleaseNotes(releaseVersion);
   if (!release) return entries;
   // The release rides on the newest entry to preserve the array shape running
   // older bundles expect; they ignore the extra field. With no git log - the
@@ -269,4 +290,4 @@ const getBuildInfo = () => {
   };
 };
 
-export { getBuildInfo, getChangelog, renderReleaseSections };
+export { getBuildInfo, getChangelog, readReleaseNotes };
