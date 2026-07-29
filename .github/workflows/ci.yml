@@ -1229,12 +1229,9 @@ jobs:
       contents: read
       statuses: write
     if: needs.deploy-plan.outputs.preview_branch != ''
-    # A cache miss still opens a deployment record with no URL. The fallback in
-    # `deploy` runs later and supersedes it, so the PR ends up pointing at the
-    # deployment that actually happened either way.
-    environment:
-      name: rom-weaver-preview.pages.dev
-      url: ${{ steps.pages.outputs.url }}
+    # Do not attach an Actions environment here. GitHub creates its deployment
+    # record when the job starts, including on a cache miss; the fallback below
+    # is the only job that should register the preview environment in that case.
     outputs:
       # False on a cache miss (the deploy step never ran) and equally false if
       # wrangler failed, so `deploy` picks the preview back up in both cases.
@@ -1244,16 +1241,6 @@ jobs:
         with:
           fetch-depth: 60
           fetch-tags: true
-
-      - name: Mark preview deployment pending
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          DEPLOYMENT_CHANNEL: preview
-          DEPLOYMENT_STATE: pending
-          STATUS_CONTEXT: Webapp Deploy / preview
-        run: node scripts/ci/deployment-status.mjs
 
       - name: Restore built wasm module
         id: wasm-cache
@@ -1269,6 +1256,17 @@ jobs:
             packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
             packages/rom-weaver-webapp/src/wasm/NOTICE
             packages/rom-weaver-webapp/src/wasm/third_party
+
+      - name: Mark preview deployment pending
+        if: steps.wasm-cache.outputs.cache-hit == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DEPLOYMENT_CHANNEL: preview
+          DEPLOYMENT_STATE: pending
+          STATUS_CONTEXT: Webapp Deploy / preview
+        run: node scripts/ci/deployment-status.mjs
 
       - name: Build and deploy preview
         id: pages
