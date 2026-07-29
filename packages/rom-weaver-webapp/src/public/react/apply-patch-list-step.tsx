@@ -455,6 +455,12 @@ const EditableCheckRow = ({
   value: string;
 }) => {
   const errorId = `${id}-err`;
+  /* The ref callback is a fresh identity every render, so React detaches and
+     reattaches it each time. Without this latch the handoff would re-focus on
+     every render, and two freshly added rows would then trade focus forever -
+     each steal blurs the other, and the blur commits, which renders again. */
+  const handedOff = useRef(false);
+  if (!focusOnMount) handedOff.current = false;
   return (
     <div
       className={join("verification-row", isHalfRowField(field) && "ck-half", isHashRowField(field) && "ck-hash")}
@@ -476,7 +482,11 @@ const EditableCheckRow = ({
             event.currentTarget.blur();
           }
         }}
-        ref={focusOnMount ? (element) => element?.focus() : undefined}
+        ref={(element) => {
+          if (!(focusOnMount && element) || handedOff.current) return;
+          handedOff.current = true;
+          element.focus();
+        }}
         spellCheck={false}
         title={invalid ? checkErrorMessage(field) : value || undefined}
         type="text"
@@ -621,6 +631,10 @@ const PatchChecksDrawer = ({
     if (invalid) return;
     const field = side === "input" ? "inputChecks" : "outputChecks";
     const checksums = { ...meta?.[field]?.checksums };
+    // A blur that did not change the value must not publish new metadata: the
+    // fresh object would re-render the card and, with focus still moving, blur
+    // again.
+    if ((checksums[algorithm] || "") === value) return;
     if (value) checksums[algorithm] = value;
     else delete checksums[algorithm];
     onMetaChange?.({ [field]: { ...meta?.[field], checksums } });
@@ -634,7 +648,9 @@ const PatchChecksDrawer = ({
     setInvalid(`${side}:bytes`, invalid);
     if (invalid) return;
     const field = side === "input" ? "inputChecks" : "outputChecks";
-    onMetaChange?.({ [field]: { ...meta?.[field], size: value ? Number(value) : undefined } });
+    const size = value ? Number(value) : undefined;
+    if ((meta?.[field]?.size ?? undefined) === size) return;
+    onMetaChange?.({ [field]: { ...meta?.[field], size } });
   };
   const removeCheck = (side: "input" | "output", field: CheckField) => {
     setDraftFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
