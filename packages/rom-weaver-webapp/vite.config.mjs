@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
@@ -1002,6 +1003,7 @@ export default defineConfig(({ command }) => {
       deferDevHotUpdates(),
       stampChannelIdentity(appChannel, appChannelLabel, serviceWorkerEnabled),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
+      babel({ presets: [reactCompilerPreset({ compilationMode: "annotation" })] }),
       prerenderWebappShell(prerenderedShells),
       preloadWorkflowRouteChunks(routePreloadLinks),
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),

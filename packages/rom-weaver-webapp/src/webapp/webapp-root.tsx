@@ -209,6 +209,8 @@ function WebappRoot({
   docsSlug = "docs",
   notFound = false,
 }: WebappRootProps) {
+  "use memo";
+
   useEntryAnimationLock();
   useEffect(() => {
     if (notFound) return;
