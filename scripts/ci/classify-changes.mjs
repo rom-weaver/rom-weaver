@@ -29,12 +29,21 @@ const EMPTY = {
 // cache hit followed by browser jobs that cannot observe the edit. Keep the
 // two lists identical - note `.*` rather than `[^/]*` under src/, because the
 // shell globs this replaced matched across directory separators.
+//
+// One carve-out, applied by the `wasm_runtime` block below rather than here:
+// the WASM browser suite reads a handful of Rust fixture trees directly, so
+// those paths do select webapp work. `wasm-runtime-coverage.test.mjs` derives
+// that set from the suite's own imports, so it cannot drift.
 const isReleaseInput = (path) =>
   !/(?:\/tests\/|\/test\/|\/examples\/|\/benches\/|\/src\/test[^/]*\.rs$|\/src\/.*\/test[^/]*\.rs$)/.test(
     path,
   );
 
-export function classifyChanges(paths, all = false, eventName = "pull_request") {
+// `eventName` only ever narrows, and only for `pull_request`; an absent one
+// selects everything a push would. `scripts/ci/cli-platform-matrix.mjs` defaults
+// the same way for the same reason: a caller that forgets to pass the event has
+// to lose time, not coverage.
+export function classifyChanges(paths, all = false, eventName = undefined) {
   const result = { ...EMPTY };
   if (all) {
     return Object.fromEntries(Object.keys(result).map((key) => [key, true]));
@@ -81,7 +90,6 @@ export function classifyChanges(paths, all = false, eventName = "pull_request") 
 
     if (
       path.startsWith("packages/rom-weaver-webapp/") ||
-      path.startsWith("tests/fixtures/") ||
       PUBLISHED_DOCS.has(path) ||
       path === "package.json" ||
       path === "package-lock.json" ||
@@ -93,6 +101,10 @@ export function classifyChanges(paths, all = false, eventName = "pull_request") 
     )
       result.webapp = true;
 
+    // Every path the `webapp-wasm-browser` suite can observe. The source and
+    // fixture entries are not a judgement call: `wasm-runtime-coverage.test.mjs`
+    // walks the suite's own import and `new URL(..., import.meta.url)` graph and
+    // fails if anything reachable from it is not selected here.
     if (
       /^(?:Cargo\.toml|Cargo\.lock|package\.json|package-lock\.json)$/.test(path) ||
       /^scripts\/wasm\//.test(path) ||
@@ -101,7 +113,7 @@ export function classifyChanges(paths, all = false, eventName = "pull_request") 
       /^packages\/rom-weaver-webapp\/(?:package(?:-lock)?\.json|vitest(?:\.config\.base|(?:\.wasm)?\.browser\.config)\.mjs)$/.test(
         path,
       ) ||
-      /^packages\/rom-weaver-webapp\/src\/(?:lib\/runtime|platform\/browser|storage|types|wasm|workers)(?:\/|$)/.test(
+      /^packages\/rom-weaver-webapp\/src\/(?:lib\/runtime|platform|storage|types|wasm|workers)(?:\/|$)/.test(
         path,
       ) ||
       /^packages\/rom-weaver-webapp\/tests\/(?:fixtures|wasm)(?:\/|$)/.test(path)

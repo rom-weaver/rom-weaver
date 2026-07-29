@@ -857,14 +857,25 @@ because they enter neither the production WASM module nor the release binary -
 selecting the webapp there could only ever buy a guaranteed cache hit followed
 by browser jobs that cannot observe the edit. The narrower `wasm_runtime` flag
 selects direct WASM browser tests for production Rust; the webapp's runtime,
-worker, storage, browser-platform, and shared type layers; dependencies; the
+platform, worker, storage, and shared type layers; dependencies; the
 suite's fixtures/config; and all fail-open CI/toolchain inputs. Ordinary Rust
 sources select CLI source Docker after merge, while Docker/Cargo/toolchain
-inputs select it on a pull request too. Keep these boundaries covered by the
-classifier tests.
+inputs select it on a pull request too.
 Changes to CI, coverage, toolchain setup, or the
-classifier fail open by selecting every stack.
-`scripts/ci/classify-changes.test.mjs` pins these boundaries.
+classifier fail open by selecting every stack. So does the event name: only
+`pull_request` narrows anything, so an absent `EVENT_NAME` costs time rather
+than coverage - the same default, for the same reason, as
+`scripts/ci/cli-platform-matrix.mjs`.
+
+Two tests pin it. `scripts/ci/classify-changes.test.mjs` covers the path
+boundaries and the event default.
+`scripts/ci/wasm-runtime-coverage.test.mjs` covers the one boundary a path list
+cannot state honestly: it walks the imports and
+`new URL(..., import.meta.url)` references reachable from
+`packages/rom-weaver-webapp/tests/wasm/*.test.mjs` and fails if anything the
+suite can observe - including the Rust fixture trees it reads directly - does
+not select `wasm_runtime`. Without it, one new import out of `src/wasm/` into an
+unlisted directory silently drops the suite from that directory's changes.
 
 ### `scripts/ci/resolve-wasm-run.mjs`
 
@@ -1229,6 +1240,7 @@ mise run ci                                                  # broad local gate
 
 mise run actionlint ::: docs-lint ::: shellcheck ::: hadolint # repo-lint
 node --test scripts/ci/classify-changes.test.mjs             # change boundaries
+node --test scripts/ci/wasm-runtime-coverage.test.mjs        # wasm_runtime vs. the suite
 mise run fmt ::: clippy ::: typegen-check ::: whitespace ::: thread-guards
 mise run test-rust ::: licenses-check ::: deny-policy ::: machete # rust-host
 cargo publish --workspace --locked --dry-run --no-verify     # rust-host

@@ -287,6 +287,9 @@ jobs:
   # so the image and the site are the same bundle.
   docker-prebuilt:
     name: Docker build (webapp, prebuilt, ${{ matrix.arch }})
+    # The matrix below only ever holds amd64 and arm64, so this reads as a pair
+    # rather than a default: any third value would silently land on the arm
+    # runner.
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 20
     needs: webapp-static
@@ -827,8 +830,11 @@ jobs:
           'rust-host=${{ needs.rust-host.result }}'
           'cli-platforms=${{ needs.cli-platforms.result }}'
 
+      # Same `!cancelled()` as the job above, for the same reason: this has to
+      # report even when the step before it failed, but a cancelled run is not a
+      # red Rust check.
       - name: Verify full native jobs
-        if: always()
+        if: ${{ !cancelled() }}
         run: >-
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
@@ -1138,8 +1144,9 @@ jobs:
           'webapp-e2e=${{ needs.webapp-e2e.result }}'
           'webapp-webkit-e2e=${{ needs.webapp-webkit-e2e.result }}'
 
+      # Reports even when the step above failed, but never on a cancelled run.
       - name: Verify WASM runtime jobs
-        if: always()
+        if: ${{ !cancelled() }}
         run: >-
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'

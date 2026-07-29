@@ -3,11 +3,16 @@ import test from "node:test";
 
 import { classifyChanges } from "./classify-changes.mjs";
 
-const classify = (...paths) =>
+// Both helpers stringify, so a `deepEqual` against the whole result and a spot
+// check of one key read the same way.
+const classifyFor = (eventName, ...paths) =>
   Object.fromEntries(
-    Object.entries(classifyChanges(paths)).map(([key, value]) => [key, String(value)]),
+    Object.entries(classifyChanges(paths, false, eventName)).map(([key, value]) => [
+      key,
+      String(value),
+    ]),
   );
-const classifyFor = (eventName, ...paths) => classifyChanges(paths, false, eventName);
+const classify = (...paths) => classifyFor(undefined, ...paths);
 
 test("documentation changes skip compiled stacks", () =>
   assert.deepEqual(classify("README.md", "docs/development/ci.md"), {
@@ -134,9 +139,20 @@ test("Rust test-only changes select Rust alone", () => {
 test("production Rust skips source Docker on pull requests and restores it on main", () => {
   const path = "crates/rom-weaver-containers/src/chd/decode/frames.rs";
   const pullRequest = classifyFor("pull_request", path);
-  assert.equal(pullRequest.wasm_runtime, true);
-  assert.equal(pullRequest.docker_cli, false);
-  assert.equal(classifyFor("push", path).docker_cli, true);
+  assert.equal(pullRequest.wasm_runtime, "true");
+  assert.equal(pullRequest.docker_cli, "false");
+  assert.equal(classifyFor("push", path).docker_cli, "true");
+});
+
+// `pull_request` is the only event that narrows anything, so an absent or
+// unrecognized one has to cost time rather than coverage - a caller that forgets
+// to pass EVENT_NAME must not silently drop the CLI image build.
+// scripts/ci/cli-platform-matrix.mjs pins the same default for the same reason.
+test("an absent or unknown event keeps the full selection", () => {
+  const path = "crates/rom-weaver-containers/src/chd/decode/frames.rs";
+  for (const eventName of [undefined, "", "push", "workflow_dispatch", "merge_group"]) {
+    assert.equal(classifyFor(eventName, path).docker_cli, "true", String(eventName));
+  }
 });
 
 test("plumbing lint runs only for the file kinds it lints", () => {
