@@ -18,7 +18,9 @@ describe("readAppBaseUrl", () => {
     // /weave/, which made a bare ?bundle= resolve to /weave/<file>.
     expect(new URL(at("/weave/")).pathname).toBe("/");
     expect(new URL(at("/weave")).pathname).toBe("/");
+    expect(new URL(at("/weave.html")).pathname).toBe("/");
     expect(new URL(at("/create")).pathname).toBe("/");
+    expect(new URL(at("/create.html")).pathname).toBe("/");
     expect(new URL(at("/trim/")).pathname).toBe("/");
   });
 
