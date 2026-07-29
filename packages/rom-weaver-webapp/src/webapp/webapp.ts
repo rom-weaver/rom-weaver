@@ -1,6 +1,7 @@
 /* RomWeaver (complete webapp implementation) v20240809 - Marc Robledo 2016-2024 - http://www.marcrobledo.com/license */
 
 import { createElement, useLayoutEffect } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
@@ -517,7 +518,13 @@ const renderWebappRoot = (): undefined => {
   }
   const root = appRoot;
   if (!root) return undefined;
-  root.render(webappRoot);
+  // Redundant under preact/compat, whose `root.render` already commits synchronously - kept because
+  // the boot sequence above is written against a synchronous commit (see the first-paint handoff
+  // notes), and dropping it would silently reintroduce an async first mount if the Preact alias in
+  // preact-aliases.mjs is ever removed.
+  flushSync(() => {
+    root.render(webappRoot);
+  });
   return undefined;
 };
 renderWebappRootIfReady = renderWebappRoot;

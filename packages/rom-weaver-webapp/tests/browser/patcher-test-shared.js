@@ -263,10 +263,19 @@ export const selectPatchCandidates = async (labels) => {
   for (const label of labels)
     if (!rows.some((entry) => entry.textContent?.includes(label)))
       throw new Error(`Missing patch candidate selection option: ${label}`);
+  // Each click only QUEUES the selection state update: preact batches into a microtask, where React
+  // used to flush every discrete event synchronously before `click()` returned. Clicking straight
+  // through would run each handler against the first render's closure, so toggle number two would
+  // overwrite toggle number one instead of adding to it, and the confirm button would submit the
+  // selection as it stood before any of them. A real user cannot click twice inside one task; this
+  // helper can, so the helper is what has to yield.
   for (const row of rows) {
     const checkbox = row.querySelector("input[type='checkbox']");
     const selected = labels.some((label) => row.textContent?.includes(label));
-    if (checkbox && checkbox.checked !== selected) checkbox.click();
+    if (checkbox && checkbox.checked !== selected) {
+      checkbox.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
   }
   const confirm = document.querySelector(".rw-modal.select-modal .selconfirm");
   if (!confirm) throw new Error("Missing patch candidate confirm button");
