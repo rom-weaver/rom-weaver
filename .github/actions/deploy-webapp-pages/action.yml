@@ -23,6 +23,9 @@ inputs:
       Pages branch. The project's production branch (main) publishes a live
       deployment; anything else is a throwaway preview.
     required: true
+  generate-attribution:
+    description: Regenerate the cheap webapp attribution bundle before building.
+    default: "false"
   cloudflare-api-token:
     description: CLOUDFLARE_API_TOKEN.
     required: true
@@ -38,13 +41,19 @@ outputs:
 runs:
   using: composite
   steps:
-    # Compiles nothing - runs vite and wrangler over a prebuilt module - so the
-    # Rust toolchain is dead weight here.
+    # Compiles nothing - runs vite and wrangler over a prebuilt module. Rust is
+    # needed only when the preview fast path regenerated the module's cheap
+    # attribution files outside the WASM build job.
     - uses: ./.github/actions/setup-build-env
       with:
-        tools: node
+        tools: ${{ inputs.generate-attribution == 'true' && 'node rust' || 'node' }}
         cargo-cache: "false"
         webapp-deps: "true"
+
+    - name: Generate webapp attribution
+      if: inputs.generate-attribution == 'true'
+      shell: bash
+      run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
 
     # The channel stamps the bundle's visible identity - masthead badge, tab
     # title, PWA name and accent tokens - so a nightly or preview tab is never

@@ -4,19 +4,13 @@ description: >-
   Building the module is the single most expensive step in the pipeline
   (~6.5 min). CI and weekly coverage share the production module; the nightly
   E2E suite builds a development one (no wasm-opt, no brotli).
-  They differ only in variant and artifact paths, so the keying rules -
-  the part that is dangerous to get wrong - live here once.
+  Generated attribution files are deliberately rebuilt separately because
+  they are cheap and can change without changing the module.
 
 inputs:
   variant:
     description: prod or dev. Part of the key, so the two builds can never collide.
     required: true
-  path:
-    description: >-
-      Newline-separated artifact paths to cache. Defaults to the variant's
-      canonical file set, which is what every caller wants; override only to
-      cache something else under the same keying rules.
-    default: ""
   cache-epoch:
     description: Bump to invalidate every cached module by hand.
     default: "1"
@@ -38,45 +32,54 @@ outputs:
     value: ${{ steps.key.outputs.key }}
   path:
     description: >-
-      The newline-separated paths that were cached. Callers that upload the same
-      files as a workflow artifact read this instead of restating the list.
+      The newline-separated complete artifact paths. Callers that upload the
+      artifact read this instead of restating the list.
     value: ${{ steps.paths.outputs.path }}
+  cache-path:
+    description: The newline-separated expensive module paths that were cached.
+    value: ${{ steps.paths.outputs.cache-path }}
 
 runs:
   using: composite
   steps:
-    # The file set is a property of the variant, not of the caller: a dev build
-    # emits no wasm-opt/brotli sidecars and no prod checksum. Resolving it here
-    # keeps a caller from caching a subset of what it later uploads.
+    # The complete artifact includes cheap generated attribution files. They
+    # are not part of the cache so a webapp dependency edit cannot invalidate
+    # the six-minute module.
     - name: Resolve artifact paths
       id: paths
       shell: bash
       env:
         VARIANT: ${{ inputs.variant }}
-        OVERRIDE: ${{ inputs.path }}
       run: |
         wasm_dir=packages/rom-weaver-webapp/src/wasm
-        if [ -n "$OVERRIDE" ]; then
-          paths="$OVERRIDE"
-        else
-          # A dev build runs neither wasm-opt nor brotli and writes no prod
-          # checksum, so it has three of the five files.
-          case "$VARIANT" in
-            prod) names=(rom-weaver-app.wasm rom-weaver-app.wasm.br rom-weaver-app.wasm.prod.sha256 NOTICE WEBAPP_NOTICE third_party) ;;
-            dev) names=(rom-weaver-app.wasm NOTICE WEBAPP_NOTICE third_party) ;;
-            *) echo "::error::unknown wasm variant '$VARIANT'"; exit 1 ;;
-          esac
-          paths=$(printf '%s\n' "${names[@]/#/$wasm_dir/}")
-        fi
+        case "$VARIANT" in
+          prod)
+            artifact_names=(rom-weaver-app.wasm rom-weaver-app.wasm.br rom-weaver-app.wasm.prod.sha256 NOTICE WEBAPP_NOTICE third_party)
+            cache_names=(rom-weaver-app.wasm rom-weaver-app.wasm.br rom-weaver-app.wasm.prod.sha256)
+            ;;
+          dev)
+            artifact_names=(rom-weaver-app.wasm NOTICE WEBAPP_NOTICE third_party)
+            cache_names=(rom-weaver-app.wasm)
+            ;;
+          *) echo "::error::unknown wasm variant '$VARIANT'"; exit 1 ;;
+        esac
+        artifact_paths=$(printf '%s\n' "${artifact_names[@]/#/$wasm_dir/}")
+        cache_paths=$(printf '%s\n' "${cache_names[@]/#/$wasm_dir/}")
         {
           echo "path<<PATHS_EOF"
-          printf '%s\n' "$paths"
+          printf '%s\n' "$artifact_paths"
           echo "PATHS_EOF"
+          echo "cache-path<<CACHE_PATHS_EOF"
+          printf '%s\n' "$cache_paths"
+          echo "CACHE_PATHS_EOF"
         } >> "$GITHUB_OUTPUT"
-        printf 'caching (%s):\n%s\n' "$VARIANT" "$paths"
+        printf 'artifact paths (%s):\n%s\n' "$VARIANT" "$artifact_paths"
+        printf 'cached paths (%s):\n%s\n' "$VARIANT" "$cache_paths"
 
     # Hash every source, dependency, toolchain, and build-script input to the
-    # emitted module. git ls-tree resolves the PR merge tree, unlike hashFiles.
+    # emitted module. The package lock and attribution generator are omitted:
+    # they affect only the cheap generated files, not the Rust module. git
+    # ls-tree resolves the PR merge tree, unlike hashFiles.
     # Test targets never enter this production build, so exclude them instead
     # of making a test-only edit rebuild the ~6.5-minute module. Inline
     # #[cfg(test)] blocks remain part of their source file's hash.
@@ -90,8 +93,7 @@ runs:
         basis=$(
           {
             git ls-tree -r HEAD -- \
-              Cargo.lock Cargo.toml .cargo packages/rom-weaver-webapp/package-lock.json scripts/wasm \
-              scripts/gen-third-party-licenses.mjs \
+              Cargo.lock Cargo.toml .cargo scripts/wasm \
               .github/actions/setup-build-env
             printf 'mise-wasm-config\n'
             git show HEAD:.config/mise.toml | awk '
@@ -128,20 +130,17 @@ runs:
       uses: actions/cache@v6
       with:
         key: ${{ steps.key.outputs.key }}
-        path: ${{ steps.paths.outputs.path }}
+        path: ${{ steps.paths.outputs.cache-path }}
 
-    # `steps.paths`, not `inputs.path`: the resolve step above already returns
-    # the override when one was given, and falls back to the variant's canonical
-    # set when none was. Reading the raw input instead restored *nothing* for a
-    # read-only caller that did not pass one - reporting a miss on every run,
-    # with no signal that the path list was empty rather than the cache cold.
+    # Restore the resolved module paths rather than the complete artifact list:
+    # generated attribution files are recreated by each consumer after setup.
     - name: Restore built wasm module (read-only)
       id: restore
       if: inputs.save == 'false'
       uses: actions/cache/restore@v6
       with:
         key: ${{ steps.key.outputs.key }}
-        path: ${{ steps.paths.outputs.path }}
+        path: ${{ steps.paths.outputs.cache-path }}
 
     # Without this the only evidence the cache works is an unexplained swing
     # in job duration, which is a poor thing to debug from months later.

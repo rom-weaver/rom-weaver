@@ -408,14 +408,15 @@ jobs:
         with:
           variant: prod
 
-      # Skipped entirely on a hit - the toolchain exists only to compile.
+      # A hit needs only Node/Rust to regenerate the cheap attribution files;
+      # the full toolchain exists only to compile on a miss.
       - uses: ./.github/actions/setup-build-env
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
         with:
-          tools: node rust binaryen
-          apt-packages: cmake ninja-build pkg-config clang libclang-dev
-          rust-targets: wasm32-wasip1-threads
-          wasi-sdk: "true"
+          tools: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'node rust' || 'node rust binaryen' }}
+          apt-packages: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && '' || 'cmake ninja-build pkg-config clang libclang-dev' }}
+          cargo-cache: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
+          rust-targets: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && '' || 'wasm32-wasip1-threads' }}
+          wasi-sdk: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
           webapp-deps: "true"
 
       # Never set RUSTFLAGS here: Cargo replaces configured target flags instead
@@ -425,8 +426,10 @@ jobs:
         if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: mise run build-wasm-prod
 
+      - name: Generate webapp attribution
+        run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
+
       # Validate completeness and the 4 GiB memory ceiling on both cache paths.
-      # Use runner Node because toolchain setup is skipped on hits.
       - name: Verify wasm artifact
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
@@ -438,8 +441,8 @@ jobs:
           name: wasm-prod
           if-no-files-found: error
           compression-level: 0
-          # Exactly what the cache step above covers, so the uploaded artifact
-          # can never drift from the restored one.
+          # Upload the complete bundle, including the freshly generated
+          # attribution files that are intentionally outside the cache.
           path: ${{ steps.wasm-cache.outputs.path }}
 
   # One stable name for the repository plumbing - lint, the WASM module, the
@@ -1253,8 +1256,8 @@ jobs:
   # Preview fast path. `deploy` below has to wait for the `wasm` job because it
   # takes the module from that job's artifact - a runner start, checkout,
   # verify and upload/download that a preview does not have to sit through when
-  # the module is already cached. On a hit (every pull request that leaves
-  # Cargo.lock and crates/ alone) this restores it directly and the preview URL
+  # the module is already cached. On a hit (every pull request that leaves the
+  # module inputs unchanged) this restores it directly and the preview URL
   # lands ~13s sooner.
   #
   # On a miss it deploys nothing and `deploy` publishes the preview as before.
@@ -1298,12 +1301,6 @@ jobs:
           # Read-only: this job never builds the module, so it must not claim
           # the key ahead of the `wasm` job that does.
           save: "false"
-          path: |
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
-            packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/third_party
 
       - name: Mark preview deployment pending
         if: steps.wasm-cache.outputs.cache-hit == 'true'
@@ -1325,6 +1322,7 @@ jobs:
           label: ${{ needs.deploy-plan.outputs.preview_branch }}
           project: rom-weaver-preview
           branch: ${{ needs.deploy-plan.outputs.preview_branch }}
+          generate-attribution: "true"
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
