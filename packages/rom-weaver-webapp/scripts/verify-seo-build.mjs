@@ -13,6 +13,10 @@ const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
 const assertIncludes = (source, expected, label) => {
   if (!source.includes(expected)) throw new Error(`${label} is missing ${JSON.stringify(expected)}`);
 };
+const assertTagAttributes = (source, tag, attributes, label) => {
+  const pattern = new RegExp(`<${tag}\\b${attributes.map((attribute) => `(?=[^>]*\\b${attribute})`).join("")}[^>]*>`);
+  if (!pattern.test(source)) throw new Error(`${label} is missing`);
+};
 const assertCount = (source, expected, count, label) => {
   const actual = source.split(expected).length - 1;
   if (actual !== count)
@@ -80,7 +84,12 @@ assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 ro
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
 assertIncludes(notFoundHtml, '<header class="masthead"', "404 app masthead");
-assertIncludes(notFoundHtml, 'class="btn primary not-found-home" href="/apply"', "404 home action");
+assertTagAttributes(
+  notFoundHtml,
+  "a",
+  ['class="btn primary not-found-home"', 'href="/apply"'],
+  "404 home action",
+);
 assertIncludes(notFoundHtml, 'class="btn ghost not-found-docs" href="/docs"', "404 docs action");
 assertIncludes(notFoundHtml, "That page is not here.", "404 recovery heading");
 assertIncludes(notFoundHtml, 'aria-selected="false" class="mode" data-mode="patcher"', "404 inactive workflow tab");
@@ -134,8 +143,18 @@ assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply descri
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
-assertIncludes(applyHtml, 'aria-selected="true" class="mode" data-mode="patcher"', "apply prerendered workflow");
-assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator"', "create prerendered workflow");
+assertTagAttributes(
+  applyHtml,
+  "a",
+  ['aria-selected="true"', 'class="mode"', 'data-mode="patcher"'],
+  "apply prerendered workflow",
+);
+assertTagAttributes(
+  createHtml,
+  "a",
+  ['aria-selected="true"', 'class="mode"', 'data-mode="creator"'],
+  "create prerendered workflow",
+);
 assertIncludes(applyHtml, 'class="build-version-label"', "preloaded build version");
 assertIncludes(applyHtml, 'class="masthead-threads-full"', "preloaded full thread label");
 assertIncludes(applyHtml, 'class="masthead-threads-short"', "preloaded compact thread label");
@@ -157,9 +176,10 @@ for (const route of [
   assertIncludes(html, runtimeResolver, `${route} parser-time runtime status resolver placement`);
   assertCount(html, "ROM_WEAVER_RESOLVE_SHELL_IDENTITY()", 1, `${route} parser-time runtime status resolver`);
 }
-assertIncludes(
+assertTagAttributes(
   read("create/index.html"),
-  'aria-selected="true" class="mode" data-mode="creator"',
+  "a",
+  ['aria-selected="true"', 'class="mode"', 'data-mode="creator"'],
   "static-host create prerendered workflow",
 );
 assertIncludes(
@@ -215,11 +235,17 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
   if ((docsHtml.match(/<h1\b/g) || []).length !== 1) throw new Error(`${route.slug} must contain exactly one h1`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
-  assertIncludes(docsHtml, 'aria-selected="true" class="mode" data-mode="docs"', `${route.slug} selected guides tab`);
-  assertIncludes(
+  assertTagAttributes(
     docsHtml,
-    '<button aria-label="Switch to light theme" class="tool"',
-    `${route.slug} React theme control`,
+    "a",
+    ['aria-selected="true"', 'class="mode"', 'data-mode="docs"'],
+    `${route.slug} selected guides tab`,
+  );
+  assertTagAttributes(
+    docsHtml,
+    "button",
+    ['aria-label="Switch to light theme"', 'class="tool"'],
+    `${route.slug} theme control`,
   );
   assertIncludes(docsHtml, '<base href="/" />', `${route.slug} asset base`);
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
