@@ -38,7 +38,7 @@ available from the version tooltip.
 The first value describes how the page was launched; the second describes
 service-worker state. The combinations are therefore independent, such as
 `web · sw`, `pwa · sw ok`, or `pwa · sw off`. The prerendered shell resolves
-known runtime state before first paint, then React hydrates that shell in place
+known runtime state before first paint, then the app hydrates that shell in place
 instead of replacing the masthead nodes. The text stays empty only while
 service-worker state is unknown.
 

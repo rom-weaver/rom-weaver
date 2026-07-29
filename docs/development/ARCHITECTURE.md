@@ -37,6 +37,7 @@ the WASM build over a JSON event protocol.
 - [rom-weaver-bundle.json bundles](#rom-weaver-bundlejson-bundles)
 - [Rust ⇄ TypeScript boundary](#rust-%E2%87%84-typescript-boundary)
 - [Build graph](#build-graph)
+- [Webapp React runtime (Preact compat)](#webapp-react-runtime-preact-compat)
 - [Webapp UI - the loom workbench](#webapp-ui---the-loom-workbench)
 - [Testing](#testing)
 - [Other docs](#other-docs)
@@ -460,6 +461,53 @@ The WASM build needs a WASI SDK (v33+, auto-detected; see
 `packages/rom-weaver-webapp/src/wasm` are gitignored; the generated *TypeScript*
 files are
 committed and drift-checked.
+
+## Webapp React runtime (Preact compat)
+
+The webapp's source is written against the React API, but the runtime that ships
+is **Preact via `preact/compat`**. Nothing imports `preact` directly: every file
+still says `react` / `react-dom` / `react-dom/client` / `react-dom/server`, and
+`packages/rom-weaver-webapp/preact-aliases.mjs` rewrites those specifiers (plus
+both JSX runtimes) at resolve time. That one helper is shared by the production
+Vite build, the browser suite, and the node unit suite so all three resolve the
+same runtime.
+
+`react` and `react-dom` stay declared in `package.json` on purpose - they back
+`@types/react`, which is still the type surface `tsc` checks. **This means the
+type checker cannot see Preact's behavioural gaps**; the guards below and the
+test suites are what actually cover them.
+
+- **Nothing named React may reach a bundle.** `checkReactRuntimeExclusion`
+  (`scripts/check-size-budget.mjs`, run by `npm run check:size`) walks every
+  `.js.map` under `dist` and fails if `react`, `react-dom`, or `scheduler`
+  appears in a `sources` list - and also fails if *no* `preact` module appears,
+  so an alias that resolves to neither cannot pass as clean. It depends on
+  `build.sourcemap` staying on.
+- **Hydration mismatches are silent.** `preact/compat/client`'s
+  `hydrateRoot(container, children)` takes **no options argument**, so React's
+  `onRecoverableError` hook does not exist, and Preact's `hydrate` patches a
+  mismatch instead of reporting one. The prerender handoff is therefore guarded
+  by comparing markup before and after hydration
+  (`tests/browser/shell-hydration.browser.test.js`), which carries a negative
+  control to prove the comparison still has teeth.
+- **`useId` is tree-position based.** Preact derives ids from the vnode's
+  position rather than a render counter, so a prerendered id only survives
+  hydration while the server and first client tree stay structurally identical.
+  When it drifts, `htmlFor` / `aria-labelledby` silently stop resolving.
+- **Renders batch into a microtask.** React flushed each discrete event
+  synchronously before `click()` returned; Preact does not. Test helpers that
+  drive several clicks in one task have to yield between them (see
+  `selectPatchCandidates` in `tests/browser/patcher-test-shared.js`) or each
+  handler runs against the previous render's closure. Real interactions are
+  always separate tasks, so this is a harness concern, not a UI one.
+- **Attribute order is not promised.** `preact-render-to-string` does not match
+  React's attribute serialization, so `scripts/verify-seo-build.mjs` asserts
+  per-attribute (`assertTagAttributes`) rather than against a baked-in string.
+- **CommonJS dependencies escape the alias.** A dependency Node loads directly
+  keeps its real React import and hands back `forwardRef` *objects*, which Preact
+  renders as literal `<[object Object]>` elements. `lucide-react` needs
+  `ssr.noExternal` for the prerender build and a generated stub in the node unit
+  suite (`vitest.unit.config.mjs`).
 
 ## Webapp UI - the loom workbench
 

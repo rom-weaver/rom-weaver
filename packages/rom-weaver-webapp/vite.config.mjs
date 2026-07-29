@@ -1072,6 +1072,10 @@ export default defineConfig(({ command, mode }) => {
       preserveSymlinks: false,
     },
     ssr: {
+      // The prerender build (scripts/prerender.mjs) runs through Vite's SSR pipeline, which would
+      // otherwise leave lucide-react external for Node to load directly - past the reach of the
+      // Preact aliases above. Its icons would then be real React `forwardRef` objects, which Preact
+      // serializes as literal `<[object Object]>` tags into the prerendered shell.
       noExternal: ["lucide-react"],
     },
     server: {
