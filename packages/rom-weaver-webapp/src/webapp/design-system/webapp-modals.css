@@ -93,8 +93,8 @@
   }
 }
 @media (max-width: 720px) {
-  /* Keep the native bundle picker compact on phones, including iOS. */
-  .rw-app .export-type-field .select { font-size: .72rem; }
+  /* Keep every native and custom dropdown label the same size on phones. */
+  .rw-app select, .codec-combobox-option, .rw-app .patch-menu-item { font-size: .72rem !important; }
 }
 /* Enlarge touch targets without changing visual layout. */
 @media (pointer: coarse) {
