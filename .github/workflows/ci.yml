@@ -1293,6 +1293,7 @@ jobs:
     permissions:
       contents: read
       statuses: write
+      deployments: write
     if: needs.deploy-plan.outputs.preview_branch != ''
     # Do not attach an Actions environment here. GitHub creates its deployment
     # record when the job starts, including on a cache miss; the fallback below
@@ -1346,8 +1347,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DEPLOYMENT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           DEPLOYMENT_CHANNEL: preview
           DEPLOYMENT_URL: ${{ steps.pages.outputs.url }}
+          DEPLOYMENT_RECORD: "true"
+          DEPLOYMENT_ENVIRONMENT: rom-weaver-preview.pages.dev
           STATUS_CONTEXT: Webapp Deploy / preview
         run: node scripts/ci/deployment-status.mjs
 
