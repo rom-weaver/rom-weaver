@@ -55,9 +55,7 @@
 .rw-app .release-changelog-heading a { color: var(--ink); text-decoration: none; }
 .rw-app .release-changelog-heading a:active { color: var(--thread-text); }
 @media (hover: hover) { .rw-app .release-changelog-heading a:hover { color: var(--thread-text); } }
-.rw-app .changelog-more { color: var(--ink-3); text-decoration: none; letter-spacing: .18em; padding-inline: var(--sp-s); }
-.rw-app .changelog-more:active { color: var(--thread-text); }
-@media (hover: hover) { .rw-app .changelog-more:hover { color: var(--thread-text); } }
+.rw-app .changelog-more { font-size: .82rem; }
 .rw-app .release-changelog { font-size: .88rem; line-height: 1.5; }
 .rw-app .release-changelog + .release-changelog { margin-block-start: var(--sp-m); }
 .rw-app .release-changelog-group { margin-block: 0 var(--sp-xs); font-size: .82rem; font-weight: 650; color: var(--ink-2); }

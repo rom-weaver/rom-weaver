@@ -218,24 +218,38 @@ const EntryGroups = ({
   </>
 );
 
-type HeaderMeta = { label: string; moreUrl: string; transition: string };
+// One side of the transition. `href` is absent only for the build-id fallback,
+// which names a local build no page on GitHub describes.
+type TransitionRef = { href?: string; label: string; text: string };
+type HeaderMeta = { from: TransitionRef; moreUrl: string; to?: TransitionRef };
+
+const releaseTagUrl = (repositoryUrl: string, version: string) => `${repositoryUrl}/releases/tag/v${version}`;
 
 // What you're moving from and to, plus the escape hatch to everything this
 // dialog could not fit. Both views share it, and it rides in the modal's title
 // bar next to "What's new" rather than at the top of the body.
 //
-// Where "more" points differs by view, because the two views show different
-// things: a release shows CHANGELOG.md entries, so it links CHANGELOG.md; a
-// nightly shows raw commits, which never reach CHANGELOG.md, so it links the
-// commit log instead.
+// Each side links to whatever describes it on GitHub - the release for a
+// version, the commit for a build - and "more" follows the same logic: a
+// release shows CHANGELOG.md entries, so it links CHANGELOG.md; a nightly shows
+// raw commits, which never reach that file, so it links the commit log.
 const headerMeta = (state: FetchState): HeaderMeta | undefined => {
   if (state.status !== "loaded") return undefined;
   const repositoryUrl = state.release?.repositoryUrl ?? REPOSITORY_URL;
   if (state.release && state.release.version !== APP_VERSION) {
+    const incoming = state.release.version;
     return {
-      label: `updating from version ${APP_VERSION} to version ${state.release.version}`,
+      from: {
+        href: releaseTagUrl(repositoryUrl, APP_VERSION),
+        label: `currently running version ${APP_VERSION}`,
+        text: `v${APP_VERSION}`,
+      },
       moreUrl: state.release.changelogUrl,
-      transition: `v${APP_VERSION} → v${state.release.version}`,
+      to: {
+        href: releaseTagUrl(repositoryUrl, incoming),
+        label: `updating to version ${incoming}`,
+        text: `v${incoming}`,
+      },
     };
   }
   const moreUrl = `${repositoryUrl}/commits/${DEFAULT_BRANCH}`;
@@ -244,31 +258,50 @@ const headerMeta = (state: FetchState): HeaderMeta | undefined => {
   // build id, the one thing that differs between same-commit rebuilds.
   const incoming = state.entries[0]?.hash;
   if (!incoming) {
-    return { label: `version ${APP_VERSION}, build ${APP_BUILD_VERSION}`, moreUrl, transition: APP_BUILD_VERSION };
+    return { from: { label: `version ${APP_VERSION}, build ${APP_BUILD_VERSION}`, text: APP_BUILD_VERSION }, moreUrl };
   }
   return {
-    label: `updating version ${APP_VERSION} from build ${COMMIT_HASH} to build ${incoming}`,
+    from: {
+      href: `${repositoryUrl}/commit/${COMMIT_HASH}`,
+      label: `currently running build ${COMMIT_HASH}`,
+      text: COMMIT_HASH,
+    },
     moreUrl,
-    transition: `${COMMIT_HASH} → ${incoming}`,
+    to: { href: `${repositoryUrl}/commit/${incoming}`, label: `updating to build ${incoming}`, text: incoming },
   };
 };
 
-// The tail the dialog could not fit. Links wherever the view's "more" points, so
-// the ellipsis is a way through rather than a dead end.
+// The tail the dialog could not fit - the same escape hatch as the header's, put
+// where you run out of entries.
 const TruncatedNote = ({ moreUrl }: { moreUrl: string }) => (
   <div className="changelog-note">
-    <a aria-label="See earlier changes" className="changelog-more" href={moreUrl} rel="noreferrer" target="_blank">
-      …
+    <a className="changelog-more" href={moreUrl} rel="noreferrer" target="_blank">
+      Full changelog
     </a>
   </div>
 );
 
+const TransitionSide = ({ side }: { side: TransitionRef }) =>
+  side.href ? (
+    <a aria-label={side.label} href={side.href} rel="noreferrer" target="_blank">
+      {side.text}
+    </a>
+  ) : (
+    // role="img" so the bare build id is announced as what it names rather than
+    // read out character by character. A plain span cannot carry aria-label.
+    <span aria-label={side.label} role="img">
+      {side.text}
+    </span>
+  );
+
 const ChangelogHeader = ({ meta }: { meta: HeaderMeta }) => (
   <div className="changelog-head-meta">
-    {/* role="img" so the arrow is announced as the transition it means rather
-        than by its glyph name. */}
-    <span aria-label={meta.label} className="changelog-head-transition mono" role="img">
-      {meta.transition}
+    <span className="changelog-head-transition mono">
+      <TransitionSide side={meta.from} />
+      {/* Hidden because each side already says which end it is; announcing the
+          glyph would only add "rightwards arrow" between them. */}
+      {meta.to ? <span aria-hidden="true"> → </span> : null}
+      {meta.to ? <TransitionSide side={meta.to} /> : null}
     </span>
     <a className="changelog-head-link" href={meta.moreUrl} rel="noreferrer" target="_blank">
       Full changelog
@@ -282,13 +315,13 @@ const ReleaseNotes = ({ moreUrl, release }: { moreUrl: string; release: ReleaseC
     <>
       {notes.map((note) => (
         <section className="release-changelog-section" key={note.version}>
-          {notes.length > 1 ? (
-            <h3 className="release-changelog-heading">
-              <a href={`${release.repositoryUrl}/releases/tag/v${note.version}`} rel="noreferrer" target="_blank">
-                v{note.version}
-              </a>
-            </h3>
-          ) : null}
+          {/* Always shown, even for a single section: it is what the entries
+              under it belong to, and it is the way to that release on GitHub. */}
+          <h3 className="release-changelog-heading">
+            <a href={releaseTagUrl(release.repositoryUrl, note.version)} rel="noreferrer" target="_blank">
+              v{note.version}
+            </a>
+          </h3>
           <EntryGroups groups={note.groups} keyPrefix={note.version} repositoryUrl={release.repositoryUrl} />
         </section>
       ))}

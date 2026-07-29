@@ -57,7 +57,13 @@ describe("ChangelogDialog", () => {
 
     renderDialog();
 
-    expect(await screen.findByText(`v${APP_VERSION} → v9.9.9`)).toBeTruthy();
+    // Each side of the header transition links to its release on GitHub.
+    expect(
+      (await screen.findByRole("link", { name: `currently running version ${APP_VERSION}` })).getAttribute("href"),
+    ).toBe(`${REPOSITORY_URL}/releases/tag/v${APP_VERSION}`);
+    expect(screen.getByRole("link", { name: "updating to version 9.9.9" }).getAttribute("href")).toBe(
+      `${REPOSITORY_URL}/releases/tag/v9.9.9`,
+    );
     expect(screen.getByRole("heading", { name: "Features" })).toBeTruthy();
     expect(screen.getByText("Shiny release feature")).toBeTruthy();
     expect(screen.getByText("webapp:")).toBeTruthy();
@@ -160,12 +166,17 @@ describe("ChangelogDialog", () => {
 
     expect(await screen.findByText("Nightly change")).toBeTruthy();
     expect(screen.queryByText("Previous release")).toBeNull();
-    // No version bump, so the header shows the build the commits move to.
-    expect(screen.getByText("dev → nightly")).toBeTruthy();
+    // No version bump, so each side of the header is a build, linking its commit.
+    expect(screen.getByRole("link", { name: "currently running build dev" }).getAttribute("href")).toBe(
+      `${REPOSITORY_URL}/commit/dev`,
+    );
+    expect(screen.getByRole("link", { name: "updating to build nightly" }).getAttribute("href")).toBe(
+      `${REPOSITORY_URL}/commit/nightly`,
+    );
     expect(screen.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(COMMIT_LOG_URL);
   });
 
-  it("links the truncation ellipsis at whatever the view could not fit", async () => {
+  it("repeats the full-changelog link at the end of a truncated release", async () => {
     mockChangelog([
       {
         date: "2026-07-29T00:00:00Z",
@@ -177,19 +188,19 @@ describe("ChangelogDialog", () => {
 
     renderDialog();
 
-    // A release ran out of embedded sections, so the tail is in CHANGELOG.md.
-    expect((await screen.findByRole("link", { name: "See earlier changes" })).getAttribute("href")).toBe(CHANGELOG_URL);
+    // One in the header, one where the entries run out. Both reach CHANGELOG.md.
+    const links = await screen.findAllByRole("link", { name: "Full changelog" });
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([CHANGELOG_URL, CHANGELOG_URL]);
   });
 
-  it("links the commit view's truncation ellipsis at the commit log", async () => {
+  it("repeats the commit-log link at the end of a truncated commit list", async () => {
     // No entry matches the running build, so the window itself is truncated.
     mockChangelog([{ date: "", hash: "a", subject: "feat(cli): add a flag" }]);
 
     renderDialog();
 
-    expect((await screen.findByRole("link", { name: "See earlier changes" })).getAttribute("href")).toBe(
-      COMMIT_LOG_URL,
-    );
+    const links = await screen.findAllByRole("link", { name: "Full changelog" });
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([COMMIT_LOG_URL, COMMIT_LOG_URL]);
   });
 
   it("renders commits as changelog groups, in release-please's order", async () => {
@@ -226,6 +237,10 @@ describe("ChangelogDialog", () => {
     renderDialog();
 
     expect(await screen.findByText("docker release")).toBeTruthy();
-    expect(screen.queryByText("v9.9.9")).toBeNull();
+    // The placeholder's hash is not a commit, so nothing links it as one.
+    expect(screen.queryByRole("link", { name: "v9.9.9" })?.getAttribute("href")).toBe(
+      `${REPOSITORY_URL}/releases/tag/v9.9.9`,
+    );
+    expect(document.querySelector(`a[href="${REPOSITORY_URL}/commit/v9.9.9"]`)).toBeNull();
   });
 });
