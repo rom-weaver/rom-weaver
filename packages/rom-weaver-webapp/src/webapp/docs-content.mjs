@@ -82,11 +82,23 @@ const headingSlug = (value) =>
     .trim()
     .replace(/\s+/g, "-");
 
-// Raw HTML remains available to the trusted, repository-owned document body,
-// but headings feed both HTML and navigation metadata, so only Markdown inline
-// formatting is rendered there.
-const headingRenderer = new Renderer();
-headingRenderer.html = () => "";
+/**
+ * Raw HTML remains available to the trusted, repository-owned document body,
+ * but headings feed both HTML and navigation metadata, so only Markdown inline
+ * formatting is rendered there.
+ *
+ * The inline lexer marks text inside a `<script>` or `<pre>` as `escaped`,
+ * which tells the default renderer to emit the source verbatim. That only holds
+ * while the surrounding tags survive, so clearing the flag hands the text back
+ * to marked's own escaping rather than reimplementing it here.
+ */
+const createHeadingRenderer = () => {
+  const renderer = new Renderer();
+  renderer.html = () => "";
+  renderer.text = (token) =>
+    Renderer.prototype.text.call(renderer, "escaped" in token && token.escaped ? { ...token, escaped: false } : token);
+  return renderer;
+};
 
 /**
  * Guide links are authored as repository-relative paths so the Markdown also
@@ -135,6 +147,9 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
   /** @type {DocSection[]} */
   const sections = [];
   const defaultRenderer = new Renderer();
+  // `Parser.parseInline` rebinds `renderer.parser` on every call, so the
+  // heading renderer stays local to one render rather than being shared.
+  const headingRenderer = createHeadingRenderer();
   const parser = new Marked({
     renderer: {
       code(token) {

@@ -457,13 +457,17 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       // for anyone copying a command out of a beta or preview deployment.
       await page.waitForFunction(() => !document.getElementById("webapp-root")?.hasAttribute("aria-busy"));
       const samples = await page.evaluate((productionOrigin) => {
-        const blocks = [...document.querySelectorAll(".docs-article pre code")].map((block) => block.textContent || "");
-        const production = blocks
-          .flatMap((text) => text.match(/https?:\/\/[^\s"'<>]+/g) ?? [])
-          .filter((value) => URL.canParse(value) && new URL(value).origin === productionOrigin).length;
+        // Origins are compared after parsing so a lookalike host such as
+        // `rom-weaver.com.example` can never read as either origin.
+        const origins = [...document.querySelectorAll(".docs-article pre code")].map((block) =>
+          (block.textContent || "")
+            .match(/https?:\/\/[^\s"'<>]+/g)
+            ?.flatMap((value) => (URL.canParse(value) ? [new URL(value).origin] : [])),
+        );
+        const countBlocksNaming = (origin) => origins.filter((block) => block?.includes(origin)).length;
         return {
-          local: blocks.filter((text) => text.includes(location.origin)).length,
-          production,
+          local: countBlocksNaming(location.origin),
+          production: countBlocksNaming(productionOrigin),
         };
       }, SITE_ORIGIN);
       if (samples.production)
