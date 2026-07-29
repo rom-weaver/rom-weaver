@@ -43,6 +43,7 @@
   .rw-app .fname .outname, .rw-app .fname .select {
     font-size: .82rem; line-height: 1.35; padding-block: 9px;
   }
+  .codec-combobox-option { font-size: .72rem; }
   .rw-app .patch-name-field .popt-input,
   .rw-app .patch-description-field .popt-input { font-size: .82rem; line-height: 1.35; }
   @supports (-webkit-touch-callout: none) {
