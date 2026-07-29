@@ -6,6 +6,7 @@
   transition: border-color .15s, box-shadow .15s;
 }
 .rw-app .select { appearance: none; padding-inline-end: 30px; cursor: pointer;
+  font-size: var(--dropdown-fs, .92rem);
   background-image: var(--chevron);
   background-repeat: no-repeat; background-position: right 10px center;
 }
@@ -130,7 +131,7 @@
 .rw-app .patch-menu-item {
   appearance: none; display: flex; align-items: center; gap: var(--sp-s);
   width: 100%; padding: 6px 9px; border: 0; border-radius: 5px; background: none;
-  color: var(--ink-2); font: inherit; font-size: .82rem; font-weight: 500;
+  color: var(--ink-2); font: inherit; font-size: var(--dropdown-fs, .82rem); font-weight: 500;
   text-align: start; cursor: pointer; transition: color .15s, background .15s;
 }
 @media (hover: hover) {
@@ -215,7 +216,7 @@
 .rw-app .ck-add-select {
   appearance: none; width: auto; min-width: 0; margin: 0; padding: 0; border: 0; background: none;
   color: inherit; cursor: pointer;
-  font-family: var(--font); font-size: .66rem; font-weight: 700;
+  font-family: var(--font); font-size: var(--dropdown-fs, .66rem); font-weight: 700;
   letter-spacing: .07em; text-transform: uppercase;
 }
 .rw-app .ck-add:focus-within {
@@ -234,7 +235,7 @@
 }
 .rw-app .ck-basis-select {
   margin-inline-start: var(--sp-s);
-  font-size: .66rem; font-weight: 600; letter-spacing: .02em; text-transform: none;
+  font-size: var(--dropdown-fs, .66rem); font-weight: 600; letter-spacing: .02em; text-transform: none;
   color: var(--ink-2);
 }
 .rw-app .ckrows .patch-off-note { margin-block-start: 7px; margin-inline: 9px; }
@@ -264,7 +265,8 @@
 @container cks-inner (max-width: 730px) { .rw-app .verification-pair { grid-template-columns: 1fr; } }
 .rw-app .ofld { display: flex; flex-direction: column; gap: var(--sp-xs); min-width: 0; }
 .rw-app .ofld-l { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
-.rw-app .ofld .input, .rw-app .ofld .select { height: 32px; font-size: .82rem; }
+.rw-app .ofld .input { height: 32px; font-size: .82rem; }
+.rw-app .ofld .select { height: 32px; font-size: var(--dropdown-fs, .82rem); }
 .rw-app .optschecks { display: flex; flex-direction: column; gap: var(--sp-s); }
 .rw-app .optschecks .popt {
   flex-direction: row-reverse; justify-content: space-between;

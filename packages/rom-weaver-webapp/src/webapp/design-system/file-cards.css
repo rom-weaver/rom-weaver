@@ -114,6 +114,7 @@
 .rw-app .meta-target-static { color: inherit; }
 .rw-app .meta-target-select {
   appearance: none; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
+  font-size: var(--dropdown-fs, inherit);
   padding: 0 13px 0 1px; margin: 0; line-height: 1.35;
   /* Meet the WCAG 2.5.8 target floor without enlarging the text line. */
   min-height: 24px;
