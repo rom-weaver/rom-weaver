@@ -589,6 +589,18 @@ Its sitemap lists the two stable, crawlable workflow pages:
 URLs distinct; the generated HTML gives each its own title, description, and
 canonical URL plus Open Graph and Twitter card metadata.
 
+The apex is the one canonical origin. `www` is a separate origin, so serving the
+app there would give it its own OPFS store and service worker and a user landing
+on it would see different saved state. The redirect that prevents this is a
+zone-level Single Redirect in the Cloudflare dashboard (rom-weaver.com -> Rules
+-> Redirect Rules, "www to apex"), not the build's `_redirects` - that file
+matches a path and never a hostname, and Cloudflare lists domain-level redirects
+as unsupported, so a rule written there is dropped silently. One was, from
+v0.7.2 through v0.9.0, and www served the app on its own origin for all three
+releases. Because the rule lives in the dashboard, nothing in this repository
+gates it; the `www` DNS record has to stay proxied for the rule to see the
+request at all.
+
 Each build also generates Cloudflare Pages `_headers`. All channels receive the
 cross-origin isolation headers required by threaded WASM. Content-hashed
 `/assets/*` responses use a one-year immutable browser cache, while
