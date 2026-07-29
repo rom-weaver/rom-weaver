@@ -16,6 +16,15 @@ const flipTo = (theme) => () => document.documentElement.setAttribute("data-them
 
 let fixture;
 
+// A long marquee to catch a clone that restarts instead of resuming.
+const keyframes = document.createElement("style");
+keyframes.textContent = `
+  @keyframes wipe-drift { from { opacity: 1; } to { opacity: .2; } }
+  .wipe-pseudo::before { content: ""; display: block; animation: wipe-drift 30s linear infinite; }
+  .wipe-oneshot { animation: wipe-drift 40ms linear 1; }
+`;
+document.head.append(keyframes);
+
 describe("theme wipe fallback", () => {
   beforeEach(() => {
     document.documentElement.setAttribute("data-theme", "dark");
@@ -64,6 +73,55 @@ describe("theme wipe fallback", () => {
     const clonedInput = veils()[0].querySelector("#wipe-input");
 
     expect(clonedInput.value).toBe("typed after render");
+    await settle();
+  });
+
+  test("the clone keeps animations moving in step instead of restarting them", async () => {
+    const marquee = document.createElement("div");
+    marquee.className = "wipe-marquee";
+    marquee.style.animation = "wipe-drift 30s linear infinite";
+    fixture.append(marquee);
+    const live = marquee.getAnimations()[0];
+    // Mid-stride: a clone left to its own devices would start over at 0.
+    live.currentTime = 9000;
+
+    runThemeWipeFallback(ORIGIN, flipTo("light"));
+    const clonedMarquee = veils()[0].querySelector(".wipe-marquee");
+    const cloned = clonedMarquee.getAnimations()[0];
+
+    expect(cloned).toBeDefined();
+    expect(cloned.playState).not.toBe("paused");
+    expect(cloned.startTime).toBe(live.startTime);
+    expect(Math.abs(cloned.currentTime - live.currentTime)).toBeLessThan(50);
+
+    // Sharing the timeline origin keeps them in step as time passes.
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(Math.abs(cloned.currentTime - live.currentTime)).toBeLessThan(50);
+    await settle();
+  });
+
+  test("syncs pseudo-element animations and drops one-shots that already played", async () => {
+    const pseudo = document.createElement("div");
+    pseudo.className = "wipe-pseudo";
+    const oneShot = document.createElement("div");
+    oneShot.className = "wipe-oneshot";
+    fixture.append(pseudo, oneShot);
+    const livePseudo = pseudo.getAnimations({ subtree: true })[0];
+    livePseudo.currentTime = 12000;
+    // Let the one-shot finish, so the live page is no longer animating it.
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(oneShot.getAnimations()).toHaveLength(0);
+
+    runThemeWipeFallback(ORIGIN, flipTo("light"));
+    const veil = veils()[0];
+    const clonedPseudo = veil.querySelector(".wipe-pseudo").getAnimations({ subtree: true })[0];
+
+    // ::before animations are invisible to element.getAnimations() — they were
+    // left restarting at 0 until the sync walked the subtree.
+    expect(clonedPseudo).toBeDefined();
+    expect(Math.abs(clonedPseudo.currentTime - livePseudo.currentTime)).toBeLessThan(50);
+    // The finished one-shot must not play again inside the circle.
+    expect(veil.querySelector(".wipe-oneshot").getAnimations()).toHaveLength(0);
     await settle();
   });
 

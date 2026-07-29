@@ -31,17 +31,80 @@ const wipeOrigin = (rect: DOMRect | undefined): WipeOrigin => {
   return { x, y, radius: Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y)) };
 };
 
+type Pair = [live: Element, clone: Element];
+
+/** Pair every cloned element with its original, before the tree is edited. */
+const pairTrees = (live: Element, clone: Element, pairs: Pair[]) => {
+  pairs.push([live, clone]);
+  for (const [index, child] of [...live.children].entries()) {
+    const twin = clone.children[index];
+    if (twin) pairTrees(child, twin, pairs);
+  }
+};
+
+/* `target`/`pseudoElement` live on KeyframeEffect, not the base AnimationEffect. */
+const keyframeEffect = (animation: Animation): KeyframeEffect | null =>
+  animation.effect instanceof KeyframeEffect ? animation.effect : null;
+
+/** Key an animation by what it runs on, so a match is unambiguous. */
+const animationKey = (animation: Animation): string => {
+  const name = "animationName" in animation ? String(animation.animationName) : "";
+  return `${keyframeEffect(animation)?.pseudoElement ?? ""}|${name}`;
+};
+
+/**
+ * A marquee mid-stride restarts at frame 0 in the clone and a one-shot entry
+ * animation that already finished replays - both read as motion the live page
+ * is not making. Sharing `startTime` puts the clone on the same timeline
+ * origin, so it keeps moving in step from here on.
+ *
+ * Walks the whole clone in one pass because animations on `::before`/`::after`
+ * never show up in `element.getAnimations()`, only in a subtree query.
+ */
+const syncAnimations = (veil: Element, liveOf: Map<Element, Element>) => {
+  const liveIndex = new Map<Element, Map<string, Animation[]>>();
+  const indexFor = (live: Element) => {
+    const cached = liveIndex.get(live);
+    if (cached) return cached;
+    const index = new Map<string, Animation[]>();
+    for (const animation of live.getAnimations({ subtree: true })) {
+      if (keyframeEffect(animation)?.target !== live) continue;
+      const key = animationKey(animation);
+      const queue = index.get(key);
+      if (queue) queue.push(animation);
+      else index.set(key, [animation]);
+    }
+    liveIndex.set(live, index);
+    return index;
+  };
+
+  for (const twin of veil.getAnimations({ subtree: true })) {
+    const target = keyframeEffect(twin)?.target;
+    const live = target ? liveOf.get(target) : undefined;
+    const source = live ? indexFor(live).get(animationKey(twin))?.shift() : undefined;
+    if (!source) {
+      // Nothing running live under that key: a one-shot that already played
+      // out. Cancelling leaves the clone in the settled style the page shows,
+      // instead of replaying the entrance inside the circle.
+      twin.cancel();
+      continue;
+    }
+    if (source.startTime !== null) twin.startTime = source.startTime;
+    else if (source.currentTime !== null) twin.currentTime = source.currentTime;
+  }
+};
+
 /**
  * cloneNode copies markup, not state: typed values, checkbox/select state,
- * scroll offsets and in-flight animations all reset. Walk both trees in step
- * and carry them over so the revealed clone matches the page it covers.
+ * scroll offsets and in-flight animations all reset. Must run with the clone
+ * already in the document - a detached element has no scrollable box and no
+ * running animations, so there would be nothing to sync onto.
  */
-const syncLiveState = (live: Element, clone: Element) => {
-  const liveNodes = [live, ...live.querySelectorAll("*")];
-  const cloneNodes = [clone, ...clone.querySelectorAll("*")];
-  for (const [index, source] of liveNodes.entries()) {
-    const target = cloneNodes[index];
-    if (!target) break;
+const syncLiveState = (veil: Element, pairs: Pair[]) => {
+  const liveOf = new Map<Element, Element>();
+  for (const [source, target] of pairs) {
+    if (!target.isConnected) continue;
+    liveOf.set(target, source);
     if (source.scrollTop || source.scrollLeft) {
       target.scrollTop = source.scrollTop;
       target.scrollLeft = source.scrollLeft;
@@ -58,16 +121,8 @@ const syncLiveState = (live: Element, clone: Element) => {
         target.currentTime = source.currentTime;
       }
     }
-    // Marquees and pulses would otherwise restart from frame 0 inside the
-    // circle while the same element keeps running outside it.
-    const running = source.getAnimations();
-    if (running.length === 0) continue;
-    const cloned = target.getAnimations();
-    for (const [slot, animation] of running.entries()) {
-      const twin = cloned[slot];
-      if (twin && animation.currentTime !== null) twin.currentTime = animation.currentTime;
-    }
   }
+  syncAnimations(veil, liveOf);
 };
 
 /**
@@ -77,7 +132,7 @@ const syncLiveState = (live: Element, clone: Element) => {
  * `.theme-veil` deliberately avoids transform/filter so it never becomes their
  * containing block.
  */
-const buildVeil = (theme: string, origin: WipeOrigin): HTMLElement => {
+const buildVeil = (theme: string, origin: WipeOrigin): { veil: HTMLElement; pairs: Pair[] } => {
   const veil = document.createElement("div");
   veil.className = "theme-veil";
   veil.setAttribute("aria-hidden", "true");
@@ -93,17 +148,18 @@ const buildVeil = (theme: string, origin: WipeOrigin): HTMLElement => {
   stage.style.insetBlockStart = `${-window.scrollY}px`;
   stage.style.insetInlineStart = `${-window.scrollX}px`;
   stage.style.width = `${document.documentElement.clientWidth}px`;
+  const pairs: Pair[] = [];
   for (const child of document.body.children) {
-    if (child === veil || child.classList.contains("theme-veil")) continue;
+    if (child.classList.contains("theme-veil")) continue;
     const clone = child.cloneNode(true) as Element;
-    // Sync before stripping: the walk pairs the two trees by index.
-    syncLiveState(child, clone);
+    // Pair before stripping, so removing nodes cannot shift the pairing.
+    pairTrees(child, clone, pairs);
     // A cloned <script> re-runs on insertion; the clone is a picture, not an app.
     for (const script of clone.querySelectorAll("script")) script.remove();
     stage.append(clone);
   }
   veil.append(stage);
-  return veil;
+  return { veil, pairs };
 };
 
 const animationsUnavailable = () => typeof Element.prototype.animate !== "function";
@@ -123,9 +179,11 @@ const runThemeWipeFallback = (origin: WipeOrigin, applyTheme: () => void) => {
   }
   settleActiveWipe?.();
   const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
-  const veil = buildVeil(next, origin);
+  const { veil, pairs } = buildVeil(next, origin);
   document.body.append(veil);
-  logger.trace("theme wipe started", { next, ...origin });
+  // Same task as the insertion, so the clone never paints unsynced.
+  syncLiveState(veil, pairs);
+  logger.trace("theme wipe started", { next, pairs: pairs.length, ...origin });
 
   let settled = false;
   const finish = () => {
