@@ -578,15 +578,23 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   @starting-style {
     .rw-modal.guide-sheet .rw-modal-card { transform: translateY(100%); opacity: 1; }
   }
+  /* Block flow, not grid: the capped outline is a scroll container, and a grid
+     row sized to its content collapses to zero around one - the rail then
+     painted its full height over the top of the guide list. In normal flow it
+     simply takes the shorter of its content and its cap, and the list follows
+     it, so the body scrolls once the two together outgrow the sheet. */
   .rw-modal.guide-sheet .modal-body {
-    display: grid;
-    gap: var(--sp-l);
+    display: block;
     padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom, 0px));
   }
   /* The outline is capped rather than left to run: a nine-section guide would
      otherwise fill the sheet and hide that a list of every other page sits
      underneath it. */
-  .rw-modal.guide-sheet .warp-rail { overflow-y: auto; max-height: 38dvh; }
+  .rw-modal.guide-sheet .warp-rail {
+    overflow-y: auto;
+    max-height: 38dvh;
+    margin-block-end: var(--sp-l);
+  }
   .rw-modal.guide-sheet .warp-rail-title {
     position: sticky;
     top: 0;
@@ -595,7 +603,10 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
     background: var(--plate);
   }
   .rw-modal.guide-sheet .warp-rail-list a { min-height: 40px; align-items: center; }
-  .rw-modal.guide-sheet .guide-nav { background: none; }
+  /* The sidebar card clips to keep its rounded corners; in the sheet that
+     clipping would hide every shelf past the fold, and the body is the thing
+     that scrolls. */
+  .rw-modal.guide-sheet .guide-nav { background: none; overflow: visible; }
   .rw-modal.guide-sheet .guide-nav-list a { min-height: 40px; padding-block: 10px; }
   /* The woven fill reads as cloth across a full-width sidebar row; at sheet
      width it is just a grid of dots, so the current page takes a flat dye. The
