@@ -218,24 +218,43 @@ const EntryGroups = ({
   </>
 );
 
-// Shared header: what you're moving from and to on the left, the escape hatch to
-// the whole file on the right.
-const ChangelogHeader = ({
-  changelogUrl,
-  label,
-  transition,
-}: {
-  changelogUrl: string;
-  label: string;
-  transition: string;
-}) => (
-  <div className="release-changelog-version">
+type HeaderMeta = { changelogUrl: string; label: string; transition: string };
+
+// What you're moving from and to, plus the escape hatch to the whole file. Both
+// views share it, and it rides in the modal's title bar next to "What's new"
+// rather than at the top of the body.
+const headerMeta = (state: FetchState): HeaderMeta | undefined => {
+  if (state.status !== "loaded") return undefined;
+  const changelogUrl = state.release?.changelogUrl ?? FALLBACK_CHANGELOG_URL;
+  if (state.release && state.release.version !== APP_VERSION) {
+    return {
+      changelogUrl,
+      label: `updating from version ${APP_VERSION} to version ${state.release.version}`,
+      transition: `v${APP_VERSION} → v${state.release.version}`,
+    };
+  }
+  // No version bump, so the transition is between builds of the same version.
+  // With nothing newer at all there is no transition either - fall back to the
+  // build id, the one thing that differs between same-commit rebuilds.
+  const incoming = state.entries[0]?.hash;
+  if (!incoming) {
+    return { changelogUrl, label: `version ${APP_VERSION}, build ${APP_BUILD_VERSION}`, transition: APP_BUILD_VERSION };
+  }
+  return {
+    changelogUrl,
+    label: `updating version ${APP_VERSION} from build ${COMMIT_HASH} to build ${incoming}`,
+    transition: `${COMMIT_HASH} → ${incoming}`,
+  };
+};
+
+const ChangelogHeader = ({ meta }: { meta: HeaderMeta }) => (
+  <div className="changelog-head-meta">
     {/* role="img" so the arrow is announced as the transition it means rather
         than by its glyph name. */}
-    <span aria-label={label} className="mono" role="img">
-      {transition}
+    <span aria-label={meta.label} className="changelog-head-transition mono" role="img">
+      {meta.transition}
     </span>
-    <a href={changelogUrl} rel="noreferrer" target="_blank">
+    <a className="changelog-head-link" href={meta.changelogUrl} rel="noreferrer" target="_blank">
       Full changelog
     </a>
   </div>
@@ -245,11 +264,6 @@ const ReleaseNotes = ({ release }: { release: ReleaseChangelog }) => {
   const { notes, truncated } = releaseNotesSince(release);
   return (
     <>
-      <ChangelogHeader
-        changelogUrl={release.changelogUrl}
-        label={`updating from version ${APP_VERSION} to version ${release.version}`}
-        transition={`v${APP_VERSION} → v${release.version}`}
-      />
       {notes.map((note) => (
         <section className="release-changelog-section" key={note.version}>
           {notes.length > 1 ? (
@@ -267,31 +281,18 @@ const ReleaseNotes = ({ release }: { release: ReleaseChangelog }) => {
   );
 };
 
-// Same-version update - a nightly or a rebuild. There is no version transition
-// to show, so the header carries the build the commits are moving to.
+// Same-version update - a nightly or a rebuild.
 const CommitNotes = ({
-  changelogUrl,
   entries,
   repositoryUrl,
   truncated,
 }: {
-  changelogUrl: string;
   entries: ChangelogEntry[];
   repositoryUrl: string;
   truncated: boolean;
 }) => {
-  const incoming = entries[0]?.hash;
   return (
     <>
-      <ChangelogHeader
-        changelogUrl={changelogUrl}
-        label={
-          incoming
-            ? `updating version ${APP_VERSION} from build ${COMMIT_HASH} to build ${incoming}`
-            : `version ${APP_VERSION}, build ${APP_BUILD_VERSION}`
-        }
-        transition={incoming ? `v${APP_VERSION} · ${COMMIT_HASH} → ${incoming}` : APP_BUILD_VERSION}
-      />
       <EntryGroups groups={commitGroups(entries)} keyPrefix="commits" repositoryUrl={repositoryUrl} />
       {truncated ? <div className="changelog-note">…</div> : null}
     </>
@@ -326,8 +327,11 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
     };
   }, [open]);
 
+  const meta = headerMeta(state);
+
   return (
     <Modal
+      headerActions={meta ? <ChangelogHeader meta={meta} /> : undefined}
       onClose={onClose}
       open={open}
       showCloseButton={false}
@@ -349,7 +353,6 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
           // A dev build has no embedded release payload, so fall back to the
           // constants baked in here.
           <CommitNotes
-            changelogUrl={state.release?.changelogUrl ?? FALLBACK_CHANGELOG_URL}
             entries={state.entries}
             repositoryUrl={state.release?.repositoryUrl ?? REPOSITORY_URL}
             truncated={state.truncated}

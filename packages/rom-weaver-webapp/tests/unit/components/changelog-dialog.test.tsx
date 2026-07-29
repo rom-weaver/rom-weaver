@@ -159,7 +159,7 @@ describe("ChangelogDialog", () => {
     expect(await screen.findByText("Nightly change")).toBeTruthy();
     expect(screen.queryByText("Previous release")).toBeNull();
     // No version bump, so the header shows the build the commits move to.
-    expect(screen.getByText(`v${APP_VERSION} · dev → nightly`)).toBeTruthy();
+    expect(screen.getByText("dev → nightly")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(CHANGELOG_URL);
   });
 
