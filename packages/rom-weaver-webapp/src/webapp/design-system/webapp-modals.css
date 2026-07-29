@@ -34,8 +34,6 @@
 }
 .rw-modal.select-modal .rw-modal-card { width: 100%; }
 .rw-modal.select-modal .modal-body { padding-block-start: var(--sp-s); }
-.rw-app .input.tarea { height: auto; min-height: 52px; resize: vertical; padding-block: 8px; line-height: 1.4; font-size: .82rem; font-family: inherit; }
-.rw-app .ofld .input.tarea { height: auto; }
 @container settings-card (min-width: 688px) {
   .rw-modal.settings-modal .modal-body { columns: 2; column-gap: var(--sp-m); }
   .rw-modal.settings-modal .modal-body .setcols { display: contents; }

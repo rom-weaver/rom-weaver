@@ -1,0 +1,11 @@
+/* Surfaces that cannot appear before the visitor interacts - drawers, dialogs, and the
+   run-result/progress readouts - so none of this needs to block first paint. Loaded at
+   boot (see webapp.ts); the layer order declared in index.css keeps each file's cascade
+   priority, not its load order.
+   webapp-modals.css is NOT here despite the name: it carries first-paint layout for the
+   main app (the wide-screen `.app` max-width, workflow step rails, patch-card grid), so
+   deferring it visibly reflows the page when it arrives. */
+@import "./drawers.css" layer(drawers);
+@import "./weave-meter.css" layer(weave-meter);
+@import "./result.css" layer(result);
+@import "./dialogs.css" layer(dialogs);

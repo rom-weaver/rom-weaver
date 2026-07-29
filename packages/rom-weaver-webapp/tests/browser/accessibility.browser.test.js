@@ -32,7 +32,10 @@ import {
 } from "../../src/webapp/settings/settings-state.ts";
 import { SettingsPanel } from "../../src/webapp/webapp-settings.tsx";
 // Load the real design system so axe + getComputedStyle see production colours.
+// deferred.css ships lazily in production (webapp.ts loads it at boot) but the dialog
+// and drawer surfaces under test here live in it, so the test loads it directly.
 import "../../src/webapp/design-system/index.css";
+import "../../src/webapp/design-system/deferred.css";
 
 const axe = axeModule.default ?? axeModule;
 const THEMES = ["light", "dark"];

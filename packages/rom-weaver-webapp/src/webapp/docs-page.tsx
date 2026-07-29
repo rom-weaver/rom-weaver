@@ -1,3 +1,4 @@
+import "./design-system/docs-route.css";
 import { ChevronUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";

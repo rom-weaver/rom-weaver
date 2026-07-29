@@ -143,7 +143,7 @@
 .rw-app .patch-off-note { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .8rem; color: var(--care); }
 .rw-app .patch-off-note svg { width: 15px; height: 15px; flex: none; }
 /* Use a darker amber in light mode to preserve 4.5:1 contrast. */
-:root[data-theme="light"] .patch-off-note, :root[data-theme="light"] .checkrow.warn { color: #7a5300; }
+:root[data-theme="light"] .patch-off-note { color: #7a5300; }
 
 .rw-app .verdict { display: inline-flex; align-items: center; gap: var(--sp-xs); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
 .rw-app .verdict.ok {

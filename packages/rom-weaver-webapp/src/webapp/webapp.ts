@@ -469,6 +469,20 @@ renderWebappRootIfReady = renderWebappRoot;
 webappController.subscribe(renderWebappRoot);
 installViteReloadGuard();
 
+// Dialogs, drawers, modals, and run readouts cannot appear before the visitor interacts,
+// so their stylesheet is a dynamic import: it starts fetching at boot but never blocks
+// first render the way a <link> in the head would. Immediate rather than idle-scheduled,
+// so the earliest possible interaction still finds the styles in place. The layer order
+// in design-system/index.css keeps its cascade priority intact regardless of when it
+// arrives.
+import("./design-system/deferred.css").then(
+  () => logger.trace("Deferred stylesheet loaded"),
+  (error: unknown) =>
+    logger.warn("Deferred stylesheet failed to load", {
+      message: error instanceof Error ? error.message : String(error || ""),
+    }),
+);
+
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("storage", (event) => {
     if (event.key !== LOCAL_STORAGE_SETTINGS_ID) return;
