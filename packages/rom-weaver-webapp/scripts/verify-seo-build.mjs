@@ -255,4 +255,12 @@ if (production) {
   if (fs.existsSync(path.join(distDir, "sitemap.xml"))) throw new Error(`${channel} must not publish a sitemap`);
 }
 
+// A route missing from the precache is only visible offline, on a first visit to that
+// route - the one case no test navigates through. Assert it here instead, where the
+// generated manifest is on disk.
+const precacheManifest = read("cache-service-worker.js");
+for (const slug of [...DOC_ROUTES.map((route) => route.slug), "create", "tools", "trim", "weave"]) {
+  assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);
+}
+
 console.log(`SEO build verified for ${channel}`);
