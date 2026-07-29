@@ -5,9 +5,13 @@ import { createDocsSeoMetadata, SITE_ORIGIN } from "./docs-routing.mjs";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
 const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs");
+const generatedDocsDirectory = path.resolve(import.meta.dirname, "../wasm");
 
 /** @param {{ file: string }} source */
-const docSourcePath = (source) => path.join(docsDirectory, source.file);
+const docSourcePath = (source) =>
+  source.file.startsWith("wasm/")
+    ? path.join(generatedDocsDirectory, source.file.slice("wasm/".length))
+    : path.join(docsDirectory, source.file);
 
 /** Read and render every published document from disk. The dev plugin re-runs this on edit. */
 const readDocRoutes = () =>
@@ -63,4 +67,4 @@ const createDocsRouteHtml = (html, route, channel, channelLabel) => {
   );
 };
 
-export { createDocsRouteHtml, DOC_ROUTES, docsDirectory, readDocRoutes };
+export { createDocsRouteHtml, DOC_ROUTES, docsDirectory, docSourcePath, generatedDocsDirectory, readDocRoutes };

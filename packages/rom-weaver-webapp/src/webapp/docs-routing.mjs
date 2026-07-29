@@ -5,6 +5,7 @@ const SITE_ORIGIN = "https://rom-weaver.com";
 /**
  * @typedef {{
  *   file: string,
+ *   group?: string,
  *   label: string,
  *   slug: string,
  * }} DocSource
@@ -34,7 +35,7 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "development/ARCHITECTURE.md", label: "Architecture", slug: "docs/architecture" }),
   Object.freeze({ file: "development/development.md", label: "Development", slug: "docs/development" }),
   Object.freeze({ file: "development/references.md", label: "References", slug: "docs/references" }),
-  Object.freeze({ file: "legal/notices.md", label: "Notices", slug: "docs/notices" }),
+  Object.freeze({ file: "wasm/notices.md", group: "Legal", label: "Notices", slug: "docs/notices" }),
   Object.freeze({ file: "legal/privacy.md", label: "Privacy", slug: "docs/privacy" }),
 ]);
 

@@ -54,11 +54,11 @@ runs:
         wasm_dir=packages/rom-weaver-webapp/src/wasm
         case "$VARIANT" in
           prod)
-            artifact_names=(rom-weaver-app.wasm rom-weaver-app.wasm.br rom-weaver-app.wasm.prod.sha256 NOTICE WEBAPP_NOTICE third_party)
+            artifact_names=(rom-weaver-app.wasm rom-weaver-app.wasm.br rom-weaver-app.wasm.prod.sha256 NOTICE WEBAPP_NOTICE notices.md third_party)
             cache_names=(rom-weaver-app.wasm rom-weaver-app.wasm.br rom-weaver-app.wasm.prod.sha256)
             ;;
           dev)
-            artifact_names=(rom-weaver-app.wasm NOTICE WEBAPP_NOTICE third_party)
+            artifact_names=(rom-weaver-app.wasm NOTICE WEBAPP_NOTICE notices.md third_party)
             cache_names=(rom-weaver-app.wasm)
             ;;
           *) echo "::error::unknown wasm variant '$VARIANT'"; exit 1 ;;
