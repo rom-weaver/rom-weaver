@@ -580,6 +580,16 @@ promptly. The `Content-Signal` header permits agent input on every channel,
 permits search use only on production, and declines AI training. Non-production
 channels add their `X-Robots-Tag` in the same file.
 
+Every document path also carries `Link:` preload headers for the two
+render-critical subresources - the stylesheet and the entry module. Neither is
+discoverable until the document has been fetched and parsed, so Cloudflare
+replays them in a `103 Early Hints` response and both fetches start during
+server think time; browsers that ignore `103` still act on the header when the
+document response lands, which is earlier than the parser either way. The
+hinted URLs are read back out of the built `index.html`, and
+`scripts/verify-seo-build.mjs` fails the build if they drift from the ones the
+document actually requests.
+
 Pages has no precompressed-sibling convention and recompresses assets on the
 fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse
 on the wasm and ~50 KB on the main JS bundle, per cold load). Every webapp

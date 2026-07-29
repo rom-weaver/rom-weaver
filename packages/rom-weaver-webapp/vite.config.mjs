@@ -439,6 +439,36 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
   };
 };
 
+// Document paths that should carry the critical-asset `Link` preload headers. Every
+// prerendered route serves the same stylesheet and entry chunk, so one hint set covers
+// them all. The trailing `*` picks up each route's `/index.html` twin; it also matches the
+// screenshots under /docs, which are subresources and ignore the hint.
+const PRELOAD_HINT_PATHS = ["/", "/index.html", "/404.html", "/weave*", "/create*", "/trim*", "/tools*", "/docs*"];
+
+// The stylesheet and entry module are the only two render-critical subresources, and the
+// parser cannot discover either until the document has been fetched and parsed. Emitting
+// them as `Link` response headers lets Cloudflare replay them in a 103 Early Hints
+// response, so both fetches start during server think time instead of after HTML parse.
+// Browsers that ignore 103 still honour the header on the document response itself, which
+// is earlier than the parser either way. Read out of the built index.html rather than the
+// bundle so the hinted URLs are byte-for-byte the ones the document requests.
+const readCriticalAssetLinks = (distDir) => {
+  const indexHtml = fs.readFileSync(path.join(distDir, "index.html"), "utf8");
+  const stylesheet = indexHtml.match(/<link[^>]+rel="stylesheet"[^>]+href="\.(\/assets\/[^"]+\.css)"/)?.[1];
+  const entryScript = indexHtml.match(/<script[^>]+type="module"[^>]+src="\.(\/assets\/[^"]+\.js)"/)?.[1];
+  if (!(stylesheet && entryScript)) {
+    throw new Error(
+      `rom-weaver-cloudflare-headers-asset: could not find the stylesheet (${stylesheet ?? "missing"}) and entry module (${entryScript ?? "missing"}) in dist/index.html`,
+    );
+  }
+  // Both are fetched in CORS mode (the stylesheet link and the module script both carry
+  // `crossorigin`), so the hints have to match or the browser fetches each asset twice.
+  return [
+    `Link: <${stylesheet}>; rel=preload; as=style; crossorigin`,
+    `Link: <${entryScript}>; rel=modulepreload; crossorigin`,
+  ];
+};
+
 // Cloudflare Pages serves dist/_headers on every response, so deployed pages are cross-origin
 // isolated from the first network load instead of round-tripping through the service worker's
 // COEP-injection reload. Hosts without header control still use the service-worker fallback.
@@ -456,7 +486,12 @@ const writeCloudflareHeadersAsset = (channel) => {
       const headerLines = Object.entries(headers)
         .map(([name, value]) => `  ${name}: ${value}`)
         .join("\n");
-      const outputPath = path.join(path.resolve(rootDir, outDir), "_headers");
+      const distDir = path.resolve(rootDir, outDir);
+      const outputPath = path.join(distDir, "_headers");
+      const criticalAssetLinks = readCriticalAssetLinks(distDir);
+      const preloadHints = PRELOAD_HINT_PATHS.map(
+        (hintPath) => `${hintPath}\n${criticalAssetLinks.map((link) => `  ${link}`).join("\n")}\n`,
+      ).join("\n");
       // The attribution files are named `LICENSE-APACHE`, `COPYING`, `NOTICE`
       // and so on. With no extension Cloudflare types them as a binary
       // download, which both skips its on-the-fly compression (2.1 MB of text
@@ -465,7 +500,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n\n${preloadHints}\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {

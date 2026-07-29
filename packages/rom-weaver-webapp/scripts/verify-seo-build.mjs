@@ -53,6 +53,16 @@ assertIncludes(
   "fingerprinted asset cache headers",
 );
 assertIncludes(headers, "/cache-service-worker.js\n  Cache-Control: no-cache", "service worker cache headers");
+// The Early Hints preload has to name the exact hashed URLs the document requests; a stale
+// hint would fetch a dead asset and leave the real ones on the post-parse critical path.
+for (const [pattern, label] of [
+  [/<link[^>]+rel="stylesheet"[^>]+href="\.(\/assets\/[^"]+\.css)"/, "stylesheet"],
+  [/<script[^>]+type="module"[^>]+src="\.(\/assets\/[^"]+\.js)"/, "entry module"],
+]) {
+  const href = weaveHtml.match(pattern)?.[1];
+  if (!href) throw new Error(`index.html is missing its ${label}`);
+  assertIncludes(headers, `Link: <${href}>;`, `${label} preload hint`);
+}
 assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 robots metadata");
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
