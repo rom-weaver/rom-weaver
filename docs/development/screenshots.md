@@ -18,15 +18,15 @@
 ### Apply patches (Weave)
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../packages/rom-weaver-webapp/design/weave-desktop-dark.png">
-  <img src="../packages/rom-weaver-webapp/design/weave-desktop-light.png" alt="Filled Weave patch workflow on desktop">
+  <source media="(prefers-color-scheme: dark)" srcset="../packages/rom-weaver-webapp/design/weave-desktop-dark.webp">
+  <img src="../packages/rom-weaver-webapp/design/weave-desktop-light.webp" alt="Filled Weave patch workflow on desktop">
 </picture>
 
 ### Create a patch
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../packages/rom-weaver-webapp/design/create-desktop-dark.png">
-  <img src="../packages/rom-weaver-webapp/design/create-desktop-light.png" alt="Filled Create patch workflow on desktop">
+  <source media="(prefers-color-scheme: dark)" srcset="../packages/rom-weaver-webapp/design/create-desktop-dark.webp">
+  <img src="../packages/rom-weaver-webapp/design/create-desktop-light.webp" alt="Filled Create patch workflow on desktop">
 </picture>
 
 ## Mobile
@@ -35,8 +35,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="../packages/rom-weaver-webapp/design/weave-mobile-dark.png">
-    <img src="../packages/rom-weaver-webapp/design/weave-mobile-light.png" alt="Filled Weave patch workflow on mobile">
+    <source media="(prefers-color-scheme: dark)" srcset="../packages/rom-weaver-webapp/design/weave-mobile-dark.webp">
+    <img src="../packages/rom-weaver-webapp/design/weave-mobile-light.webp" alt="Filled Weave patch workflow on mobile">
   </picture>
 </p>
 
@@ -44,8 +44,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="../packages/rom-weaver-webapp/design/create-mobile-dark.png">
-    <img src="../packages/rom-weaver-webapp/design/create-mobile-light.png" alt="Filled Create patch workflow on mobile">
+    <source media="(prefers-color-scheme: dark)" srcset="../packages/rom-weaver-webapp/design/create-mobile-dark.webp">
+    <img src="../packages/rom-weaver-webapp/design/create-mobile-light.webp" alt="Filled Create patch workflow on mobile">
   </picture>
 </p>
 
@@ -53,4 +53,4 @@
 
 | Original ROM | After the first patch | After both patches |
 | :---: | :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../../packages/rom-weaver-webapp/design/first-sample-modified-world.png) | ![The sample ROM displaying MODIFIED ROM after both patches](../../packages/rom-weaver-webapp/design/first-sample-modified-rom.png) |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../../packages/rom-weaver-webapp/design/first-sample-hello-world.webp) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../../packages/rom-weaver-webapp/design/first-sample-modified-world.webp) | ![The sample ROM displaying MODIFIED ROM after both patches](../../packages/rom-weaver-webapp/design/first-sample-modified-rom.webp) |

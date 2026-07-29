@@ -25,17 +25,17 @@ const countVisibleWords = (source) =>
     .trim()
     .split(/\s+/).length;
 const docsScreenshotNames = [
-  "create-desktop-dark.png",
-  "create-desktop-light.png",
-  "create-mobile-dark.png",
-  "create-mobile-light.png",
-  "first-sample-hello-world.png",
-  "first-sample-modified-world.png",
-  "first-sample-modified-rom.png",
-  "weave-desktop-dark.png",
-  "weave-desktop-light.png",
-  "weave-mobile-dark.png",
-  "weave-mobile-light.png",
+  "create-desktop-dark.webp",
+  "create-desktop-light.webp",
+  "create-mobile-dark.webp",
+  "create-mobile-light.webp",
+  "first-sample-hello-world.webp",
+  "first-sample-modified-world.webp",
+  "first-sample-modified-rom.webp",
+  "weave-desktop-dark.webp",
+  "weave-desktop-light.webp",
+  "weave-mobile-dark.webp",
+  "weave-mobile-light.webp",
 ];
 
 const weaveHtml = read("index.html");
@@ -153,7 +153,7 @@ for (const [slug, workflow] of [
     for (const theme of ["dark", "light"]) {
       assertIncludes(
         docsHtml,
-        `/docs/screenshots/${workflow}-${viewport}-${theme}.png`,
+        `/docs/screenshots/${workflow}-${viewport}-${theme}.webp`,
         `${slug} ${viewport} ${theme} screenshot`,
       );
     }

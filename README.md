@@ -353,8 +353,8 @@ webapp builds, and tests.
       <td>Desktop: Apply patches (Weave)</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-desktop-dark.png">
-          <img src="packages/rom-weaver-webapp/design/weave-desktop-light.png" alt="Filled Weave patch workflow on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-desktop-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/weave-desktop-light.webp" alt="Filled Weave patch workflow on desktop">
         </picture>
       </td>
     </tr>
@@ -362,8 +362,8 @@ webapp builds, and tests.
       <td>Desktop: Create a patch</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-desktop-dark.png">
-          <img src="packages/rom-weaver-webapp/design/create-desktop-light.png" alt="Filled Create patch workflow on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-desktop-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/create-desktop-light.webp" alt="Filled Create patch workflow on desktop">
         </picture>
       </td>
     </tr>
@@ -371,8 +371,8 @@ webapp builds, and tests.
       <td>Mobile: Apply patches (Weave)</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-mobile-dark.png">
-          <img src="packages/rom-weaver-webapp/design/weave-mobile-light.png" alt="Filled Weave patch workflow on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-mobile-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/weave-mobile-light.webp" alt="Filled Weave patch workflow on mobile" width="390">
         </picture>
       </td>
     </tr>
@@ -380,8 +380,8 @@ webapp builds, and tests.
       <td>Mobile: Create a patch</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-mobile-dark.png">
-          <img src="packages/rom-weaver-webapp/design/create-mobile-light.png" alt="Filled Create patch workflow on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-mobile-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/create-mobile-light.webp" alt="Filled Create patch workflow on mobile" width="390">
         </picture>
       </td>
     </tr>

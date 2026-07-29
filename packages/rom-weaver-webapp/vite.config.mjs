@@ -24,17 +24,17 @@ const repoRoot = path.resolve(rootDir, "../..");
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
 const docsScreenshotNames = [
-  "create-desktop-dark.png",
-  "create-desktop-light.png",
-  "create-mobile-dark.png",
-  "create-mobile-light.png",
-  "first-sample-hello-world.png",
-  "first-sample-modified-world.png",
-  "first-sample-modified-rom.png",
-  "weave-desktop-dark.png",
-  "weave-desktop-light.png",
-  "weave-mobile-dark.png",
-  "weave-mobile-light.png",
+  "create-desktop-dark.webp",
+  "create-desktop-light.webp",
+  "create-mobile-dark.webp",
+  "create-mobile-light.webp",
+  "first-sample-hello-world.webp",
+  "first-sample-modified-world.webp",
+  "first-sample-modified-rom.webp",
+  "weave-desktop-dark.webp",
+  "weave-desktop-light.webp",
+  "weave-mobile-dark.webp",
+  "weave-mobile-light.webp",
 ];
 const docsScreenshotSources = Object.fromEntries(
   docsScreenshotNames.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),

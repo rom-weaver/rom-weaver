@@ -101,12 +101,12 @@ Your original, your modified file, and the patch all stay on your device.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" srcset="/docs/screenshots/create-mobile-light.png">
-    <img src="/docs/screenshots/create-desktop-light.png" alt="The Create workflow filled with the first-create sample assets" loading="lazy" decoding="async">
+    <source media="(max-width: 520px)" srcset="/docs/screenshots/create-mobile-light.webp">
+    <img src="/docs/screenshots/create-desktop-light.webp" alt="The Create workflow filled with the first-create sample assets" loading="lazy" decoding="async">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" srcset="/docs/screenshots/create-mobile-dark.png">
-    <img src="/docs/screenshots/create-desktop-dark.png" alt="The Create workflow filled with the first-create sample assets" loading="lazy" decoding="async">
+    <source media="(max-width: 520px)" srcset="/docs/screenshots/create-mobile-dark.webp">
+    <img src="/docs/screenshots/create-desktop-dark.webp" alt="The Create workflow filled with the first-create sample assets" loading="lazy" decoding="async">
   </picture>
   <figcaption>The docs build captures this filled workflow from the bundled <code>first-create.zip</code> sample.</figcaption>
 </figure>

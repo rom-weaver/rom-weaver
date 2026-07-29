@@ -27,11 +27,11 @@ ROM, patch stack, file picker, and output controls. The first patch changes
 
 <figure class="docs-screenshot-pair" aria-label="The sample ROM before and after both patches">
   <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-hello-world.png" alt="The original sample ROM displaying HELLO WORLD in an NES emulator" loading="lazy" decoding="async">
+    <img src="/docs/screenshots/first-sample-hello-world.webp" alt="The original sample ROM displaying HELLO WORLD in an NES emulator" loading="lazy" decoding="async">
     <figcaption>Before: the original practice ROM.</figcaption>
   </figure>
   <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-modified-rom.png" alt="The sample ROM displaying MODIFIED ROM in an NES emulator after both patches" loading="lazy" decoding="async">
+    <img src="/docs/screenshots/first-sample-modified-rom.webp" alt="The sample ROM displaying MODIFIED ROM in an NES emulator after both patches" loading="lazy" decoding="async">
     <figcaption>After: the result with both patches applied in order.</figcaption>
   </figure>
 </figure>
@@ -91,12 +91,12 @@ are not uploaded anywhere.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" srcset="/docs/screenshots/weave-mobile-light.png">
-    <img src="/docs/screenshots/weave-desktop-light.png" alt="The Weave workflow filled with the first-weave sample ROM and two patches" loading="lazy" decoding="async">
+    <source media="(max-width: 520px)" srcset="/docs/screenshots/weave-mobile-light.webp">
+    <img src="/docs/screenshots/weave-desktop-light.webp" alt="The Weave workflow filled with the first-weave sample ROM and two patches" loading="lazy" decoding="async">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" srcset="/docs/screenshots/weave-mobile-dark.png">
-    <img src="/docs/screenshots/weave-desktop-dark.png" alt="The Weave workflow filled with the first-weave sample ROM and two patches" loading="lazy" decoding="async">
+    <source media="(max-width: 520px)" srcset="/docs/screenshots/weave-mobile-dark.webp">
+    <img src="/docs/screenshots/weave-desktop-dark.webp" alt="The Weave workflow filled with the first-weave sample ROM and two patches" loading="lazy" decoding="async">
   </picture>
   <figcaption>The docs build captures this filled workflow from the bundled <code>first-weave.zip</code> sample.</figcaption>
 </figure>

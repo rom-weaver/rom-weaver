@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { assertSamePixels, optimizePng } from "./optimize-png.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT_DIR = path.resolve(process.env.ROM_WEAVER_SCREENSHOT_OUTPUT || path.join(PACKAGE_DIR, "design"));
@@ -25,10 +25,16 @@ const CASES = [
   },
 ];
 const VIEWPORTS = [
-  { name: "desktop", viewport: { width: 1164, height: 100 }, deviceScaleFactor: 1, isMobile: false },
-  { name: "mobile", viewport: { width: 390, height: 100 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+  { name: "desktop", viewport: { width: 1164, height: 100 }, deviceScaleFactor: 2, isMobile: false },
+  { name: "mobile", viewport: { width: 390, height: 100 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
 ];
 const THEMES = ["light", "dark"];
+const IMAGE_MAGICK = ["magick", "convert"].find(
+  (command) => spawnSync(command, ["-version"], { stdio: "ignore" }).status === 0,
+);
+
+if (!IMAGE_MAGICK)
+  throw new Error("Screenshot capture requires ImageMagick (magick or convert) for lossless WebP output");
 
 const pageUrl = (route) => new URL(route, BASE_URL).toString();
 
@@ -77,14 +83,15 @@ const capture = async () => {
           // Chromium's full-page compositor can paint this translated, visually
           // hidden fixed link in a later capture tile.
           await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
-          const outputPath = path.join(OUTPUT_DIR, `${captureCase.name}-${viewport.name}-${theme}.png`);
+          const outputPath = path.join(OUTPUT_DIR, `${captureCase.name}-${viewport.name}-${theme}.webp`);
           const shot = await page.screenshot({ animations: "disabled", fullPage: true, type: "png" });
-          // These are committed docs assets; Chrome's encoder leaves ~25% on
-          // the table, so squeeze before writing rather than re-bloating the
-          // repo on every recapture.
-          const optimized = optimizePng(shot);
-          assertSamePixels(shot, optimized, path.basename(outputPath));
-          fs.writeFileSync(outputPath, optimized);
+          // Keep text and fine UI edges lossless; the 2x desktop and 3x mobile
+          // captures prevent retina docs pages from upscaling a 1x source.
+          const webp = execFileSync(IMAGE_MAGICK, ["png:-", "-define", "webp:lossless=true", "webp:-"], {
+            input: shot,
+            maxBuffer: 64 * 1024 * 1024,
+          });
+          fs.writeFileSync(outputPath, webp);
           await context.close();
           console.log(`Captured ${path.relative(PACKAGE_DIR, outputPath)}`);
         }
