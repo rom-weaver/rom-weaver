@@ -60,8 +60,8 @@
 * **release:** open the release pull request on manual dispatch only ([#179](https://github.com/rom-weaver/rom-weaver/issues/179)) ([d2aab43](https://github.com/rom-weaver/rom-weaver/commit/d2aab438ed950a056e1a8dbc75f4d2872440f202))
 * **webapp:** sweep 1-16 threads across compress and extract ([#183](https://github.com/rom-weaver/rom-weaver/issues/183)) ([170f359](https://github.com/rom-weaver/rom-weaver/commit/170f359d74c064aa925c041797ab99ab1d60d1a0))
 
-
 </details>
+
 ## [0.8.0](https://github.com/rom-weaver/rom-weaver/compare/v0.7.2...v0.8.0) (2026-07-25)
 
 
