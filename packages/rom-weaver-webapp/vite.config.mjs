@@ -864,7 +864,14 @@ export default defineConfig(({ command }) => {
         injectManifest: {
           globIgnores: ["**/*.map"],
           globPatterns: [
+            // Every route ships its own prerendered document, so precache them all:
+            // offline, a route the user has not visited yet has nothing in the runtime
+            // cache, and without its own shell it falls back to the patcher one and
+            // hydrates through a mismatch. Only the directory-index copy is listed -
+            // the `<slug>.html` twin is the same bytes, and the service worker looks
+            // routes up by the index form (see matchRouteDocument).
             "index.html",
+            "**/index.html",
             "manifest.json",
             "logo.svg",
             "first-create.zip",

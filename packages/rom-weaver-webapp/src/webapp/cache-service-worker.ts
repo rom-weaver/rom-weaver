@@ -11,6 +11,7 @@ import type { WorkboxPlugin } from "workbox-core/types.js";
 import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
+import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 
 declare let self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<string | { revision?: string | null; url: string }>;
@@ -186,6 +187,14 @@ const fetchAndUpdateCache = async (request: Request): Promise<Response> => {
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
 
+const matchRouteDocument = async (url: URL) => {
+  for (const candidate of routeDocumentCandidates(url.pathname)) {
+    const response = await matchPrecache(candidate);
+    if (response) return response;
+  }
+  return undefined;
+};
+
 const matchCachedResponse = async (request: Request, url: URL) => {
   const credentialless = await ensureCoepModeHydrated();
   const cachedResponse = await caches.match(request);
@@ -195,7 +204,7 @@ const matchCachedResponse = async (request: Request, url: URL) => {
     return withCrossOriginIsolationHeaders(manifest, credentialless) || manifest;
   }
   if (isHtmlRequest(request, url)) {
-    const html = (await matchPrecache("index.html")) || (await matchPrecache("/"));
+    const html = (await matchRouteDocument(url)) || (await matchPrecache("index.html")) || (await matchPrecache("/"));
     return withCrossOriginIsolationHeaders(html, credentialless) || html;
   }
   return undefined;
