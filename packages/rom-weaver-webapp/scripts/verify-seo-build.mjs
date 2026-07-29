@@ -14,9 +14,13 @@ const assertIncludes = (source, expected, label) => {
   if (!source.includes(expected)) throw new Error(`${label} is missing ${JSON.stringify(expected)}`);
 };
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// preact-render-to-string does not promise React's attribute order, so assert per attribute instead of
+// on one baked-in string. Each attribute is matched behind required whitespace rather than `\b`: a
+// word boundary also sits inside `data-aria-selected="true"`, which would then satisfy a check for
+// `aria-selected="true"`. `[^>]*` keeps every lookahead inside the one opening tag.
 const assertTagAttributes = (source, tag, attributes, label) => {
   const pattern = new RegExp(
-    `<${escapeRegExp(tag)}\\b${attributes.map((attribute) => `(?=[^>]*\\b${escapeRegExp(attribute)})`).join("")}[^>]*>`,
+    `<${escapeRegExp(tag)}\\b${attributes.map((attribute) => `(?=[^>]*\\s${escapeRegExp(attribute)})`).join("")}[^>]*>`,
   );
   if (!pattern.test(source))
     throw new Error(

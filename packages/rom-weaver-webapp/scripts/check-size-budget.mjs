@@ -26,6 +26,7 @@ const listFiles = (directory) =>
 const RUNTIME_CHUNK_PATTERN = /^wasm-runtime-[\w-]+\.js$/;
 const WORKER_ENTRY_CHUNK_PATTERNS = [/^browser-runner-worker-[\w-]+\.js$/, /^browser-wasi-thread-worker-[\w-]+\.js$/];
 const FORBIDDEN_RUNTIME_SOURCE_PATTERN = /(?:^|\/)node_modules\/(react-dom|react|scheduler)(?:\/|$)/;
+const PREACT_RUNTIME_SOURCE_PATTERN = /(?:^|\/)node_modules\/preact(?:\/|$)/;
 // Static ESM imports only, at a statement boundary. `import("./x.js")` (dynamic) and the plain
 // strings inside Vite's `__vite__mapDeps` array must not match - neither costs a first-paint fetch.
 const STATIC_IMPORT_PATTERN = /(?:^|[;}\n])import\s*(?:[\w$*{},\s]+?\s*from\s*)?"([^"]+)"/g;
@@ -114,25 +115,34 @@ export function checkWorkerRuntimeChunk(distDir = DIST_DIR) {
 }
 
 export function checkReactRuntimeExclusion(distDir = DIST_DIR) {
-  const assetsDir = path.join(distDir, "assets");
-  const sourceMapNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".js.map"));
-  if (sourceMapNames.length === 0)
-    return { failures: 1, problems: [`expected JavaScript source maps in ${assetsDir}, found none`] };
+  // Every emitted `.js.map` under dist, not just `dist/assets`: the service worker and any future
+  // root-level or nested entry ship to visitors too, and a React import that lands in one of those is
+  // exactly as expensive as one in an app chunk.
+  const sourceMaps = listFiles(distDir).filter((file) => file.endsWith(".js.map"));
+  if (sourceMaps.length === 0)
+    return { failures: 1, problems: [`expected JavaScript source maps in ${distDir}, found none`] };
   const bundledPackages = new Map();
-  for (const sourceMapName of sourceMapNames) {
-    const sourceMap = JSON.parse(fs.readFileSync(path.join(assetsDir, sourceMapName), "utf8"));
+  let sawPreact = false;
+  for (const sourceMapPath of sourceMaps) {
+    const sourceMap = JSON.parse(fs.readFileSync(sourceMapPath, "utf8"));
+    const label = path.relative(distDir, sourceMapPath);
     for (const source of sourceMap.sources || []) {
-      const packageName = String(source).replaceAll("\\", "/").match(FORBIDDEN_RUNTIME_SOURCE_PATTERN)?.[1];
+      const normalized = String(source).replaceAll("\\", "/");
+      if (PREACT_RUNTIME_SOURCE_PATTERN.test(normalized)) sawPreact = true;
+      const packageName = normalized.match(FORBIDDEN_RUNTIME_SOURCE_PATTERN)?.[1];
       if (!packageName) continue;
-      const sourceMaps = bundledPackages.get(packageName) ?? new Set();
-      sourceMaps.add(sourceMapName);
-      bundledPackages.set(packageName, sourceMaps);
+      const labels = bundledPackages.get(packageName) ?? new Set();
+      labels.add(label);
+      bundledPackages.set(packageName, labels);
     }
   }
   const problems = [...bundledPackages].map(
-    ([packageName, sourceMaps]) =>
-      `${packageName} was bundled into ${[...sourceMaps].sort().join(", ")}; production must use only Preact compat`,
+    ([packageName, labels]) =>
+      `${packageName} was bundled into ${[...labels].sort().join(", ")}; production must use only Preact compat`,
   );
+  // A build that ships neither runtime would otherwise report a clean pass: an alias typo that
+  // resolves react to an empty shim drops React from the bundle without giving Preact its place.
+  if (!sawPreact) problems.push(`no preact module was bundled into ${distDir}; the runtime alias resolved to neither`);
   return { failures: problems.length, problems };
 }
 

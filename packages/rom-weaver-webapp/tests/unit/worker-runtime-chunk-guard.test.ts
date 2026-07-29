@@ -22,12 +22,14 @@ const writeDist = (chunks: Chunks, documentChunks: string[]): string => {
   return distDir;
 };
 
-const writeSourceMapDist = (sources: string[]): string => {
+const PREACT_SOURCE = "../../node_modules/preact/compat/src/index.js";
+
+const writeSourceMapDist = (sources: string[], mapPath = "assets/index-test.js.map"): string => {
   const distDir = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-runtime-guard-"));
   temporaryDirectories.push(distDir);
-  const assetsDir = path.join(distDir, "assets");
-  fs.mkdirSync(assetsDir);
-  fs.writeFileSync(path.join(assetsDir, "index-test.js.map"), JSON.stringify({ sources, version: 3 }));
+  const mapFile = path.join(distDir, mapPath);
+  fs.mkdirSync(path.dirname(mapFile), { recursive: true });
+  fs.writeFileSync(mapFile, JSON.stringify({ sources, version: 3 }));
   return distDir;
 };
 
@@ -94,12 +96,13 @@ describe("checkWorkerRuntimeChunk", () => {
 
 describe("checkReactRuntimeExclusion", () => {
   it("passes when source maps contain only Preact compat", () => {
-    const distDir = writeSourceMapDist(["../../node_modules/preact/compat/src/index.js", "../../src/webapp/main.tsx"]);
+    const distDir = writeSourceMapDist([PREACT_SOURCE, "../../src/webapp/main.tsx"]);
     expect(checkReactRuntimeExclusion(distDir)).toEqual({ failures: 0, problems: [] });
   });
 
   it("fails when React or Scheduler enters a bundle", () => {
     const distDir = writeSourceMapDist([
+      PREACT_SOURCE,
       "../../node_modules/react-dom/client.js",
       "../../node_modules/scheduler/index.js",
     ]);
@@ -109,5 +112,28 @@ describe("checkReactRuntimeExclusion", () => {
       expect.stringContaining("react-dom was bundled"),
       expect.stringContaining("scheduler was bundled"),
     ]);
+  });
+
+  // `react-is`/`lucide-react` share React's prefix but are not the runtime; flagging them would make
+  // the guard cry wolf on every build.
+  it("does not confuse prefixed package names for the React runtime", () => {
+    const distDir = writeSourceMapDist([
+      PREACT_SOURCE,
+      "../../node_modules/react-is/index.js",
+      "../../node_modules/lucide-react/dist/esm/lucide-react.mjs",
+    ]);
+    expect(checkReactRuntimeExclusion(distDir)).toEqual({ failures: 0, problems: [] });
+  });
+
+  it("scans source maps outside the assets directory", () => {
+    const distDir = writeSourceMapDist(["../../node_modules/react-dom/client.js", PREACT_SOURCE], "sw.js.map");
+    expect(checkReactRuntimeExclusion(distDir).problems).toEqual([expect.stringContaining("react-dom was bundled")]);
+  });
+
+  it("fails when neither runtime is bundled", () => {
+    const distDir = writeSourceMapDist(["../../src/webapp/main.tsx"]);
+    const result = checkReactRuntimeExclusion(distDir);
+    expect(result.failures).toBe(1);
+    expect(result.problems).toEqual([expect.stringContaining("no preact module was bundled")]);
   });
 });
