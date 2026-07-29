@@ -67,7 +67,6 @@
 .rw-app .cks .opts-lab svg { width: 13px; height: 13px; color: var(--thread-text); flex: none; }
 .rw-app .optsbody { display: flex; flex-direction: column; gap: var(--sp-m); padding-block: 9px 2px; }
 .rw-app .optsgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--sp-m); }
-.rw-app .patch-name-field { grid-column: 1 / -1; }
 .rw-app .patch-description-field { grid-column: 1 / -1; }
 /* Ellipsize long export types instead of stretching the grid. */
 .rw-app .export-type-field { min-width: 0; }
