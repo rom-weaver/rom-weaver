@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
 import { SwapIcon } from "./swap-icon.tsx";
@@ -77,6 +77,14 @@ const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: str
 
 const GUIDE_GAP = 14;
 const GUIDE_MARGIN = 12;
+/** The card leaves its old anchor before the step swaps, then arrives at the new one. */
+const GUIDE_EXIT_MS = 130;
+const GUIDE_ENTER_MS = 260;
+const GUIDE_EXIT_EASE = "cubic-bezier(.4, 0, 1, 1)";
+/** Matches the --ease token the rest of the guide's motion uses. */
+const GUIDE_ENTER_EASE = "cubic-bezier(.2, .85, .3, 1)";
+/** How far the card drifts toward its row as it arrives. */
+const GUIDE_ENTER_RISE = 10;
 /** Drawers expand over .3s, so the row keeps growing after a step opens. */
 const GUIDE_SETTLE_MS = 360;
 /** Caps the re-reveal so later layout shifts never yank the page around. */
@@ -87,6 +95,8 @@ const GUIDE_TALL_ROW_RATIO = 0.45;
 const GUIDE_RING_INSET = 7;
 
 type GuideRect = { bottom: number; height: number; left: number; top: number; width: number };
+
+const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** The same row, seen from the viewport a pending reveal scroll is about to land on. */
 const shiftRect = (rect: GuideRect, by: number): GuideRect => ({
@@ -216,6 +226,14 @@ const SampleTutorial = ({
   const ringRef = useRef<HTMLDivElement>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [targetEl, setTargetEl] = useState<HTMLElement | null>(null);
+  // Whether the guide is showing steps yet. Lags the `ready` prop by one exit
+  // animation so the loading copy is gone before the card leaves the bottom bar.
+  const [live, setLive] = useState(ready);
+  // While moving, the card is parked invisible: it has left its old anchor and
+  // the new one is not placed yet, so anything drawn there would be a flash.
+  const [moving, setMoving] = useState(false);
+  const motionRef = useRef<Animation | null>(null);
+  const arrivingRef = useRef(false);
   const step = steps[stepIndex];
   // Resolved once: re-querying per render hands createPortal a different
   // container the moment .rw-app appears, which tears the whole overlay down
@@ -231,6 +249,39 @@ const SampleTutorial = ({
   useEffect(() => {
     dialogRef.current?.focus();
   }, []);
+
+  /**
+   * Hands the card from one anchor to the next: it fades out where it stands,
+   * the caller's change lands while nothing is on screen, and the placement
+   * effect fades it back in once the new anchor is written. Gliding across
+   * instead only reads as motion when there is a previous anchor to leave -
+   * the first step has none, so the card would jump the pinned bar's whole
+   * height on the appearance the user sees first.
+   */
+  const beginMove = useCallback((commit: () => void) => {
+    const dialog = dialogRef.current;
+    if (!dialog || typeof dialog.animate !== "function" || prefersReducedMotion()) {
+      commit();
+      return;
+    }
+    motionRef.current?.cancel();
+    arrivingRef.current = true;
+    setMoving(true);
+    const exit = dialog.animate(
+      { opacity: [1, 0] },
+      { duration: GUIDE_EXIT_MS, easing: GUIDE_EXIT_EASE, fill: "forwards" },
+    );
+    motionRef.current = exit;
+    // A cancelled exit rejects; the run that cancelled it owns the card now.
+    exit.finished.then(commit, () => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (live === ready) return;
+    beginMove(() => setLive(ready));
+  }, [beginMove, live, ready]);
+
+  useEffect(() => () => motionRef.current?.cancel(), []);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -249,7 +300,7 @@ const SampleTutorial = ({
 
   useEffect(() => {
     const targetSelector = step?.target;
-    if (!(ready && targetSelector)) return;
+    if (!(live && targetSelector)) return;
     let target: HTMLElement | null = null;
     let stage: HTMLElement | null = null;
     let previousDescription: string | null = null;
@@ -319,7 +370,7 @@ const SampleTutorial = ({
         else target.removeAttribute("aria-describedby");
       }
     };
-  }, [bodyId, ready, step]);
+  }, [bodyId, live, step]);
 
   // Pins the ring and the card to the row in *document* coordinates, so the
   // page scrolls all three together on the compositor and this runs no code
@@ -342,8 +393,25 @@ const SampleTutorial = ({
       dialog.style.left = "";
       dialog.style.top = "";
     };
+    // Fades the card back in wherever the placement below just put it. A step
+    // that anchors to a row waits for that placement; one without a row has
+    // nothing to wait for and must not be left parked invisible.
+    const arrive = () => {
+      if (!(arrivingRef.current && dialog && typeof dialog.animate === "function")) return;
+      arrivingRef.current = false;
+      motionRef.current?.cancel();
+      setMoving(false);
+      // Drifts in from the row's side, so the card reads as coming off the row
+      // it explains rather than materialising in place.
+      const rise = step?.placement === "top" ? -GUIDE_ENTER_RISE : GUIDE_ENTER_RISE;
+      motionRef.current = dialog.animate(
+        { opacity: [0, 1], translate: [`0 ${rise}px`, "0 0"] },
+        { duration: GUIDE_ENTER_MS, easing: GUIDE_ENTER_EASE },
+      );
+    };
     if (!(targetEl && dialog && ring)) {
       unanchor();
+      if (!step?.target) arrive();
       return;
     }
     const prefer = step?.placement ?? "bottom";
@@ -377,7 +445,9 @@ const SampleTutorial = ({
       ring.style.left = `${box.left + originX}px`;
       ring.style.top = `${box.top + originY}px`;
       ring.style.width = `${box.width}px`;
-      setGlide(dialog, glide && card !== null);
+      // Only the ring glides. The card is hidden between anchors and fades in
+      // where it lands, so a transition here would slide it under its own
+      // arrival - and on the first step there is no previous anchor to slide from.
       if (!card) {
         unanchor();
         return;
@@ -424,6 +494,7 @@ const SampleTutorial = ({
     };
     const observer = new ResizeObserver(onResize);
     placeAndReveal(true);
+    arrive();
     observer.observe(targetEl);
     observer.observe(dialog);
     window.addEventListener("resize", track);
@@ -446,8 +517,8 @@ const SampleTutorial = ({
   }, [step, targetEl]);
 
   if (!(portalTarget && step)) return null;
-  const finalStep = ready && stepIndex === steps.length - 1;
-  const copyKey = ready ? stepIndex : "loading";
+  const finalStep = live && stepIndex === steps.length - 1;
+  const copyKey = live ? stepIndex : "loading";
   const layer = (
     <div className="sample-tutorial-layer">
       <div aria-hidden="true" className="sample-tutorial-scrim" />
@@ -460,7 +531,8 @@ const SampleTutorial = ({
         aria-labelledby={titleId}
         aria-modal="false"
         className="sample-tutorial-dialog"
-        data-placement={ready ? (step.placement ?? "bottom") : "bottom"}
+        data-moving={moving ? "true" : undefined}
+        data-placement={live ? (step.placement ?? "bottom") : "bottom"}
         ref={dialogRef}
         role="dialog"
         tabIndex={-1}
@@ -469,16 +541,16 @@ const SampleTutorial = ({
           0x
         </span>
         {/* The live region has to outlive the step copy: a region inserted
-            together with its content is never announced, and the key below
-            remounts the copy on every step to restart its entry animation. */}
+            together with its content is never announced, so only the copy
+            inside it is keyed per step. */}
         <div aria-live="polite" className="sample-tutorial-live">
           <div className="sample-tutorial-copy" key={copyKey}>
             <span className="sample-tutorial-kicker mono">
-              {ready ? `Guided workbench · ${stepIndex + 1}/${steps.length}` : "Preparing workbench…"}
+              {live ? `Guided workbench · ${stepIndex + 1}/${steps.length}` : "Preparing workbench…"}
             </span>
-            <h2 id={titleId}>{ready ? step.title : "Loading the practice files"}</h2>
-            <p id={bodyId}>{ready ? step.body : loadingBody}</p>
-            {ready && step.actions?.length ? (
+            <h2 id={titleId}>{live ? step.title : "Loading the practice files"}</h2>
+            <p id={bodyId}>{live ? step.body : loadingBody}</p>
+            {live && step.actions?.length ? (
               <ul aria-label="Available actions" className="sample-tutorial-action-list">
                 {step.actions.map(([action, label]) => {
                   const Icon = ACTION_ICONS[action];
@@ -496,12 +568,15 @@ const SampleTutorial = ({
           </div>
         </div>
         <div className="sample-tutorial-actions">
-          {ready ? (
+          {live ? (
             <button
               className="btn primary slim"
               onClick={() => {
+                // A second press mid-handoff would cancel the exit the first one
+                // started, stranding the card invisible on a step it never left.
+                if (moving) return;
                 if (finalStep) onClose();
-                else setStepIndex((current) => current + 1);
+                else beginMove(() => setStepIndex((current) => current + 1));
               }}
               type="button"
             >
