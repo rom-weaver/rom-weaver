@@ -608,6 +608,15 @@ siblings (~2 MB, and no longer asserts their absence), and every bundle ships a
 `_routes.json` that only Cloudflare reads - inert but public wherever the
 bundle is self-hosted.
 
+Production bundles carry external source maps (`build.sourcemap`), so a stack
+trace from a deployed build resolves to real source. They are the one class of
+asset that stays out of all three compression/caching paths: no q11 sidecar and
+no `_routes.json` include, no `compress-static-assets.mjs` pass in the Docker
+image, and no service-worker precache entry. Nothing but devtools ever requests
+them, so a normal visit pays only for the `sourceMappingURL` comments (~0.8 KB
+raw across the bundle). The maps themselves add ~5.7 MB to the release tarball
+and the image.
+
 Quality 11 on the wasm costs ~15s, which every build would otherwise repay for
 an unchanged asset, so `scripts/wasm/brotli-compress.mjs` keys its output by
 input digest and brotli parameters under `node_modules/.cache/rom-weaver-brotli`
