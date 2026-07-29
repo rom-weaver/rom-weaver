@@ -230,10 +230,12 @@ merge put 20 CI runs on the 0.8.0 release pull request, 17 of them cancelled by
 the next merge, for a pull request nobody had yet decided to merge. Dispatching
 by hand spends that CI once, when a release is actually wanted.
 
-Dispatch after main's CI is green: the release screenshots reuse the `wasm-prod`
-artifact from the CI run for that commit, and without it the job rebuilds WASM
-from source (~6.5 min). Merging the release pull request is what sets
-`release_created` and unlocks the publish jobs.
+The release workflow waits for a completed successful `CI` push run for the
+exact main commit before it creates or refreshes the release pull request. The
+screenshots reuse that run's `wasm-prod` artifact when changed-path
+classification produced one; otherwise the job rebuilds WASM from source
+(~6.5 min). Merging the release pull request is what sets `release_created` and
+unlocks the publish jobs.
 
 > **`main` is protected by the active `main protection` ruleset.** Pull requests
 > must use squash merge and pass `Rust`, `Webapp`, `Plumbing`, `PR Title Lint`,
