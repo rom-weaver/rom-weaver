@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createLogger } from "../../lib/logging.ts";
 import { Modal } from "../../public/react/components/ds/index.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
-import { APP_BUILD_VERSION, COMMIT_HASH } from "../build-version.ts";
+import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../build-version.ts";
 
 /**
  * The "What's new" dialog behind the update banner's version affordance. Fetches
@@ -10,16 +10,18 @@ import { APP_BUILD_VERSION, COMMIT_HASH } from "../build-version.ts";
  * cache: "no-store" so a pending update surfaces the INCOMING deploy's commits,
  * not the stale copy the running bundle shipped with. The list is sliced to the
  * commits newer than the running build so it reads as "what you're about to get".
+ * Release builds replace that list with their embedded, user-facing release notes.
  */
 
 const logger = createLogger("changelog-dialog");
 
-type ChangelogEntry = { hash: string; subject: string; date: string };
+type ReleaseChangelog = { html: string; url: string; version: string };
+type ChangelogEntry = { hash: string; subject: string; date: string; release?: unknown };
 
 type FetchState =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "loaded"; entries: ChangelogEntry[]; truncated: boolean };
+  | { status: "loaded"; entries: ChangelogEntry[]; release?: ReleaseChangelog; truncated: boolean };
 
 // Commits newer than the running build are everything before its hash in the
 // (newest-first) log. If the running hash isn't in the window the client is more
@@ -30,15 +32,24 @@ const commitsSinceCurrent = (entries: ChangelogEntry[]): { entries: ChangelogEnt
   return { entries: entries.slice(0, index), truncated: false };
 };
 
-const fetchChangelog = async (): Promise<ChangelogEntry[]> => {
+const readReleaseChangelog = (value: unknown): ReleaseChangelog | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const release = value as ReleaseChangelog;
+  return typeof release.html === "string" && typeof release.url === "string" && typeof release.version === "string"
+    ? release
+    : undefined;
+};
+
+const fetchChangelog = async (): Promise<{ entries: ChangelogEntry[]; release?: ReleaseChangelog }> => {
   const response = await fetch(`./changelog.json?t=${Date.now()}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`changelog fetch failed: ${response.status}`);
   const data: unknown = await response.json();
   if (!Array.isArray(data)) throw new Error("changelog is not an array");
-  return data.filter(
+  const entries = data.filter(
     (entry): entry is ChangelogEntry =>
       typeof entry === "object" && entry !== null && typeof (entry as ChangelogEntry).hash === "string",
   );
+  return { entries, release: readReleaseChangelog(entries[0]?.release) };
 };
 
 const formatDate = (iso: string) => iso.split("T")[0] || "";
@@ -54,8 +65,12 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
     let active = true;
     setState({ status: "loading" });
     fetchChangelog()
-      .then((all) => {
+      .then(({ entries: all, release }) => {
         if (!active) return;
+        if (release && release.version !== APP_VERSION) {
+          setState({ entries: [], release, status: "loaded", truncated: false });
+          return;
+        }
         const { entries, truncated } = commitsSinceCurrent(all);
         setState({ entries, status: "loaded", truncated });
       })
@@ -86,26 +101,50 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
         </div>
       ) : null}
       {state.status === "loaded" ? (
-        <>
-          <ul className="changelog">
-            {state.entries.map((entry) => (
-              <li className="changelog-item" key={entry.hash}>
-                <span className="changelog-subject">{entry.subject}</span>
-                <span className="changelog-meta mono">
-                  {entry.hash}
-                  {entry.date ? ` · ${formatDate(entry.date)}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {state.truncated ? <div className="changelog-note">…</div> : null}
-          {/* No newer commits: a same-commit rebuild (notably dirty dev deploys, whose
-              uncommitted changes never reach git log). Fall back to the build id - the
-              one thing that differs between such builds - so the dialog isn't blank. */}
-          {state.entries.length === 0 && !state.truncated ? (
-            <div className="changelog-note changelog-version mono">{APP_BUILD_VERSION}</div>
-          ) : null}
-        </>
+        state.release ? (
+          <>
+            <div className="release-changelog-version">
+              <span className="mono">
+                v{APP_VERSION} → v{state.release.version}
+              </span>
+              <a
+                aria-label={`GitHub release v${state.release.version}`}
+                href={state.release.url}
+                rel="noreferrer"
+                target="_blank"
+              >
+                GitHub
+              </a>
+            </div>
+            <div
+              className="release-changelog"
+              // The same-origin asset contains committed CHANGELOG.md rendered at build time.
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the release source
+              dangerouslySetInnerHTML={{ __html: state.release.html }}
+            />
+          </>
+        ) : (
+          <>
+            <ul className="changelog">
+              {state.entries.map((entry) => (
+                <li className="changelog-item" key={entry.hash}>
+                  <span className="changelog-subject">{entry.subject}</span>
+                  <span className="changelog-meta mono">
+                    {entry.hash}
+                    {entry.date ? ` · ${formatDate(entry.date)}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {state.truncated ? <div className="changelog-note">…</div> : null}
+            {/* No newer commits: a same-commit rebuild (notably dirty dev deploys, whose
+                uncommitted changes never reach git log). Fall back to the build id - the
+                one thing that differs between such builds - so the dialog isn't blank. */}
+            {state.entries.length === 0 && !state.truncated ? (
+              <div className="changelog-note changelog-version mono">{APP_BUILD_VERSION}</div>
+            ) : null}
+          </>
+        )
       ) : null}
       <div className="changelog-actions">
         <button className="btn ghost" onClick={onClose} type="button">

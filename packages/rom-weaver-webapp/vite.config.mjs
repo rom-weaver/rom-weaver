@@ -543,7 +543,7 @@ const writeBrotliSidecars = () => {
 // than the stale precached copy the running (old) bundle shipped with.
 const CHANGELOG_ASSET_URL = "/changelog.json";
 
-const serveChangelogAsset = () => {
+const serveChangelogAsset = (releaseVersion) => {
   const middleware = (req, res, next) => {
     if ((req.url ? req.url.split("?")[0] : "") !== CHANGELOG_ASSET_URL) {
       next();
@@ -552,7 +552,7 @@ const serveChangelogAsset = () => {
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-    res.end(JSON.stringify(getChangelog()));
+    res.end(JSON.stringify(getChangelog(50, releaseVersion)));
   };
   return {
     apply: "serve",
@@ -566,13 +566,13 @@ const serveChangelogAsset = () => {
   };
 };
 
-const writeChangelogAsset = () => {
+const writeChangelogAsset = (releaseVersion) => {
   let outDir = "dist";
   return {
     apply: "build",
     closeBundle() {
       const outputPath = path.join(path.resolve(rootDir, outDir), "changelog.json");
-      fs.writeFileSync(outputPath, JSON.stringify(getChangelog()));
+      fs.writeFileSync(outputPath, JSON.stringify(getChangelog(50, releaseVersion)));
     },
     configResolved(config) {
       outDir = config.build.outDir;
@@ -779,6 +779,7 @@ export default defineConfig(({ command }) => {
   // an unset channel means a local build or dev server, never production.
   const appChannel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
   const appChannelLabel = process.env.ROM_WEAVER_CHANNEL_LABEL || appChannel;
+  const releaseVersion = appChannel === "prod" || appChannel === "beta" || appChannel === "nightly" ? appVersion : "";
   const serviceWorkerDefines = {
     __SERVICE_WORKER_ENABLED__: JSON.stringify(serviceWorkerEnabled),
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: JSON.stringify(command === "build" ? 60000 : 5000),
@@ -844,14 +845,14 @@ export default defineConfig(({ command }) => {
     plugins: [
       docsVirtualModule(),
       serveRootStaticAssets(appChannel, appChannelLabel),
-      serveChangelogAsset(),
+      serveChangelogAsset(releaseVersion),
       deferDevHotUpdates(),
       stampChannelIdentity(appChannel, appChannelLabel, serviceWorkerEnabled),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
       prerenderWebappShell(prerenderedShells),
       preloadWorkflowRouteChunks(routePreloadLinks),
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),
-      writeChangelogAsset(),
+      writeChangelogAsset(releaseVersion),
       writeCloudflareHeadersAsset(appChannel),
       writeBrotliSidecars(),
       VitePWA({

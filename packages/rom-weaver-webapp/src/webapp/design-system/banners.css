@@ -49,6 +49,15 @@
 .rw-app .changelog-subject { font-size: .9rem; }
 .rw-app .changelog-meta { font-size: .72rem; color: var(--ink-3); }
 .rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: var(--sp-s) 0; }
+.rw-app .release-changelog-version { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-m); margin-block-end: var(--sp-m); }
+.rw-app .release-changelog { font-size: .88rem; line-height: 1.5; }
+.rw-app .release-changelog > :first-child { margin-block-start: 0; }
+.rw-app .release-changelog > :last-child { margin-block-end: 0; }
+.rw-app .release-changelog h3 { margin-block: var(--sp-l) var(--sp-s); font-size: .92rem; }
+.rw-app .release-changelog ul { padding-inline-start: 1.25rem; }
+.rw-app .release-changelog li + li { margin-block-start: var(--sp-xs); }
+.rw-app .release-changelog details { margin-block-start: var(--sp-l); }
+.rw-app .release-changelog summary { cursor: pointer; font-weight: 650; }
 .rw-app .changelog-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); padding-top: 8px; }
 /* banner dismiss (update + wake-lock) - sized to --ctrl-h so it reads as a
    sibling of the other row controls, not a stray small glyph */

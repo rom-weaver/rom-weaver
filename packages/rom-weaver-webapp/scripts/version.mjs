@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { marked } from "marked";
 
 const LINE_BREAK_REGEX = /\r?\n/;
 
@@ -22,6 +23,7 @@ const findPackageRoot = (startDir) => {
 
 const packageRoot = findPackageRoot(scriptsDir);
 const packageJsonPath = path.join(packageRoot, "package.json");
+const changelogPath = path.resolve(packageRoot, "../..", "CHANGELOG.md");
 
 const readPackageVersion = () => {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
@@ -143,20 +145,40 @@ const buildVersionString = (baseVersion, gitMetadata) => {
 // Unit separator between fields; %s (subject) and %cI (ISO date) are single-line,
 // so newline-per-record splitting is safe.
 const CHANGELOG_FIELD_SEP = "\x1f";
+const RELEASE_URL = "https://github.com/rom-weaver/rom-weaver/releases/tag/v";
+
+const getReleaseChangelog = (version) => {
+  if (!(version && fs.existsSync(changelogPath))) return undefined;
+  const changelog = fs.readFileSync(changelogPath, "utf8");
+  const headingStart = changelog.indexOf(`## [${version}]`);
+  if (headingStart < 0) return undefined;
+  const bodyStart = changelog.indexOf("\n", headingStart) + 1;
+  const nextHeading = changelog.indexOf("\n## ", bodyStart);
+  const body = changelog.slice(bodyStart, nextHeading < 0 ? undefined : nextHeading).trim();
+  if (!body) return undefined;
+  return {
+    html: marked.parse(body, { async: false }),
+    url: `${RELEASE_URL}${encodeURIComponent(version)}`,
+    version,
+  };
+};
 
 // Recent commit log for the in-app "What's new" dialog. Capped so the emitted
 // asset stays flat-sized forever - anyone more than `limit` builds behind falls
 // off the tail, which the dialog covers with an "earlier" note.
-const getChangelog = (limit = 50) => {
+const getChangelog = (limit = 50, releaseVersion = "") => {
   const raw = runGit(`git log -n ${limit} --pretty=format:%h${CHANGELOG_FIELD_SEP}%s${CHANGELOG_FIELD_SEP}%cI`);
   if (!raw) return [];
-  return raw
+  const entries = raw
     .split(LINE_BREAK_REGEX)
     .map((line) => {
       const [hash, subject, date] = line.split(CHANGELOG_FIELD_SEP);
       return { date: date || "", hash: hash || "", subject: subject || "" };
     })
     .filter((entry) => entry.hash);
+  const release = getReleaseChangelog(releaseVersion);
+  // Preserve the array shape for running older bundles; they ignore the extra field.
+  return release ? entries.map((entry, index) => (index === 0 ? { ...entry, release } : entry)) : entries;
 };
 
 const getBuildInfo = () => {
