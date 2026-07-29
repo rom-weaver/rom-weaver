@@ -90,6 +90,26 @@ RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') | trim }}"
 CARGO_INCREMENTAL = "0"
 SCCACHE_CACHE_SIZE = "35G"
 
+# cc-rs falls back to RUSTC_WRAPPER above, so every cc-built C dep already goes
+# through sccache. libarchive does not: it is built by cmake::Config
+# (crates/rom-weaver-containers/libarchive/build.rs), and cmake-rs forwards no
+# wrapper, so its ~130 translation units were the one part of the build sccache
+# never saw. CMake initializes the cache variable from this environment variable
+# (since 3.4), so no build.rs change is needed.
+#
+# Worth having, but only for a clean rebuild into the *same* target directory
+# (measured: 1m55s -> 1m35s). It does nothing across worktrees. cmake-rs puts
+# both the build tree and the patched libarchive sources under OUT_DIR, so every
+# -I in the compile line carries the absolute target path; sccache hashes the
+# command line and has no ccache-style base_dir rewriting, so a different target
+# directory misses on all ~360 C compiles by construction.
+#
+# Resolved dynamically like RUSTC_WRAPPER: empty is a no-op for CMake, which
+# keeps hosts without sccache - and CI, which deliberately installs none - on
+# the plain compiler. The launcher bakes into CMakeCache.txt at configure time,
+# so an existing OUT_DIR keeps building unwrapped until it is cleaned.
+CMAKE_C_COMPILER_LAUNCHER = "{{ exec(command='command -v sccache || true') | trim }}"
+
 # --- Tasks ----------------------------------------------------------------
 
 [tasks.wasm-check]
