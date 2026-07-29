@@ -156,8 +156,11 @@
   mix-blend-mode: normal;
   animation: theme-wipe .42s cubic-bezier(.4, 0, .2, 1) both;
 }
-/* Hand-painted wipe for engines without view transitions (see theme-wipe.ts). */
-.theme-veil { position: fixed; inset: 0; z-index: 2000; pointer-events: none; will-change: clip-path, opacity; }
+/* Hand-painted wipe for engines without view transitions (see theme-wipe.ts).
+   No transform/filter/will-change here - any of them would make the veil the
+   containing block for the cloned UI's fixed elements and shift them. */
+.theme-veil { position: fixed; inset: 0; z-index: 2000; overflow: hidden; pointer-events: none; background: var(--chassis); }
+.theme-veil-stage { position: absolute; }
 @keyframes theme-wipe {
   from { clip-path: circle(0px at var(--wipe-x, 50%) var(--wipe-y, 0%)); }
   to { clip-path: circle(var(--wipe-r, 150vmax) at var(--wipe-x, 50%) var(--wipe-y, 0%)); }

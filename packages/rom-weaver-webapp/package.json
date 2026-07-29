@@ -58,7 +58,7 @@
     "icons:optimize:png": "node scripts/optimize-png.mjs --verify src/assets/app/root design",
     "lint": "run-s lint:i18n lint:checks",
     "lint:browser-compat": "node scripts/check-browser-compat.mjs",
-    "lint:checks": "run-p --continue-on-error --aggregate-output format:check lint:code lint:types lint:browser-compat lint:touch-styles lint:knip lint:jscpd audit:strings",
+    "lint:checks": "run-p --continue-on-error --aggregate-output format:check lint:code lint:types lint:browser-compat lint:touch-styles lint:theme-veil-styles lint:knip lint:jscpd audit:strings",
     "lint:code": "run-s lint:code:oxlint lint:code:biome",
     "lint:code:biome": "biome lint . --diagnostic-level=error",
     "lint:code:oxlint": "oxlint . --deny-warnings",
@@ -92,7 +92,8 @@
     "test:performance": "run-s --continue-on-error check:size audit:lighthouse",
     "test:unit": "vitest --config ./vitest.unit.config.mjs run",
     "test:unit:coverage": "ROM_WEAVER_COVERAGE=1 vitest --config ./vitest.unit.config.mjs run --coverage",
-    "verify:sw:no-coop-coep": "node scripts/verify-service-worker-no-coop-coep.mjs"
+    "verify:sw:no-coop-coep": "node scripts/verify-service-worker-no-coop-coep.mjs",
+    "lint:theme-veil-styles": "node scripts/check-theme-veil-styles.mjs"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",

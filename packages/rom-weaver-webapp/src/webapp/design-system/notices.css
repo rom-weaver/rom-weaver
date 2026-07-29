@@ -13,7 +13,7 @@
 .rw-app .notice.warn svg, .rw-app .notice.warn b { color: var(--care); }
 /* light mode: the golden --care is too light for bold body text on the cream
    notice (2.5:1) - darken the emphasised word to a deep amber that clears 4.5:1 */
-:root[data-theme="light"] .notice.warn b { color: #7a5300; }
+:root[data-theme="light"] .notice.warn b, .theme-veil.theme-veil[data-theme="light"] .notice.warn b { color: #7a5300; }
 /* notice dismiss matches the row-control size (--ctrl-h) like the card buttons */
 .rw-app .notice .x { appearance: none; border: 0; border-radius: var(--r-s); background: transparent; color: currentColor; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); display: grid; place-items: center; flex: none; opacity: .6; }
 @media (hover: hover) {

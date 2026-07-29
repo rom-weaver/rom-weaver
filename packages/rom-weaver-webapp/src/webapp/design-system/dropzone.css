@@ -81,7 +81,7 @@
     radial-gradient(120% 150% at 50% -35%, color-mix(in oklab, var(--thread) 12%, transparent), transparent 62%),
     var(--plate);
 }
-:root[data-theme="light"] .hero-lead {
+:root[data-theme="light"] .hero-lead, .theme-veil.theme-veil[data-theme="light"] .hero-lead {
   background:
     radial-gradient(120% 150% at 50% -35%, color-mix(in oklab, var(--thread) 8%, transparent), transparent 62%),
     var(--plate);

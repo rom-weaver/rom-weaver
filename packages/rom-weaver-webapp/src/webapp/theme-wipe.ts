@@ -3,16 +3,21 @@ import { createLogger } from "../lib/logging.ts";
 /**
  * Circle-wipe fallback for engines where the View Transitions path is off
  * (iOS WebKit - see flat-transition.ts). No snapshots are available there, so
- * the wipe is painted by hand: a chassis-colored veil grows from the toggle to
- * cover the viewport, the theme flips underneath it, then the veil fades out to
- * reveal the repainted UI.
+ * the wipe is painted by hand: a clone of the UI rendered in the *incoming*
+ * theme is clip-revealed from the toggle over the live page, then the real
+ * theme flips and the clone is dropped. The reveal shows real content, so
+ * nothing blanks out mid-wipe.
+ *
+ * The clone is themed by `data-theme` on `.theme-veil`, which every
+ * `:root[data-theme=...]` rule has a twin for (see tokens.css).
  */
 
 const logger = createLogger("theme-wipe");
 
-const GROW_MS = 380;
-const FADE_MS = 220;
+const WIPE_MS = 420;
 const EASE = "cubic-bezier(.4, 0, .2, 1)";
+/* Live state the clone cannot inherit from cloneNode alone. */
+const STATEFUL = "input, textarea, select, details, dialog, video, audio";
 
 type WipeOrigin = { x: number; y: number; radius: number };
 
@@ -24,17 +29,78 @@ const wipeOrigin = (rect: DOMRect | undefined): WipeOrigin => {
 };
 
 /**
- * Chassis color the page will have once `theme` is applied. The attribute swap
- * is reverted in the same task, so no frame ever paints the wrong theme.
+ * cloneNode copies markup, not state: typed values, checkbox/select state,
+ * scroll offsets and in-flight animations all reset. Walk both trees in step
+ * and carry them over so the revealed clone matches the page it covers.
  */
-const readChassis = (theme: string): string => {
-  const root = document.documentElement;
-  const previous = root.getAttribute("data-theme");
-  root.setAttribute("data-theme", theme);
-  const chassis = getComputedStyle(root).getPropertyValue("--chassis").trim();
-  if (previous === null) root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", previous);
-  return chassis;
+const syncLiveState = (live: Element, clone: Element) => {
+  const liveNodes = [live, ...live.querySelectorAll("*")];
+  const cloneNodes = [clone, ...clone.querySelectorAll("*")];
+  for (const [index, source] of liveNodes.entries()) {
+    const target = cloneNodes[index];
+    if (!target) break;
+    if (source.scrollTop || source.scrollLeft) {
+      target.scrollTop = source.scrollTop;
+      target.scrollLeft = source.scrollLeft;
+    }
+    if (source.matches(STATEFUL)) {
+      if (source instanceof HTMLInputElement && target instanceof HTMLInputElement) {
+        target.value = source.value;
+        target.checked = source.checked;
+      } else if (source instanceof HTMLTextAreaElement && target instanceof HTMLTextAreaElement) {
+        target.value = source.value;
+      } else if (source instanceof HTMLSelectElement && target instanceof HTMLSelectElement) {
+        target.selectedIndex = source.selectedIndex;
+      } else if (source instanceof HTMLMediaElement && target instanceof HTMLMediaElement) {
+        target.currentTime = source.currentTime;
+      }
+    }
+    // Marquees and pulses would otherwise restart from frame 0 inside the
+    // circle while the same element keeps running outside it.
+    const running = source.getAnimations();
+    if (running.length === 0) continue;
+    const cloned = target.getAnimations();
+    for (const [slot, animation] of running.entries()) {
+      const twin = cloned[slot];
+      if (twin && animation.currentTime !== null) twin.currentTime = animation.currentTime;
+    }
+  }
+};
+
+/**
+ * The clone is laid out inside a fixed, viewport-sized box, so it has to be
+ * pulled up by the page scroll to sit on top of what it duplicates. Elements
+ * that are themselves fixed stay viewport-anchored and must not be shifted -
+ * `.theme-veil` deliberately avoids transform/filter so it never becomes their
+ * containing block.
+ */
+const buildVeil = (theme: string, origin: WipeOrigin): HTMLElement => {
+  const veil = document.createElement("div");
+  veil.className = "theme-veil";
+  veil.setAttribute("aria-hidden", "true");
+  veil.inert = true;
+  for (const attribute of document.documentElement.attributes) {
+    if (attribute.name !== "class") veil.setAttribute(attribute.name, attribute.value);
+  }
+  veil.setAttribute("data-theme", theme);
+  veil.style.clipPath = `circle(0px at ${origin.x}px ${origin.y}px)`;
+
+  const stage = document.createElement("div");
+  stage.className = "theme-veil-stage";
+  stage.style.insetBlockStart = `${-window.scrollY}px`;
+  stage.style.insetInlineStart = `${-window.scrollX}px`;
+  stage.style.width = `${document.documentElement.clientWidth}px`;
+  for (const child of document.body.children) {
+    if (child === veil || child.classList.contains("theme-veil")) continue;
+    const clone = child.cloneNode(true) as Element;
+    // Sync before stripping: the walk pairs the two trees by index.
+    syncLiveState(child, clone);
+    // A cloned <script> re-runs on insertion; the clone is a picture, not an app.
+    for (const script of clone.querySelectorAll("script")) script.remove();
+    stage.append(clone);
+  }
+  veil.append(stage);
+  return veil;
 };
 
 const animationsUnavailable = () => typeof Element.prototype.animate !== "function";
@@ -43,8 +109,8 @@ const animationsUnavailable = () => typeof Element.prototype.animate !== "functi
 let settleActiveWipe: (() => void) | null = null;
 
 /**
- * Grow the veil, flip the theme, fade the veil. `applyTheme` runs exactly once
- * even if the animation is interrupted or unsupported.
+ * Reveal the incoming theme from `origin`, then hand the page over to it.
+ * `applyTheme` runs exactly once even if the wipe is interrupted.
  */
 const runThemeWipeFallback = (origin: WipeOrigin, applyTheme: () => void) => {
   if (animationsUnavailable()) {
@@ -54,53 +120,32 @@ const runThemeWipeFallback = (origin: WipeOrigin, applyTheme: () => void) => {
   }
   settleActiveWipe?.();
   const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
-  const veil = document.createElement("div");
-  veil.className = "theme-veil";
-  veil.style.background = readChassis(next);
-  veil.style.clipPath = `circle(0px at ${origin.x}px ${origin.y}px)`;
+  const veil = buildVeil(next, origin);
   document.body.append(veil);
   logger.trace("theme wipe started", { next, ...origin });
 
-  let themeApplied = false;
-  const applyOnce = () => {
-    if (themeApplied) return;
-    themeApplied = true;
-    applyTheme();
-  };
   let settled = false;
   const finish = () => {
     if (settled) return;
     settled = true;
-    applyOnce();
+    // Flip and drop the clone in one task: the page underneath already looks
+    // like the clone, so no frame shows a mismatch.
+    applyTheme();
     veil.remove();
     if (settleActiveWipe === finish) settleActiveWipe = null;
     logger.trace("theme wipe finished", { next });
   };
   settleActiveWipe = finish;
 
-  const grow = veil.animate(
+  const reveal = veil.animate(
     [
       { clipPath: `circle(0px at ${origin.x}px ${origin.y}px)` },
       { clipPath: `circle(${origin.radius}px at ${origin.x}px ${origin.y}px)` },
     ],
-    { duration: GROW_MS, easing: EASE, fill: "forwards" },
+    { duration: WIPE_MS, easing: EASE, fill: "forwards" },
   );
-  grow.onfinish = () => {
-    applyOnce();
-    // Repaint under the veil before it starts fading, otherwise the first fade
-    // frames still show the outgoing theme through the thinning veil.
-    requestAnimationFrame(() => {
-      if (settled) return;
-      const fade = veil.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: FADE_MS,
-        easing: EASE,
-        fill: "forwards",
-      });
-      fade.onfinish = finish;
-      fade.oncancel = finish;
-    });
-  };
-  grow.oncancel = finish;
+  reveal.onfinish = finish;
+  reveal.oncancel = finish;
 };
 
 export { runThemeWipeFallback, wipeOrigin };

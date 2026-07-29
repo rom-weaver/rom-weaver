@@ -20,8 +20,8 @@
   --thread-ink: #0b1030;
   --thread-hi: #c5cbf6;
 }
-:root[data-accent="woad"][data-theme="dark"] { --thread-text: #9aa6ff; }
-:root[data-accent="woad"][data-theme="light"] { --thread-text: #4149c4; }
+:root[data-accent="woad"][data-theme="dark"], .theme-veil.theme-veil[data-accent="woad"][data-theme="dark"] { --thread-text: #9aa6ff; }
+:root[data-accent="woad"][data-theme="light"], .theme-veil.theme-veil[data-accent="woad"][data-theme="light"] { --thread-text: #4149c4; }
 
 /* ── violet ── */
 :root[data-accent="violet"] {
@@ -29,8 +29,8 @@
   --thread-ink: #16092c;
   --thread-hi: #d7c3f3;
 }
-:root[data-accent="violet"][data-theme="dark"] { --thread-text: #c3a4ff; }
-:root[data-accent="violet"][data-theme="light"] { --thread-text: #6b3fb5; }
+:root[data-accent="violet"][data-theme="dark"], .theme-veil.theme-veil[data-accent="violet"][data-theme="dark"] { --thread-text: #c3a4ff; }
+:root[data-accent="violet"][data-theme="light"], .theme-veil.theme-veil[data-accent="violet"][data-theme="light"] { --thread-text: #6b3fb5; }
 
 /* ── verdigris: green ── */
 :root[data-accent="verdigris"] {
@@ -38,8 +38,8 @@
   --thread-ink: #04180e;
   --thread-hi: #aee1c6;
 }
-:root[data-accent="verdigris"][data-theme="dark"] { --thread-text: #58c795; }
-:root[data-accent="verdigris"][data-theme="light"] { --thread-text: #0b6b46; }
+:root[data-accent="verdigris"][data-theme="dark"], .theme-veil.theme-veil[data-accent="verdigris"][data-theme="dark"] { --thread-text: #58c795; }
+:root[data-accent="verdigris"][data-theme="light"], .theme-veil.theme-veil[data-accent="verdigris"][data-theme="light"] { --thread-text: #0b6b46; }
 
 /* ── teal ── */
 :root[data-accent="teal"] {
@@ -47,8 +47,8 @@
   --thread-ink: #03181a;
   --thread-hi: #9fe2e7;
 }
-:root[data-accent="teal"][data-theme="dark"] { --thread-text: #45c3cb; }
-:root[data-accent="teal"][data-theme="light"] { --thread-text: #06696f; }
+:root[data-accent="teal"][data-theme="dark"], .theme-veil.theme-veil[data-accent="teal"][data-theme="dark"] { --thread-text: #45c3cb; }
+:root[data-accent="teal"][data-theme="light"], .theme-veil.theme-veil[data-accent="teal"][data-theme="light"] { --thread-text: #06696f; }
 
 /* ── plum ── */
 :root[data-accent="plum"] {
@@ -56,8 +56,8 @@
   --thread-ink: #2a0620;
   --thread-hi: #eac1db;
 }
-:root[data-accent="plum"][data-theme="dark"] { --thread-text: #e58ac0; }
-:root[data-accent="plum"][data-theme="light"] { --thread-text: #a3266f; }
+:root[data-accent="plum"][data-theme="dark"], .theme-veil.theme-veil[data-accent="plum"][data-theme="dark"] { --thread-text: #e58ac0; }
+:root[data-accent="plum"][data-theme="light"], .theme-veil.theme-veil[data-accent="plum"][data-theme="light"] { --thread-text: #a3266f; }
 
 /* ── channel badge ──
    Names the build (nightly / beta / pr-123 / dev). Production has no badge. */

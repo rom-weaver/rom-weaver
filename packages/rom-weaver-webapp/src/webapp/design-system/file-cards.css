@@ -71,7 +71,7 @@
 .rw-app .patch-meta-inline .input { width: 100%; box-sizing: border-box; }
 .rw-app .patch-warn { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .76rem; color: var(--care); }
 .rw-app .patch-warn svg { width: 13px; height: 13px; flex: none; }
-:root[data-theme="light"] .patch-warn { color: #7a5300; }
+:root[data-theme="light"] .patch-warn, .theme-veil.theme-veil[data-theme="light"] .patch-warn { color: #7a5300; }
 .rw-app .tag {
   font-size: .66rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
   color: var(--ink-2); padding: 2px 6px; border: 1px solid var(--seam-strong); border-radius: 4px; white-space: nowrap;
@@ -147,8 +147,8 @@
 .rw-app .patch-off-note { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .8rem; color: var(--care); }
 .rw-app .patch-off-note svg { width: 15px; height: 15px; flex: none; }
 /* Use a darker amber in light mode to preserve 4.5:1 contrast. */
-:root[data-theme="light"] .patch-off-note, :root[data-theme="light"] .checkrow.warn { color: #7a5300; }
-.rw-app .patch-off-note.is-ok, :root[data-theme="light"] .patch-off-note.is-ok { color: var(--verified); }
+:root[data-theme="light"] .patch-off-note, :root[data-theme="light"] .checkrow.warn, .theme-veil.theme-veil[data-theme="light"] .patch-off-note, .theme-veil.theme-veil[data-theme="light"] .checkrow.warn { color: #7a5300; }
+.rw-app .patch-off-note.is-ok, :root[data-theme="light"] .patch-off-note.is-ok, .theme-veil.theme-veil[data-theme="light"] .patch-off-note.is-ok { color: var(--verified); }
 
 .rw-app .verdict { display: inline-flex; align-items: center; gap: var(--sp-xs); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
 .rw-app .verdict.ok { color: var(--verified); } .rw-app .verdict.bad { color: var(--fault); }
