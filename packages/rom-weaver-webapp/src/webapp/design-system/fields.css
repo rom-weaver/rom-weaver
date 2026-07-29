@@ -72,10 +72,6 @@
 .rw-app .export-type-field { min-width: 0; }
 .rw-app .export-type-field .select { text-overflow: ellipsis; }
 .rw-app .patch-description-field textarea.input { height: auto; min-height: 36px; padding-block: 8px; line-height: 1.4; resize: vertical; overflow: hidden; }
-.rw-app .verification-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: var(--sp-m); margin-block-start: 3px; }
-.rw-app .patch-check-group { min-width: 0; padding: var(--sp-m); border: 1px solid var(--seam-soft); border-radius: var(--r-s); background: color-mix(in oklab, var(--well) 72%, transparent); }
-.rw-app .patch-check-group .ck-group-head { margin-block-end: 7px; }
-.rw-app .verification-list { display: flex; flex-direction: column; gap: var(--sp-s); }
 .rw-app .ck-mark { display: inline-flex; align-items: center; flex: none; }
 .rw-app .ck-mark svg { width: 13px; height: 13px; }
 .rw-app .ck-mark.ok { color: var(--verified); }
@@ -104,11 +100,6 @@
 .rw-app .ck-more .chev-i { width: 12px; height: 12px; flex: none; transition: rotate .16s var(--ease); }
 .rw-app .ck-more[aria-expanded="true"] .chev-i { rotate: 90deg; }
 @media (prefers-reduced-motion: reduce) { .rw-app .ck-more .chev-i { transition: none; } }
-
-/* Pair short checks; give MD5 and SHA-1 full width. */
-.rw-app .ck-fields-paired { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-s) var(--sp-m); margin-block-start: 3px; }
-.rw-app .ck-fields-paired .verification-row:nth-child(n + 3) { grid-column: 1 / -1; }
-@container cks-inner (max-width: 420px) { .rw-app .ck-fields-paired { grid-template-columns: 1fr; } }
 .rw-app .patch-meta-inline { display: flex; flex-direction: column; gap: var(--sp-s); margin-block-start: 2px; }
 .rw-app .patch-meta-cols { display: flex; gap: var(--sp-s); }
 .rw-app .patch-meta-cols .patch-meta-field { flex: 1 1 0; min-width: 0; }
@@ -247,9 +238,6 @@
 }
 .rw-app .bundle-rom-expectation .card .card-name { color: var(--ink-2); }
 .rw-app .bundle-rom-expectation .card .card-meta { color: var(--thread-text); }
-/* Keep boxed verification rows inset. */
-.rw-app .verification-list .ck { margin-inline: 0; width: 100%; }
-.rw-app .verification-list .ck + .ck { margin-block-start: 0; }
 .rw-app .verification-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: var(--sp-xs); min-width: 0; }
 .rw-app .verification-row .ofld-l { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; line-height: 1.05; text-transform: lowercase; }
 /* Use fixed-width glyphs so a 40-character SHA-1 fits predictably. */
@@ -260,8 +248,6 @@
 }
 .rw-app .built-in { display: block; margin: 2px 0 0; color: var(--verified); font-size: .5rem; letter-spacing: .03em; white-space: nowrap; text-transform: uppercase; }
 .rw-app .popt-input[readonly] { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 32%, var(--seam)); background: color-mix(in oklab, var(--verified) 7%, var(--well)); cursor: text; }
-/* Stack based on drawer width, not viewport width. */
-@container cks-inner (max-width: 730px) { .rw-app .verification-pair { grid-template-columns: 1fr; } }
 .rw-app .ofld { display: flex; flex-direction: column; gap: var(--sp-xs); min-width: 0; }
 .rw-app .ofld-l { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
 .rw-app .ofld .input, .rw-app .ofld .select { height: 32px; font-size: .82rem; }

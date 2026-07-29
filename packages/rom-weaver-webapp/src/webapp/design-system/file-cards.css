@@ -51,7 +51,6 @@
 .rw-app .handle:active:not(:disabled) { color: var(--thread-text); border-color: var(--thread); background: color-mix(in oklab, var(--thread) 12%, var(--well)); }
 .rw-app .handle:disabled { cursor: default; opacity: .4; }
 .rw-app .nmline { display: flex; align-items: center; gap: var(--sp-s); flex-wrap: wrap; width: 100%; min-width: 0; }
-.rw-app .nm-file { flex-basis: 100%; color: var(--ink-4); font-size: .7rem; overflow-wrap: anywhere; }
 .rw-app .nm {
   font-weight: 650; line-height: 1.3; min-width: 0; max-width: 100%;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -69,9 +68,6 @@
 .rw-app .patch-desc-line.is-editing { min-width: 0; clear: both; width: 100%; }
 .rw-app .patch-desc-line.is-editing .patch-meta-inline { min-width: 0; margin-block-start: 0; width: 100%; }
 .rw-app .patch-meta-inline .input { width: 100%; box-sizing: border-box; }
-.rw-app .patch-warn { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .76rem; color: var(--care); }
-.rw-app .patch-warn svg { width: 13px; height: 13px; flex: none; }
-:root[data-theme="light"] .patch-warn { color: #7a5300; }
 .rw-app .tag {
   font-size: .66rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
   color: var(--ink-2); padding: 2px 6px; border: 1px solid var(--seam-strong); border-radius: 4px; white-space: nowrap;
@@ -124,7 +120,7 @@
 .rw-app .meta-fmt { font-size: calc(var(--badge-fs) * 0.92); font-stretch: 86%; letter-spacing: .04em; text-transform: uppercase; color: var(--thread-text); }
 .rw-app .card-meta .meta-fmt::before { content: "·"; margin-inline-end: 7px; color: var(--ink-4); }
 .rw-app .card-meta :is(.fsize, .meta-fmt) + .target-grp::before { content: "·"; color: var(--ink-4); }
-.rw-app .cks > .cks-head .rb, .rw-app .fsize, .rw-app .ckgrp .tsz, .rw-app .meta-fmt {
+.rw-app .cks > .cks-head .rb, .rw-app .fsize, .rw-app .meta-fmt {
   display: inline-flex; align-items: center;
 }
 .rw-app .meta-ic { gap: 4px; }
@@ -147,7 +143,6 @@
 .rw-app .patch-off-note svg { width: 15px; height: 15px; flex: none; }
 /* Use a darker amber in light mode to preserve 4.5:1 contrast. */
 :root[data-theme="light"] .patch-off-note, :root[data-theme="light"] .checkrow.warn { color: #7a5300; }
-.rw-app .patch-off-note.is-ok, :root[data-theme="light"] .patch-off-note.is-ok { color: var(--verified); }
 
 .rw-app .verdict { display: inline-flex; align-items: center; gap: var(--sp-xs); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
 .rw-app .verdict.ok {

@@ -224,7 +224,7 @@
     text-shadow: 0 0 10px color-mix(in oklab, var(--verified) 70%, transparent);
   }
 }
-:root[data-theme="dark"] .ck .ck-v, :root[data-theme="dark"] .ck.req .ck-v { color: var(--thread-text); }
+:root[data-theme="dark"] .ck .ck-v{ color: var(--thread-text); }
 :root[data-theme="light"] .ck { --ck-seam: var(--seam-strong); border-color: var(--ck-seam); }
 /* Preserve label contrast over tinted light-theme rows. */
 :root[data-theme="light"] .ck .ck-k { color: var(--ink-2); }
@@ -235,30 +235,6 @@
 .rw-app .ck .copy:active { transform: scale(.82); }
 .rw-app .ck .copy.copied { color: var(--verified); opacity: 1; animation: pop .32s var(--ease); }
 .rw-app .ck .copy svg { width: 13px; height: 13px; }
-/* A shared subgrid aligns verification columns across groups. */
-.rw-app .cks .trackrows:has(.ck.req) { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto auto; align-items: center; }
-.rw-app .cks .trackrows:has(.ck.req) > .ckgrp { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; padding-inline-start: 0; }
-/* Only row labels should size the first column. */
-.rw-app .cks .trackrows:has(.ck.req) > .ckgrp > * { grid-column: 1 / -1; }
-.rw-app .cks .trackrows:has(.ck.req) > .ckgrp > .ckrows { display: grid; grid-template-columns: subgrid; }
-.rw-app .ck.req { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; column-gap: var(--sp-m); border: 0; border-block-end: 1px solid var(--seam-soft); border-radius: 0; }
-.rw-app .ck.req .ck-k { text-transform: uppercase; letter-spacing: .03em; }
-.rw-app .ck.req .ck-v { text-transform: uppercase; letter-spacing: .03em; color: var(--weft); }
-.rw-app .ck.req .reqstat { display: inline-flex; align-items: center; }
-.rw-app .ck.req .reqstat svg { width: 14px; height: 14px; color: var(--verified); }
-.rw-app .ck.req.bad .reqstat svg { color: var(--fault); }
-.rw-app .ck.req.bad dd { color: var(--fault); }
-.rw-app .ck.req:not(.bad) .ck-v {
-  text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 55%, transparent);
-  text-underline-offset: 4px;
-}
-.rw-app .dryrun-verdict { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .82rem; font-weight: 600; }
-.rw-app .dryrun-verdict svg { width: 15px; height: 15px; flex: none; }
-.rw-app .dryrun-verdict.bad { color: var(--fault); }
-.rw-app .dryrun-verdict:not(.bad) {
-  text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 55%, transparent);
-  text-underline-offset: 4px;
-}
 .rw-app .pverdict { padding: var(--sp-s) var(--sp-m); }
 /* Separate failed verdict, detail, and guidance instead of tinting all text red. */
 .rw-app .pfault {
@@ -272,13 +248,9 @@
 .rw-app .pfault-title svg { width: 15px; height: 15px; flex: none; animation: pverdict-mark .34s var(--ease) both; }
 .rw-app .pfault-detail { margin: 0; font-size: .8rem; color: var(--ink-2); overflow-wrap: anywhere; }
 .rw-app .pfault-hint { margin: 0; font-size: .74rem; color: var(--ink-3); }
-.rw-app .pverdict.dryrun-verdict { animation: pverdict-in .3s var(--ease) both; }
-.rw-app .pverdict.dryrun-verdict svg { animation: pverdict-mark .34s var(--ease) both; }
 @keyframes pverdict-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes pverdict-mark { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .pverdict.dryrun-verdict,
-  .rw-app .pverdict.dryrun-verdict svg,
   .rw-app .pfault,
   .rw-app .pfault-title svg { animation: none; }
 }
@@ -354,5 +326,4 @@
 
 /* Tracks and per-file task history */
 .rw-app .trackrows, .rw-app .taskbody { display: flex; flex-direction: column; gap: var(--sp-2xs); padding-block: 4px 2px; }
-.rw-app .ckgrp { padding-inline-start: 0; }
 .rw-app .popt { display: flex; align-items: center; gap: var(--sp-s); font-size: .78rem; color: var(--ink-2); }
