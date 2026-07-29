@@ -10,12 +10,6 @@
   background-image: var(--chevron);
   background-repeat: no-repeat; background-position: right 10px center;
 }
-/* Overlay the native datalist picker on the shared chevron. */
-.rw-app .input.combo { padding-inline-end: 30px;
-  background-image: var(--chevron);
-  background-repeat: no-repeat; background-position: right 10px center;
-}
-.rw-app .input.combo::-webkit-calendar-picker-indicator { opacity: 0; width: 24px; margin: 0; padding: 0; cursor: pointer; }
 .rw-app .input:focus-visible, .rw-app .select:focus-visible { outline: none; border-color: var(--thread); box-shadow: 0 0 0 1px var(--thread); }
 .rw-app .input[aria-invalid="true"], .rw-app .select[aria-invalid="true"] { border-color: var(--fault); box-shadow: 0 0 0 1px color-mix(in oklab, var(--fault) 50%, transparent); }
 .rw-app .input:disabled, .rw-app .select:disabled { opacity: .5; cursor: not-allowed; }
@@ -256,7 +250,6 @@
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: .68rem; font-stretch: 100%; letter-spacing: -.02em;
 }
-.rw-app .built-in { display: block; margin: 2px 0 0; color: var(--verified); font-size: .5rem; letter-spacing: .03em; white-space: nowrap; text-transform: uppercase; }
 .rw-app .popt-input[readonly] { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 32%, var(--seam)); background: color-mix(in oklab, var(--verified) 7%, var(--well)); cursor: text; }
 .rw-app .ofld { display: flex; flex-direction: column; gap: var(--sp-xs); min-width: 0; }
 .rw-app .ofld-l { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }

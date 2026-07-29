@@ -258,7 +258,6 @@
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .copy { grid-row: 1; grid-column: 3; }
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-v { grid-row: 2; grid-column: 1 / -1; }
 }
-.rw-app .ck .ck-v .exp { color: var(--fault); }
 .rw-app .ck .ck-v.copied { animation: copied-value .55s var(--ease); }
 @keyframes copied-value {
   35% {
