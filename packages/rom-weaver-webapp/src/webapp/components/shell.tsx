@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
-import { viewTransitionsUnavailable } from "../../public/react/components/ds/flat-transition.ts";
+import { viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
@@ -140,6 +140,11 @@ const ModeRail = ({
  * Theme toggle with the loom circle-wipe: the new theme clip-reveals from the
  * button via a view transition. The wipe itself is the CSS `theme-wipe`
  * keyframe; this only feeds the origin custom properties and flips the theme.
+ *
+ * Gated on `viewTransitionsUnsupported`, not `viewTransitionsUnavailable`:
+ * iOS WebKit is excluded from the latter because named elements misbehave
+ * mid-capture, and `html.vt-theme` suppresses every name, so the wipe is a
+ * plain root snapshot there.
  */
 const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   const { theme, toggleTheme } = useTheme();
@@ -147,7 +152,7 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   const label = localizer.message(theme === "dark" ? "ui.theme.toLight" : "ui.theme.toDark");
   const handleClick = () => {
     const root = document.documentElement;
-    if (viewTransitionsUnavailable()) {
+    if (viewTransitionsUnsupported()) {
       toggleTheme();
       return;
     }
