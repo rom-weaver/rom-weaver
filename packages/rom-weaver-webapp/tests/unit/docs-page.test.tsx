@@ -4,6 +4,7 @@ import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
 import { DocsPage } from "../../src/webapp/docs-page.tsx";
+import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
 
 const routeFor = (slug: string) => {
   const route = DOC_ROUTES.find((entry) => entry.slug === slug);
@@ -97,7 +98,7 @@ describe("DocsPage", () => {
     const article = document.querySelector(".docs-article");
     const offsite = [...(article?.querySelectorAll("a[href]") ?? [])]
       .map((link) => link.getAttribute("href") ?? "")
-      .filter((href) => href.startsWith("https://rom-weaver.com"));
+      .filter((href) => URL.canParse(href) && new URL(href).origin === SITE_ORIGIN);
     expect(offsite).toEqual([]);
   });
 
@@ -133,6 +134,22 @@ echo hi
     expect(route.html).toContain(
       '<h2 id="a-and-b-1"><span aria-hidden="true" class="docs-section-index">02</span><span class="docs-section-title">A &amp; <code>B</code></span>',
     );
+  });
+
+  it("drops raw HTML from headings before rendering them", () => {
+    const route = createDocRoute(
+      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## **Safe <script>alert(1)</script>**
+`,
+    );
+
+    expect(route.sections).toEqual([{ id: "safe-alert1", label: "Safe alert(1)" }]);
+    expect(route.html).toContain("<strong>Safe alert(1)</strong>");
+    expect(route.html).not.toContain("<script>");
   });
 
   it("publishes the bundle guide as numbered, collapsible sections", () => {

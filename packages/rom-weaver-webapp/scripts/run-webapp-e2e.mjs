@@ -10,7 +10,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium, webkit } from "playwright";
-import { DOC_SOURCES } from "../src/webapp/docs-routing.mjs";
+import { DOC_SOURCES, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
 import { summarizeCssCoverage } from "./css-coverage.mjs";
 
@@ -456,13 +456,16 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       // production, which is the right answer for a crawler but the wrong one
       // for anyone copying a command out of a beta or preview deployment.
       await page.waitForFunction(() => !document.getElementById("webapp-root")?.hasAttribute("aria-busy"));
-      const samples = await page.evaluate(() => {
+      const samples = await page.evaluate((productionOrigin) => {
         const blocks = [...document.querySelectorAll(".docs-article pre code")].map((block) => block.textContent || "");
+        const production = blocks
+          .flatMap((text) => text.match(/https?:\/\/[^\s"'<>]+/g) ?? [])
+          .filter((value) => URL.canParse(value) && new URL(value).origin === productionOrigin).length;
         return {
           local: blocks.filter((text) => text.includes(location.origin)).length,
-          production: blocks.filter((text) => text.includes("https://rom-weaver.com")).length,
+          production,
         };
-      });
+      }, SITE_ORIGIN);
       if (samples.production)
         throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
       retargetedSamples += samples.local;
