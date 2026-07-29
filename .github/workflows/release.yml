@@ -27,14 +27,68 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A release pull request must describe a commit that already cleared the
+  # full main push matrix. Wait here instead of relying on the operator to
+  # inspect Actions first; the exact SHA matters because the release workflow
+  # can be dispatched while main is moving.
+  verify-main-ci:
+    name: Verify main CI
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Wait for successful CI push run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for _ in {1..360}; do
+            response=$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?event=push&head_sha=$TARGET_SHA&per_page=100")
+            IFS=$'\t' read -r run_state conclusion url <<< "$(
+              jq -r '[.workflow_runs[]] | sort_by(.created_at) | last // {} | [.status // "", .conclusion // "", .html_url // ""] | @tsv' <<< "$response"
+            )"
+
+            if [[ "$run_state" == completed ]]; then
+              if [[ "$conclusion" == success ]]; then
+                echo "CI passed for $TARGET_SHA: $url"
+                exit 0
+              fi
+              echo "::error::CI for $TARGET_SHA concluded $conclusion: $url"
+              exit 1
+            fi
+
+            if [[ -n "$run_state" ]]; then
+              echo "CI for $TARGET_SHA is $run_state; waiting"
+            else
+              echo "No push CI run found for $TARGET_SHA; waiting"
+            fi
+            sleep 30
+          done
+
+          echo "::error::Timed out waiting for CI for $TARGET_SHA"
+          exit 1
+
   release:
+    needs: verify-main-ci
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      always() &&
       (
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.merged == true &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        startsWith(github.event.pull_request.head.ref, 'release-please--branches--main--components--')
+        github.event_name != 'workflow_dispatch' ||
+        needs.verify-main-ci.result == 'success'
+      ) &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          startsWith(github.event.pull_request.head.ref, 'release-please--branches--main--components--')
+        )
       )
     runs-on: ubuntu-24.04
     permissions:
@@ -164,9 +218,9 @@ jobs:
 
       # These PNGs belong in the release PR so the merge contains the exact
       # captures the release will ship. Capturing them reuses the production
-      # WASM artifact from main's CI run for this commit, so dispatch once that
-      # run is green; otherwise the resolver finds nothing and the fallback
-      # below rebuilds WASM from source, adding ~6.5 min.
+      # WASM artifact from main's CI run for this commit. The verify-main-ci job
+      # above guarantees the run is complete; the fallback remains for a green
+      # run that did not build WASM for its changed-path classification.
       - name: Set up screenshot capture
         if: steps.release-pr.outputs.found == 'true'
         uses: ./.github/actions/setup-build-env
