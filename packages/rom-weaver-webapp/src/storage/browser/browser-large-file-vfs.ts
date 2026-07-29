@@ -1,5 +1,6 @@
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
 import { requestBrowserOpfsStorage } from "../../workers/protocol/browser-opfs-worker-client.ts";
+import { createLogger } from "../../lib/logging.ts";
 import { getVfsRelativePath, normalizeAbsoluteVfsPath, normalizeVfsRoot } from "../vfs/path.ts";
 import type { LargeFileVfs, VfsOutputRef, VfsStat } from "../vfs/types.ts";
 import { writeBlobToFileHandle } from "./file-handle-write.ts";
@@ -8,6 +9,8 @@ type BrowserLargeFileVfsOptions = {
   navigatorObject?: Pick<Navigator, "storage"> | null;
   rootPath?: string;
 };
+
+const logger = createLogger("browser-large-file-vfs");
 
 const toUint8Array = (source: ArrayBuffer | ArrayBufferView | Uint8Array) => {
   if (source instanceof Uint8Array) return source;
@@ -239,6 +242,11 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     truncate: async (filePath, size) => {
       const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
       invalidateReadCache(normalizedPath);
+      logger.debug("OPFS path create requested", {
+        creator: "browser-large-file-vfs.truncate",
+        path: normalizedPath,
+        size: Math.max(0, Math.floor(size || 0)),
+      });
       const response = await requestBrowserOpfsStorage({
         action: "truncate",
         filePath: normalizedPath,
@@ -259,6 +267,11 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
       payload.set(data);
       const fileOffset =
         typeof options?.fileOffset === "number" && options.fileOffset > 0 ? Math.floor(options.fileOffset) : 0;
+      logger.debug("OPFS path write requested", {
+        creator: "browser-large-file-vfs.write",
+        path: normalizedPath,
+        size: byteLength,
+      });
       const response = await requestBrowserOpfsStorage({
         action: "write",
         bytes: payload,

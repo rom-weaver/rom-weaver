@@ -1,4 +1,4 @@
-import { requestBrowserOpfsStorage } from "../../workers/protocol/browser-opfs-worker-client.ts";
+import { requestBrowserOpfsStorage, type BrowserOpfsEntry } from "../../workers/protocol/browser-opfs-worker-client.ts";
 
 // These are application scratch buckets. Host-ingested files live under rom-weaver-imports and are
 // deliberately preserved across reload/reset because they are user-owned input, not transient state.
@@ -21,4 +21,10 @@ const resetBrowserTransientOpfs = async (): Promise<void> => {
   );
 };
 
-export { resetBrowserTransientOpfs };
+const listBrowserOpfs = async (): Promise<BrowserOpfsEntry[]> => {
+  const response = await requestBrowserOpfsStorage({ action: "list" });
+  if (!response.success) throw new Error(response.error?.message || "Unable to list OPFS paths");
+  return response.entries || [];
+};
+
+export { listBrowserOpfs, resetBrowserTransientOpfs };

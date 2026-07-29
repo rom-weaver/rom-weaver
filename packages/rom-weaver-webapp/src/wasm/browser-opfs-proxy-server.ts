@@ -422,6 +422,7 @@ class OpfsProxyServer {
 
   private async opMkdir(guestPath: string): Promise<void> {
     const location = this.locate(guestPath);
+    this.trace?.(`[browser-opfs] path create requested creator=browser-opfs-proxy.mkdir path=${guestPath}`);
     let dir = location.mount.directoryHandle;
     for (const part of location.parts) {
       dir = (await dir.getDirectoryHandle(part, { create: true })) as FileSystemDirectoryHandleLike;
@@ -447,6 +448,11 @@ class OpfsProxyServer {
 
   private async resolveFileHandle(location: FileLocation, { create }: { create: boolean }): Promise<unknown> {
     const { dir, name } = await this.resolveParent(location, { create });
+    if (create) {
+      this.trace?.(
+        `[browser-opfs] path create requested creator=browser-opfs-proxy.open path=${location.mount.mountPath}/${location.parts.join("/")}`,
+      );
+    }
     return dir.getFileHandle(name, { create });
   }
 
