@@ -7,6 +7,7 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
+import { sidecarContentType } from "./functions/assets/content-types.js";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
@@ -439,6 +440,35 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
   };
 };
 
+// The stylesheet and entry module are the only two render-critical subresources, and the
+// parser cannot discover either until the document has been fetched and parsed. Emitting
+// them as `Link` response headers lets Cloudflare replay them in a 103 Early Hints
+// response, so both fetches start during server think time instead of after HTML parse.
+// Browsers that ignore 103 still honour the header on the document response itself, which
+// is earlier than the parser either way. Read out of the built index.html rather than the
+// bundle so the hinted URLs are byte-for-byte the ones the document requests.
+//
+// These ride in the `/*` block rather than an enumerated route list: every document in the
+// build - the prerendered workflow routes, 404.html, every docs slug, and any route added
+// later - loads the same two assets, and a list would silently stop covering new ones. The
+// hint also lands on subresource responses, which ignore it.
+const readCriticalAssetLinks = (distDir) => {
+  const indexHtml = fs.readFileSync(path.join(distDir, "index.html"), "utf8");
+  const stylesheet = indexHtml.match(/<link[^>]+rel="stylesheet"[^>]+href="\.(\/assets\/[^"]+\.css)"/)?.[1];
+  const entryScript = indexHtml.match(/<script[^>]+type="module"[^>]+src="\.(\/assets\/[^"]+\.js)"/)?.[1];
+  if (!(stylesheet && entryScript)) {
+    throw new Error(
+      `rom-weaver-cloudflare-headers-asset: could not find the stylesheet (${stylesheet ?? "missing"}) and entry module (${entryScript ?? "missing"}) in dist/index.html`,
+    );
+  }
+  // Both are fetched in CORS mode (the stylesheet link and the module script both carry
+  // `crossorigin`), so the hints have to match or the browser fetches each asset twice.
+  return [
+    `Link: <${stylesheet}>; rel=preload; as=style; crossorigin`,
+    `Link: <${entryScript}>; rel=modulepreload; crossorigin`,
+  ];
+};
+
 // Cloudflare Pages serves dist/_headers on every response, so deployed pages are cross-origin
 // isolated from the first network load instead of round-tripping through the service worker's
 // COEP-injection reload. Hosts without header control still use the service-worker fallback.
@@ -453,10 +483,14 @@ const writeCloudflareHeadersAsset = (channel) => {
         "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
         ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
       };
-      const headerLines = Object.entries(headers)
-        .map(([name, value]) => `  ${name}: ${value}`)
+      const distDir = path.resolve(rootDir, outDir);
+      const outputPath = path.join(distDir, "_headers");
+      const headerLines = [
+        ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
+        ...readCriticalAssetLinks(distDir),
+      ]
+        .map((line) => `  ${line}`)
         .join("\n");
-      const outputPath = path.join(path.resolve(rootDir, outDir), "_headers");
       // The attribution files are named `LICENSE-APACHE`, `COPYING`, `NOTICE`
       // and so on. With no extension Cloudflare types them as a binary
       // download, which both skips its on-the-fly compression (2.1 MB of text
@@ -507,7 +541,17 @@ const writeBrotliSidecars = () => {
       }
       if (fs.existsSync(sourceSidecar)) fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
       else brotliCompressFile({ inputPath: emittedWasm, outputPath: `${emittedWasm}.br`, quality: 11 });
+      // The Pages Function reads the type from SIDECAR_CONTENT_TYPES instead of probing
+      // the static asset, so a staged sidecar whose extension is missing there would
+      // silently fall back to Pages' own compression. Fail the build instead.
+      const assertSidecarTypeIsKnown = (assetUrl) => {
+        if (sidecarContentType(assetUrl)) return;
+        throw new Error(
+          `${assetUrl} has a brotli sidecar but no entry in SIDECAR_CONTENT_TYPES (functions/assets/content-types.js); add its content type there`,
+        );
+      };
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
+      assertSidecarTypeIsKnown(sidecarUrls[0]);
       for (const name of fs.readdirSync(assetsDir)) {
         // `.map` sidecars are devtools-only: nothing on a normal page load
         // requests them, so a q11 pass and a _routes.json include each would
@@ -523,6 +567,7 @@ const writeBrotliSidecars = () => {
           fs.rmSync(`${assetPath}.br`);
           continue;
         }
+        assertSidecarTypeIsKnown(`/assets/${name}`);
         sidecarUrls.push(`/assets/${name}`);
       }
       if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {

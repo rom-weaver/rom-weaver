@@ -580,6 +580,19 @@ promptly. The `Content-Signal` header permits agent input on every channel,
 permits search use only on production, and declines AI training. Non-production
 channels add their `X-Robots-Tag` in the same file.
 
+Every response also carries `Link:` preload headers for the two
+render-critical subresources - the stylesheet and the entry module. Neither is
+discoverable until the document has been fetched and parsed, so Cloudflare
+replays them in a `103 Early Hints` response and both fetches start during
+server think time; browsers that ignore `103` still act on the header when the
+document response lands, which is earlier than the parser either way. They ride
+in the `/*` block rather than an enumerated route list, so every prerendered
+route, every docs slug, and any route added later is covered without upkeep;
+subresource responses carry the header too and ignore it. The
+hinted URLs are read back out of the built `index.html`, and
+`scripts/verify-seo-build.mjs` fails the build if they drift from the ones the
+document actually requests.
+
 Pages has no precompressed-sibling convention and recompresses assets on the
 fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse
 on the wasm and ~50 KB on the main JS bundle, per cold load). Every webapp
@@ -590,10 +603,15 @@ only when it saves at least 2% (already-compressed formats such as woff2/png
 fail that bar and stay static), and writes a `_routes.json` routing exactly
 the sidecar-backed URLs through the Pages Function in
 `packages/rom-weaver-webapp/functions/assets/[name].js`. The function takes
-the content type from a headers-only probe of the static asset (no hand-kept
-extension map) and serves the sidecar bytes with `Content-Encoding: br`
+the content type from `functions/assets/content-types.js` and serves the
+sidecar bytes with `Content-Encoding: br`
 (`encodeBody: "manual"`) to br-capable clients, falling through to static
-serving otherwise; unrouted requests never invoke it. Because function
+serving otherwise; unrouted requests never invoke it. That table is the one
+place the mapping lives - `writeBrotliSidecars` imports it and fails the build
+if it stages a sidecar for an extension the table does not cover, so it cannot
+go stale. It replaced a headers-only probe of the static asset, which was a
+second subrequest the sidecar fetch had to wait behind and so put a serialized
+round trip in front of the render-critical CSS and entry module. Because function
 responses bypass `_headers`, the function restates the immutable cache rule
 and the cross-origin-isolation headers - COEP in particular, which
 dedicated-worker scripts must carry on a cross-origin-isolated page. Only
