@@ -425,8 +425,25 @@ entry checks-only. Create re-parses before writing, so it can never emit
   call lives in another module - so the import form is the rule, not a
   case-by-case judgement. Self-referential imports (a worker that transitively
   imports its own URL, as the WASI thread worker does to self-spawn) are fine:
-  Vite collapses them to `self.location.href` inside that worker's own bundle
-  and emits no duplicate chunk.
+  the URL resolves to the thread worker's own chunk from whichever chunk holds
+  the reference, so no duplicate is emitted.
+- **Workers share one runtime chunk.** Vite's own `?worker&url` handling gives
+  every worker entry its own isolated rolldown build, so the runner and WASI
+  thread workers each shipped a private copy of the whole wasm/OPFS runtime
+  (~85 kB raw of pure duplication). The
+  `rom-weaver-share-worker-runtime-chunks` plugin in `vite.config.mjs`
+  intercepts `?worker&url` during *builds only* and emits the worker as an extra
+  entry chunk of the main graph, so one code-splitting pass covers app and
+  workers together. The `wasm-runtime` group in
+  `build.rollupOptions.output.advancedChunks` then hoists the modules that only
+  worker entries reach into a single chunk both workers import. It groups by
+  real entry reachability rather than by path, and keeps
+  `includeDependenciesRecursively` off, because either shortcut sweeps in the
+  wasm modules the document entry also uses and drags the whole runtime onto the
+  first-paint critical path. For the same reason `src/wasm/index.ts` re-exports
+  `rom-weaver-browser-opfs-api.ts` as types only - the OPFS runner is
+  Dedicated-Worker-only, and a value re-export wires it into the app graph.
+  Dev is untouched: the plugin is `apply: "build"`.
 
 ## Build graph
 
