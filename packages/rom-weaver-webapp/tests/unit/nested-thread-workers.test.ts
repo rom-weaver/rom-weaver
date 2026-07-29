@@ -124,4 +124,21 @@ describe("nested thread worker ownership", () => {
 
     expect(FakeWorker.created[0]?.terminated).toBe(false);
   });
+
+  it("forwards the runner's full-mount mode to nested workers", () => {
+    vi.stubGlobal("Worker", FakeWorker);
+    const options = {
+      ...createOptions(),
+      runtime: { invalidateMountCacheBeforeRun: true, virtualOnlyMounts: false },
+    };
+    const list = acquireNestedThreadWorkerList(options);
+
+    list.acquire(43, 1);
+
+    const payload = FakeWorker.created[0]?.messages[0] as {
+      runtime?: { invalidateMountCacheBeforeRun?: boolean; virtualOnlyMounts?: boolean };
+    };
+    expect(payload.runtime?.invalidateMountCacheBeforeRun).toBe(true);
+    expect(payload.runtime?.virtualOnlyMounts).toBe(false);
+  });
 });

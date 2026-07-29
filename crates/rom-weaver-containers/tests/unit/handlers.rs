@@ -855,11 +855,12 @@ mod tests {
 
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
-    fn chd_runtime_threads_match_capabilities_for_create_and_extract() {
+    fn chd_runtime_threads_match_capabilities_for_create_and_nested_extract() {
         let temp_dir = temp_dir_path("chd-thread-parity");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let source_path = temp_dir.join("source.bin");
         let archive_path = temp_dir.join("source.chd");
+        let outer_archive_path = temp_dir.join("outer.7z");
         let output_dir = temp_dir.join("out");
         let payload = (0..(512 * 1024))
             .map(|index| (index as u8).wrapping_mul(17))
@@ -929,6 +930,34 @@ mod tests {
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
+
+        let nested_output_dir = temp_dir.join("nested-out");
+        let nested_extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path.clone(),
+                    out_dir: nested_output_dir.clone(),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    containing_archive: Some(outer_archive_path),
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("extract nested chd");
+        let nested_execution = nested_extract_report
+            .thread_execution
+            .expect("nested thread execution");
+        assert_eq!(nested_execution.requested_threads, 6);
+        assert_eq!(nested_execution.effective_threads, 6);
+        assert!(nested_execution.used_parallelism);
+        assert_eq!(
+            fs::read(nested_output_dir.join("source.bin")).expect("read nested extracted payload"),
+            payload
+        );
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -2097,12 +2126,15 @@ mod tests {
     }
 
     #[test]
-    fn rvz_create_runtime_threads_match_capability() {
+    fn rvz_create_and_nested_extract_runtime_threads_match_capability() {
         let temp_dir = temp_dir_path("rvz-thread-parity");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_path = temp_dir.join("disc.iso");
         let output_path = temp_dir.join("disc.rvz");
-        fs::write(&input_path, build_test_gamecube_iso(0xA000)).expect("fixture");
+        let output_dir = temp_dir.join("out");
+        let outer_archive_path = temp_dir.join("outer.7z");
+        let source = build_test_gamecube_iso(0x400000);
+        fs::write(&input_path, &source).expect("fixture");
 
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("rvz").expect("rvz handler");
@@ -2124,6 +2156,33 @@ mod tests {
         let execution = report.thread_execution.expect("thread execution");
         assert_execution_parallel_when_available(&execution, &capabilities.create_threads, 8);
         assert!(output_path.exists());
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: output_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    containing_archive: Some(outer_archive_path),
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract nested rvz");
+        let extract_execution = extract_report.thread_execution.expect("thread execution");
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
+        );
+        assert_eq!(
+            fs::read(output_dir.join("disc.iso")).expect("read nested extracted rvz"),
+            source
+        );
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -2262,13 +2321,14 @@ mod tests {
     }
 
     #[test]
-    fn z3ds_extract_runtime_threads_match_capability_with_single_chunk_input() {
+    fn z3ds_nested_extract_runtime_threads_match_capability_with_two_chunk_input() {
         let temp_dir = temp_dir_path("z3ds-extract-thread-parity");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_path = temp_dir.join("disc.3ds");
         let archive_path = temp_dir.join("disc.z3ds");
         let output_dir = temp_dir.join("out");
-        let source = (0..65_536)
+        let outer_archive_path = temp_dir.join("outer.7z");
+        let source = (0..(2 * 1024 * 1024))
             .map(|index| (index % 223) as u8)
             .collect::<Vec<_>>();
         fs::write(&input_path, &source).expect("fixture");
@@ -2290,8 +2350,8 @@ mod tests {
             )
             .expect("z3ds create");
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert_eq!(create_execution.effective_threads, 1);
-        assert!(!create_execution.used_parallelism);
+        assert_eq!(create_execution.effective_threads, 2);
+        assert!(create_execution.used_parallelism);
 
         let extract_report = handler
             .extract(
@@ -2300,7 +2360,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                    containing_archive: None,
+                    containing_archive: Some(outer_archive_path),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -2316,8 +2376,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 1);
-        assert!(!extract_execution.used_parallelism);
+        assert_eq!(extract_execution.effective_threads, 2);
+        assert!(extract_execution.used_parallelism);
 
         let extracted = fs::read(output_dir.join("disc.3ds")).expect("read extracted file");
         assert_eq!(extracted, source);
