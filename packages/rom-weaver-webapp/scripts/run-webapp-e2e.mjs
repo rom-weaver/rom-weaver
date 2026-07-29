@@ -438,8 +438,14 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     // run against the app page and would have to re-enter it afterwards.
     // Loading them for real rather than switching to them in-app is the only
     // way a hydration mismatch against the served HTML surfaces as a page error.
+    // Coverage is per-document and resets on navigation, so bank what the app
+    // page used before leaving it - otherwise only the last guide's sheet
+    // survives to the budget check and the whole app's CSS reads as unused.
+    if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
+
     let retargetedSamples = 0;
     for (const slug of DOCS_ROUTES) {
+      if (browserName === "chromium") await page.coverage.startCSSCoverage();
       await page.goto(`${baseUrl.replace(/\/$/, "")}/${slug}`, { waitUntil: "domcontentloaded" });
       await page.locator(".docs-article h1").waitFor({ state: "visible" });
       await installAuditTools();
@@ -461,6 +467,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
       retargetedSamples += samples.local;
       await scanVariants(slug);
+      if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
     }
     // Without this the checks above pass just as happily when the swap stops
     // running and no guide offers a sample download at all.
@@ -468,10 +475,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     process.stdout.write(`PASS docs samples retargeted (${retargetedSamples} blocks)\n`);
 
     if (failures.length) throw new Error(`live app accessibility audit page errors:\n${failures.join("\n")}`);
-    if (browserName === "chromium") {
-      cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
-      checkCssCoverage(cssCoverageEntries);
-    }
+    // Every page above banked its own coverage as it finished; nothing is still
+    // recording here.
+    if (browserName === "chromium") checkCssCoverage(cssCoverageEntries);
   } finally {
     await context.close();
   }
