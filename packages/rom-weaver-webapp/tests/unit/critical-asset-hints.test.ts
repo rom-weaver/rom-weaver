@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { criticalAssetLinkHeaders } from "../../scripts/critical-asset-hints.mjs";
 
+const stylesheetTag = '<link rel="stylesheet" crossorigin href="./assets/index-UWYfzcLg.css" />';
+const entryModuleTag = '<script type="module" crossorigin src="./assets/index-lgao6CRe.js"></script>';
 const indexHtml = `<!doctype html><html><head>
-  <link rel="stylesheet" crossorigin href="./assets/index-UWYfzcLg.css" />
-  <script type="module" crossorigin src="./assets/index-lgao6CRe.js"></script>
+  ${stylesheetTag}
+  ${entryModuleTag}
 </head><body></body></html>`;
 
 describe("critical asset link headers", () => {
@@ -21,8 +23,8 @@ describe("critical asset link headers", () => {
   });
 
   it.each([
-    ["stylesheet", indexHtml.replace(/<link[^>]+>/, "")],
-    ["entry module", indexHtml.replace(/<script[\s\S]+?<\/script>/, "")],
+    ["stylesheet", indexHtml.replace(stylesheetTag, "")],
+    ["entry module", indexHtml.replace(entryModuleTag, "")],
   ])("throws when index.html has no %s", (label, html) => {
     expect(() => criticalAssetLinkHeaders(html)).toThrow(`index.html is missing its ${label}`);
   });
