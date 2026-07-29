@@ -159,6 +159,7 @@ test("archive whose index is named rw.json (not canonical) is content-probed and
 });
 
 test("local bundle remote sources remain live until the workflow owner is disposed", async () => {
+  const progressSpy = vi.fn();
   const truncateSpy = vi.spyOn(browserVfs, "truncate");
   const bundleFile = new File(
     [
@@ -172,8 +173,9 @@ test("local bundle remote sources remain live until the workflow owner is dispos
     { type: "application/json" },
   );
   try {
-    mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleFile], id: 1 } }));
+    mount(createElement(ApplyPatchForm, { onProgress: progressSpy, pageDrop: { files: [bundleFile], id: 1 } }));
     await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips"]);
+    await expect.poll(() => progressSpy.mock.calls.length).toBeGreaterThan(0);
     await waitForApplyButtonEnabled();
     const remotePaths = truncateSpy.mock.calls
       .map(([filePath]) => filePath)
