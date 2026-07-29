@@ -8,6 +8,8 @@ import { ChangelogDialog } from "../../../src/webapp/components/changelog-dialog
 
 const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver";
 const CHANGELOG_URL = `${REPOSITORY_URL}/blob/main/CHANGELOG.md`;
+// The commit view shows raw commits, which never reach CHANGELOG.md.
+const COMMIT_LOG_URL = `${REPOSITORY_URL}/commits/main`;
 
 const releaseOf = (version: string, notes: unknown[], truncated = false) => ({
   changelogUrl: CHANGELOG_URL,
@@ -139,8 +141,8 @@ describe("ChangelogDialog", () => {
     expect(await screen.findByText("Some change")).toBeTruthy();
     // The commit view, not the release view: no version transition to 9.9.9.
     expect(screen.queryByText(`v${APP_VERSION} → v9.9.9`)).toBeNull();
-    // It still gets a header, falling back to the built-in changelog url.
-    expect(screen.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(CHANGELOG_URL);
+    // It still gets a header, pointing at the commit log.
+    expect(screen.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(COMMIT_LOG_URL);
   });
 
   it("keeps showing commits when the incoming build has the same version", async () => {
@@ -160,7 +162,34 @@ describe("ChangelogDialog", () => {
     expect(screen.queryByText("Previous release")).toBeNull();
     // No version bump, so the header shows the build the commits move to.
     expect(screen.getByText("dev → nightly")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(CHANGELOG_URL);
+    expect(screen.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(COMMIT_LOG_URL);
+  });
+
+  it("links the truncation ellipsis at whatever the view could not fit", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [noteOf("9.9.9", [{ summary: "newest" }])], true),
+        subject: "release",
+      },
+    ]);
+
+    renderDialog();
+
+    // A release ran out of embedded sections, so the tail is in CHANGELOG.md.
+    expect((await screen.findByRole("link", { name: "See earlier changes" })).getAttribute("href")).toBe(CHANGELOG_URL);
+  });
+
+  it("links the commit view's truncation ellipsis at the commit log", async () => {
+    // No entry matches the running build, so the window itself is truncated.
+    mockChangelog([{ date: "", hash: "a", subject: "feat(cli): add a flag" }]);
+
+    renderDialog();
+
+    expect((await screen.findByRole("link", { name: "See earlier changes" })).getAttribute("href")).toBe(
+      COMMIT_LOG_URL,
+    );
   });
 
   it("renders commits as changelog groups, in release-please's order", async () => {

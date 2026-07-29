@@ -23,7 +23,7 @@ import { GITHUB_URL } from "../project-links.ts";
 const logger = createLogger("changelog-dialog");
 
 const REPOSITORY_URL = GITHUB_URL.replace(/\/$/, "");
-const FALLBACK_CHANGELOG_URL = `${REPOSITORY_URL}/blob/main/CHANGELOG.md`;
+const DEFAULT_BRANCH = "main";
 
 type ReleaseEntry = { commit?: string; pr?: string; scope?: string; summary: string };
 type ReleaseGroup = { entries: ReleaseEntry[]; title: string };
@@ -218,34 +218,50 @@ const EntryGroups = ({
   </>
 );
 
-type HeaderMeta = { changelogUrl: string; label: string; transition: string };
+type HeaderMeta = { label: string; moreUrl: string; transition: string };
 
-// What you're moving from and to, plus the escape hatch to the whole file. Both
-// views share it, and it rides in the modal's title bar next to "What's new"
-// rather than at the top of the body.
+// What you're moving from and to, plus the escape hatch to everything this
+// dialog could not fit. Both views share it, and it rides in the modal's title
+// bar next to "What's new" rather than at the top of the body.
+//
+// Where "more" points differs by view, because the two views show different
+// things: a release shows CHANGELOG.md entries, so it links CHANGELOG.md; a
+// nightly shows raw commits, which never reach CHANGELOG.md, so it links the
+// commit log instead.
 const headerMeta = (state: FetchState): HeaderMeta | undefined => {
   if (state.status !== "loaded") return undefined;
-  const changelogUrl = state.release?.changelogUrl ?? FALLBACK_CHANGELOG_URL;
+  const repositoryUrl = state.release?.repositoryUrl ?? REPOSITORY_URL;
   if (state.release && state.release.version !== APP_VERSION) {
     return {
-      changelogUrl,
       label: `updating from version ${APP_VERSION} to version ${state.release.version}`,
+      moreUrl: state.release.changelogUrl,
       transition: `v${APP_VERSION} → v${state.release.version}`,
     };
   }
+  const moreUrl = `${repositoryUrl}/commits/${DEFAULT_BRANCH}`;
   // No version bump, so the transition is between builds of the same version.
   // With nothing newer at all there is no transition either - fall back to the
   // build id, the one thing that differs between same-commit rebuilds.
   const incoming = state.entries[0]?.hash;
   if (!incoming) {
-    return { changelogUrl, label: `version ${APP_VERSION}, build ${APP_BUILD_VERSION}`, transition: APP_BUILD_VERSION };
+    return { label: `version ${APP_VERSION}, build ${APP_BUILD_VERSION}`, moreUrl, transition: APP_BUILD_VERSION };
   }
   return {
-    changelogUrl,
     label: `updating version ${APP_VERSION} from build ${COMMIT_HASH} to build ${incoming}`,
+    moreUrl,
     transition: `${COMMIT_HASH} → ${incoming}`,
   };
 };
+
+// The tail the dialog could not fit. Links wherever the view's "more" points, so
+// the ellipsis is a way through rather than a dead end.
+const TruncatedNote = ({ moreUrl }: { moreUrl: string }) => (
+  <div className="changelog-note">
+    <a aria-label="See earlier changes" className="changelog-more" href={moreUrl} rel="noreferrer" target="_blank">
+      …
+    </a>
+  </div>
+);
 
 const ChangelogHeader = ({ meta }: { meta: HeaderMeta }) => (
   <div className="changelog-head-meta">
@@ -254,13 +270,13 @@ const ChangelogHeader = ({ meta }: { meta: HeaderMeta }) => (
     <span aria-label={meta.label} className="changelog-head-transition mono" role="img">
       {meta.transition}
     </span>
-    <a className="changelog-head-link" href={meta.changelogUrl} rel="noreferrer" target="_blank">
+    <a className="changelog-head-link" href={meta.moreUrl} rel="noreferrer" target="_blank">
       Full changelog
     </a>
   </div>
 );
 
-const ReleaseNotes = ({ release }: { release: ReleaseChangelog }) => {
+const ReleaseNotes = ({ moreUrl, release }: { moreUrl: string; release: ReleaseChangelog }) => {
   const { notes, truncated } = releaseNotesSince(release);
   return (
     <>
@@ -276,7 +292,7 @@ const ReleaseNotes = ({ release }: { release: ReleaseChangelog }) => {
           <EntryGroups groups={note.groups} keyPrefix={note.version} repositoryUrl={release.repositoryUrl} />
         </section>
       ))}
-      {truncated ? <div className="changelog-note">…</div> : null}
+      {truncated ? <TruncatedNote moreUrl={moreUrl} /> : null}
     </>
   );
 };
@@ -284,17 +300,19 @@ const ReleaseNotes = ({ release }: { release: ReleaseChangelog }) => {
 // Same-version update - a nightly or a rebuild.
 const CommitNotes = ({
   entries,
+  moreUrl,
   repositoryUrl,
   truncated,
 }: {
   entries: ChangelogEntry[];
+  moreUrl: string;
   repositoryUrl: string;
   truncated: boolean;
 }) => {
   return (
     <>
       <EntryGroups groups={commitGroups(entries)} keyPrefix="commits" repositoryUrl={repositoryUrl} />
-      {truncated ? <div className="changelog-note">…</div> : null}
+      {truncated ? <TruncatedNote moreUrl={moreUrl} /> : null}
     </>
   );
 };
@@ -346,14 +364,15 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
           </button>
         </div>
       ) : null}
-      {state.status === "loaded" ? (
+      {state.status === "loaded" && meta ? (
         state.release && state.release.version !== APP_VERSION ? (
-          <ReleaseNotes release={state.release} />
+          <ReleaseNotes moreUrl={meta.moreUrl} release={state.release} />
         ) : (
           // A dev build has no embedded release payload, so fall back to the
           // constants baked in here.
           <CommitNotes
             entries={state.entries}
+            moreUrl={meta.moreUrl}
             repositoryUrl={state.release?.repositoryUrl ?? REPOSITORY_URL}
             truncated={state.truncated}
           />

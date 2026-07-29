@@ -20,7 +20,7 @@
 .rw-modal .modal-head .dlg-x { align-self: flex-start; margin-inline-end: calc(-1 * var(--sp-2xs)); }
 .rw-modal .modal-head .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
 .rw-modal .modal-body { padding: var(--sp-l); overflow-y: auto; overscroll-behavior: contain; }
-.rw-modal.changelog-modal .rw-modal-card { width: min(520px, 100%); }
+.rw-modal.changelog-modal .rw-modal-card { width: min(720px, 100%); }
 /* The version transition and full-changelog link ride in the title bar. They sit
    on the title's baseline while they fit, and drop to their own right-aligned
    row (the auto margin survives the wrap) once the head runs out of width. */
