@@ -509,7 +509,10 @@ const writeBrotliSidecars = () => {
       else brotliCompressFile({ inputPath: emittedWasm, outputPath: `${emittedWasm}.br`, quality: 11 });
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
       for (const name of fs.readdirSync(assetsDir)) {
-        if (name.endsWith(".wasm") || name.endsWith(".br")) continue;
+        // `.map` sidecars are devtools-only: nothing on a normal page load
+        // requests them, so a q11 pass and a _routes.json include each would
+        // buy nothing and eat the include budget.
+        if (name.endsWith(".wasm") || name.endsWith(".br") || name.endsWith(".map")) continue;
         const assetPath = path.join(assetsDir, name);
         const { compressedSize, sourceSize } = brotliCompressFile({
           inputPath: assetPath,
@@ -811,6 +814,12 @@ export default defineConfig(({ command }) => {
           },
         },
       },
+      // External `.map` sidecars, never inline: a stack trace from a released
+      // bundle is otherwise unreadable, and the maps cost nothing to a user who
+      // never opens devtools. They are excluded from the service-worker
+      // precache, the brotli sidecars and the Docker compression pass, so the
+      // only bytes a normal visit pays for are the `sourceMappingURL` comments.
+      sourcemap: true,
       target: "es2022",
     },
     clearScreen: false,
