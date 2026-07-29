@@ -1,4 +1,4 @@
-import { Marked, Renderer } from "marked";
+import { Marked, Parser, Renderer } from "marked";
 import { docGroupTitle, DOC_SOURCES, SITE_ORIGIN } from "./docs-routing.mjs";
 
 // Build-time only. `marked` must never reach a browser bundle: the client
@@ -59,16 +59,46 @@ const decodeHeadingEntities = (value) =>
     return Number.isFinite(code) ? String.fromCodePoint(code) : " ";
   });
 
-/** @param {string} value */
-const plainHeading = (value) => stripMarkdown(decodeHeadingEntities(value.replace(/<[^>]+>/g, "")));
+/** @param {import("marked").Token[]} tokens @returns {string} */
+const plainHeading = (tokens) =>
+  decodeHeadingEntities(
+    tokens
+      .map((token) => {
+        if (token.type === "html") return "";
+        if ("tokens" in token && token.tokens) return plainHeading(token.tokens);
+        if (token.type === "br") return " ";
+        return "text" in token ? token.text : "";
+      })
+      .join(""),
+  )
+    .replace(/\s+/g, " ")
+    .trim();
 
 /** @param {string} value */
 const headingSlug = (value) =>
-  plainHeading(value)
+  value
     .toLowerCase()
     .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
     .trim()
     .replace(/\s+/g, "-");
+
+/**
+ * Raw HTML remains available to the trusted, repository-owned document body,
+ * but headings feed both HTML and navigation metadata, so only Markdown inline
+ * formatting is rendered there.
+ *
+ * The inline lexer marks text inside a `<script>` or `<pre>` as `escaped`,
+ * which tells the default renderer to emit the source verbatim. That only holds
+ * while the surrounding tags survive, so clearing the flag hands the text back
+ * to marked's own escaping rather than reimplementing it here.
+ */
+const createHeadingRenderer = () => {
+  const renderer = new Renderer();
+  renderer.html = () => "";
+  renderer.text = (token) =>
+    Renderer.prototype.text.call(renderer, "escaped" in token && token.escaped ? { ...token, escaped: false } : token);
+  return renderer;
+};
 
 /**
  * Guide links are authored as repository-relative paths so the Markdown also
@@ -117,6 +147,9 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
   /** @type {DocSection[]} */
   const sections = [];
   const defaultRenderer = new Renderer();
+  // `Parser.parseInline` rebinds `renderer.parser` on every call, so the
+  // heading renderer stays local to one render rather than being shared.
+  const headingRenderer = createHeadingRenderer();
   const parser = new Marked({
     renderer: {
       code(token) {
@@ -129,17 +162,19 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
         defaultRenderer.parser = this.parser;
         return defaultRenderer.table(token).replace("<table>", '<table tabindex="0">');
       },
-      heading({ depth, text, tokens }) {
-        const base = headingSlug(text);
+      heading({ depth, tokens }) {
+        const label = plainHeading(tokens);
+        const base = headingSlug(label);
         const count = seen.get(base) ?? 0;
         seen.set(base, count + 1);
         const id = count === 0 ? base : `${base}-${count}`;
+        const html = Parser.parseInline(tokens, { renderer: headingRenderer });
         if (depth === 2) {
-          sections.push({ id, label: plainHeading(text) });
+          sections.push({ id, label });
           const index = String(sections.length).padStart(2, "0");
-          return `<h2 id="${id}"><span aria-hidden="true" class="docs-section-index">${index}</span><span class="docs-section-title">${this.parser.parseInline(tokens)}</span></h2>\n`;
+          return `<h2 id="${id}"><span aria-hidden="true" class="docs-section-index">${index}</span><span class="docs-section-title">${html}</span></h2>\n`;
         }
-        return `<h${depth} id="${id}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
+        return `<h${depth} id="${id}">${html}</h${depth}>\n`;
       },
     },
     walkTokens(token) {

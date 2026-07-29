@@ -4,6 +4,15 @@ import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
 import { DocsPage } from "../../src/webapp/docs-page.tsx";
+import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
+
+const BUNDLE_GUIDE_ANCHORS = [
+  "decide-what-the-bundle-should-contain",
+  "create-a-bundle-in-the-weave-webapp",
+  "create-a-bundle-with-the-cli",
+  "test-the-finished-bundle",
+  "publish-and-link-the-bundle",
+];
 
 const routeFor = (slug: string) => {
   const route = DOC_ROUTES.find((entry) => entry.slug === slug);
@@ -97,7 +106,7 @@ describe("DocsPage", () => {
     const article = document.querySelector(".docs-article");
     const offsite = [...(article?.querySelectorAll("a[href]") ?? [])]
       .map((link) => link.getAttribute("href") ?? "")
-      .filter((href) => href.startsWith("https://rom-weaver.com"));
+      .filter((href) => URL.canParse(href) && new URL(href).origin === SITE_ORIGIN);
     expect(offsite).toEqual([]);
   });
 
@@ -133,6 +142,54 @@ echo hi
     expect(route.html).toContain(
       '<h2 id="a-and-b-1"><span aria-hidden="true" class="docs-section-index">02</span><span class="docs-section-title">A &amp; <code>B</code></span>',
     );
+  });
+
+  it("drops raw HTML from headings before rendering them", () => {
+    const route = createDocRoute(
+      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## **Safe <script>alert(1)</script>**
+`,
+    );
+
+    expect(route.sections).toEqual([{ id: "safe-alert1", label: "Safe alert(1)" }]);
+    expect(route.html).toContain("<strong>Safe alert(1)</strong>");
+    expect(route.html).not.toContain("<script>");
+  });
+
+  // Text inside a raw block is handed back verbatim on the assumption that the
+  // tags around it survive. They do not in a heading, so it has to be escaped.
+  it("escapes heading text that a dropped raw block would pass through", () => {
+    const route = createDocRoute(
+      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## <script>1 & 2 "3"</script>
+`,
+    );
+
+    expect(route.sections).toEqual([{ id: "1-2-3", label: '1 & 2 "3"' }]);
+    expect(route.html).toContain('<span class="docs-section-title">1 &amp; 2 &quot;3&quot;</span>');
+  });
+
+  // Section ids are the anchor URLs the published guides link to and that
+  // readers bookmark, so a change to how headings are parsed must not move them.
+  it.each(DOC_ROUTES.map((route) => route.slug))("derives usable section anchors for %s", (slug) => {
+    const { sections } = routeFor(slug);
+    const ids = sections.map((section) => section.id);
+
+    expect(ids.filter((id) => !/^[\p{Letter}\p{Number}][\p{Letter}\p{Number}-]*$/u.test(id))).toEqual([]);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(sections.filter((section) => !section.label.trim())).toEqual([]);
+  });
+
+  it("keeps the bundle guide's published anchors stable", () => {
+    expect(routeFor("docs/create-bundles").sections.map((section) => section.id)).toEqual(BUNDLE_GUIDE_ANCHORS);
   });
 
   it("publishes the bundle guide as numbered, collapsible sections", () => {
