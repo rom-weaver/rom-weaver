@@ -85,6 +85,7 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   tools: "tools",
   trim: "trim",
   weave: "patcher",
+  "weave.html": "patcher",
 };
 
 const readRouteSegments = (): string[] => {
