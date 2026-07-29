@@ -26,10 +26,12 @@ import {
   CHECK_LABELS,
   type CheckAlgorithm,
   type CheckField,
+  isHalfRowField,
   isValidCheckValue,
   normalizeCheckInput,
 } from "./components/ds/check-fields.ts";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
+import { join } from "./components/ds/cx.ts";
 import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
@@ -453,7 +455,7 @@ const EditableCheckRow = ({
 }) => {
   const errorId = `${id}-err`;
   return (
-    <div className="verification-row" key={`${id}:${value}`}>
+    <div className={join("verification-row", isHalfRowField(field) && "ck-half")} key={`${id}:${value}`}>
       <label className="ofld-l" htmlFor={id}>
         {CHECK_LABELS[field]}
       </label>

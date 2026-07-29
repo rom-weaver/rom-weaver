@@ -34,9 +34,10 @@
   .rw-app .card { gap: var(--sp-xs); border-radius: var(--r-s); padding: 7px; }
   .rw-app .card-name { gap: var(--sp-2xs); }
   .rw-app .card-actions, .rw-app .patch-body-inner { gap: var(--sp-xs); }
-  /* Retain a 30px drawer-header tap floor. */
-  .rw-app .cks > .cks-head { min-height: clamp(30px, 5vw, 34px); padding-block: 1px; }
-  .rw-app .drawer-action { top: 50%; }
+  /* Retain a 30px drawer-header tap floor; phone controls and padding are
+     smaller, so less is held back from the check value. */
+  .rw-app .cks { --drawer-head-h: clamp(30px, 5vw, 34px); --ck-label-w: 30px; --ck-fit-reserve: 76px; }
+  .rw-app .cks > .cks-head { min-height: var(--drawer-head-h); padding-block: 1px; }
   .rw-app .cks > .cks-head .readouts { gap: var(--sp-xs); }
   .rw-app .cks .cks-inner > :last-child { margin-block-end: 6px; }
   .rw-app .optsbody { gap: var(--sp-s); padding-block: 6px 0; }
@@ -79,25 +80,19 @@
   .rw-app .log-actions { order: 0; flex-basis: auto; }
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
   .rw-app .ck {
-    grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto;
     gap: var(--sp-2xs) var(--sp-s); min-height: 24px; padding-inline: 6px; padding-block: 1px;
   }
   .rw-app .ck .ck-k { font-size: .72rem; }
-  /* Adjust the base clamp for smaller phone controls and padding. */
-  .rw-app .ck .ck-v { line-height: 1.35; font-size: clamp(.46rem, calc((100cqi - 64px) / 25.2), .97rem); }
+  .rw-app .ck .ck-v { line-height: 1.35; }
   .rw-app .ck .copy { width: 20px; height: 20px; }
   .rw-app .ckrows > .ck-group:first-child { margin-block-start: 2px; }
   .rw-app .ck-group + .ck-group { margin-block-start: 4px; }
   .rw-app .ck-group-head { margin-block-end: 2px; padding-block: 2px; }
   /* Keep editable and read-only check columns aligned. */
   .rw-app .patch-checks-body .verification-row {
-    grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto;
     gap: var(--sp-2xs) var(--sp-s); padding-inline: 6px; min-height: 24px; padding-block: 1px;
   }
   .rw-app .patch-checks-body .verification-row .ofld-l { font-size: .72rem; }
-  .rw-app .patch-checks-body .verification-row .popt-input {
-    font-size: clamp(.46rem, calc((100cqi - 64px) / 25.2), .97rem);
-  }
   .rw-app .ck-remove { width: 20px; height: 20px; }
 }
 

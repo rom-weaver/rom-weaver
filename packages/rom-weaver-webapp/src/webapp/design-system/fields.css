@@ -77,8 +77,12 @@
 .rw-app .ck-mark svg { width: 13px; height: 13px; }
 .rw-app .ck-mark.ok { color: var(--verified); }
 .rw-app .ck-mark.bad { color: var(--fault); }
-/* Reserve a fourth cell for the match mark. */
-.rw-app .ck:not(.req):has(> .ck-mark) { grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto auto; }
+/* Reserve a fourth cell for the match mark, and take that cell plus its gap out
+   of the value's share so the hash still fits on one line. */
+.rw-app .ck:not(.req):has(> .ck-mark) {
+  grid-template-columns: minmax(var(--ck-label-w), max-content) minmax(0, 1fr) auto auto;
+  --ck-mark-reserve: 20px;
+}
 .rw-app .ck-group-head .ck-mark { margin-inline-start: var(--sp-s); vertical-align: -2px; }
 .rw-app .ck-group-head .ck-head-note { margin-inline-start: var(--sp-s); color: var(--ink-4); font-weight: 500; text-transform: none; letter-spacing: .02em; }
 /* Distinguish expected bundle values from computed readouts. */
@@ -139,11 +143,17 @@
 .rw-app .patch-menu-item.is-danger:active { color: var(--fault); }
 /* Match editable check rows to computed rows. */
 .rw-app .patch-checks-body .verification-row {
-  grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(var(--ck-label-w, 38px), max-content) minmax(0, 1fr) auto;
   align-items: center; gap: var(--sp-xs) var(--sp-s);
   min-height: 26px; padding: 3px 9px; margin-inline: 0; width: 100%;
-  border-block: 1px solid var(--seam-soft);
+  border-block: 1px solid var(--ck-seam);
+  /* The input's own inner padding eats into the value the way a mark's cell
+     does on a read-only row, so it is charged to the same reserve. */
+  --ck-mark-reserve: 4px;
 }
+/* Here the mark shares the tail cell with the remove button instead of taking a
+   column of its own, so it widens the tail rather than the grid. */
+.rw-app .patch-checks-body .verification-row:has(.ck-mark) { --ck-mark-reserve: 21px; }
 .rw-app .patch-checks-body .verification-row + .verification-row { border-block-start-color: transparent; }
 .rw-app .patch-checks-body .verification-row .ofld-l {
   font-size: .74rem; font-weight: 400; color: var(--ink-4); letter-spacing: .02em;
@@ -156,7 +166,7 @@
   margin-inline: -4px 0; width: calc(100% + 4px);
   background: transparent; border: 1px solid transparent; border-radius: 5px;
   font-family: var(--mono); font-stretch: revert; letter-spacing: .03em;
-  font-size: clamp(.46rem, calc((100cqi - 85px) / 25.2), .97rem);
+  font-size: clamp(.46rem, calc((100cqi - var(--ck-fit-reserve, 96px) - var(--ck-mark-reserve, 0px)) / 25.2), .97rem);
   color: var(--weft); text-transform: uppercase;
   transition: border-color .08s, background-color .08s;
 }
