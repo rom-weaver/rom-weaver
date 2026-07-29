@@ -17,7 +17,7 @@ fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
         || native_file_identity_matches(left, right)
 }
 
-fn warn_on_rom_name_mismatch(expected: Option<&str>, actual_path: &Path) {
+pub(super) fn warn_on_rom_name_mismatch(expected: Option<&str>, actual_path: &Path) {
     let Some(expected) = expected else {
         return;
     };
@@ -325,7 +325,10 @@ impl CliApp {
         // track's filesystem rather than patching bytes, so it follows a
         // dedicated path.
         if args.patches.iter().any(|patch| Self::is_dcp_patch(patch)) {
-            return self.run_dcp_apply(args);
+            let expected_rom_name = bundle_resolution
+                .as_ref()
+                .and_then(|resolution| resolution.expected_rom_name.as_deref());
+            return self.run_dcp_apply(args, expected_rom_name);
         }
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();

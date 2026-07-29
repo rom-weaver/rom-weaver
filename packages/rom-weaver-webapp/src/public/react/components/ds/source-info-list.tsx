@@ -91,15 +91,13 @@ const expectedNameMark = (expected: string, actual: string | undefined): "bad" |
   return actualName.toLowerCase() === expected.trim().toLowerCase() ? "ok" : "bad";
 };
 
-/* At least one expected field was actually compared and disagreed - the
+/* At least one strict expected field was actually compared and disagreed - the
    header-level "this is not the expected ROM" signal. */
 const hasExpectedMismatch = (
   expected: SourceInfoExpectedChecks,
   checksums: SourceInfoChecksums | null | undefined,
   computedBytes: string,
-  fileName: string | undefined,
 ): boolean => {
-  if (expected.name && expectedNameMark(expected.name, fileName) === "bad") return true;
   for (const [algorithm, value] of Object.entries(expected.checksums || {})) {
     if (!value) continue;
     const actual = checksums?.[algorithm as keyof SourceInfoChecksums];
@@ -128,18 +126,10 @@ const ExpectedMismatchInfo = () => (
  * transform variant's. */
 type ComputedCheckSet = { byteValue: string; checksums?: SourceInfoChecksums | null; id: string; label: string };
 
-/* The expectation matches a computed set when every expected field that the
-   set can answer agrees, and at least one field was actually compared. */
-const matchesExpected = (
-  expected: SourceInfoExpectedChecks,
-  set: ComputedCheckSet,
-  fileName: string | undefined,
-): boolean => {
+/* Strict checksum/size expectations select a computed set independently of
+   the advisory file name, which gets its own mark. */
+const matchesExpected = (expected: SourceInfoExpectedChecks, set: ComputedCheckSet): boolean => {
   let compared = 0;
-  if (expected.name && fileName) {
-    compared += 1;
-    if (expectedNameMark(expected.name, fileName) !== "ok") return false;
-  }
   for (const [algorithm, value] of Object.entries(expected.checksums || {})) {
     if (!value) continue;
     const actual = set.checksums?.[algorithm as keyof SourceInfoChecksums];
@@ -182,7 +172,9 @@ const MatchedExpectedGroup = ({
         </span>
         <span className="ck-head-note">Expected</span>
       </div>
-      {expected.name ? <ChecksumRow label="NAME" mark="ok" value={expected.name || fileName || ""} /> : null}
+      {expected.name ? (
+        <ChecksumRow label="NAME" mark={expectedNameMark(expected.name, fileName)} value={expected.name} />
+      ) : null}
       {rowValue("crc32") ? <ChecksumRow label="CRC32" mark={rowMark("crc32")} value={rowValue("crc32")} /> : null}
       {byteValue ? (
         <ChecksumRow copyValue={byteValue} label="BYTES" mark={expectedSize ? "ok" : undefined} value={byteValue} />
@@ -489,12 +481,13 @@ const SourceInfoList = ({
           id: variant.id,
           label: variant.label,
         })),
-      ].find((set) => matchesExpected(expected as SourceInfoExpectedChecks, set, fileName))
+      ].find((set) => matchesExpected(expected as SourceInfoExpectedChecks, set))
     : undefined;
+  const expectedName = expected?.name?.trim() || "";
+  const expectedNameMismatch = !!expectedName && expectedNameMark(expectedName, fileName) === "bad";
   const expectedMismatch =
-    hasExpected &&
-    !expectedMatch &&
-    hasExpectedMismatch(expected as SourceInfoExpectedChecks, checksums, byteValue, fileName);
+    expectedNameMismatch ||
+    (hasExpected && !expectedMatch && hasExpectedMismatch(expected as SourceInfoExpectedChecks, checksums, byteValue));
   // BYTES rides directly after CRC32 - the two short rows pair onto one grid
   // row in wide drawers, so they stay adjacent in the DOM.
   const baseRows = (
