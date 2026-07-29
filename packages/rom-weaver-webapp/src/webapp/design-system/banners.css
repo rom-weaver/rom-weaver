@@ -44,10 +44,6 @@
 }
 /* Touch devices need active feedback because they lack hover. */
 .rw-app .updates-ver:active { color: var(--thread-text); }
-.rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-m); }
-.rw-app .changelog-item { display: flex; flex-direction: column; gap: var(--sp-2xs); }
-.rw-app .changelog-subject { font-size: .9rem; }
-.rw-app .changelog-meta { font-size: .72rem; color: var(--ink-3); }
 .rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: var(--sp-s) 0; }
 .rw-app .release-changelog-version { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-m); margin-block-end: var(--sp-m); }
 .rw-app .release-changelog-section + .release-changelog-section { margin-block-start: var(--sp-l); border-block-start: 1px solid var(--seam-soft); padding-block-start: var(--sp-l); }

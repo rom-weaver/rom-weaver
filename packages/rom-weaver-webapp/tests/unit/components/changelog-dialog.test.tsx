@@ -137,7 +137,10 @@ describe("ChangelogDialog", () => {
     renderDialog();
 
     expect(await screen.findByText("Some change")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Full changelog" })).toBeNull();
+    // The commit view, not the release view: no version transition to 9.9.9.
+    expect(screen.queryByText(`v${APP_VERSION} → v9.9.9`)).toBeNull();
+    // It still gets a header, falling back to the built-in changelog url.
+    expect(screen.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(CHANGELOG_URL);
   });
 
   it("keeps showing commits when the incoming build has the same version", async () => {
@@ -154,7 +157,31 @@ describe("ChangelogDialog", () => {
     renderDialog();
 
     expect(await screen.findByText("Nightly change")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Full changelog" })).toBeNull();
+    expect(screen.queryByText("Previous release")).toBeNull();
+    // No version bump, so the header shows the build the commits move to.
+    expect(screen.getByText(`v${APP_VERSION} · dev → nightly`)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(CHANGELOG_URL);
+  });
+
+  it("renders commits as changelog groups, in release-please's order", async () => {
+    mockChangelog([
+      { date: "", hash: "a", subject: "fix(webapp): center the swap control (#253)" },
+      { date: "", hash: "b", subject: "feat(cli): add a flag" },
+      { date: "", hash: "c", subject: "not a conventional commit" },
+      { date: "2026-07-28T00:00:00Z", hash: "dev", subject: "Current build" },
+    ]);
+
+    renderDialog();
+
+    const headings = await screen.findAllByRole("heading");
+    expect(headings.map((heading) => heading.textContent)).toEqual(["Features", "Bug Fixes", "Other Changes"]);
+    expect(screen.getByText("center the swap control")).toBeTruthy();
+    expect(screen.getByText("webapp:")).toBeTruthy();
+    // The squash-merge PR reference becomes the entry link.
+    expect(screen.getByRole("link", { name: "#253" }).getAttribute("href")).toBe(`${REPOSITORY_URL}/pull/253`);
+    // No PR in the subject, so the commit itself is the link.
+    expect(screen.getByRole("link", { name: "b" }).getAttribute("href")).toBe(`${REPOSITORY_URL}/commit/b`);
+    expect(screen.getByText("not a conventional commit")).toBeTruthy();
   });
 
   it("skips the subject-less placeholder a git-less build uses to carry the notes", async () => {

@@ -3,6 +3,7 @@ import { createLogger } from "../../lib/logging.ts";
 import { Modal } from "../../public/react/components/ds/index.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../build-version.ts";
+import { GITHUB_URL } from "../project-links.ts";
 
 /**
  * The "What's new" dialog behind the update banner's version affordance. Fetches
@@ -11,9 +12,18 @@ import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../build-version.ts
  * not the stale copy the running bundle shipped with. The list is sliced to the
  * commits newer than the running build so it reads as "what you're about to get".
  * Release builds replace that list with their embedded, user-facing release notes.
+ *
+ * Both views render the same CHANGELOG.md shape - a header, then `### type`
+ * groups of `**scope:** summary #ref` lines - so a nightly update and a release
+ * update read alike. The only difference is where the entries come from: a
+ * release parses them at build time out of CHANGELOG.md, a nightly parses the
+ * raw commit subjects here.
  */
 
 const logger = createLogger("changelog-dialog");
+
+const REPOSITORY_URL = GITHUB_URL.replace(/\/$/, "");
+const FALLBACK_CHANGELOG_URL = `${REPOSITORY_URL}/blob/main/CHANGELOG.md`;
 
 type ReleaseEntry = { commit?: string; pr?: string; scope?: string; summary: string };
 type ReleaseGroup = { entries: ReleaseEntry[]; title: string };
@@ -88,9 +98,81 @@ const fetchChangelog = async (): Promise<{ entries: ChangelogEntry[]; release?: 
   return { entries: entries.filter((entry) => entry.subject), release: readReleaseChangelog(entries[0]?.release) };
 };
 
-const formatDate = (iso: string) => iso.split("T")[0] || "";
+// Conventional-commit subject, the same shape release-please reads when it
+// writes CHANGELOG.md. The trailing `(#123)` is the squash-merge PR reference
+// GitHub appends, which becomes the entry's link.
+const COMMIT_SUBJECT_REGEX = /^(?<type>[a-z]+)(?:\((?<scope>[^)]+)\))?!?: +(?<summary>.+?)$/;
+const COMMIT_PR_REGEX = / +\(#(\d+)\)$/;
+// release-please's changelog-sections, in its order, so a nightly's groups are
+// titled and sorted exactly like the release notes they turn into. A type left
+// out here is one release-please hides from CHANGELOG.md; the dialog still shows
+// it, under the catch-all, because a nightly has nothing else to show.
+const COMMIT_GROUP_TITLES: Record<string, string> = {
+  build: "Build System",
+  chore: "Miscellaneous Chores",
+  ci: "Continuous Integration",
+  docs: "Documentation",
+  feat: "Features",
+  fix: "Bug Fixes",
+  perf: "Performance Improvements",
+  refactor: "Code Refactoring",
+  revert: "Reverts",
+  style: "Styles",
+  test: "Tests",
+};
+const COMMIT_GROUP_ORDER = [
+  "feat",
+  "fix",
+  "perf",
+  "revert",
+  "docs",
+  "refactor",
+  "test",
+  "build",
+  "ci",
+  "style",
+  "chore",
+];
+const OTHER_GROUP_KEY = "";
+const OTHER_GROUP_TITLE = "Other Changes";
 
-const entryRef = (entry: ReleaseEntry, repositoryUrl: string) => {
+// One commit subject as a CHANGELOG-style entry. A subject that is not a
+// conventional commit still gets shown verbatim under the catch-all group -
+// dropping it would silently hide a change from the list.
+const parseCommitEntry = (entry: ChangelogEntry): { entry: ReleaseEntry; type: string } => {
+  const prMatch = COMMIT_PR_REGEX.exec(entry.subject);
+  const subject = prMatch ? entry.subject.slice(0, prMatch.index) : entry.subject;
+  const match = COMMIT_SUBJECT_REGEX.exec(subject);
+  const reference = prMatch ? { pr: prMatch[1] } : { commit: entry.hash };
+  if (!match?.groups) return { entry: { ...reference, summary: subject }, type: OTHER_GROUP_KEY };
+  const { scope, summary, type } = match.groups;
+  if (!(summary && type)) return { entry: { ...reference, summary: subject }, type: OTHER_GROUP_KEY };
+  return {
+    entry: { ...reference, ...(scope ? { scope } : {}), summary },
+    type: type in COMMIT_GROUP_TITLES ? type : OTHER_GROUP_KEY,
+  };
+};
+
+const commitGroups = (entries: ChangelogEntry[]): ReleaseGroup[] => {
+  const byType = new Map<string, ReleaseEntry[]>();
+  for (const entry of entries) {
+    const { entry: parsed, type } = parseCommitEntry(entry);
+    const bucket = byType.get(type);
+    if (bucket) bucket.push(parsed);
+    else byType.set(type, [parsed]);
+  }
+  // Known types in release-please's order, then the catch-all last.
+  const types = [
+    ...COMMIT_GROUP_ORDER.filter((type) => byType.has(type)),
+    ...(byType.has(OTHER_GROUP_KEY) ? [OTHER_GROUP_KEY] : []),
+  ];
+  return types.map((type) => ({
+    entries: byType.get(type) ?? [],
+    title: COMMIT_GROUP_TITLES[type] ?? OTHER_GROUP_TITLE,
+  }));
+};
+
+const EntryRef = ({ entry, repositoryUrl }: { entry: ReleaseEntry; repositoryUrl: string }) => {
   const ref = entry.pr
     ? { href: `${repositoryUrl}/pull/${entry.pr}`, label: `#${entry.pr}` }
     : entry.commit && { href: `${repositoryUrl}/commit/${entry.commit}`, label: entry.commit.slice(0, 7) };
@@ -105,24 +187,69 @@ const entryRef = (entry: ReleaseEntry, repositoryUrl: string) => {
   );
 };
 
+// The shared body of both views: `### type` group headings over
+// `**scope:** summary #ref` lines, mirroring CHANGELOG.md.
+const EntryGroups = ({
+  groups,
+  keyPrefix,
+  repositoryUrl,
+}: {
+  groups: ReleaseGroup[];
+  keyPrefix: string;
+  repositoryUrl: string;
+}) => (
+  <>
+    {groups.map((group) => (
+      <div className="release-changelog" key={`${keyPrefix}:${group.title}`}>
+        {group.title ? <h4 className="release-changelog-group">{group.title}</h4> : null}
+        <ul className="release-changelog-entries">
+          {group.entries.map((entry) => (
+            <li key={`${entry.pr || entry.commit || ""}:${entry.summary}`}>
+              {entry.scope ? <strong>{entry.scope}: </strong> : null}
+              {entry.summary}
+              {/* The PR is the readable reference; fall back to the commit so an
+                  entry recorded without a PR still links somewhere. */}
+              <EntryRef entry={entry} repositoryUrl={repositoryUrl} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+  </>
+);
+
+// Shared header: what you're moving from and to on the left, the escape hatch to
+// the whole file on the right.
+const ChangelogHeader = ({
+  changelogUrl,
+  label,
+  transition,
+}: {
+  changelogUrl: string;
+  label: string;
+  transition: string;
+}) => (
+  <div className="release-changelog-version">
+    {/* role="img" so the arrow is announced as the transition it means rather
+        than by its glyph name. */}
+    <span aria-label={label} className="mono" role="img">
+      {transition}
+    </span>
+    <a href={changelogUrl} rel="noreferrer" target="_blank">
+      Full changelog
+    </a>
+  </div>
+);
+
 const ReleaseNotes = ({ release }: { release: ReleaseChangelog }) => {
   const { notes, truncated } = releaseNotesSince(release);
   return (
     <>
-      <div className="release-changelog-version">
-        {/* role="img" so the arrow is announced as the transition it means rather
-            than by its glyph name. */}
-        <span
-          aria-label={`updating from version ${APP_VERSION} to version ${release.version}`}
-          className="mono"
-          role="img"
-        >
-          v{APP_VERSION} → v{release.version}
-        </span>
-        <a href={release.changelogUrl} rel="noreferrer" target="_blank">
-          Full changelog
-        </a>
-      </div>
+      <ChangelogHeader
+        changelogUrl={release.changelogUrl}
+        label={`updating from version ${APP_VERSION} to version ${release.version}`}
+        transition={`v${APP_VERSION} → v${release.version}`}
+      />
       {notes.map((note) => (
         <section className="release-changelog-section" key={note.version}>
           {notes.length > 1 ? (
@@ -132,24 +259,40 @@ const ReleaseNotes = ({ release }: { release: ReleaseChangelog }) => {
               </a>
             </h3>
           ) : null}
-          {note.groups.map((group) => (
-            <div className="release-changelog" key={`${note.version}:${group.title}`}>
-              {group.title ? <h4 className="release-changelog-group">{group.title}</h4> : null}
-              <ul className="release-changelog-entries">
-                {group.entries.map((entry) => (
-                  <li key={`${entry.commit || ""}:${entry.summary}`}>
-                    {entry.scope ? <strong>{entry.scope}: </strong> : null}
-                    {entry.summary}
-                    {/* The PR is the readable reference; fall back to the commit so an
-                        entry release-please recorded without a PR still links somewhere. */}
-                    {entryRef(entry, release.repositoryUrl)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          <EntryGroups groups={note.groups} keyPrefix={note.version} repositoryUrl={release.repositoryUrl} />
         </section>
       ))}
+      {truncated ? <div className="changelog-note">…</div> : null}
+    </>
+  );
+};
+
+// Same-version update - a nightly or a rebuild. There is no version transition
+// to show, so the header carries the build the commits are moving to.
+const CommitNotes = ({
+  changelogUrl,
+  entries,
+  repositoryUrl,
+  truncated,
+}: {
+  changelogUrl: string;
+  entries: ChangelogEntry[];
+  repositoryUrl: string;
+  truncated: boolean;
+}) => {
+  const incoming = entries[0]?.hash;
+  return (
+    <>
+      <ChangelogHeader
+        changelogUrl={changelogUrl}
+        label={
+          incoming
+            ? `updating version ${APP_VERSION} from build ${COMMIT_HASH} to build ${incoming}`
+            : `version ${APP_VERSION}, build ${APP_BUILD_VERSION}`
+        }
+        transition={incoming ? `v${APP_VERSION} · ${COMMIT_HASH} → ${incoming}` : APP_BUILD_VERSION}
+      />
+      <EntryGroups groups={commitGroups(entries)} keyPrefix="commits" repositoryUrl={repositoryUrl} />
       {truncated ? <div className="changelog-note">…</div> : null}
     </>
   );
@@ -168,12 +311,10 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
     fetchChangelog()
       .then(({ entries: all, release }) => {
         if (!active) return;
-        if (release && release.version !== APP_VERSION) {
-          setState({ entries: [], release, status: "loaded", truncated: false });
-          return;
-        }
+        // A version bump renders the release notes and ignores the commits; the
+        // slice only matters for the same-version commit view.
         const { entries, truncated } = commitsSinceCurrent(all);
-        setState({ entries, status: "loaded", truncated });
+        setState({ entries, release, status: "loaded", truncated });
       })
       .catch((error) => {
         if (!active) return;
@@ -202,29 +343,17 @@ const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: 
         </div>
       ) : null}
       {state.status === "loaded" ? (
-        state.release ? (
+        state.release && state.release.version !== APP_VERSION ? (
           <ReleaseNotes release={state.release} />
         ) : (
-          <>
-            <ul className="changelog">
-              {state.entries.map((entry) => (
-                <li className="changelog-item" key={entry.hash}>
-                  <span className="changelog-subject">{entry.subject}</span>
-                  <span className="changelog-meta mono">
-                    {entry.hash}
-                    {entry.date ? ` · ${formatDate(entry.date)}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {state.truncated ? <div className="changelog-note">…</div> : null}
-            {/* No newer commits: a same-commit rebuild (notably dirty dev deploys, whose
-                uncommitted changes never reach git log). Fall back to the build id - the
-                one thing that differs between such builds - so the dialog isn't blank. */}
-            {state.entries.length === 0 && !state.truncated ? (
-              <div className="changelog-note changelog-version mono">{APP_BUILD_VERSION}</div>
-            ) : null}
-          </>
+          // A dev build has no embedded release payload, so fall back to the
+          // constants baked in here.
+          <CommitNotes
+            changelogUrl={state.release?.changelogUrl ?? FALLBACK_CHANGELOG_URL}
+            entries={state.entries}
+            repositoryUrl={state.release?.repositoryUrl ?? REPOSITORY_URL}
+            truncated={state.truncated}
+          />
         )
       ) : null}
       <div className="changelog-actions">
