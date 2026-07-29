@@ -113,6 +113,7 @@ struct CdExtractInputs<'a> {
     context: &'a OperationContext,
     execution: &'a ThreadExecution,
     extract_progress: &'a Arc<dyn Fn(u64) + Send + Sync>,
+    allow_parallel_checksums: bool,
 }
 
 /// Mutable accumulators threaded through the CD writer paths: the shared cue
@@ -970,6 +971,7 @@ impl ChdContainerHandler {
             context,
             execution: &execution,
             extract_progress: &extract_progress,
+            allow_parallel_checksums: request.containing_archive.is_none(),
         };
         let (omitted_subcode, produced_outputs, wrote_single_bin_output, output_checksums) =
             self.build_cd_extract_result(&inputs, &plan, &cue_path, &cleanup)?;
@@ -1205,6 +1207,7 @@ impl ChdContainerHandler {
             context,
             execution,
             extract_progress,
+            allow_parallel_checksums,
         } = *inputs;
         let single_bin_name = &plan.single_bin_name;
         let write_single_bin = plan.write_single_bin;
@@ -1218,7 +1221,7 @@ impl ChdContainerHandler {
             None
         };
         let mut single_bin_checksum = if write_single_bin {
-            create_extract_checksum(context)?
+            create_extract_checksum(context, allow_parallel_checksums)?
         } else {
             None
         };
@@ -1324,6 +1327,7 @@ impl ChdContainerHandler {
             context,
             execution,
             extract_progress,
+            allow_parallel_checksums,
         } = *inputs;
         let split_track_names = &plan.split_track_names;
         let write_split_tracks = &plan.write_split_tracks;
@@ -1361,13 +1365,17 @@ impl ChdContainerHandler {
 
         let mut track_writers = Vec::with_capacity(layout.tracks.len());
         let mut track_checksums = Vec::with_capacity(layout.tracks.len());
-        let checksum_threads = split_checksum_thread_budget(
-            execution.effective_threads,
-            write_split_tracks
-                .iter()
-                .filter(|selected| **selected)
-                .count(),
-        );
+        let checksum_threads = if allow_parallel_checksums {
+            split_checksum_thread_budget(
+                execution.effective_threads,
+                write_split_tracks
+                    .iter()
+                    .filter(|selected| **selected)
+                    .count(),
+            )
+        } else {
+            1
+        };
         for (track_index, track_name) in split_track_names.iter().enumerate() {
             if write_split_tracks[track_index] {
                 let track_path = request.out_dir.join(track_name);
@@ -1526,7 +1534,10 @@ impl ChdContainerHandler {
                     let writer = cleanup.create_output(&track_path, request.overwrite)?;
                     produced_outputs.push(track_path.clone());
                     track_writers.push(Some(BufWriter::new(writer)));
-                    track_checksums.push(create_extract_checksum(context)?);
+                    track_checksums.push(create_extract_checksum(
+                        context,
+                        request.containing_archive.is_none(),
+                    )?);
                 } else {
                     track_writers.push(None);
                     track_checksums.push(None);

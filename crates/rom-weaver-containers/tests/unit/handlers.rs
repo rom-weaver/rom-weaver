@@ -930,6 +930,34 @@ mod tests {
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
 
+        let nested_output_dir = temp_dir.join("nested-out");
+        let nested_extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path.clone(),
+                    out_dir: nested_output_dir.clone(),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    containing_archive: Some(archive_path.clone()),
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("extract nested chd");
+        let nested_execution = nested_extract_report
+            .thread_execution
+            .expect("nested thread execution");
+        assert_eq!(nested_execution.requested_threads, 6);
+        assert_eq!(nested_execution.effective_threads, 6);
+        assert!(nested_execution.used_parallelism);
+        assert_eq!(
+            fs::read(nested_output_dir.join("source.bin")).expect("read nested extracted payload"),
+            payload
+        );
+
         let _ = fs::remove_dir_all(temp_dir);
     }
 
