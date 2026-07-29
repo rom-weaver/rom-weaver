@@ -751,6 +751,89 @@ const collectStaticImportClosure = (bundle, entryFileNames) => {
 const renderRoutePreloadLinks = (fileNames) =>
   fileNames.map((fileName) => `  <link rel="modulepreload" crossorigin href="./${fileName}" />`).join("\n");
 
+// `?worker&url` makes Vite bundle each worker entry in its own isolated rolldown
+// build, so two workers that share a runtime each ship a private copy of it -
+// the runner and WASI thread workers overlapped by ~85 kB raw. Intercepting the
+// import at build time and emitting the worker as an extra entry chunk of the
+// *main* graph instead puts both workers under one code-splitting pass, so the
+// shared runtime is hoisted into a chunk both of them import. Build-only: dev
+// keeps Vite's own `?worker&url` handling, and the import form stays the rule
+// (see "Worker URLs" in docs/development/ARCHITECTURE.md).
+const WORKER_URL_IMPORT_PATTERN = /[?&]worker(?:&|$)/;
+const URL_IMPORT_PATTERN = /[?&]url(?:&|$)/;
+
+// Filled by the plugin below with the absolute path of every emitted worker
+// entry, so the chunk grouping can tell worker-only modules from app modules.
+const workerEntryFiles = new Set();
+/** Memoized isWorkerOnlyModule answers; the module graph is rebuilt per build, so it resets there. */
+const workerOnlyModules = new Map();
+
+const shareWorkerRuntimeChunks = () => {
+  const chunkRefs = new Map();
+  return {
+    apply: "build",
+    buildStart() {
+      chunkRefs.clear();
+      workerEntryFiles.clear();
+      workerOnlyModules.clear();
+    },
+    enforce: "pre",
+    load(id) {
+      if (!(WORKER_URL_IMPORT_PATTERN.test(id) && URL_IMPORT_PATTERN.test(id))) return null;
+      const workerFile = id.split("?")[0];
+      let ref = chunkRefs.get(workerFile);
+      if (!ref) {
+        workerEntryFiles.add(workerFile);
+        ref = this.emitFile({
+          id: workerFile,
+          name: path.basename(workerFile, path.extname(workerFile)),
+          preserveSignature: false,
+          type: "chunk",
+        });
+        chunkRefs.set(workerFile, ref);
+      }
+      return `export default import.meta.ROLLUP_FILE_URL_${ref};`;
+    },
+    name: "rom-weaver-share-worker-runtime-chunks",
+  };
+};
+
+// True when every import path that reaches this module starts at a worker entry.
+// Grouping by path instead would sweep up the wasm modules the document entry
+// also uses (the OPFS proxy client, the command builders), which would drag the
+// whole worker runtime onto the first-paint critical path.
+const isWorkerOnlyModule = (moduleId, ctx) => {
+  const cached = workerOnlyModules.get(moduleId);
+  if (cached !== undefined) return cached;
+  const visited = new Set([moduleId]);
+  const pending = [moduleId];
+  let workerOnly = true;
+  while (pending.length > 0 && workerOnly) {
+    const id = pending.pop();
+    // Only the bare path is the worker entry; the `?worker&url` module of the same file is the
+    // URL stub the app imports, and its own importers decide where it belongs.
+    if (workerEntryFiles.has(id)) continue;
+    const info = ctx.getModuleInfo(id);
+    const importers = info ? [...info.importers, ...info.dynamicImporters] : [];
+    if (importers.length === 0) {
+      workerOnly = false;
+      break;
+    }
+    for (const importer of importers) {
+      if (visited.has(importer)) continue;
+      visited.add(importer);
+      pending.push(importer);
+    }
+  }
+  workerOnlyModules.set(moduleId, workerOnly);
+  return workerOnly;
+};
+
+/** Captures the worker-only runtime into one `wasm-runtime` chunk; everything else falls through
+ * to the `shared` group below it. `includeDependenciesRecursively` has to stay off, or the group
+ * also swallows the app-facing wasm modules its members depend on. */
+const nameWorkerRuntimeGroup = (moduleId, ctx) => (isWorkerOnlyModule(moduleId, ctx) ? "wasm-runtime" : null);
+
 const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
   apply: "build",
   name: "rom-weaver-preload-workflow-route-chunks",
@@ -854,7 +937,10 @@ export default defineConfig(({ command }) => {
           // everything two or more chunks reach restores the compression
           // context; the size floor keeps a future split from re-stranding it.
           advancedChunks: {
-            groups: [{ minShareCount: 2, name: "shared", priority: 0, test: /./ }],
+            groups: [
+              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerRuntimeGroup, priority: 1 },
+              { minShareCount: 2, name: "shared", priority: 0, test: /./ },
+            ],
             minSize: SHARED_CHUNK_MIN_SIZE,
           },
         },
@@ -898,6 +984,7 @@ export default defineConfig(({ command }) => {
     },
     plugins: [
       docsVirtualModule(),
+      shareWorkerRuntimeChunks(),
       serveRootStaticAssets(appChannel, appChannelLabel),
       serveChangelogAsset(releaseVersion),
       deferDevHotUpdates(),
