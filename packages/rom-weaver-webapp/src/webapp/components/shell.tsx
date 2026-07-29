@@ -4,9 +4,10 @@ import type { ReactNode } from "react";
 import { useLayoutEffect, useRef } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
-import { viewTransitionsUnavailable } from "../../public/react/components/ds/flat-transition.ts";
+import { prefersReducedMotion, viewTransitionsUnavailable } from "../../public/react/components/ds/flat-transition.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
+import { runThemeWipeFallback, wipeOrigin } from "../theme-wipe.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
 const Github = createLucideIcon("github", [
@@ -141,17 +142,19 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   const label = localizer.message(theme === "dark" ? "ui.theme.toLight" : "ui.theme.toDark");
   const handleClick = () => {
     const root = document.documentElement;
-    if (viewTransitionsUnavailable()) {
+    const origin = wipeOrigin(buttonRef.current?.getBoundingClientRect());
+    if (prefersReducedMotion()) {
       toggleTheme();
       return;
     }
-    const rect = buttonRef.current?.getBoundingClientRect();
-    const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-    const cy = rect ? rect.top + rect.height / 2 : 0;
-    const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
-    root.style.setProperty("--wipe-x", `${cx}px`);
-    root.style.setProperty("--wipe-y", `${cy}px`);
-    root.style.setProperty("--wipe-r", `${radius}px`);
+    // iOS WebKit has no usable view transitions; it gets the hand-painted wipe.
+    if (viewTransitionsUnavailable()) {
+      runThemeWipeFallback(origin, toggleTheme);
+      return;
+    }
+    root.style.setProperty("--wipe-x", `${origin.x}px`);
+    root.style.setProperty("--wipe-y", `${origin.y}px`);
+    root.style.setProperty("--wipe-r", `${origin.radius}px`);
     root.classList.add("vt-theme");
     const transition = document.startViewTransition(() => toggleTheme());
     transition.ready.catch(() => undefined);

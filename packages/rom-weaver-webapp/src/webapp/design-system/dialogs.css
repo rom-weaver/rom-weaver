@@ -156,6 +156,8 @@
   mix-blend-mode: normal;
   animation: theme-wipe .42s cubic-bezier(.4, 0, .2, 1) both;
 }
+/* Hand-painted wipe for engines without view transitions (see theme-wipe.ts). */
+.theme-veil { position: fixed; inset: 0; z-index: 2000; pointer-events: none; will-change: clip-path, opacity; }
 @keyframes theme-wipe {
   from { clip-path: circle(0px at var(--wipe-x, 50%) var(--wipe-y, 0%)); }
   to { clip-path: circle(var(--wipe-r, 150vmax) at var(--wipe-x, 50%) var(--wipe-y, 0%)); }
