@@ -22,15 +22,16 @@ third_party
 # `<dockerfile>.dockerignore` - never a `.dockerignore` that merely lives beside
 # the image's other sources.
 .github
+# The webapp build reads every published guide, so these are build inputs. Kept
+# per shelf rather than per file: a new guide is published by adding it to its
+# folder, and listing files here would be a second place to forget.
 docs/*
-!docs/guides
-!docs/guides/**
-!docs/ARCHITECTURE.md
-!docs/cli.md
-!docs/development.md
-!docs/env-vars.md
-!docs/references.md
-!docs/self-hosting.md
-!docs/webapp-integration.md
-!docs/webapp-runtime-status.md
+!docs/usage
+!docs/usage/**
+!docs/hosting
+!docs/hosting/**
+!docs/development
+!docs/development/**
+!docs/legal
+!docs/legal/**
 packages/rom-weaver-webapp/tests
