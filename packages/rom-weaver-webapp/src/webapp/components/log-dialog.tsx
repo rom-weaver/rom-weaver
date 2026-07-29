@@ -69,8 +69,6 @@ const formatOpfsSize = (size: number | undefined) => (size === undefined ? "—"
 const formatOpfsEntry = (entry: BrowserOpfsEntry) =>
   `${entry.kind.padEnd(9)} ${formatOpfsSize(entry.size).padStart(12)} ${entry.path}`;
 
-const OPFS_REFRESH_INTERVAL_MS = 1000;
-
 const EMPTY_ENTRIES: readonly LogStoreEntry[] = [];
 // While the dialog is closed there is nothing to show, so subscribe to a no-op
 // store: otherwise useSyncExternalStore re-renders the whole list every
@@ -163,8 +161,6 @@ const LogDialog = ({
   useEffect(() => {
     if (!(open && showingOpfs)) return;
     void refreshOpfs();
-    const interval = window.setInterval(() => void refreshOpfs(), OPFS_REFRESH_INTERVAL_MS);
-    return () => window.clearInterval(interval);
   }, [open, refreshOpfs, showingOpfs]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
