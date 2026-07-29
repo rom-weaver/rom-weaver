@@ -146,6 +146,10 @@
   min-height: 26px; padding: 3px 9px; background: transparent; cursor: pointer;
   /* Share a theme-aware seam across full and paired rows. */
   --ck-seam: var(--seam-soft);
+  /* Width the row spends on everything but the value (label + copy glyph), so
+     the value's fit clamp knows what is left; rows carrying a match mark raise
+     it in fields.css. */
+  --ck-v-reserve: 85px;
   border-block: 1px solid var(--ck-seam); border-inline: 0; transition: background .15s, border-color .15s;
 }
 /* Extend ordinary rows through the drawer's 10px inset. */
@@ -162,10 +166,7 @@
 .rw-app .ck:active { background: color-mix(in oklab, var(--thread) 7%, var(--well)); }
 .rw-app .ck.bad { background: color-mix(in oklab, var(--fault) 10%, var(--well)); }
 .rw-app .ck .ck-k { font-size: .74rem; color: var(--ink-4); margin: 0; text-transform: lowercase; letter-spacing: .02em; }
-/* Scale all values together so a 40-character SHA-1 stays on one line. The
-   reserve is the width the row spends on everything but the value (label +
-   copy glyph); rows carrying a match mark raise it in fields.css. */
-.rw-app .ck { --ck-v-reserve: 85px; }
+/* Scale all values together so a 40-character SHA-1 stays on one line. */
 .rw-app .ck .ck-v {
   margin: 0; color: var(--weft); white-space: nowrap; text-transform: uppercase; letter-spacing: .03em;
   font-size: clamp(.46rem, calc((100cqi - var(--ck-v-reserve)) / 25.2), .97rem);
@@ -216,13 +217,15 @@
 }
 /* Stack long hashes when the minimum font size no longer fits. */
 @container (max-width: calc(11.6rem + 64px)) {
-  .rw-app .ck:not(.req):has(.ck-v.ck-fit) { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .rw-app .ck:not(.req):has(.ck-v.ck-fit) {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    /* The value owns its own row here, so the mark costs it nothing. */
+    --ck-v-reserve: 85px;
+  }
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-k { grid-row: 1; grid-column: 1; }
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-mark { grid-row: 1; grid-column: 2; }
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .copy { grid-row: 1; grid-column: 3; }
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-v { grid-row: 2; grid-column: 1 / -1; }
-  /* The value owns its own row here, so the mark costs it nothing. */
-  .rw-app .ck:not(.req):has(.ck-v.ck-fit) { --ck-v-reserve: 85px; }
 }
 .rw-app .ck .ck-v .exp { color: var(--fault); }
 .rw-app .ck .ck-v.copied { animation: copied-value .55s var(--ease); }
