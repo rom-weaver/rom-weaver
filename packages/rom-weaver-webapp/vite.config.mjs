@@ -1067,7 +1067,18 @@ export default defineConfig(({ command, mode }) => {
     },
     publicDir: false,
     resolve: {
+      alias: [
+        { find: /^react\/jsx-dev-runtime$/, replacement: "preact/jsx-dev-runtime" },
+        { find: /^react\/jsx-runtime$/, replacement: "preact/jsx-runtime" },
+        { find: /^react-dom\/client$/, replacement: "preact/compat/client" },
+        { find: /^react-dom\/server$/, replacement: "preact/compat/server" },
+        { find: /^react-dom$/, replacement: "preact/compat" },
+        { find: /^react$/, replacement: "preact/compat" },
+      ],
       preserveSymlinks: false,
+    },
+    ssr: {
+      noExternal: ["lucide-react"],
     },
     server: {
       fs: {

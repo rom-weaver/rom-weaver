@@ -100,6 +100,8 @@
     "@bjorn3/browser_wasi_shim": "0.4.2",
     "@lingui/core": "6.6.0",
     "lucide-react": "1.27.0",
+    "preact": "10.29.1",
+    "preact-render-to-string": "6.7.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

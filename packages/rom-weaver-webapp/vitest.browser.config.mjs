@@ -26,6 +26,7 @@ const GIT_COMMON_ROOT = (() => {
 const VIRTUAL_PWA_REGISTER_STUB = fileURLToPath(
   new URL("./tests/browser/stubs/virtual-pwa-register.js", import.meta.url),
 );
+const PREACT_REACT_STUB = fileURLToPath(new URL("./tests/browser/stubs/preact-react.mjs", import.meta.url));
 const BROWSER_INSTANCES_BY_NAME = {
   chromium: { browser: "chromium" },
   webkit: { browser: "webkit" },
@@ -98,9 +99,15 @@ export default mergeConfig(baseConfig, {
   plugins: [serveFirstSampleAssets],
   publicDir: fileURLToPath(new URL("./src/assets/app/root", import.meta.url)),
   resolve: {
-    alias: {
-      "virtual:pwa-register": VIRTUAL_PWA_REGISTER_STUB,
-    },
+    alias: [
+      { find: "virtual:pwa-register", replacement: VIRTUAL_PWA_REGISTER_STUB },
+      { find: /^react\/jsx-dev-runtime$/, replacement: "preact/jsx-dev-runtime" },
+      { find: /^react\/jsx-runtime$/, replacement: "preact/jsx-runtime" },
+      { find: /^react-dom\/client$/, replacement: "preact/compat/client" },
+      { find: /^react-dom\/server$/, replacement: "preact/compat/server" },
+      { find: /^react-dom$/, replacement: "preact/compat" },
+      { find: /^react$/, replacement: PREACT_REACT_STUB },
+    ],
     preserveSymlinks: true,
   },
   server: {
