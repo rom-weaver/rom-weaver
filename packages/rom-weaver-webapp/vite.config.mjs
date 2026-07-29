@@ -373,8 +373,10 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       for (const [assetPath, sourcePath] of Object.entries(generatedLicenseAssetSources)) {
         copyFile(sourcePath, path.join(distDir, assetPath));
       }
-      const indexHtml = fs.readFileSync(path.join(distDir, "index.html"), "utf8");
-      const patcherRoot = PRERENDER_ROOT(prerenderedShells.get("patcher"));
+      const indexHtml = compactGeneratedHtml(
+        relocateCriticalAssetTags(fs.readFileSync(path.join(distDir, "index.html"), "utf8")),
+      );
+      const patcherRoot = compactGeneratedHtml(PRERENDER_ROOT(prerenderedShells.get("patcher")));
       if (!indexHtml.includes(patcherRoot))
         throw new Error("rom-weaver-static-assets: prerendered patcher shell not found in dist/index.html");
       // dist/index.html is served at the apex (the patcher); give it the same
@@ -705,6 +707,30 @@ const prerenderWebappShell = (prerenderedShells) => ({
 // is deriving.
 const ROUTE_PRELOAD_MARKER_START = "<!--rw-route-preload-->";
 const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
+const CRITICAL_ASSET_MARKER = "<!--rw-critical-assets-->";
+
+// Vite appends the entry script, its static imports, and the entry stylesheet
+// after the source head has been transformed. Put those tags beside the marker
+// near the top of the head, ahead of parser-blocking shell scripts. Protect the
+// route-specific block while moving them so it is not duplicated.
+const VITE_CRITICAL_ASSET_PATTERN =
+  /<script type="module" crossorigin src="\.\/assets\/[^"]+\.js"><\/script>|<link rel="modulepreload" crossorigin href="\.\/assets\/[^"]+"(?: \/)?>|<link rel="stylesheet" crossorigin href="\.\/assets\/[^"]+"(?: \/)?>/g;
+const relocateCriticalAssetTags = (html) => {
+  const routePreloadBlockPattern = new RegExp(`${ROUTE_PRELOAD_MARKER_START}[\\s\\S]*?${ROUTE_PRELOAD_MARKER_END}`);
+  const routePreloadBlock = html.match(routePreloadBlockPattern)?.[0];
+  if (!routePreloadBlock) throw new Error("rom-weaver-critical-assets: route preload block not found");
+  const protectedToken = "<!--rw-route-preload-protected-->";
+  const protectedHtml = html.replace(routePreloadBlock, protectedToken);
+  const tags = protectedHtml.match(VITE_CRITICAL_ASSET_PATTERN) || [];
+  if (tags.length === 0) throw new Error("rom-weaver-critical-assets: Vite asset tags not found");
+  const withoutTags = tags.reduce((source, tag) => source.replace(tag, ""), protectedHtml).replace(protectedToken, "");
+  return withoutTags.replace(CRITICAL_ASSET_MARKER, `${tags.join("\n    ")}\n    ${routePreloadBlock}`);
+};
+
+// The document is already Brotli-compressed at the edge, but removing whitespace
+// between generated elements also reduces parser work and keeps the prerendered
+// route copies from multiplying indentation-only bytes.
+const compactGeneratedHtml = (html) => html.replace(/>\s+</g, "><");
 
 const WORKFLOW_ROUTE_MODULES = {
   creator: "src/public/react/create-patch-form.tsx",
@@ -861,9 +887,11 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
           .join("\n");
         routePreloadLinks.set(view, links);
       }
+      if (!html.includes(CRITICAL_ASSET_MARKER))
+        throw new Error("rom-weaver-preload-workflow-route-chunks: critical asset marker not found");
       return html.replace(
-        "</head>",
-        `${ROUTE_PRELOAD_MARKER_START}\n${routePreloadLinks.get("patcher")}\n  ${ROUTE_PRELOAD_MARKER_END}\n  </head>`,
+        CRITICAL_ASSET_MARKER,
+        `${CRITICAL_ASSET_MARKER}\n${ROUTE_PRELOAD_MARKER_START}\n${routePreloadLinks.get("patcher")}\n  ${ROUTE_PRELOAD_MARKER_END}`,
       );
     },
     order: "post",
@@ -875,33 +903,6 @@ const withRoutePreloadLinks = (html, links) =>
     new RegExp(`${ROUTE_PRELOAD_MARKER_START}[\\s\\S]*?${ROUTE_PRELOAD_MARKER_END}`),
     `${ROUTE_PRELOAD_MARKER_START}\n${links}\n  ${ROUTE_PRELOAD_MARKER_END}`,
   );
-
-// Primary (latin) Archivo woff2 - but not the latin-ext subset, which is only
-// fetched on demand via unicode-range and is wasteful to preload eagerly.
-const PRIMARY_FONT_PATTERN = /^assets\/archivo-var-latin-(?!ext-)[\w-]+\.woff2$/;
-
-// Preload the primary UI font from the document head so its download starts
-// alongside the HTML instead of waiting for the stylesheet to parse and discover
-// the @font-face. Build-only: the file name is content-hashed, so the hashed
-// name is read out of the emitted bundle at generate time.
-const preloadPrimaryFont = () => ({
-  apply: "build",
-  name: "rom-weaver-preload-primary-font",
-  transformIndexHtml: {
-    handler(_html, ctx) {
-      const fileName = ctx.bundle && Object.keys(ctx.bundle).find((key) => PRIMARY_FONT_PATTERN.test(key));
-      if (!fileName) return [];
-      return [
-        {
-          attrs: { as: "font", crossorigin: "", href: `./${fileName}`, rel: "preload", type: "font/woff2" },
-          injectTo: "head-prepend",
-          tag: "link",
-        },
-      ];
-    },
-    order: "post",
-  },
-});
 
 export default defineConfig(({ command }) => {
   const buildInfo = getBuildInfo();
@@ -1053,7 +1054,6 @@ export default defineConfig(({ command }) => {
         srcDir: "src/webapp",
         strategies: "injectManifest",
       }),
-      preloadPrimaryFont(),
     ],
     preview: {
       headers: securityHeaders,

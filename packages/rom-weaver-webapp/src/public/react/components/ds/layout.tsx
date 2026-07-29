@@ -1,5 +1,5 @@
 import { Upload } from "lucide-react";
-import { type ReactNode, type Ref, useId, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
@@ -137,8 +137,12 @@ const DropZone = ({
   const resolvedInputId = inputId || generatedInputId;
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState(false);
+  const [duplicateTickerCopy, setDuplicateTickerCopy] = useState(false);
   const formatsRef = useRef<HTMLSpanElement>(null);
   const showFormats = Boolean(big && formats?.length);
+  useEffect(() => {
+    if (showFormats) setDuplicateTickerCopy(true);
+  }, [showFormats]);
   // Phase-lock the extension ticker (`formats-ticker`) to wall-clock time via a
   // negative animation-delay derived from --wall-clock (see dropzone.css), so a
   // page reload resumes the marquee where a continuously-running one would sit
@@ -196,11 +200,11 @@ const DropZone = ({
   );
   const formatsNode =
     big && formats?.length ? (
-      <span aria-hidden="true" className="formats" ref={formatsRef}>
+      <span aria-hidden="true" className={join("formats", duplicateTickerCopy && "is-ticker-ready")} ref={formatsRef}>
         {formatRows.map((row) => (
           <span className="formats-lane" key={row.join("|")}>
             <span className="formats-track">
-              {[0, 1].map((copy) => (
+              {[0, ...(duplicateTickerCopy ? [1] : [])].map((copy) => (
                 <span className="formats-set" key={copy}>
                   {row.map((format) => (
                     <span className="fmt mono" key={`${copy}-${format}`}>
