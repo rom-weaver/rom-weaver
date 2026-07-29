@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
 import { SwapIcon } from "./swap-icon.tsx";
@@ -85,12 +85,6 @@ const GUIDE_REVEALS = 3;
 const GUIDE_TALL_ROW_RATIO = 0.45;
 /** How far the ring sits outside the row it frames. */
 const GUIDE_RING_INSET = 7;
-
-type GuideGeometry = {
-  card: { left: number; top: number } | null;
-  glide: boolean;
-  ring: { height: number; left: number; top: number; width: number };
-};
 
 /**
  * The row's own ancestors are `overflow: clip`, so an outline drawn on the row
@@ -213,9 +207,9 @@ const SampleTutorial = ({
   const bodyId = useId();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [targetEl, setTargetEl] = useState<HTMLElement | null>(null);
-  const [geometry, setGeometry] = useState<GuideGeometry | null>(null);
   const step = steps[stepIndex];
   // Resolved once: re-querying per render hands createPortal a different
   // container the moment .rw-app appears, which tears the whole overlay down
@@ -321,42 +315,81 @@ const SampleTutorial = ({
     };
   }, [bodyId, ready, step]);
 
-  // Keep the card beside its row as the page scrolls or resizes. The step's own
-  // scrollIntoView animates, so this re-measures per frame while that settles.
-  useEffect(() => {
+  // Keep the card and its ring locked to the row as the page scrolls or
+  // resizes. Both boxes are written straight to the DOM inside the scroll
+  // handler: routing them through React state defers the write past the paint
+  // that already moved the row, so every frame of a scroll lands the ring one
+  // step behind and it shakes against the row until the scroll stops.
+  useLayoutEffect(() => {
     const dialog = dialogRef.current;
-    if (!(targetEl && dialog)) {
-      setGeometry(null);
+    const ring = ringRef.current;
+    const unanchor = () => {
+      if (!dialog) return;
+      delete dialog.dataset.anchored;
+      delete dialog.dataset.glide;
+      dialog.style.left = "";
+      dialog.style.top = "";
+    };
+    if (!(targetEl && dialog && ring)) {
+      unanchor();
       return;
     }
     const prefer = step?.placement ?? "bottom";
     const desktop = window.matchMedia(GUIDE_ANCHOR_QUERY);
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-    let frame = 0;
     let settle = 0;
     let revealsLeft = GUIDE_REVEALS;
+    let rowHeight = targetEl.getBoundingClientRect().height;
+    // Only when moving between steps - see the glide rules in dropzone.css.
+    const setGlide = (element: HTMLElement, glide: boolean) => {
+      if (glide) element.dataset.glide = "true";
+      else delete element.dataset.glide;
+    };
     const place = (glide: boolean) => {
-      frame = 0;
-      setGeometry({
-        // Below 641px the card stays the CSS-pinned bar; the ring still tracks.
-        card: desktop.matches ? anchorToTarget(targetEl, dialog, prefer) : null,
-        glide,
-        ring: ringAroundTarget(targetEl),
-      });
+      // Below 641px the card stays the CSS-pinned bar; the ring still tracks.
+      const card = desktop.matches ? anchorToTarget(targetEl, dialog, prefer) : null;
+      // Every box is measured before anything is written, so a placement never
+      // interleaves reads and writes into a forced reflow per frame.
+      const box = ringAroundTarget(targetEl);
+      setGlide(ring, glide);
+      ring.style.height = `${box.height}px`;
+      ring.style.left = `${box.left}px`;
+      ring.style.top = `${box.top}px`;
+      ring.style.width = `${box.width}px`;
+      setGlide(dialog, glide && card !== null);
+      if (!card) {
+        unanchor();
+        return;
+      }
+      dialog.dataset.anchored = "true";
+      dialog.style.left = `${card.left}px`;
+      dialog.style.top = `${card.top}px`;
     };
     // Scroll and resize must track exactly - gliding there would leave the card
     // lagging behind the row it points at while the page is still moving.
-    const schedule = () => {
-      if (!frame) frame = window.requestAnimationFrame(() => place(false));
-    };
+    const track = () => place(false);
     const reveal = () => {
       const top = scrollDeltaForPair(targetEl, dialog, prefer);
       if (Math.abs(top) > 1) window.scrollBy({ behavior, top });
     };
+    // A re-reveal that lands while the user is scrolling fights them for the
+    // scroll position, and the page - ring and all - shakes until one of the
+    // two wins. Deliberate scroll input retires the rest of this step's
+    // re-reveals; the opening one has already run by then.
+    const yieldToUser = () => {
+      revealsLeft = 0;
+      window.clearTimeout(settle);
+    };
     // The row grows as its drawers expand, so re-reveal once each size change
     // has stopped - otherwise the card ends up sitting over the row it explains.
+    // Gated on the row's own height: the card reflowing, or mobile browser
+    // chrome collapsing as the user scrolls, must not scroll the page out from
+    // under them.
     const onResize = () => {
-      schedule();
+      place(false);
+      const height = targetEl.getBoundingClientRect().height;
+      if (height === rowHeight) return;
+      rowHeight = height;
       if (revealsLeft <= 0) return;
       window.clearTimeout(settle);
       settle = window.setTimeout(() => {
@@ -369,16 +402,24 @@ const SampleTutorial = ({
     reveal();
     observer.observe(targetEl);
     observer.observe(dialog);
-    window.addEventListener("resize", schedule);
-    window.addEventListener("scroll", schedule, { capture: true, passive: true });
-    desktop.addEventListener("change", schedule);
+    window.addEventListener("resize", track);
+    window.addEventListener("scroll", track, { capture: true, passive: true });
+    window.addEventListener("wheel", yieldToUser, { passive: true });
+    window.addEventListener("touchmove", yieldToUser, { passive: true });
+    window.addEventListener("keydown", yieldToUser);
+    desktop.addEventListener("change", track);
     return () => {
-      if (frame) window.cancelAnimationFrame(frame);
       window.clearTimeout(settle);
       observer.disconnect();
-      window.removeEventListener("resize", schedule);
-      window.removeEventListener("scroll", schedule, { capture: true });
-      desktop.removeEventListener("change", schedule);
+      window.removeEventListener("resize", track);
+      window.removeEventListener("scroll", track, { capture: true });
+      window.removeEventListener("wheel", yieldToUser);
+      window.removeEventListener("touchmove", yieldToUser);
+      window.removeEventListener("keydown", yieldToUser);
+      desktop.removeEventListener("change", track);
+      // The card is deliberately left where it is: clearing it here would make
+      // the next step's placement measure from the CSS-pinned bar and glide
+      // across the screen instead of from the card the user is looking at.
     };
   }, [step, targetEl]);
 
@@ -388,30 +429,18 @@ const SampleTutorial = ({
   const layer = (
     <div className="sample-tutorial-layer">
       <div aria-hidden="true" className="sample-tutorial-scrim" />
-      {geometry ? (
-        <div
-          aria-hidden="true"
-          className="sample-tutorial-ring"
-          data-glide={geometry.glide ? "true" : undefined}
-          style={{
-            height: `${geometry.ring.height}px`,
-            left: `${geometry.ring.left}px`,
-            top: `${geometry.ring.top}px`,
-            width: `${geometry.ring.width}px`,
-          }}
-        />
-      ) : null}
+      {/* Position, and the glide/anchor flags that go with it, are owned by the
+          placement effect - it writes them to the DOM directly so scroll
+          tracking is not a render behind the page. */}
+      {targetEl ? <div aria-hidden="true" className="sample-tutorial-ring" ref={ringRef} /> : null}
       <div
         aria-describedby={bodyId}
         aria-labelledby={titleId}
         aria-modal="false"
         className="sample-tutorial-dialog"
-        data-anchored={geometry?.card ? "true" : undefined}
-        data-glide={geometry?.card && geometry.glide ? "true" : undefined}
         data-placement={ready ? (step.placement ?? "bottom") : "bottom"}
         ref={dialogRef}
         role="dialog"
-        style={geometry?.card ? { left: `${geometry.card.left}px`, top: `${geometry.card.top}px` } : undefined}
         tabIndex={-1}
       >
         <span aria-hidden="true" className="sample-tutorial-beacon">

@@ -189,6 +189,76 @@ describe("sample tutorial", () => {
     await waitFor(() => expect(guide.style.top).toBe("386px"));
   });
 
+  it("tracks a scroll in the scroll event itself so the ring cannot lag its row", async () => {
+    const guide = await renderAnchored({ height: 100, left: 200, top: 200, width: 600 });
+    const ring = document.querySelector(".sample-tutorial-ring") as HTMLElement;
+    // Row box plus the 7px ring inset on every side.
+    expect(ring.style.top).toBe("193px");
+    expect(ring.style.height).toBe("114px");
+
+    const target = document.querySelector("#tutorial-first") as HTMLElement;
+    stubRect(target, { height: 100, left: 200, top: 120, width: 600 });
+    fireEvent.scroll(window);
+
+    // Deliberately not awaited: deferring these writes to a frame or a React
+    // commit paints them against a page that has already scrolled, which is
+    // what made the ring shake.
+    expect(ring.style.top).toBe("113px");
+    expect(guide.style.top).toBe("234px");
+    // Gliding here would rubber-band the pair behind the moving page.
+    expect(ring.dataset.glide).toBeUndefined();
+    expect(guide.dataset.glide).toBeUndefined();
+  });
+
+  it("stops re-revealing the row once the user takes over the scroll", async () => {
+    // happy-dom has no layout, so its ResizeObserver never fires - the row's
+    // growth has to be delivered by hand.
+    const rowGrew: (() => void)[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: () => void) {
+          rowGrew.push(callback);
+        }
+        disconnect() {
+          // The callback list is per-test, so nothing to tear down.
+        }
+        observe() {
+          // Observation is implied: the test calls the callback itself.
+        }
+      },
+    );
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Swallowed: happy-dom would throw on the real one, and the call itself is
+    // what this test is watching for.
+    const scrollBy = vi.spyOn(window, "scrollBy").mockImplementation(() => undefined);
+    try {
+      await renderAnchored({ height: 100, left: 200, top: 200, width: 600 });
+      const target = document.querySelector("#tutorial-first") as HTMLElement;
+      const grow = (height: number) => {
+        stubRect(target, { height, left: 200, top: 200, width: 600 });
+        for (const callback of rowGrew) callback();
+        vi.advanceTimersByTime(700);
+      };
+
+      // A drawer opening still re-reveals the row it just made taller.
+      scrollBy.mockClear();
+      grow(300);
+      expect(scrollBy).toHaveBeenCalled();
+
+      // Once the user scrolls, the page is theirs - later growth re-places the
+      // card but never scrolls out from under them.
+      fireEvent.wheel(window);
+      scrollBy.mockClear();
+      grow(500);
+      expect(scrollBy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+      scrollBy.mockRestore();
+    }
+  });
+
   it("marks the button the final step asks for and clears it on close", async () => {
     const ctaSteps: readonly SampleTutorialStep[] = [
       { body: "Press it.", cta: ".btn.run", target: "#tutorial-cta", title: "Finish" },
