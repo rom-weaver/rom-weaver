@@ -121,7 +121,7 @@ PAT, EBP, BDF/BSDIFF40, BSP, MOD, DLDI, DPS, and the Dreamcast-specific DCP
 workflow. Support for applying and support for creating are not the same for
 every one of these.
 
-The [full format table](../cli.md#patch-formats) is the authoritative list of
+The [full format table](../hosting/cli.md#patch-formats) is the authoritative list of
 names, extensions, and what rom-weaver can currently apply and create.
 
 ## Just tell me which one

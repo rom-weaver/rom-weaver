@@ -41,7 +41,7 @@ done
 # `sort -V` is what keeps wasi-sdk-9 behind wasi-sdk-25; plain sort orders them
 # lexically and picks 9. It is a GNU/BSD extension rather than POSIX, present on
 # both macOS and Linux - and the Windows CI leg does not use mise at all (see
-# docs/ci.md), which is the only place without it.
+# docs/development/ci.md), which is the only place without it.
 #
 # The glob is expanded by the loop rather than parsed out of `ls` so a path
 # containing whitespace survives.

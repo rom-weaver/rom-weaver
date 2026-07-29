@@ -105,7 +105,7 @@ docker compose down
 
 ## Static files
 
-Install the system tools from the [development guide](development.md#prerequisites),
+Install the system tools from the [development guide](../development/development.md#prerequisites),
 then build the static files from a checkout:
 
 ```bash

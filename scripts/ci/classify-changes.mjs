@@ -3,6 +3,13 @@
 import { readFileSync } from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+import { DOC_SOURCES } from "../../packages/rom-weaver-webapp/src/webapp/docs-routing.mjs";
+
+// Editing a published guide changes the built site, so it has to rebuild the
+// webapp. Taking the set from the route table rather than a folder prefix keeps
+// that exact: `docs/development/` holds both published pages and maintainer
+// notes, and only the published ones belong in the trigger.
+const PUBLISHED_DOCS = new Set(DOC_SOURCES.map((source) => `docs/${source.file}`));
 
 const EMPTY = {
   rust: false,
@@ -62,7 +69,7 @@ export function classifyChanges(paths, all = false) {
 
     if (
       path.startsWith("packages/rom-weaver-webapp/") ||
-      path.startsWith("docs/guides/") ||
+      PUBLISHED_DOCS.has(path) ||
       path === "package.json" ||
       path === "package-lock.json" ||
       /^scripts\/.*\.mjs$/.test(path) ||

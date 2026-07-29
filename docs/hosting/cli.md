@@ -322,7 +322,7 @@ variant on Apple Silicon and other arm64 hosts.
 
 ### Development checkout
 
-For a development checkout, follow the [development guide](development.md)
+For a development checkout, follow the [development guide](../development/development.md)
 and use `cargo run -p rom-weaver-cli --bin rom-weaver --` in place of
 `rom-weaver`.
 
@@ -346,7 +346,7 @@ Open the result in any NES emulator to run it.
 
 | Original ROM | After the first patch | After both patches |
 | :---: | :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../packages/rom-weaver-webapp/design/first-sample-modified-world.png) | ![The sample ROM displaying MODIFIED ROM after both patches](../packages/rom-weaver-webapp/design/first-sample-modified-rom.png) |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../../packages/rom-weaver-webapp/design/first-sample-hello-world.png) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../../packages/rom-weaver-webapp/design/first-sample-modified-world.png) | ![The sample ROM displaying MODIFIED ROM after both patches](../../packages/rom-weaver-webapp/design/first-sample-modified-rom.png) |
 
 ## Common workflows
 
@@ -611,11 +611,11 @@ reports a verdict per patch, rather than stopping at the first failure.
 A `rom-weaver-bundle.json` bundle describes a distributable patching
 workflow: ordered patches, expected input and output checksums, and output
 naming. The machine-readable schema is
-[`rom-weaver-bundle-v1.schema.json`](rom-weaver-bundle-v1.schema.json); its `$id`
+[`rom-weaver-bundle-v1.schema.json`](../rom-weaver-bundle-v1.schema.json); its `$id`
 resolves to the public GitHub copy at
 `https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json`.
 For an end-to-end release workflow in either the Weave webapp or terminal,
-start with [Create and share a patch bundle](guides/create-bundles.md).
+start with [Create and share a patch bundle](../usage/create-bundles.md).
 Print the current schema to stdout with `bundle schema`, then redirect it to a
 file or point an editor at it:
 
@@ -816,7 +816,7 @@ and RVZ scrub cannot be reverted. It also answers to `--untrim` and
 
 `--revert-marker` (also `--reversible`) embeds a small footer so a later revert
 reproduces the original padding exactly rather than guessing at it; see the
-[footer format](trim-revert-footer.md).
+[footer format](../development/trim-revert-footer.md).
 
 ## Header detection and repair
 
@@ -893,7 +893,7 @@ rom-weaver completions fish > ~/.config/fish/completions/rom-weaver.fish
 `bash`, `zsh`, `fish`, `powershell`, and `elvish` are supported.
 
 For format specifications and upstream implementations, see
-[`references.md`](references.md).
+[`references.md`](../development/references.md).
 
 ## Man pages
 

@@ -23,7 +23,7 @@ The helper refuses to remove a worktree with tracked or untracked changes.
 ## rom-weaver
 
 ROM workflow CLI (native + WASM) with a React webapp. Read
-`docs/ARCHITECTURE.md` first - it covers the crate graph, registry traits,
+`docs/development/ARCHITECTURE.md` first - it covers the crate graph, registry traits,
 threading model, and the Rust⇄TypeScript boundary.
 
 ## Commands
@@ -41,7 +41,7 @@ npm --prefix packages/rom-weaver-webapp run test:browser:wasm  # wasm-layer brow
 ```
 
 Pre-commit hooks (lefthook) run oxfmt/clippy/typegen/oxlint/biome/tsc scoped to changed
-paths; CI runs all of it unconditionally plus the full test suites. `docs/ci.md`
+paths; CI runs all of it unconditionally plus the full test suites. `docs/development/ci.md`
 maps every workflow, the shared actions, caching, and the release fan-out.
 
 ## Hard rules
@@ -67,7 +67,7 @@ maps every workflow, the shared actions, caching, and the release fan-out.
   (`window`) usage. All OPFS access goes through the dedicated OPFS proxy
   worker; spawned wasm threads open and read their own OPFS files through it
   (the old read-on-main gates are retired). See "Browser I/O paths" in
-  `docs/ARCHITECTURE.md`.
+  `docs/development/ARCHITECTURE.md`.
 - **Tracing.** Use `tracing` `trace!`/`debug!` liberally in Rust pipelines -
   trace output is the primary debugging tool for wasm/browser issues.
 - **Every `:hover` rule lives inside `@media (hover: hover)`**, paired with an

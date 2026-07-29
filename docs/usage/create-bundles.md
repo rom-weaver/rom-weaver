@@ -75,7 +75,7 @@ putting the original in the download.
 <details class="docs-disclosure">
 <summary>Show the terminal workflow</summary>
 
-Install the command first if needed: [Install the CLI](../cli.md#install).
+Install the command first if needed: [Install the CLI](../hosting/cli.md#install).
 Then create a patch-only ZIP from local files:
 
 ```bash
@@ -110,7 +110,7 @@ rom-weaver bundle create \
   --no-bundle-rom
 ```
 
-The [CLI bundle reference](../cli.md#bundles) documents URLs, per-patch
+The [CLI bundle reference](../hosting/cli.md#bundles) documents URLs, per-patch
 checksums, output checks, compression, and every metadata flag. `bundle create
 --help` is the exact reference for the installed version.
 
@@ -166,7 +166,7 @@ https://rom-weaver.com/weave?bundle=https://example.com/release.zip
 
 The file host must allow cross-origin downloads (CORS). Relative file URLs
 inside a remote bundle resolve against the bundle URL. See
-[Webapp integration](../webapp-integration.md) for multiple URLs, local OPFS
+[Webapp integration](../hosting/webapp-integration.md) for multiple URLs, local OPFS
 files, and hosting requirements.
 
 For an update, rebuild from the same documented clean original and the new

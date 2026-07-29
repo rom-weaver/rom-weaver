@@ -8,6 +8,8 @@ declare module "virtual:rom-weaver-docs" {
   /** One published guide, rendered to HTML at build time by scripts/docs-virtual-module.mjs. */
   export type DocRoute = {
     description: string;
+    /** Shelf this guide sits on, from the folder it lives in under `docs/`. */
+    group: string;
     html: string;
     label: string;
     sections: readonly DocSection[];

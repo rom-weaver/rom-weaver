@@ -82,11 +82,25 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   padding: 10px 12px 8px;
   border-bottom: 1px solid var(--seam-soft);
 }
+/* Shelves: one per folder under docs/. The heading is what turns sixteen
+   entries into four short lists you can take in at a glance. */
+.rw-app .guide-shelf { padding: 5px 5px 7px; }
+.rw-app .guide-shelf + .guide-shelf { border-top: 1px solid var(--seam-soft); }
+.rw-app .guide-shelf-title {
+  margin: 0;
+  padding: 4px 9px 5px;
+  color: var(--ink-4);
+  font-size: .625rem;
+  font-weight: 700;
+  font-stretch: 86%;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
 .rw-app .guide-nav-list {
   display: grid;
   gap: 1px;
   margin: 0;
-  padding: 5px;
+  padding: 0;
   list-style: none;
 }
 .rw-app .guide-nav-list li { margin: 0; }
@@ -392,6 +406,61 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   .rw-app .docs-screenshot-pair { grid-template-columns: 1fr; }
 }
 
+/* --- hub index ---
+   The landing route ends with every page and the sentence it opens on, so
+   "which one do I want" is answered here instead of by opening four of them. */
+.rw-app .docs-index {
+  display: grid;
+  gap: var(--sp-xl);
+  padding: var(--sp-xl) var(--article-pad) clamp(28px, 5vw, 44px);
+  border-top: 1px solid var(--seam);
+}
+.rw-app .docs-index h2 {
+  margin: 0 0 var(--sp-m);
+  color: var(--ink-3);
+  font-size: .655rem;
+  font-weight: 700;
+  font-stretch: 86%;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.rw-app .docs-index ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--sp-s);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rw-app .docs-index li { margin: 0; }
+.rw-app .docs-index a {
+  display: grid;
+  gap: 3px;
+  height: 100%;
+  padding: var(--sp-m) var(--sp-l);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+  text-decoration: none;
+  transition: border-color .18s, background .18s;
+}
+@media (hover: hover) {
+  .rw-app .docs-index a:hover { border-color: var(--thread); background: var(--well); }
+}
+.rw-app .docs-index a:active { border-color: var(--thread); background: var(--well); }
+.rw-app .docs-index-label { color: var(--ink); font-size: .88rem; font-weight: 700; letter-spacing: -.01em; }
+.rw-app .docs-index-blurb {
+  /* Two lines of the opening sentence: enough to choose by, never enough to
+     turn the index into a second copy of the guide. */
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--ink-3);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
 /* --- closing call to action --- */
 .rw-app .docs-cta {
   display: flex;
@@ -413,74 +482,138 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 .rw-app .docs-cta-actions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-s); }
 .rw-app .docs-cta .btn { text-decoration: none; }
 
+/* --- the weft bar ---
+   Desktop keeps the sidebar and never shows this. Once the sidebar is gone the
+   two rails move into a sheet the bar opens, which gives the article the whole
+   first screen back and keeps the reader's position visible for the length of
+   the document rather than only at the top of it. */
+.rw-app .weft-dock { display: none; }
+
 /* --- responsive --- */
 @media (max-width: 860px) {
   .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
-  .rw-app .docs-rails { position: static; overflow: visible; max-height: none; gap: var(--sp-s); }
-  /* Both rails become horizontal strips here, so the switcher drops its card
-     chrome and the two read as one navigation zone rather than two widgets. */
-  .rw-app .guide-nav { border: 0; border-radius: 0; background: none; }
-  /* the breadcrumb sitting one line above already reads ". . . / Guides" */
-  .rw-app .guide-nav-title { display: none; }
+  .rw-app .docs-rails { display: none; }
+  .rw-app .weft-dock { display: block; }
+  /* Scroll room so the end of the article clears the bar, plus whatever the
+     mobile browser's own collapsing toolbar reserves underneath it. */
+  .rw-app .docs-workbench { padding-block-end: max(96px, env(safe-area-inset-bottom, 0px) + 84px); }
 
-  /* Shared strip behaviour. A scrollbar under each strip stacked two grey bars
-     into the first screen, so the overflow is signalled by a fade at the edge
-     the content runs past instead - a clipped label reads as "keep going"
-     rather than as a rendering fault. The trailing padding is what the last
-     item scrolls into, so nothing sits permanently under the fade. */
-  .rw-app .guide-nav-list,
-  .rw-app .warp-rail-list {
-    display: flex;
-    overflow-x: auto;
-    padding-inline: 0 2.75rem;
-    scrollbar-width: none;
-    scroll-snap-type: x proximity;
-    mask-image: linear-gradient(90deg, #000 calc(100% - 2.75rem), transparent);
+  .rw-app .weft-bar {
+    position: fixed;
+    z-index: 900;
+    inset: auto 0 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--sp-m);
+    width: 100%;
+    min-height: 52px;
+    padding: var(--sp-s) var(--gutter) calc(var(--sp-m) + env(safe-area-inset-bottom, 0px));
+    border: 0;
+    border-top: 1px solid var(--seam);
+    background: color-mix(in oklab, var(--plate) 88%, transparent);
+    backdrop-filter: blur(14px);
+    color: var(--ink);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
   }
-  .rw-app .guide-nav-list::-webkit-scrollbar,
-  .rw-app .warp-rail-list::-webkit-scrollbar { display: none; }
-  .rw-app .guide-nav-list li,
-  .rw-app .warp-rail-list li { flex: none; scroll-snap-align: start; }
-
-  .rw-app .guide-nav-list { gap: var(--sp-xs); padding-block: 0; }
-  .rw-app .guide-nav-list a { white-space: nowrap; }
-  /* the warp weave reads as cloth across a full-width row; at chip width it is
-     just noise, so the current guide takes a flat dye instead. The dye stops at
-     12%: --thread-text over it is 4.62:1 on the weakest accent, and 18% put the
-     default accent under 4.5:1 with nothing else to lift it - the desktop row
-     has the weave to read against, this chip has only the dye. */
-  .rw-app .guide-nav-list a[aria-current="page"] {
-    background: color-mix(in oklab, var(--thread) 12%, var(--well));
+  .rw-app .weft-bar-index {
+    color: var(--weft);
+    font: 700 .72rem/1 var(--mono);
+    font-variant-numeric: tabular-nums;
   }
-
-  /* The warp turns with the cloth: the threads lie along the top edge. The
-     numbering stays on - it is what keeps the outline legible as an outline
-     next to the chips above, which are the same words in the same direction. */
-  .rw-app .warp-rail {
+  .rw-app .weft-bar-label {
+    min-width: 0;
     overflow: hidden;
-    padding: var(--sp-s) 0 0;
-    border-top: 1px solid var(--seam-soft);
-  }
-  .rw-app .warp-rail-title { padding: 0 0 var(--sp-xs); }
-  .rw-app .warp-rail-list { gap: var(--sp-m); padding-bottom: .4rem; }
-  .rw-app .warp-rail-list::before { inset: auto 0 2px; width: auto; height: 1px; }
-  .rw-app .warp-rail-list li { max-width: 15rem; }
-  .rw-app .warp-rail-list a {
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: .4rem;
-    padding: 0 0 .5rem;
+    font-size: .82rem;
+    font-weight: 650;
+    font-stretch: 92%;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .rw-app .warp-rail-list .warp-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .rw-app .weft-bar-chevron { width: 15px; height: 15px; color: var(--ink-3); }
+  .rw-app .weft-bar:active { background: var(--plate-2); }
+
+  /* The warp, woven: one tick per section, each as wide as its section is long,
+     so the crossing weft is a plain scroll fraction that still lands inside the
+     right tick. Ticks are divided by a border rather than a gap, which keeps
+     them edge to edge and the boundaries exactly where the weft stops. */
+  .rw-app .warp-gauge {
+    position: absolute;
+    inset: auto var(--gutter) calc(5px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    height: 3px;
   }
-  .rw-app .warp-pick {
-    top: auto;
-    bottom: 0;
-    left: 0;
+  /* The floor keeps a two-line section visible as a tick, at the cost of
+     borrowing a pixel or two from its neighbours - so the weft can sit ~1% off
+     a boundary on a guide with sixteen sections. The label beside it is exact;
+     the gauge is the shape of the document, not a readout. */
+  .rw-app .warp-gauge i {
+    box-sizing: border-box;
+    flex: 1 1 0;
+    min-width: 2px;
+    border-right: 1px solid var(--plate);
+    border-radius: 2px;
+    background: var(--seam);
+  }
+  .rw-app .warp-gauge i:last-of-type { border-right: 0; }
+  .rw-app .warp-gauge-weft {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 2px;
+    background: var(--thread);
+    transition: width .18s var(--ease);
+  }
+
+  /* --- the sheet the bar opens --- */
+  .rw-modal.guide-sheet { place-items: end stretch; padding: 0; }
+  .rw-modal.guide-sheet .rw-modal-card {
     width: 100%;
-    height: 2px;
+    max-width: none;
+    max-height: 82dvh;
+    border-width: 1px 0 0;
+    border-radius: var(--r-l) var(--r-l) 0 0;
+  }
+  @starting-style {
+    .rw-modal.guide-sheet .rw-modal-card { transform: translateY(100%); opacity: 1; }
+  }
+  /* Block flow, not grid: the capped outline is a scroll container, and a grid
+     row sized to its content collapses to zero around one - the rail then
+     painted its full height over the top of the guide list. In normal flow it
+     simply takes the shorter of its content and its cap, and the list follows
+     it, so the body scrolls once the two together outgrow the sheet. */
+  .rw-modal.guide-sheet .modal-body {
+    display: block;
+    padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom, 0px));
+  }
+  /* The outline is capped rather than left to run: a nine-section guide would
+     otherwise fill the sheet and hide that a list of every other page sits
+     underneath it. */
+  .rw-modal.guide-sheet .warp-rail {
+    overflow-y: auto;
+    max-height: 38dvh;
+    margin-block-end: var(--sp-l);
+  }
+  .rw-modal.guide-sheet .warp-rail-title {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 0 0 var(--sp-s) 2.35rem;
+    background: var(--plate);
+  }
+  .rw-modal.guide-sheet .warp-rail-list a { min-height: 40px; align-items: center; }
+  /* The sidebar card clips to keep its rounded corners; in the sheet that
+     clipping would hide every shelf past the fold, and the body is the thing
+     that scrolls. */
+  .rw-modal.guide-sheet .guide-nav { background: none; overflow: visible; }
+  .rw-modal.guide-sheet .guide-nav-list a { min-height: 40px; padding-block: 10px; }
+  /* The woven fill reads as cloth across a full-width sidebar row; at sheet
+     width it is just a grid of dots, so the current page takes a flat dye. The
+     dye stops at 12%: --thread-text over it is 4.62:1 on the weakest accent,
+     and the sidebar's warp lines are not here to carry any of the contrast. */
+  .rw-modal.guide-sheet .guide-nav-list a[aria-current="page"] {
+    background: color-mix(in oklab, var(--thread) 12%, var(--well));
   }
 }
 

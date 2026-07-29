@@ -22,7 +22,7 @@
   .rw-app .hero-lead .lead-sub { padding: 1px 7px; font-size: .65rem; }
   .rw-app .drop.hero > .hero-lead { margin-block-end: 8px; padding: 0 8px 10px; }
   :root:has(.rw-app) { scrollbar-gutter: auto; }
-  .rw-app .step-meta .rb, .rw-app .ckgrp .tsz, .rw-app .cks > .cks-head .rb { padding: 1px 6px; }
+  .rw-app .step-meta .rb, .rw-app .cks > .cks-head .rb { padding: 1px 6px; }
   .rw-app .app { font-stretch: 82%; }
   .rw-app .mono { font-stretch: 74%; }
   /* Keep condensed progress labels legible. */
@@ -78,8 +78,6 @@
   .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
   .rw-app .log-actions { order: 0; flex-basis: auto; }
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
-  /* Reclaim enough space for a single-line SHA-1. */
-  .rw-app .ckgrp { padding-inline-start: 0; }
   .rw-app .ck {
     grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto;
     gap: var(--sp-2xs) var(--sp-s); min-height: 24px; padding-inline: 6px; padding-block: 1px;
@@ -91,8 +89,6 @@
   .rw-app .ckrows > .ck-group:first-child { margin-block-start: 2px; }
   .rw-app .ck-group + .ck-group { margin-block-start: 4px; }
   .rw-app .ck-group-head { margin-block-end: 2px; padding-block: 2px; }
-  .rw-app .ck.req { column-gap: var(--sp-s); }
-  .rw-app .ck.req .ck-k { font-size: .72rem; }
   /* Keep editable and read-only check columns aligned. */
   .rw-app .patch-checks-body .verification-row {
     grid-template-columns: minmax(40px, max-content) minmax(0, 1fr) auto;

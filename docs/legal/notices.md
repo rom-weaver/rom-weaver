@@ -53,4 +53,4 @@ a component, a copyright line, a source link, or a license looks wrong, please
 [open an issue](https://github.com/rom-weaver/rom-weaver/issues) and say which
 release version and which entry.
 
-Back to the [guide index](README.md).
+Back to the [guide index](../usage/README.md).

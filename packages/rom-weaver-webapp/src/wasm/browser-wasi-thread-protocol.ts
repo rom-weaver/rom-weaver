@@ -1,6 +1,6 @@
 // WASI thread-start barrier. Serializing spawns prevents per-thread memory.grow
 // calls from racing V8 shared-memory propagation. The requester blocks until a
-// pooled worker acknowledges startup. See docs/browser-concurrency.md.
+// pooled worker acknowledges startup. See docs/development/browser-concurrency.md.
 
 // --- WASI errnos returned to the wasm thread-spawn import ----------------------------------------
 

@@ -33,7 +33,7 @@ For substantial behavior or format changes, open an issue first so the scope
 can be agreed before implementation. Keep pull requests focused and update the
 relevant documentation when behavior changes.
 
-The [development guide](docs/development.md) covers cloning and bootstrap,
+The [development guide](./docs/development/development.md) covers cloning and bootstrap,
 toolchains, builds, tests, generated files, and linked worktrees.
 
 Pull request titles must use Conventional Commits because the squash-merge title
@@ -41,7 +41,7 @@ becomes the commit on `main` and the input to Release Please. Use
 `type(scope): summary`, for example `fix(webapp): handle empty patch archives`.
 Branch commit messages are not linted. The `PR Title Lint` check comments with
 the exact problem when a title does not parse, and deletes that comment once you
-rename the pull request. The [commit conventions](docs/commits.md) guide covers
+rename the pull request. The [commit conventions](./docs/development/commits.md) guide covers
 the allowed types, scopes, breaking changes, and release footers.
 
 Before submitting a pull request, run the smallest relevant checks and, when

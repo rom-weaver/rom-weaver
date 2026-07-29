@@ -1,7 +1,7 @@
 import type { RomWeaverBrowserOpfsOptions, RomWeaverDefaultThreads } from "../rom-weaver-types.d.ts";
 import { normalizeDefaultThreads, resolveBrowserDefaultThreads } from "./browser-thread-budget.ts";
 import { createBrowserWorkerTransport, RomWeaverWorkerClientCore } from "./worker-client-core.ts";
-// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/ARCHITECTURE.md.
+// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/development/ARCHITECTURE.md.
 import DEFAULT_RUNNER_WORKER_URL from "./browser-runner-worker.ts?worker&url";
 
 type BrowserWorkerClientOptions = {

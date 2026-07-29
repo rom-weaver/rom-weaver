@@ -66,8 +66,8 @@ yourself.
 
 ## Documentation
 
-- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#supported-formats): the full patch format and capability tables.
-- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/ARCHITECTURE.md): registry traits and copier-header handling on apply.
+- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/hosting/cli.md#supported-formats): the full patch format and capability tables.
+- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/development/ARCHITECTURE.md): registry traits and copier-header handling on apply.
 
 ## License
 

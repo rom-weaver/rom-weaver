@@ -2,7 +2,7 @@
 
 Every workflow in `.github/workflows`, what triggers it, what it gates, and
 what it caches. For the release *decision* - versions, tags, trusted
-publishing, and retry procedures - see the [release guide](../.github/RELEASING.md).
+publishing, and retry procedures - see the [release guide](../../.github/RELEASING.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -80,7 +80,7 @@ Both tests drive the script against a stub GitHub API served over real HTTP, so
 the JSON, base64 and status handling runs rather than a mock of it.
 
 The CLA gate checks every contributor to a pull request against
-[CLA version 2.0](../CLA.md), whose grant covers every repository in the
+[CLA version 2.0](../../CLA.md), whose grant covers every repository in the
 `rom-weaver` organization rather than this one alone.
 
 | Where | What |
@@ -1117,7 +1117,7 @@ asset list. That is why adding them does not interact with
 and the step is safe on a rerun and after the release is published.
 
 The consumer side is a single query against the digest - see
-[Verifying a download](cli.md#verifying-a-download), where both install scripts'
+[Verifying a download](../hosting/cli.md#verifying-a-download), where both install scripts'
 check and the `gh attestation verify` route for a file downloaded by hand are
 written out.
 
@@ -1238,7 +1238,7 @@ npm --prefix packages/rom-weaver-webapp run build
 the separate `shellcheck` task covers the tracked shell files, and `npm test`
 covers the Node.js tooling. `docker` is
 conditional on image-plumbing changes and is most directly reproduced with the
-source-build commands in the [self-hosting guide](self-hosting.md);
+source-build commands in the [self-hosting guide](../hosting/self-hosting.md);
 `docker-prebuilt` is `docker build --build-arg DIST=prebuilt .` with the bundle
 staged under `prebuilt/`; the CLI job uses `BINARY=prebuilt` when its packaging
 inputs change.

@@ -202,7 +202,7 @@ for (const route of DOC_ROUTES) {
   // the page metadata below may name the production origin.
   const crossChannel = route.html.match(/href="https:\/\/rom-weaver\.com[^"]*"/g);
   if (crossChannel) throw new Error(`${route.slug} links to production: ${crossChannel.join(", ")}`);
-  const guide = route.source.startsWith("docs/guides/");
+  const guide = route.source.startsWith("docs/usage/");
   const minimumWords = guide ? (route.slug === "docs" || legalPage ? 250 : 500) : 150;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {

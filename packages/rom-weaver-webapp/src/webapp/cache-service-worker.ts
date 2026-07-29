@@ -138,7 +138,7 @@ const shouldUseNetworkFirst = (request: Request, url: URL) => {
 const getCrossOriginIsolationHeaders = (sourceHeaders: HeadersInit = {}, credentialless = coepCredentialless) => {
   const headers = new Headers(sourceHeaders);
   // A response that already names a COEP came from a host that serves the isolation trio itself
-  // (the deployed _headers file, or a self-host configured per docs/self-hosting.md). Pass it
+  // (the deployed _headers file, or a self-host configured per docs/hosting/self-hosting.md). Pass it
   // through untouched: rewriting a served require-corp to credentialless would un-isolate the page
   // in browsers that cannot parse credentialless and send them into the reload dance for nothing.
   if (headers.has(COI_HEADER_COEP)) return headers;

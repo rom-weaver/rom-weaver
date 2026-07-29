@@ -87,7 +87,7 @@ Before 1.0 a breaking change bumps the **minor** version, because
   `beta.rom-weaver.com`.
 - `Fixes #123` closes the issue when the pull request merges.
 
-The [release guide](../.github/RELEASING.md) covers the rest of the release
+The [release guide](../../.github/RELEASING.md) covers the rest of the release
 flow, which is manually dispatched rather than triggered by merging.
 
 ## Checking a title before you push

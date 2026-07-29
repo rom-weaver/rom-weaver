@@ -77,9 +77,9 @@ yourself.
 
 ## Documentation
 
-- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#supported-formats): the full container, codec, and capability tables.
-- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/ARCHITECTURE.md): registry traits and the threading model.
-- [Vendored third-party code](https://github.com/rom-weaver/rom-weaver/blob/main/docs/vendor-code.md): what is vendored here and why.
+- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/hosting/cli.md#supported-formats): the full container, codec, and capability tables.
+- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/development/ARCHITECTURE.md): registry traits and the threading model.
+- [Vendored third-party code](https://github.com/rom-weaver/rom-weaver/blob/main/docs/development/vendor-code.md): what is vendored here and why.
 
 ## License
 

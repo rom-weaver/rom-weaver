@@ -5,8 +5,15 @@ import { classifyChanges } from "./classify-changes.mjs";
 
 const classify = (...paths) => Object.fromEntries(Object.entries(classifyChanges(paths)).map(([key, value]) => [key, String(value)]));
 
-test("documentation changes skip compiled stacks", () => assert.deepEqual(classify("README.md", "docs/ci.md"), { rust: "false", webapp: "false", security: "false", docker_cli: "false", docker_webapp: "false", repo_lint: "true", full: "false" }));
-test("usage guide changes build the webapp", () => assert.equal(classify("docs/guides/apply-rom-patches.md").webapp, "true"));
+test("documentation changes skip compiled stacks", () => assert.deepEqual(classify("README.md", "docs/development/ci.md"), { rust: "false", webapp: "false", security: "false", docker_cli: "false", docker_webapp: "false", repo_lint: "true", full: "false" }));
+test("usage guide changes build the webapp", () => assert.equal(classify("docs/usage/apply-rom-patches.md").webapp, "true"));
+test("every published guide builds the webapp, whatever folder it sits in", () => {
+  for (const path of ["docs/hosting/cli.md", "docs/legal/privacy.md", "docs/development/ARCHITECTURE.md"]) {
+    assert.equal(classify(path).webapp, "true", `${path} is a published route`);
+  }
+});
+test("unpublished maintainer docs do not build the webapp", () =>
+  assert.equal(classify("docs/development/performance.md").webapp, "false"));
 test("webapp changes reuse wasm and skip Rust", () => assert.equal(classify("packages/rom-weaver-webapp/src/index.tsx").webapp, "true"));
 test("Docker changes select only the affected images", () => {
   assert.equal(classify("Dockerfile").docker_cli, "true");
@@ -72,7 +79,7 @@ test("plumbing lint runs only for the file kinds it lints", () => {
   ]) {
     assert.equal(classify(path).repo_lint, "false", path);
   }
-  for (const path of ["README.md", "docs/ci.md", ".github/ISSUE_TEMPLATE/bug.md"]) {
+  for (const path of ["README.md", "docs/development/ci.md", ".github/ISSUE_TEMPLATE/bug.md"]) {
     assert.equal(classify(path).repo_lint, "true", path);
   }
 });
