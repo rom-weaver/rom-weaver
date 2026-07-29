@@ -132,10 +132,15 @@
 
 /* Scale progress on the compositor; counter-scale its texture and shuttle. */
 .rw-app .meter:not(.indet) .fill { width: 100%; transform-origin: 0 50%; transform: scaleX(var(--scale, 0)); transition: transform .4s var(--ease); }
-.rw-app .meter.live:not(.indet) .fill { transition: none; }
+/* Live ticks arrive per frame, so the settle tween becomes pure lag - swap it
+   for the short linear one that smooths the steps and still lands on time. */
+.rw-app .meter.live:not(.indet) .fill { transition: transform var(--prog-tween); }
 .rw-app .meter:not(.indet) .fill::before {
   transform-origin: 100% 50%;
   transform: scaleX(calc(1 / max(var(--scale, 1), .001)));
+  /* Tween alongside the fill; snapping the counter-scale would fatten the
+     shuttle for the length of the fill's transition. */
+  transition: transform var(--prog-tween);
 }
 /* Isolate per-tick layout and paint invalidation. */
 .rw-app .card, .rw-app .prog-panel { contain: layout paint style; }
