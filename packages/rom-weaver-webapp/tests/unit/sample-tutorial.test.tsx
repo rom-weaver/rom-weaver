@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SampleTutorial,
   SampleTutorialStart,
@@ -71,6 +71,15 @@ const stubRect = (element: HTMLElement, box: { height: number; left: number; top
       y: box.top,
     }) as DOMRect;
 };
+
+// The guide converts viewport boxes to document ones, so the page offset is
+// part of every placement assertion.
+const scrolledTo = (top: number) => {
+  Object.defineProperty(window, "scrollY", { configurable: true, value: top, writable: true });
+  Object.defineProperty(window, "scrollX", { configurable: true, value: 0, writable: true });
+};
+
+afterEach(() => scrolledTo(0));
 
 // happy-dom reports zero-sized rects, so the geometry has to be stubbed after
 // mount and a resize fired to re-measure. Viewport is 1024x768.
@@ -187,6 +196,88 @@ describe("sample tutorial", () => {
     const guide = await renderAnchored({ height: 100, left: 200, top: 600, width: 600 });
 
     await waitFor(() => expect(guide.style.top).toBe("386px"));
+  });
+
+  it("places the pair in document coordinates so the page scrolls it along", async () => {
+    scrolledTo(900);
+    const guide = await renderAnchored({ height: 100, left: 200, top: 200, width: 600 });
+    const ring = document.querySelector(".sample-tutorial-ring") as HTMLElement;
+
+    // Row box plus the 7px ring inset on every side, offset by the scroll: the
+    // ring is absolute, so these are document coordinates, not viewport ones.
+    expect(ring.style.top).toBe(`${193 + 900}px`);
+    expect(ring.style.height).toBe("114px");
+    expect(guide.style.top).toBe(`${314 + 900}px`);
+  });
+
+  it("does not re-place on scroll - the composited page already moves the pair", async () => {
+    const guide = await renderAnchored({ height: 100, left: 200, top: 200, width: 600 });
+    const ring = document.querySelector(".sample-tutorial-ring") as HTMLElement;
+    const before = [ring.style.top, guide.style.top];
+
+    // The row's viewport box has moved because the page scrolled under it. A
+    // scroll handler that rewrote the boxes here could only ever trail the
+    // composited scroll, which is exactly the shake - the document coordinates
+    // are unchanged, so there is nothing to do.
+    scrolledTo(400);
+    stubRect(document.querySelector("#tutorial-first") as HTMLElement, {
+      height: 100,
+      left: 200,
+      top: -200,
+      width: 600,
+    });
+    fireEvent.scroll(window);
+
+    expect([ring.style.top, guide.style.top]).toEqual(before);
+  });
+
+  it("stops re-revealing the row once the user takes over the scroll", async () => {
+    // happy-dom has no layout, so its ResizeObserver never fires - the row's
+    // growth has to be delivered by hand.
+    const rowGrew: (() => void)[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: () => void) {
+          rowGrew.push(callback);
+        }
+        disconnect() {
+          // The callback list is per-test, so nothing to tear down.
+        }
+        observe() {
+          // Observation is implied: the test calls the callback itself.
+        }
+      },
+    );
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Swallowed: happy-dom would throw on the real one, and the call itself is
+    // what this test is watching for.
+    const scrollBy = vi.spyOn(window, "scrollBy").mockImplementation(() => undefined);
+    try {
+      await renderAnchored({ height: 100, left: 200, top: 200, width: 600 });
+      const target = document.querySelector("#tutorial-first") as HTMLElement;
+      const grow = (height: number) => {
+        stubRect(target, { height, left: 200, top: 200, width: 600 });
+        for (const callback of rowGrew) callback();
+        vi.advanceTimersByTime(700);
+      };
+
+      // A drawer opening still re-reveals the row it just made taller.
+      scrollBy.mockClear();
+      grow(300);
+      expect(scrollBy).toHaveBeenCalled();
+
+      // Once the user scrolls, the page is theirs - later growth re-places the
+      // card but never scrolls out from under them.
+      fireEvent.wheel(window);
+      scrollBy.mockClear();
+      grow(500);
+      expect(scrollBy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+      scrollBy.mockRestore();
+    }
   });
 
   it("marks the button the final step asks for and clears it on close", async () => {
