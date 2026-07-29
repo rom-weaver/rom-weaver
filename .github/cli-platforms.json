@@ -7,7 +7,7 @@
     "build": "build",
     "binary": "rom-weaver",
     "bootstrap": false,
-    "pr": true
+    "pr": false
   },
   {
     "package": "darwin-x64",
@@ -27,7 +27,7 @@
     "build": "cross",
     "binary": "rom-weaver",
     "bootstrap": false,
-    "pr": true
+    "pr": false
   },
   {
     "package": "linux-ia32-musl",
@@ -93,6 +93,6 @@
     "msvc_arch": "amd64",
     "msvc_host": "amd64",
     "bootstrap": false,
-    "pr": true
+    "pr": false
   }
 ]

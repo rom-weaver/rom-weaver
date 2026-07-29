@@ -14,6 +14,7 @@ const PUBLISHED_DOCS = new Set(DOC_SOURCES.map((source) => `docs/${source.file}`
 const EMPTY = {
   rust: false,
   webapp: false,
+  wasm_runtime: false,
   security: false,
   docker_cli: false,
   docker_webapp: false,
@@ -25,13 +26,24 @@ const EMPTY = {
 // nothing else: they never enter the production WASM module or the release CLI
 // binary. `.github/actions/wasm-cache` excludes the same set from its cache key
 // for that reason, so selecting the webapp stack for them only buys a guaranteed
-// cache hit followed by four browser jobs that cannot observe the edit. Keep the
+// cache hit followed by browser jobs that cannot observe the edit. Keep the
 // two lists identical - note `.*` rather than `[^/]*` under src/, because the
 // shell globs this replaced matched across directory separators.
+//
+// One carve-out, applied by the `wasm_runtime` block below rather than here:
+// the WASM browser suite reads a handful of Rust fixture trees directly, so
+// those paths do select webapp work. `wasm-runtime-coverage.test.mjs` derives
+// that set from the suite's own imports, so it cannot drift.
 const isReleaseInput = (path) =>
-  !/(?:\/tests\/|\/test\/|\/examples\/|\/benches\/|\/src\/test[^/]*\.rs$|\/src\/.*\/test[^/]*\.rs$)/.test(path);
+  !/(?:\/tests\/|\/test\/|\/examples\/|\/benches\/|\/src\/test[^/]*\.rs$|\/src\/.*\/test[^/]*\.rs$)/.test(
+    path,
+  );
 
-export function classifyChanges(paths, all = false) {
+// `eventName` only ever narrows, and only for `pull_request`; an absent one
+// selects everything a push would. `scripts/ci/cli-platform-matrix.mjs` defaults
+// the same way for the same reason: a caller that forgets to pass the event has
+// to lose time, not coverage.
+export function classifyChanges(paths, all = false, eventName = undefined) {
   const result = { ...EMPTY };
   if (all) {
     return Object.fromEntries(Object.keys(result).map((key) => [key, true]));
@@ -44,24 +56,33 @@ export function classifyChanges(paths, all = false) {
       /^\.cargo\//.test(path) ||
       path === ".config/mise.toml" ||
       /^scripts\/ci\//.test(path)
-    ) result.full = true;
+    )
+      result.full = true;
 
     if (path.startsWith("crates/")) {
       result.rust = true;
       if (isReleaseInput(path)) {
         result.webapp = true;
-        result.docker_cli = true;
+        result.wasm_runtime = true;
+        // Pull requests already compile the release CLI directly. Rebuild its
+        // source Docker image after merge for nightly, or when image/toolchain
+        // inputs below changed and the Docker path itself needs proving.
+        if (eventName !== "pull_request") result.docker_cli = true;
       }
     }
 
     if (
-      /^(?:Cargo\.toml|Cargo\.lock|\.config\/deny\.toml|package\.json|package-lock\.json)$/.test(path) ||
+      /^(?:Cargo\.toml|Cargo\.lock|\.config\/deny\.toml|package\.json|package-lock\.json)$/.test(
+        path,
+      ) ||
       /^\.github\/workflows\/(?:npm-publish|release)\.yml$/.test(path) ||
       /^\.github\/actions\/build-cli-platform\//.test(path) ||
       path === ".github/cli-platforms.json" ||
       /^packages\/rom-weaver-cli-platforms\//.test(path) ||
       /^(?:bin\/rom-weaver\.mjs|install\.(?:sh|ps1))$/.test(path) ||
-      /^(?:scripts\/(?:check-thread-guards|check-whitespace|gen-third-party-licenses|prepare-npm-platform-package|sync-version|vendored-pathspecs|verify-cli-platform)\.mjs|scripts\/wasm\/)/.test(path)
+      /^(?:scripts\/(?:check-thread-guards|check-whitespace|gen-third-party-licenses|prepare-npm-platform-package|sync-version|vendored-pathspecs|verify-cli-platform)\.mjs|scripts\/wasm\/)/.test(
+        path,
+      )
     ) {
       result.rust = true;
       result.webapp = true;
@@ -77,7 +98,27 @@ export function classifyChanges(paths, all = false) {
       path === ".dockerignore" ||
       path === "docker-compose.yml" ||
       path === ".github/workflows/docker-publish.yml"
-    ) result.webapp = true;
+    )
+      result.webapp = true;
+
+    // Every path the `webapp-wasm-browser` suite can observe. The source and
+    // fixture entries are not a judgement call: `wasm-runtime-coverage.test.mjs`
+    // walks the suite's own import and `new URL(..., import.meta.url)` graph and
+    // fails if anything reachable from it is not selected here.
+    if (
+      /^(?:Cargo\.toml|Cargo\.lock|package\.json|package-lock\.json)$/.test(path) ||
+      /^scripts\/wasm\//.test(path) ||
+      /^tests\/fixtures\//.test(path) ||
+      /^crates\/rom-weaver-patches\/tests\/fixtures\/hdiffpatch\//.test(path) ||
+      /^packages\/rom-weaver-webapp\/(?:package(?:-lock)?\.json|vitest(?:\.config\.base|(?:\.wasm)?\.browser\.config)\.mjs)$/.test(
+        path,
+      ) ||
+      /^packages\/rom-weaver-webapp\/src\/(?:lib\/runtime|platform|storage|types|wasm|workers)(?:\/|$)/.test(
+        path,
+      ) ||
+      /^packages\/rom-weaver-webapp\/tests\/(?:fixtures|wasm)(?:\/|$)/.test(path)
+    )
+      result.wasm_runtime = true;
 
     if (
       /^(?:Cargo\.toml|Cargo\.lock)$/.test(path) ||
@@ -86,16 +127,22 @@ export function classifyChanges(paths, all = false) {
       path === "package-lock.json" ||
       path === "packages/rom-weaver-webapp/package.json" ||
       path === "packages/rom-weaver-webapp/package-lock.json"
-    ) result.security = true;
+    )
+      result.security = true;
 
-    if (path === "Dockerfile" || /^\.cargo\//.test(path) || /^(?:Cargo\.toml|Cargo\.lock)$/.test(path)) {
+    if (
+      path === "Dockerfile" ||
+      /^\.cargo\//.test(path) ||
+      /^(?:Cargo\.toml|Cargo\.lock)$/.test(path)
+    ) {
       result.docker_cli = true;
     }
     if (
       path === "packages/rom-weaver-webapp/Dockerfile" ||
       path === "packages/rom-weaver-webapp/sws.toml" ||
       path === "packages/rom-weaver-webapp/scripts/compress-static-assets.mjs"
-    ) result.docker_webapp = true;
+    )
+      result.docker_webapp = true;
     if (
       path === ".dockerignore" ||
       path === "docker-compose.yml" ||
@@ -121,22 +168,28 @@ export function classifyChanges(paths, all = false) {
       path === ".config/hadolint.yaml" ||
       /(?:Dockerfile(?:\.|$))/.test(path) ||
       /\.(?:md|sh|mjs)$/.test(path)
-    ) result.repo_lint = true;
+    )
+      result.repo_lint = true;
   }
 
   if (result.full) {
     result.rust = true;
     result.webapp = true;
+    result.wasm_runtime = true;
     result.security = true;
     result.docker_cli = true;
     result.docker_webapp = true;
     result.repo_lint = true;
   }
+  // Every runtime test consumes the production module and webapp dependencies.
+  if (result.wasm_runtime) result.webapp = true;
   return result;
 }
 
 export function formatChanges(result) {
-  return `${Object.entries(result).map(([key, value]) => `${key}=${value}`).join("\n")}\n`;
+  return `${Object.entries(result)
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n")}\n`;
 }
 
 export function main(argv = process.argv.slice(2), readStdin = () => readFileSync(0, "utf8")) {

@@ -3,18 +3,74 @@ import test from "node:test";
 
 import { classifyChanges } from "./classify-changes.mjs";
 
-const classify = (...paths) => Object.fromEntries(Object.entries(classifyChanges(paths)).map(([key, value]) => [key, String(value)]));
+// Both helpers stringify, so a `deepEqual` against the whole result and a spot
+// check of one key read the same way.
+const classifyFor = (eventName, ...paths) =>
+  Object.fromEntries(
+    Object.entries(classifyChanges(paths, false, eventName)).map(([key, value]) => [
+      key,
+      String(value),
+    ]),
+  );
+const classify = (...paths) => classifyFor(undefined, ...paths);
 
-test("documentation changes skip compiled stacks", () => assert.deepEqual(classify("README.md", "docs/development/ci.md"), { rust: "false", webapp: "false", security: "false", docker_cli: "false", docker_webapp: "false", repo_lint: "true", full: "false" }));
-test("usage guide changes build the webapp", () => assert.equal(classify("docs/usage/apply-rom-patches.md").webapp, "true"));
+test("documentation changes skip compiled stacks", () =>
+  assert.deepEqual(classify("README.md", "docs/development/ci.md"), {
+    rust: "false",
+    webapp: "false",
+    wasm_runtime: "false",
+    security: "false",
+    docker_cli: "false",
+    docker_webapp: "false",
+    repo_lint: "true",
+    full: "false",
+  }));
+test("usage guide changes build the webapp", () =>
+  assert.equal(classify("docs/usage/apply-rom-patches.md").webapp, "true"));
 test("every published guide builds the webapp, whatever folder it sits in", () => {
-  for (const path of ["docs/hosting/cli.md", "docs/legal/privacy.md", "docs/development/ARCHITECTURE.md"]) {
+  for (const path of [
+    "docs/hosting/cli.md",
+    "docs/legal/privacy.md",
+    "docs/development/ARCHITECTURE.md",
+  ]) {
     assert.equal(classify(path).webapp, "true", `${path} is a published route`);
   }
 });
 test("unpublished maintainer docs do not build the webapp", () =>
   assert.equal(classify("docs/development/performance.md").webapp, "false"));
-test("webapp changes reuse wasm and skip Rust", () => assert.equal(classify("packages/rom-weaver-webapp/src/index.tsx").webapp, "true"));
+test("webapp changes reuse wasm and skip Rust", () => {
+  const result = classify("packages/rom-weaver-webapp/src/index.tsx");
+  assert.equal(result.webapp, "true");
+  assert.equal(result.wasm_runtime, "false");
+});
+test("browser runtime changes select the direct WASM browser suite", () => {
+  for (const path of [
+    "packages/rom-weaver-webapp/src/wasm/browser-opfs-runner.ts",
+    "packages/rom-weaver-webapp/src/workers/rom-weaver/rom-weaver-runner.ts",
+    "packages/rom-weaver-webapp/src/storage/browser/browser-large-file-vfs.ts",
+    "packages/rom-weaver-webapp/src/lib/runtime/wasm-command-runtime.ts",
+    "packages/rom-weaver-webapp/src/platform/browser/workflow-runtime.ts",
+    "packages/rom-weaver-webapp/src/types/workflow-runtime-adapter.ts",
+    "packages/rom-weaver-webapp/tests/wasm/browser-worker-client.test.mjs",
+    "packages/rom-weaver-webapp/vitest.config.base.mjs",
+    "packages/rom-weaver-webapp/vitest.wasm.browser.config.mjs",
+  ]) {
+    const result = classify(path);
+    assert.equal(result.wasm_runtime, "true", path);
+    assert.equal(result.webapp, "true", path);
+  }
+});
+test("fixtures consumed by WASM browser tests select the runtime suite", () => {
+  for (const path of [
+    "tests/fixtures/vcdiff/secondary-source.bin",
+    "crates/rom-weaver-patches/tests/fixtures/hdiffpatch/source.bin",
+    "packages/rom-weaver-webapp/tests/fixtures/archives/multi-rom.zip",
+  ]) {
+    const result = classify(path);
+    assert.equal(result.wasm_runtime, "true", path);
+    assert.equal(result.webapp, "true", path);
+  }
+});
 test("Docker changes select only the affected images", () => {
   assert.equal(classify("Dockerfile").docker_cli, "true");
   assert.equal(classify("packages/rom-weaver-webapp/Dockerfile").docker_webapp, "true");
@@ -25,7 +81,10 @@ test("Docker changes select only the affected images", () => {
 // The shared build/tag path. An edit here that breaks an image would otherwise
 // only surface at the release that publishes it.
 test("the shared Docker actions select both images", () => {
-  for (const path of [".github/actions/docker-build-arch/action.yml", ".github/actions/docker-manifest/action.yml"]) {
+  for (const path of [
+    ".github/actions/docker-build-arch/action.yml",
+    ".github/actions/docker-manifest/action.yml",
+  ]) {
     const result = classify(path);
     assert.equal(result.docker_cli, "true", path);
     assert.equal(result.docker_webapp, "true", path);
@@ -36,7 +95,7 @@ test("the shared Docker actions select both images", () => {
   assert.equal(classify(".github/actions/deploy-webapp-pages/action.yml").docker_cli, "false");
 });
 // The wasm cache key excludes these same trees, so selecting the webapp stack
-// for them can only ever buy a cache hit plus four browser jobs that cannot
+// for them can only ever buy a cache hit plus browser jobs that cannot
 // observe the edit. `.github/actions/wasm-cache` owns the authoritative list.
 test("Rust test-only changes select nothing but Rust", () => {
   for (const path of [
@@ -45,7 +104,20 @@ test("Rust test-only changes select nothing but Rust", () => {
     "crates/rom-weaver-patches/benches/xdelta.rs",
     "crates/rom-weaver-containers/examples/probe.rs",
   ]) {
-    assert.deepEqual(classify(path), { rust: "true", webapp: "false", security: "false", docker_cli: "false", docker_webapp: "false", repo_lint: "false", full: "false" }, path);
+    assert.deepEqual(
+      classify(path),
+      {
+        rust: "true",
+        webapp: "false",
+        wasm_runtime: "false",
+        security: "false",
+        docker_cli: "false",
+        docker_webapp: "false",
+        repo_lint: "false",
+        full: "false",
+      },
+      path,
+    );
   }
 });
 
@@ -53,8 +125,34 @@ test("Rust test-only changes select Rust alone", () => {
   assert.equal(classify("crates/rom-weaver-cli/tests/cli_smoke/apply.rs").webapp, "false");
   assert.equal(classify("crates/rom-weaver-containers/src/chd/tests.rs").webapp, "false");
   // Nested test modules too: the shell globs this replaced matched across `/`.
-  assert.equal(classify("crates/rom-weaver-containers/src/chd/decode/test_frames.rs").webapp, "false");
-  assert.equal(classify("crates/rom-weaver-containers/src/chd/decode/frames.rs").webapp, "true", "non-test sources still drive the release stacks");
+  assert.equal(
+    classify("crates/rom-weaver-containers/src/chd/decode/test_frames.rs").webapp,
+    "false",
+  );
+  assert.equal(
+    classify("crates/rom-weaver-containers/src/chd/decode/frames.rs").webapp,
+    "true",
+    "non-test sources still drive the release stacks",
+  );
+});
+
+test("production Rust skips source Docker on pull requests and restores it on main", () => {
+  const path = "crates/rom-weaver-containers/src/chd/decode/frames.rs";
+  const pullRequest = classifyFor("pull_request", path);
+  assert.equal(pullRequest.wasm_runtime, "true");
+  assert.equal(pullRequest.docker_cli, "false");
+  assert.equal(classifyFor("push", path).docker_cli, "true");
+});
+
+// `pull_request` is the only event that narrows anything, so an absent or
+// unrecognized one has to cost time rather than coverage - a caller that forgets
+// to pass EVENT_NAME must not silently drop the CLI image build.
+// scripts/ci/cli-platform-matrix.mjs pins the same default for the same reason.
+test("an absent or unknown event keeps the full selection", () => {
+  const path = "crates/rom-weaver-containers/src/chd/decode/frames.rs";
+  for (const eventName of [undefined, "", "push", "workflow_dispatch", "merge_group"]) {
+    assert.equal(classifyFor(eventName, path).docker_cli, "true", String(eventName));
+  }
 });
 
 test("plumbing lint runs only for the file kinds it lints", () => {
@@ -92,15 +190,56 @@ test("native package changes build every CLI platform", () => {
     [".github/cli-platforms.json", "false"],
     [".github/actions/build-cli-platform/action.yml", "true"],
   ]) {
-    assert.deepEqual(classify(path), { rust: "true", webapp: "true", security: "false", docker_cli: "false", docker_webapp: "false", repo_lint: repoLint, full: "false" }, path);
+    assert.deepEqual(
+      classify(path),
+      {
+        rust: "true",
+        webapp: "true",
+        wasm_runtime: "false",
+        security: "false",
+        docker_cli: "false",
+        docker_webapp: "false",
+        repo_lint: repoLint,
+        full: "false",
+      },
+      path,
+    );
   }
 });
 
 test("dependency and CI changes select their broader checks", () => {
-  assert.deepEqual(classify("Cargo.lock"), { rust: "true", webapp: "true", security: "true", docker_cli: "true", docker_webapp: "false", repo_lint: "false", full: "false" });
-  for (const path of [".github/workflows/ci.yml", "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs", "scripts/ci/mise-disable-tools.mjs", "scripts/ci/resolve-wasm-run.mjs"]) {
-    assert.deepEqual(classify(path), { rust: "true", webapp: "true", security: "true", docker_cli: "true", docker_webapp: "true", repo_lint: "true", full: "true" }, path);
+  assert.deepEqual(classify("Cargo.lock"), {
+    rust: "true",
+    webapp: "true",
+    wasm_runtime: "true",
+    security: "true",
+    docker_cli: "true",
+    docker_webapp: "false",
+    repo_lint: "false",
+    full: "false",
+  });
+  for (const path of [
+    ".github/workflows/ci.yml",
+    "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs",
+    "scripts/ci/mise-disable-tools.mjs",
+    "scripts/ci/resolve-wasm-run.mjs",
+  ]) {
+    assert.deepEqual(
+      classify(path),
+      {
+        rust: "true",
+        webapp: "true",
+        wasm_runtime: "true",
+        security: "true",
+        docker_cli: "true",
+        docker_webapp: "true",
+        repo_lint: "true",
+        full: "true",
+      },
+      path,
+    );
   }
 });
 
-test("the dependency policy moved under .config/", () => assert.equal(classify(".config/deny.toml").rust, "true"));
+test("the dependency policy moved under .config/", () =>
+  assert.equal(classify(".config/deny.toml").rust, "true"));
