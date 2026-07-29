@@ -2017,7 +2017,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "rom-name",
-            help = "File name to show for the ROM, and to base the output name on"
+            help = "Expected ROM file name to show and use for output naming; a supplied ROM with a different name only warns"
         )
     )]
     #[serde(default)]

@@ -1096,6 +1096,7 @@ const invokeRomWeaverBundleCreateWorker = async (
     outputCheck?: string;
     outputHeader?: BundleHeaderMode;
     romChecksums?: string;
+    romName?: string;
     romSize?: number;
     outputName?: string;
     outputPath: string;
@@ -1149,6 +1150,7 @@ const invokeRomWeaverBundleCreateWorker = async (
     ...(bundlePath ? { bundle: bundlePath } : {}),
     ...(bundleRomPath ? { bundle_rom: bundleRomPath } : {}),
     ...(input.outputName ? { output_name: input.outputName } : {}),
+    ...(input.romName === undefined ? {} : { rom_name: input.romName.trim() }),
     ...(input.outputHeader && input.outputHeader !== "auto" ? { output_header: input.outputHeader } : {}),
     ...(input.romChecksums || typeof input.romSize === "number"
       ? {

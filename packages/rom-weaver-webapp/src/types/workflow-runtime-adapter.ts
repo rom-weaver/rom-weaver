@@ -491,6 +491,8 @@ type WorkflowRuntimeBundle = {
     }>;
     outputName?: string;
     outputHeader?: BundleHeaderMode;
+    /** Advisory logical ROM file name written to bundle `rom.name`. */
+    romName?: string;
     /** Cached checksums from apply staging; Rust hashes only when this is absent. */
     romChecksums?: string;
     /** Cached prepared ROM byte size. */

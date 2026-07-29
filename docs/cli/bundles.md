@@ -42,7 +42,9 @@ rom-weaver bundle create \
   --output rom-weaver-bundle.json
 ```
 
-`-i`/`--input` names the ROM. Use `--rom-url` and `--rom-name` when the ROM
+`-i`/`--input` names the ROM. `--rom-name` records the expected logical file
+name (and supplies display/output naming); applying a separately supplied ROM
+with a different basename warns but continues. Use `--rom-url` when the ROM
 ships from somewhere else and the bundle should only point at it.
 
 Every `--patch-*` flag describes the `--patch` before it: `--patch-id`,

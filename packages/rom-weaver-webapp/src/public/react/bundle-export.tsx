@@ -142,6 +142,7 @@ type UseBundleExportOptions = {
   bundleMetaById: ReadonlyMap<string, BundlePatchMeta>;
   initialBundleRom?: boolean;
   initialFormat?: string;
+  initialRomName?: string;
   ready: boolean;
   onComplete?: (result: ParsedBundleCreateResult) => void;
 };
@@ -310,6 +311,7 @@ const useBundleExport = ({
   bundleMetaById,
   initialBundleRom = false,
   initialFormat = "",
+  initialRomName = "",
   ready,
   onComplete,
 }: UseBundleExportOptions) => {
@@ -317,6 +319,7 @@ const useBundleExport = ({
   const [error, setError] = useState("");
   const [format, setFormat] = useState(initialFormat);
   const [bundleRom, setBundleRom] = useState(initialBundleRom);
+  const [romName, setRomName] = useState(initialRomName);
   const [progress, setProgress] = useState<BundleExportProgress | null>(null);
   const [downloadableOutput, setDownloadableOutput] = useState<PublicOutput | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -328,7 +331,8 @@ const useBundleExport = ({
   useEffect(() => {
     setFormat(initialFormat);
     setBundleRom(initialBundleRom);
-  }, [initialBundleRom, initialFormat]);
+    setRomName(initialRomName);
+  }, [initialBundleRom, initialFormat, initialRomName]);
 
   const downloadExport = useCallback(async () => {
     const output = downloadableOutputRef.current;
@@ -419,6 +423,7 @@ const useBundleExport = ({
         ...(bundleFileName ? { bundleFileName } : {}),
         ...(packagedRom ? { bundleRom: packagedRom } : {}),
         ...(exportName.trim() ? { outputName: exportName.trim() } : {}),
+        ...(bundleRom && wantsBundle ? {} : { romName: romName.trim() }),
         ...(Object.keys(romChecksums).length ? { romChecksums: formatChecks(romChecksums) } : {}),
         ...(typeof romSize === "number" ? { romSize } : {}),
         ...(outputHeader === "keep" || outputHeader === "strip" ? { outputHeader } : {}),
@@ -470,6 +475,7 @@ const useBundleExport = ({
     onComplete,
     downloadExport,
     getPatchIds,
+    romName,
   ]);
 
   const cancelExport = useCallback(() => abortControllerRef.current?.abort(), []);
@@ -498,6 +504,13 @@ const useBundleExport = ({
     },
     [clearDownloadable],
   );
+  const selectRomName = useCallback(
+    (value: string) => {
+      clearDownloadable();
+      setRomName(value);
+    },
+    [clearDownloadable],
+  );
 
   useEffect(
     () => () => {
@@ -517,9 +530,11 @@ const useBundleExport = ({
     format,
     progress,
     ready,
+    romName,
     runExport,
     setBundleRom: selectBundleRom,
     setFormat: selectFormat,
+    setRomName: selectRomName,
   };
 };
 

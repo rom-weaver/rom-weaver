@@ -68,6 +68,9 @@ test("export bundle bundles the session from main-page options with a checks-onl
   setFormControlValue(formatSelect, "zip:patches");
   expect(window.location.hash).toBe("");
   await expect.poll(() => formatSelect.value).toBe("zip:patches");
+  const romNameInput = await waitForState(() => document.getElementById("rom-weaver-bundle-rom-name"));
+  expect(romNameInput.value).toBe(RAW_ROM.split("/").pop());
+  setFormControlValue(romNameInput, "Expected Game.bin");
 
   // Choosing a package also arms the export action.
   const exportButton = await waitForState(() => {
@@ -164,6 +167,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
   // The ROM stays out of the bundle: its entry carries checks but no source.
   expect(result.bundle.rom?.path ?? null).toBeNull();
   expect(result.bundle.rom?.url ?? null).toBeNull();
+  expect(result.bundle.rom?.name).toBe("Expected Game.bin");
   expect(Object.keys(result.bundle.rom?.checks?.checksums || {}).length).toBeGreaterThan(0);
   expect(result.bundle.patches).toHaveLength(1);
   const patchEntry = result.bundle.patches[0];
@@ -216,6 +220,7 @@ test("export bundles the extracted patch leaf, not the archive it arrived in", a
   // action - no reveal step needed.
   const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
   expect(formatSelect?.value).toBe("zip:rom");
+  expect(document.getElementById("rom-weaver-bundle-rom-name")).toBeNull();
   const exportButton = await waitForState(() => {
     const button = document.getElementById("rom-weaver-button-export-bundle");
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;

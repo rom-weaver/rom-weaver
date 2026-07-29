@@ -113,9 +113,12 @@ In **0x04 Apply**:
 2. Open **Options**.
 3. Find **Bundle**. It starts at **Hide bundle creation**. Turn bundle output
    on by choosing **Bundle + patches (.zip)** for a normal public release.
-4. Choose **Create ZIP Bundle**.
-5. Wait while rom-weaver calculates checksums and checks the recipe.
-6. When the button changes to **Download ZIP Bundle**, choose it and save the
+4. Confirm or edit **Expected ROM name**. A different supplied filename warns
+   without blocking the weave; checksum and size requirements stay strict.
+   Clear the field to omit the name check.
+5. Choose **Create ZIP Bundle**.
+6. Wait while rom-weaver calculates checksums and checks the recipe.
+7. When the button changes to **Download ZIP Bundle**, choose it and save the
    archive.
 
 <figure class="docs-screenshot">

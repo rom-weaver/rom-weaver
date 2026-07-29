@@ -46,7 +46,8 @@ pub struct RomWeaverBundle {
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(deny_unknown_fields)]
 pub struct BundleRom {
-    /// Display / output-naming file name (defaults to the source's base name).
+    /// Display / output-naming file name. For a separately supplied ROM, this
+    /// is also an advisory expected basename (defaults to the source basename).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub name: Option<String>,

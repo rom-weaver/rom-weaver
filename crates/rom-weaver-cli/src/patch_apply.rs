@@ -17,6 +17,23 @@ fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
         || native_file_identity_matches(left, right)
 }
 
+fn warn_on_rom_name_mismatch(expected: Option<&str>, actual_path: &Path) {
+    let Some(expected) = expected else {
+        return;
+    };
+    let Some(actual) = actual_path.file_name().and_then(|name| name.to_str()) else {
+        return;
+    };
+    if expected.to_lowercase() == actual.to_lowercase() {
+        return;
+    }
+    warn!(
+        expected_rom_name = expected,
+        actual_rom_name = actual,
+        "bundle ROM name mismatch; continuing because file-name checks are advisory"
+    );
+}
+
 // same-file compares dev/inode on Unix and volume serial + file index on
 // Windows. The Windows half cannot be written against std on stable: the
 // MetadataExt equivalents are still unstable behind `windows_by_handle`
@@ -571,6 +588,12 @@ impl CliApp {
                 } = resolved;
                 (source, extracted_archives, cleanup_paths)
             };
+        warn_on_rom_name_mismatch(
+            bundle_resolution
+                .as_ref()
+                .and_then(|resolution| resolution.expected_rom_name.as_deref()),
+            &resolved_input,
+        );
         // Seed host-provided input checksums so handler source verification skips
         // a re-read. Keyed by the resolved path; header/N64 transforms write a
         // distinct temp path whose lookup misses and recomputes. Skipped for disc
