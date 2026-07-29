@@ -6,7 +6,7 @@ import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
-import { markRomWeaverRunnerStale } from "../workers/rom-weaver/rom-weaver-runner.ts";
+import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/rom-weaver-runner.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { installLogStore } from "./log-store.ts";
@@ -58,6 +58,7 @@ let confirmationDialogState = createEmptyConfirmationDialogState();
 let renderWebappRootIfReady = () => undefined;
 let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
+let pageResetKey = 0;
 // Suppresses the first render until cross-origin isolation settles so the un-isolated first document
 // never flashes before the service worker reloads the page. Decided synchronously at construction.
 const serviceWorkerBootGate = createServiceWorkerBootGate({
@@ -418,12 +419,16 @@ const renderWebappRoot = (): undefined => {
         void (async () => {
           const accepted = await requestConfirmation({
             cancelLabel: "Stay here",
-            confirmLabel: "Reload page",
+            confirmLabel: "Reset page",
             level: "warning",
-            message: "Reloading will clear the current page state. Continue?",
+            message: "Resetting will clear the current page state. Continue?",
             title: "Reset the page?",
           });
-          if (accepted) window.location.reload();
+          if (!accepted) return;
+          await resetRomWeaverRunner({ terminate: true });
+          webappController.resetPage();
+          pageResetKey += 1;
+          renderWebappRoot();
         })();
       },
       onRestoreDefaults: () => webappController.restoreDefaults(),
@@ -450,7 +455,8 @@ const renderWebappRoot = (): undefined => {
         }),
     serviceWorkerCache,
     state: rootState,
-    urlSession: shouldHydrate ? null : urlSessionParse.request ? urlSessionParse : null,
+    urlSession: shouldHydrate || pageResetKey > 0 ? null : urlSessionParse.request ? urlSessionParse : null,
+    key: pageResetKey,
   });
   if (shouldHydrate && appRootElement) {
     appRootHydrating = true;

@@ -192,6 +192,38 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(session.patchCount).toBe(1);
   });
 
+  it("resets transient page state without changing saved settings or the current view", () => {
+    const controller = createController();
+    controller.selectView("creator");
+    controller.setCreatorModifiedState({});
+    controller.setPatcherInputState([{}]);
+    controller.setPatcherPatchState([{}]);
+    controller.setToolsSessionState(true);
+    controller.setTrimSourceState({});
+    controller.setStartupState("error", "failed");
+    controller.openSettings();
+    controller.updateDraftSetting("language", "de");
+
+    controller.resetPage();
+
+    const state = controller.getState();
+    expect(state.currentView).toBe("creator");
+    expect(state.creatorSession.modifiedFilePresent).toBe(false);
+    expect(state.patcherSession).toEqual({
+      outputCompression: "none",
+      outputName: "",
+      patchCount: 0,
+      pendingDownloadFileName: null,
+      romFilePresent: false,
+    });
+    expect(state.settingsDialogOpen).toBe(false);
+    expect(state.draftSettings).toEqual(state.settings);
+    expect(state.startup).toEqual({ message: "", status: "ready" });
+    expect(state.toolsSession.active).toBe(false);
+    expect(state.trimSession.sourceFilePresent).toBe(false);
+    expect(state.validation).toEqual({ invalidFields: [], messages: [] });
+  });
+
   // Reading a guide must not decide where the site root lands: docs is a
   // document route, not a workflow tab with state to resume.
   it("never stores the guides as the tab to resume", () => {
