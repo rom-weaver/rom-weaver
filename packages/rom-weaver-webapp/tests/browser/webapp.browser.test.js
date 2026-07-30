@@ -192,7 +192,11 @@ test("WebappRoot keeps Trim and Tools behind the beta flag and Guides in front o
   // Docs is reference rather than a workflow, but it rides in the rail so the
   // readers it is written for do not have to go hunting for it.
   await expect
-    .poll(() => [...document.querySelectorAll('.mode-rail [role="tab"]')].map((tab) => tab.textContent))
+    .poll(() =>
+      [...document.querySelectorAll('.mode-rail [role="tab"]')]
+        .filter((tab) => getComputedStyle(tab).display !== "none")
+        .map((tab) => tab.textContent),
+    )
     .toEqual(["Weave", "Create", "Docs"]);
 });
 

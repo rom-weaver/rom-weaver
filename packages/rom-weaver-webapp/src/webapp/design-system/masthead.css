@@ -66,6 +66,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .mode svg { width: 17px; height: 17px; }
 .rw-app .mode[aria-selected="true"] { color: var(--thread-ink); }
+html:not([data-beta-tools-enabled="true"]) .rw-app .mode[data-beta-tool] { display: none; }
 @media (hover: hover) {
   .rw-app .mode:not([aria-selected="true"]):hover { color: var(--ink); }
 }

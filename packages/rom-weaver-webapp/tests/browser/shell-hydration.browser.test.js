@@ -10,12 +10,14 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const tabs = [
   { href: "weave", icon: createElement("svg", { "aria-hidden": true }), id: "patcher", label: "Weave" },
   { href: "create", icon: createElement("svg", { "aria-hidden": true }), id: "creator", label: "Create" },
+  { href: "trim", icon: createElement("svg", { "aria-hidden": true }), id: "trim", label: "Trim" },
+  { href: "tools", icon: createElement("svg", { "aria-hidden": true }), id: "tools", label: "Tools" },
 ];
 
-const shell = (threads, serviceWorkerStatus) =>
+const shell = (threads, serviceWorkerStatus, betaToolsEnabled = false) =>
   createElement(
     RomWeaverSettingsProvider,
-    { settings: {} },
+    { settings: { betaToolsEnabled } },
     createElement(
       Fragment,
       null,
@@ -68,6 +70,25 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
 
   expect(host.querySelector(".masthead-threads")).toBe(threads);
   expect(host.querySelector(".masthead-runtime")).toBe(runtime);
+  expect(recoverableErrors).toEqual([]);
+  expect(consoleError).not.toHaveBeenCalled();
+});
+
+test("hydrates the beta navigation in place when the persisted flag is enabled", async () => {
+  const host = document.createElement("div");
+  host.innerHTML = renderToString(shell(8, null));
+  document.body.append(host);
+  document.documentElement.dataset.betaToolsEnabled = "true";
+
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const recoverableErrors = [];
+  await act(async () => {
+    root = hydrateRoot(host, shell(8, "off", true), {
+      onRecoverableError: (error) => recoverableErrors.push(error),
+    });
+  });
+
+  expect(host.querySelectorAll("[data-beta-tool]").length).toBe(2);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });

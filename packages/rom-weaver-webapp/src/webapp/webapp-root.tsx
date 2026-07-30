@@ -239,6 +239,9 @@ function WebappRoot({
   const pageDropIdRef = useRef(0);
   const threads = state.settings.threads;
   useLayoutEffect(() => notifyGuidedSampleView(state.currentView), [state.currentView]);
+  useLayoutEffect(() => {
+    document.documentElement.dataset.betaToolsEnabled = state.settings.betaToolsEnabled ? "true" : "false";
+  }, [state.settings.betaToolsEnabled]);
   const preloadGuide = useCallback(
     (guide: GuidedSample) => {
       void preloadWorkflowRoute(getGuideView(guide));
@@ -440,10 +443,6 @@ function WebappRoot({
         </div>
       </section>
     ) : null;
-  const visibleTabs = state.settings.betaToolsEnabled
-    ? WORKFLOW_TABS
-    : WORKFLOW_TABS.filter((tab) => tab.id === "patcher" || tab.id === "creator" || tab.id === "docs");
-
   return (
     <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
@@ -468,7 +467,7 @@ function WebappRoot({
               selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]));
             }}
             settingsOpen={state.settingsDialogOpen}
-            tabs={notFound ? visibleTabs.map((tab) => ({ ...tab, href: `/${tab.href}` })) : visibleTabs}
+            tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
             tabsControlPanels={!notFound}
           />
           <UpdateBanner

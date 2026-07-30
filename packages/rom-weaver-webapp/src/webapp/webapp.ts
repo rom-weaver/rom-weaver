@@ -364,6 +364,8 @@ const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs"]);
 const readHydrationView = (): WebappView =>
   PRERENDERED_VIEWS.has(servedDocumentView) ? servedDocumentView : "patcher";
 
+const readHydrationBetaToolsEnabled = (): boolean => document.documentElement.dataset.betaToolsEnabled === "true";
+
 const renderWebappRoot = (): undefined => {
   // Suppress all renders (including reactive ones from the service worker state machine) while the boot
   // gate is closed, so the un-isolated first document stays on the static background until the SW reload.
@@ -388,7 +390,11 @@ const renderWebappRoot = (): undefined => {
   const serviceWorkerCache = serviceWorkerClient.getState();
   const state = webappController.getState();
   const hydrationSettings = shouldHydrate
-    ? { ...getDefaultSettings(), threads: state.settings.threads }
+    ? {
+        ...getDefaultSettings(),
+        betaToolsEnabled: readHydrationBetaToolsEnabled(),
+        threads: state.settings.threads,
+      }
     : state.settings;
   const rootState: WebappRootProps["state"] = shouldHydrate
     ? {
