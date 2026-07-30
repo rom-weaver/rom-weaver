@@ -34,7 +34,7 @@ const IMAGE_MAGICK = ["magick", "convert"].find(
 );
 
 if (!IMAGE_MAGICK)
-  throw new Error("Screenshot capture requires ImageMagick (magick or convert) for lossless WebP output");
+  throw new Error("Screenshot capture requires ImageMagick (magick or convert) for optimized lossless WebP output");
 
 const pageUrl = (route) => new URL(route, BASE_URL).toString();
 
@@ -87,10 +87,11 @@ const capture = async () => {
           const shot = await page.screenshot({ animations: "disabled", fullPage: true, type: "png" });
           // Keep text and fine UI edges lossless; the 2x desktop and 3x mobile
           // captures prevent retina docs pages from upscaling a 1x source.
-          const webp = execFileSync(IMAGE_MAGICK, ["png:-", "-define", "webp:lossless=true", "webp:-"], {
-            input: shot,
-            maxBuffer: 64 * 1024 * 1024,
-          });
+          const webp = execFileSync(
+            IMAGE_MAGICK,
+            ["png:-", "-define", "webp:lossless=true", "-define", "webp:method=6", "webp:-"],
+            { input: shot, maxBuffer: 64 * 1024 * 1024 },
+          );
           fs.writeFileSync(outputPath, webp);
           await context.close();
           console.log(`Captured ${path.relative(PACKAGE_DIR, outputPath)}`);
