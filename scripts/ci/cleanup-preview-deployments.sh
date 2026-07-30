@@ -22,6 +22,7 @@ ids=$(
 )
 
 deleted=0
+kept_success=false
 kept_failure=false
 while read -r id; do
   [[ -n "$id" ]] || continue
@@ -31,6 +32,12 @@ while read -r id; do
   )
   case "$state" in
     inactive) ;;
+    success)
+      if [[ "$kept_success" == false ]]; then
+        kept_success=true
+        continue
+      fi
+      ;;
     error | failure)
       if [[ "$kept_failure" == false ]]; then
         kept_failure=true

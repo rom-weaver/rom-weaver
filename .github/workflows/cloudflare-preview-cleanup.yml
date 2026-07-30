@@ -43,8 +43,9 @@ jobs:
 
           page=1
           while :; do
-            response=$(curl -fsS --get "$api" \
+            response=$(curl --fail-with-body --silent --show-error --get "$api" \
               -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --data-urlencode "env=preview" \
               --data-urlencode "page=${page}" \
               --data-urlencode "per_page=100")
             jq -c '.result[]?' <<<"$response" >>"$deployments"
@@ -87,8 +88,8 @@ jobs:
             age=$((now - created_epoch))
             [ "$latest" = true ] || [ "$age" -le "$((RETENTION_DAYS * 86400))" ] && continue
 
-            if curl -fsS -X DELETE "${api}/${id}?force=true" \
-              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" >/dev/null; then
+            if curl --fail-with-body --silent --show-error -X DELETE "${api}/${id}?force=true" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"; then
               deleted=$((deleted + 1))
               echo "deleted deployment ${id} (${branch}, PR #${pr}, ${created})"
             fi
