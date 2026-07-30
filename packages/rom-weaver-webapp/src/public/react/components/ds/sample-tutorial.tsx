@@ -234,6 +234,14 @@ const SampleTutorialStart = ({
   const [href, setHref] = useState(`/${downloadName}`);
   useEffect(() => setHref(downloadHref), [downloadHref]);
 
+  // Re-enabling the setting revives a locally dismissed beacon: in the webapp
+  // a dismissal flips onboardingEnabled off, so the transition back to true is
+  // exactly the Settings checkbox being saved. Hosts that pass a static value
+  // (or none) never fire this, and there the local flag rules the session.
+  useEffect(() => {
+    if (settings.onboardingEnabled === true) setDismissed(false);
+  }, [settings.onboardingEnabled]);
+
   useEffect(() => {
     if (!open) return;
     const closeFromOutside = (event: PointerEvent) => {
@@ -253,12 +261,7 @@ const SampleTutorialStart = ({
     };
   }, [open]);
 
-  // An explicit onboardingEnabled=true (the webapp always carries the key)
-  // outranks the local dismissal, so re-enabling the setting brings the beacon
-  // back immediately. The local flag only rules where no setting exists at all
-  // (embeds without the webapp shell).
-  const hidden = settings.onboardingEnabled === false || (dismissed && settings.onboardingEnabled !== true);
-  if (hidden) return null;
+  if (settings.onboardingEnabled === false || dismissed) return null;
   return (
     <div className="first-weave-demo sample-tutorial-start" ref={rootRef}>
       <button
