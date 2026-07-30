@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
 import { LOCALE_OPTIONS, type Localizer } from "../../presentation/localization/index.ts";
-import { viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
+import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
@@ -164,11 +164,12 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
     root.style.setProperty("--wipe-x", `${cx}px`);
     root.style.setProperty("--wipe-y", `${cy}px`);
     root.style.setProperty("--wipe-r", `${radius}px`);
-    root.classList.add("vt-theme");
+    const release = holdTransitionClasses(["vt-theme"]);
+    // Plain call, not flushSync: forcing React's commit inside the capture
+    // makes WebKit render a different wipe (it dislikes mid-capture layout).
     const transition = document.startViewTransition(() => toggleTheme());
     transition.ready.catch(() => undefined);
-    const clear = () => root.classList.remove("vt-theme");
-    transition.finished.then(clear, clear);
+    transition.finished.then(release, release);
   };
   return (
     <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">

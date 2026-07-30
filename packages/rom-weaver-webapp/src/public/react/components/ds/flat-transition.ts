@@ -58,6 +58,38 @@ const viewTransitionsUnavailable = (): boolean => {
 };
 
 /**
+ * Refcounted `<html>` marker classes for in-flight transitions.
+ *
+ * Clicking again mid-transition starts a second run while the first is still
+ * settling; the first's `finished` then resolves (as a skip) and its plain
+ * `classList.remove` would strip the marker the live run depends on. The
+ * survivor loses its wipe/flattening CSS and degrades into the default
+ * per-element morph - the "theme switch lagged" symptom. Counting holders means
+ * only the last release actually removes the class.
+ */
+const classHolds = new Map<string, number>();
+
+const holdTransitionClasses = (classes: readonly string[]): (() => void) => {
+  const root = document.documentElement;
+  for (const name of classes) classHolds.set(name, (classHolds.get(name) ?? 0) + 1);
+  root.classList.add(...classes);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    for (const name of classes) {
+      const held = (classHolds.get(name) ?? 1) - 1;
+      if (held > 0) {
+        classHolds.set(name, held);
+        continue;
+      }
+      classHolds.delete(name);
+      root.classList.remove(name);
+    }
+  };
+};
+
+/**
  * Run a synchronous DOM update inside a flat crossfade (no-op fallback).
  * `extraClass` tags the transition on `<html>` for the run's duration - mode
  * (tab) switches pass `vt-mode` so the CSS can flatten the per-form drop/head
@@ -66,20 +98,19 @@ const viewTransitionsUnavailable = (): boolean => {
  * out of sync with the root crossfade instead of riding it as one surface.
  */
 const runFlatViewTransition = (update: () => void, extraClass?: string) => {
-  const root = document.documentElement;
   const classes = extraClass ? ["vt-flat", "vt-quiet", extraClass] : ["vt-flat", "vt-quiet"];
   if (viewTransitionsUnavailable()) {
     update();
     lockEntryAnimations();
     return;
   }
-  root.classList.add(...classes);
+  const release = holdTransitionClasses(classes);
   const transition = document.startViewTransition(update);
   transition.ready.catch(() => undefined);
   const clear = () => {
     // lock first - removing vt-quiet would otherwise start the held animations
     lockEntryAnimations();
-    root.classList.remove(...classes);
+    release();
   };
   transition.finished.then(clear, clear);
 };
@@ -101,4 +132,4 @@ const useFlatTransitionFlag = (actual: boolean): boolean => {
   return displayed;
 };
 
-export { runFlatViewTransition, useFlatTransitionFlag, viewTransitionsUnsupported };
+export { holdTransitionClasses, runFlatViewTransition, useFlatTransitionFlag, viewTransitionsUnsupported };
