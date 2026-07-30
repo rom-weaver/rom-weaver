@@ -589,25 +589,31 @@ function WebappRoot({
             />
           </Suspense>
         ) : null}
-        <Modal
-          headerActions={
-            <>
-              <button className="btn ghost" onClick={actions.onRestoreDefaults} title="Reset to defaults" type="button">
-                <RotateCcw aria-hidden="true" />
-                <span className="bl">Defaults</span>
-              </button>
-              <button className="btn primary" onClick={actions.onSaveClose} title="Save &amp; close" type="button">
-                <Save aria-hidden="true" />
-                <span className="bl">Save</span>
-              </button>
-            </>
-          }
-          onClose={actions.onCloseSettings}
-          open={state.settingsDialogOpen}
-          title="Settings"
-          variant="settings-modal"
-        >
-          <Suspense fallback={null}>
+        {/* Keep the frame inside the boundary so lazy loads never show a header-only modal. */}
+        <Suspense fallback={null}>
+          <Modal
+            headerActions={
+              <>
+                <button
+                  className="btn ghost"
+                  onClick={actions.onRestoreDefaults}
+                  title="Reset to defaults"
+                  type="button"
+                >
+                  <RotateCcw aria-hidden="true" />
+                  <span className="bl">Defaults</span>
+                </button>
+                <button className="btn primary" onClick={actions.onSaveClose} title="Save &amp; close" type="button">
+                  <Save aria-hidden="true" />
+                  <span className="bl">Save</span>
+                </button>
+              </>
+            }
+            onClose={actions.onCloseSettings}
+            open={state.settingsDialogOpen}
+            title="Settings"
+            variant="settings-modal"
+          >
             <SettingsPanel
               draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
               onClose={actions.onCloseSettings}
@@ -617,8 +623,8 @@ function WebappRoot({
               uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
               validation={state.validation}
             />
-          </Suspense>
-        </Modal>
+          </Modal>
+        </Suspense>
         <ConfirmDialog
           body={confirmationDialog.message}
           cancelLabel={confirmationDialog.cancelLabel}
