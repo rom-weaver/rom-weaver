@@ -439,6 +439,17 @@ const createWebappRootController = (options: ControllerOptions) => {
       commitMode(nextView, optionsForSelection?.historyMode);
       return nextView;
     },
+    setAccent(accent: string) {
+      const state = store.getState();
+      if (state.settings.accent === accent) return;
+      const validAccents = new Set((SETTINGS_FIELD_METADATA.accent.options || []).map((option) => option.value));
+      if (!validAccents.has(accent)) return;
+      const nextSettings = { ...copySettings(state.settings), accent };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings: { ...state.draftSettings, accent },
+      });
+    },
     setBundlePackage(value: string) {
       const state = store.getState();
       if (state.settings.bundlePackage === value) return;

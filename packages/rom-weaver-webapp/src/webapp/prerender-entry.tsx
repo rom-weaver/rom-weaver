@@ -24,6 +24,7 @@ import { preloadWorkflowRoute } from "./workflow-routes.tsx";
 const noop = () => undefined;
 
 const createPrerenderActions = (): WebappRootProps["actions"] => ({
+  onAccentChange: noop,
   onCancelConfirmation: noop,
   onCloseSettings: noop,
   onConfirmConfirmation: noop,
@@ -33,6 +34,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onCreatorPatchTypeChange: noop,
   onCreatorSettingsChange: noop,
   onDraftChange: noop,
+  onLanguageChange: noop,
   onLogLevelChange: noop,
   onOpenSettings: noop,
   onPatcherBundlePackageChange: noop,

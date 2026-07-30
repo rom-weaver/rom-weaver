@@ -55,6 +55,11 @@ msgstr "7z-Codec"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.accent"
+msgstr "Akzentfarbe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "Alles lokal in deinem Browser — deine Dateien verlassen nie deinen Rechner."
 
@@ -217,6 +222,11 @@ msgstr "ROM-Header korrigieren"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
 msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.language"
+msgstr "Sprache"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

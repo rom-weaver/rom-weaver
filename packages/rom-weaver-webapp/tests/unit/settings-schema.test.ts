@@ -73,8 +73,8 @@ describe("validateSettingsDraft", () => {
   });
 
   it("normalizes a valid choice value case-insensitively without flagging it", () => {
-    const result = validateSettingsDraft(validDraft({ language: "FR" }));
-    expect(result.settings.language).toBe("fr");
+    const result = validateSettingsDraft(validDraft({ language: "DE" }));
+    expect(result.settings.language).toBe("de");
     expect(result.invalidFields).not.toContain(getSettingsFieldId("language"));
   });
 
@@ -155,10 +155,10 @@ describe("serializeSettingsForStorage", () => {
   });
 
   it("serializes a changed common choice field under common", () => {
-    const settings = { ...getDefaultSettings(), language: "fr" };
+    const settings = { ...getDefaultSettings(), language: "de" };
     const json = serializeSettingsForStorage(settings);
     const parsed = JSON.parse(json as string);
-    expect(parsed.common.language).toBe("fr");
+    expect(parsed.common.language).toBe("de");
   });
 
   it("serializes and loads the beta tools setting under common", () => {
@@ -182,12 +182,12 @@ describe("loadSettings", () => {
   });
 
   it("applies a valid grouped payload round-tripped through serialize", () => {
-    const modified = { ...getDefaultSettings(), fixChecksum: true, language: "fr" };
+    const modified = { ...getDefaultSettings(), fixChecksum: true, language: "de" };
     const stored = serializeSettingsForStorage(modified);
     const storage = makeStorage(stored);
     const loaded = loadSettings(storage);
     expect(loaded.fixChecksum).toBe(true);
-    expect(loaded.language).toBe("fr");
+    expect(loaded.language).toBe("de");
     expect(storage.removedKeys).toEqual([]);
   });
 
@@ -206,7 +206,7 @@ describe("loadSettings", () => {
   });
 
   it("resets and returns defaults on a storage version mismatch", () => {
-    const payload = JSON.stringify({ common: { language: "fr" }, version: SETTINGS_STORAGE_VERSION - 1 });
+    const payload = JSON.stringify({ common: { language: "de" }, version: SETTINGS_STORAGE_VERSION - 1 });
     const storage = makeStorage(payload);
     expect(loadSettings(storage)).toEqual(getDefaultSettings());
     expect(storage.removedKeys).toEqual([LOCAL_STORAGE_SETTINGS_ID]);
@@ -219,7 +219,7 @@ describe("loadSettings", () => {
   });
 
   it("resets when the payload is the right version but not grouped", () => {
-    const payload = JSON.stringify({ language: "fr", version: SETTINGS_STORAGE_VERSION });
+    const payload = JSON.stringify({ language: "de", version: SETTINGS_STORAGE_VERSION });
     const storage = makeStorage(payload);
     expect(loadSettings(storage)).toEqual(getDefaultSettings());
     expect(storage.removedKeys).toEqual([LOCAL_STORAGE_SETTINGS_ID]);

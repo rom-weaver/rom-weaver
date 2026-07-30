@@ -13,7 +13,7 @@ import {
   getGeneratedCompressionCodecLevelMax,
   getGeneratedCompressionCodecLevelMin,
 } from "../../lib/compression/compression-metadata.ts";
-import { getBrowserLocaleCandidates, negotiateLocale } from "../../presentation/localization/index.ts";
+import { getBrowserLocaleCandidates, LOCALE_OPTIONS, negotiateLocale } from "../../presentation/localization/index.ts";
 import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/settings.ts";
 import { ACCENTS } from "../accent.ts";
 import { DEFAULT_CHANNEL_ACCENT } from "../build-channel.ts";
@@ -353,22 +353,9 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     key: "language",
     kind: "select",
     label: getSettingsLabel("language"),
-    options: [
-      { label: "English", value: "en" },
-      { label: "Français", value: "fr" },
-      { label: "Deutsch", value: "de" },
-      { label: "Italiano", value: "it" },
-      { label: "Español", value: "es" },
-      { label: "Nederlands", value: "nl" },
-      { label: "Svenska", value: "sv" },
-      { label: "Català", value: "ca" },
-      { label: "Valencià", value: "ca-va" },
-      { label: "Português Brasileiro", value: "pt-br" },
-      { label: "Russian", value: "ru" },
-      { label: "日本語", value: "ja" },
-      { label: "中文（简体）", value: "zh-cn" },
-      { label: "中文（正體）", value: "zh-tw" },
-    ],
+    // One option per shipped catalog. The list used to name 14 languages, 11 of
+    // which had no catalog and silently rendered English.
+    options: LOCALE_OPTIONS.map((locale) => ({ label: locale.label, value: locale.value })),
     validationLabel: "Language",
   },
   logLevel: {

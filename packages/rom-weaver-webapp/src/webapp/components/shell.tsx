@@ -1,9 +1,10 @@
-import { createLucideIcon, Heart, Moon, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
+import { createLucideIcon, Heart, Moon, Palette, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
-import type { Localizer } from "../../presentation/localization/index.ts";
+import { ACCENTS, useAccent } from "../accent.ts";
+import { LOCALE_OPTIONS, type Localizer } from "../../presentation/localization/index.ts";
 import { viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
@@ -180,6 +181,133 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   );
 };
 
+type QuickTool = "accent" | "language";
+
+/**
+ * Accent quick picker: the button wears the live dye, and opening it drops the
+ * six lots below the toolbar. Choosing one commits immediately - the picker
+ * exists precisely to skip the settings panel's draft/Save round trip, and an
+ * accent is self-evidently reversible.
+ *
+ * Same swatch radios as the settings panel's picker, so arrow-key roving comes
+ * from the native radio group rather than a hand-rolled one.
+ */
+const AccentPicker = ({
+  localizer,
+  onChange,
+  onToggle,
+  open,
+}: {
+  localizer: Localizer;
+  onChange: (accent: string) => void;
+  onToggle: () => void;
+  open: boolean;
+}) => {
+  const accent = useAccent();
+  const trayRef = useRef<HTMLDivElement | null>(null);
+  const label = localizer.message("ui.tools.accent");
+
+  // Opening with the keyboard has to land somewhere; the current lot is the
+  // only sensible anchor for the arrow keys that follow.
+  useEffect(() => {
+    if (!open) return;
+    trayRef.current?.querySelector<HTMLInputElement>("input:checked")?.focus();
+  }, [open]);
+
+  return (
+    <div className="tool-anchor">
+      <button
+        aria-expanded={open}
+        aria-label={label}
+        className="tool accent-tool"
+        onClick={onToggle}
+        title={label}
+        type="button"
+      >
+        <Palette aria-hidden="true" />
+        <span aria-hidden="true" className="accent-tool-dot" />
+      </button>
+      {open ? (
+        <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
+          {ACCENTS.map((entry) => (
+            <label className="accent-chip" key={entry.value} title={entry.label}>
+              <input
+                aria-label={entry.label}
+                checked={entry.value === accent}
+                name="masthead-accent"
+                onChange={() => onChange(entry.value)}
+                type="radio"
+                value={entry.value}
+              />
+              <span aria-hidden="true" className="accent-chip-dot" style={{ background: entry.swatch }} />
+            </label>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+/**
+ * Language quick picker. The list is `LOCALE_OPTIONS` - one entry per shipped
+ * catalog - so every choice here actually changes what the app says.
+ */
+const LanguagePicker = ({
+  language,
+  localizer,
+  onChange,
+  onToggle,
+  open,
+}: {
+  language: string;
+  localizer: Localizer;
+  onChange: (language: string) => void;
+  onToggle: () => void;
+  open: boolean;
+}) => {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const label = localizer.message("ui.tools.language");
+  const current = LOCALE_OPTIONS.find((locale) => locale.value === language) || LOCALE_OPTIONS[0];
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
+  }, [open]);
+
+  return (
+    <div className="tool-anchor">
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={label}
+        className="tool tool-code"
+        onClick={onToggle}
+        title={label}
+        type="button"
+      >
+        <span aria-hidden="true">{(current?.value || "").slice(0, 2).toUpperCase()}</span>
+      </button>
+      {open ? (
+        <div aria-label={label} className="tool-menu" ref={menuRef} role="menu">
+          {LOCALE_OPTIONS.map((locale) => (
+            <button
+              aria-checked={locale.value === language}
+              className="tool-menu-item"
+              key={locale.value}
+              lang={locale.value}
+              onClick={() => onChange(locale.value)}
+              role="menuitemradio"
+              type="button"
+            >
+              {locale.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
  * resolver in `index.html` rewrites before React loads - that is what stops the
@@ -211,6 +339,9 @@ const Masthead = ({
   channelBadge,
   commitHash,
   commitsSinceVersion,
+  language,
+  onAccentChange,
+  onLanguageChange,
   tabs,
   currentTab,
   dirty,
@@ -234,6 +365,9 @@ const Masthead = ({
   channelBadge?: string;
   commitHash?: string;
   commitsSinceVersion?: number | null;
+  language?: string;
+  onAccentChange?: (accent: string) => void;
+  onLanguageChange?: (language: string) => void;
   tabs: WorkflowTab[];
   currentTab: string;
   dirty?: boolean;
@@ -254,6 +388,10 @@ const Masthead = ({
   versionTitle?: string;
 }) => {
   const localizer = useUiLocalizer();
+  // One slot, so opening either picker closes the other - the two trays sit
+  // side by side and would otherwise overlap.
+  const [openTool, setOpenTool] = useState<QuickTool | null>(null);
+  const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const logLabel = localizer.message("ui.tools.log");
   const settingsLabel = localizer.message("ui.settings.title");
@@ -270,6 +408,30 @@ const Masthead = ({
         : hydratedStatus === "off"
           ? "Service-worker offline support is unavailable."
           : undefined;
+  // Pointer-down rather than click so a press that starts outside dismisses
+  // before the target's own handler runs.
+  useEffect(() => {
+    if (!openTool) return undefined;
+    const dismiss = (event: Event) => {
+      const tools = toolsRef.current;
+      if (tools && event.target instanceof Node && tools.contains(event.target)) return;
+      setOpenTool(null);
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpenTool(null);
+      toolsRef.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [openTool]);
+
+  const toggleTool = (tool: QuickTool) => setOpenTool((previous) => (previous === tool ? null : tool));
+
   const guardExternalClick = (event: { preventDefault: () => void }, href: string) => {
     if (!confirmExternalNavigation) return;
     event.preventDefault();
@@ -366,7 +528,7 @@ const Masthead = ({
           </span>
         </span>
         <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
-        <div className="masthead-tools">
+        <div className="masthead-tools" ref={toolsRef}>
           {githubHref ? (
             <a
               aria-label="GitHub"
@@ -413,6 +575,24 @@ const Masthead = ({
             </span>
           </button>
           <ThemeToggle localizer={localizer} />
+          {/* stays open on pick: arrow keys walk the radio group, and comparing
+              two lots should not cost a reopen */}
+          <AccentPicker
+            localizer={localizer}
+            onChange={(accent) => onAccentChange?.(accent)}
+            onToggle={() => toggleTool("accent")}
+            open={openTool === "accent"}
+          />
+          <LanguagePicker
+            language={language || ""}
+            localizer={localizer}
+            onChange={(next) => {
+              onLanguageChange?.(next);
+              setOpenTool(null);
+            }}
+            onToggle={() => toggleTool("language")}
+            open={openTool === "language"}
+          />
           <button
             aria-haspopup="dialog"
             aria-label={logLabel}

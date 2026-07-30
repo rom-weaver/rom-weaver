@@ -48,20 +48,25 @@
     align-items: center;
     justify-content: flex-end;
     min-width: 0;
-    gap: var(--sp-2xs);
+    /* eight tools at the 24px floor already fill the column; a gap between them
+       would come out of the brand column and clip the build line */
+    gap: 0;
     margin: 0;
   }
 
   /* Narrower than desktop (icon-only, tall tap target kept) so the brand
-     column's 1fr can hold the full build line without clipping the sha. */
+     column's 1fr can hold the full build line without clipping the sha.
+     24px is the floor - WCAG 2.5.8 target size - and the row is at it. */
   .rw-app .tool {
     position: relative;
-    width: 26px;
+    width: 24px;
     height: 40px;
     min-width: 0;
     padding: 0;
     border-radius: var(--r-m);
   }
+
+  .rw-app .tools-sep { margin-inline: 3px; }
 
   .rw-app .tool svg,
   .rw-app .tool .ico-sun,

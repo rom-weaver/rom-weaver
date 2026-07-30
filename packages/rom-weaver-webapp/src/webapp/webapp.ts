@@ -394,6 +394,7 @@ const renderWebappRoot = (): undefined => {
           if (accepted) webappController.discardDraftSettings();
         })();
       },
+      onAccentChange: (accent) => webappController.setAccent(accent),
       onConfirmConfirmation: () => closeConfirmationDialog(true),
       onConfirmExternalNavigation: async () => {
         const navigationGuardState = getNavigationGuardState();
@@ -412,6 +413,7 @@ const renderWebappRoot = (): undefined => {
       onCreatorSettingsChange: (settings) => webappController.setCreatorSettingsState(settings),
       onDraftChange: (field, value) =>
         webappController.updateDraftSetting(field as Parameters<typeof webappController.updateDraftSetting>[0], value),
+      onLanguageChange: (language) => webappController.setLanguage(language),
       onLogLevelChange: (level) => webappController.setLogLevel(level),
       onOpenSettings: () => webappController.openSettings(),
       onPatcherBundlePackageChange: (value) => webappController.setBundlePackage(value),

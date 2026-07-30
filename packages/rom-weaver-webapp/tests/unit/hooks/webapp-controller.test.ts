@@ -152,6 +152,31 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().draftSettings.language).toBe("de");
   });
 
+  it("rejects a language with no shipped catalog", () => {
+    const controller = createController();
+    const before = controller.getState().settings.language;
+    controller.setLanguage("fr");
+    expect(controller.getState().settings.language).toBe(before);
+  });
+
+  it("commits and persists an accent change from the masthead picker", () => {
+    const storage = createStorage();
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+    controller.setAccent("woad");
+    expect(controller.getState().settings.accent).toBe("woad");
+    expect(controller.getState().draftSettings.accent).toBe("woad");
+    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").common?.accent).toBe("woad");
+    // An unknown dye lot is rejected rather than persisted.
+    controller.setAccent("chartreuse");
+    expect(controller.getState().settings.accent).toBe("woad");
+  });
+
   it("commits and persists the bundle package selection from the output card", () => {
     const storage = createStorage();
     const controller = createWebappRootController({
