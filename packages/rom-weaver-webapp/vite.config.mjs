@@ -24,17 +24,17 @@ const repoRoot = path.resolve(rootDir, "../..");
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
 const docsScreenshotNames = [
-  "create-desktop-dark.png",
-  "create-desktop-light.png",
-  "create-mobile-dark.png",
-  "create-mobile-light.png",
-  "first-sample-hello-world.png",
-  "first-sample-modified-world.png",
-  "first-sample-modified-rom.png",
-  "weave-desktop-dark.png",
-  "weave-desktop-light.png",
-  "weave-mobile-dark.png",
-  "weave-mobile-light.png",
+  "create-desktop-dark.webp",
+  "create-desktop-light.webp",
+  "create-mobile-dark.webp",
+  "create-mobile-light.webp",
+  "first-sample-hello-world.webp",
+  "first-sample-modified-world.webp",
+  "first-sample-modified-rom.webp",
+  "weave-desktop-dark.webp",
+  "weave-desktop-light.webp",
+  "weave-mobile-dark.webp",
+  "weave-mobile-light.webp",
 ];
 const docsScreenshotSources = Object.fromEntries(
   docsScreenshotNames.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),
@@ -59,7 +59,9 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/llms.txt": path.join(rootAssetDir, "llms.txt"),
   "/logo.svg": channelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
+  "/social-preview.avif": path.join(rootDir, "design", "social-preview.avif"),
   "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
+  "/social-preview.webp": path.join(rootDir, "design", "social-preview.webp"),
   ...docsScreenshotSources,
 });
 const generatedSampleAssetPaths = new Set([
@@ -122,6 +124,7 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   if (requestPath.endsWith(".html")) res.setHeader("Content-Type", "text/html; charset=utf-8");
   else if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
   else if (requestPath.endsWith(".txt")) res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  else if (requestPath.endsWith(".avif")) res.setHeader("Content-Type", "image/avif");
   else if (requestPath.endsWith(".png")) res.setHeader("Content-Type", "image/png");
   else if (requestPath.endsWith(".zip")) res.setHeader("Content-Type", "application/zip");
   else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");

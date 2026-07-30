@@ -216,7 +216,7 @@ jobs:
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: node scripts/aggregate-release-changelog.mjs
 
-      # These PNGs belong in the release PR so the merge contains the exact
+      # These WebPs belong in the release PR so the merge contains the exact
       # captures the release will ship. Capturing them reuses the production
       # WASM artifact from main's CI run for this commit. The verify-main-ci job
       # above guarantees the run is complete; the fallback remains for a green
@@ -226,6 +226,7 @@ jobs:
         uses: ./.github/actions/setup-build-env
         with:
           tools: node
+          apt-packages: imagemagick
           cargo-cache: "false"
           cache-save: "false"
           playwright: "true"
@@ -316,7 +317,7 @@ jobs:
           set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add packages/rom-weaver-webapp/design/*-{desktop,mobile}-{light,dark}.png
+          git add packages/rom-weaver-webapp/design/*-{desktop,mobile}-{light,dark}.webp
           if git diff --cached --quiet; then
             echo "Release screenshots are already current"
             exit 0

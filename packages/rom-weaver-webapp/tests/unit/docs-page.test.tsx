@@ -215,7 +215,7 @@ Fixture description.
 
 [Install](../hosting/cli.md#install)
 [Maintainer notes](../development/mobile-safari-verification.md)
-![Sample](../../packages/rom-weaver-webapp/design/first-sample-modified-world.png)
+![Sample](../../packages/rom-weaver-webapp/design/first-sample-modified-world.webp)
 `,
     );
 
@@ -223,7 +223,7 @@ Fixture description.
     expect(route.html).toContain(
       'href="https://github.com/rom-weaver/rom-weaver/blob/main/docs/development/mobile-safari-verification.md"',
     );
-    expect(route.html).toContain('src="/docs/screenshots/first-sample-modified-world.png"');
+    expect(route.html).toContain('src="/docs/screenshots/first-sample-modified-world.webp"');
   });
 
   it.each([

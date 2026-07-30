@@ -37,6 +37,7 @@ const DYNAMIC_BROTLI_MAX_BYTES = 256 * 1024;
 const DYNAMIC_BROTLI_TYPES = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg"]);
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
+  ".avif": "image/avif",
   ".gif": "image/gif",
   ".html": "text/html; charset=utf-8",
   ".ico": "image/x-icon",
