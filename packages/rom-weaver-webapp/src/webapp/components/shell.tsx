@@ -2,10 +2,11 @@ import { createLucideIcon, Heart, Moon, Palette, RotateCcw, ScrollText, Settings
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
 import { LOCALE_OPTIONS, type Localizer } from "../../presentation/localization/index.ts";
-import { viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
+import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
@@ -164,11 +165,12 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
     root.style.setProperty("--wipe-x", `${cx}px`);
     root.style.setProperty("--wipe-y", `${cy}px`);
     root.style.setProperty("--wipe-r", `${radius}px`);
-    root.classList.add("vt-theme");
-    const transition = document.startViewTransition(() => toggleTheme());
+    const release = holdTransitionClasses(["vt-theme"]);
+    // flushSync so the icon swap lands in the captured "new" snapshot rather
+    // than popping in whenever React's own commit happens to schedule.
+    const transition = document.startViewTransition(() => flushSync(toggleTheme));
     transition.ready.catch(() => undefined);
-    const clear = () => root.classList.remove("vt-theme");
-    transition.finished.then(clear, clear);
+    transition.finished.then(release, release);
   };
   return (
     <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">

@@ -41,7 +41,25 @@ const pretendIosWebKit = () => {
     property === "-webkit-touch-callout" ? true : originalSupports.call(CSS, property, value);
 };
 
-const clickThemeToggle = async () => {
+/** Like the stub above, but the caller decides when each run finishes. */
+const stubDeferredViewTransitions = () => {
+  startCalls = [];
+  originalStart = document.startViewTransition;
+  const settlers = [];
+  document.startViewTransition = (update) => {
+    startCalls.push(update);
+    update();
+    let settle;
+    const finished = new Promise((resolve) => {
+      settle = resolve;
+    });
+    settlers.push(settle);
+    return { finished, ready: Promise.resolve(), updateCallbackDone: Promise.resolve() };
+  };
+  return settlers;
+};
+
+const renderMasthead = async () => {
   host = document.createElement("div");
   host.className = "rw-app";
   document.body.append(host);
@@ -70,6 +88,11 @@ const clickThemeToggle = async () => {
     toggle = find();
   }
   if (!toggle) throw new Error("theme toggle never rendered");
+  return toggle;
+};
+
+const clickThemeToggle = async () => {
+  const toggle = await renderMasthead();
   // The store owns the current theme; read it rather than assuming a direction.
   const before = document.documentElement.getAttribute("data-theme");
   toggle.click();
@@ -106,6 +129,28 @@ describe("theme toggle view-transition gate", () => {
     expect(root_.style.getPropertyValue("--wipe-x")).toBe(`${rect.left + rect.width / 2}px`);
     expect(root_.style.getPropertyValue("--wipe-y")).toBe(`${rect.top + rect.height / 2}px`);
     expect(Number.parseFloat(root_.style.getPropertyValue("--wipe-r"))).toBeGreaterThan(0);
+  });
+
+  test("keeps vt-theme held when a second toggle overlaps the first", async () => {
+    pretendIosWebKit();
+    const settlers = stubDeferredViewTransitions();
+    const toggle = await renderMasthead();
+
+    toggle.click();
+    toggle.click();
+    expect(startCalls).toHaveLength(2);
+
+    // The first run settles while the second is still animating; its release
+    // must not strip the class the live run's wipe depends on.
+    settlers[0]();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.documentElement.classList.contains("vt-theme")).toBe(true);
+
+    settlers[1]();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.documentElement.classList.contains("vt-theme")).toBe(false);
   });
 
   test("falls back to an instant flip where the API is missing", async () => {
