@@ -24,18 +24,33 @@ const countVisibleWords = (source) =>
     .replace(/<[^>]+>/g, " ")
     .trim()
     .split(/\s+/).length;
+const docsScreenshotCaptures = [
+  "apply-output-desktop-dark",
+  "apply-output-desktop-light",
+  "apply-output-mobile-dark",
+  "apply-output-mobile-light",
+  "apply-patches-desktop-dark",
+  "apply-patches-desktop-light",
+  "apply-patches-mobile-dark",
+  "apply-patches-mobile-light",
+  "bundle-output-desktop-dark",
+  "bundle-output-desktop-light",
+  "bundle-output-mobile-dark",
+  "bundle-output-mobile-light",
+  "create-inputs-desktop-dark",
+  "create-inputs-desktop-light",
+  "create-inputs-mobile-dark",
+  "create-inputs-mobile-light",
+  "create-output-desktop-dark",
+  "create-output-desktop-light",
+  "create-output-mobile-dark",
+  "create-output-mobile-light",
+];
 const docsScreenshotNames = [
-  "create-desktop-dark.webp",
-  "create-desktop-light.webp",
-  "create-mobile-dark.webp",
-  "create-mobile-light.webp",
+  ...docsScreenshotCaptures.flatMap((name) => [`${name}.avif`, `${name}.webp`]),
   "first-sample-hello-world.webp",
   "first-sample-modified-world.webp",
   "first-sample-modified-rom.webp",
-  "weave-desktop-dark.webp",
-  "weave-desktop-light.webp",
-  "weave-mobile-dark.webp",
-  "weave-mobile-light.webp",
 ];
 
 const applyHtml = read("index.html");
@@ -81,16 +96,20 @@ for (const url of [
   "https://rom-weaver.com/apply",
   "https://rom-weaver.com/create",
   "https://rom-weaver.com/docs",
+  "https://rom-weaver.com/docs/apply-rom-patches",
   "https://rom-weaver.com/docs/cli",
   "https://rom-weaver.com/docs/create-bundles",
+  "https://rom-weaver.com/docs/create-rom-patches",
+  "https://rom-weaver.com/docs/faq",
   "https://rom-weaver.com/docs/self-hosting",
   "https://rom-weaver.com/docs/architecture",
   "https://github.com/rom-weaver/rom-weaver",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md",
-  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/cli.md",
-  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/webapp-integration.md",
-  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/self-hosting.md",
-  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/ARCHITECTURE.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/usage/README.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/cli.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/webapp-integration.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/self-hosting.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/ARCHITECTURE.md",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/.github/RELEASING.md",
 ]) {
   assertIncludes(llmsTxt, `](${url})`, "llms.txt links");
@@ -155,18 +174,22 @@ for (const name of docsScreenshotNames) {
   const screenshotPath = path.join(distDir, "docs", "screenshots", name);
   if (!fs.statSync(screenshotPath).isFile()) throw new Error(`docs screenshot is missing: ${name}`);
 }
-for (const [slug, workflow] of [
-  ["docs/apply-rom-patches", "weave"],
-  ["docs/create-rom-patches", "create"],
+for (const [slug, captures] of [
+  ["docs/apply-rom-patches", ["apply-patches", "apply-output"]],
+  ["docs/create-rom-patches", ["create-inputs", "create-output"]],
+  ["docs/create-bundles", ["bundle-output"]],
 ]) {
   const docsHtml = read(`${slug}.html`);
-  for (const viewport of ["desktop", "mobile"]) {
-    for (const theme of ["dark", "light"]) {
-      assertIncludes(
-        docsHtml,
-        `/docs/screenshots/${workflow}-${viewport}-${theme}.webp`,
-        `${slug} ${viewport} ${theme} screenshot`,
-      );
+  for (const capture of captures) {
+    for (const viewport of ["desktop", "mobile"]) {
+      for (const theme of ["dark", "light"]) {
+        for (const extension of ["avif", "webp"])
+          assertIncludes(
+            docsHtml,
+            `/docs/screenshots/${capture}-${viewport}-${theme}.${extension}`,
+            `${slug} ${capture} ${viewport} ${theme} ${extension} screenshot`,
+          );
+      }
     }
   }
 }
@@ -202,13 +225,17 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
   const legalPage = route.slug === "docs/notices" || route.slug === "docs/privacy";
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);
-  // The guided-sample offer is the hub's, not every page's: sixteen guides all
+  // The guided-sample offer is the hub's, not every page's: the guides all
   // closing on the same three buttons made it furniture. Each guide still reaches
   // the samples through the prose links its own author wrote.
   if (route.slug === "docs") {
     assertIncludes(docsHtml, 'href="/apply?guide=apply"', `${route.slug} guided Apply link`);
     assertIncludes(docsHtml, 'href="/create?guide=create"', `${route.slug} guided Create link`);
-    assertIncludes(docsHtml, 'href="/docs/cli#install"', `${route.slug} CLI installation link`);
+    assertIncludes(docsHtml, 'href="/apply?guide=bundle"', `${route.slug} guided Bundle link`);
+    assertIncludes(docsHtml, 'href="/docs/faq"', `${route.slug} FAQ link`);
+    assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} browser usage link`);
+    assertIncludes(docsHtml, 'href="/docs/cli"', `${route.slug} CLI usage link`);
+    assertIncludes(docsHtml, 'href="/docs/self-hosting"', `${route.slug} self-hosting link`);
   }
   // The hub is an index with no headings of its own, so it has neither in-page
   // anchors nor an outline to rail. Every other page must have both.

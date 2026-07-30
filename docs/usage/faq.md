@@ -75,8 +75,8 @@ and patch files. Whether you may share a ROM depends on the rights you hold.
 
 ### Which page should I use?
 
-Use [Weave](https://rom-weaver.com/weave) when somebody gave you a patch or
-bundle. Start [guided Apply](https://rom-weaver.com/weave?guide=apply) for a
+Use [Apply](https://rom-weaver.com/apply) when somebody gave you a patch or
+bundle. Start [guided Apply](https://rom-weaver.com/apply?guide=apply) for a
 safe tour with included files. The complete steps are in
 [Apply a ROM patch](apply-rom-patches.md).
 
@@ -178,7 +178,7 @@ public domain files, backups, or material you may redistribute.
 
 ### How do I make a bundle?
 
-Start [guided Bundle](https://rom-weaver.com/weave?guide=bundle). It loads the
+Start [guided Bundle](https://rom-weaver.com/apply?guide=bundle). It loads the
 practice recipe and selects a patch-only ZIP. For a real release, stage the
 clean ROM and ordered patches, add patch details, open **Output Options**,
 select a bundle package, choose **Create ZIP Bundle**, then download and test
@@ -192,7 +192,7 @@ The full browser workflow is in
 Yes:
 
 ```text
-https://rom-weaver.com/weave?bundle=https://example.com/release.zip
+https://rom-weaver.com/apply?bundle=https://example.com/release.zip
 ```
 
 Your file host must allow cross-origin browser requests with CORS. See
@@ -247,7 +247,7 @@ commands, and large jobs.
 
 They use the same core patch and container logic, but the interfaces are
 different. Browser documentation stays focused on visible controls. The
-[CLI guide](../hosting/cli.md) owns installation, shell commands, options, and
+[CLI usage guide](../hosting/cli.md) owns installation, shell commands, options, and
 the command reference.
 
 ### Where can I report a bug?
@@ -262,5 +262,5 @@ for bugs and feature requests. Use the private process in the
 [security policy](https://github.com/rom-weaver/rom-weaver/security/policy)
 for vulnerabilities.
 
-Still learning? Return to [Get started](get-started.md) or use the picker on
+Still learning? Return to [Browser usage](get-started.md) or choose a guide on
 the [documentation home](README.md).

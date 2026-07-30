@@ -18,7 +18,7 @@
 > (`rom-weaver-core`, `-checksum`, `-containers`, `-patches`) are published only
 > so this one can be; using them directly is unsupported.
 
-## What this crate is
+## What does this crate do?
 
 The installable end of rom-weaver. It ships the `rom-weaver` binary and the
 `rom_weaver_app` command library that both frontends share. The native CLI and

@@ -14,18 +14,24 @@ Choose the guide that matches what you are trying to do.
 
 ## Use rom-weaver
 
-- [Get started](./usage/get-started.md): what a patch is, one worked example in
-  the browser and in a terminal, and the words the guides keep using.
-- [Usage guides](./usage/README.md): the index of every page - apply and create
-  patches, choose a format, troubleshoot checksum errors, in the webapp or CLI.
-- [Bundle creation guide](./usage/create-bundles.md): build and verify a
-  distributable patch bundle in the Weave webapp or CLI.
-- [CLI guide](./hosting/cli.md): installation, common workflows, command reference,
+- [Documentation home](./usage/README.md): browser and CLI entry points, guided
+  samples, installation, self-hosting, every guide, and quick answers.
+- [Browser usage](./usage/get-started.md): what a patch is and one
+  safe worked example with the included homebrew files.
+- [Apply patches](./usage/apply-rom-patches.md): the complete Weave workflow,
+  with focused screenshots for desktop, mobile, light, and dark themes.
+- [Create patches](./usage/create-rom-patches.md): compare Original and
+  Modified, download a patch, then test that downloaded patch.
+- [Create bundles](./usage/create-bundles.md): package and verify a repeatable,
+  patch-only release in the Weave webapp.
+- [FAQ](./usage/faq.md): privacy, matching ROMs, patch formats, bundles,
+  offline use, devices, and choosing between browser and CLI.
+- [CLI usage](./hosting/cli.md): installation, common workflows, command reference,
   supported formats, compression, checksums, trimming, and JSON output.
 - [Man pages](./hosting/cli.md#man-pages): generate `rom-weaver(1)` and one page per
   visible CLI command directly from Clap.
-- [Screenshots](./development/screenshots.md): desktop and mobile workflows plus the runnable
-  sample ROMs before and after patching.
+- [Screenshots](./development/screenshots.md): reproducible, focused desktop
+  and mobile captures plus the runnable sample ROMs before and after patching.
 - [Webapp masthead metadata](./hosting/webapp-runtime-status.md): the version, SHA,
   thread, PWA, and service-worker labels.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v1.schema.json): machine-readable

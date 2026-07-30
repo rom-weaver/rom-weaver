@@ -475,10 +475,14 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       setSampleLoading(false);
     }
   };
-  useGuidedSampleStart("create", () => {
-    setSampleTutorialActive(true);
-    void loadCreateSample();
-  });
+  useGuidedSampleStart(
+    "create",
+    () => {
+      setSampleTutorialActive(true);
+      void loadCreateSample();
+    },
+    () => setSampleTutorialActive(false),
+  );
   const swapCreateSources = () => {
     const workflow = stagedCreateWorkflowRef.current;
     const bothStaged = !!workflow && originalState?.status === "ready" && modifiedState?.status === "ready";

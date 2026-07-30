@@ -9,7 +9,7 @@ const GUIDE = `<pre tabindex="0"><code class="language-bash">curl --fail --locat
   ${PRODUCTION}/first-weave.zip
 rom-weaver weave --input first-weave.zip --output woven.bin --no-compress
 </code></pre>
-<p>Open the <a href="/weave?bundle=first-weave.zip">practice run</a> on ${PRODUCTION}.</p>
+<p>Open the <a href="/apply?bundle=first-weave.zip">practice run</a> on ${PRODUCTION}.</p>
 <pre tabindex="0"><code class="language-bash">rom-weaver --help
 </code></pre>`;
 
@@ -36,7 +36,7 @@ describe("retargetSampleUrls", () => {
 
   it("leaves prose and links on the production site", () => {
     expect(retargetSampleUrls(GUIDE, PREVIEW)).toContain(
-      `<a href="/weave?bundle=first-weave.zip">practice run</a> on ${PRODUCTION}.`,
+      `<a href="/apply?bundle=first-weave.zip">practice run</a> on ${PRODUCTION}.`,
     );
   });
 

@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
+import { requestGuidedSampleStart } from "../public/react/guided-sample-start.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
 import { resetBrowserTransientOpfs } from "../storage/browser/browser-opfs-cleanup.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/rom-weaver-runner.ts";
@@ -470,6 +471,15 @@ const renderWebappRoot = (): undefined => {
         webappController.saveDraftSettings();
       },
       onSelectView: (view) => webappController.selectView(view),
+      onStartGuide: (guide) => {
+        const view = guide === "create" ? "creator" : "patcher";
+        if (webappController.selectView(view) !== view) return;
+        const url = new URL(window.location.href);
+        url.search = "";
+        url.searchParams.set("guide", guide);
+        window.history.replaceState(window.history.state, "", url);
+        requestGuidedSampleStart(guide);
+      },
       onToolsSessionChange: (active) => webappController.setToolsSessionState(active),
       onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),
       onTrimSettingsChange: (settings) => webappController.setTrimSettingsState(settings),

@@ -16,6 +16,7 @@ import type { ComponentType } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
+import { GUIDED_SAMPLE_START_EVENT, GUIDED_SAMPLE_VIEW_EVENT, type GuidedSample } from "../../guided-sample-start.ts";
 import { SwapIcon } from "./swap-icon.tsx";
 
 type SampleTutorialAction =
@@ -33,14 +34,28 @@ type SampleTutorialAction =
   | "swap"
   | "toggle";
 
-const useGuidedSampleStart = (guide: "apply" | "bundle" | "create", onStart: () => void) => {
+const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismiss: () => void) => {
+  const onDismissRef = useRef(onDismiss);
   const onStartRef = useRef(onStart);
-  const startedRef = useRef(false);
+  onDismissRef.current = onDismiss;
   onStartRef.current = onStart;
   useEffect(() => {
-    if (startedRef.current || new URLSearchParams(window.location.search).get("guide") !== guide) return;
-    startedRef.current = true;
-    onStartRef.current();
+    const ownerView = guide === "create" ? "creator" : "patcher";
+    const startRequestedGuide = (event: Event) => {
+      if (!(event instanceof CustomEvent) || event.detail !== guide) return;
+      onStartRef.current();
+    };
+    const dismissHiddenGuide = (event: Event) => {
+      if (!(event instanceof CustomEvent) || event.detail === ownerView) return;
+      onDismissRef.current();
+    };
+    window.addEventListener(GUIDED_SAMPLE_START_EVENT, startRequestedGuide);
+    window.addEventListener(GUIDED_SAMPLE_VIEW_EVENT, dismissHiddenGuide);
+    if (new URLSearchParams(window.location.search).get("guide") === guide) onStartRef.current();
+    return () => {
+      window.removeEventListener(GUIDED_SAMPLE_START_EVENT, startRequestedGuide);
+      window.removeEventListener(GUIDED_SAMPLE_VIEW_EVENT, dismissHiddenGuide);
+    };
   }, [guide]);
 };
 

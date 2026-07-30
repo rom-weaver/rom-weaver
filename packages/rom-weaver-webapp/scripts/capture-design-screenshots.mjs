@@ -12,21 +12,48 @@ const OUTPUT_DIR = path.resolve(process.env.ROM_WEAVER_SCREENSHOT_OUTPUT || path
 const BASE_URL = process.env.ROM_WEAVER_SCREENSHOT_BASE_URL || "https://localhost:4173/";
 const CASES = [
   {
-    name: "weave",
+    name: "apply-patches",
     route: "/apply?bundle=first-weave.zip",
+    target: "#rom-weaver-row-patch-stack",
     waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
   },
   {
-    name: "create",
-    route: "/create",
-    waitFor: "Checksum from extract",
+    name: "apply-output",
+    route: "/apply?bundle=first-weave.zip",
+    target: "#rom-weaver-row-output-file-name",
+    waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
+  },
+  {
     click: "Start guided Create",
     dismissGuide: true,
+    name: "create-inputs",
+    route: "/create",
+    target: "#patch-builder-row-original, .swap-row, #patch-builder-row-modified",
+    waitFor: "Checksum from extract",
+  },
+  {
+    click: "Start guided Create",
+    dismissGuide: true,
+    name: "create-output",
+    route: "/create",
+    target: "#patch-builder-row-output",
+    waitFor: "Checksum from extract",
+  },
+  {
+    dismissGuide: true,
+    name: "bundle-output",
+    openOutputOptions: true,
+    route: "/apply?guide=bundle",
+    target: "#rom-weaver-row-output-file-name",
+    waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
   },
 ];
+const CASE_FILTER = process.env.ROM_WEAVER_SCREENSHOT_CASE;
+const CAPTURE_CASES = CASE_FILTER ? CASES.filter(({ name }) => name === CASE_FILTER) : CASES;
+if (!CAPTURE_CASES.length) throw new Error(`Unknown screenshot case: ${CASE_FILTER}`);
 const VIEWPORTS = [
-  { name: "desktop", viewport: { width: 1164, height: 100 }, deviceScaleFactor: 2, isMobile: false },
-  { name: "mobile", viewport: { width: 390, height: 100 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+  { name: "desktop", viewport: { width: 1164, height: 900 }, deviceScaleFactor: 2, isMobile: false },
+  { name: "mobile", viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
 ];
 const THEMES = ["light", "dark"];
 const IMAGE_MAGICK = ["magick", "convert"].find(
@@ -34,7 +61,7 @@ const IMAGE_MAGICK = ["magick", "convert"].find(
 );
 
 if (!IMAGE_MAGICK)
-  throw new Error("Screenshot capture requires ImageMagick (magick or convert) for optimized lossless WebP output");
+  throw new Error("Screenshot capture requires ImageMagick (magick or convert) for AVIF and WebP output");
 
 const pageUrl = (route) => new URL(route, BASE_URL).toString();
 
@@ -57,13 +84,48 @@ const waitForStableContent = (page) =>
     { polling: 50, timeout: 30_000 },
   );
 
+const captureRegion = async (page, selector) => {
+  const target = page.locator(selector);
+  await target.first().scrollIntoViewIfNeeded();
+  const { bounds, deviceScaleFactor, pageSize } = await target.evaluateAll((elements) => {
+    const boxes = elements.map((element) => element.getBoundingClientRect());
+    if (!boxes.length) throw new Error("Screenshot target has no elements");
+    return {
+      bounds: {
+        bottom: Math.max(...boxes.map((box) => box.bottom)) + window.scrollY,
+        left: Math.min(...boxes.map((box) => box.left)) + window.scrollX,
+        right: Math.max(...boxes.map((box) => box.right)) + window.scrollX,
+        top: Math.min(...boxes.map((box) => box.top)) + window.scrollY,
+      },
+      deviceScaleFactor: window.devicePixelRatio,
+      pageSize: {
+        height: document.documentElement.scrollHeight,
+        width: document.documentElement.scrollWidth,
+      },
+    };
+  });
+  const padding = 14;
+  const x = Math.max(0, bounds.left - padding);
+  const y = Math.max(0, bounds.top - padding);
+  const height = Math.min(pageSize.height, bounds.bottom + padding) - y;
+  const width = Math.min(pageSize.width, bounds.right + padding) - x;
+  const cropWidth = Math.round(width * deviceScaleFactor);
+  const cropHeight = Math.round(height * deviceScaleFactor);
+  const cropX = Math.round(x * deviceScaleFactor);
+  const cropY = Math.round(y * deviceScaleFactor);
+  return {
+    crop: `${cropWidth}x${cropHeight}+${cropX}+${cropY}`,
+    shot: await page.screenshot({ animations: "disabled", fullPage: true, type: "png" }),
+  };
+};
+
 const capture = async () => {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const browser = await chromium.launch();
   try {
     for (const viewport of VIEWPORTS) {
       for (const theme of THEMES) {
-        for (const captureCase of CASES) {
+        for (const captureCase of CAPTURE_CASES) {
           const context = await browser.newContext({
             colorScheme: theme,
             deviceScaleFactor: viewport.deviceScaleFactor,
@@ -78,23 +140,30 @@ const capture = async () => {
           if (captureCase.click) await page.getByRole("button", { name: captureCase.click, exact: true }).click();
           await page.getByText(captureCase.waitFor, { exact: true }).last().waitFor({ state: "visible" });
           if (captureCase.dismissGuide) await page.getByRole("button", { name: "End guide", exact: true }).click();
+          if (captureCase.openOutputOptions) {
+            const output = page.locator("#rom-weaver-row-output-file-name");
+            const options = output.locator(".cks > .cks-head");
+            if ((await options.getAttribute("aria-expanded")) === "false") await options.click();
+            await output.locator("#rom-weaver-bundle-export-format").waitFor({ state: "visible" });
+          }
           await waitForStableContent(page);
           await assertNoDevBadge(page);
-          // Chromium's full-page compositor can paint this translated, visually
-          // hidden fixed link in a later capture tile.
           await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
-          const outputPath = path.join(OUTPUT_DIR, `${captureCase.name}-${viewport.name}-${theme}.webp`);
-          const shot = await page.screenshot({ animations: "disabled", fullPage: true, type: "png" });
-          // Keep text and fine UI edges lossless; the 2x desktop and 3x mobile
-          // captures prevent retina docs pages from upscaling a 1x source.
+          const outputBase = path.join(OUTPUT_DIR, `${captureCase.name}-${viewport.name}-${theme}`);
+          const { crop, shot } = await captureRegion(page, captureCase.target);
+          const avif = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", "-quality", "80", "avif:-"], {
+            input: shot,
+            maxBuffer: 64 * 1024 * 1024,
+          });
           const webp = execFileSync(
             IMAGE_MAGICK,
-            ["png:-", "-define", "webp:lossless=true", "-define", "webp:method=6", "webp:-"],
+            ["png:-", "-crop", crop, "+repage", "-define", "webp:lossless=true", "-define", "webp:method=6", "webp:-"],
             { input: shot, maxBuffer: 64 * 1024 * 1024 },
           );
-          fs.writeFileSync(outputPath, webp);
+          fs.writeFileSync(`${outputBase}.avif`, avif);
+          fs.writeFileSync(`${outputBase}.webp`, webp);
           await context.close();
-          console.log(`Captured ${path.relative(PACKAGE_DIR, outputPath)}`);
+          console.log(`Captured ${path.relative(PACKAGE_DIR, outputBase)}.{avif,webp}`);
         }
       }
     }

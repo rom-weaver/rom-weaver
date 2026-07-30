@@ -19,7 +19,7 @@
 > documented beyond this page, changes without notice between minor releases,
 > and using it in another project is unsupported.
 
-## What this crate is
+## What does this crate do?
 
 Every checksum rom-weaver computes comes from here, whether it is verifying a
 patch's expected input, fingerprinting an extracted ROM, or answering a plain

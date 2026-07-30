@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
+import { notifyGuidedSampleView, requestGuidedSampleStart } from "../../src/public/react/guided-sample-start.ts";
 import type {
   DialogController,
   PatcherOutputController,
@@ -108,7 +109,7 @@ const renderView = ({
 };
 
 describe("apply workflow view - empty bench", () => {
-  beforeEach(() => window.history.replaceState(null, "", "/weave"));
+  beforeEach(() => window.history.replaceState(null, "", "/apply"));
   afterEach(() => vi.unstubAllGlobals());
 
   it("renders only the 0x01 hero", () => {
@@ -146,7 +147,7 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it("starts the sample tutorial from a guided Apply URL", async () => {
-    window.history.replaceState(null, "", "/weave?guide=apply");
+    window.history.replaceState(null, "", "/apply?guide=apply");
     const onUnifiedDrop = vi.fn();
     vi.stubGlobal(
       "fetch",
@@ -162,8 +163,28 @@ describe("apply workflow view - empty bench", () => {
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
   });
 
+  it("starts a guide requested after the Apply workbench has mounted", async () => {
+    const onUnifiedDrop = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        blob: () => Promise.resolve(new Blob(["sample"], { type: "application/zip" })),
+        ok: true,
+      }),
+    );
+    renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
+
+    act(() => requestGuidedSampleStart("apply"));
+
+    await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
+    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
+
+    act(() => notifyGuidedSampleView("docs"));
+    expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
+  });
+
   it("starts the bundle tutorial and selects a patch-only ZIP from a guided Bundle URL", async () => {
-    window.history.replaceState(null, "", "/weave?guide=bundle");
+    window.history.replaceState(null, "", "/apply?guide=bundle");
     const onUnifiedDrop = vi.fn();
     const setBundlePackage = vi.fn();
     vi.stubGlobal(

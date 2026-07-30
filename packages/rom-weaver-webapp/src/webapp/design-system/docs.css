@@ -82,13 +82,36 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   padding: 10px 12px 8px;
   border-bottom: 1px solid var(--seam-soft);
 }
-/* Shelves: one per folder under docs/. The heading is what turns the
-   entries into four short lists you can take in at a glance. */
-.rw-app .guide-shelf { padding: 5px 5px 7px; }
+/* Shelves: one per folder under docs/. Browser usage opens first; after that,
+   the reader's choices carry across pages. */
+.rw-app .guide-shelf { padding: 3px 5px; }
 .rw-app .guide-shelf + .guide-shelf { border-top: 1px solid var(--seam-soft); }
+.rw-app .guide-shelf > summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  border-radius: var(--r-s);
+  cursor: pointer;
+  list-style: none;
+}
+.rw-app .guide-shelf > summary::-webkit-details-marker { display: none; }
+.rw-app .guide-shelf > summary::after {
+  content: "+";
+  width: 1rem;
+  margin-inline-end: 7px;
+  color: var(--thread-text);
+  font: 700 .78rem/1 var(--mono);
+  text-align: center;
+}
+.rw-app .guide-shelf[open] > summary::after { content: "−"; }
+@media (hover: hover) {
+  .rw-app .guide-shelf > summary:hover { background: var(--well); }
+}
+.rw-app .guide-shelf > summary:active { background: var(--well); }
 .rw-app .guide-shelf-title {
+  flex: 1;
   margin: 0;
-  padding: 4px 9px 5px;
+  padding: 6px 9px;
   color: var(--ink-4);
   font-size: .625rem;
   font-weight: 700;
@@ -406,82 +429,62 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   .rw-app .docs-screenshot-pair { grid-template-columns: 1fr; }
 }
 
-/* --- hub picker ---
-   Two ordinary selects keep the decision small: one job, one tool, one guide.
-   The index below remains the no-JavaScript and browse-everything path. */
-.rw-app .docs-picker {
-  display: grid;
-  grid-template-columns: minmax(9rem, 1fr) minmax(0, 1.8fr) auto;
-  align-items: end;
-  gap: var(--sp-l);
-  padding: var(--sp-xl) var(--article-pad);
-  border-top: 1px solid var(--seam);
-  background: var(--plate-2);
-}
-.rw-app .docs-picker-heading > span {
-  display: block;
-  margin-block-end: 4px;
-  color: var(--weft);
-  font: 650 .64rem/1 var(--mono);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.rw-app .docs-picker h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: 1rem;
-  letter-spacing: -.01em;
-}
-.rw-app .docs-picker-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-s);
-}
-.rw-app .docs-picker label { display: grid; gap: 4px; min-width: 0; }
-.rw-app .docs-picker label > span {
-  color: var(--ink-3);
-  font-size: .65rem;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-.rw-app .docs-picker select {
-  width: 100%;
-  min-height: 44px;
-  padding-inline: var(--sp-m);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-s);
-  background: var(--well);
-  color: var(--ink);
-  font: inherit;
-  font-size: .8rem;
-}
-.rw-app .docs-picker-result { min-height: 44px; text-decoration: none; white-space: nowrap; }
-
 /* --- hub index ---
-   The landing route ends with every page and the sentence it opens on, so
-   "which one do I want" is answered here instead of by opening four of them. */
+   Browser usage opens first. The longer reference shelves stay one tap away. */
 .rw-app .docs-index {
   display: grid;
-  gap: var(--sp-xl);
+  gap: var(--sp-s);
   padding: var(--sp-xl) var(--article-pad) clamp(28px, 5vw, 44px);
   border-top: 1px solid var(--seam);
 }
-.rw-app .docs-index h2 {
-  margin: 0 0 var(--sp-m);
-  color: var(--ink-3);
-  font-size: .655rem;
+.rw-app .docs-index-shelf {
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+}
+.rw-app .docs-index-shelf > summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  gap: var(--sp-m);
+  padding: var(--sp-m) var(--sp-l);
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+.rw-app .docs-index-shelf > summary::-webkit-details-marker { display: none; }
+.rw-app .docs-index-shelf > summary::before {
+  content: "+";
+  width: 1rem;
+  color: var(--thread-text);
+  font: 700 .9rem/1 var(--mono);
+  text-align: center;
+}
+.rw-app .docs-index-shelf[open] > summary::before { content: "−"; }
+@media (hover: hover) {
+  .rw-app .docs-index-shelf > summary:hover { background: var(--well); }
+}
+.rw-app .docs-index-shelf > summary:active { background: var(--well); }
+.rw-app .docs-index-title {
+  flex: 1;
+  margin: 0;
+  color: var(--ink);
+  font-size: .78rem;
   font-weight: 700;
-  font-stretch: 86%;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  letter-spacing: -.005em;
+}
+.rw-app .docs-index-count {
+  color: var(--ink-3);
+  font-size: .68rem;
+  font-weight: 650;
 }
 .rw-app .docs-index ul {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: var(--sp-s);
-  margin: 0;
-  padding: 0;
+  margin: 0 var(--sp-m) var(--sp-m);
+  padding: var(--sp-m) 0 0;
+  border-top: 1px solid var(--seam-soft);
   list-style: none;
 }
 .rw-app .docs-index li { margin: 0; }
@@ -582,8 +585,6 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 
 /* --- responsive --- */
 @media (max-width: 860px) {
-  .rw-app .docs-picker { grid-template-columns: 1fr; align-items: stretch; }
-  .rw-app .docs-picker-result { justify-content: center; white-space: normal; }
   .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
   .rw-app .docs-rails { display: none; }
   /* The plain breadcrumb hands its job to the trail, which does the navigating
@@ -745,6 +746,7 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
      clipping would hide every shelf past the fold, and the body is the thing
      that scrolls. */
   .rw-modal.guide-sheet .guide-nav { background: none; overflow: visible; }
+  .rw-modal.guide-sheet .guide-shelf > summary { min-height: 44px; }
   .rw-modal.guide-sheet .guide-nav-list a { min-height: 40px; padding-block: 10px; }
   /* The woven fill reads as cloth across a full-width sidebar row; at sheet
      width it is just a grid of dots, so the current page takes a flat dye. The
@@ -758,8 +760,6 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 @media (max-width: 520px) {
   .rw-app .docs-workbench { --article-pad: 18px; }
   .rw-app .docs-article { padding: 22px 18px 26px; }
-  .rw-app .docs-picker { gap: var(--sp-m); padding: 18px; }
-  .rw-app .docs-picker-fields { grid-template-columns: 1fr; }
   .rw-app .docs-cta { align-items: stretch; flex-direction: column; padding: 18px; }
   .rw-app .docs-cta-actions { display: grid; grid-template-columns: 1fr; }
   /* Commands wrap rather than scroll at this width. Scrolled sideways they cut

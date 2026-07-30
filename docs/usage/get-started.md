@@ -1,130 +1,151 @@
-# Get started with rom-weaver
+# Browser usage
 
-rom-weaver applies and creates ROM patches. It runs in your browser or in a
-terminal, and your files never leave your device.
+rom-weaver applies and creates ROM patches without uploading your files.
+Nothing needs to be installed for this guide.
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [What a patch is](#what-a-patch-is)
-- [Pick your guide](#pick-your-guide)
-- [Try it in the browser](#try-it-in-the-browser)
-- [Try it in a terminal](#try-it-in-a-terminal)
-- [Before you use a real patch](#before-you-use-a-real-patch)
-- [Words you will keep seeing](#words-you-will-keep-seeing)
+- [What is a patch?](#what-is-a-patch)
+- [Try a harmless sample](#try-a-harmless-sample)
+- [Apply your first real patch](#apply-your-first-real-patch)
+- [Should I use the browser or CLI?](#should-i-use-the-browser-or-cli)
+- [Terms used in rom-weaver](#terms-used-in-rom-weaver)
+- [Before you use a real game](#before-you-use-a-real-game)
 - [Where to go next](#where-to-go-next)
-- [Legal and privacy](#legal-and-privacy)
 
 <!-- END doctoc -->
 
-## What a patch is
+## What is a patch?
 
-A ROM is a copy of a game kept in one file. A patch is a much smaller file
-that lists changes somebody made to that game: a fan translation, a bug fix, a
-new set of levels.
+A ROM is a copy of a game stored in one or more files. A patch is a much
+smaller file that describes changes to one exact version of that game. The
+change might be a translation, a bug fix, restored content, or a new set of
+levels.
 
-A patch is not the game. It only holds the differences. To play the change you
-need two files: the patch, and your own copy of the exact game it was built
-from. rom-weaver combines them and writes a new file. Your original is left
+A patch is not the game. Think of it as a list that says, "replace these bytes
+with those bytes." You provide your own clean game file and the patch.
+rom-weaver combines them and gives you a new file. It leaves the clean file
 alone.
 
-This is why patches get shared and games do not. rom-weaver never supplies
-game data, and no patch works without the right starting file.
+The exact starting file matters. A USA release and a Japanese release may look
+like the same game, but their bytes differ. The same is true for revisions and
+some cartridge headers. A patch made for one will usually reject the others.
 
-## Pick your guide
+## Try a harmless sample
 
-- [Apply a patch](apply-rom-patches.md) if somebody handed you a patch and you
-  want to play it.
-- [Create a patch](create-rom-patches.md) if you changed a game and want to
-  share that change.
-- [Create a bundle](create-bundles.md) if a release has several patches,
-  optional choices, or checksums you want rom-weaver to carry for users.
-- [Fix a checksum error](fix-checksum-errors.md) if rom-weaver says your file
-  is not the one the patch expects.
-- [Pick a patch format](patch-formats.md) if you are publishing and cannot
-  decide between BPS, IPS, xdelta, and the rest.
+Open [guided Apply](https://rom-weaver.com/apply?guide=apply). rom-weaver loads
+a tiny homebrew NES ROM and two patches made for this project. No commercial
+game data is involved.
 
-Reading in order also works. Each guide points at the next one.
+The guide points to four parts of the real Weave page:
 
-## Try it in the browser
+1. The **ROM** card shows the starting file and its checksums.
+2. The **Patches** cards show the order. Patch 1 changes `HELLO` to
+   `MODIFIED`. Patch 2 changes `WORLD` to `ROM`.
+3. **Add files** stays available if you need another ROM, patch, archive, or
+   bundle.
+4. **Weave** controls the output. Choose **WEAVE & DOWNLOAD** to make the new
+   ROM.
 
-Nothing to install, no account to make.
-[Apply](https://rom-weaver.com/apply) applies patches.
-[Create](https://rom-weaver.com/create) makes them.
+The finished sample displays `MODIFIED ROM`. Its SHA-256 is
+`e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`, so you
+can check that your download is byte-for-byte identical. If you want to inspect
+the files yourself, choose **Download the bundle** on the empty Weave page or
+[download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
 
-Want to watch it work before you touch your own files? Open
-[guided Apply](https://rom-weaver.com/apply?guide=apply). It loads a tiny
-practice ROM and two patches, then walks through the important controls with
-nothing of yours at stake. [Guided Create](https://rom-weaver.com/create?guide=create)
-does the same with an original and modified ROM. Both pages also let you
-download their sample files without starting the guide.
+The sample is also useful later. [Guided Create](https://rom-weaver.com/create?guide=create)
+uses two homebrew ROMs to make a patch.
+[Guided Bundle](https://rom-weaver.com/apply?guide=bundle) turns the Apply
+sample into a safe, patch-only release archive.
 
-You can also install the site as an app from your browser menu. Once it has
-saved its own files, it keeps working with no connection.
+## Apply your first real patch
 
-## Try it in a terminal
+Once the sample makes sense, you need two things:
 
-The command-line tool does the same jobs. Reach for it when you want to repeat
-a task or script it. Install it with Homebrew, Scoop, the install script, npm,
-Cargo, or Docker. Start with [Install the CLI](../hosting/cli.md#install), then copy
-the complete [First weave](../hosting/cli.md#first-weave) practice run. The CLI guide
-also covers every command and option.
+- the patch you downloaded;
+- your own clean copy of the exact game version named by the patch author.
 
-Check that it is there:
+Then:
 
-```bash
-rom-weaver --help
-```
+1. Open [Apply](https://rom-weaver.com/apply).
+2. Add the ROM and patch together. You may drag them onto **0x01 Add files** or
+   tap the picker.
+3. Wait for the ROM and patch cards to finish reading and checking.
+4. Read every warning. A different filename is only a clue. A checksum or size
+   mismatch means the bytes differ and needs attention.
+5. If there is more than one patch, drag the numbered handles into the order
+   the author gave you.
+6. In **0x04 Weave**, give the result a new name.
+7. Choose **WEAVE & DOWNLOAD**.
+8. Open the new file in the emulator or hardware you normally use.
 
-Then run the same practice files:
+The original ROM is not overwritten. Keep it somewhere safe because an update
+or a different patch may need the clean file again.
 
-```bash
-curl --fail --location --output first-weave.zip \
-  https://rom-weaver.com/first-weave.zip
-rom-weaver weave --input first-weave.zip --output modified-rom.nes --no-compress
-rom-weaver checksum --input modified-rom.nes --algo sha256
-```
+For screenshots and explanations of every control, continue with
+[Apply a ROM patch in the browser](apply-rom-patches.md).
 
-The last command should print
-`e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`. If it
-does, your install works.
+## Should I use the browser or CLI?
 
-## Before you use a real patch
+Use the browser when you are learning, patching a few files, or want the cards
+and warnings to explain what rom-weaver found. It works on desktop and mobile,
+supports drag and drop or file pickers, and can be installed as an offline
+app. Your ROMs, patches, and results stay on your device.
 
-Read whatever the patch author wrote, even when it is short. Write down which
-version of the game they used: the region (USA, Japan, Europe), the revision
-number, and anything they say about headers or disc layout. If they published
-a checksum, keep it.
+Use the command-line tool when you want repeatable scripts, batch jobs, CI, or
+exact flags you can paste into release instructions. The commands do the same
+core work, but the interface is intentionally different. The
+[CLI usage guide](../hosting/cli.md) owns installation, terminal examples, and the
+full command reference. Browser guides do not mix terminal steps into the
+middle of a visual workflow.
 
-Do not trust the filename. Two files can share a name and hold different
-bytes, and the patch cares about the bytes.
+If you are unsure, start in the browser. You can move to the CLI later without
+changing your patch files or bundles.
 
-Keep one clean copy of the original game and never overwrite it. Save patched
-results under new names. Only use files you are allowed to have.
+## Terms used in rom-weaver
 
-## Words you will keep seeing
+- **ROM**: the game file you already have.
+- **Patch**: the smaller file that describes changes to one ROM.
+- **Original**: the clean, unchanged ROM used to create a patch.
+- **Modified**: the finished ROM from which a new patch is created.
+- **Checksum**: a fingerprint calculated from every byte in a file. A matching
+  checksum proves that the bytes match. Renaming a file does not change it.
+- **Region**: the market a release was made for, such as USA, Japan, or Europe.
+- **Revision**: a later printing of the same game.
+- **Header**: extra bytes added to the front of some cartridge dumps.
+- **Patch order**: the sequence used when several patches build on one another.
+- **Bundle**: a recipe that records a ROM's checks, patch files, order, choices,
+  and output settings.
 
-- **ROM**: one file holding a copy of a game.
-- **Patch**: a small file listing changes to a specific ROM.
-- **Checksum**: a short code worked out from a file's bytes, used to prove two
-  files are identical. Renaming a file does not change it.
-- **Region**: which part of the world a release was sold in. Regions differ
-  inside the file, not just on the title screen.
-- **Revision**: a later printing of the same game, often with bugs fixed.
-- **Header**: a small block of extra bytes sitting in front of some ROMs. A
-  patch may expect it to be there or expect it gone.
+You do not need to memorize this list. The cards show these details where they
+matter, and the [FAQ](faq.md) answers the common follow-up questions.
+
+## Before you use a real game
+
+Read the patch author's notes first. Find the expected region, revision,
+header state, patch order, and checksum. Keep the notes open while you work.
+
+Do not trust filenames alone. Two files can have the same name and different
+bytes. The reverse is also true: a correctly matching ROM may have a different
+filename. rom-weaver treats an expected name as a helpful warning, while size
+and checksums are the real checks.
+
+Keep a clean original. Save patched results under new names. Only use and
+share files you are allowed to have. Public patch releases normally contain a
+patch or patch-only bundle, not the copyrighted original ROM.
 
 ## Where to go next
 
-These guides cover the usual path: a clean file in, a checked file out. For a
-repeatable multi-patch release, read [Create a bundle](create-bundles.md). For
-scripting, archives, compression, JSON output, and the full command reference,
-read the [CLI guide](../hosting/cli.md). To build or deploy rom-weaver
-itself, start at the [documentation index](../README.md).
+- [Apply a ROM patch](apply-rom-patches.md) for the complete Weave webapp
+  workflow.
+- [Create a ROM patch](create-rom-patches.md) when you have clean and modified
+  files.
+- [Create and share a bundle](create-bundles.md) for several patches or a
+  repeatable release.
+- [Fix a checksum error](fix-checksum-errors.md) when a file does not match.
+- [Pick a patch format](patch-formats.md) when you are publishing.
+- [Use the CLI](../hosting/cli.md) for installation and terminal commands.
 
-## Legal and privacy
-
-- [Notices](https://rom-weaver.com/docs/notices) covers the project license and the open-source
-  components in each build.
-- [Privacy](../legal/privacy.md) covers what stays on your device, what your browser
-  keeps, and what leaves.
+For privacy details, read [Privacy](../legal/privacy.md). For licensing and
+third-party components, read [Notices](https://rom-weaver.com/docs/notices).

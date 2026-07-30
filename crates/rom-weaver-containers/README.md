@@ -19,7 +19,7 @@
 > documented beyond this page, changes without notice between minor releases,
 > and using it in another project is unsupported.
 
-## What this crate is
+## What does this crate do?
 
 The container registry and one handler per format, each implementing
 `rom-weaver-core`'s `ContainerHandler` trait.

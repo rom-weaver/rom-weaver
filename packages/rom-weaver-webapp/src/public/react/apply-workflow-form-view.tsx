@@ -1409,15 +1409,23 @@ function ApplyWorkflowFormView({
       setSampleLoading(false);
     }
   };
-  useGuidedSampleStart("apply", () => {
-    setSampleTutorial("apply");
-    void loadFirstWeave();
-  });
-  useGuidedSampleStart("bundle", () => {
-    bundleTools?.setBundlePackage("zip:patches");
-    setSampleTutorial("bundle");
-    void loadFirstWeave();
-  });
+  useGuidedSampleStart(
+    "apply",
+    () => {
+      setSampleTutorial("apply");
+      void loadFirstWeave();
+    },
+    () => setSampleTutorial(null),
+  );
+  useGuidedSampleStart(
+    "bundle",
+    () => {
+      bundleTools?.setBundlePackage("zip:patches");
+      setSampleTutorial("bundle");
+      void loadFirstWeave();
+    },
+    () => setSampleTutorial(null),
+  );
   // Start the hero morph at the gesture, not after a large input finishes enough
   // staging to publish its first row. This is presentation-only; Rust ingestion
   // continues on its existing schedule behind the transition.

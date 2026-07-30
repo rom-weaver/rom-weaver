@@ -14,7 +14,7 @@ const SITE_ORIGIN = "https://rom-weaver.com";
 /** @type {readonly DocSource[]} */
 const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "usage/README.md", label: "Overview", slug: "docs" }),
-  Object.freeze({ file: "usage/get-started.md", label: "Get started", slug: "docs/get-started" }),
+  Object.freeze({ file: "usage/get-started.md", label: "Browser usage", slug: "docs/get-started" }),
   Object.freeze({ file: "usage/apply-rom-patches.md", label: "Apply patches", slug: "docs/apply-rom-patches" }),
   Object.freeze({ file: "usage/create-rom-patches.md", label: "Create patches", slug: "docs/create-rom-patches" }),
   Object.freeze({ file: "usage/create-bundles.md", label: "Create bundles", slug: "docs/create-bundles" }),
@@ -25,7 +25,7 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({ file: "usage/faq.md", label: "FAQ", slug: "docs/faq" }),
   Object.freeze({ file: "usage/patch-formats.md", label: "Patch formats", slug: "docs/patch-formats" }),
-  Object.freeze({ file: "hosting/cli.md", label: "CLI and installation", slug: "docs/cli" }),
+  Object.freeze({ file: "hosting/cli.md", label: "CLI usage", slug: "docs/cli" }),
   Object.freeze({ file: "hosting/self-hosting.md", label: "Self-hosting", slug: "docs/self-hosting" }),
   Object.freeze({
     file: "hosting/webapp-integration.md",
@@ -48,7 +48,7 @@ const DOC_SOURCES = Object.freeze([
  * not already the words we want to show.
  */
 /** @type {Readonly<Record<string, string>>} */
-const DOC_GROUP_TITLES = Object.freeze({ hosting: "Install & hosting" });
+const DOC_GROUP_TITLES = Object.freeze({ hosting: "Install & hosting", usage: "Browser usage" });
 
 /**
  * Title of the shelf a source file sits on, from its directory under `docs/`.
