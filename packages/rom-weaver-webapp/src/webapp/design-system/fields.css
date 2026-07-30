@@ -144,13 +144,16 @@
   align-items: center; gap: var(--sp-xs) var(--sp-s);
   min-height: 26px; padding: 3px 9px; margin-inline: 0; width: 100%;
   border-block: 1px solid var(--ck-seam);
-  /* The input's own inner padding eats into the value the way a mark's cell
-     does on a read-only row, so it is charged to the same reserve. */
-  --ck-mark-reserve: 4px;
+  /* The input's own chrome eats into the value the way a mark's cell does on a
+     read-only row, so it is charged to the same reserve: 8px of padding and 2px
+     of border, less the 4px the negative inline margin below hands back, plus
+     2px because a text field also reserves room for the caret past the last
+     glyph - without it the final hex digit of a SHA-1 scrolls out of view. */
+  --ck-mark-reserve: 8px;
 }
 /* Here the mark shares the tail cell with the remove button instead of taking a
    column of its own, so it widens the tail rather than the grid. */
-.rw-app .patch-checks-body .verification-row:has(.ck-mark) { --ck-mark-reserve: 21px; }
+.rw-app .patch-checks-body .verification-row:has(.ck-mark) { --ck-mark-reserve: 25px; }
 .rw-app .patch-checks-body .verification-row + .verification-row { border-block-start-color: transparent; }
 .rw-app .patch-checks-body .verification-row .ofld-l {
   font-size: .74rem; font-weight: 400; color: var(--ink-4); letter-spacing: .02em;
@@ -163,7 +166,7 @@
   margin-inline: -4px 0; width: calc(100% + 4px);
   background: transparent; border: 1px solid transparent; border-radius: 5px;
   font-family: var(--mono); font-stretch: revert; letter-spacing: .03em;
-  font-size: clamp(.46rem, calc((var(--ck-v-span, 100cqi) - var(--ck-fit-reserve, 96px) - var(--ck-mark-reserve, 0px)) / 25.2), .97rem);
+  font-size: clamp(.46rem, calc((var(--ck-v-span, 100cqi) - var(--ck-fit-reserve, 96px) - var(--ck-mark-reserve, 0px)) / var(--ck-v-divisor, 26)), .97rem);
   color: var(--weft); text-transform: uppercase;
   transition: border-color .08s, background-color .08s;
 }

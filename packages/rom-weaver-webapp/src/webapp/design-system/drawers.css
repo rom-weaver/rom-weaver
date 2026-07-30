@@ -18,6 +18,11 @@
   --ck-fit-reserve: 96px;
   /* A per-row match mark takes a fourth cell and one more gap out of the value. */
   --ck-mark-reserve: 0px;
+  /* The em-width of a 40-character SHA-1, and so the divisor that turns the
+     value track's px width into a font size holding one line: 40 cells at the
+     --mono stack's .618em advance (measured, not the .6em a monospace is assumed
+     to have) plus the .03em tracking below, rounded up for margin. */
+  --ck-v-divisor: 26;
   /* Share a theme-aware seam across full and paired rows. */
   --ck-seam: var(--seam-soft);
 }
@@ -194,7 +199,7 @@
    whole width, a paired row only half of it. */
 .rw-app .ck .ck-v {
   margin: 0; color: var(--weft); white-space: nowrap; text-transform: uppercase; letter-spacing: .03em;
-  font-size: clamp(.46rem, calc((var(--ck-v-span, 100cqi) - var(--ck-fit-reserve) - var(--ck-mark-reserve)) / 25.2), .97rem);
+  font-size: clamp(.46rem, calc((var(--ck-v-span, 100cqi) - var(--ck-fit-reserve) - var(--ck-mark-reserve)) / var(--ck-v-divisor)), .97rem);
 }
 /* Pair short checksum rows while full rows and groups span both tracks. */
 .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) {
@@ -257,12 +262,12 @@
     border-block-start-color: var(--ck-seam);
   }
 }
-/* Stack long hashes when the minimum font size no longer fits: 11.6rem is the
-   clamp floor times its divisor, so the sum is the width where the value stops
+/* Stack long hashes when the minimum font size no longer fits: 11.96rem is the
+   clamp floor times --ck-v-divisor, so the sum is the width where the value stops
    shrinking and would start overflowing. Container queries cannot read custom
    properties, so this uses the largest reserve (a desktop row with a mark) and
    stacks the lighter rows slightly early rather than one pixel too late. */
-@container (max-width: calc(11.6rem + 116px)) {
+@container (max-width: calc(11.96rem + 116px)) {
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) { grid-template-columns: minmax(0, 1fr) auto auto; }
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-k { grid-row: 1; grid-column: 1; }
   /* The mark keeps its own cell beside the copy glyph; without an explicit
