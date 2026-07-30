@@ -125,10 +125,12 @@ const useTheme = (): {
   theme: Theme;
   preference: ThemePreference;
   setPreference: (preference: ThemePreference) => void;
+  toggleTheme: () => void;
 } => {
   const theme = useSyncExternalStore(subscribe, getTheme, getServerTheme);
   const preference = useSyncExternalStore(subscribe, getPreference, getServerPreference);
-  return { theme, preference, setPreference };
+  const toggleTheme = () => setPreference(theme === "dark" ? "light" : "dark");
+  return { theme, preference, setPreference, toggleTheme };
 };
 
 export { useTheme };

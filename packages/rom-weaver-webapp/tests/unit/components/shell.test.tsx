@@ -65,9 +65,9 @@ describe("Masthead", () => {
     expect(tabs[1]?.getAttribute("href")).toBe("create");
     fireEvent.click(tabs[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(5);
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
     // the accent and language pickers sit in anchors, so they are not direct children
-    expect(container.querySelectorAll(".masthead-tools > .tool").length).toBe(3);
+    expect(container.querySelectorAll(".masthead-tools > .tool").length).toBe(4);
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     expect(container.querySelector(".tool-code")?.textContent).toBe("EN");
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
