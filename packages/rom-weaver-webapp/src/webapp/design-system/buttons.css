@@ -16,13 +16,6 @@
   .rw-app .btn.primary:hover { background: color-mix(in oklab, var(--thread) 88%, #fff); box-shadow: 0 4px 18px -6px color-mix(in oklab, var(--thread) 60%, transparent); }
 }
 .rw-app .btn.ghost { background: transparent; }
-/* The guided sample's opener, dashed to read as a demo rather than a real run.
-   Lives here with the rest of the button family; dropzone.css lays out the row. */
-.rw-app .sample-tutorial-start .btn {
-  border-style: dashed;
-  border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
-  color: var(--thread-text);
-}
 .rw-app .btn.danger { background: transparent; border-color: color-mix(in oklab, var(--fault) 55%, var(--seam-strong)); color: var(--fault); }
 @media (hover: hover) {
   .rw-app .btn.danger:hover { background: color-mix(in oklab, var(--fault) 10%, transparent); }

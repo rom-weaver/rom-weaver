@@ -222,30 +222,40 @@ test("WebappRoot uses the compact thread label only on mobile", async () => {
   page.viewport(1280, 900);
 });
 
-test("guided sample actions stay compact on small laptops and phones", async () => {
+test("the New here? beacon stays compact and its popover carries every start action", async () => {
   page.viewport(1024, 900);
   mountWebappRoot();
 
-  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start .btn").length).toBe(3);
-  const start = document.querySelector(".sample-tutorial-start").getBoundingClientRect();
-  const download = document.querySelector(".sample-tutorial-start-download").getBoundingClientRect();
-  const primary = document.querySelector(".sample-tutorial-start-primary").getBoundingClientRect();
-  const secondary = document.querySelector(".sample-tutorial-start-secondary").getBoundingClientRect();
-  expect(Math.round(download.top)).toBe(Math.round(primary.top));
-  expect(Math.round(download.width)).toBe(Math.round(primary.width));
-  expect(secondary.top).toBeGreaterThan(download.bottom);
-  expect(Math.round(secondary.left + secondary.width / 2)).toBe(Math.round(start.left + start.width / 2));
-  expect(start.height).toBeLessThan(120);
-  expect(getComputedStyle(document.querySelector(".sample-tutorial-start-or")).display).toBe("none");
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
+  const chip = document.querySelector(".sample-tutorial-start-chip");
+  const chipBox = chip.getBoundingClientRect();
+  expect(chipBox.height).toBeLessThan(40);
+  // The chip rides the hero's lower corner instead of spending a band below it.
+  const hero = document.querySelector(".drop.hero").getBoundingClientRect();
+  expect(chipBox.bottom).toBeLessThanOrEqual(hero.bottom + 1);
+  // Closed popover is not mounted at all - it must stay out of the prerendered shell.
+  expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
+
+  chip.click();
+  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
+  const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();
+  expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+  expect(pop.top).toBeGreaterThanOrEqual(0);
 
   page.viewport(360, 740);
   await expect
-    .poll(() => document.querySelector(".sample-tutorial-start").getBoundingClientRect().right)
+    .poll(() => document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().right)
     .toBeLessThanOrEqual(document.documentElement.clientWidth);
-  const phoneDownload = document.querySelector(".sample-tutorial-start-download").getBoundingClientRect();
-  const phonePrimary = document.querySelector(".sample-tutorial-start-primary").getBoundingClientRect();
-  expect(Math.round(phoneDownload.top)).toBe(Math.round(phonePrimary.top));
-  expect(Math.round(phoneDownload.width)).toBe(Math.round(phonePrimary.width));
+  expect(document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+
+  // Dismissal hides the beacon in place.
+  document.querySelector(".sample-tutorial-start-dismiss").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeNull();
+
+  // The persisted form of the same choice: onboardingEnabled=false renders no beacon.
+  mountWebappRoot({ settings: { ...getDefaultSettings(), onboardingEnabled: false } });
+  await expect.poll(() => document.querySelector(".drop.hero")).toBeTruthy();
+  expect(document.querySelector(".sample-tutorial-start-chip")).toBeNull();
 });
 
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {

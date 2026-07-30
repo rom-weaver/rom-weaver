@@ -51,7 +51,8 @@ The guide points to four parts of the real Weave page:
 The finished sample displays `MODIFIED ROM`. Its SHA-256 is
 `e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`, so you
 can check that your download is byte-for-byte identical. If you want to inspect
-the files yourself, choose **Download the bundle** on the empty Weave page or
+the files yourself, choose **Download a test bundle** from the **New here?**
+beacon on the empty Weave page or
 [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
 
 The sample is also useful later. [Guided Create](https://rom-weaver.com/create?guide=create)

@@ -41,7 +41,8 @@ That fingerprint lets you confirm your result is exactly the practice result.
   </figure>
 </figure>
 
-You can choose **Download the bundle** on the empty Apply page or
+You can choose **Download a test bundle** from the **New here?** beacon on the
+empty Apply page or
 [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip). The
 archive contains the sample ROM, both IPS patches, and the recipe that puts
 them in order.

@@ -15,9 +15,18 @@ import {
 import type { ComponentType } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { createLogger } from "../../../../lib/logging.ts";
 import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
-import { GUIDED_SAMPLE_START_EVENT, GUIDED_SAMPLE_VIEW_EVENT, type GuidedSample } from "../../guided-sample-start.ts";
+import {
+  GUIDED_SAMPLE_START_EVENT,
+  GUIDED_SAMPLE_VIEW_EVENT,
+  type GuidedSample,
+  requestOnboardingDismiss,
+} from "../../guided-sample-start.ts";
+import { useRomWeaverSettings } from "../../settings-context.tsx";
 import { SwapIcon } from "./swap-icon.tsx";
+
+const startLogger = createLogger("sample-tutorial");
 
 type SampleTutorialAction =
   | "apply"
@@ -193,6 +202,8 @@ const SampleTutorialStart = ({
   onStart,
   secondaryLabel,
   onSecondaryStart,
+  startAction = "apply",
+  secondaryAction = "package",
 }: {
   downloadHref: string;
   downloadLabel: string;
@@ -203,47 +214,124 @@ const SampleTutorialStart = ({
   onStart: () => void;
   secondaryLabel?: string;
   onSecondaryStart?: () => void;
+  /** Icons for the guided actions, keyed into the tutorial's action icon set. */
+  startAction?: SampleTutorialAction;
+  secondaryAction?: SampleTutorialAction;
 }) => {
+  const StartIcon = ACTION_ICONS[startAction];
+  const SecondaryIcon = ACTION_ICONS[secondaryAction];
+  const popId = useId();
+  const chipRef = useRef<HTMLButtonElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  // Dismissal also hides the beacon immediately (and for the whole session in
+  // embeds where no shell listens for the persistence event).
+  const [dismissed, setDismissed] = useState(false);
+  const settings = useRomWeaverSettings() as { onboardingEnabled?: unknown };
   // The resolved href depends on where the app is served, which the prerender
   // cannot know. Render the root-relative form the server emits, then upgrade
   // after hydration so a sub-path deployment still links correctly.
   const [href, setHref] = useState(`/${downloadName}`);
   useEffect(() => setHref(downloadHref), [downloadHref]);
+
+  // Re-enabling the setting revives a locally dismissed beacon: in the webapp
+  // a dismissal flips onboardingEnabled off, so the transition back to true is
+  // exactly the Settings checkbox being saved. Hosts that pass a static value
+  // (or none) never fire this, and there the local flag rules the session.
+  useEffect(() => {
+    if (settings.onboardingEnabled === true) setDismissed(false);
+  }, [settings.onboardingEnabled]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeFromOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && rootRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      setOpen(false);
+      chipRef.current?.focus();
+    };
+    window.addEventListener("pointerdown", closeFromOutside);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeFromOutside);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  if (settings.onboardingEnabled === false || dismissed) return null;
   return (
-    <div className="first-weave-demo sample-tutorial-start">
-      <span className="sample-tutorial-start-label">New here?</span>
-      <a className="btn slim sample-tutorial-start-download" download href={href}>
-        <Download aria-hidden="true" />
-        {downloadLabel}
-      </a>
-      <span className="sample-tutorial-start-or">or</span>
+    <div className="first-weave-demo sample-tutorial-start" ref={rootRef}>
       <button
-        aria-busy={loading}
-        className="btn ghost slim sample-tutorial-start-primary"
-        disabled={loading}
-        onClick={onStart}
+        aria-controls={popId}
+        aria-expanded={open}
+        className="sample-tutorial-start-chip"
+        onClick={() => {
+          startLogger.trace("onboarding beacon toggled", { open: !open });
+          setOpen((current) => !current);
+        }}
+        ref={chipRef}
         type="button"
       >
         <span aria-hidden="true" className="sample-tutorial-start-beacon">
-          0x
+          !
         </span>
-        {loading ? "Loading practice files…" : label}
+        New here?
       </button>
-      {secondaryLabel && onSecondaryStart ? (
-        <button
-          aria-busy={loading}
-          className="btn ghost slim sample-tutorial-start-secondary"
-          disabled={loading}
-          onClick={onSecondaryStart}
-          type="button"
-        >
-          <span aria-hidden="true" className="sample-tutorial-start-beacon">
-            0x
+      {/* Mounted only while open: the closed popover would otherwise ship in
+          the prerendered shell - four inline SVGs and all - on every page. */}
+      {open ? (
+        <div className="sample-tutorial-start-pop" id={popId}>
+          <span aria-hidden="true" className="sample-tutorial-start-head mono">
+            Get started
           </span>
-          {loading ? "Loading practice files…" : secondaryLabel}
-        </button>
+          <button
+            aria-busy={loading}
+            className="sample-tutorial-start-action sample-tutorial-start-primary"
+            disabled={loading}
+            onClick={onStart}
+            type="button"
+          >
+            <span aria-hidden="true" className="sample-tutorial-start-action-icon">
+              <StartIcon />
+            </span>
+            {loading ? "Loading practice files…" : label}
+          </button>
+          {secondaryLabel && onSecondaryStart ? (
+            <button
+              aria-busy={loading}
+              className="sample-tutorial-start-action sample-tutorial-start-secondary"
+              disabled={loading}
+              onClick={onSecondaryStart}
+              type="button"
+            >
+              <span aria-hidden="true" className="sample-tutorial-start-action-icon">
+                <SecondaryIcon />
+              </span>
+              {loading ? "Loading practice files…" : secondaryLabel}
+            </button>
+          ) : null}
+          <a className="sample-tutorial-start-action sample-tutorial-start-download" download href={href}>
+            <Download aria-hidden="true" />
+            {downloadLabel}
+          </a>
+          {error ? <span role="status">{error}</span> : null}
+          <button
+            className="sample-tutorial-start-dismiss"
+            onClick={() => {
+              startLogger.debug("onboarding beacon dismissed");
+              setOpen(false);
+              setDismissed(true);
+              requestOnboardingDismiss();
+            }}
+            type="button"
+          >
+            Don't show this again
+          </button>
+        </div>
       ) : null}
-      {error ? <span role="status">{error}</span> : null}
     </div>
   );
 };

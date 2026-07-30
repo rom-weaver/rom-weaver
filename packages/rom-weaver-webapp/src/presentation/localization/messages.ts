@@ -54,6 +54,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.language": msg({ id: "settings.language", message: "Language" }),
   "settings.levelOverride": msg({ id: "settings.levelOverride", message: "Level override" }),
   "settings.logLevel": msg({ id: "settings.logLevel", message: "Log level" }),
+  "settings.onboardingEnabled": msg({
+    id: "settings.onboardingEnabled",
+    message: 'Show the "New here?" quick-start tips',
+  }),
   "settings.requireInputChecksumMatch": msg({
     id: "settings.requireInputChecksumMatch",
     message: "Require input checksum match",

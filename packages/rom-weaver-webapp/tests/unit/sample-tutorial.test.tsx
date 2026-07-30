@@ -101,7 +101,7 @@ describe("sample tutorial start", () => {
     render(
       <SampleTutorialStart
         downloadHref="/first-weave.zip"
-        downloadLabel="Download the bundle"
+        downloadLabel="Download a test bundle"
         downloadName="first-weave.zip"
         error=""
         label="Start guided Apply"
@@ -112,7 +112,8 @@ describe("sample tutorial start", () => {
       />,
     );
 
-    const download = screen.getByRole("link", { name: /Download the bundle/ });
+    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    const download = screen.getByRole("link", { name: /Download a test bundle/ });
     expect(download.getAttribute("href")).toBe("/first-weave.zip");
     expect(download.hasAttribute("download")).toBe(true);
 

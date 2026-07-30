@@ -61,6 +61,7 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
       "logLevel",
       "bundlePackage",
       "betaToolsEnabled",
+      "onboardingEnabled",
       "fixChecksum",
       "requireInputChecksumMatch",
     ],

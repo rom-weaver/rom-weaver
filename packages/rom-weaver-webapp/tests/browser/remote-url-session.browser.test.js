@@ -244,9 +244,10 @@ test("url-session files fetched from same-origin urls flow through the drop pipe
 test("sample action stays in-page and flows through the drop pipeline to a green apply", async () => {
   mount(createElement(ApplyPatchForm));
   const href = location.href;
-  await expect.poll(() => document.querySelector(".first-weave-demo button")).toBeInstanceOf(HTMLButtonElement);
-  const sampleButton = document.querySelector(".first-weave-demo button");
-  sampleButton.click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
   expect(location.href).toBe(href);
 
   await expect.poll(() => getInputStackRows().length, { timeout: 30000 }).toBe(1);

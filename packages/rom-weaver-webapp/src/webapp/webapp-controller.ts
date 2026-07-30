@@ -498,6 +498,15 @@ const createWebappRootController = (options: ControllerOptions) => {
         draftSettings: { ...state.draftSettings, logLevel: level },
       });
     },
+    setOnboardingEnabled(enabled: boolean) {
+      const state = store.getState();
+      if (state.settings.onboardingEnabled === enabled) return;
+      const nextSettings = { ...copySettings(state.settings), onboardingEnabled: enabled };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings: { ...state.draftSettings, onboardingEnabled: enabled },
+      });
+    },
     setPatcherInputState(inputs: readonly unknown[]) {
       updatePatcherSession({ romFilePresent: inputs.length > 0 });
     },

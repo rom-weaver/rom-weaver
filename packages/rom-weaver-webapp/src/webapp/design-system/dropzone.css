@@ -273,43 +273,85 @@
   padding-block: clamp(12px, 2.4svh, 28px);
 }
 .rw-app .step.is-input.is-empty .step-body { padding-block-end: 0; }
+/* The New here? beacon: a small dismissible chip riding the hero's lower-right
+   corner; its popover carries the guided runs and the practice download. The
+   wrapper spends no flow height - the chip lifts up into the hero above it. */
 .rw-app .first-weave-demo {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-s);
-  padding-block: var(--sp-s); color: var(--ink-3); font-size: .78rem;
+  position: relative; height: 0;
+  display: flex; justify-content: flex-end;
 }
-/* The guided-run button's own dashed treatment is in buttons.css beside the other
-   `.btn` variants - that layer is later than this one, so from here its colour
-   would lose to the plain `.btn` regardless of specificity. */
-/* The download leads; the guided run is the alternative beside it. */
-.rw-app .sample-tutorial-start-download {
-  border-style: solid; text-decoration: none;
-  border-color: color-mix(in oklab, var(--thread) 70%, var(--seam-strong));
-  background: color-mix(in oklab, var(--thread) 10%, var(--plate));
+.rw-app .sample-tutorial-start-chip {
+  position: absolute; right: var(--sp-m); bottom: var(--sp-m); z-index: 3;
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px dashed color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--thread) 8%, var(--plate));
+  color: var(--ink-2); font-size: .74rem; font-weight: 650;
+  padding: 4px 12px 4px 6px; cursor: pointer;
+  transition: border-color .15s var(--ease), color .15s var(--ease);
 }
-.rw-app .sample-tutorial-start-or { color: var(--ink-4); font-size: .72rem; }
+@media (hover: hover) {
+  .rw-app .sample-tutorial-start-chip:hover { border-color: var(--thread); color: var(--ink); }
+}
+.rw-app .sample-tutorial-start-chip:active { border-color: var(--thread); color: var(--ink); }
+/* The beacon breathes until it is engaged, so a first visit notices it. */
+.rw-app .sample-tutorial-start-chip[aria-expanded="false"] .sample-tutorial-start-beacon {
+  animation: onboarding-beacon-pulse 2.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .sample-tutorial-start-chip[aria-expanded="false"] .sample-tutorial-start-beacon { animation: none; }
+}
+@keyframes onboarding-beacon-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--thread) 45%, transparent); }
+  60% { box-shadow: 0 0 0 6px transparent; }
+}
+/* A drag gesture owns the hero - the chip yields until the files land. */
+.rw-app .step-body:has(.drop.dragging) .sample-tutorial-start-chip { opacity: 0; pointer-events: none; }
+.rw-app .sample-tutorial-start-pop {
+  position: absolute; right: var(--sp-m); bottom: calc(var(--sp-m) + 36px); z-index: 4;
+  display: grid; gap: var(--sp-2xs); min-width: 232px; padding: var(--sp-s);
+  border: 1px solid var(--seam); border-radius: var(--r-m);
+  background: var(--plate-2);
+  box-shadow: 0 12px 30px -10px color-mix(in oklab, var(--scrim) 65%, transparent);
+}
+.rw-app .sample-tutorial-start-pop[hidden] { display: none; }
+.rw-app .sample-tutorial-start-head {
+  font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-4); padding: var(--sp-2xs) var(--sp-s);
+}
+.rw-app .sample-tutorial-start-action {
+  display: flex; align-items: center; gap: var(--sp-s);
+  border: none; border-radius: var(--r-s); background: none;
+  color: var(--ink); font-size: .8rem; font-weight: 600; text-align: left; text-decoration: none;
+  padding: 7px var(--sp-s); cursor: pointer;
+}
+@media (hover: hover) {
+  .rw-app .sample-tutorial-start-action:hover {
+    background: color-mix(in oklab, var(--thread) 10%, transparent);
+  }
+}
+.rw-app .sample-tutorial-start-action:active { background: color-mix(in oklab, var(--thread) 10%, transparent); }
+.rw-app .sample-tutorial-start-action:disabled { color: var(--ink-4); cursor: default; }
+.rw-app .sample-tutorial-start-action svg { width: 14px; height: 14px; color: var(--thread-text); flex: none; }
+.rw-app .sample-tutorial-start-action-icon { display: inline-flex; flex: none; }
+/* The quest marker: a bold ! on a round badge, the way a game flags the NPC
+   with something to offer. */
 .rw-app .sample-tutorial-start-beacon {
-  display: inline-grid; place-items: center; width: 24px; height: 18px;
-  border: 1px solid color-mix(in oklab, var(--thread) 65%, var(--seam-strong)); border-radius: 3px;
+  display: inline-grid; place-items: center; width: 18px; height: 18px; flex: none;
+  border: 1px solid color-mix(in oklab, var(--thread) 65%, var(--seam-strong)); border-radius: 50%;
   background: color-mix(in oklab, var(--thread) 12%, var(--plate)); color: var(--thread-text);
-  font-family: var(--mono); font-size: .58rem; font-weight: 850; letter-spacing: -.04em;
+  font-family: var(--mono); font-size: .78rem; font-weight: 850; line-height: 1;
 }
-.rw-app .sample-tutorial-start [role="status"] { flex-basis: 100%; color: var(--fault); text-align: center; }
-@media (max-width: 1100px) {
-  .rw-app .sample-tutorial-start {
-    display: grid; grid-template-columns: repeat(2, minmax(0, 320px));
-    justify-content: center;
-  }
-  .rw-app .sample-tutorial-start-label,
-  .rw-app .sample-tutorial-start-secondary {
-    grid-column: 1 / -1; justify-self: center;
-  }
-  .rw-app .sample-tutorial-start-or { display: none; }
-  .rw-app .sample-tutorial-start-download,
-  .rw-app .sample-tutorial-start-primary {
-    min-width: 0; width: 100%; padding-inline: var(--sp-xs); font-size: .7rem;
-  }
-  .rw-app .sample-tutorial-start-secondary { width: min(100%, 320px); }
+.rw-app .sample-tutorial-start [role="status"] { color: var(--fault); font-size: .72rem; padding-inline: var(--sp-s); }
+.rw-app .sample-tutorial-start-dismiss {
+  margin-top: var(--sp-2xs); border: none; border-top: 1px solid var(--seam-soft); background: none;
+  color: var(--ink-4); font-size: .7rem; text-align: center;
+  padding: var(--sp-xs) var(--sp-s) var(--sp-2xs); cursor: pointer;
 }
+@media (hover: hover) {
+  .rw-app .sample-tutorial-start-dismiss:hover { color: var(--ink-2); }
+}
+.rw-app .sample-tutorial-start-dismiss:active { color: var(--ink-2); }
 
 /* Guided samples trace the same numbered loom stages as the workbench. The
    dimmer never traps input: each live section remains available while its

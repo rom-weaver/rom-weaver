@@ -942,6 +942,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           downloadLabel="Download the sample ROMs"
           error={sampleError}
           label="Start guided Create"
+          startAction="create"
           loading={sampleLoading}
           onStart={() => {
             setSampleTutorialActive(true);
