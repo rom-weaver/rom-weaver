@@ -53,6 +53,29 @@ const subscribe = (listener: () => void) => {
 };
 
 /**
+ * The class that arms the `--thread*` crossfade in accents.css. It rides only
+ * a real accent change - never the boot apply, which must keep matching the
+ * pre-paint resolve in index.html without a dissolve - and comes off again
+ * once the transition has finished so theme flips stay instant.
+ */
+const ANIMATION_CLASS = "accent-anim";
+/** Outlives the .45s CSS transition so it can't be cut short mid-fade. */
+const ANIMATION_DURATION_MS = 600;
+
+let animationTimer: ReturnType<typeof setTimeout> | undefined;
+let hasAppliedBefore = false;
+
+const armAccentAnimation = (root: HTMLElement) => {
+  root.classList.add(ANIMATION_CLASS);
+  if (animationTimer !== undefined) clearTimeout(animationTimer);
+  animationTimer = setTimeout(() => {
+    animationTimer = undefined;
+    root.classList.remove(ANIMATION_CLASS);
+    logger.trace("Accent animation finished", { accent: current });
+  }, ANIMATION_DURATION_MS);
+};
+
+/**
  * Reflect the accent on the document root. Unknown values fall back to the
  * baseline rather than leaving a stale dye on the element.
  *
@@ -63,12 +86,17 @@ const subscribe = (listener: () => void) => {
 const applyAccent = (value: unknown) => {
   const accent = isAccent(value) ? value : DEFAULT_ACCENT;
   const changed = accent !== current;
+  const animate = changed && hasAppliedBefore;
+  hasAppliedBefore = true;
   current = accent;
   if (typeof document !== "undefined" && document.documentElement) {
+    // Class before attribute: transition-property is read from the after-change
+    // style, so both landing in one style recalc still starts the crossfade.
+    if (animate) armAccentAnimation(document.documentElement);
     if (accent === DEFAULT_ACCENT) document.documentElement.removeAttribute("data-accent");
     else document.documentElement.setAttribute("data-accent", accent);
   }
-  logger.trace("Applied accent", { accent, changed, requested: value });
+  logger.trace("Applied accent", { accent, animate, changed, requested: value });
   if (changed) for (const listener of listeners) listener();
 };
 
