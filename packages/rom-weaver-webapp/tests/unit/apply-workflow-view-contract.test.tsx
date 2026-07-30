@@ -119,6 +119,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero .formats .fmt")).toBeTruthy();
     const sample = container.querySelector(".first-weave-demo button") as HTMLButtonElement;
     expect(sample.textContent).toContain("Start guided Apply");
+    expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Bundle");
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
     // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
@@ -157,6 +158,58 @@ describe("apply workflow view - empty bench", () => {
 
     renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
 
+    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
+    await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
+  });
+
+  it("starts the bundle tutorial and selects a patch-only ZIP from a guided Bundle URL", async () => {
+    window.history.replaceState(null, "", "/weave?guide=bundle");
+    const onUnifiedDrop = vi.fn();
+    const setBundlePackage = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        blob: () => Promise.resolve(new Blob(["sample"], { type: "application/zip" })),
+        ok: true,
+      }),
+    );
+    const ui = createEmptyPatcherUiState();
+    const controllers = {
+      dialog: storeOf({ ...createInitialDialogState() }) as unknown as DialogController,
+      output: storeOf(outputState()) as unknown as PatcherOutputController,
+      patchStack: storeOf({ items: [] }) as unknown as PatcherStackController,
+      ui: storeOf(ui) as unknown as PatcherUiController,
+    };
+
+    render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={{
+            bundleRom: false,
+            busy: false,
+            cancelExport: () => undefined,
+            downloadable: false,
+            error: "",
+            format: "zip",
+            progress: null,
+            ready: true,
+            runExport: async () => undefined,
+            setBundleRom: () => undefined,
+            setFormat: () => undefined,
+          }}
+          bundleTools={{
+            exportVisible: false,
+            hasOptionalEntries: false,
+            outputVerification: null,
+            setBundlePackage,
+          }}
+          controllers={controllers}
+          onUnifiedDrop={onUnifiedDrop}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    expect(setBundlePackage).toHaveBeenCalledWith("zip:patches");
     expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
   });

@@ -423,6 +423,29 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     }
     await tutorial.waitFor({ state: "hidden" });
 
+    await page.goto(new URL("weave?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
+    await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+    await installAuditTools();
+    await tutorial.waitFor({ state: "visible" });
+    await scanLiveApp(page, "guided Bundle loading (desktop, light)");
+    for (let step = 1; step <= 4; step += 1) {
+      await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
+      await scanVariants(`guided Bundle ${step}/4`);
+      if (step === 4) {
+        await page.getByRole("button", { name: "Create ZIP Bundle", exact: true }).click();
+        const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
+        await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
+        const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });
+        await downloadButton.click();
+        const download = await downloadPromise;
+        if (!download.suggestedFilename().endsWith(".zip")) {
+          throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
+        }
+      }
+      await tutorial.getByRole("button", { name: step === 4 ? "Done" : "Continue" }).click();
+    }
+    await tutorial.waitFor({ state: "hidden" });
+
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
     const firstPatchMenu = page.getByRole("button", { name: "Patch actions" }).first();

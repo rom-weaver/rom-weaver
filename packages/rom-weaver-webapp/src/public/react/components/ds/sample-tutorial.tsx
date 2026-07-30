@@ -33,7 +33,7 @@ type SampleTutorialAction =
   | "swap"
   | "toggle";
 
-const useGuidedSampleStart = (guide: "apply" | "create", onStart: () => void) => {
+const useGuidedSampleStart = (guide: "apply" | "bundle" | "create", onStart: () => void) => {
   const onStartRef = useRef(onStart);
   const startedRef = useRef(false);
   onStartRef.current = onStart;
@@ -176,6 +176,8 @@ const SampleTutorialStart = ({
   label,
   loading,
   onStart,
+  secondaryLabel,
+  onSecondaryStart,
 }: {
   downloadHref: string;
   downloadLabel: string;
@@ -184,6 +186,8 @@ const SampleTutorialStart = ({
   label: string;
   loading: boolean;
   onStart: () => void;
+  secondaryLabel?: string;
+  onSecondaryStart?: () => void;
 }) => {
   // The resolved href depends on where the app is served, which the prerender
   // cannot know. Render the root-relative form the server emits, then upgrade
@@ -204,6 +208,20 @@ const SampleTutorialStart = ({
         </span>
         {loading ? "Loading practice files…" : label}
       </button>
+      {secondaryLabel && onSecondaryStart ? (
+        <button
+          aria-busy={loading}
+          className="btn ghost slim"
+          disabled={loading}
+          onClick={onSecondaryStart}
+          type="button"
+        >
+          <span aria-hidden="true" className="sample-tutorial-start-beacon">
+            0x
+          </span>
+          {loading ? "Loading practice files…" : secondaryLabel}
+        </button>
+      ) : null}
       {error ? <span role="status">{error}</span> : null}
     </div>
   );
