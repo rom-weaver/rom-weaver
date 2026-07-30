@@ -83,6 +83,12 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/create");
   });
 
+  it("resolves a candidate URL without changing the current browser path", () => {
+    expect(readWorkflowViewFromPath("/docs/apply-rom-patches")).toBe("docs");
+    expect(readWorkflowViewFromPath("/create")).toBe("creator");
+    expect(window.location.pathname).toBe("/");
+  });
+
   it("preserves a self-hosted subpath while switching workflows", () => {
     window.history.replaceState({}, "", "/rom-weaver/create/");
     const controller = createController();
