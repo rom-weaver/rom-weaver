@@ -1,3 +1,25 @@
+/* Registered colors interpolate on browsers without the View Transition API. */
+@property --thread {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #d9690f;
+}
+@property --thread-ink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #1c1206;
+}
+@property --thread-hi {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fccb90;
+}
+@property --thread-text {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ef8534;
+}
+
 /* ═══ accent dye lots ═══
    The thread keeps its weight and role in every accent; only its dye changes.
    Chassis, plate and ink stay put, so an accent reads as the same app in a
@@ -13,6 +35,11 @@
 
    Every pairing below is verified in tests/browser/accessibility.browser.test.js
    ("accent" sweep) - both themes, every surface. */
+
+:root {
+  transition: --thread .42s var(--ease), --thread-ink .42s var(--ease), --thread-hi .42s var(--ease),
+    --thread-text .42s var(--ease);
+}
 
 /* ── woad: indigo ── */
 :root[data-accent="woad"] {

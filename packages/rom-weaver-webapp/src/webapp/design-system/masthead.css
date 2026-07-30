@@ -156,11 +156,12 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 /* The locale code sits over the globe so the language control stays compact. */
 .rw-app .tool-code { position: relative; }
-.rw-app .tool-language-globe { width: 19px; height: 19px; }
+.rw-app .tool-language-globe { width: 21px; height: 21px; }
 .rw-app .tool-language-code {
-  position: absolute; inset: 0; display: grid; place-items: center; padding-top: 1px;
-  color: var(--thread-text); font-size: .46rem; font-weight: 750; letter-spacing: .02em; line-height: 1;
-  text-shadow: 0 0 2px var(--chassis), 0 0 2px var(--chassis); pointer-events: none;
+  position: absolute; inset-block-end: 2px; inset-inline-end: 0; min-width: 14px; padding: 1px 2px 0;
+  border: 1px solid var(--thread); border-radius: 3px; background: var(--chassis); color: var(--thread-text);
+  font-size: .46rem; font-weight: 800; letter-spacing: .01em; line-height: 1; text-align: center;
+  pointer-events: none;
 }
 .rw-app .tool-menu { display: flex; flex-direction: column; min-width: 152px; padding: var(--sp-xs); }
 .rw-app .tool-menu-item {
