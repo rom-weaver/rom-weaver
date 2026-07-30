@@ -7,6 +7,8 @@ import { ACCENTS } from "./accent.ts";
 import { RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
 import { LICENSE_URL, NOTICE_URL, PRIVACY_URL } from "./project-links.ts";
+import { useUiLocalizer } from "../public/react/settings-context.tsx";
+import { useTheme, type ThemePreference } from "./theme.ts";
 import type { SettingsDraftState, SettingsFieldKey, SettingsUiState } from "./settings/settings-state.ts";
 import {
   getDefaultThreads,
@@ -214,6 +216,37 @@ const AccentPicker = ({ fieldKey, draftSettings, uiState, onDraftChange }: Field
   );
 };
 
+const ThemeSetting = () => {
+  const localizer = useUiLocalizer();
+  const { preference, setPreference } = useTheme();
+  const themeOptions: Array<{ value: ThemePreference; label: string }> = [
+    { label: localizer.message("ui.theme.auto"), value: "auto" },
+    { label: localizer.message("ui.theme.light"), value: "light" },
+    { label: localizer.message("ui.theme.dark"), value: "dark" },
+  ];
+  return (
+    <div className="setrow">
+      <span className="slabel">
+        <label htmlFor="settings-theme">{localizer.message("settings.theme")}</label>
+      </span>
+      <span className="sctl">
+        <select
+          className="select"
+          id="settings-theme"
+          onChange={(event) => setPreference(event.currentTarget.value as ThemePreference)}
+          value={preference}
+        >
+          {themeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </span>
+    </div>
+  );
+};
+
 /** The control element (select / text / number input) for a non-toggle field. */
 const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftChange }: FieldRenderProps) => {
   const field = SETTINGS_FIELD_METADATA[fieldKey];
@@ -373,6 +406,7 @@ const SettingsGroup = ({
   return (
     <div className="setgroup">
       <div className="gtitle">{section.title}</div>
+      {section.title === "General" ? <ThemeSetting /> : null}
       {rows.map((fieldKey) =>
         SETTINGS_FIELD_METADATA[fieldKey].kind === "range" ? (
           <SettingsRange fieldKey={fieldKey} key={fieldKey} {...shared} />

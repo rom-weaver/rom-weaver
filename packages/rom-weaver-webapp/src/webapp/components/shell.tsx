@@ -1,13 +1,11 @@
-import { createLucideIcon, Heart, Moon, Palette, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
+import { createLucideIcon, Heart, Palette, RotateCcw, ScrollText, Settings, X } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
 import { LOCALE_OPTIONS, type Localizer } from "../../presentation/localization/index.ts";
-import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
-import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
 const Github = createLucideIcon("github", [
@@ -134,51 +132,6 @@ const ModeRail = ({
         ))}
       </div>
     </nav>
-  );
-};
-
-/**
- * Theme toggle with the loom circle-wipe: the new theme clip-reveals from the
- * button via a view transition. The wipe itself is the CSS `theme-wipe`
- * keyframe; this only feeds the origin custom properties and flips the theme.
- *
- * Gated on `viewTransitionsUnsupported`, not `viewTransitionsUnavailable`:
- * iOS WebKit is excluded from the latter because named elements misbehave
- * mid-capture, and `html.vt-theme` suppresses every name, so the wipe is a
- * plain root snapshot there.
- */
-const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
-  const { theme, toggleTheme } = useTheme();
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const label = localizer.message(theme === "dark" ? "ui.theme.toLight" : "ui.theme.toDark");
-  const handleClick = () => {
-    const root = document.documentElement;
-    if (viewTransitionsUnsupported()) {
-      toggleTheme();
-      return;
-    }
-    const rect = buttonRef.current?.getBoundingClientRect();
-    const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-    const cy = rect ? rect.top + rect.height / 2 : 0;
-    const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
-    root.style.setProperty("--wipe-x", `${cx}px`);
-    root.style.setProperty("--wipe-y", `${cy}px`);
-    root.style.setProperty("--wipe-r", `${radius}px`);
-    const release = holdTransitionClasses(["vt-theme"]);
-    // Plain call, not flushSync: forcing React's commit inside the capture
-    // makes WebKit render a different wipe (it dislikes mid-capture layout).
-    const transition = document.startViewTransition(() => toggleTheme());
-    transition.ready.catch(() => undefined);
-    transition.finished.then(release, release);
-  };
-  return (
-    <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">
-      <Moon aria-hidden="true" className="ico-moon" />
-      <SunMedium aria-hidden="true" className="ico-sun" />
-      <span aria-hidden="true" className="tool-text">
-        {localizer.message("ui.tools.theme")}
-      </span>
-    </button>
   );
 };
 
@@ -659,7 +612,6 @@ const Masthead = ({
               {localizer.message("ui.settings.reset")}
             </span>
           </button>
-          <ThemeToggle localizer={localizer} />
           {/* stays open on pick: arrow keys walk the radio group, and comparing
               two lots should not cost a reopen */}
           <AccentPicker

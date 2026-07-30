@@ -9,6 +9,7 @@ import { createLogger } from "../lib/logging.ts";
  */
 
 type Theme = "dark" | "light";
+type ThemePreference = Theme | "auto";
 
 const logger = createLogger("theme");
 
@@ -17,16 +18,17 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 const listeners = new Set<() => void>();
 let current: Theme = "dark";
-let userPreference: Theme | null = null;
+let userPreference: ThemePreference = "auto";
 let initialized = false;
 
-const isTheme = (value: unknown): value is Theme => value === "dark" || value === "light";
+const isThemePreference = (value: unknown): value is ThemePreference =>
+  value === "auto" || value === "dark" || value === "light";
 
-const readStoredPreference = (): Theme | null => {
+const readStoredPreference = (): ThemePreference | null => {
   if (typeof localStorage === "undefined") return null;
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return isTheme(stored) ? stored : null;
+    return isThemePreference(stored) ? stored : null;
   } catch (error) {
     logger.trace("Unable to read stored theme preference", {
       message: error instanceof Error ? error.message : String(error || ""),
@@ -35,10 +37,10 @@ const readStoredPreference = (): Theme | null => {
   }
 };
 
-const writeStoredPreference = (theme: Theme) => {
+const writeStoredPreference = (preference: ThemePreference) => {
   if (typeof localStorage === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, theme);
+    localStorage.setItem(STORAGE_KEY, preference);
   } catch (error) {
     logger.trace("Unable to persist theme preference", {
       message: error instanceof Error ? error.message : String(error || ""),
@@ -67,14 +69,18 @@ const notify = () => {
   for (const listener of listeners) listener();
 };
 
-const setTheme = (theme: Theme, { persist }: { persist: boolean }) => {
-  if (persist) {
-    userPreference = theme;
-    writeStoredPreference(theme);
-  }
-  if (theme === current && initialized) return;
+const setTheme = (theme: Theme): boolean => {
+  if (theme === current && initialized) return false;
   applyTheme(theme);
   notify();
+  return true;
+};
+
+const setPreference = (preference: ThemePreference) => {
+  userPreference = preference;
+  writeStoredPreference(preference);
+  const changed = setTheme(preference === "auto" ? getSystemTheme() : preference);
+  if (!changed) notify();
 };
 
 /**
@@ -84,14 +90,14 @@ const setTheme = (theme: Theme, { persist }: { persist: boolean }) => {
 const initTheme = () => {
   if (initialized) return;
   initialized = true;
-  userPreference = readStoredPreference();
-  applyTheme(userPreference ?? getSystemTheme());
+  userPreference = readStoredPreference() ?? "auto";
+  applyTheme(userPreference === "auto" ? getSystemTheme() : userPreference);
   if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
     const media = window.matchMedia(DARK_QUERY);
     const handleSystemChange = () => {
       // System changes only drive the UI while the user hasn't picked a theme.
-      if (userPreference) return;
-      setTheme(getSystemTheme(), { persist: false });
+      if (userPreference !== "auto") return;
+      setTheme(getSystemTheme());
     };
     if (typeof media.addEventListener === "function") media.addEventListener("change", handleSystemChange);
     else if (typeof media.addListener === "function") media.addListener(handleSystemChange);
@@ -99,12 +105,10 @@ const initTheme = () => {
   logger.debug("Theme initialized", { theme: current, userPreference });
 };
 
-const toggleTheme = () => {
-  setTheme(current === "dark" ? "light" : "dark", { persist: true });
-};
-
 const getTheme = (): Theme => current;
+const getPreference = (): ThemePreference => userPreference;
 const getServerTheme = (): Theme => "dark";
+const getServerPreference = (): ThemePreference => "auto";
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -117,9 +121,15 @@ const subscribe = (listener: () => void) => {
 // before the React tree renders (avoids a theme flash on first paint).
 initTheme();
 
-const useTheme = (): { theme: Theme; toggleTheme: () => void } => {
+const useTheme = (): {
+  theme: Theme;
+  preference: ThemePreference;
+  setPreference: (preference: ThemePreference) => void;
+} => {
   const theme = useSyncExternalStore(subscribe, getTheme, getServerTheme);
-  return { theme, toggleTheme };
+  const preference = useSyncExternalStore(subscribe, getPreference, getServerPreference);
+  return { theme, preference, setPreference };
 };
 
 export { useTheme };
+export type { ThemePreference };

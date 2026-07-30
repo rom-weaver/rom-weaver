@@ -100,6 +100,11 @@ msgstr "auto"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.theme.auto"
+msgstr "Automatisch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.autoBase"
 msgstr "auto (Basis-ROM)"
 
@@ -157,6 +162,11 @@ msgstr "{format}-Bundle erstellen"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "{format}-ROM-Bundle erstellen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.dark"
+msgstr "Dunkel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -257,6 +267,11 @@ msgstr "Stufe"
 #: src/presentation/localization/messages.ts
 msgid "settings.levelOverride"
 msgstr "Eigene Stufe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.light"
+msgstr "Hell"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -537,6 +552,11 @@ msgstr "Die gewählte Quelle wurde nicht gefunden."
 #: src/presentation/localization/messages.ts
 msgid "error.SOURCE_UNSUPPORTED"
 msgstr "Der gewählte Quelltyp wird nicht unterstützt."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.theme"
+msgstr "Design"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

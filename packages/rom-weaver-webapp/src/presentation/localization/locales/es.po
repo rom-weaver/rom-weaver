@@ -100,6 +100,11 @@ msgstr "auto"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.theme.auto"
+msgstr "Automático"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.autoBase"
 msgstr "auto (ROM base)"
 
@@ -157,6 +162,11 @@ msgstr "Crear bundle {format}"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "Crear bundle {format} con ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.dark"
+msgstr "Oscuro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -257,6 +267,11 @@ msgstr "Nivel"
 #: src/presentation/localization/messages.ts
 msgid "settings.levelOverride"
 msgstr "Nivel personalizado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.light"
+msgstr "Claro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -537,6 +552,11 @@ msgstr "La fuente seleccionada no se encontró."
 #: src/presentation/localization/messages.ts
 msgid "error.SOURCE_UNSUPPORTED"
 msgstr "El tipo de fuente seleccionado no es compatible."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.theme"
+msgstr "Tema"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
