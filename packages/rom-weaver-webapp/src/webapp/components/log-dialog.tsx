@@ -1,10 +1,12 @@
-import { Check, Copy, Download, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Check, Copy, Download, RefreshCw, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { copyToClipboard } from "../../lib/clipboard.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
+import { listBrowserOpfs } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
+import type { BrowserOpfsEntry } from "../../workers/protocol/browser-opfs-worker-client.ts";
 import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
 
 /**
@@ -62,6 +64,10 @@ const serializeDetails = (details: LogStoreEntry["details"]): string => {
 
 const formatLine = (entry: LogStoreEntry) => renderLine(entry, formatDetails(entry.details));
 const formatCopyLine = (entry: LogStoreEntry) => renderLine(entry, serializeDetails(entry.details));
+
+const formatOpfsSize = (size: number | undefined) => (size === undefined ? "—" : `${size.toLocaleString()} B`);
+const formatOpfsEntry = (entry: BrowserOpfsEntry) =>
+  `${entry.kind.padEnd(9)} ${formatOpfsSize(entry.size).padStart(12)} ${entry.path}`;
 
 const EMPTY_ENTRIES: readonly LogStoreEntry[] = [];
 // While the dialog is closed there is nothing to show, so subscribe to a no-op
@@ -131,17 +137,36 @@ const LogDialog = ({
   const [viewportHeight, setViewportHeight] = useState(0);
   const [copiedAll, setCopiedAll] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
-  const [view, setView] = useState<"current" | "previous">("current");
+  const [view, setView] = useState<"current" | "previous" | "opfs">("current");
+  const [opfsEntries, setOpfsEntries] = useState<BrowserOpfsEntry[]>([]);
+  const [opfsLoading, setOpfsLoading] = useState(false);
+  const [opfsError, setOpfsError] = useState<string | null>(null);
   // Previous session's entries (promoted from localStorage at boot); the "previous" view shows a run that
   // OOM-reloaded the tab. Stable for the session, so read once.
   const previousEntries = useMemo(() => getLastSessionEntries(), []);
   const hasPrevious = previousEntries.length > 0;
   const showingPrevious = view === "previous" && hasPrevious;
+  const showingOpfs = view === "opfs";
+  const refreshOpfs = useCallback(async () => {
+    setOpfsLoading(true);
+    setOpfsError(null);
+    try {
+      setOpfsEntries(await listBrowserOpfs());
+    } catch (error) {
+      setOpfsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpfsLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (!(open && showingOpfs)) return;
+    void refreshOpfs();
+  }, [open, refreshOpfs, showingOpfs]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
   const liveEntries = useSyncExternalStore(
-    open && !showingPrevious ? subscribeLogEntries : noopSubscribe,
-    open && !showingPrevious ? getLogEntries : getEmptyEntries,
+    open && !showingPrevious && !showingOpfs ? subscribeLogEntries : noopSubscribe,
+    open && !showingPrevious && !showingOpfs ? getLogEntries : getEmptyEntries,
     getEmptyEntries,
   );
   const entries = showingPrevious ? previousEntries : liveEntries;
@@ -158,6 +183,13 @@ const LogDialog = ({
     if (!query) return entries;
     return entries.filter((entry) => formatLine(entry).toLowerCase().includes(query));
   }, [entries, filter]);
+
+  const visibleOpfs = useMemo(() => {
+    const query = filter.trim().toLowerCase();
+    if (!query) return opfsEntries;
+    return opfsEntries.filter((entry) => formatOpfsEntry(entry).toLowerCase().includes(query));
+  }, [filter, opfsEntries]);
+  const exportText = showingOpfs ? visibleOpfs.map(formatOpfsEntry).join("\n") : visible.map(formatCopyLine).join("\n");
 
   const virtualStart = Math.max(0, Math.floor(scrollTop / TRACE_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS);
   const virtualEnd = Math.min(
@@ -207,17 +239,17 @@ const LogDialog = ({
           <h2 className="dlg-title" id="log-title">
             {localizer.message("ui.log.viewLabel")}
           </h2>
-          {hasPrevious ? (
-            <fieldset className="logview">
-              <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
-              <button
-                aria-pressed={!showingPrevious}
-                className="seg-btn"
-                onClick={() => setView("current")}
-                type="button"
-              >
-                {localizer.message("ui.log.viewCurrent")}
-              </button>
+          <fieldset className="logview">
+            <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
+            <button
+              aria-pressed={view === "current"}
+              className="seg-btn"
+              onClick={() => setView("current")}
+              type="button"
+            >
+              {localizer.message("ui.log.viewCurrent")}
+            </button>
+            {hasPrevious ? (
               <button
                 aria-pressed={showingPrevious}
                 className="seg-btn"
@@ -226,14 +258,17 @@ const LogDialog = ({
               >
                 {localizer.message("ui.log.viewPrevious")}
               </button>
-            </fieldset>
-          ) : null}
+            ) : null}
+            <button aria-pressed={showingOpfs} className="seg-btn" onClick={() => setView("opfs")} type="button">
+              OPFS
+            </button>
+          </fieldset>
           <div className="dlg-actions log-actions">
             <button
               aria-label={localizer.message("ui.common.copy")}
               className={`btn slim ghost log-icon-btn${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}
               onClick={() => {
-                copyToClipboard(visible.map(formatCopyLine).join("\n"))
+                copyToClipboard(exportText)
                   .then(() => {
                     setCopyFailed(false);
                     setCopiedAll(true);
@@ -256,8 +291,12 @@ const LogDialog = ({
               className="btn slim ghost log-icon-btn"
               onClick={() => {
                 void triggerBrowserDownload(
-                  visible.map(formatCopyLine).join("\n"),
-                  showingPrevious ? "rom-weaver-previous-log.txt" : "rom-weaver-log.txt",
+                  exportText,
+                  showingOpfs
+                    ? "rom-weaver-opfs.txt"
+                    : showingPrevious
+                      ? "rom-weaver-previous-log.txt"
+                      : "rom-weaver-log.txt",
                 );
               }}
               title={localizer.message("ui.result.download")}
@@ -289,43 +328,79 @@ const LogDialog = ({
             type="search"
             value={filter}
           />
-          <label className="loglevel">
-            <span className="sr-only">{localizer.message("settings.logLevel")}</span>
-            <select
-              className="select mono"
-              onChange={(event) => onLevelChange(event.currentTarget.value)}
-              value={currentLevel}
+          {showingOpfs ? (
+            <button
+              aria-label="Refresh OPFS"
+              className="btn slim ghost log-refresh"
+              disabled={opfsLoading}
+              onClick={() => void refreshOpfs()}
+              title="Refresh OPFS"
+              type="button"
             >
-              {LOG_LEVELS.map((value) => (
-                <option key={value} value={value}>
-                  {`level: ${value}`}
-                </option>
-              ))}
-            </select>
-          </label>
+              <RefreshCw aria-hidden="true" className={opfsLoading ? "spin" : undefined} />
+            </button>
+          ) : (
+            <label className="loglevel">
+              <span className="sr-only">{localizer.message("settings.logLevel")}</span>
+              <select
+                className="select mono"
+                onChange={(event) => onLevelChange(event.currentTarget.value)}
+                value={currentLevel}
+              >
+                {LOG_LEVELS.map((value) => (
+                  <option key={value} value={value}>
+                    {`level: ${value}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
         <div className="dlg-body log-body">
-          <div
-            aria-atomic="false"
-            aria-live="polite"
-            className="tracelog mono"
-            onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-            ref={traceRef}
-          >
-            {visible.length === 0 ? (
-              <div className="tracelog-empty">
-                {filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-"}
+          {showingOpfs ? (
+            <div aria-live="polite" className="opfs-inspector mono">
+              <div className="opfs-summary">
+                {opfsLoading ? "Loading OPFS…" : `${visibleOpfs.length.toLocaleString()} paths`}
               </div>
-            ) : (
-              <div className="tracelog-virtual-content" style={{ height: totalHeight }}>
-                <div className="tracelog-virtual-window" style={{ top: virtualStart * TRACE_ROW_HEIGHT }}>
-                  {rendered.map((entry) => (
-                    <TraceLine entry={entry} key={entry.id} />
+              {opfsError ? (
+                <div className="tracelog-empty">{opfsError}</div>
+              ) : visibleOpfs.length === 0 ? (
+                <div className="tracelog-empty">{filter.trim() ? "No matching paths" : "OPFS is empty"}</div>
+              ) : (
+                <ul className="opfs-list">
+                  {visibleOpfs.map((entry) => (
+                    <li className="opfs-row" key={`${entry.kind}:${entry.path}`}>
+                      <span className="opfs-kind">{entry.kind}</span>
+                      <span className="opfs-path">{entry.path}</span>
+                      <span className="opfs-size">{formatOpfsSize(entry.size)}</span>
+                    </li>
                   ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            <div
+              aria-atomic="false"
+              aria-live="polite"
+              className="tracelog mono"
+              onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+              ref={traceRef}
+            >
+              {visible.length === 0 ? (
+                <div className="tracelog-empty">
+                  {filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-"}
                 </div>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="tracelog-virtual-content" style={{ height: totalHeight }}>
+                  <div className="tracelog-virtual-window" style={{ top: virtualStart * TRACE_ROW_HEIGHT }}>
+                    {rendered.map((entry) => (
+                      <TraceLine entry={entry} key={entry.id} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </dialog>

@@ -381,6 +381,19 @@ const createWebappRootController = (options: ControllerOptions) => {
       });
       return store.getState().settings;
     },
+    resetPage() {
+      const state = store.getState();
+      setState({
+        creatorSession: createEmptyCreatorSessionState(),
+        draftSettings: copySettings(state.settings),
+        patcherSession: createEmptyPatcherSessionState(),
+        settingsDialogOpen: false,
+        startup: { message: "", status: "ready" },
+        toolsSession: createEmptyToolsSessionState(),
+        trimSession: createEmptyTrimSessionState(),
+        validation: emptyValidation(),
+      });
+    },
     restoreDefaults() {
       setState({
         draftSettings: getDefaultSettings(),

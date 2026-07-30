@@ -1,7 +1,9 @@
+import { createLogger } from "../lib/logging.ts";
 import { getManagedOpfsFileHandle } from "../workers/protocol/opfs-path.ts";
 
 const HOST_INGEST_EVENT = "rom-weaver:ingest";
 const HOST_INGEST_PATH_PREFIX = "/work/rom-weaver-imports/";
+const logger = createLogger("host-ingest");
 
 type HostIngestListener = (paths: readonly string[]) => void;
 
@@ -19,6 +21,7 @@ const normalizeHostIngestPaths = (value: unknown): string[] => {
 
 const ingest = (paths: readonly string[]) => {
   const detail = normalizeHostIngestPaths(paths);
+  logger.debug("OPFS paths supplied by host", { creator: "host-ingest", paths: detail });
   if (typeof document === "undefined") {
     pendingRequests.push(detail);
     return;
