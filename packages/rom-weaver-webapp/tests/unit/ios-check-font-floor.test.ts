@@ -8,8 +8,9 @@ import { describe, expect, test } from "vitest";
  * drawer cannot live with that floor - a 40-character SHA-1 needs ~415px at 16px and no
  * phone has it - and it escapes in two different ways, both asserted here:
  *
- * - the two dropdowns carry `.ck-tight` and the floor skips them. A <select> opens a
- *   native picker rather than a keyboard, so exempting them costs no zoom.
+ * - the self-sizing dropdown families (`.meta-target-select`, `.ck-add-select`) are
+ *   skipped by class, so every one of them keeps the size of the line it rides in. A
+ *   <select> opens a native picker rather than a keyboard, so this costs no zoom.
  * - the check values are not fields at rest. `EditableCheckRow` renders the value as a
  *   button and only mounts the input on tap, already at the floor, before focus lands.
  *   The input must therefore NOT be exempt: 16px while editing is what stops the zoom.
@@ -35,24 +36,37 @@ const iosFloorBlock = (): string => {
   return MODALS_CSS.slice(start, end);
 };
 
-/** Selectors in the floor block that set `font-size` on a bare element or field class. */
+/**
+ * Selectors in the floor block that set `font-size` on the bare `<input>` / `<select>`
+ * element - the broad ones that sweep up every control. Class selectors like
+ * `.rw-app .select` are deliberately excluded: no dropdown in these families carries a
+ * `select` class (they carry `meta-target-select`), so those rules cannot reach them.
+ */
 const floorSelectorsFor = (element: "input" | "select"): string[] =>
   [...iosFloorBlock().matchAll(/([^{}]+)\{([^{}]*)\}/g)]
     .filter(([, , declarations]) => declarations.includes("font-size"))
     .flatMap(([, selectorList]) => selectorList.split(","))
     .map((selector) => selector.replaceAll(/\/\*[^*]*\*+([^/*][^*]*\*+)*\//g, "").trim())
-    .filter((selector) => new RegExp(String.raw`(^|\s)\.?${element}(:|$)`).test(selector))
+    .filter((selector) => new RegExp(String.raw`(^|\s)${element}(:|$)`).test(selector))
     // The reassert block deliberately re-floors named fields outside the drawer.
     .filter((selector) => !/\.(ofld|fname)\s/.test(selector));
 
 describe("iOS check font floor", () => {
-  test("the floor skips the drawer's dropdowns", () => {
+  test("the floor skips every self-sizing dropdown family", () => {
+    // Keyed off the classes that define the family, not per call site, so a new header /
+    // target / basis picker is unified with the rest the moment it is added.
     const selectors = floorSelectorsFor("select");
     expect(selectors.length).toBeGreaterThan(0);
-    for (const selector of selectors) expect(selector, selector).toContain(":not(.ck-tight)");
-    for (const marker of ["ck-basis-select ck-tight", "ck-add-select ck-tight"]) {
-      expect(PATCH_LIST_STEP, marker).toContain(marker);
+    for (const selector of selectors) {
+      expect(selector, selector).toContain(":not(.meta-target-select)");
+      expect(selector, selector).toContain(":not(.ck-add-select)");
     }
+  });
+
+  test("no dropdown call site opts out by hand", () => {
+    // Every one of these carries .meta-target-select, which is what the floor skips.
+    expect([...PATCH_LIST_STEP.matchAll(/className="meta-target-select[^"]*"/g)].length).toBeGreaterThan(0);
+    expect(PATCH_LIST_STEP).not.toContain("ck-tight");
   });
 
   test("the check value is a button at rest, not a field", () => {
@@ -66,7 +80,7 @@ describe("iOS check font floor", () => {
     expect(PATCH_LIST_STEP).toContain('className="input mono popt-input"');
     const selectors = floorSelectorsFor("input");
     expect(selectors.length).toBeGreaterThan(0);
-    for (const selector of selectors) expect(selector, selector).not.toContain("ck-tight");
+    for (const selector of selectors) expect(selector, selector).not.toContain("popt-input");
   });
 
   test("resting text and the field divide the value track by the same per-character model", () => {

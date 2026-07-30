@@ -47,10 +47,10 @@ describe("EditableCheckRow", () => {
     expect(document.activeElement).toBe(input);
   });
 
-  it("keeps the field out of the iOS floor's exemption", () => {
+  it("keeps the field out of the iOS floor's exemptions", () => {
     const { container } = renderRow();
     fireEvent.click(screen.getByRole("button", { name: "Edit SHA-1 check" }));
-    expect(container.querySelector("input")?.className).not.toContain("ck-tight");
+    expect(container.querySelector("input")?.className).not.toContain("meta-target-select");
   });
 
   it("commits and returns to text on blur", () => {

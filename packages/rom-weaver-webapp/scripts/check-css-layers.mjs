@@ -31,12 +31,15 @@ const IOS_FONT_FLOOR =
 
 // `<earlier selector> >>> <later selector>` -> why the later rule is meant to win.
 //
-// The three `.select` entries this list used to carry are gone: the floor now skips the
-// checks drawer's dropdowns via `:not(.ck-tight)`, which lifted `.rw-app .select` to a
-// specificity tie with them, so those pairs stopped being violations.
+// These are the fields the floor is still meant to reach. The self-sizing dropdown
+// families (`.meta-target-select`, `.ck-add-select`) need no entry: the floor's bare
+// `select` selector skips them by class, and its `.select` selector never matched them.
 const EXEMPT = new Map([
   [".rw-app .ofld .input >>> .rw-app .input", IOS_FONT_FLOOR],
+  [".rw-app .ofld .select >>> .rw-app .select", IOS_FONT_FLOOR],
   [".rw-app .setrow .input >>> .rw-app .input", IOS_FONT_FLOOR],
+  [".rw-app .setrow .select >>> .rw-app .select", IOS_FONT_FLOOR],
+  [".rw-app .log-filter-bar .loglevel .select >>> .rw-app .select", IOS_FONT_FLOOR],
 ]);
 
 const scrub = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");
