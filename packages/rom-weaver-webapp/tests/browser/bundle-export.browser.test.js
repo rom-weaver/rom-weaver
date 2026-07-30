@@ -132,7 +132,9 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(checksInput).not.toBeNull();
   setFormControlValue(checksInput, "deadbeef");
   checksInput.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-  await expect.poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")?.value).toBe("deadbeef");
+  // Committing returns the row to text, so the value reads off the resting cell rather
+  // than the field (EditableCheckRow keeps the field out of the way between edits).
+  await expect.poll(() => document.getElementById("rom-weaver-patch-input-crc32-0-open")?.textContent).toBe("deadbeef");
 
   // The selected output is a .zip bundle with the ROM left out.
   expect(formatSelect.value).toBe("zip:patches");

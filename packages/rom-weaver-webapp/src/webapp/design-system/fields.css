@@ -142,15 +142,44 @@
 .rw-app .patch-checks-body .verification-row {
   grid-template-columns: minmax(var(--ck-label-w, 38px), max-content) minmax(0, 1fr) auto;
   align-items: center; gap: var(--sp-xs) var(--sp-s);
-  min-height: 26px; padding: 3px 9px; margin-inline: 0; width: 100%;
+  /* Published so the resting value cell can cancel it and cover the row edge to edge,
+     the way a read-only row's button does. */
+  --vrow-pad-y: 3px;
+  min-height: 26px; padding: var(--vrow-pad-y) 9px; margin-inline: 0; width: 100%;
   border-block: 1px solid var(--ck-seam);
-  /* The input's own inner padding eats into the value the way a mark's cell
-     does on a read-only row, so it is charged to the same reserve. */
-  --ck-mark-reserve: 4px;
 }
+/* A row at rest shows its value in a bare button, so it holds text exactly the way
+   a read-only row does and keeps that row's reserve. Editing swaps in the field,
+   whose own chrome eats into the value the way a mark's cell does: 8px of padding
+   and 2px of border, less the 4px the negative inline margin below hands back, plus
+   2px because a text field also reserves room for the caret past the last glyph -
+   without it the final hex digit of a SHA-1 scrolls out of view. */
+.rw-app .patch-checks-body .verification-row.is-editing { --ck-mark-reserve: 8px; }
 /* Here the mark shares the tail cell with the remove button instead of taking a
    column of its own, so it widens the tail rather than the grid. */
-.rw-app .patch-checks-body .verification-row:has(.ck-mark) { --ck-mark-reserve: 21px; }
+.rw-app .patch-checks-body .verification-row:has(.ck-mark) { --ck-mark-reserve: 17px; }
+.rw-app .patch-checks-body .verification-row.is-editing:has(.ck-mark) { --ck-mark-reserve: 25px; }
+/* The resting value cell: a button that carries no button, so the row reads as one
+   line of checksum text with a tap target over it. */
+.rw-app .patch-checks-body .verification-row .ck-open {
+  appearance: none; display: flex; align-items: center; min-width: 0; width: 100%;
+  /* Fill the row rather than set a floor of its own: the row already clears the WCAG
+     2.5.8 target minimum, and a min-height here would stack on the row's padding and
+     make every resting row taller than the read-only one it mirrors. Cancelling that
+     padding hands the target the row's full height, so it matches a read-only row's
+     and adjacent targets tile instead of leaving 2px gutters. */
+  align-self: stretch; min-height: 0; margin-block: calc(-1 * (var(--vrow-pad-y) + 1px));
+  margin-inline: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit;
+  text-align: start; cursor: pointer; border-radius: 5px;
+}
+.rw-app .patch-checks-body .verification-row .ck-open:focus-visible {
+  outline: 2px solid var(--thread); outline-offset: 1px;
+}
+.rw-app .patch-checks-body .verification-row .ck-open .ck-v {
+  margin: 0; min-width: 0; color: var(--weft); white-space: nowrap; overflow: hidden;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.rw-app .patch-checks-body .verification-row.bad .ck-open .ck-v { color: var(--fault); }
 .rw-app .patch-checks-body .verification-row + .verification-row { border-block-start-color: transparent; }
 .rw-app .patch-checks-body .verification-row .ofld-l {
   font-size: .74rem; font-weight: 400; color: var(--ink-4); letter-spacing: .02em;
@@ -163,9 +192,15 @@
   margin-inline: -4px 0; width: calc(100% + 4px);
   background: transparent; border: 1px solid transparent; border-radius: 5px;
   font-family: var(--mono); font-stretch: revert; letter-spacing: .03em;
-  font-size: clamp(.46rem, calc((var(--ck-v-span, 100cqi) - var(--ck-fit-reserve, 96px) - var(--ck-mark-reserve, 0px)) / 25.2), .97rem);
   color: var(--weft); text-transform: uppercase;
   transition: border-color .08s, background-color .08s;
+}
+/* Resting text and the field resolve one size from the same row metrics, so the row
+   keeps its height across the swap. The glyphs still change width - the resting value
+   rides Archivo's width axis like a read-only row while the field uses the true
+   monospace stack - and on iOS the field also jumps to the 16px floor. */
+.rw-app .patch-checks-body .verification-row :is(.ck-open .ck-v, .popt-input) {
+  font-size: clamp(.46rem, calc((var(--ck-v-span, 100cqi) - var(--ck-fit-reserve, 96px) - var(--ck-mark-reserve, 0px)) / var(--ck-v-divisor, 26)), .97rem);
 }
 .rw-app .patch-checks-body .verification-row .popt-input::placeholder { text-transform: none; }
 @media (hover: hover) {
@@ -203,6 +238,9 @@
 .rw-app .patch-checks-body .verification-row .ck-mark.bad { color: var(--fault); }
 .rw-app .ck-add {
   display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+  /* Its tallest child is a 12px glyph, so the label alone would sit under the
+     WCAG 2.5.8 floor once the select stops being held at 16px. */
+  min-height: 24px; box-sizing: border-box;
   /* Align the bordered control with row text, not the full-bleed frame. */
   margin-block-start: 7px; margin-inline-start: 9px; padding: 4px 10px 4px 8px;
   border: 1px dashed var(--seam-strong); border-radius: var(--r-s);

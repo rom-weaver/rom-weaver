@@ -30,6 +30,10 @@ const IOS_FONT_FLOOR =
   "iOS 16px font-size floor - it is meant to beat the smaller per-field size, or iOS zooms on focus";
 
 // `<earlier selector> >>> <later selector>` -> why the later rule is meant to win.
+//
+// These are the fields the floor is still meant to reach. The self-sizing dropdown
+// families (`.meta-target-select`, `.ck-add-select`) need no entry: the floor's bare
+// `select` selector skips them by class, and its `.select` selector never matched them.
 const EXEMPT = new Map([
   [".rw-app .ofld .input >>> .rw-app .input", IOS_FONT_FLOOR],
   [".rw-app .ofld .select >>> .rw-app .select", IOS_FONT_FLOOR],

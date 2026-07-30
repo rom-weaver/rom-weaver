@@ -96,12 +96,23 @@
 .codec-combobox-option { min-height: 28px; display: flex; align-items: center; padding: 0 8px; border-radius: 4px; color: var(--ink); cursor: pointer; font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; font-size: var(--dropdown-fs, .8rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .codec-combobox-option.active { background: var(--plate-2); color: var(--thread-text); }
 
-/* Prevent iOS focus zoom without disabling pinch zoom. */
+/* Prevent iOS focus zoom without disabling pinch zoom.
+   Two dropdown families opt out, and both are defined by sizing themselves to the
+   line that holds them rather than to a field: `.meta-target-select` (the header,
+   N64 byte order, patch target and check-basis pickers - small text over a 24px tap
+   floor) and `.ck-add-select`. The floor blew each of them past the line it rides in,
+   and a <select> opens a native picker rather than a keyboard, so it never triggers
+   the zoom this floor exists to prevent.
+   The check *values* need the floor and get it - they are read-only text until
+   tapped, and the field that replaces them is mounted at 16px before focus lands
+   (see EditableCheckRow). A 40-character SHA-1 does not fit at 16px on any phone,
+   which is exactly why it is not a field at rest. */
 @supports (-webkit-touch-callout: none) {
   @media (pointer: coarse) {
     .rw-app .input, .rw-app .select,
     .rw-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
-    .rw-app textarea, .rw-app select { font-size: max(16px, 1em); }
+    .rw-app textarea,
+    .rw-app select:not(.meta-target-select):not(.ck-add-select) { font-size: max(16px, 1em); }
     /* Reassert the 16px floor against more specific field rules. */
     .rw-app .ofld .select,
     .rw-app .fname .select, .rw-app .fname .outname { font-size: max(16px, 1em); }
