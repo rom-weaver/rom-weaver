@@ -294,6 +294,22 @@
   font-family: var(--mono); font-size: .58rem; font-weight: 850; letter-spacing: -.04em;
 }
 .rw-app .sample-tutorial-start [role="status"] { flex-basis: 100%; color: var(--fault); text-align: center; }
+@media (max-width: 1100px) {
+  .rw-app .sample-tutorial-start {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 320px));
+    justify-content: center;
+  }
+  .rw-app .sample-tutorial-start-label,
+  .rw-app .sample-tutorial-start-secondary {
+    grid-column: 1 / -1; justify-self: center;
+  }
+  .rw-app .sample-tutorial-start-or { display: none; }
+  .rw-app .sample-tutorial-start-download,
+  .rw-app .sample-tutorial-start-primary {
+    min-width: 0; width: 100%; padding-inline: var(--sp-xs); font-size: .7rem;
+  }
+  .rw-app .sample-tutorial-start-secondary { width: min(100%, 320px); }
+}
 
 /* Guided samples trace the same numbered loom stages as the workbench. The
    dimmer never traps input: each live section remains available while its
@@ -368,6 +384,12 @@
   top: max(18px, env(safe-area-inset-top));
   bottom: auto;
 }
+.rw-app .sample-tutorial-dialog[data-loading="true"] {
+  top: 50%; bottom: auto;
+  width: min(560px, calc(100vw - 2 * var(--gutter))); max-height: calc(100dvh - 36px);
+  translate: 0 -50%;
+  animation-name: sample-tutorial-loading-in;
+}
 /* Anchored beside its row on desktop: the component supplies left/top, so the
    viewport-pinned insets have to release or the box stays over-constrained.
    Absolute for the same reason as the ring - the card rides the page rather
@@ -398,6 +420,17 @@
 }
 .rw-app .sample-tutorial-copy p {
   margin: 0; color: var(--ink-2); font-size: .86rem; line-height: 1.5;
+}
+.rw-app .sample-tutorial-progress {
+  height: 7px; margin-block-start: var(--sp-m); overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--thread) 55%, var(--seam-strong)); border-radius: 999px;
+  background: color-mix(in oklab, var(--thread) 10%, var(--well));
+}
+.rw-app .sample-tutorial-progress > span {
+  display: block; width: 42%; height: 100%; border-radius: inherit;
+  background: linear-gradient(90deg, var(--thread), var(--thread-hi));
+  box-shadow: 0 0 12px color-mix(in oklab, var(--thread) 55%, transparent);
+  animation: sample-tutorial-progress 1.05s var(--ease) infinite alternate;
 }
 .rw-app .sample-tutorial-action-list {
   display: flex; flex-wrap: wrap; gap: var(--sp-xs); margin: var(--sp-s) 0 0; padding: 0; list-style: none;
@@ -445,6 +478,13 @@
 @keyframes sample-tutorial-dialog-in {
   from { opacity: 0; translate: 0 12px; }
 }
+@keyframes sample-tutorial-loading-in {
+  from { opacity: 0; translate: 0 calc(-50% + 12px); }
+}
+@keyframes sample-tutorial-progress {
+  from { translate: -8% 0; }
+  to { translate: 146% 0; }
+}
 @media (max-width: 640px) {
   .rw-app .sample-tutorial-dialog {
     grid-template-columns: 38px minmax(0, 1fr); gap: var(--sp-m);
@@ -455,6 +495,9 @@
     top: max(10px, env(safe-area-inset-top));
     bottom: auto;
   }
+  .rw-app .sample-tutorial-dialog[data-loading="true"] {
+    top: 50%; bottom: auto; max-height: calc(100dvh - 20px);
+  }
   .rw-app .sample-tutorial-beacon { width: 38px; height: 38px; font-size: 1rem; }
   .rw-app .sample-tutorial-actions {
     grid-column: 1 / -1; flex-direction: row-reverse; justify-content: flex-start;
@@ -464,8 +507,12 @@
   .rw-app .sample-tutorial-scrim,
   .rw-app .sample-tutorial-ring,
   .rw-app .sample-tutorial-dialog,
+  .rw-app .sample-tutorial-progress > span,
   .rw-app .btn[data-guide-cta="true"]:not(:disabled) {
     animation: none;
+  }
+  .rw-app .sample-tutorial-progress > span {
+    width: 100%;
   }
   .rw-app .sample-tutorial-ring[data-glide="true"] {
     transition: none;

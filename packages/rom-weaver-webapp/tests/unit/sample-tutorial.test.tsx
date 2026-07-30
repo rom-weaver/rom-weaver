@@ -108,7 +108,7 @@ describe("sample tutorial start", () => {
         loading={false}
         onStart={onStart}
         onSecondaryStart={onSecondaryStart}
-        secondaryLabel="Start guided Bundle"
+        secondaryLabel="Create a sharable bundle"
       />,
     );
 
@@ -118,12 +118,27 @@ describe("sample tutorial start", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Start guided Apply/ }));
     expect(onStart).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: /Start guided Bundle/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Create a sharable bundle/ }));
     expect(onSecondaryStart).toHaveBeenCalledOnce();
   });
 });
 
 describe("sample tutorial", () => {
+  it("centers an announced progress bar while the guided workbench is preparing", () => {
+    render(
+      <div className="rw-app">
+        <SampleTutorial loadingBody="Loading." onClose={vi.fn()} ready={false} steps={STEPS} />
+      </div>,
+    );
+
+    const guide = screen.getByRole("dialog", { name: "Loading the practice files" });
+    expect(guide.getAttribute("aria-busy")).toBe("true");
+    expect(guide.getAttribute("data-loading")).toBe("true");
+    expect(screen.getByRole("progressbar", { name: "Loading practice files" }).getAttribute("aria-valuetext")).toBe(
+      "Preparing the guided workbench",
+    );
+  });
+
   it("highlights live sections, opens their drawers, and keeps progression in the guide", async () => {
     const onClose = vi.fn();
     render(

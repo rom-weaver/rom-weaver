@@ -183,7 +183,7 @@ const ApplyDropAfter = ({
       loading={sampleLoading}
       onStart={onLoadApplySample}
       onSecondaryStart={onLoadBundleSample}
-      secondaryLabel="Start guided Bundle"
+      secondaryLabel="Create a sharable bundle"
     />
   );
 };
@@ -201,17 +201,17 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [
-      ["reorder", "Reorder"],
+      ["reorder", "Change patch order"],
       ["toggle", "Toggle On / Off"],
       ["header", "Header options"],
       ["checks", "Checks"],
-      ["menu", "Menu: edit · replace · remove"],
+      ["menu", "Menu: edit metadata · replace · remove"],
     ],
-    body: "Both IPS patches run in order: HELLO → MODIFIED, then WORLD → ROM. Use the numbered handles to reorder, the On/Off toggles to skip a patch, scissors for header handling, Checks for checksums, and the 3-dot menu to edit, replace, or remove.",
+    body: "Both IPS patches run in order: HELLO → MODIFIED, then WORLD → ROM. Use the numbered handles to change the order, the On/Off toggles to skip a patch, scissors for header handling, Checks for checksums, and the 3-dot menu to edit patch metadata, replace a file, or remove it.",
     openDrawers: true,
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
-    title: "Build the two-patch stack",
+    title: "Build the patch stack",
   },
   {
     actions: [
@@ -250,11 +250,11 @@ const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [
-      ["reorder", "Reorder"],
+      ["reorder", "Change patch order"],
       ["toggle", "Required or optional"],
       ["menu", "Patch details"],
     ],
-    body: "The bundle keeps these patches in this order. Patch details can explain what each patch does and whether a player may skip it.",
+    body: "The bundle keeps these patches in this order. Use Patch details to edit each patch's label, version, author, and description, then choose whether a player must apply it or may skip it.",
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
     title: "Describe the patch recipe",

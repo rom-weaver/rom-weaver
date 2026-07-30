@@ -120,7 +120,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero .formats .fmt")).toBeTruthy();
     const sample = container.querySelector(".first-weave-demo button") as HTMLButtonElement;
     expect(sample.textContent).toContain("Start guided Apply");
-    expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Bundle");
+    expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Create a sharable bundle");
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
     // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
