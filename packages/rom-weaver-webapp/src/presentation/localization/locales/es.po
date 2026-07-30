@@ -55,6 +55,11 @@ msgstr "Códec 7z"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.masthead.slogan"
+msgstr "Kit de herramientas ROM y parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Color de acento"
 
@@ -225,12 +230,12 @@ msgstr "en un parche comprimido y compartible que otros puedan aplicar —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.language"
+msgid "settings.language"
 msgstr "Idioma"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.language"
+msgid "ui.tools.language"
 msgstr "Idioma"
 
 #. js-lingui-explicit-id
@@ -475,6 +480,11 @@ msgstr "Elimina relleno y bloques basura de tus volcados de ROM,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Apoyar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.toDark"
 msgstr "Cambiar a tema oscuro"
 
@@ -547,11 +557,6 @@ msgstr "hilos"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Hilos"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Propina"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -55,6 +55,11 @@ msgstr "7z codec"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.masthead.slogan"
+msgstr "A ROM & Patch toolkit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Accent"
 
@@ -225,12 +230,12 @@ msgstr "into a compressed, shareable patch others can apply —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.language"
+msgid "settings.language"
 msgstr "Language"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.language"
+msgid "ui.tools.language"
 msgstr "Language"
 
 #. js-lingui-explicit-id
@@ -475,6 +480,11 @@ msgstr "Strip padding and junk blocks from ROM dumps,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Support"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.toDark"
 msgstr "Switch to dark theme"
 
@@ -547,11 +557,6 @@ msgstr "threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Tip"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

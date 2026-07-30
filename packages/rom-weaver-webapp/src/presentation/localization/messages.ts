@@ -89,7 +89,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.drop.staging": msg({ id: "ui.drop.staging", message: "Reading dropped files…" }),
   "ui.drop.tap": msg({ id: "ui.drop.tap", message: "Tap to choose files" }),
   "ui.env.threads": msg({ id: "ui.env.threads", message: "threads" }),
-  "ui.footer.donate": msg({ id: "ui.footer.donate", message: "Tip" }),
+  "ui.footer.donate": msg({ id: "ui.footer.donate", message: "Support" }),
+  "ui.masthead.slogan": msg({
+    id: "ui.masthead.slogan",
+    message: "A ROM & Patch toolkit",
+  }),
   "ui.hero.accent": msg({ id: "ui.hero.accent", message: "at native speed" }),
   "ui.hero.createThesis": msg({
     id: "ui.hero.createThesis",

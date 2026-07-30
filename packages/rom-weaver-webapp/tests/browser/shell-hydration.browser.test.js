@@ -1,9 +1,9 @@
-import { act, createElement } from "react";
+import { Fragment, act, createElement } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
-import { Masthead } from "../../src/webapp/components/shell.tsx";
+import { Masthead, SiteFooter } from "../../src/webapp/components/shell.tsx";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -16,17 +16,23 @@ const shell = (threads, serviceWorkerStatus) =>
   createElement(
     RomWeaverSettingsProvider,
     { settings: {} },
-    createElement(Masthead, {
-      currentTab: "patcher",
-      onOpenLog: () => undefined,
-      onOpenSettings: () => undefined,
-      onReset: () => undefined,
-      onSelectTab: () => undefined,
-      serviceWorkerStatus,
-      tabs,
-      threads,
-      version: "v1.2.3",
-    }),
+    createElement(
+      Fragment,
+      null,
+      createElement(Masthead, {
+        currentTab: "patcher",
+        onOpenLog: () => undefined,
+        onOpenSettings: () => undefined,
+        onReset: () => undefined,
+        onSelectTab: () => undefined,
+        tabs,
+      }),
+      createElement(SiteFooter, {
+        serviceWorkerStatus,
+        threads,
+        version: "1.2.3",
+      }),
+    ),
   );
 
 let root;

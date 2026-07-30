@@ -336,6 +336,123 @@ const useHydratedServiceWorkerStatus = (status: ServiceWorkerStatus | null | und
   return hydrated ? status : resolved;
 };
 
+type BuildStatusProps = {
+  commitHash?: string;
+  commitsSinceVersion?: number | null;
+  dirty?: boolean;
+  serviceWorkerStatus?: ServiceWorkerStatus | null;
+  confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  githubHref?: string;
+  threads?: number;
+  version?: string;
+  versionTitle?: string;
+};
+
+const guardFooterExternalClick = (
+  event: { preventDefault: () => void },
+  href: string,
+  confirmExternalNavigation?: (href: string) => Promise<boolean>,
+) => {
+  if (!confirmExternalNavigation) return;
+  event.preventDefault();
+  void confirmExternalNavigation(href).then((accepted) => {
+    if (accepted) window.open(href, "_blank", "noopener,noreferrer");
+  });
+};
+
+const BuildStatus = ({
+  commitHash,
+  commitsSinceVersion,
+  dirty,
+  serviceWorkerStatus,
+  confirmExternalNavigation,
+  githubHref,
+  threads,
+  version,
+  versionTitle,
+}: BuildStatusProps) => {
+  const localizer = useUiLocalizer();
+  const threadsLabel = localizer.message("ui.env.threads");
+  const isPwa = readPwaState();
+  const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
+  const runtimeStatus = `· ${isPwa ? "pwa" : "web"} · ${hydratedStatus === "off" ? "sw off" : "sw"}`;
+  const runtimeStatusTitle =
+    hydratedStatus === "active"
+      ? "This page is controlled by the service worker and its offline cache is available."
+      : hydratedStatus === "ready"
+        ? "A service worker is installed and ready to take control."
+        : hydratedStatus === "off"
+          ? "Service-worker offline support is unavailable."
+          : undefined;
+  const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
+  const versionHref = version && githubBaseHref ? `${githubBaseHref}releases/tag/v${version}` : undefined;
+  const commitHref = commitHash && githubBaseHref ? `${githubBaseHref}commit/${commitHash}` : undefined;
+  const commitDistance =
+    typeof commitsSinceVersion === "number" && Number.isInteger(commitsSinceVersion) && commitsSinceVersion > 0
+      ? commitsSinceVersion
+      : 0;
+  if (!version) return null;
+  return (
+    <span className="masthead-version mono">
+      <span className="build-version-label" title={versionTitle}>
+        {versionHref ? (
+          <a
+            className="build-version-link"
+            href={versionHref}
+            onClick={(event) => guardFooterExternalClick(event, versionHref, confirmExternalNavigation)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            v{version}
+            {commitDistance ? `+${commitDistance}` : null}
+          </a>
+        ) : (
+          `v${version}${commitDistance ? `+${commitDistance}` : ""}`
+        )}
+        {commitHash ? (
+          <>
+            <span aria-hidden="true"> · </span>
+            {commitHref ? (
+              <a
+                className="build-version-link"
+                href={commitHref}
+                onClick={(event) => guardFooterExternalClick(event, commitHref, confirmExternalNavigation)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                {commitHash.slice(0, 7)}
+              </a>
+            ) : (
+              commitHash.slice(0, 7)
+            )}
+            {dirty ? "*" : null}
+          </>
+        ) : null}
+      </span>
+      <span
+        className="masthead-threads"
+        data-thread-label={threadsLabel}
+        title={threads ? `${threads} ${threadsLabel}` : undefined}
+      >
+        {threads ? (
+          <>
+            <span aria-hidden="true" className="masthead-threads-full">
+              {`· ${threads} ${threadsLabel}`}
+            </span>
+            <span aria-hidden="true" className="masthead-threads-short">
+              {`· ${threads}T`}
+            </span>
+            <span className="sr-only">{`${threads} ${threadsLabel}`}</span>
+          </>
+        ) : null}
+      </span>
+      <span className="masthead-runtime" title={runtimeStatusTitle}>
+        {runtimeStatus}
+      </span>
+    </span>
+  );
+};
+
 const Masthead = ({
   channelBadge,
   commitHash,
@@ -356,7 +473,6 @@ const Masthead = ({
   serviceWorkerStatus,
   confirmExternalNavigation,
   githubHref,
-  donateHref,
   settingsOpen,
   threads,
   version,
@@ -527,42 +643,10 @@ const Masthead = ({
               </span>
             ) : null}
           </span>
+          <span className="masthead-slogan">{localizer.message("ui.masthead.slogan")}</span>
         </span>
         <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
         <div className="masthead-tools" ref={toolsRef}>
-          {githubHref ? (
-            <a
-              aria-label="GitHub"
-              className="tool"
-              href={githubHref}
-              onClick={(event) => guardExternalClick(event, githubHref)}
-              rel="noreferrer"
-              target="_blank"
-              title="GitHub"
-            >
-              <Github aria-hidden="true" />
-              <span aria-hidden="true" className="tool-text">
-                GitHub
-              </span>
-            </a>
-          ) : null}
-          {donateHref ? (
-            <a
-              aria-label={localizer.message("ui.footer.donate")}
-              className="tool masthead-donate"
-              href={donateHref}
-              onClick={(event) => guardExternalClick(event, donateHref)}
-              rel="noreferrer"
-              target="_blank"
-              title={localizer.message("ui.footer.donate")}
-            >
-              <Heart aria-hidden="true" />
-              <span aria-hidden="true" className="tool-text">
-                {localizer.message("ui.footer.donate")}
-              </span>
-            </a>
-          ) : null}
-          {githubHref || donateHref ? <span aria-hidden="true" className="tools-sep" /> : null}
           <button
             aria-label={localizer.message("ui.settings.reset")}
             className="tool"
@@ -630,6 +714,62 @@ const Masthead = ({
         </div>
       </header>
     </>
+  );
+};
+
+type SiteFooterProps = BuildStatusProps & {
+  donateHref?: string;
+  legalHref?: string;
+  privacyHref?: string;
+};
+
+const SiteFooter = ({ donateHref, githubHref, legalHref, privacyHref, ...buildStatusProps }: SiteFooterProps) => {
+  const localizer = useUiLocalizer();
+  const confirmExternalNavigation = buildStatusProps.confirmExternalNavigation;
+  return (
+    <footer className="site-footer">
+      <div className="site-footer-links">
+        {githubHref ? (
+          <a
+            aria-label="GitHub"
+            className="site-footer-link"
+            href={githubHref}
+            onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Github aria-hidden="true" />
+            <span>GitHub</span>
+          </a>
+        ) : null}
+        {donateHref ? (
+          <a
+            aria-label={localizer.message("ui.footer.donate")}
+            className="site-footer-link support-link"
+            href={donateHref}
+            onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Heart aria-hidden="true" />
+            <span>{localizer.message("ui.footer.donate")}</span>
+          </a>
+        ) : null}
+        {privacyHref ? (
+          <a className="site-footer-link" href={privacyHref}>
+            <span>Privacy</span>
+          </a>
+        ) : null}
+        {legalHref ? (
+          <a className="site-footer-link" href={legalHref}>
+            <span>Legal</span>
+          </a>
+        ) : null}
+      </div>
+      <div className="site-footer-status">
+        <BuildStatus {...buildStatusProps} githubHref={githubHref} />
+      </div>
+    </footer>
   );
 };
 
@@ -712,4 +852,4 @@ const WakeLockBanner = ({
   );
 };
 
-export { Masthead, readPwaState, Reveal, UpdateBanner, WakeLockBanner };
+export { Masthead, readPwaState, Reveal, SiteFooter, UpdateBanner, WakeLockBanner };

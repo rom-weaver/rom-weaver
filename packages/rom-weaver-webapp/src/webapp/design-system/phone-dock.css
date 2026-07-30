@@ -16,7 +16,7 @@
 
   .rw-app .masthead {
     display: grid;
-    grid-template-columns: minmax(112px, 1fr) auto;
+    grid-template-columns: minmax(112px, 1fr) minmax(0, auto);
     grid-template-areas:
       "brand tools"
       "modes modes";
@@ -28,10 +28,14 @@
   .rw-app .brand {
     grid-area: brand;
     justify-self: start;
-    gap: var(--sp-s);
+    column-gap: var(--sp-s);
+    row-gap: 0;
     min-width: 0;
     width: 100%;
   }
+
+  .rw-app .brand-copy,
+  .rw-app .masthead-slogan { transform: none; }
 
   .rw-app .brand-copy {
     display: flex;
@@ -48,7 +52,7 @@
     align-items: center;
     justify-content: flex-end;
     min-width: 0;
-    /* eight tools at the 24px floor already fill the column; a gap between them
+    /* six tools at the 24px floor already fill the column; a gap between them
        would come out of the brand column and clip the build line */
     gap: 0;
     margin: 0;
@@ -66,7 +70,6 @@
     border-radius: var(--r-m);
   }
 
-  .rw-app .tools-sep { margin-inline: 3px; }
 
   .rw-app .tool svg,
   .rw-app .tool .ico-sun,

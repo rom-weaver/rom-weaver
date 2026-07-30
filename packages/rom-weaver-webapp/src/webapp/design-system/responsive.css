@@ -9,7 +9,10 @@
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   .rw-app { --dropdown-fs: .72rem; }
   .rw-app .masthead { row-gap: var(--sp-xs); padding-block: 5px 3px; }
-  .rw-app .brand { gap: var(--sp-s); }
+  .rw-app .brand { column-gap: var(--sp-s); row-gap: 0; }
+  .rw-app .site-footer { align-items: center; flex-direction: row; justify-content: flex-start; gap: var(--sp-s); overflow-x: auto; }
+  .rw-app .site-footer-links { width: auto; flex: none; flex-wrap: nowrap; gap: var(--sp-s); }
+  .rw-app .site-footer-status { width: auto; flex: none; }
   /* No banner treatment here: the lead only ever renders inside `.drop.hero`, which
      strips the border/background in dropzone.css. Under plain imports specificity
      kept that reset winning, so a boxed rule at this weight was dead; layer order
