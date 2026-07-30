@@ -16,7 +16,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
 import { LOCALE_OPTIONS, type Localizer } from "../../presentation/localization/index.ts";
-import { viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
+import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
@@ -48,6 +48,26 @@ const readPwaState = () => {
 type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
+
+/** Reveal masthead color changes from the control that caused them. */
+const runMastheadColorWipe = (update: () => void, source: HTMLElement | null) => {
+  const root = document.documentElement;
+  if (viewTransitionsUnsupported()) {
+    update();
+    return;
+  }
+  const rect = source?.getBoundingClientRect();
+  const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+  const cy = rect ? rect.top + rect.height / 2 : 0;
+  const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
+  root.style.setProperty("--wipe-x", `${cx}px`);
+  root.style.setProperty("--wipe-y", `${cy}px`);
+  root.style.setProperty("--wipe-r", `${radius}px`);
+  const release = holdTransitionClasses(["vt-theme"]);
+  const transition = document.startViewTransition(update);
+  transition.ready.catch(() => undefined);
+  transition.finished.then(release, release);
+};
 
 /**
  * Workflow mode rail: tabs with a sliding thumb. Where CSS anchor positioning
@@ -154,23 +174,7 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const label = localizer.message(theme === "dark" ? "ui.theme.toLight" : "ui.theme.toDark");
   const handleClick = () => {
-    const root = document.documentElement;
-    if (viewTransitionsUnsupported()) {
-      toggleTheme();
-      return;
-    }
-    const rect = buttonRef.current?.getBoundingClientRect();
-    const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-    const cy = rect ? rect.top + rect.height / 2 : 0;
-    const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
-    root.style.setProperty("--wipe-x", `${cx}px`);
-    root.style.setProperty("--wipe-y", `${cy}px`);
-    root.style.setProperty("--wipe-r", `${radius}px`);
-    root.classList.add("vt-theme");
-    const transition = document.startViewTransition(() => toggleTheme());
-    transition.ready.catch(() => undefined);
-    const clear = () => root.classList.remove("vt-theme");
-    transition.finished.then(clear, clear);
+    runMastheadColorWipe(toggleTheme, buttonRef.current);
   };
   return (
     <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">
@@ -206,6 +210,7 @@ const AccentPicker = ({
   open: boolean;
 }) => {
   const accent = useAccent();
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const trayRef = useRef<HTMLDivElement | null>(null);
   const label = localizer.message("ui.tools.accent");
 
@@ -223,6 +228,7 @@ const AccentPicker = ({
         aria-label={label}
         className="tool accent-tool"
         onClick={onToggle}
+        ref={buttonRef}
         title={label}
         type="button"
       >
@@ -237,7 +243,7 @@ const AccentPicker = ({
                 aria-label={entry.label}
                 checked={entry.value === accent}
                 name="masthead-accent"
-                onChange={() => onChange(entry.value)}
+                onChange={() => runMastheadColorWipe(() => onChange(entry.value), buttonRef.current)}
                 type="radio"
                 value={entry.value}
               />

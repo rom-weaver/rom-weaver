@@ -9,6 +9,7 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import { applyAccent } from "../../src/webapp/accent.ts";
 import { Masthead } from "../../src/webapp/components/shell.tsx";
 
 const noop = () => undefined;
@@ -99,6 +100,43 @@ const clickThemeToggle = async () => {
   return { before, toggle };
 };
 
+const clickAccentSwatch = async () => {
+  host = document.createElement("div");
+  host.className = "rw-app";
+  document.body.append(host);
+  root = createRoot(host);
+  root.render(
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: {} },
+      createElement(Masthead, {
+        currentTab: "patcher",
+        onAccentChange: applyAccent,
+        onOpenLog: noop,
+        onOpenSettings: noop,
+        onReset: noop,
+        onSelectTab: noop,
+        tabs: PAGE_TABS,
+      }),
+    ),
+  );
+  const find = () => host.querySelector(".accent-tool");
+  let button = find();
+  for (let attempt = 0; !button && attempt < 50; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    button = find();
+  }
+  if (!button) throw new Error("accent picker never rendered");
+  button.click();
+  await expect.poll(() => host.querySelector(".accent-tray input")).not.toBeNull();
+  const current = host.querySelector(".accent-tray input:checked");
+  const target = [...host.querySelectorAll(".accent-tray input")].find((input) => input !== current);
+  if (!target) throw new Error("accent swatches never rendered");
+  const before = document.documentElement.getAttribute("data-accent");
+  target.click();
+  return { before, button };
+};
+
 describe("theme toggle view-transition gate", () => {
   beforeEach(() => {
     stubViewTransitions();
@@ -109,6 +147,7 @@ describe("theme toggle view-transition gate", () => {
     document.startViewTransition = originalStart;
     if (originalSupports) CSS.supports = originalSupports;
     originalSupports = undefined;
+    applyAccent("madder");
     document.documentElement.classList.remove("vt-theme");
   });
 
@@ -159,5 +198,15 @@ describe("theme toggle view-transition gate", () => {
 
     expect(document.documentElement.getAttribute("data-theme")).not.toBe(before);
     expect(document.documentElement.classList.contains("vt-theme")).toBe(false);
+  });
+
+  test("animates accent changes from the picker button", async () => {
+    pretendIosWebKit();
+    const { before, button } = await clickAccentSwatch();
+
+    expect(startCalls).toHaveLength(1);
+    expect(document.documentElement.getAttribute("data-accent")).not.toBe(before);
+    const rect = button.getBoundingClientRect();
+    expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(`${rect.left + rect.width / 2}px`);
   });
 });
