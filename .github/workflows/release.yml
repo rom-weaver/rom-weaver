@@ -334,10 +334,22 @@ jobs:
   #
   # Safe to run alongside the publishing jobs: it publishes nothing, so it needs
   # no registry credentials and cannot half-release anything on failure.
+  # `!cancelled()` here and on every other job downstream of `release` is
+  # load-bearing, not decoration. `release` needs `verify-main-ci`, which is
+  # skipped on the `pull_request` path - and a skip propagates down the whole
+  # dependency chain, past `release`'s own `always()`, unless each descendant
+  # opts out of it. Without this the entire fan-out skipped on a run that cut
+  # the draft release and reported success, leaving v0.10.0 a draft with no
+  # assets. Every job that gains it also asserts the `result` of the needs it
+  # actually depends on, because opting out of skip propagation means failed
+  # and skipped ancestors no longer stop it either.
   semver-check:
     name: Check for breaking API changes
     needs: release
-    if: needs.release.outputs.release_created == 'true'
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -409,7 +421,10 @@ jobs:
   cargo-publish-dry-run:
     name: Dry-run Cargo publish
     needs: release
-    if: needs.release.outputs.release_created == 'true'
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -437,7 +452,10 @@ jobs:
   static-webapp:
     name: Package static webapp
     needs: release
-    if: needs.release.outputs.release_created == 'true'
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -559,6 +577,8 @@ jobs:
   publish-npm:
     needs: [release, cargo-publish-dry-run]
     if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
       needs.release.outputs.release_created == 'true' &&
       needs.cargo-publish-dry-run.result == 'success'
     permissions:
@@ -587,6 +607,9 @@ jobs:
   publish-homebrew:
     needs: [release, publish-release]
     if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.publish-release.result == 'success' &&
       needs.release.outputs.release_created == 'true' &&
       !contains(needs.release.outputs.version, '-')
     runs-on: ubuntu-24.04
@@ -664,6 +687,9 @@ jobs:
   publish-scoop:
     needs: [release, publish-release]
     if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.publish-release.result == 'success' &&
       needs.release.outputs.release_created == 'true' &&
       !contains(needs.release.outputs.version, '-')
     runs-on: ubuntu-24.04
@@ -737,7 +763,12 @@ jobs:
   # missing, which is what a standalone workflow_dispatch gets.
   publish-containers:
     needs: [release, static-webapp, publish-npm]
-    if: needs.release.outputs.release_created == 'true'
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.static-webapp.result == 'success' &&
+      needs.publish-npm.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
     permissions:
       # Belt and braces for the artifact download in docker-publish.yml. A
       # same-run download authenticates with the runner's ACTIONS_RUNTIME_TOKEN

@@ -1014,6 +1014,14 @@ The table is in dependency order. Everything above `publish-release` attaches an
 asset to the draft or gates it; the two package-manager pushes come after it, and
 [Package managers publish last](#package-managers-publish-last) explains why.
 
+Every one of these jobs guards its `if` with `!cancelled()`. `release` needs
+`verify-main-ci`, which is skipped on the release-PR-merge path, and a skipped
+job propagates the skip to everything downstream of it - past `release`'s own
+`always()`. v0.10.0 was cut this way: the run reported success, created the draft
+release, and skipped the entire fan-out, leaving a draft with no assets. Opting
+out of skip propagation also means failed ancestors no longer stop a job either,
+so each one additionally asserts the `result` of the needs it depends on.
+
 Ordering inside `publish-npm` is load-bearing: the unscoped `rom-weaver` alias
 is a dependency-only pointer at `@rom-weaver/cli`, so publishing it first would
 make installs resolve a version that is not on the registry yet.
