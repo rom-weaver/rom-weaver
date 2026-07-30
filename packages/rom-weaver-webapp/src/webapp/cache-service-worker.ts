@@ -204,7 +204,9 @@ const matchCachedResponse = async (request: Request, url: URL) => {
     return withCrossOriginIsolationHeaders(manifest, credentialless) || manifest;
   }
   if (isHtmlRequest(request, url)) {
-    const html = (await matchRouteDocument(url)) || (await matchPrecache("index.html")) || (await matchPrecache("/"));
+    const routeDocument = await matchRouteDocument(url);
+    const fallbackDocument = url.pathname === "/" ? await matchPrecache("index.html") : await matchPrecache("404.html");
+    const html = routeDocument || fallbackDocument || (await matchPrecache("index.html")) || (await matchPrecache("/"));
     return withCrossOriginIsolationHeaders(html, credentialless) || html;
   }
   return undefined;

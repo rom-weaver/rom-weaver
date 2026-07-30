@@ -7,6 +7,9 @@ export const routeDocumentCandidates = (pathname: string): string[] => {
   const trimmed = pathname.replace(/\/+$/, "").replace(/^\/+/, "");
   if (!trimmed) return [];
   if (/(^|\/)index\.html$/i.test(trimmed)) return [trimmed];
-  if (/\.html$/i.test(trimmed)) return [trimmed];
+  if (/\.html$/i.test(trimmed)) {
+    const route = trimmed.slice(0, -".html".length);
+    return [trimmed, `${route}/index.html`];
+  }
   return [`${trimmed}/index.html`, `${trimmed}.html`];
 };
