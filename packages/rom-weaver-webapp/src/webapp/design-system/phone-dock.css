@@ -25,6 +25,8 @@
     padding-block: 5px 6px;
   }
 
+  .rw-app .masthead-control-rail { display: contents; }
+
   .rw-app .brand {
     grid-area: brand;
     justify-self: start;
@@ -52,6 +54,7 @@
      across the column - a full-width stretch floats each icon in a wide cell */
   .rw-app .masthead-tools {
     grid-area: tools;
+    order: 2;
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -60,6 +63,7 @@
        would come out of the brand column and clip the build line */
     gap: 0;
     margin: 0;
+    margin-inline-start: auto;
   }
 
   /* Keep the controls compact enough for the iPhone SE while giving the icons
@@ -82,6 +86,8 @@
     width: 17px;
     height: 17px;
   }
+
+  .rw-app .tool-language { width: 36px; }
 
   .rw-app .updates {
     gap: var(--sp-s);
@@ -109,22 +115,27 @@
 
   .rw-app .modes {
     grid-area: modes;
+    order: 3;
     width: 100%;
     margin: 0;
+    display: flex;
+    justify-content: center;
   }
+
+  .rw-app .mode-rail { width: auto; }
 
   .rw-app .mode {
     min-width: 0;
     min-height: 34px;
     padding: 2px 5px;
-    flex: 1 1 0;
+    flex: 0 0 auto;
     justify-content: center;
     gap: var(--sp-2xs);
     font-size: .8rem;
     line-height: 1;
   }
 
-  .rw-app .mode svg { width: 15px; height: 15px; }
+  .rw-app .mode svg { width: 17px; height: 17px; }
 
   /* the whole empty hero is the tap target - flash it on touch so taps
      anywhere in the panel visibly register */
@@ -262,5 +273,110 @@
     width: 100%;
     height: 44px;
     padding-inline: 10px;
+  }
+}
+
+/* Keep the phone-sized controls, but let the masthead use its natural flex
+   widths on wider tablets and short landscape viewports. That gives the mode
+   rail a chance to share the first row instead of dropping at this breakpoint;
+   if it still does not fit, its auto margins center it on the next row. */
+@media (min-width: 501px) and (max-width: 720px),
+  (min-width: 521px) and (max-width: 860px) and (max-height: 520px) {
+  .rw-app .masthead {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .rw-app .brand { width: auto; }
+
+  .rw-app .modes {
+    width: auto;
+    margin-inline: auto;
+  }
+
+  .rw-app .masthead-tools { margin-inline-start: auto; }
+}
+
+@media (min-width: 501px) {
+  .rw-app .masthead-tools {
+    --masthead-tool-size: clamp(36px, 3vw, 48px);
+    gap: clamp(4px, .7vw, 12px);
+  }
+  .rw-app .masthead-tools .tool,
+  .rw-app .masthead-tools .tool-language {
+    width: var(--masthead-tool-size);
+    height: var(--masthead-tool-size);
+  }
+  .rw-app .masthead-tools .tool svg,
+  .rw-app .masthead-tools .tool .ico-sun,
+  .rw-app .masthead-tools .tool .ico-moon {
+    width: clamp(17px, 1.35vw, 22px);
+    height: clamp(17px, 1.35vw, 22px);
+  }
+
+  /* Keep utilities with the brand while the measured rail needs its own row.
+     Once the groups fit, a three-column grid centers the nav in the header
+     itself rather than in the unequal gap between brand and utilities. */
+  .rw-app .masthead[data-masthead-layout="wide"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(max-content, 2fr) minmax(0, 1fr);
+    grid-template-areas: "brand modes tools";
+  }
+  .rw-app .masthead[data-masthead-layout="wide"] .brand {
+    grid-area: brand;
+    justify-self: start;
+    min-width: 0;
+  }
+  .rw-app .masthead[data-masthead-layout="wide"] .brand-line {
+    flex-wrap: nowrap;
+  }
+  .rw-app .masthead[data-masthead-layout="wide"] .modes {
+    grid-area: modes;
+    display: block;
+    width: max-content;
+    flex-basis: auto;
+    order: initial;
+    justify-self: center;
+  }
+  .rw-app .masthead[data-masthead-layout="wide"] .mode-rail {
+    width: max-content;
+  }
+  .rw-app .masthead[data-masthead-layout="wide"] .mode {
+    --mode-pad-inline: clamp(8px, .65vw, 14px);
+    flex: 0 0 auto;
+    min-width: max-content;
+    justify-content: center;
+    padding-inline: var(--mode-pad-inline);
+    white-space: nowrap;
+  }
+  .rw-app .masthead[data-masthead-layout="wide"] .masthead-tools {
+    grid-area: tools;
+    justify-self: end;
+    order: initial;
+    margin-inline-start: 0;
+  }
+}
+
+@media (min-width: 721px) {
+  /* A rail that owns the second row can give each mode more breathing room;
+     the compact intrinsic rail above is what keeps the first row viable. */
+  .rw-app .masthead[data-masthead-layout="stacked"] .modes {
+    display: flex;
+    width: auto;
+    flex-basis: 100%;
+    margin-inline: 0;
+    justify-content: center;
+  }
+  .rw-app .masthead[data-masthead-layout="stacked"] .mode-rail {
+    display: flex;
+    width: max-content;
+  }
+  .rw-app .masthead[data-masthead-layout="stacked"] .mode {
+    --mode-pad-inline: clamp(16px, 1.4vw, 24px);
+    flex: 0 1 auto;
+    min-width: max-content;
+    justify-content: center;
+    padding-inline: var(--mode-pad-inline);
+    white-space: nowrap;
   }
 }

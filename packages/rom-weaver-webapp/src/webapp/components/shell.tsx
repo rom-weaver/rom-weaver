@@ -1,15 +1,4 @@
-import {
-  createLucideIcon,
-  Globe,
-  Heart,
-  Moon,
-  Palette,
-  RotateCcw,
-  ScrollText,
-  Settings,
-  SunMedium,
-  X,
-} from "lucide-react";
+import { createLucideIcon, Heart, Moon, Palette, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -48,9 +37,26 @@ const readPwaState = () => {
 type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
+const WIDE_MASTHEAD_MIN_WIDTH = 1300;
 
-/** Reveal masthead color changes from the control that caused them. */
-const runMastheadColorWipe = (update: () => void, source: HTMLElement | null) => {
+const measureIntrinsicModeRailWidth = (rail: HTMLElement) => {
+  const buttons = [...rail.querySelectorAll<HTMLElement>(".mode")];
+  const previousWidth = rail.style.width;
+  const previousFlex = buttons.map((button) => button.style.flex);
+  rail.style.width = "max-content";
+  for (const button of buttons) {
+    button.style.flex = "0 0 auto";
+  }
+  const width = rail.getBoundingClientRect().width;
+  rail.style.width = previousWidth;
+  for (const [index, button] of buttons.entries()) {
+    button.style.flex = previousFlex[index] ?? "";
+  }
+  return width;
+};
+
+/** Reveal light/dark changes from the theme control that caused them. */
+const runThemeWipe = (update: () => void, source: HTMLElement | null) => {
   const root = document.documentElement;
   if (viewTransitionsUnsupported()) {
     update();
@@ -174,7 +180,7 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const label = localizer.message(theme === "dark" ? "ui.theme.toLight" : "ui.theme.toDark");
   const handleClick = () => {
-    runMastheadColorWipe(toggleTheme, buttonRef.current);
+    runThemeWipe(toggleTheme, buttonRef.current);
   };
   return (
     <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">
@@ -210,7 +216,6 @@ const AccentPicker = ({
   open: boolean;
 }) => {
   const accent = useAccent();
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const trayRef = useRef<HTMLDivElement | null>(null);
   const label = localizer.message("ui.tools.accent");
 
@@ -228,7 +233,6 @@ const AccentPicker = ({
         aria-label={label}
         className="tool accent-tool"
         onClick={onToggle}
-        ref={buttonRef}
         title={label}
         type="button"
       >
@@ -243,7 +247,7 @@ const AccentPicker = ({
                 aria-label={entry.label}
                 checked={entry.value === accent}
                 name="masthead-accent"
-                onChange={() => runMastheadColorWipe(() => onChange(entry.value), buttonRef.current)}
+                onChange={() => onChange(entry.value)}
                 type="radio"
                 value={entry.value}
               />
@@ -288,13 +292,12 @@ const LanguagePicker = ({
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={label}
-        className="tool tool-code"
+        className="tool tool-code tool-language"
         onClick={onToggle}
         title={label}
         type="button"
       >
-        <Globe aria-hidden="true" className="tool-language-globe" />
-        <span aria-hidden="true" className="tool-language-code">
+        <span aria-hidden="true" className="tool-language-label">
           {(current?.value || "").slice(0, 2).toUpperCase()}
         </span>
       </button>
@@ -518,6 +521,8 @@ const Masthead = ({
   // One slot, so opening either picker closes the other - the two trays sit
   // side by side and would otherwise overlap.
   const [openTool, setOpenTool] = useState<QuickTool | null>(null);
+  const [wideMasthead, setWideMasthead] = useState(false);
+  const mastheadRef = useRef<HTMLElement | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const logLabel = localizer.message("ui.tools.log");
@@ -535,6 +540,36 @@ const Masthead = ({
         : hydratedStatus === "off"
           ? "Service-worker offline support is unavailable."
           : undefined;
+
+  useLayoutEffect(() => {
+    const masthead = mastheadRef.current;
+    const brand = masthead?.querySelector<HTMLElement>(".brand");
+    const modes = masthead?.querySelector<HTMLElement>(".modes");
+    const modeRail = modes?.querySelector<HTMLElement>(".mode-rail");
+    const tools = toolsRef.current;
+    if (!(masthead && brand && modes && modeRail && tools)) return undefined;
+
+    const measure = () => {
+      const gap = Number.parseFloat(getComputedStyle(masthead).columnGap) || 0;
+      const requiredWidth =
+        brand.getBoundingClientRect().width +
+        measureIntrinsicModeRailWidth(modeRail) +
+        tools.getBoundingClientRect().width +
+        gap * 2;
+      const viewportWidth = typeof window === "undefined" ? masthead.clientWidth : window.innerWidth;
+      setWideMasthead(requiredWidth <= masthead.clientWidth && viewportWidth >= WIDE_MASTHEAD_MIN_WIDTH);
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+    if (typeof ResizeObserver === "undefined") return () => window.removeEventListener("resize", measure);
+    const observer = new ResizeObserver(measure);
+    for (const element of [masthead, brand, modes, modeRail, tools]) observer.observe(element);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
   // Pointer-down rather than click so a press that starts outside dismisses
   // before the target's own handler runs.
   useEffect(() => {
@@ -578,7 +613,7 @@ const Masthead = ({
       <a className="skip-link" href="#main-content">
         {localizer.message("ui.common.skipToMain")}
       </a>
-      <header className="masthead">
+      <header className="masthead" data-masthead-layout={wideMasthead ? "wide" : "stacked"} ref={mastheadRef}>
         <span className="brand">
           <a aria-label="Home" className="brand-mark-link" href="/">
             <BrandMark />
@@ -655,72 +690,74 @@ const Masthead = ({
           </span>
           <span className="masthead-slogan">{localizer.message("ui.masthead.slogan")}</span>
         </span>
-        <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
-        <div className="masthead-tools" ref={toolsRef}>
-          <button
-            aria-label={localizer.message("ui.settings.reset")}
-            className="tool"
-            onClick={onReset}
-            title={localizer.message("ui.settings.reset")}
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              {localizer.message("ui.settings.reset")}
-            </span>
-          </button>
-          <ThemeToggle localizer={localizer} />
-          {/* stays open on pick: arrow keys walk the radio group, and comparing
+        <div className="masthead-control-rail">
+          <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
+          <div className="masthead-tools" ref={toolsRef}>
+            <button
+              aria-label={localizer.message("ui.settings.reset")}
+              className="tool"
+              onClick={onReset}
+              title={localizer.message("ui.settings.reset")}
+              type="button"
+            >
+              <RotateCcw aria-hidden="true" />
+              <span aria-hidden="true" className="tool-text">
+                {localizer.message("ui.settings.reset")}
+              </span>
+            </button>
+            <ThemeToggle localizer={localizer} />
+            {/* stays open on pick: arrow keys walk the radio group, and comparing
               two lots should not cost a reopen */}
-          <AccentPicker
-            localizer={localizer}
-            onChange={(accent) => onAccentChange?.(accent)}
-            onToggle={() => toggleTool("accent")}
-            open={openTool === "accent"}
-          />
-          <LanguagePicker
-            language={language || ""}
-            localizer={localizer}
-            onChange={(next) => {
-              onLanguageChange?.(next);
-              setOpenTool(null);
-            }}
-            onToggle={() => toggleTool("language")}
-            open={openTool === "language"}
-          />
-          <button
-            aria-haspopup="dialog"
-            aria-label={logLabel}
-            className="tool"
-            onClick={onOpenLog}
-            onFocus={onPreloadLog}
-            onPointerDown={onPreloadLog}
-            onPointerEnter={onPreloadLog}
-            title={logLabel}
-            type="button"
-          >
-            <ScrollText aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              {logLabel}
-            </span>
-          </button>
-          <button
-            aria-expanded={settingsOpen}
-            aria-haspopup="dialog"
-            aria-label={settingsLabel}
-            className="tool"
-            onClick={onOpenSettings}
-            onFocus={onPreloadSettings}
-            onPointerDown={onPreloadSettings}
-            onPointerEnter={onPreloadSettings}
-            title={settingsLabel}
-            type="button"
-          >
-            <Settings aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              {settingsLabel}
-            </span>
-          </button>
+            <AccentPicker
+              localizer={localizer}
+              onChange={(accent) => onAccentChange?.(accent)}
+              onToggle={() => toggleTool("accent")}
+              open={openTool === "accent"}
+            />
+            <LanguagePicker
+              language={language || ""}
+              localizer={localizer}
+              onChange={(next) => {
+                onLanguageChange?.(next);
+                setOpenTool(null);
+              }}
+              onToggle={() => toggleTool("language")}
+              open={openTool === "language"}
+            />
+            <button
+              aria-haspopup="dialog"
+              aria-label={logLabel}
+              className="tool"
+              onClick={onOpenLog}
+              onFocus={onPreloadLog}
+              onPointerDown={onPreloadLog}
+              onPointerEnter={onPreloadLog}
+              title={logLabel}
+              type="button"
+            >
+              <ScrollText aria-hidden="true" />
+              <span aria-hidden="true" className="tool-text">
+                {logLabel}
+              </span>
+            </button>
+            <button
+              aria-expanded={settingsOpen}
+              aria-haspopup="dialog"
+              aria-label={settingsLabel}
+              className="tool"
+              onClick={onOpenSettings}
+              onFocus={onPreloadSettings}
+              onPointerDown={onPreloadSettings}
+              onPointerEnter={onPreloadSettings}
+              title={settingsLabel}
+              type="button"
+            >
+              <Settings aria-hidden="true" />
+              <span aria-hidden="true" className="tool-text">
+                {settingsLabel}
+              </span>
+            </button>
+          </div>
         </div>
       </header>
     </>

@@ -1,16 +1,6 @@
 /* Viewport breakpoints only handle structural changes. */
 @media (max-width: 860px) {
   .rw-app .masthead { gap: var(--sp-m); }
-  .rw-app .masthead-tools { margin-inline-start: auto; }
-  .rw-app .modes { order: 3; flex-basis: 100%; margin-inline: 0; }
-  .rw-app .mode-rail { display: flex; width: 100%; }
-  .rw-app .mode { flex: 1; justify-content: center; }
-}
-@media (min-width: 861px) {
-  /* When the full mode rail cannot share the line, keep the brand and utility
-     buttons together; the navigation is the flexible item that drops below. */
-  .rw-app .masthead-tools { order: 2; margin-inline-start: auto; }
-  .rw-app .modes { order: 3; flex-basis: 100%; margin-inline: 0; }
 }
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   .rw-app { --dropdown-fs: .72rem; }

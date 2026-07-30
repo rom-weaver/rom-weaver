@@ -25,7 +25,10 @@
 .rw-app .brand-word b { color: var(--thread-text); font-weight: 650; }
 .rw-app .brand-hy { color: var(--ink-4); font-weight: 400; }
 
-.rw-app .modes { margin-inline: auto; }
+.rw-app .masthead-control-rail {
+  display: contents;
+}
+.rw-app .modes { order: 3; flex: 0 0 auto; width: max-content; max-width: 100%; margin-inline: auto; }
 .rw-app .mode-rail { position: relative; display: inline-flex; gap: var(--sp-2xs); padding: 3px; border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--well); }
 .rw-app .mode-thumb {
   position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: var(--r-s);
@@ -61,7 +64,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   font-size: .8rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
   color: var(--ink-2); text-decoration: none; transition: color .25s var(--ease);
 }
-.rw-app .mode svg { width: 1rem; height: 1rem; }
+.rw-app .mode svg { width: 17px; height: 17px; }
 .rw-app .mode[aria-selected="true"] { color: var(--thread-ink); }
 @media (hover: hover) {
   .rw-app .mode:not([aria-selected="true"]):hover { color: var(--ink); }
@@ -79,7 +82,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tools-subnav-tab:active { background: color-mix(in oklab, var(--thread) 22%, var(--well)); }
 .rw-app .tools-subnav-tab svg { width: 15px; height: 15px; }
 
-.rw-app .masthead-tools { display: inline-flex; gap: var(--sp-2xs); }
+.rw-app .masthead-tools { order: 2; display: inline-flex; gap: var(--sp-2xs); margin-inline-start: auto; }
 .rw-app .masthead-version { display: flex; align-items: center; gap: var(--sp-xs); max-width: 100%; color: var(--ink-3); font-size: clamp(.68rem, .6rem + .36vw, .82rem); line-height: 1.25; white-space: nowrap; }
 .rw-app .masthead-slogan { grid-column: 2; grid-row: 2; justify-self: start; color: var(--ink-3); font-size: clamp(.66rem, .6rem + .25vw, .84rem); letter-spacing: .01em; line-height: 1.25; text-align: start; white-space: nowrap; transform: translateY(-4px); }
 .rw-app .masthead-threads { flex: none; }
@@ -121,8 +124,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   text-decoration: underline dotted var(--ink-4);
   text-underline-offset: 2px;
 }
-/* the tools are icon-only everywhere; the title/aria-label carries the name
-   (the spans stay in the DOM so the localized names remain available) */
+/* Most tools are icon-only; the title/aria-label carries the name, while the
+   language control keeps its short locale code visible beside its icon. */
 .rw-app .tool-text { display: none; }
 /* ── quick pickers (accent / language) ──
    Both trays are anchored rather than inline: unrolling six dots into the
@@ -154,15 +157,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .accent-tray .accent-chip:active .accent-chip-dot { scale: 1.12; }
 
-/* The locale code sits over the globe so the language control stays compact. */
-.rw-app .tool-code { position: relative; }
-.rw-app .tool-language-globe { width: 21px; height: 21px; }
-.rw-app .tool-language-code {
-  position: absolute; inset-block-end: 2px; inset-inline-end: 0; min-width: 14px; padding: 1px 2px 0;
-  border: 1px solid var(--thread); border-radius: 3px; background: var(--chassis); color: var(--thread-text);
-  font-size: .46rem; font-weight: 800; letter-spacing: .01em; line-height: 1; text-align: center;
-  pointer-events: none;
-}
+/* The language control is a compact two-letter locale mark. */
+.rw-app .tool-language { width: 36px; display: grid; place-items: center; }
+.rw-app .tool-language-label { color: var(--thread-text); font-size: 17px; font-weight: 750; letter-spacing: .02em; line-height: 17px; }
 .rw-app .tool-menu { display: flex; flex-direction: column; min-width: 152px; padding: var(--sp-xs); }
 .rw-app .tool-menu-item {
   appearance: none; cursor: pointer; display: flex; align-items: center; min-height: 34px;
