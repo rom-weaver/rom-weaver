@@ -34,6 +34,10 @@
     width: 100%;
   }
 
+  .rw-app .brand-mark { width: clamp(30px, 3.3vw + 19.5px, 38px); }
+  .rw-app .brand-word { font-size: clamp(1.18rem, .98rem + .72vw, 1.36rem); }
+  .rw-app .masthead-slogan { font-size: clamp(.6rem, .54rem + .2vw, .72rem); }
+
   .rw-app .brand-copy,
   .rw-app .masthead-slogan { transform: none; }
 
