@@ -21,7 +21,12 @@
 .rw-app .drop .pointer-copy.coarse { display: none; }
 
 /* Empty-state hero */
-.rw-app .drop.hero { min-height: 0; gap: clamp(28px, 4.8vw, 62px); padding: 0; justify-content: center; }
+/* Every fluid step in the hero is capped by BOTH axes. A wide-but-short window
+   (a laptop with devtools open, a landscape tablet) resolves the vw term to its
+   maximum while there is no height to spend it in, so the stack outgrows the
+   panel and presses flat against its edges. The svh term is what makes it shrink
+   instead. */
+.rw-app .drop.hero { min-height: 0; gap: clamp(20px, min(4.8vw, 7svh), 62px); padding: 0; justify-content: center; }
 .rw-app .drop.hero .main { flex: none; flex-direction: row; padding: 0; border: 0; background: none; box-shadow: none; }
 /* the shuttle bead: the single focal control on the empty page. a raised disc
    riding the fell line, lit from above, that warms and lifts as it arms */
@@ -30,7 +35,7 @@
   --bead-lift: 0px; --bead-scale: 1; --bead-rim: 38%; --bead-halo: 0; --bead-glyph: 0px;
   position: relative;
   justify-content: center;
-  width: clamp(56px, 7vw, 68px); aspect-ratio: 1; padding: 0; border-radius: 50%;
+  width: clamp(44px, min(7vw, 11svh), 68px); aspect-ratio: 1; padding: 0; border-radius: 50%;
   background:
     radial-gradient(115% 115% at 50% 8%, color-mix(in oklab, var(--thread) 30%, var(--plate-2)), var(--plate-2) 76%);
   box-shadow:
@@ -67,7 +72,7 @@
 .rw-app .drop.hero .fell-thread { flex: 1 1 0; min-width: 20px; height: 2px; border-radius: 2px; }
 .rw-app .drop.hero .fell-thread:first-child { background: linear-gradient(to right, transparent, color-mix(in oklab, var(--thread) 88%, transparent)); }
 .rw-app .drop.hero .fell-thread:last-child { background: linear-gradient(to left, transparent, color-mix(in oklab, var(--thread) 88%, transparent)); }
-.rw-app .drop.hero .drop-base { align-self: stretch; display: flex; flex-direction: column; align-items: center; gap: clamp(20px, 2.6vw, 34px); }
+.rw-app .drop.hero .drop-base { align-self: stretch; display: flex; flex-direction: column; align-items: center; gap: clamp(12px, min(2.6vw, 3.8svh), 34px); }
 .rw-app .drop.hero .drop-belowlabel {
   display: block; max-width: min(94%, 42ch); margin-inline: auto; text-align: center; text-wrap: balance;
   font-size: clamp(.9rem, .85rem + .3vw, 1.02rem); font-weight: 600; line-height: 1.35; color: var(--ink-2);
@@ -114,7 +119,7 @@
   border: 0; border-radius: 0; background: none;
 }
 .rw-app .drop.hero > .hero-lead::before, .rw-app .drop.hero > .hero-lead::after { display: none; }
-.rw-app .hero-lead .lead-title { font-size: clamp(1.2rem, 3.25vw, 2.5rem); font-weight: 760; letter-spacing: -.018em; line-height: 1.14; color: var(--ink); max-width: min(97%, 1160px); margin-inline: auto; text-wrap: balance; }
+.rw-app .hero-lead .lead-title { font-size: clamp(1.2rem, min(3.25vw, 7.2svh), 2.5rem); font-weight: 760; letter-spacing: -.018em; line-height: 1.14; color: var(--ink); max-width: min(97%, 1160px); margin-inline: auto; text-wrap: balance; }
 .rw-app .hero-lead .lead-line { display: inline; }
 .rw-app .hero-lead .lead-accent { color: var(--thread-text); }
 .rw-app .hero-lead .lead-sub {
@@ -130,7 +135,7 @@
   width: 24px; height: 24px; stroke-width: 2.2; color: var(--thread-text);
 }
 .rw-app .drop.hero .formats {
-  display: grid; flex: none; gap: var(--sp-xs); width: min(100%, 46rem); margin-block-start: 0; padding-block-end: clamp(16px, 3vw, 24px); overflow: hidden; pointer-events: none;
+  display: grid; flex: none; gap: var(--sp-xs); width: min(100%, 46rem); margin-block-start: 0; padding-block-end: clamp(8px, min(3vw, 2.6svh), 24px); overflow: hidden; pointer-events: none;
   /* Fade format pills before the clipped edges. */
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
@@ -262,7 +267,10 @@
    below still fit above the fold */
 .rw-app .step.is-input.is-empty .drop.hero {
   min-height: clamp(360px, calc(100svh - var(--hero-chrome)), 920px);
-  padding-block: 0;
+  /* Border-box padding, so at comfortable heights the min-height still governs
+     and this only absorbs slack. Once the stack outgrows the panel it is the
+     margin that keeps the headline off the seam instead of flush against it. */
+  padding-block: clamp(12px, 2.4svh, 28px);
 }
 .rw-app .step.is-input.is-empty .step-body { padding-block-end: 0; }
 .rw-app .first-weave-demo {
