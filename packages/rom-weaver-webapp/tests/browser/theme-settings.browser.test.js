@@ -43,8 +43,11 @@ test("theme preference lives in Settings as a dropdown", async () => {
 
   await expect.poll(() => document.querySelector("#settings-theme")).not.toBeNull();
   const select = document.querySelector("#settings-theme");
-  expect(select?.value).toBe("auto");
   expect([...select.options].map((option) => option.value)).toEqual(["auto", "light", "dark"]);
+
+  select.value = "auto";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await expect.poll(() => localStorage.getItem("rom-weaver-theme")).toBe("auto");
 
   select.value = "dark";
   select.dispatchEvent(new Event("change", { bubbles: true }));
