@@ -344,7 +344,9 @@
 * **webapp:** rebuild wasm during development ([008b92e](https://github.com/rom-weaver/rom-weaver/commit/008b92e9a5c1fcd62c8476f755d30bca4116d3ec))
 
 
-### Internal
+<details>
+<summary>Internal</summary>
+
 
 * **app:** consolidate internal crates ([58741ea](https://github.com/rom-weaver/rom-weaver/commit/58741ea8ce03e8fc6842168529a35b6efe732731))
 * **app:** fold dcp and gdrom into app ([a074c48](https://github.com/rom-weaver/rom-weaver/commit/a074c4854ad84884462fa6e5316dbeee70a454e9))
@@ -540,6 +542,8 @@
 * **web:** self-bootstrap cloudflare pages projects ([6f1dacc](https://github.com/rom-weaver/rom-weaver/commit/6f1dacc2c32af46201099543fecb60b2fb0fe583))
 * **xdelta:** share serial window apply paths ([a4e9cf7](https://github.com/rom-weaver/rom-weaver/commit/a4e9cf70f3fbdc2d7de365c4eb86a9e10ebc4b6a))
 
+
+</details>
 ## [0.10.0](https://github.com/rom-weaver/rom-weaver/compare/v0.9.0...v0.10.0) (2026-07-30)
 
 
