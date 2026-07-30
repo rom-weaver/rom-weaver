@@ -37,6 +37,7 @@ type SettingsState = {
   logLevel: string;
   bundlePackage: string;
   betaToolsEnabled: boolean;
+  onboardingEnabled: boolean;
   fixChecksum: boolean;
   requireInputChecksumMatch: boolean;
   compressionProfile: string;
@@ -163,6 +164,7 @@ const SETTINGS_FIELD_ORDER = [
   "language",
   "logLevel",
   "betaToolsEnabled",
+  "onboardingEnabled",
   "fixChecksum",
   "requireInputChecksumMatch",
   "bundlePackage",
@@ -376,6 +378,15 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       "Default: Trace in development; Warnings otherwise. Debug and Trace include detailed workflow progress.",
     validationLabel: "Log level",
     validValues: [...LOG_LEVELS],
+  },
+  onboardingEnabled: {
+    defaultValue: true,
+    id: "settings-onboarding-enabled",
+    key: "onboardingEnabled",
+    kind: "checkbox",
+    label: getSettingsLabel("onboardingEnabled"),
+    labelDataLocalize: 'Show the "New here?" quick-start tips',
+    layout: "large",
   },
   requireInputChecksumMatch: {
     defaultValue: true,

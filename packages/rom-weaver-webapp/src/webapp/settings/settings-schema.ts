@@ -68,7 +68,11 @@ const isCodecSettingValue = (value: unknown): value is string | string[] | numbe
   value === null ||
   value === undefined ||
   (Array.isArray(value) && value.every((item) => typeof item === "string"));
-const BOOLEAN_SETTINGS_FIELDS = ["betaToolsEnabled", "fixChecksum"] as const satisfies readonly SettingsFieldKey[];
+const BOOLEAN_SETTINGS_FIELDS = [
+  "betaToolsEnabled",
+  "onboardingEnabled",
+  "fixChecksum",
+] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
   "accent",
@@ -390,6 +394,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   const validation = isRecord(applySettings.validation) ? applySettings.validation : {};
   return {
     betaToolsEnabled: commonSettings.betaToolsEnabled,
+    onboardingEnabled: commonSettings.onboardingEnabled,
     accent: commonSettings.accent,
     bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
@@ -459,6 +464,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
+
+    const onboardingEnabled = readStoredField(storedBooleanSchema, loadedSettings.onboardingEnabled);
+    if (onboardingEnabled !== undefined) settings.onboardingEnabled = onboardingEnabled;
 
     const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
     if (defaultCompression !== undefined) {
@@ -557,6 +565,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     if (
       fieldKey === "accent" ||
       fieldKey === "betaToolsEnabled" ||
+      fieldKey === "onboardingEnabled" ||
       fieldKey === "language" ||
       fieldKey === "logLevel"
     ) {

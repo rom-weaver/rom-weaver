@@ -480,6 +480,11 @@ msgstr "Shared session download failed"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.onboardingEnabled"
+msgstr "Show the \"New here?\" quick-start tips"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Skip to main content"
 
