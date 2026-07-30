@@ -91,15 +91,15 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "weave.html": "patcher",
 };
 
-const readRouteSegments = (): string[] => {
-  if (typeof window === "undefined") return [];
-  const segments = window.location.pathname.trim().toLowerCase().split("/").filter(Boolean);
+const readRouteSegments = (pathname?: string): string[] => {
+  const path = pathname ?? (typeof window === "undefined" ? "" : window.location.pathname);
+  const segments = path.trim().toLowerCase().split("/").filter(Boolean);
   if (segments.at(-1) === "index.html") segments.pop();
   return segments;
 };
 
-const readWorkflowViewFromPath = (): WebappView | null => {
-  const segments = readRouteSegments();
+const readWorkflowViewFromPath = (pathname?: string): WebappView | null => {
+  const segments = readRouteSegments(pathname);
   if (segments.includes("docs")) return "docs";
   const slug = segments.at(-1) || "";
   return ROUTE_SLUG_TO_VIEW[slug] || null;

@@ -26,6 +26,7 @@ import {
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
 import { createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath } from "./webapp-controller.ts";
 import { readPwaState } from "./components/shell.tsx";
+import { getSoftNavigationUrl } from "./soft-navigation.ts";
 import { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { preloadWorkflowRoute } from "./workflow-routes.tsx";
 import {
@@ -541,16 +542,35 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     if (typeof localStorage !== "undefined" && event.storageArea && event.storageArea !== localStorage) return;
     webappController.reloadPersistedSettings();
   });
-  if (!isNotFoundPage)
-    window.addEventListener("popstate", () => {
+  if (!isNotFoundPage) {
+    const syncRouteFromUrl = () => {
       const view = readWorkflowViewFromPath();
-      if (view && view !== webappController.getState().currentView) {
-        selectViewWithTransition(() => {
-          const selectedView = webappController.selectView(view, { historyMode: "none" });
-          if (selectedView !== view) webappController.selectView(selectedView, { historyMode: "replace" });
-        });
-      }
+      if (!view) return;
+      selectViewWithTransition(() => {
+        const selectedView = webappController.selectView(view, { historyMode: "none" });
+        if (selectedView !== view) webappController.selectView(selectedView, { historyMode: "replace" });
+      });
+    };
+
+    window.addEventListener("popstate", syncRouteFromUrl);
+    document.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) return;
+      const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+      if (!anchor) return;
+      const url = getSoftNavigationUrl(event, anchor, new URL(window.location.href));
+      if (!url) return;
+      event.preventDefault();
+      window.history.pushState(window.history.state, "", url);
+      syncRouteFromUrl();
+      window.requestAnimationFrame(() => {
+        if (url.hash) {
+          document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" });
+        } else {
+          window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        }
+      });
     });
+  }
 }
 
 const initializeWebapp = () => {
