@@ -6,7 +6,7 @@ import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
 import { LOCALE_OPTIONS, type Localizer } from "../../presentation/localization/index.ts";
 import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
-import { useUiLocalizer } from "../../public/react/settings-context.tsx";
+import { useRomWeaverSettings, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
@@ -35,6 +35,7 @@ const readPwaState = () => {
 };
 
 type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
+const isBetaWorkflowTab = (tab: WorkflowTab) => tab.id === "trim" || tab.id === "tools";
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
 const WIDE_MASTHEAD_MIN_WIDTH = 1300;
@@ -81,11 +82,13 @@ const runThemeWipe = (update: () => void, source: HTMLElement | null) => {
  * measure positions it (and re-positions on resize / font swap).
  */
 const ModeRail = ({
+  betaToolsEnabled = true,
   tabs,
   current,
   onSelect,
   controlsPanels = true,
 }: {
+  betaToolsEnabled?: boolean;
   tabs: WorkflowTab[];
   current: string;
   onSelect: (id: string) => void;
@@ -119,11 +122,12 @@ const ModeRail = ({
   // A tablist needs exactly one tabIndex 0 to stay keyboard reachable, and the
   // current view is not always one of these tabs - the 404 shell renders the
   // rail with nothing selected. Roving focus falls back to the first tab.
-  const selectedIndex = tabs.findIndex((tab) => tab.id === current);
+  const interactiveTabs = betaToolsEnabled ? tabs : tabs.filter((tab) => !isBetaWorkflowTab(tab));
+  const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    const order = tabs.map((tab) => tab.id);
+    const order = interactiveTabs.map((tab) => tab.id);
     const currentIndex = focusIndex;
     let next = -1;
     if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (currentIndex + 1) % order.length;
@@ -153,6 +157,7 @@ const ModeRail = ({
             aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
             aria-selected={tab.id === current}
             className="mode"
+            data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
             data-mode={tab.id}
             href={tab.href}
             id={`tab-${tab.id}`}
@@ -517,7 +522,9 @@ const Masthead = ({
   version?: string;
   versionTitle?: string;
 }) => {
+  const settings = useRomWeaverSettings();
   const localizer = useUiLocalizer();
+  const betaToolsEnabled = settings.betaToolsEnabled !== false;
   // One slot, so opening either picker closes the other - the two trays sit
   // side by side and would otherwise overlap.
   const [openTool, setOpenTool] = useState<QuickTool | null>(null);
@@ -691,7 +698,13 @@ const Masthead = ({
           <span className="masthead-slogan">{localizer.message("ui.masthead.slogan")}</span>
         </span>
         <div className="masthead-control-rail">
-          <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
+          <ModeRail
+            betaToolsEnabled={betaToolsEnabled}
+            controlsPanels={tabsControlPanels}
+            current={currentTab}
+            onSelect={onSelectTab}
+            tabs={tabs}
+          />
           <div className="masthead-tools" ref={toolsRef}>
             <button
               aria-label={localizer.message("ui.settings.reset")}

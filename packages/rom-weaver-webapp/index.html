@@ -30,6 +30,9 @@
           background: #ece9e1;
         }
       }
+      html:not([data-beta-tools-enabled="true"]) .mode[data-beta-tool] {
+        display: none;
+      }
     </style>
     <script>
       // Resolve data-theme/data-accent before first paint so the prerendered shell
@@ -46,6 +49,8 @@
           document.documentElement.setAttribute("data-theme", preferred || system);
           const settings = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
           const common = settings && settings.common ? settings.common : null;
+          document.documentElement.dataset.betaToolsEnabled =
+            settings && settings.version === 5 && common && common.betaToolsEnabled === true ? "true" : "false";
           const storedAccent = common && typeof common.accent === "string" ? common.accent : "";
           // Must list every value in accent.ts's ACCENTS; a missing one falls
           // through to the channel default and snaps on boot. Pinned by
@@ -58,6 +63,7 @@
           else document.documentElement.setAttribute("data-accent", accent);
         } catch (error) {
           document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.dataset.betaToolsEnabled = "false";
         }
       })();
     </script>
