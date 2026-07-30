@@ -118,8 +118,10 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("section.step.is-input.is-empty")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
     expect(container.querySelector(".drop.hero .formats .fmt")).toBeTruthy();
-    const sample = container.querySelector(".first-weave-demo button") as HTMLButtonElement;
-    expect(sample.textContent).toContain("Start guided Apply");
+    const chip = container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement;
+    expect(chip.textContent).toContain("New here?");
+    fireEvent.click(chip);
+    expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
     expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Create a sharable bundle");
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
     // The remaining workflow is progressively disclosed after staging begins.
@@ -137,7 +139,8 @@ describe("apply workflow view - empty bench", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { container } = renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
 
-    fireEvent.click(container.querySelector(".first-weave-demo button") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".sample-tutorial-start-primary") as HTMLButtonElement);
     expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
 
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());

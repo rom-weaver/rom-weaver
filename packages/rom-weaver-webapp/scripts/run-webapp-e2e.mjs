@@ -410,6 +410,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
+    const onboardingChip = page.getByRole("button", { name: "New here?" });
+    await onboardingChip.waitFor({ state: "visible", timeout: 60_000 });
+    await onboardingChip.click();
     const guidedApply = page.getByRole("button", { name: "Start guided Apply" });
     await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
     await guidedApply.click();

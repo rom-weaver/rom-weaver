@@ -176,7 +176,7 @@ const ApplyDropAfter = ({
   return (
     <SampleTutorialStart
       downloadHref={downloadHref}
-      downloadLabel="Download the bundle"
+      downloadLabel="Download a test bundle"
       downloadName={FIRST_WEAVE_ASSET}
       error={sampleError}
       label="Start guided Apply"
