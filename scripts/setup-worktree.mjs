@@ -51,7 +51,10 @@ export async function main(cwd = process.cwd(), { prime = true } = {}) {
   const source = join(mainRoot, "packages/rom-weaver-webapp/src/wasm");
   const destination = join(root, "packages/rom-weaver-webapp/src/wasm");
   mkdirSync(destination, { recursive: true });
-  for (const artifact of ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br", "NOTICE", "WEBAPP_NOTICE"]) {
+  // notices.md belongs here with the other generated license files: vite.config.mjs
+  // reads it while *loading the config*, so a worktree without it cannot run vitest,
+  // lint, or the dev server at all.
+  for (const artifact of ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br", "NOTICE", "WEBAPP_NOTICE", "notices.md"]) {
     if (!existsSync(join(source, artifact))) continue;
     cpSync(join(source, artifact), join(destination, artifact));
     process.stdout.write(`  copied ${artifact} from main checkout\n`);

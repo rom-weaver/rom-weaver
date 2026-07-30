@@ -14,6 +14,7 @@ const SITE_ORIGIN = "https://rom-weaver.com";
 /** @type {readonly DocSource[]} */
 const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "usage/README.md", label: "Overview", slug: "docs" }),
+  Object.freeze({ file: "usage/get-started.md", label: "Get started", slug: "docs/get-started" }),
   Object.freeze({ file: "usage/apply-rom-patches.md", label: "Apply patches", slug: "docs/apply-rom-patches" }),
   Object.freeze({ file: "usage/create-rom-patches.md", label: "Create patches", slug: "docs/create-rom-patches" }),
   Object.freeze({ file: "usage/create-bundles.md", label: "Create bundles", slug: "docs/create-bundles" }),

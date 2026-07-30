@@ -482,68 +482,103 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 .rw-app .docs-cta-actions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-s); }
 .rw-app .docs-cta .btn { text-decoration: none; }
 
-/* --- the weft bar ---
-   Desktop keeps the sidebar and never shows this. Once the sidebar is gone the
-   two rails move into a sheet the bar opens, which gives the article the whole
-   first screen back and keeps the reader's position visible for the length of
-   the document rather than only at the top of it. */
-.rw-app .weft-dock { display: none; }
+/* --- the end of the guide ---
+   Phone-only: the desktop sidebar is sticky, so the top of the document is never
+   more than a glance away there. */
+.rw-app .docs-onward { display: none; }
+
+/* --- the trail ---
+   Desktop keeps the sidebar and never shows this. */
+.rw-app .docs-trail { display: none; }
 
 /* --- responsive --- */
 @media (max-width: 860px) {
   .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
   .rw-app .docs-rails { display: none; }
-  .rw-app .weft-dock { display: block; }
-  /* Scroll room so the end of the article clears the bar, plus whatever the
-     mobile browser's own collapsing toolbar reserves underneath it. */
-  .rw-app .docs-workbench { padding-block-end: max(96px, env(safe-area-inset-bottom, 0px) + 84px); }
+  /* The plain breadcrumb hands its job to the trail, which does the navigating
+     as well as the naming. */
+  .rw-app .docs-breadcrumbs { display: none; }
 
-  .rw-app .weft-bar {
-    position: fixed;
-    z-index: 900;
-    inset: auto 0 0;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+  /* Sticky rather than fixed, and at the top rather than the bottom: the bottom
+     of a phone screen is where the browser parks its own collapsing toolbar, so
+     a dock there had to reserve scroll room to clear it. Nothing is fixed now,
+     so the guide just ends.
+     The seam is unconditional rather than appearing on pin - detecting "stuck"
+     needs a scroll observer, and at the top of the guide a rule under the trail
+     reads as the divider the breadcrumb used to have anyway. */
+  .rw-app .docs-trail {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    display: block;
+    /* Chrome, not a card: full-bleed past the app column's gutter, which is an
+       exact inset (`.app` sets `padding: 0 var(--gutter)`) rather than a `vw`
+       guess that would overflow beside a classic scrollbar. */
+    margin-inline: calc(var(--gutter) * -1);
+    margin-block-end: var(--sp-m);
+    padding-inline: var(--gutter);
+    border-block-end: 1px solid var(--seam);
+    background: var(--chassis);
+  }
+  .rw-app .trail-crumbs {
+    display: flex;
     align-items: center;
-    gap: var(--sp-m);
-    width: 100%;
-    min-height: 52px;
-    padding: var(--sp-s) var(--gutter) calc(var(--sp-m) + env(safe-area-inset-bottom, 0px));
+    gap: 2px;
+    min-width: 0;
+    min-height: 36px;
+    padding-block: 2px 4px;
+  }
+  .rw-app .trail-sep { flex: none; color: var(--seam-strong); font-size: .7rem; }
+  .rw-app .trail-crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    min-height: 32px;
+    padding: 0 5px;
     border: 0;
-    border-top: 1px solid var(--seam);
-    background: color-mix(in oklab, var(--plate) 88%, transparent);
-    backdrop-filter: blur(14px);
-    color: var(--ink);
+    border-radius: var(--r-s);
+    background: transparent;
+    color: var(--ink-3);
     font: inherit;
-    text-align: start;
+    font-size: .69rem;
+    font-weight: 700;
+    font-stretch: 88%;
+    letter-spacing: .06em;
+    text-transform: uppercase;
     cursor: pointer;
   }
-  .rw-app .weft-bar-index {
-    color: var(--weft);
-    font: 700 .72rem/1 var(--mono);
-    font-variant-numeric: tabular-nums;
-  }
-  .rw-app .weft-bar-label {
+  .rw-app .trail-crumb svg { flex: none; width: 12px; height: 12px; }
+  .rw-app .trail-crumb.is-section { color: var(--ink); }
+  .rw-app .trail-label {
     min-width: 0;
     overflow: hidden;
-    font-size: .82rem;
-    font-weight: 650;
-    font-stretch: 92%;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .rw-app .weft-bar-chevron { width: 15px; height: 15px; color: var(--ink-3); }
-  .rw-app .weft-bar:active { background: var(--plate-2); }
+  .rw-app .trail-index {
+    flex: none;
+    color: var(--weft);
+    font-family: var(--mono);
+    font-size: .66rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+  }
+  .rw-app .trail-crumb:active { background: var(--well); }
 
   /* The warp, woven: one tick per section, each as wide as its section is long,
      so the crossing weft is a plain scroll fraction that still lands inside the
      right tick. Ticks are divided by a border rather than a gap, which keeps
-     them edge to edge and the boundaries exactly where the weft stops. */
+     them edge to edge and the boundaries exactly where the weft stops. It rides
+     the trail's bottom edge, which is the only place it lives now that nothing
+     holds the bottom of the screen. */
   .rw-app .warp-gauge {
     position: absolute;
-    inset: auto var(--gutter) calc(5px + env(safe-area-inset-bottom, 0px));
+    inset: auto 0 0;
+    z-index: 1;
     display: flex;
-    height: 3px;
+    height: 2px;
   }
   /* The floor keeps a two-line section visible as a tick, at the cost of
      borrowing a pixel or two from its neighbours - so the weft can sit ~1% off
@@ -553,17 +588,51 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
     box-sizing: border-box;
     flex: 1 1 0;
     min-width: 2px;
-    border-right: 1px solid var(--plate);
-    border-radius: 2px;
-    background: var(--seam);
+    border-right: 1px solid var(--chassis);
+    background: var(--seam-soft);
   }
   .rw-app .warp-gauge i:last-of-type { border-right: 0; }
   .rw-app .warp-gauge-weft {
     position: absolute;
     inset: 0 auto 0 0;
-    border-radius: 2px;
     background: var(--thread);
     transition: width .18s var(--ease);
+  }
+
+  /* --- the way back up ---
+     Just this. Onward links are the last paragraph of every guide already, written
+     by hand and pointing at whatever follows from what you just read. */
+  .rw-app .docs-onward {
+    display: flex;
+    justify-content: center;
+    margin-block-start: var(--sp-l);
+  }
+  .rw-app .docs-to-top {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-s);
+    min-height: 44px;
+    padding-inline: var(--sp-l);
+    border: 1px solid var(--seam);
+    border-radius: 999px;
+    background: var(--well);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: .7rem;
+    font-weight: 750;
+    font-stretch: 88%;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .rw-app .docs-to-top svg { flex: none; width: 15px; height: 15px; color: var(--weft); }
+  .rw-app .docs-to-top:active { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
+
+  /* A narrow desktop window gets this layout too, so the phone controls still
+     want their hover halves. */
+  @media (hover: hover) {
+    .rw-app .trail-crumb:hover { background: var(--well); color: var(--ink); }
+    .rw-app .docs-to-top:hover { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
   }
 
   /* --- the sheet the bar opens ---
@@ -571,30 +640,15 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
      transform) live in webapp-modals.css beside the other `.rw-modal` variants:
      that layer is later than this one, so from here they would lose to the plain
      `.rw-modal-card` however specific they are. */
-  /* Block flow, not grid: the capped outline is a scroll container, and a grid
-     row sized to its content collapses to zero around one - the rail then
-     painted its full height over the top of the guide list. In normal flow it
-     simply takes the shorter of its content and its cap, and the list follows
-     it, so the body scrolls once the two together outgrow the sheet. */
+  /* One list per sheet now that each crumb opens the one it named, so the outline
+     runs to its full length and the body is the only scroll container. The cap
+     and the sticky heading this used to need existed to keep the guide list
+     visible underneath it; nothing sits underneath it any more. */
   .rw-modal.guide-sheet .modal-body {
     display: block;
     padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom, 0px));
   }
-  /* The outline is capped rather than left to run: a nine-section guide would
-     otherwise fill the sheet and hide that a list of every other page sits
-     underneath it. */
-  .rw-modal.guide-sheet .warp-rail {
-    overflow-y: auto;
-    max-height: 38dvh;
-    margin-block-end: var(--sp-l);
-  }
-  .rw-modal.guide-sheet .warp-rail-title {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    padding: 0 0 var(--sp-s) 2.35rem;
-    background: var(--plate);
-  }
+  .rw-modal.guide-sheet .warp-rail-title { padding: 0 0 var(--sp-s) 2.35rem; }
   .rw-modal.guide-sheet .warp-rail-list a { min-height: 40px; align-items: center; }
   /* The sidebar card clips to keep its rounded corners; in the sheet that
      clipping would hide every shelf past the fold, and the body is the thing

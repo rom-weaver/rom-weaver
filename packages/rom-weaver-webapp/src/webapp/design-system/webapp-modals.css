@@ -33,20 +33,21 @@
   container: settings-card / inline-size;
 }
 .rw-modal.select-modal .rw-modal-card { width: 100%; }
-/* The guide sheet rises from the bottom edge instead of sitting centred. The rest
-   of its styling is in docs.css with the guide; only the modal-frame overrides are
-   here, where they outrank the `.rw-modal-card` defaults above. */
+/* The guide sheet drops from the top edge instead of sitting centred - it belongs
+   to the trail that opens it, and the trail sticks to the top of the guide. The
+   rest of its styling is in docs.css with the guide; only the modal-frame
+   overrides are here, where they outrank the `.rw-modal-card` defaults above. */
 @media (max-width: 860px) {
-  .rw-modal.guide-sheet { place-items: end stretch; padding: 0; }
+  .rw-modal.guide-sheet { place-items: start stretch; padding: 0; }
   .rw-modal.guide-sheet .rw-modal-card {
     width: 100%;
     max-width: none;
     max-height: 82dvh;
-    border-width: 1px 0 0;
-    border-radius: var(--r-l) var(--r-l) 0 0;
+    border-width: 0 0 1px;
+    border-radius: 0 0 var(--r-l) var(--r-l);
   }
   @starting-style {
-    .rw-modal.guide-sheet .rw-modal-card { transform: translateY(100%); opacity: 1; }
+    .rw-modal.guide-sheet .rw-modal-card { transform: translateY(-100%); opacity: 1; }
   }
 }
 .rw-modal.select-modal .modal-body { padding-block-start: var(--sp-s); }
