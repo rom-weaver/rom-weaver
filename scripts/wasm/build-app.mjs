@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { createWasmSourceFingerprint } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
 export const parseMode = (value = "dev") => {
@@ -63,6 +64,8 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   const artifact = join(outDir, "rom-weaver-app.wasm");
   const builtArtifact = join(root, "target", target, "wasm-release", "rom-weaver-app.wasm");
   const fingerprintFile = `${artifact}.prod.sha256`;
+  const sourceFingerprintFile = `${artifact}.source.sha256`;
+  const sourceFingerprint = createWasmSourceFingerprint(root);
   if (!existsExecutable("cargo")) throw new Error("missing command: cargo");
   if (!existsExecutable(env.WASI_CLANG)) throw new Error(`missing WASI toolchain: ${env.WASI_CLANG} (install WASI SDK)`);
   if (!existsSync(env.WASI_SYSROOT || "")) throw new Error(`missing WASI sysroot: ${env.WASI_SYSROOT}`);
@@ -105,6 +108,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
     run(env.WASI_STRIP, [artifact]);
   }
 
+  writeFileSync(sourceFingerprintFile, `${sourceFingerprint}\n`);
   run("node", [join(root, "scripts/gen-third-party-licenses.mjs"), outDir, "--target", "webapp"]);
   if (outDir !== packageDir) run("node", [join(root, "packages/rom-weaver-webapp/scripts/sync-dist.mjs"), outDir]);
   process.stdout.write(mode === "prod" && env.ROM_WEAVER_WASM_NO_BROTLI !== "1" ? `artifacts written to ${outDir} (rom-weaver-app.wasm, rom-weaver-app.wasm.br)\n` : `artifact written to ${artifact}\n`);
