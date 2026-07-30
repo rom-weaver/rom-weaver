@@ -42,6 +42,7 @@
   "scripts": {
     "audit:deps": "npm audit --audit-level=high",
     "audit:lighthouse": "node scripts/run-lighthouse.mjs",
+    "analyze": "vite build --mode analyze",
     "audit:strings": "if grep -rI --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist 'rom-patcher' src tests index.html; then echo 'Found legacy rom-patcher identifiers' && exit 1; else echo 'No legacy rom-patcher identifiers found'; fi",
     "build": "vite build && node scripts/verify-seo-build.mjs",
     "capture:screenshots": "node scripts/capture-design-screenshots.mjs",
@@ -129,6 +130,7 @@
     "oxfmt": "0.60.0",
     "oxlint": "1.75.0",
     "playwright": "1.62.0",
+    "rollup-plugin-visualizer": "7.0.1",
     "typescript": "^7.0.2",
     "vite": "8.1.5",
     "vite-plugin-pwa": "1.3.0",

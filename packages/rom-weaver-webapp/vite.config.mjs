@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
@@ -898,7 +899,7 @@ const withRoutePreloadLinks = (html, links) =>
     `${ROUTE_PRELOAD_MARKER_START}\n${links}\n  ${ROUTE_PRELOAD_MARKER_END}`,
   );
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
   const buildInfo = getBuildInfo();
   const devServiceWorkerEnabled = process.env.VITE_SW_DEV === "1";
   const serviceWorkerEnabled = command === "build" || devServiceWorkerEnabled;
@@ -1049,6 +1050,17 @@ export default defineConfig(({ command }) => {
         srcDir: "src/webapp",
         strategies: "injectManifest",
       }),
+      ...(mode === "analyze"
+        ? [
+            visualizer({
+              brotliSize: true,
+              filename: path.resolve(rootDir, "dist", "bundle-analysis.html"),
+              gzipSize: true,
+              projectRoot: repoRoot,
+              title: "rom-weaver bundle analysis",
+            }),
+          ]
+        : []),
     ],
     preview: {
       headers: securityHeaders,
