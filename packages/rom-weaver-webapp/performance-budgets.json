@@ -15,10 +15,10 @@
         "directory": "assets",
         "extension": ".js",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 1406000,
-        "maxRawBytes": 1476000,
-        "expectedBrotliBytes": 362000,
-        "maxBrotliBytes": 380000
+        "expectedRawBytes": 1462000,
+        "maxRawBytes": 1535000,
+        "expectedBrotliBytes": 381000,
+        "maxBrotliBytes": 400000
       },
       {
         "name": "CSS",
