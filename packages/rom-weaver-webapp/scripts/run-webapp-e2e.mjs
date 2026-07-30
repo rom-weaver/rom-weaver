@@ -477,6 +477,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
     await page.locator('[role="tab"][data-mode="creator"]').click();
+    const createOnboardingChip = page.getByRole("button", { name: "New here?" });
+    await createOnboardingChip.waitFor({ state: "visible" });
+    await createOnboardingChip.click();
     const guidedCreate = page.getByRole("button", { name: "Start guided Create" });
     await guidedCreate.waitFor({ state: "visible" });
     await guidedCreate.click();
