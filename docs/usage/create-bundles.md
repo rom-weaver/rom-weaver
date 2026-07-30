@@ -45,8 +45,8 @@ required. The order is executable data: patch 2 receives patch 1's output.
 <details class="docs-disclosure">
 <summary>Show the browser workflow</summary>
 
-1. Open [Weave](https://rom-weaver.com/weave). For harmless practice first,
-   open [guided Apply](https://rom-weaver.com/weave?guide=apply); its sample
+1. Open [Apply](https://rom-weaver.com/apply). For harmless practice first,
+   open [guided Apply](https://rom-weaver.com/apply?guide=apply); its sample
    already contains one ROM and two ordered patches.
 2. Add the clean original ROM and every patch. Drag the patch cards into the
    order users should run them.
@@ -125,7 +125,7 @@ Do not test only the loose files used to build the bundle. Move the finished
 archive to a clean directory or another machine and test what people will
 actually download.
 
-In the browser, open [Weave](https://rom-weaver.com/weave), add the bundle
+In the browser, open [Apply](https://rom-weaver.com/apply), add the bundle
 archive, and supply the matching original when the bundle does not include it.
 Check each optional-patch combination you promise to support, weave the output,
 and launch it in an emulator or on supported hardware.
@@ -161,7 +161,7 @@ choices for rom-weaver.
 You can link directly into the hosted webapp:
 
 ```text
-https://rom-weaver.com/weave?bundle=https://example.com/release.zip
+https://rom-weaver.com/apply?bundle=https://example.com/release.zip
 ```
 
 The file host must allow cross-origin downloads (CORS). Relative file URLs

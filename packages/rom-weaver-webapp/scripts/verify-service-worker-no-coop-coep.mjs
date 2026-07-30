@@ -13,9 +13,9 @@ const STARTUP_TIMEOUT_MS = Number(process.env.ROM_WEAVER_VERIFY_STARTUP_TIMEOUT_
 const PAGE_TIMEOUT_MS = 20000;
 const OFFLINE_PAGES = [
   { expectedView: "patcher", label: "apex", path: "" },
-  { expectedView: "patcher", label: "weave slashless", path: "weave.html" },
-  { expectedView: "patcher", label: "weave directory", path: "weave/" },
-  { expectedView: "patcher", label: "weave directory document", path: "weave/index.html" },
+  { expectedView: "patcher", label: "apply slashless", path: "apply.html" },
+  { expectedView: "patcher", label: "apply directory", path: "apply/" },
+  { expectedView: "patcher", label: "apply directory document", path: "apply/index.html" },
   { expectedView: "creator", label: "create slashless", path: "create.html" },
   { expectedView: "creator", label: "create directory", path: "create/" },
   { expectedView: "creator", label: "create directory document", path: "create/index.html" },

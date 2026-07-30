@@ -13,7 +13,7 @@ const BASE_URL = process.env.ROM_WEAVER_SCREENSHOT_BASE_URL || "https://localhos
 const CASES = [
   {
     name: "weave",
-    route: "/weave?bundle=first-weave.zip",
+    route: "/apply?bundle=first-weave.zip",
     waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
   },
   {

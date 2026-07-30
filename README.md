@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://rom-weaver.com/weave">Open the webapp</a>
+  <a href="https://rom-weaver.com/apply">Open the webapp</a>
   · <a href="docs/README.md">Docs index</a>
   · <a href="https://github.com/sponsors/brandonocasey">Sponsor on GitHub</a>
   · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
@@ -157,14 +157,14 @@ edits and corrections are welcome.
 
 ### Webapp
 
-Open the hosted webapp at **[rom-weaver.com/weave](https://rom-weaver.com/weave)**. You
+Open the hosted webapp at **[rom-weaver.com/apply](https://rom-weaver.com/apply)**. You
 do not need to install anything or create an account. Choose **Weave**, add a
 ROM and one or more patches, review the detected formats and checksums, then run
 the workflow and save the result. Use **Create** to generate a distributable
 patch from an original and a modified file. Your files are processed locally
 and never leave the device. Install it as a PWA from the browser menu to use it
 offline.
-New here? [Try the sample weave](https://rom-weaver.com/weave?bundle=first-weave.zip)
+New here? [Try the sample weave](https://rom-weaver.com/apply?bundle=first-weave.zip)
 with a tiny original homebrew NES ROM and two patches that change “HELLO WORLD” to “MODIFIED ROM.”
 
 <a name="self-host-the-webapp"></a>

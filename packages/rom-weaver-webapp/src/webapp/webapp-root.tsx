@@ -43,7 +43,7 @@ import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS = [
   // "Weave": the tab both applies patch chains and edits/exports them as bundles.
-  { href: "weave", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Weave" },
+  { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Weave" },
   { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
   // Reference rather than a workflow, but it earns a slot because the people it
   // is written for are the least likely to go looking in an icon tray. It is
@@ -475,7 +475,7 @@ function WebappRoot({
                   </h1>
                   <p className="not-found-copy">Check the address, or choose where you want to go next.</p>
                   <div className="not-found-actions">
-                    <a className="btn primary not-found-home" href="/weave">
+                    <a className="btn primary not-found-home" href="/apply">
                       <House aria-hidden="true" />
                       Apply a patch
                     </a>

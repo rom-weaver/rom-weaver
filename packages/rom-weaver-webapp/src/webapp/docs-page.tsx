@@ -280,7 +280,7 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
   return (
     <div className="docs-workbench" id="main">
       <nav aria-label="Breadcrumb" className="docs-breadcrumbs">
-        <a href="/weave">{SITE_NAME}</a>
+        <a href="/apply">{SITE_NAME}</a>
         <span aria-hidden="true">/</span>
         {hub ? (
           <span aria-current="page">Docs</span>
@@ -321,7 +321,7 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
                 <p>Use a guided browser sample, or copy a CLI install command.</p>
               </div>
               <div className="docs-cta-actions">
-                <a className="btn primary" href="/weave?guide=apply">
+                <a className="btn primary" href="/apply?guide=apply">
                   Guided Apply
                 </a>
                 <a className="btn" href="/create?guide=create">

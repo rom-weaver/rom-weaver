@@ -749,7 +749,7 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
   const acceptHeader = req.headers.accept || "";
   const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
   // Pages matches `_headers` against the requested path, not the file the SPA fallback
-  // resolves to, so `/weave` picks up the `/*` block the same way `/` does.
+  // resolves to, so `/apply` picks up the `/*` block the same way `/` does.
   const pathname = new URL(req.url, "https://localhost").pathname;
   readPreviewAsset(cache, filePath, fallbackPath, allowFallback, (readError, asset) => {
     if (readError) {
