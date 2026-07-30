@@ -524,7 +524,6 @@ import("./design-system/deferred.css").then(
 );
 
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-  window.addEventListener("resize", () => logApplicationStatus("Application status changed"));
   window.addEventListener("storage", (event) => {
     if (event.key !== LOCAL_STORAGE_SETTINGS_ID) return;
     if (typeof localStorage !== "undefined" && event.storageArea && event.storageArea !== localStorage) return;
