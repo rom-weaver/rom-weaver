@@ -1116,10 +1116,12 @@ describe("webapp responsive navigation", () => {
     const rail = host.querySelector(".mode-rail");
     const firstRowBottom = Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom);
     const modesRect = modes.getBoundingClientRect();
+    const railRect = rail.getBoundingClientRect();
 
     expect(getComputedStyle(modes).position).toBe("static");
     expect(modesRect.top).toBeGreaterThanOrEqual(firstRowBottom);
     expect(modesRect.bottom).toBeLessThanOrEqual(masthead.getBoundingClientRect().bottom);
+    expect(railRect.width).toBeGreaterThanOrEqual(modesRect.width - 2);
     expect(rail.scrollWidth).toBeLessThanOrEqual(rail.clientWidth);
   });
 
@@ -1238,6 +1240,7 @@ describe("webapp responsive navigation", () => {
       expect(modesRect.bottom).toBeLessThanOrEqual(
         Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom),
       );
+      expect(modesRect.right).toBeLessThanOrEqual(tools.getBoundingClientRect().left);
       expect(
         Math.abs(modesRect.left + modesRect.width / 2 - (mastheadRect.left + mastheadRect.width / 2)),
       ).toBeLessThanOrEqual(1);

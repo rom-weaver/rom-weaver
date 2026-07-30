@@ -113,6 +113,8 @@
     background: var(--plate);
   }
 
+  /* The navigation owns the second mobile row, so the flex rail uses that row
+     instead of leaving most of it empty beside an intrinsic-size rail. */
   .rw-app .modes {
     grid-area: modes;
     order: 3;
@@ -122,13 +124,13 @@
     justify-content: center;
   }
 
-  .rw-app .mode-rail { width: auto; }
+  .rw-app .mode-rail { display: flex; width: 100%; }
 
   .rw-app .mode {
     min-width: 0;
     min-height: 34px;
     padding: 2px 5px;
-    flex: 0 0 auto;
+    flex: 1 1 0;
     justify-content: center;
     gap: var(--sp-2xs);
     font-size: .8rem;
@@ -289,12 +291,11 @@
 
   .rw-app .brand { width: auto; }
 
-  .rw-app .modes {
-    width: auto;
-    margin-inline: auto;
-  }
+  .rw-app .modes { width: 100%; flex-basis: 100%; margin-inline: 0; }
 
   .rw-app .masthead-tools { margin-inline-start: auto; }
+  .rw-app .mode-rail { display: flex; width: 100%; }
+  .rw-app .mode { flex: 1 1 0; min-width: 0; }
 }
 
 @media (min-width: 501px) {
@@ -319,7 +320,7 @@
      itself rather than in the unequal gap between brand and utilities. */
   .rw-app .masthead[data-masthead-layout="wide"] {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(max-content, 2fr) minmax(0, 1fr);
+    grid-template-columns: minmax(max-content, 1fr) minmax(max-content, 2fr) minmax(max-content, 1fr);
     grid-template-areas: "brand modes tools";
   }
   .rw-app .masthead[data-masthead-layout="wide"] .brand {
