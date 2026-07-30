@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 import { execFile, execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+
+import { createWasmSourceFingerprint } from "./wasm/wasm-source-fingerprint.mjs";
 
 const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
@@ -54,10 +56,15 @@ export async function main(cwd = process.cwd(), { prime = true } = {}) {
   // notices.md belongs here with the other generated license files: vite.config.mjs
   // reads it while *loading the config*, so a worktree without it cannot run vitest,
   // lint, or the dev server at all.
-  for (const artifact of ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br", "NOTICE", "WEBAPP_NOTICE", "notices.md"]) {
+  for (const artifact of ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br", "rom-weaver-app.wasm.source.sha256", "NOTICE", "WEBAPP_NOTICE", "notices.md"]) {
     if (!existsSync(join(source, artifact))) continue;
     cpSync(join(source, artifact), join(destination, artifact));
     process.stdout.write(`  copied ${artifact} from main checkout\n`);
+  }
+  const sourceFingerprint = join(source, "rom-weaver-app.wasm.source.sha256");
+  if (existsSync(join(source, "rom-weaver-app.wasm")) && !existsSync(sourceFingerprint)) {
+    writeFileSync(join(destination, "rom-weaver-app.wasm.source.sha256"), `${createWasmSourceFingerprint(mainRoot)}\n`);
+    process.stdout.write("  recorded copied WASM source fingerprint\n");
   }
   if (existsSync(join(source, "third_party"))) {
     rmSync(join(destination, "third_party"), { recursive: true, force: true });
