@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { classifyChanges } from "./classify-changes.mjs";
+import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 // Both helpers stringify, so a `deepEqual` against the whole result and a spot
 // check of one key read the same way.
@@ -315,3 +316,68 @@ test("dependency and CI changes select their broader checks", () => {
 
 test("the dependency policy moved under .config/", () =>
   assert.equal(classify(".config/deny.toml").rust, "true"));
+
+// The release pull request's diff is version strings and a changelog, which
+// classifies as documentation - and merging it is what ships. Classifying it
+// like any other pull request gave the shipping commit less coverage than the
+// commit it was cut from.
+const classifyForRef = (headRef, ...paths) =>
+  classifyChanges(paths, false, "pull_request", headRef);
+
+test("the release pull request selects every stack", () => {
+  const result = classifyForRef(
+    `${RELEASE_PR_BRANCH_PREFIX}cli`,
+    "CHANGELOG.md",
+    "Cargo.toml",
+    "package.json",
+  );
+  for (const [key, value] of Object.entries(result)) {
+    assert.equal(value, true, key);
+  }
+});
+
+// Whatever the component is named, and whatever it happens to touch.
+test("the release pull request selects every stack whatever it changed", () => {
+  for (const component of ["cli", "webapp", "rom-weaver"]) {
+    const result = classifyForRef(`${RELEASE_PR_BRANCH_PREFIX}${component}`, "README.md");
+    assert.equal(result.rust, true, component);
+    assert.equal(result.docker_webapp_arm64, true, component);
+    assert.equal(result.full, true, component);
+  }
+});
+
+test("an ordinary pull request branch classifies exactly as before", () => {
+  for (const headRef of [
+    undefined,
+    "",
+    "feature/release-please",
+    // Near misses: a branch that merely mentions the prefix is not the release
+    // pull request. Only a prefix match is.
+    `wip-${RELEASE_PR_BRANCH_PREFIX}cli`,
+    "release-please--branches--next--components--cli",
+  ]) {
+    for (const path of [
+      "README.md",
+      "packages/rom-weaver-webapp/src/index.tsx",
+      "crates/rom-weaver-containers/src/chd/decode/frames.rs",
+    ]) {
+      assert.deepEqual(
+        classifyChanges([path], false, "pull_request", headRef),
+        classifyChanges([path], false, "pull_request"),
+        `${String(headRef)} / ${path}`,
+      );
+    }
+  }
+});
+
+// The head ref is only ever a pull request's, but nothing stops a caller from
+// passing a stale one on another event, and that must not narrow anything.
+test("a head ref on a non-pull-request event changes nothing", () => {
+  for (const eventName of [undefined, "push", "workflow_dispatch"]) {
+    assert.deepEqual(
+      classifyChanges(["README.md"], false, eventName, `${RELEASE_PR_BRANCH_PREFIX}cli`),
+      classifyChanges(["README.md"], false, eventName),
+      String(eventName),
+    );
+  }
+});

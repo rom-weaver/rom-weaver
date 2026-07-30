@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 import { readPlatformMatrix, selectPlatformMatrix } from "./cli-platform-matrix.mjs";
+import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 const platforms = JSON.parse(readFileSync(join(repoRoot, ".github/cli-platforms.json"), "utf8"));
@@ -46,6 +47,21 @@ test("narrows to the pr-marked subset on pull_request", () => {
     ["linux-x64-gnu"],
   );
   assert.ok(subset.length < platforms.length, "the subset must actually be smaller");
+});
+
+// Merging the release pull request is what publishes these nine packages, so it
+// builds all nine rather than the one leg a review needs.
+test("keeps the full matrix on the release pull request", () => {
+  assert.deepEqual(
+    selectPlatformMatrix(platforms, "pull_request", `${RELEASE_PR_BRANCH_PREFIX}cli`),
+    platforms,
+  );
+  assert.deepEqual(
+    selectPlatformMatrix(platforms, "pull_request", "feature/whatever").map(
+      (platform) => platform.package,
+    ),
+    ["linux-x64-gnu"],
+  );
 });
 
 test("refuses to emit an empty matrix when nothing is marked for pull requests", () => {

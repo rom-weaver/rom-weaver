@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { DOC_SOURCES } from "../../packages/rom-weaver-webapp/src/webapp/docs-routing.mjs";
+import { isReleasePullRequest } from "./release-pr.mjs";
 
 // Editing a published guide changes the built site, so it has to rebuild the
 // webapp. Taking the set from the route table rather than a folder prefix keeps
@@ -56,9 +57,15 @@ const isReleaseInput = (path) =>
 // selects everything a push would. `scripts/ci/cli-platform-matrix.mjs` defaults
 // the same way for the same reason: a caller that forgets to pass the event has
 // to lose time, not coverage.
-export function classifyChanges(paths, all = false, eventName = undefined) {
+//
+// `headRef` is the one thing that can un-narrow a pull request: the release
+// pull request carries main's tree plus version strings, so classifying its diff
+// would hand the commit that ships less coverage than the commit it was cut
+// from. Its cost is that every refresh of that pull request - and each dispatch
+// pushes metadata-sync and screenshot commits - re-runs the whole matrix.
+export function classifyChanges(paths, all = false, eventName = undefined, headRef = undefined) {
   const result = { ...EMPTY };
-  if (all) {
+  if (all || isReleasePullRequest(eventName, headRef)) {
     return Object.fromEntries(Object.keys(result).map((key) => [key, true]));
   }
 
