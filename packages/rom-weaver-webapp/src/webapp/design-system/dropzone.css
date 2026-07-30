@@ -269,11 +269,9 @@
   display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-s);
   padding-block: var(--sp-s); color: var(--ink-3); font-size: .78rem;
 }
-.rw-app .sample-tutorial-start .btn {
-  border-style: dashed;
-  border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
-  color: var(--thread-text);
-}
+/* The guided-run button's own dashed treatment is in buttons.css beside the other
+   `.btn` variants - that layer is later than this one, so from here its colour
+   would lose to the plain `.btn` regardless of specificity. */
 /* The download leads; the guided run is the alternative beside it. */
 .rw-app .sample-tutorial-start-download {
   border-style: solid; text-decoration: none;

@@ -10,13 +10,10 @@
   .rw-app { --dropdown-fs: .72rem; }
   .rw-app .masthead { row-gap: var(--sp-xs); padding-block: 5px 3px; }
   .rw-app .brand { gap: var(--sp-s); }
-  .rw-app .hero-lead {
-    display: flex; gap: var(--sp-s); margin: 5px 6px 8px; padding: var(--sp-m);
-    border: 1px solid var(--seam); border-radius: var(--r-m);
-    background: color-mix(in oklab, var(--thread) 4%, var(--plate));
-  }
-  .rw-app .hero-lead::before { display: none; }
-  .rw-app .hero-lead::after { display: block; }
+  /* No banner treatment here: the lead only ever renders inside `.drop.hero`, which
+     strips the border/background in dropzone.css. Under plain imports specificity
+     kept that reset winning, so a boxed rule at this weight was dead; layer order
+     would hand it the win instead and box the headline. */
   .rw-app .hero-lead .lead-title { font-size: clamp(1.05rem, 4.6vw, 1.5rem); line-height: 1.2; }
   .rw-app .hero-lead .lead-line { display: inline; }
   .rw-app .hero-lead .lead-sub { padding: 1px 7px; font-size: .65rem; }
@@ -84,8 +81,6 @@
   .rw-app .ck .ck-k { font-size: .72rem; }
   .rw-app .ck .ck-v { line-height: 1.35; }
   .rw-app .ck .copy { width: 20px; height: 20px; }
-  .rw-app .ckrows > .ck-group:first-child { margin-block-start: 2px; }
-  .rw-app .ck-group + .ck-group { margin-block-start: 4px; }
   .rw-app .ck-group-head { margin-block-end: 2px; padding-block: 2px; }
   /* Keep editable and read-only check columns aligned. */
   .rw-app .patch-checks-body .verification-row {

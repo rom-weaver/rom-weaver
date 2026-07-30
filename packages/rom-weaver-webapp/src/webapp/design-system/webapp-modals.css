@@ -33,6 +33,22 @@
   container: settings-card / inline-size;
 }
 .rw-modal.select-modal .rw-modal-card { width: 100%; }
+/* The guide sheet rises from the bottom edge instead of sitting centred. The rest
+   of its styling is in docs.css with the guide; only the modal-frame overrides are
+   here, where they outrank the `.rw-modal-card` defaults above. */
+@media (max-width: 860px) {
+  .rw-modal.guide-sheet { place-items: end stretch; padding: 0; }
+  .rw-modal.guide-sheet .rw-modal-card {
+    width: 100%;
+    max-width: none;
+    max-height: 82dvh;
+    border-width: 1px 0 0;
+    border-radius: var(--r-l) var(--r-l) 0 0;
+  }
+  @starting-style {
+    .rw-modal.guide-sheet .rw-modal-card { transform: translateY(100%); opacity: 1; }
+  }
+}
 .rw-modal.select-modal .modal-body { padding-block-start: var(--sp-s); }
 @container settings-card (min-width: 688px) {
   .rw-modal.settings-modal .modal-body { columns: 2; column-gap: var(--sp-m); }
@@ -91,17 +107,15 @@
     .rw-app .fname .select, .rw-app .fname .outname { font-size: max(16px, 1em); }
   }
 }
-/* Enlarge touch targets without changing visual layout. */
+/* Enlarge touch targets without changing visual layout.
+   The drawer copy buttons get the same treatment in drawers.css - it owns them, and
+   from here this layer would outrank the placement rules that live with them. */
 @media (pointer: coarse) {
-  .rw-app .ck .copy, .rw-app .cue-copy, .rw-app .info-btn { position: relative; }
-  .rw-app .ck .copy::before, .rw-app .cue-copy::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+  .rw-app .info-btn { position: relative; }
   /* Expand masthead targets vertically to avoid overlapping neighbors. */
   .rw-app .masthead-tools .tool { position: relative; }
   .rw-app .masthead-tools .tool::after { content: ""; position: absolute; inset-inline: 0; top: 50%; height: 44px; transform: translateY(-50%); }
 }
-
-/* Strip user-agent chrome from keyboard-copyable trace buttons. */
-.rw-app .tracelog .ln { appearance: none; display: flex; width: max-content; min-width: 100%; border-inline: 0; border-block-start: 0; background: transparent; color: inherit; font: inherit; text-align: start; padding-inline: 0; }
 
 .rw-app .notice.error { color: var(--ink); background: color-mix(in oklab, var(--fault) 9%, var(--plate-2)); border: 1px solid color-mix(in oklab, var(--fault) 40%, var(--seam)); }
 .rw-app .notice.error svg, .rw-app .notice.error b { color: var(--fault); }
@@ -111,8 +125,6 @@
 .rw-modal .confirm-card .c-title svg { width: 19px; height: 19px; color: var(--care); flex: none; }
 .rw-modal .confirm-card .c-body { margin: 10px 0 16px; font-size: .9rem; line-height: 1.55; color: var(--ink-2); }
 .rw-modal .confirm-card .c-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); }
-
-.rw-app button.ck { appearance: none; text-align: start; width: 100%; font: inherit; }
 
 .rw-app .pdesc { margin: 0 0 4px; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
 .rw-app .pdesc.bad { color: var(--fault); }
