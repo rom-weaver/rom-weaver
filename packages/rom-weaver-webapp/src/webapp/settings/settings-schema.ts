@@ -67,7 +67,7 @@ const isCodecSettingValue = (value: unknown): value is string | string[] | numbe
   typeof value === "number" ||
   value === null ||
   value === undefined ||
-  (Array.isArray(value) && Array.from(value).every((item) => typeof item === "string"));
+  (Array.isArray(value) && value.every((item) => typeof item === "string"));
 const BOOLEAN_SETTINGS_FIELDS = ["betaToolsEnabled", "fixChecksum"] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",

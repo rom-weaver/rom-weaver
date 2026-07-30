@@ -62,8 +62,8 @@ const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) 
 const LogDialog = lazy(loadLogDialog);
 const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
 const SettingsPanel = lazy(loadSettingsPanel);
-type BrowserRuntimePreloadOptions = { threads?: number | "auto" | null };
-const preloadBrowserRuntime = (options: BrowserRuntimePreloadOptions = {}) =>
+type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
+const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
   import("../platform/browser/browser-api.ts").then(({ preloadBrowserRuntime: preload }) => preload(options));
 
 const logger = createLogger("webapp-root");
