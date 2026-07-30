@@ -2,7 +2,6 @@ import { createLucideIcon, Heart, Moon, Palette, RotateCcw, ScrollText, Settings
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
 import { LOCALE_OPTIONS, type Localizer } from "../../presentation/localization/index.ts";
@@ -166,9 +165,9 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
     root.style.setProperty("--wipe-y", `${cy}px`);
     root.style.setProperty("--wipe-r", `${radius}px`);
     const release = holdTransitionClasses(["vt-theme"]);
-    // flushSync so the icon swap lands in the captured "new" snapshot rather
-    // than popping in whenever React's own commit happens to schedule.
-    const transition = document.startViewTransition(() => flushSync(toggleTheme));
+    // Plain call, not flushSync: forcing React's commit inside the capture
+    // makes WebKit render a different wipe (it dislikes mid-capture layout).
+    const transition = document.startViewTransition(() => toggleTheme());
     transition.ready.catch(() => undefined);
     transition.finished.then(release, release);
   };
