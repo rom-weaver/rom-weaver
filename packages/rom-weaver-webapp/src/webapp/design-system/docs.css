@@ -82,13 +82,36 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   padding: 10px 12px 8px;
   border-bottom: 1px solid var(--seam-soft);
 }
-/* Shelves: one per folder under docs/. The heading is what turns sixteen
-   entries into four short lists you can take in at a glance. */
-.rw-app .guide-shelf { padding: 5px 5px 7px; }
+/* Shelves: one per folder under docs/. Browser usage opens first; after that,
+   the reader's choices carry across pages. */
+.rw-app .guide-shelf { padding: 3px 5px; }
 .rw-app .guide-shelf + .guide-shelf { border-top: 1px solid var(--seam-soft); }
+.rw-app .guide-shelf > summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  border-radius: var(--r-s);
+  cursor: pointer;
+  list-style: none;
+}
+.rw-app .guide-shelf > summary::-webkit-details-marker { display: none; }
+.rw-app .guide-shelf > summary::after {
+  content: "+";
+  width: 1rem;
+  margin-inline-end: 7px;
+  color: var(--thread-text);
+  font: 700 .78rem/1 var(--mono);
+  text-align: center;
+}
+.rw-app .guide-shelf[open] > summary::after { content: "−"; }
+@media (hover: hover) {
+  .rw-app .guide-shelf > summary:hover { background: var(--well); }
+}
+.rw-app .guide-shelf > summary:active { background: var(--well); }
 .rw-app .guide-shelf-title {
+  flex: 1;
   margin: 0;
-  padding: 4px 9px 5px;
+  padding: 6px 9px;
   color: var(--ink-4);
   font-size: .625rem;
   font-weight: 700;
@@ -407,29 +430,61 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 }
 
 /* --- hub index ---
-   The landing route ends with every page and the sentence it opens on, so
-   "which one do I want" is answered here instead of by opening four of them. */
+   Browser usage opens first. The longer reference shelves stay one tap away. */
 .rw-app .docs-index {
   display: grid;
-  gap: var(--sp-xl);
+  gap: var(--sp-s);
   padding: var(--sp-xl) var(--article-pad) clamp(28px, 5vw, 44px);
   border-top: 1px solid var(--seam);
 }
-.rw-app .docs-index h2 {
-  margin: 0 0 var(--sp-m);
-  color: var(--ink-3);
-  font-size: .655rem;
+.rw-app .docs-index-shelf {
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+}
+.rw-app .docs-index-shelf > summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  gap: var(--sp-m);
+  padding: var(--sp-m) var(--sp-l);
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+.rw-app .docs-index-shelf > summary::-webkit-details-marker { display: none; }
+.rw-app .docs-index-shelf > summary::before {
+  content: "+";
+  width: 1rem;
+  color: var(--thread-text);
+  font: 700 .9rem/1 var(--mono);
+  text-align: center;
+}
+.rw-app .docs-index-shelf[open] > summary::before { content: "−"; }
+@media (hover: hover) {
+  .rw-app .docs-index-shelf > summary:hover { background: var(--well); }
+}
+.rw-app .docs-index-shelf > summary:active { background: var(--well); }
+.rw-app .docs-index-title {
+  flex: 1;
+  margin: 0;
+  color: var(--ink);
+  font-size: .78rem;
   font-weight: 700;
-  font-stretch: 86%;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  letter-spacing: -.005em;
+}
+.rw-app .docs-index-count {
+  color: var(--ink-3);
+  font-size: .68rem;
+  font-weight: 650;
 }
 .rw-app .docs-index ul {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: var(--sp-s);
-  margin: 0;
-  padding: 0;
+  margin: 0 var(--sp-m) var(--sp-m);
+  padding: var(--sp-m) 0 0;
+  border-top: 1px solid var(--seam-soft);
   list-style: none;
 }
 .rw-app .docs-index li { margin: 0; }
@@ -481,6 +536,43 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 .rw-app .docs-cta p { margin: 3px 0 0; color: var(--ink-3); font-size: .78rem; }
 .rw-app .docs-cta-actions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-s); }
 .rw-app .docs-cta .btn { text-decoration: none; }
+
+.rw-app .docs-faq-preview {
+  padding: var(--sp-xl) var(--article-pad) clamp(28px, 5vw, 44px);
+  border-top: 1px solid var(--seam);
+}
+.rw-app .docs-faq-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-m);
+  margin-block-end: var(--sp-m);
+}
+.rw-app .docs-faq-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  letter-spacing: -.01em;
+}
+.rw-app .docs-faq-heading a { color: var(--thread-text); font-size: .75rem; font-weight: 700; }
+.rw-app .docs-faq-list { border-block: 1px solid var(--seam-soft); }
+.rw-app .docs-faq-list details + details { border-top: 1px solid var(--seam-soft); }
+.rw-app .docs-faq-list summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding-block: var(--sp-m);
+  color: var(--ink);
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rw-app .docs-faq-list p {
+  margin: 0;
+  padding: 0 0 var(--sp-m) var(--sp-l);
+  color: var(--ink-3);
+  font-size: .78rem;
+  line-height: 1.55;
+}
 
 /* --- the end of the guide ---
    Phone-only: the desktop sidebar is sticky, so the top of the document is never
@@ -582,7 +674,7 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   }
   /* The floor keeps a two-line section visible as a tick, at the cost of
      borrowing a pixel or two from its neighbours - so the weft can sit ~1% off
-     a boundary on a guide with sixteen sections. The label beside it is exact;
+     a boundary on a guide with many sections. The label beside it is exact;
      the gauge is the shape of the document, not a readout. */
   .rw-app .warp-gauge i {
     box-sizing: border-box;
@@ -654,6 +746,7 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
      clipping would hide every shelf past the fold, and the body is the thing
      that scrolls. */
   .rw-modal.guide-sheet .guide-nav { background: none; overflow: visible; }
+  .rw-modal.guide-sheet .guide-shelf > summary { min-height: 44px; }
   .rw-modal.guide-sheet .guide-nav-list a { min-height: 40px; padding-block: 10px; }
   /* The woven fill reads as cloth across a full-width sidebar row; at sheet
      width it is just a grid of dots, so the current page takes a flat dye. The

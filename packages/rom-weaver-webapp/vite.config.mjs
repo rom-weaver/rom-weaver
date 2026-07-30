@@ -23,18 +23,33 @@ const repoRoot = path.resolve(rootDir, "../..");
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
+const docsScreenshotCaptures = [
+  "apply-output-desktop-dark",
+  "apply-output-desktop-light",
+  "apply-output-mobile-dark",
+  "apply-output-mobile-light",
+  "apply-patches-desktop-dark",
+  "apply-patches-desktop-light",
+  "apply-patches-mobile-dark",
+  "apply-patches-mobile-light",
+  "bundle-output-desktop-dark",
+  "bundle-output-desktop-light",
+  "bundle-output-mobile-dark",
+  "bundle-output-mobile-light",
+  "create-inputs-desktop-dark",
+  "create-inputs-desktop-light",
+  "create-inputs-mobile-dark",
+  "create-inputs-mobile-light",
+  "create-output-desktop-dark",
+  "create-output-desktop-light",
+  "create-output-mobile-dark",
+  "create-output-mobile-light",
+];
 const docsScreenshotNames = [
-  "create-desktop-dark.webp",
-  "create-desktop-light.webp",
-  "create-mobile-dark.webp",
-  "create-mobile-light.webp",
+  ...docsScreenshotCaptures.flatMap((name) => [`${name}.avif`, `${name}.webp`]),
   "first-sample-hello-world.webp",
   "first-sample-modified-world.webp",
   "first-sample-modified-rom.webp",
-  "weave-desktop-dark.webp",
-  "weave-desktop-light.webp",
-  "weave-mobile-dark.webp",
-  "weave-mobile-light.webp",
 ];
 const docsScreenshotSources = Object.fromEntries(
   docsScreenshotNames.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),

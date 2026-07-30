@@ -1,5 +1,5 @@
 import { BookOpen, GitCompare, House, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
@@ -11,6 +11,7 @@ import { getDefaultBrowserThreadCount } from "../platform/shared/compression-opt
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
 import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
+import { type GuidedSample, notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
 import type { PageFileDrop } from "../public/react/public-types.ts";
 // Deliberately NOT the ../public/react/index.tsx barrel: that barrel re-exports
 // every workflow form, so a static import of it pulls all four route chunks
@@ -36,6 +37,7 @@ import {
   ApplyPatchRoute,
   CreatePatchRoute,
   DocsPageRoute,
+  preloadWorkflowRoute,
   ToolsRouteForm,
   TrimPatchRoute,
 } from "./workflow-routes.tsx";
@@ -52,6 +54,8 @@ const WORKFLOW_TABS = [
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
+
+const getGuideView = (guide: GuidedSample): WebappView => (guide === "create" ? "creator" : "patcher");
 
 // Keep the trace inspector out of the initial bundle, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
@@ -232,6 +236,34 @@ function WebappRoot({
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
   const threads = state.settings.threads;
+  useLayoutEffect(() => notifyGuidedSampleView(state.currentView), [state.currentView]);
+  const preloadGuide = useCallback(
+    (guide: GuidedSample) => {
+      void preloadWorkflowRoute(getGuideView(guide));
+      void preloadBrowserRuntime({ threads });
+    },
+    [threads],
+  );
+  const startGuide = useCallback(
+    (guide: GuidedSample) => {
+      const targetHasFiles =
+        guide === "create"
+          ? state.creatorSession.originalFilePresent || state.creatorSession.modifiedFilePresent
+          : state.patcherSession.romFilePresent || state.patcherSession.patchCount > 0;
+      if (targetHasFiles) return false;
+      preloadGuide(guide);
+      selectViewWithTransition(() => actions.onStartGuide(guide));
+      return true;
+    },
+    [
+      actions,
+      preloadGuide,
+      state.creatorSession.modifiedFilePresent,
+      state.creatorSession.originalFilePresent,
+      state.patcherSession.patchCount,
+      state.patcherSession.romFilePresent,
+    ],
+  );
   useEffect(() => {
     if (notFound) return;
     let cancelled = false;
@@ -513,7 +545,15 @@ function WebappRoot({
                     pageDrop={activePageDrop}
                   />,
                 )}
-                {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
+                {workflowPanel(
+                  "docs",
+                  <DocsPageRoute
+                    active={state.currentView === "docs"}
+                    onGuideIntent={preloadGuide}
+                    onStartGuide={startGuide}
+                    slug={docsSlug}
+                  />,
+                )}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute

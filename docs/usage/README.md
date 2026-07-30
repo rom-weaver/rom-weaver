@@ -1,8 +1,15 @@
+<!-- START doctoc -->
+<!-- END doctoc -->
+
 # rom-weaver documentation
 
-Every rom-weaver guide, grouped by what it is for: using the tool, hosting it,
-and working on it.
+Start with the browser. Nothing needs to be installed, your files stay on your
+device, and the guided samples let you learn with tiny homebrew ROMs.
 
-New here? [Get started](get-started.md) explains what a patch is and walks one
-through end to end. Otherwise pick a page below - the sidebar carries the same
-list once a guide is open.
+Use [Browser usage](get-started.md) for visual, step-by-step workflows. It
+explains the basics and includes a safe practice run. Then open the Browser
+usage section below and pick the guide for your task.
+
+Use [CLI usage](../hosting/cli.md) for terminal commands, scripts, batch jobs,
+and CI. You can also jump straight to [CLI installation](../hosting/cli.md#install)
+or [self-hosting the webapp](../hosting/self-hosting.md).

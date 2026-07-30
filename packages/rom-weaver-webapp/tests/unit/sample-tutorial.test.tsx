@@ -97,6 +97,7 @@ const renderAnchored = async (row: { height: number; left: number; top: number; 
 describe("sample tutorial start", () => {
   it("offers the bundle as a download alongside the guided run", () => {
     const onStart = vi.fn();
+    const onSecondaryStart = vi.fn();
     render(
       <SampleTutorialStart
         downloadHref="/first-weave.zip"
@@ -106,6 +107,8 @@ describe("sample tutorial start", () => {
         label="Start guided Apply"
         loading={false}
         onStart={onStart}
+        onSecondaryStart={onSecondaryStart}
+        secondaryLabel="Start guided Bundle"
       />,
     );
 
@@ -115,6 +118,8 @@ describe("sample tutorial start", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Start guided Apply/ }));
     expect(onStart).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: /Start guided Bundle/ }));
+    expect(onSecondaryStart).toHaveBeenCalledOnce();
   });
 });
 

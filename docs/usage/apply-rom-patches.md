@@ -1,210 +1,207 @@
-# Apply a ROM patch
+# Apply a ROM patch in the browser
 
-Somebody gave you a patch. This guide turns that patch and your own copy of
-the game into a new, patched file you can play.
+Use the Apply page to combine your clean ROM with one or more patches. The
+original stays untouched and the new file never leaves your device.
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Practice on the sample first](#practice-on-the-sample-first)
-- [What you need](#what-you-need)
-- [Apply a patch in the browser](#apply-a-patch-in-the-browser)
-- [Apply a patch in a terminal](#apply-a-patch-in-a-terminal)
-- [Check first, write after](#check-first-write-after)
-- [Apply several patches in order](#apply-several-patches-in-order)
+- [Practice with the included sample](#practice-with-the-included-sample)
+- [What do you need?](#what-do-you-need)
+- [Add the files](#add-the-files)
+- [Read the ROM and patch cards](#read-the-rom-and-patch-cards)
+- [Put several patches in order](#put-several-patches-in-order)
+- [Choose the output and weave](#choose-the-output-and-weave)
 - [Open a bundle](#open-a-bundle)
-- [When rom-weaver says the file does not match](#when-rom-weaver-says-the-file-does-not-match)
+- [If the ROM does not match](#if-the-rom-does-not-match)
+- [Use the result safely](#use-the-result-safely)
 
 <!-- END doctoc -->
 
-## Practice on the sample first
+## Practice with the included sample
 
-New to this? Do not start with a game you care about. Open
-[guided Apply](https://rom-weaver.com/apply?guide=apply). It loads a tiny
-practice ROM and two patches shipped with the project, then walks through the
-ROM, patch stack, file picker, and output controls. The first patch changes
-`HELLO` to `MODIFIED`; the second changes `WORLD` to `ROM`.
+Open [guided Apply](https://rom-weaver.com/apply?guide=apply) before using a
+game you care about. It loads a tiny homebrew NES ROM and two legal practice
+patches. The guide points at the same controls you will use with real files.
 
-<figure class="docs-screenshot-pair" aria-label="The sample ROM before and after both patches">
+Patch 1 changes `HELLO` to `MODIFIED`. Patch 2 changes `WORLD` to `ROM`.
+Applying both in order gives `MODIFIED ROM`.
+The finished ROM's SHA-256 is
+`e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`.
+That fingerprint lets you confirm your result is exactly the practice result.
+
+<figure class="docs-screenshot-pair" aria-label="The practice ROM before and after both patches">
   <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-hello-world.webp" alt="The original sample ROM displaying HELLO WORLD in an NES emulator" loading="lazy" decoding="async">
-    <figcaption>Before: the original practice ROM.</figcaption>
+    <img src="/docs/screenshots/first-sample-hello-world.webp" width="1024" height="768" alt="The original homebrew sample ROM displaying HELLO WORLD in an NES emulator" loading="lazy" decoding="async">
+    <figcaption>Before: the clean practice ROM.</figcaption>
   </figure>
   <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-modified-rom.webp" alt="The sample ROM displaying MODIFIED ROM in an NES emulator after both patches" loading="lazy" decoding="async">
-    <figcaption>After: the result with both patches applied in order.</figcaption>
+    <img src="/docs/screenshots/first-sample-modified-rom.webp" width="1024" height="768" alt="The homebrew sample ROM displaying MODIFIED ROM after both patches" loading="lazy" decoding="async">
+    <figcaption>After: both patches applied in order.</figcaption>
   </figure>
 </figure>
 
-Want the files without the guide? Choose **Download the bundle** on that page,
-or [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip)
-directly. It contains the ROM, both patches, and the bundle recipe that puts
+You can choose **Download the bundle** on the empty Apply page or
+[download `first-weave.zip`](https://rom-weaver.com/first-weave.zip). The
+archive contains the sample ROM, both IPS patches, and the recipe that puts
 them in order.
 
-The same practice run works in a terminal:
+## What do you need?
 
-```bash
-curl --fail --location --output first-weave.zip \
-  https://rom-weaver.com/first-weave.zip
-rom-weaver weave --input first-weave.zip --output modified-rom.nes --no-compress
-rom-weaver checksum --input modified-rom.nes --algo sha256
-```
+You need the patch and your own copy of the exact game release it was made
+for. Keep the patch author's notes open. Look for:
 
-That last command should print
-`e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`. If it
-does, patching works on your machine and you can move on to the real thing.
-If rom-weaver is not installed yet, copy an install command from the hosted
-[CLI installation guide](../hosting/cli.md#install).
+- region, such as USA, Japan, or Europe;
+- revision, such as Rev 0 or Rev 1;
+- a checksum and its algorithm;
+- whether the ROM has a header;
+- the required order when there is more than one patch.
 
-## What you need
+A filename is only a hint. Two different releases can have similar names.
+A checksum is calculated from every byte, so it is the useful proof.
 
-Two files: the patch, and the exact copy of the game its author built it from.
+Keep one clean original somewhere safe. rom-weaver writes a separate result,
+but a known-good copy makes updates and troubleshooting much easier.
 
-Keep the author's notes open while you work. They should say which region the
-game is from (USA, Japan, Europe), which revision, and often a checksum. A
-checksum is a short code worked out from every byte of a file. If two files
-have the same checksum they are the same file, whatever they are named.
+## Add the files
 
-That last part is the one people get wrong. A filename is a guess. A USA
-release and a Japanese release can carry near-identical names and completely
-different bytes, and so can two revisions of the same release. The patch cares
-about bytes.
+1. Open [Apply](https://rom-weaver.com/apply).
+2. Drag the ROM and patch onto **0x01 Add files**, or tap the large picker and
+   select them. You may add both at once.
+3. Wait while the temporary cards say **Reading** or **Checksumming**.
+4. If an archive contains several possible files, choose the entry the patch
+   author named.
 
-One habit saves a lot of grief: keep a clean copy of the original and write
-every patched result to a new name. Updates, optional add-ons, and undoing a
-mistake all get easy once you can go back to a known-good file.
+You can add ZIP, 7z, RAR, tar, and other supported archives without extracting
+them first. rom-weaver looks inside, including inside nested archives. Disc
+containers such as CHD and RVZ are unpacked to the form the patch expects.
 
-## Apply a patch in the browser
+The page changes after the files are understood. **0x02 ROM** holds the game,
+**0x03 Patches** holds the patch stack, and **0x04 Weave** controls the new
+file.
 
-1. Open the [Apply page](https://rom-weaver.com/apply).
-2. Add your clean copy of the game.
-3. Add the patch. Drag both onto the page or use the file pickers.
-4. Look over what rom-weaver worked out: the formats it recognized, the
-   checksums, how it plans to handle headers, and any warnings.
-5. Got more than one patch? Put them in the order the author asked for.
-6. Run the weave.
-7. Download the result under a new name and try it in your emulator or on
-   whatever hardware you use.
+## Read the ROM and patch cards
 
-Everything happens inside your browser. The game, the patch, and the result
-are not uploaded anywhere.
+Start with the labels and warning colors, then open **Checks** if you need the
+numbers.
+
+The ROM card shows the selected filename, size, detected system, and
+checksums. A message about the expected filename is advice. The name can
+differ while the bytes are still correct. A checksum or expected-size failure
+is strict and means the bytes do not match.
+
+Each patch card shows its format and position. Open **Checks** to see what that
+patch expects at this point in the chain. Open the three-dot **Patch actions**
+menu to edit details, replace the file, or remove it. Header controls appear
+only for formats and systems where they make sense.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" srcset="/docs/screenshots/weave-mobile-light.webp">
-    <img src="/docs/screenshots/weave-desktop-light.webp" alt="The Weave workflow filled with the first-weave sample ROM and two patches" loading="lazy" decoding="async">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-light.avif" width="1170" height="2348">
+    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-light.avif" width="2242" height="1045">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-light.webp" width="1170" height="2348">
+    <img src="/docs/screenshots/apply-patches-desktop-light.webp" width="2242" height="1045" alt="Cropped Weave patch stack with two ordered practice patches in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" srcset="/docs/screenshots/weave-mobile-dark.webp">
-    <img src="/docs/screenshots/weave-desktop-dark.webp" alt="The Weave workflow filled with the first-weave sample ROM and two patches" loading="lazy" decoding="async">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-dark.avif" width="1170" height="2348">
+    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-dark.avif" width="2242" height="1045">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-dark.webp" width="1170" height="2348">
+    <img src="/docs/screenshots/apply-patches-desktop-dark.webp" width="2242" height="1045" alt="Cropped Weave patch stack with two ordered practice patches in the dark theme">
   </picture>
-  <figcaption>The docs build captures this filled workflow from the bundled <code>first-weave.zip</code> sample.</figcaption>
+  <figcaption>The focused patch stack. The site serves a mobile crop on small screens and matches the active theme.</figcaption>
 </figure>
 
-If your download is a zip or another archive, hand rom-weaver the archive as
-it is. It looks inside. When an archive holds several files that could be the
-ROM or the patch, it asks which one you meant. Picking the file with the
-likeliest name is still a guess, so check the checksum afterwards.
+## Put several patches in order
 
-## Apply a patch in a terminal
+Patches run from top to bottom. Patch 2 receives the output of patch 1, not the
+clean ROM. Order is part of the release instructions.
 
-One patch:
+Drag a numbered handle to move a patch. With a keyboard, focus the handle and
+use its announced controls. The number changes when the card moves.
 
-```bash
-rom-weaver weave \
-  --input original.sfc \
-  --patch translation.bps \
-  --output translated.sfc \
-  --no-compress
-```
+The On or Off switch temporarily skips a patch. This is useful for optional
+add-ons, but only use combinations the author says are compatible. Turning off
+a required base patch can make everything below it fail.
 
-`--input` is your clean game, `--patch` is the patch, `--output` is the new
-file to write. `weave` is the short name for `patch apply`; the two run the
-same thing.
+After changing order or switches, read the checks again. A valid chain should
+show each patch matching the bytes produced by the step before it.
 
-If the output name ends in an archive extension such as `.zip`, rom-weaver
-compresses the result for you. `--no-compress` turns that off and writes a
-plain ROM.
+## Choose the output and weave
 
-`rom-weaver weave --help` lists the rest: checksum options, header handling,
-byte order, which file to pull out of an archive, compression, and bundles.
+In **0x04 Weave**:
 
-## Check first, write after
+1. Enter an output filename without an extension.
+2. Pick a plain file or a compressed output format. The format selector adds
+   the extension.
+3. Open **Options** only if you need compression, output header, or bundle
+   controls. The defaults are right for most patches.
+4. Choose **WEAVE & DOWNLOAD**.
+5. Wait for the button to finish, then save the browser download.
 
-You can ask rom-weaver to read a patch and run its checks without producing
-any file:
+<figure class="docs-screenshot">
+  <picture data-docs-screenshot-theme="light">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-light.avif" width="1170" height="654">
+    <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-light.avif" width="2242" height="560">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-light.webp" width="1170" height="654">
+    <img src="/docs/screenshots/apply-output-desktop-light.webp" width="2242" height="560" alt="Cropped Weave output card with filename, format, options, and WEAVE AND DOWNLOAD button in the light theme">
+  </picture>
+  <picture data-docs-screenshot-theme="dark">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-dark.avif" width="1170" height="654">
+    <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-dark.avif" width="2242" height="560">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-dark.webp" width="1170" height="654">
+    <img src="/docs/screenshots/apply-output-desktop-dark.webp" width="2242" height="560" alt="Cropped Weave output card with filename, format, options, and WEAVE AND DOWNLOAD button in the dark theme">
+  </picture>
+  <figcaption>The output card is shown at readable size instead of shrinking the entire page into one image.</figcaption>
+</figure>
 
-```bash
-rom-weaver patch validate \
-  --input original.sfc \
-  --patch translation.bps
-```
-
-Some patch formats carry a checksum of the file they were built from, so this
-catches a wrong starting file on its own. Formats that carry nothing need you
-to supply the value the author published:
-
-```bash
-rom-weaver patch validate \
-  --input original.sfc \
-  --patch translation.bps \
-  --expect-in sha256=EXPECTED_HEX_VALUE
-```
-
-Use the same algorithm the author used. A CRC32 value and a SHA-256 value of
-the same file look nothing alike, so comparing across algorithms tells you
-nothing.
-
-## Apply several patches in order
-
-Repeat `--patch` once per patch:
-
-```bash
-rom-weaver weave \
-  --input original.sfc \
-  --patch base.ips \
-  --patch fixes.ups \
-  --output patched.zip
-```
-
-They run left to right, and each one works on the result of the one before.
-That is why order is part of the instructions: a translation, a bug fix, and
-an optional tweak may each expect a different starting point. Swapping two of
-them can fail outright or, worse, appear to succeed.
+Everything happens locally in the browser. The ROM, patches, and result are
+not sent to rom-weaver. The [privacy guide](../legal/privacy.md) explains local
+browser storage and the small amount of normal site traffic.
 
 ## Open a bundle
 
-A bundle is a small text file named `rom-weaver-bundle.json` that writes the
-whole job down: which game, which patches, in what order, which are optional,
-what the checksums should be, and what to call the output. It records the
-recipe, not the game, so an author can share it freely.
+A rom-weaver bundle is a saved patching recipe. It can include patch files,
+their order, optional choices, expected checksums, and output settings. A
+public bundle normally does not include the original game.
 
-```bash
-rom-weaver weave --bundle rom-weaver-bundle.json
-```
+Add the bundle archive to **0x01 Add files**. If it is patch-only, rom-weaver
+shows which ROM it expects. Add your matching ROM. Review optional patch
+switches, then use **WEAVE & DOWNLOAD** just as you would for loose files.
 
-In the browser, open a bundle the way you would open any other file. Check any
-optional patches before you run it.
+A release author can also give you a link that opens the bundle directly in
+Weave. The same local checks still happen before anything is written.
 
-Publishing your own multi-patch release? [Create a bundle](create-bundles.md)
-shows the Weave webapp and CLI workflows.
+Want to publish one? [Create and share a patch bundle](create-bundles.md) has a
+separate browser-only guide and its own guided sample.
 
-## When rom-weaver says the file does not match
+## If the ROM does not match
 
-Stop. Do not keep forcing it.
+Stop and find the difference. Do not turn on an override just to make the red
+message disappear.
 
-The warning means the bytes you handed over are not the bytes the author
-built against. Something is off: the region, the revision, the header, the
-byte order, which file got picked out of the archive, or the order of the
-patches. The [checksum guide](fix-checksum-errors.md) walks those checks in
-the order that finds the problem fastest.
+Check these in order:
 
-Forcing past the warning can still produce a file. It will download fine, and
-then crash on the title screen or corrupt itself six hours into the game.
-Finding the right starting file is quicker than that.
+1. region and revision;
+2. the selected file inside an archive;
+3. header state;
+4. Nintendo 64 byte order;
+5. patch order;
+6. whether the ROM was already patched or trimmed.
 
-Once a patch works, hang on to the clean original. The next release will want
-it.
+The [checksum error guide](fix-checksum-errors.md) explains each cause using
+the browser cards. A wrong filename by itself can be harmless. A wrong
+checksum or size is not.
 
-Ready to make your own? See [Create a patch](create-rom-patches.md). Back to
-the [guide index](README.md).
+## Use the result safely
+
+Open the downloaded result in the emulator or hardware you trust. Reaching the
+title screen is a useful first check, but play far enough to exercise the
+change when you can. Some bad combinations fail later.
+
+Do not delete the clean original. Give the patched result a name that includes
+the project and version so you can tell it apart later.
+
+If you need automation or terminal commands, switch to the complete
+[CLI usage guide](../hosting/cli.md#common-workflows). If you want to make your own
+change, continue with [Create a ROM patch](create-rom-patches.md). Back to the
+[browser guide index](README.md).

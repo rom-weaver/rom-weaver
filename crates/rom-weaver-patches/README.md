@@ -19,7 +19,7 @@
 > documented beyond this page, changes without notice between minor releases,
 > and using it in another project is unsupported.
 
-## What this crate is
+## What does this crate do?
 
 One file per patch format, each implementing `rom-weaver-core`'s `PatchHandler`
 trait, plus the registry that probes an unknown patch file down to a format.

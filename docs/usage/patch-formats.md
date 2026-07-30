@@ -6,19 +6,19 @@ separates them and which one to publish in.
 <!-- START doctoc -->
 ## Table of contents
 
-- [Applying a patch? Skip this guide](#applying-a-patch-skip-this-guide)
-- [The one thing that separates them](#the-one-thing-that-separates-them)
+- [Applying a patch? Use the format you received](#applying-a-patch-use-the-format-you-received)
+- [What separates patch formats?](#what-separates-patch-formats)
 - [BPS](#bps)
 - [IPS and IPS32](#ips-and-ips32)
 - [UPS](#ups)
 - [xdelta and VCDIFF](#xdelta-and-vcdiff)
 - [PPF](#ppf)
-- [Everything else](#everything-else)
-- [Just tell me which one](#just-tell-me-which-one)
+- [Other supported formats](#other-supported-formats)
+- [Which format should I choose?](#which-format-should-i-choose)
 
 <!-- END doctoc -->
 
-## Applying a patch? Skip this guide
+## Applying a patch? Use the format you received
 
 Use whatever format you were handed. rom-weaver applies 21 families of patch,
 so it is very unlikely you need to do anything about the format at all.
@@ -29,7 +29,7 @@ format is not the problem; the starting file is. Go to
 
 This guide is for people publishing a patch.
 
-## The one thing that separates them
+## What separates patch formats?
 
 Every format on this page records the same thing: which bytes changed. What
 separates them is how much they know about the file you are supposed to start
@@ -55,15 +55,9 @@ itself. A patcher can therefore reject the wrong starting file, and confirm
 the result came out right.
 
 That makes it a strong default for cartridge games, as long as your audience
-uses a patcher from this century. rom-weaver applies and creates BPS in both
-the browser and the terminal.
-
-```bash
-rom-weaver patch create \
-  --original original.sfc \
-  --modified modified.sfc \
-  --output release.bps
-```
+uses a patcher from this century. rom-weaver applies and creates BPS. In the
+webapp, choose BPS in the **0x04 Patch** format selector. For a scripted
+release, use the separate [CLI usage guide](../hosting/cli.md#common-workflows).
 
 ## IPS and IPS32
 
@@ -114,7 +108,7 @@ built against before you treat a mismatch as a patcher bug.
 
 rom-weaver applies and creates PPF.
 
-## Everything else
+## Other supported formats
 
 rom-weaver also handles SOLID, GDIFF, HDiffPatch/HPatchZ, APS, APSGBA, RUP,
 PAT, EBP, BDF/BSDIFF40, BSP, MOD, DLDI, DPS, and the Dreamcast-specific DCP
@@ -124,7 +118,7 @@ every one of these.
 The [full format table](../hosting/cli.md#patch-formats) is the authoritative list of
 names, extensions, and what rom-weaver can currently apply and create.
 
-## Just tell me which one
+## Which format should I choose?
 
 - **Applying somebody's patch:** the format they gave you, with the exact file
   they documented.

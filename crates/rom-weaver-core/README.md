@@ -19,7 +19,7 @@
 > documented beyond this page, changes without notice between minor releases,
 > and using it in another project is unsupported.
 
-## What this crate is
+## What does this crate do?
 
 `rom-weaver-core` is the bottom of the rom-weaver crate graph. It depends on
 nothing else in the workspace, and every other crate builds on it:

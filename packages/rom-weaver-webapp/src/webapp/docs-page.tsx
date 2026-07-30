@@ -1,9 +1,11 @@
 import "./design-system/docs-route.css";
 import { ArrowUpToLine, ChevronDown } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { MouseEvent } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { Modal } from "../public/react/components/ds/modal.tsx";
+import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes } from "./docs-routing.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
@@ -14,6 +16,51 @@ type DocRoute = (typeof DOC_ROUTES)[number];
 
 /** Shelves are fixed at build time; the route table never changes at runtime. */
 const DOC_SHELVES = groupDocRoutes(DOC_ROUTES);
+const DOC_SHELF_STATE_KEY = "rom-weaver-docs-shelves";
+type DocShelfState = Record<string, boolean>;
+const DEFAULT_DOC_SHELF_STATE = Object.fromEntries(
+  DOC_SHELVES.map((shelf) => [shelf.title, shelf.title === "Browser usage"]),
+) as DocShelfState;
+
+const readDocShelfState = (): DocShelfState => {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(DOC_SHELF_STATE_KEY) || "{}") as Record<string, unknown>;
+    return Object.fromEntries(
+      DOC_SHELVES.map((shelf) => [
+        shelf.title,
+        typeof stored[shelf.title] === "boolean" ? stored[shelf.title] : DEFAULT_DOC_SHELF_STATE[shelf.title],
+      ]),
+    ) as DocShelfState;
+  } catch {
+    return DEFAULT_DOC_SHELF_STATE;
+  }
+};
+
+const useDocShelfState = () => {
+  const [openShelves, setOpenShelves] = useState(DEFAULT_DOC_SHELF_STATE);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    setOpenShelves(readDocShelfState());
+    setReady(true);
+  }, []);
+  const onShelfToggle = useCallback(
+    (title: string, open: boolean) => {
+      if (!ready) return;
+      setOpenShelves((current) => {
+        if (current[title] === open) return current;
+        const next = { ...current, [title]: open };
+        try {
+          sessionStorage.setItem(DOC_SHELF_STATE_KEY, JSON.stringify(next));
+        } catch {
+          // The menu still works when storage is blocked.
+        }
+        return next;
+      });
+    },
+    [ready],
+  );
+  return { onShelfToggle, openShelves };
+};
 
 /** The landing route: an index of the guides rather than one of them. */
 const HUB_SLUG = "docs";
@@ -92,12 +139,29 @@ const SectionRail = ({
 );
 
 /** Every page, on the shelf its folder puts it on. */
-const DocsNav = ({ currentSlug, onNavigate }: { currentSlug: string; onNavigate?: () => void }) => (
+const DocsNav = ({
+  currentSlug,
+  onNavigate,
+  onShelfToggle,
+  openShelves,
+}: {
+  currentSlug: string;
+  onNavigate?: () => void;
+  onShelfToggle: (title: string, open: boolean) => void;
+  openShelves: DocShelfState;
+}) => (
   <nav aria-label="Docs" className="guide-nav">
     <span className="guide-nav-title">Docs</span>
     {DOC_SHELVES.map((shelf) => (
-      <div className="guide-shelf" key={shelf.title}>
-        <h3 className="guide-shelf-title">{shelf.title}</h3>
+      <details
+        className="guide-shelf"
+        key={shelf.title}
+        onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
+        open={openShelves[shelf.title]}
+      >
+        <summary>
+          <h3 className="guide-shelf-title">{shelf.title}</h3>
+        </summary>
         <ul className="guide-nav-list">
           {shelf.routes.map((entry) => (
             <li key={entry.slug}>
@@ -111,25 +175,37 @@ const DocsNav = ({ currentSlug, onNavigate }: { currentSlug: string; onNavigate?
             </li>
           ))}
         </ul>
-      </div>
+      </details>
     ))}
   </nav>
 );
 
-/**
- * Hub index: every page with the sentence it opens on, so the landing route
- * answers "which one do I want" without opening four of them. Built from the
- * routes themselves, so a new page appears here the moment it is published.
- */
-const DocsIndex = ({ currentSlug }: { currentSlug: string }) => (
+/** Every page and its opening sentence, grouped by audience and kept in route order. */
+const DocsIndex = ({
+  currentSlug,
+  onShelfToggle,
+  openShelves,
+}: {
+  currentSlug: string;
+  onShelfToggle: (title: string, open: boolean) => void;
+  openShelves: DocShelfState;
+}) => (
   <nav aria-label="All documentation" className="docs-index">
-    {DOC_SHELVES.map((shelf) => (
-      <section key={shelf.title}>
-        <h2>{shelf.title}</h2>
-        <ul>
-          {shelf.routes
-            .filter((entry) => entry.slug !== currentSlug)
-            .map((entry) => (
+    {DOC_SHELVES.map((shelf) => {
+      const routes = shelf.routes.filter((entry) => entry.slug !== currentSlug);
+      return (
+        <details
+          className="docs-index-shelf"
+          key={shelf.title}
+          onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
+          open={openShelves[shelf.title]}
+        >
+          <summary>
+            <h2 className="docs-index-title">{shelf.title}</h2>
+            <span className="docs-index-count">{`${routes.length} ${routes.length === 1 ? "page" : "pages"}`}</span>
+          </summary>
+          <ul>
+            {routes.map((entry) => (
               <li key={entry.slug}>
                 <a href={`/${entry.slug}`}>
                   <span className="docs-index-label">{entry.label}</span>
@@ -137,10 +213,34 @@ const DocsIndex = ({ currentSlug }: { currentSlug: string }) => (
                 </a>
               </li>
             ))}
-        </ul>
-      </section>
-    ))}
+          </ul>
+        </details>
+      );
+    })}
   </nav>
+);
+
+const DocsFaqPreview = () => (
+  <section aria-labelledby="docs-faq-title" className="docs-faq-preview">
+    <div className="docs-faq-heading">
+      <h2 id="docs-faq-title">Quick answers</h2>
+      <a href="/docs/faq">Read the full FAQ</a>
+    </div>
+    <div className="docs-faq-list">
+      <details>
+        <summary>Do my files get uploaded?</summary>
+        <p>No. The webapp reads, patches, and writes files on your device.</p>
+      </details>
+      <details>
+        <summary>Which patch format should I use?</summary>
+        <p>Applying a patch? Use the file you were given. Creating one? BPS is a good cartridge default.</p>
+      </details>
+      <details>
+        <summary>Why does my ROM not match?</summary>
+        <p>The region, revision, header, byte order, archive entry, or patch order differs from the author's file.</p>
+      </details>
+    </div>
+  </section>
 );
 
 /** Which list the tapped crumb promised; null while the sheet is shut. */
@@ -163,16 +263,22 @@ type TrailSheet = "pages" | "sections";
 const TrailHead = ({
   activeIndex,
   fraction,
+  onShelfToggle,
+  openShelves,
   route,
   weights,
 }: {
   activeIndex: number;
   fraction: number;
+  onShelfToggle: (title: string, open: boolean) => void;
+  openShelves: DocShelfState;
   route: DocRoute;
   weights: readonly number[];
 }) => {
   const [sheet, setSheet] = useState<TrailSheet | null>(null);
   const current = route.sections[activeIndex];
+  const currentLabel = current?.label ?? "";
+  const currentLabelEnd = /[.!?]$/.test(currentLabel) ? "" : ".";
   const close = () => setSheet(null);
   // A page with no headings - the index - keeps the guide menu and drops the half
   // of the trail that reports a position it does not have. Returning nothing here
@@ -199,7 +305,7 @@ const TrailHead = ({
             </span>
             <button
               aria-expanded={sheet === "sections"}
-              aria-label={`Section ${activeIndex + 1} of ${route.sections.length}: ${current?.label ?? ""}. Open this guide's outline.`}
+              aria-label={`Section ${activeIndex + 1} of ${route.sections.length}: ${currentLabel}${currentLabelEnd} Open this guide's outline.`}
               className="trail-crumb is-section"
               onClick={() => setSheet("sections")}
               type="button"
@@ -230,7 +336,12 @@ const TrailHead = ({
         {sheet === "sections" ? (
           <SectionRail activeIndex={activeIndex} onNavigate={close} route={route} />
         ) : (
-          <DocsNav currentSlug={route.slug} onNavigate={close} />
+          <DocsNav
+            currentSlug={route.slug}
+            onNavigate={close}
+            onShelfToggle={onShelfToggle}
+            openShelves={openShelves}
+          />
         )}
       </Modal>
     </div>
@@ -259,12 +370,27 @@ const ArticleEnd = () => (
   </div>
 );
 
-const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
+const isPlainLeftClick = (event: MouseEvent<HTMLAnchorElement>) =>
+  event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+const ignoreGuide = (_guide: GuidedSample) => undefined;
+
+const DocsPage = ({
+  active,
+  onGuideIntent = ignoreGuide,
+  onStartGuide = ignoreGuide,
+  slug,
+}: {
+  active: boolean;
+  onGuideIntent?: (guide: GuidedSample) => void;
+  onStartGuide?: (guide: GuidedSample) => boolean | void;
+  slug: string;
+}) => {
   const route = findDocsRoute(slug);
   const hub = route.slug === HUB_SLUG;
   // One subscription for the page: the desktop rail and the phone trail read the
   // same position, and the hook measures the document on every scroll frame.
   const { activeIndex, fraction, weights } = useReadingProgress(route.sections, active);
+  const { onShelfToggle, openShelves } = useDocShelfState();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   // Starts on the base the guides are authored against, which is what the
   // served document was rendered with, so hydration has nothing to reconcile.
@@ -294,10 +420,18 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
       </nav>
       {/* Keyed on the route so moving to another guide closes the sheet with it,
           rather than leaving it open over a guide it no longer describes. */}
-      <TrailHead activeIndex={activeIndex} fraction={fraction} key={route.slug} route={route} weights={weights} />
+      <TrailHead
+        activeIndex={activeIndex}
+        fraction={fraction}
+        key={route.slug}
+        onShelfToggle={onShelfToggle}
+        openShelves={openShelves}
+        route={route}
+        weights={weights}
+      />
       <div className="docs-layout">
         <div className="docs-rails">
-          <DocsNav currentSlug={route.slug} />
+          <DocsNav currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} />
           {route.sections.length > 0 ? <SectionRail activeIndex={activeIndex} route={route} /> : null}
         </div>
         <section className="docs-panel">
@@ -309,31 +443,58 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
             // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source
             dangerouslySetInnerHTML={{ __html: html }}
           />
-          {/* Hub only, and above the index rather than below it. Sixteen guides
+          {/* Hub only, and above the index rather than below it. Every guide
               each ending in the same three buttons made the pitch furniture
               rather than an offer, and every guide already closes on a link its
-              author chose. On the index it is the shortest answer to "what do you
-              want to do", so it goes before the list of everything. */}
+              author chose. */}
           {hub ? (
             <aside className="docs-cta">
               <div>
                 <h2>Try rom-weaver</h2>
-                <p>Use a guided browser sample, or copy a CLI install command.</p>
+                <p>Learn Apply, Create, or Bundle with included homebrew files.</p>
               </div>
               <div className="docs-cta-actions">
-                <a className="btn primary" href="/apply?guide=apply">
+                <a
+                  className="btn primary"
+                  href="/apply?guide=apply"
+                  onClick={(event) => {
+                    if (!isPlainLeftClick(event)) return;
+                    if (onStartGuide("apply") !== false) event.preventDefault();
+                  }}
+                  onFocus={() => onGuideIntent("apply")}
+                  onPointerEnter={() => onGuideIntent("apply")}
+                >
                   Guided Apply
                 </a>
-                <a className="btn" href="/create?guide=create">
+                <a
+                  className="btn"
+                  href="/create?guide=create"
+                  onClick={(event) => {
+                    if (!isPlainLeftClick(event)) return;
+                    if (onStartGuide("create") !== false) event.preventDefault();
+                  }}
+                  onFocus={() => onGuideIntent("create")}
+                  onPointerEnter={() => onGuideIntent("create")}
+                >
                   Guided Create
                 </a>
-                <a className="btn" href="/docs/cli#install">
-                  Install the CLI
+                <a
+                  className="btn"
+                  href="/apply?guide=bundle"
+                  onClick={(event) => {
+                    if (!isPlainLeftClick(event)) return;
+                    if (onStartGuide("bundle") !== false) event.preventDefault();
+                  }}
+                  onFocus={() => onGuideIntent("bundle")}
+                  onPointerEnter={() => onGuideIntent("bundle")}
+                >
+                  Guided Bundle
                 </a>
               </div>
             </aside>
           ) : null}
-          {hub ? <DocsIndex currentSlug={route.slug} /> : null}
+          {hub ? <DocsFaqPreview /> : null}
+          {hub ? <DocsIndex currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} /> : null}
         </section>
       </div>
       <ArticleEnd />

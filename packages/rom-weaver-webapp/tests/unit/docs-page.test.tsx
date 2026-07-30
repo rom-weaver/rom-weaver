@@ -7,11 +7,14 @@ import { DocsPage } from "../../src/webapp/docs-page.tsx";
 import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
 
 const BUNDLE_GUIDE_ANCHORS = [
-  "decide-what-the-bundle-should-contain",
-  "create-a-bundle-in-the-weave-webapp",
-  "create-a-bundle-with-the-cli",
-  "test-the-finished-bundle",
-  "publish-and-link-the-bundle",
+  "what-does-a-bundle-do",
+  "practice-with-the-guided-bundle-tour",
+  "choose-what-to-include",
+  "build-the-patch-recipe",
+  "turn-on-bundle-output-and-download-it",
+  "test-the-finished-download",
+  "publish-a-useful-release",
+  "open-a-hosted-bundle-in-weave",
 ];
 
 const routeFor = (slug: string) => {
@@ -29,6 +32,7 @@ const setSeoMetadata = (title: string, description: string, canonicalUrl: string
 
 describe("DocsPage", () => {
   beforeEach(() => {
+    sessionStorage.clear();
     document.head.innerHTML = `
       <meta name="description" content="">
       <meta property="og:title" content="">
@@ -63,6 +67,20 @@ describe("DocsPage", () => {
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://rom-weaver.com/docs");
   });
 
+  it("opens guided samples inside the running webapp", () => {
+    const onGuideIntent = vi.fn();
+    const onStartGuide = vi.fn(() => true);
+    render(<DocsPage active onGuideIntent={onGuideIntent} onStartGuide={onStartGuide} slug="docs" />);
+
+    const guidedApply = screen.getByRole("link", { name: "Guided Apply" });
+    fireEvent.focus(guidedApply);
+    fireEvent.click(guidedApply);
+
+    expect(onGuideIntent).toHaveBeenCalledWith("apply");
+    expect(onStartGuide).toHaveBeenCalledWith("apply");
+    expect(guidedApply.getAttribute("href")).toBe("/apply?guide=apply");
+  });
+
   it("builds the section rail from the guide's own headings and drops the generated outline", () => {
     render(<DocsPage active slug="docs/apply-rom-patches" />);
 
@@ -95,6 +113,26 @@ describe("DocsPage", () => {
       .map((link) => link.getAttribute("href") ?? "")
       .filter((href) => !/^https?:/.test(href) && href.includes(".md"));
     expect(unrewritten).toEqual([]);
+  });
+
+  it("keeps links between published guide sections pointed at real anchors", () => {
+    const routes = new Map(DOC_ROUTES.map((route) => [`/${route.slug}`, route]));
+    for (const route of DOC_ROUTES) {
+      const source = document.createElement("template");
+      source.innerHTML = route.html;
+      for (const link of source.content.querySelectorAll<HTMLAnchorElement>("a[href*='#']")) {
+        const targetUrl = new URL(link.getAttribute("href") ?? "", SITE_ORIGIN);
+        const targetRoute = routes.get(targetUrl.pathname);
+        if (!(targetRoute && targetUrl.hash)) continue;
+
+        const target = document.createElement("template");
+        target.innerHTML = targetRoute.html;
+        const ids = [...target.content.querySelectorAll<HTMLElement>("[id]")].map((element) => element.id);
+        expect(ids, `${route.slug} links to missing ${targetUrl.pathname}${targetUrl.hash}`).toContain(
+          decodeURIComponent(targetUrl.hash.slice(1)),
+        );
+      }
+    }
   });
 
   // Guides name the production origin so the Markdown reads on GitHub. A page
@@ -192,16 +230,42 @@ Fixture description.
     expect(routeFor("docs/create-bundles").sections.map((section) => section.id)).toEqual(BUNDLE_GUIDE_ANCHORS);
   });
 
-  it("publishes the bundle guide as numbered, collapsible sections", () => {
+  it("publishes the browser bundle guide as one numbered topic", () => {
     render(<DocsPage active slug="docs/create-bundles" />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "Create and share a patch bundle" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Create and share a patch bundle in the browser" }),
+    ).toBeTruthy();
     expect(document.querySelectorAll(".docs-article > h2 .docs-section-index")).toHaveLength(
       routeFor("docs/create-bundles").sections.length,
     );
-    expect(document.querySelectorAll(".docs-article details.docs-disclosure")).toHaveLength(
-      routeFor("docs/create-bundles").sections.length,
-    );
+    expect(document.querySelectorAll(".docs-article details.docs-disclosure")).toHaveLength(0);
+  });
+
+  it.each([
+    ["docs/apply-rom-patches", 4],
+    ["docs/create-rom-patches", 4],
+    ["docs/create-bundles", 2],
+  ])("reserves responsive screenshot space and keeps WebP fallbacks on %s", (slug, expectedPictures) => {
+    render(<DocsPage active slug={slug} />);
+
+    const pictures = [...document.querySelectorAll<HTMLPictureElement>("picture[data-docs-screenshot-theme]")];
+    expect(pictures).toHaveLength(expectedPictures);
+    for (const picture of pictures) {
+      const image = picture.querySelector("img");
+      const sources = [...picture.querySelectorAll("source")];
+      expect(image?.getAttribute("src")).toMatch(/\.webp$/);
+      expect(image?.getAttribute("loading")).toBeNull();
+      expect(image?.getAttribute("decoding")).toBeNull();
+      expect(Number(image?.getAttribute("width"))).toBeGreaterThan(0);
+      expect(Number(image?.getAttribute("height"))).toBeGreaterThan(0);
+      expect(sources.map((source) => source.getAttribute("type"))).toContain("image/avif");
+      expect(sources.map((source) => source.getAttribute("type"))).toContain("image/webp");
+      for (const source of sources) {
+        expect(Number(source.getAttribute("width"))).toBeGreaterThan(0);
+        expect(Number(source.getAttribute("height"))).toBeGreaterThan(0);
+      }
+    }
   });
 
   it("resolves hosted documents, repository-only documents, and published images from their source file", () => {
@@ -238,12 +302,12 @@ Fixture description.
     );
   });
 
-  it("shelves every route under the folder it lives in", () => {
-    render(<DocsPage active slug="docs/cli" />);
+  it("shelves every route and keeps disclosure choices between pages", async () => {
+    const { unmount } = render(<DocsPage active slug="docs/cli" />);
 
     const nav = document.querySelector(".docs-rails .guide-nav");
     expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual([
-      "Usage",
+      "Browser usage",
       "Install & hosting",
       "Development",
       "Legal",
@@ -251,7 +315,25 @@ Fixture description.
     // Every published route reaches the nav, so a new guide can never be
     // stranded off the shelves.
     expect(nav?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
-    expect(nav?.querySelector('a[aria-current="page"]')?.textContent).toBe("CLI and installation");
+    expect(nav?.querySelector('a[aria-current="page"]')?.textContent).toBe("CLI usage");
+    const shelves = [...(nav?.querySelectorAll<HTMLDetailsElement>(".guide-shelf") ?? [])];
+    expect(shelves.map((shelf) => shelf.open)).toEqual([true, false, false, false]);
+    fireEvent.click(shelves[2]?.querySelector("summary") as HTMLElement);
+    expect(shelves[2]?.open).toBe(true);
+
+    fireEvent.click(document.querySelector(".trail-crumb") as HTMLElement);
+    const mobileShelves = [
+      ...(document.querySelector(".rw-modal.guide-sheet")?.querySelectorAll<HTMLDetailsElement>(".guide-shelf") ?? []),
+    ];
+    expect(mobileShelves.map((shelf) => shelf.open)).toEqual([true, false, true, false]);
+
+    unmount();
+    render(<DocsPage active slug="docs/privacy" />);
+    await vi.waitFor(() =>
+      expect(
+        [...document.querySelectorAll<HTMLDetailsElement>(".docs-rails .guide-shelf")].map((shelf) => shelf.open),
+      ).toEqual([true, false, true, false]),
+    );
   });
 
   it("gives each trail crumb the list its own label promised", () => {
@@ -276,6 +358,14 @@ Fixture description.
     expect(pagesSheet?.querySelector(".warp-rail-list")).toBeNull();
   });
 
+  it("does not add a second stop after a question in the mobile outline label", () => {
+    render(<DocsPage active slug="docs/fix-checksum-errors" />);
+
+    const label = document.querySelector(".trail-crumb.is-section")?.getAttribute("aria-label");
+    expect(label).toContain("? Open this guide's outline.");
+    expect(label).not.toContain("?.");
+  });
+
   it("sends the reader back to the top of a guide from the end of it", () => {
     const scrollTo = vi.fn();
     vi.stubGlobal("scrollTo", scrollTo);
@@ -287,7 +377,7 @@ Fixture description.
   });
 
   it("pitches the guided samples on the hub only", () => {
-    // Sixteen guides each closing on the same three buttons made the offer read as
+    // Every guide closing on the same three buttons made the offer read as
     // furniture, and every guide already ends on a link its own author chose.
     const { unmount } = render(<DocsPage active slug="docs" />);
     expect(document.querySelector(".docs-cta")).toBeTruthy();
@@ -295,6 +385,19 @@ Fixture description.
     unmount();
     render(<DocsPage active slug="docs/apply-rom-patches" />);
     expect(document.querySelector(".docs-cta")).toBeNull();
+  });
+
+  it("lists browser, CLI, installation, and self-hosting paths, and previews the FAQ", () => {
+    render(<DocsPage active slug="docs" />);
+
+    const index = document.querySelector(".docs-index");
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain("Browser usage");
+    expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("CLI usage");
+    expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("Install");
+    expect(index?.querySelector('a[href="/docs/self-hosting"]')?.textContent).toContain("Self-hosting");
+    expect(screen.getByRole("link", { name: "Read the full FAQ" }).getAttribute("href")).toBe("/docs/faq");
+    expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();
   });
 
   it.each(["docs", "docs/apply-rom-patches"])("ends %s with nothing but the way back up", (slug) => {
@@ -373,12 +476,16 @@ Fixture description.
     const { unmount } = render(<DocsPage active slug="docs" />);
 
     const index = document.querySelector(".docs-index");
-    expect([...(index?.querySelectorAll("h2") ?? [])].map((shelf) => shelf.textContent)).toEqual([
-      "Usage",
+    const shelves = [...(index?.querySelectorAll<HTMLDetailsElement>(".docs-index-shelf") ?? [])];
+    expect(shelves.map((shelf) => shelf.querySelector(".docs-index-title")?.textContent)).toEqual([
+      "Browser usage",
       "Install & hosting",
       "Development",
       "Legal",
     ]);
+    expect(shelves.map((shelf) => shelf.open)).toEqual([true, false, false, false]);
+    fireEvent.click(shelves[1]?.querySelector("summary") as HTMLElement);
+    expect(shelves[1]?.open).toBe(true);
     // Everything but the hub itself, so the landing page never links to itself.
     expect(index?.querySelectorAll("a")).toHaveLength(DOC_ROUTES.length - 1);
     // Every card carries its own page's opening sentence, matched by the page it

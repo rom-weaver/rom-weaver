@@ -166,6 +166,10 @@ and never leave the device. Install it as a PWA from the browser menu to use it
 offline.
 New here? [Try the sample weave](https://rom-weaver.com/apply?bundle=first-weave.zip)
 with a tiny original homebrew NES ROM and two patches that change “HELLO WORLD” to “MODIFIED ROM.”
+For a guided explanation, use
+[guided Apply](https://rom-weaver.com/apply?guide=apply),
+[guided Create](https://rom-weaver.com/create?guide=create), or
+[guided Bundle](https://rom-weaver.com/apply?guide=bundle).
 
 <a name="self-host-the-webapp"></a>
 
@@ -350,38 +354,38 @@ webapp builds, and tests.
   </thead>
   <tbody>
     <tr>
-      <td>Desktop: Apply patches (Weave)</td>
+      <td>Desktop: ordered patch stack</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-desktop-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/weave-desktop-light.webp" alt="Filled Weave patch workflow on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/apply-patches-desktop-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/apply-patches-desktop-light.webp" alt="Focused Weave patch stack with two ordered sample patches on desktop">
         </picture>
       </td>
     </tr>
     <tr>
-      <td>Desktop: Create a patch</td>
+      <td>Desktop: create output</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-desktop-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/create-desktop-light.webp" alt="Filled Create patch workflow on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-output-desktop-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/create-output-desktop-light.webp" alt="Focused Create output card with BPS selected on desktop">
         </picture>
       </td>
     </tr>
     <tr>
-      <td>Mobile: Apply patches (Weave)</td>
+      <td>Mobile: Original and Modified</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-mobile-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/weave-mobile-light.webp" alt="Filled Weave patch workflow on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-inputs-mobile-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/create-inputs-mobile-light.webp" alt="Focused Create Original and Modified cards on mobile" width="390">
         </picture>
       </td>
     </tr>
     <tr>
-      <td>Mobile: Create a patch</td>
+      <td>Mobile: bundle output options</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-mobile-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/create-mobile-light.webp" alt="Filled Create patch workflow on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/bundle-output-mobile-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/bundle-output-mobile-light.webp" alt="Focused patch-only bundle controls on mobile" width="390">
         </picture>
       </td>
     </tr>
@@ -390,8 +394,11 @@ webapp builds, and tests.
 
 ## Documentation
 
-The [documentation index](./docs/README.md) routes to the CLI, deployment,
-integration, development, architecture, and format-reference guides.
+Start with the browser-first [documentation home](https://rom-weaver.com/docs)
+or the repository [documentation index](./docs/README.md). The web docs include
+a task and tool picker, guided samples, focused screenshots, and a
+[FAQ](./docs/usage/faq.md). CLI, deployment, integration, development,
+architecture, and format references each have their own guides.
 
 ## Contributing and support
 

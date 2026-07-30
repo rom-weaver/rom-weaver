@@ -86,6 +86,7 @@ const CompressPanelBody = ({
               aria-label={field.label}
               className="select"
               disabled={disabled}
+              name={field.key}
               onChange={(event) => handleChange(field, event.currentTarget.value)}
               value={field.value}
             >
@@ -125,6 +126,7 @@ const CompressPanelBody = ({
               aria-label={field.label}
               className={field.mono ? "input mono" : "input"}
               disabled={disabled}
+              name={field.key}
               onChange={(event) => handleChange(field, event.currentTarget.value)}
               placeholder={field.placeholder}
               value={field.value}

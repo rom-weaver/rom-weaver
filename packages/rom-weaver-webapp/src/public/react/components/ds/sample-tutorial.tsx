@@ -16,6 +16,7 @@ import type { ComponentType } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
+import { GUIDED_SAMPLE_START_EVENT, GUIDED_SAMPLE_VIEW_EVENT, type GuidedSample } from "../../guided-sample-start.ts";
 import { SwapIcon } from "./swap-icon.tsx";
 
 type SampleTutorialAction =
@@ -33,14 +34,28 @@ type SampleTutorialAction =
   | "swap"
   | "toggle";
 
-const useGuidedSampleStart = (guide: "apply" | "create", onStart: () => void) => {
+const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismiss: () => void) => {
+  const onDismissRef = useRef(onDismiss);
   const onStartRef = useRef(onStart);
-  const startedRef = useRef(false);
+  onDismissRef.current = onDismiss;
   onStartRef.current = onStart;
   useEffect(() => {
-    if (startedRef.current || new URLSearchParams(window.location.search).get("guide") !== guide) return;
-    startedRef.current = true;
-    onStartRef.current();
+    const ownerView = guide === "create" ? "creator" : "patcher";
+    const startRequestedGuide = (event: Event) => {
+      if (!(event instanceof CustomEvent) || event.detail !== guide) return;
+      onStartRef.current();
+    };
+    const dismissHiddenGuide = (event: Event) => {
+      if (!(event instanceof CustomEvent) || event.detail === ownerView) return;
+      onDismissRef.current();
+    };
+    window.addEventListener(GUIDED_SAMPLE_START_EVENT, startRequestedGuide);
+    window.addEventListener(GUIDED_SAMPLE_VIEW_EVENT, dismissHiddenGuide);
+    if (new URLSearchParams(window.location.search).get("guide") === guide) onStartRef.current();
+    return () => {
+      window.removeEventListener(GUIDED_SAMPLE_START_EVENT, startRequestedGuide);
+      window.removeEventListener(GUIDED_SAMPLE_VIEW_EVENT, dismissHiddenGuide);
+    };
   }, [guide]);
 };
 
@@ -176,6 +191,8 @@ const SampleTutorialStart = ({
   label,
   loading,
   onStart,
+  secondaryLabel,
+  onSecondaryStart,
 }: {
   downloadHref: string;
   downloadLabel: string;
@@ -184,6 +201,8 @@ const SampleTutorialStart = ({
   label: string;
   loading: boolean;
   onStart: () => void;
+  secondaryLabel?: string;
+  onSecondaryStart?: () => void;
 }) => {
   // The resolved href depends on where the app is served, which the prerender
   // cannot know. Render the root-relative form the server emits, then upgrade
@@ -204,6 +223,20 @@ const SampleTutorialStart = ({
         </span>
         {loading ? "Loading practice files…" : label}
       </button>
+      {secondaryLabel && onSecondaryStart ? (
+        <button
+          aria-busy={loading}
+          className="btn ghost slim"
+          disabled={loading}
+          onClick={onSecondaryStart}
+          type="button"
+        >
+          <span aria-hidden="true" className="sample-tutorial-start-beacon">
+            0x
+          </span>
+          {loading ? "Loading practice files…" : secondaryLabel}
+        </button>
+      ) : null}
       {error ? <span role="status">{error}</span> : null}
     </div>
   );

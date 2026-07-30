@@ -3,8 +3,8 @@
 How rom-weaver is benchmarked, what the numbers currently are, and how to
 reproduce them.
 
-Every format is measured against the tool that defines it, in both directions —
-compress and extract — with output size recorded next to every timing.
+Every format is measured against the tool that defines it, in both directions:
+compress and extract. Output size is recorded next to every timing.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -61,7 +61,7 @@ dolphin-tool, and vice versa.
 ## Method
 
 `scripts/bench-disc-tools.mjs` walks a corpus directory and builds two
-benchmarks per source it recognises — one compress, one extract — then hands both
+benchmarks per source it recognises, one compress and one extract, then hands both
 commands to [hyperfine](https://github.com/sharkdp/hyperfine), which runs a
 warmup pass followed by the measured runs.
 
@@ -115,7 +115,7 @@ Three further details:
   all three.
 - **A wrong subcommand fails but still exits 0.** `chdman extractcd` against a
   DVD CHD terminates on an uncaught C++ exception, writes nothing, and returns
-  success — exit status alone would score that crash as an extremely fast run.
+  success. Exit status alone would score that crash as an extremely fast run.
   Every measured command is therefore also required to produce a non-empty
   output.
 
@@ -132,15 +132,15 @@ dolphin-tool, 7zz 26.02, and Info-ZIP.
 **Runs:** three timed runs per command after one warmup; `±` is the standard
 deviation across those runs.
 
-Each group of suites ran back to back — `chd` and `rvz` in one sitting, `7z` and
+Each group of suites ran back to back, with `chd` and `rvz` in one sitting and `7z` and
 `zip` in a second after the archive corpus grew to include the 256 MB and 1 GiB
 ROMs.
 
 One exception: the **RVZ size columns** were re-measured after
 [#213](https://github.com/rom-weaver/rom-weaver/pull/213), which changed how much
 padding RVZ compression detects. Their time columns are still from the original
-sitting. RVZ output is deterministic — three repeats produced bit-identical
-sizes — so the size columns are exact even though they and the time columns come
+sitting. RVZ output is deterministic. Three repeats produced bit-identical
+sizes, so the size columns are exact even though they and the time columns come
 from different runs. #213 touches only GameCube junk detection, so no other suite
 was affected.
 
@@ -178,7 +178,7 @@ and audio tracks (`CHT2`), a Dreamcast GD-ROM (`CHGD`), and a PS2 DVD (`DVD `).
 | PS2 DVD | DVD | 5.726 s ± 0.062 | 17.766 s ± 0.034 | −12.040 s (−67.8%) | 1,697.8 MB |
 
 Output sizes agree with chdman's to within 72 bytes on every disc; the difference
-is cue-sheet text — track naming and line endings — not image data.
+is cue-sheet text, specifically track naming and line endings, not image data.
 
 #### Compress
 
@@ -209,8 +209,8 @@ compress inputs were produced by extracting them.
 | GameCube B | 0.269 s ± 0.014 | 0.363 s ± 0.008 | −0.094 s (−25.9%) | 156.9 MB | 156.9 MB | +0.01% |
 
 Times here are sub-second because most of a GameCube disc is pseudorandom padding
-that RVZ stores as a seed rather than compressing; only the real payload —
-roughly 100–160 MB of a 1.46 GB disc — reaches the compressor.
+that RVZ stores as a seed rather than compressing. Only the real payload,
+roughly 100–160 MB of a 1.46 GB disc, reaches the compressor.
 
 Both directions are lossless: extracting either tool's RVZ reproduces the source
 ISO's SHA-1 exactly, and the two extracted ISOs are byte-identical to each other.
@@ -236,7 +236,7 @@ measure. The `.7z` archives read back on the extract side do contain disc images
 rom-weaver's output is smaller than 7zz's at every size, and the time premium is
 what pays for it: rom-weaver seeds every parallel block with the preceding
 dictionary so cross-block matches survive, and each worker spends time indexing
-that seed before it encodes — work 7zz skips entirely by resetting the dictionary
+that seed before it encodes. 7zz skips this work by resetting the dictionary
 at every block boundary, which is also why its archives are larger. The premium
 grows with input size because seed cost scales with the dictionary while liblzma
 encodes each byte ~1.2x slower than 7-Zip's encoder and has no multithreaded
@@ -253,7 +253,7 @@ match finder to hide it.
 | GD-ROM B `.7z` | 673 MB | 27.093 s ± 0.023 | 19.911 s ± 0.086 | +7.182 s (+36.1%) | 1,134.7 MB |
 
 Every extract is byte-exact against 7zz's. PS1 CD A is the only multi-member
-archive in this set — eight track files; the other four each hold a single file.
+archive in this set, with eight track files. The other four each hold a single file.
 
 ### zip vs Info-ZIP
 
@@ -316,7 +316,7 @@ each suite picks up only what it can use:
 | `zip` | `zip` / `unzip` | ROM files | `.zip` |
 
 "ROM files" means `.gba`, `.nds`, `.3ds`, `.cci`, `.sfc`, `.smc`, `.n64`,
-`.z64`, `.nes`, `.gb`, `.gbc` — cartridge dumps, which range from a 128 KB NES
+`.z64`, `.nes`, `.gb`, `.gbc`. These cartridge dumps range from a 128 KB NES
 ROM to a 1 GiB 3DS image. Some of the larger ones only exist inside the corpus's
 own archives; extract those once and the archive suites pick them up.
 

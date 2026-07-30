@@ -1,4 +1,5 @@
 import type { PageUpdateState } from "./page-update-state.ts";
+import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import type { ServiceWorkerStatus } from "./pwa/service-worker-cache-state.ts";
 import type { UrlSessionParseResult } from "./url-session/url-session-request.ts";
 import type {
@@ -59,6 +60,7 @@ type WebappRootProps = {
   /** Boot-time `?bundle=` / `?rom=&patch=` session request, when present. */
   urlSession?: UrlSessionParseResult | null;
   actions: {
+    onStartGuide: (guide: GuidedSample) => void;
     onSelectView: (view: WebappView) => void;
     /** Masthead quick pickers commit straight to settings - no draft, no Save. */
     onAccentChange: (accent: string) => void;
