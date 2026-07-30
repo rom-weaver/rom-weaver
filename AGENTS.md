@@ -77,6 +77,15 @@ maps every workflow, the shared actions, caching, and the release fan-out.
   `:focus-visible`/`:focus-within`/`:active` in one selector list - those halves
   must stay outside the media query. Enforced by `npm run lint:touch-styles`;
   genuine exceptions go in that script's `EXEMPT` map with a reason.
+- **A cascade layer boundary costs more than it looks.** `design-system/index.css`
+  declares the layer order; across a boundary that order decides outright and
+  specificity stops counting, so a bare `.card` in a later layer beats a
+  `.card.is-disabled .rb` in an earlier one. Layers therefore exist only where a
+  stylesheet arrives at a different time (`deferred.css`, `docs-route.css`) - a new
+  file joins the layer its neighbours are in, never one of its own. An override
+  belongs in the file that owns the component it modifies; reaching across a
+  boundary cannot be fixed by adding specificity. Enforced by
+  `npm run lint:css-layers`, with exceptions in that script's `EXEMPT` map.
 - Relative imports only in TypeScript (no path aliases).
 
 ## Releases

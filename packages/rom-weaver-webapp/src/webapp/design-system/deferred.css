@@ -6,6 +6,6 @@
    main app (the wide-screen `.app` max-width, workflow step rails, patch-card grid), so
    deferring it visibly reflows the page when it arrives. */
 @import "./drawers.css" layer(drawers);
-@import "./weave-meter.css" layer(weave-meter);
-@import "./result.css" layer(result);
-@import "./dialogs.css" layer(dialogs);
+@import "./weave-meter.css" layer(readouts);
+@import "./result.css" layer(readouts);
+@import "./dialogs.css" layer(readouts);

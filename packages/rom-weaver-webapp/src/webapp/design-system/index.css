@@ -1,29 +1,42 @@
 /* Layer order is cascade order, and it is declared here in full - including the layers
    filled by stylesheets that load later (deferred.css after hydration, docs-route.css
    with the docs route chunk) - so a stylesheet arriving out of document order still
-   slots into the priority this list gives it. `style` is src/webapp/style.css, the
-   pre-design-system base that everything below may override. */
-@layer style, tokens, accents, base, masthead, banners, workbench, not-found, dropzone,
-  file-cards, inline-help, drawers, notices, fields, buttons, weave-meter, result, dialogs,
-  docs, keyframes, responsive, webapp-modals, phone-dock;
+   slots into the priority this list gives it.
+
+   There is one layer per *load phase boundary*, not one per file. A layer boundary is
+   expensive: across it, order alone decides and specificity stops counting, so a bare
+   `.card` in a later layer beats a `.card.is-disabled .rb` in an earlier one. Files
+   sharing a layer keep ordinary CSS behaviour - specificity first, import order only to
+   break ties - which is how every rule here was written. Boundaries therefore exist only
+   where one is unavoidable: between stylesheets that arrive at different times.
+
+   `drawers` and `readouts` are deferred.css; `docs` rides the docs route chunk; the rest
+   is the render-critical entry sheet. The deferred pair is split by `controls` because
+   drawers.css sits before notices/fields/buttons in cascade order and moving it would
+   change outcomes (drawers' `.popt` would start beating fields' `.optschecks .popt`).
+
+   Adding a file means adding it to the layer its neighbours are in - not a layer of its
+   own. `npm run lint:css-layers` fails the build on any rule an earlier layer would now
+   lose on order despite outranking on specificity. */
+@layer style, foundation, drawers, controls, readouts, docs, overrides;
 
 @import "../style.css" layer(style);
-@import "./tokens.css" layer(tokens);
-@import "./accents.css" layer(accents);
-@import "./base.css" layer(base);
-@import "./masthead.css" layer(masthead);
-@import "./banners.css" layer(banners);
-@import "./workbench.css" layer(workbench);
-@import "./not-found.css" layer(not-found);
-@import "./dropzone.css" layer(dropzone);
-@import "./file-cards.css" layer(file-cards);
-@import "./inline-help.css" layer(inline-help);
-@import "./notices.css" layer(notices);
-@import "./fields.css" layer(fields);
-@import "./buttons.css" layer(buttons);
-@import "./keyframes.css" layer(keyframes);
-@import "./responsive.css" layer(responsive);
+@import "./tokens.css" layer(foundation);
+@import "./accents.css" layer(foundation);
+@import "./base.css" layer(foundation);
+@import "./masthead.css" layer(foundation);
+@import "./banners.css" layer(foundation);
+@import "./workbench.css" layer(foundation);
+@import "./not-found.css" layer(foundation);
+@import "./dropzone.css" layer(foundation);
+@import "./file-cards.css" layer(foundation);
+@import "./inline-help.css" layer(foundation);
+@import "./notices.css" layer(controls);
+@import "./fields.css" layer(controls);
+@import "./buttons.css" layer(controls);
+@import "./keyframes.css" layer(overrides);
+@import "./responsive.css" layer(overrides);
 /* Misnamed but render-critical: carries the wide-screen `.app` layout and workflow step
    rails alongside its modal styles - deferring it reflows the page (see deferred.css). */
-@import "./webapp-modals.css" layer(webapp-modals);
-@import "./phone-dock.css" layer(phone-dock);
+@import "./webapp-modals.css" layer(overrides);
+@import "./phone-dock.css" layer(overrides);
