@@ -254,18 +254,69 @@ Fixture description.
     expect(nav?.querySelector('a[aria-current="page"]')?.textContent).toBe("CLI and installation");
   });
 
-  it("carries this guide's outline and every other page into the sheet", () => {
+  it("gives each trail crumb the list its own label promised", () => {
     render(<DocsPage active slug="docs/apply-rom-patches" />);
 
     const sections = routeFor("docs/apply-rom-patches").sections;
     // One warp tick per section: the gauge is the shape of the document.
     expect(document.querySelectorAll(".warp-gauge i")).toHaveLength(sections.length);
 
-    fireEvent.click(screen.getByRole("button", { name: /Open docs navigation/ }));
-    const sheet = document.querySelector(".rw-modal.guide-sheet");
-    expect(sheet).toBeTruthy();
-    expect(sheet?.querySelectorAll(".warp-rail-list a")).toHaveLength(sections.length);
-    expect(sheet?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+    // The section crumb opens this guide's outline, and nothing else.
+    fireEvent.click(screen.getByRole("button", { name: /Open this guide's outline/ }));
+    const outlineSheet = document.querySelector(".rw-modal.guide-sheet");
+    expect(outlineSheet?.querySelectorAll(".warp-rail-list a")).toHaveLength(sections.length);
+    expect(outlineSheet?.querySelector(".guide-nav-list")).toBeNull();
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    // `Docs` opens every guide, and nothing else - tapping it and landing on this
+    // guide's outline would break the promise the label made.
+    fireEvent.click(screen.getByRole("button", { name: "Docs" }));
+    const pagesSheet = document.querySelector(".rw-modal.guide-sheet");
+    expect(pagesSheet?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+    expect(pagesSheet?.querySelector(".warp-rail-list")).toBeNull();
+  });
+
+  it("closes a guide with the guides either side of it, in shelf order", () => {
+    render(<DocsPage active slug="docs/create-rom-patches" />);
+
+    const onward = [...document.querySelectorAll(".docs-onward .onward-link")].map((link) => [
+      link.querySelector(".onward-kind")?.textContent,
+      link.getAttribute("href"),
+    ]);
+    expect(onward).toEqual([
+      ["Previous guide", "/docs/apply-rom-patches"],
+      ["Next guide", "/docs/create-bundles"],
+    ]);
+  });
+
+  it("never offers the hub as a neighbouring guide", () => {
+    // The first guide on the shelves sits directly after the hub, so an unfiltered
+    // reading order would hand it "previous guide: Docs" - the parent these all
+    // live under, and the trail's own `Docs` crumb is the way back to it.
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    const onward = [...document.querySelectorAll(".docs-onward .onward-link")].map((link) => [
+      link.querySelector(".onward-kind")?.textContent,
+      link.getAttribute("href"),
+    ]);
+    expect(onward).toEqual([["Next guide", "/docs/create-rom-patches"]]);
+  });
+
+  it("sends the reader back to the top of a guide from the end of it", () => {
+    const scrollTo = vi.fn();
+    vi.stubGlobal("scrollTo", scrollTo);
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to top" }));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+    vi.unstubAllGlobals();
+  });
+
+  it("leaves the neighbour pair off the hub, which already lists every guide", () => {
+    render(<DocsPage active slug="docs" />);
+
+    expect(document.querySelector(".docs-onward .onward-link")).toBeNull();
+    expect(screen.getByRole("button", { name: "Back to top" })).toBeTruthy();
   });
 
   it("tracks the reading position as the reader scrolls", () => {
@@ -307,8 +358,8 @@ Fixture description.
       // geometry, which was taken before these rects existed.
       fireEvent(window, new Event("resize"));
       return {
-        index: document.querySelector(".weft-bar-index")?.textContent,
-        label: document.querySelector(".weft-bar-label")?.textContent,
+        index: document.querySelector(".trail-index")?.textContent,
+        label: document.querySelector(".trail-label")?.textContent,
         weft: (document.querySelector(".warp-gauge-weft") as HTMLElement | null)?.style.width,
       };
     };

@@ -1,5 +1,5 @@
 import "./design-system/docs-route.css";
-import { ChevronUp } from "lucide-react";
+import { ArrowUpToLine, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
@@ -14,6 +14,16 @@ type DocRoute = (typeof DOC_ROUTES)[number];
 
 /** Shelves are fixed at build time; the route table never changes at runtime. */
 const DOC_SHELVES = groupDocRoutes(DOC_ROUTES);
+
+/** The landing route: an index of the guides rather than one of them. */
+const HUB_SLUG = "docs";
+
+/**
+ * Reading order across the whole set, so a guide can name the ones either side
+ * of it. The hub is not in it - it is the parent these all sit under, reachable
+ * from the trail's own `Docs` crumb, and "previous guide: Docs" would be a lie.
+ */
+const DOC_ORDER = DOC_SHELVES.flatMap((shelf) => shelf.routes).filter((entry) => entry.slug !== HUB_SLUG);
 
 const syncDocsSeoMetadata = (route: DocRoute) => {
   const { canonicalUrl, metadata, title } = createDocsSeoMetadata(route, CHANNEL_BADGE);
@@ -140,59 +150,150 @@ const DocsIndex = ({ currentSlug }: { currentSlug: string }) => (
   </nav>
 );
 
+/** Which list the tapped crumb promised; null while the sheet is shut. */
+type TrailSheet = "pages" | "sections";
+
 /**
- * The weft bar: the phone-width navigation, and the reading position it reports
- * for free.
+ * The trail: phone-width navigation folded into the breadcrumb it replaces.
  *
- * Closed it is a readout rather than a menu button - the section being read,
- * over a warp of one tick per section. Each tick is as wide as its section is
- * long, so a single continuous scroll fraction still lands inside the right
- * tick. Opening the sheet is its secondary job, which is why it can afford to
- * hold the bottom of every screen.
+ * A guide already needs a breadcrumb, so on a phone that row does the
+ * navigating too - `Docs` opens every guide, the section crumb opens this
+ * guide's outline - and the reading position rides its bottom edge as a warp of
+ * one tick per section. Two crumbs, not four: the masthead brands the page and
+ * the guide's own title is the heading below, which buys the room to name the
+ * section, the one part of the trail that changes while you read.
+ *
+ * It sticks to the top rather than holding the bottom of the screen. The bottom
+ * is where the phone browser parks its own collapsing toolbar, which is what
+ * the old bar had to reserve scroll room to clear.
  */
-const ReadingBar = ({ active, route }: { active: boolean; route: DocRoute }) => {
-  const [open, setOpen] = useState(false);
-  const { activeIndex, fraction, weights } = useReadingProgress(route.sections, active);
+const TrailHead = ({
+  activeIndex,
+  fraction,
+  route,
+  weights,
+}: {
+  activeIndex: number;
+  fraction: number;
+  route: DocRoute;
+  weights: readonly number[];
+}) => {
+  const [sheet, setSheet] = useState<TrailSheet | null>(null);
   const current = route.sections[activeIndex];
-  const close = () => setOpen(false);
+  const close = () => setSheet(null);
 
   if (route.sections.length === 0) return null;
   return (
-    <div className="weft-dock">
-      <button
-        aria-expanded={open}
-        aria-label={`Open docs navigation. Reading section ${activeIndex + 1} of ${route.sections.length}: ${current?.label ?? ""}`}
-        className="weft-bar"
-        onClick={() => setOpen(true)}
-        type="button"
-      >
-        <span aria-hidden="true" className="weft-bar-index">
-          {sectionNumber(activeIndex)}
+    <div className="docs-trail">
+      <nav aria-label="Breadcrumb" className="trail-crumbs">
+        <button
+          aria-expanded={sheet === "pages"}
+          className="trail-crumb"
+          onClick={() => setSheet("pages")}
+          type="button"
+        >
+          Docs
+          <ChevronDown aria-hidden="true" />
+        </button>
+        <span aria-hidden="true" className="trail-sep">
+          /
         </span>
-        <span aria-hidden="true" className="weft-bar-label">
-          {current?.label}
-        </span>
-        <ChevronUp aria-hidden="true" className="weft-bar-chevron" />
-        <span aria-hidden="true" className="warp-gauge">
-          {route.sections.map((section, index) => (
-            <i key={section.id} style={{ flexGrow: weights[index] ?? 1 }} />
-          ))}
-          <span className="warp-gauge-weft" style={{ width: `${fraction * 100}%` }} />
-        </span>
-      </button>
+        <button
+          aria-expanded={sheet === "sections"}
+          aria-label={`Section ${activeIndex + 1} of ${route.sections.length}: ${current?.label ?? ""}. Open this guide's outline.`}
+          className="trail-crumb is-section"
+          onClick={() => setSheet("sections")}
+          type="button"
+        >
+          <b aria-hidden="true" className="trail-index">
+            {sectionNumber(activeIndex)}
+          </b>
+          <span aria-hidden="true" className="trail-label">
+            {current?.label}
+          </span>
+          <ChevronDown aria-hidden="true" />
+        </button>
+      </nav>
+      <span aria-hidden="true" className="warp-gauge">
+        {route.sections.map((section, index) => (
+          <i key={section.id} style={{ flexGrow: weights[index] ?? 1 }} />
+        ))}
+        <span className="warp-gauge-weft" style={{ width: `${fraction * 100}%` }} />
+      </span>
 
-      <Modal onClose={close} open={open} title={route.title} variant="guide-sheet">
-        <SectionRail activeIndex={activeIndex} onNavigate={close} route={route} />
-        <DocsNav currentSlug={route.slug} onNavigate={close} />
+      {/* Only the list the tapped crumb named: tapping `Docs` and getting this
+          guide's outline first would break the promise the label made. */}
+      <Modal onClose={close} open={sheet !== null} title={route.title} variant="guide-sheet">
+        {sheet === "sections" ? (
+          <SectionRail activeIndex={activeIndex} onNavigate={close} route={route} />
+        ) : (
+          <DocsNav currentSlug={route.slug} onNavigate={close} />
+        )}
       </Modal>
+    </div>
+  );
+};
+
+/**
+ * The end of the guide: the guides either side of it, and the way back up.
+ *
+ * Both belong here rather than in fixed chrome - this is where a reader arrives
+ * actually needing them, and it costs no screen while they are still reading.
+ */
+const ArticleEnd = ({ currentSlug, hub }: { currentSlug: string; hub: boolean }) => {
+  const at = DOC_ORDER.findIndex((entry) => entry.slug === currentSlug);
+  const previous = at > 0 ? DOC_ORDER[at - 1] : undefined;
+  const next = at >= 0 ? DOC_ORDER[at + 1] : undefined;
+  return (
+    <div className="docs-onward">
+      {/* The hub already lists every guide above this point, so a pair of
+          neighbours there would just be two of those entries again. */}
+      {!hub && (previous || next) ? (
+        <nav aria-label="Nearby guides">
+          <span className="docs-onward-title">More guides</span>
+          <div className="docs-onward-pair">
+            {previous ? (
+              <a className="onward-link" href={`/${previous.slug}`}>
+                <ChevronLeft aria-hidden="true" />
+                <span className="onward-copy">
+                  <span className="onward-kind">Previous guide</span>
+                  <span className="onward-label">{previous.label}</span>
+                </span>
+              </a>
+            ) : (
+              <span />
+            )}
+            {next ? (
+              <a className="onward-link is-next" href={`/${next.slug}`}>
+                <span className="onward-copy">
+                  <span className="onward-kind">Next guide</span>
+                  <span className="onward-label">{next.label}</span>
+                </span>
+                <ChevronRight aria-hidden="true" />
+              </a>
+            ) : null}
+          </div>
+        </nav>
+      ) : null}
+      <div className="docs-to-top-row">
+        {/* A button, not an `#top` anchor: the guide routes are paths, and a hash
+            here would leave a destination in the address bar that is not one.
+            `scrollTo` still picks up the page's own `scroll-behavior`. */}
+        <button className="docs-to-top" onClick={() => window.scrollTo({ top: 0 })} type="button">
+          <ArrowUpToLine aria-hidden="true" />
+          Back to top
+        </button>
+      </div>
     </div>
   );
 };
 
 const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
   const route = findDocsRoute(slug);
-  const hub = route.slug === "docs";
-  const { activeIndex } = useReadingProgress(route.sections, active);
+  const hub = route.slug === HUB_SLUG;
+  // One subscription for the page: the desktop rail and the phone trail read the
+  // same position, and the hook measures the document on every scroll frame.
+  const { activeIndex, fraction, weights } = useReadingProgress(route.sections, active);
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   // Starts on the base the guides are authored against, which is what the
   // served document was rendered with, so hydration has nothing to reconcile.
@@ -220,6 +321,9 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
           </>
         )}
       </nav>
+      {/* Keyed on the route so moving to another guide closes the sheet with it,
+          rather than leaving it open over a guide it no longer describes. */}
+      <TrailHead activeIndex={activeIndex} fraction={fraction} key={route.slug} route={route} weights={weights} />
       <div className="docs-layout">
         <div className="docs-rails">
           <DocsNav currentSlug={route.slug} />
@@ -254,9 +358,7 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
           </aside>
         </section>
       </div>
-      {/* Keyed on the route so moving to another page closes the sheet with it,
-          rather than leaving it open over a guide it no longer describes. */}
-      <ReadingBar active={active} key={route.slug} route={route} />
+      <ArticleEnd currentSlug={route.slug} hub={hub} />
     </div>
   );
 };
