@@ -329,6 +329,11 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (browserName === "chromium") await page.coverage.startCSSCoverage();
     await page.goto(new URL("404.html", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator(".not-found-page").waitFor({ state: "visible" });
+    if ((await page.locator('.mode[aria-selected="true"]').count()) !== 0) {
+      throw new Error("404 page marks a workflow tab as selected");
+    }
+    await page.getByRole("link", { name: "Apply a patch" }).waitFor({ state: "visible" });
+    await page.getByRole("link", { name: "Browse docs" }).waitFor({ state: "visible" });
     await installAuditTools();
     await scanVariants("not found");
     if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));

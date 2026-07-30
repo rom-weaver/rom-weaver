@@ -294,12 +294,16 @@ const makeBetaRouteNoindex = (html, slug) =>
     .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1https://rom-weaver.com/${slug}$2`);
 
 const createNotFoundHtml = (html, channel, channelLabel) => {
-  const title = `Page not found — ${SITE_NAME}${channel === "prod" ? "" : ` ${channelLabel}`}`;
+  const title = `Page not found | ${SITE_NAME}${channel === "prod" ? "" : ` ${channelLabel}`}`;
   const description = "The requested rom-weaver page could not be found.";
   let notFoundHtml = html
     .replace("<html ", '<html data-page="not-found" ')
     .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
     .replace(/(<meta\s+name="robots"\s+content=")[^"]*(")/, "$1noindex$2")
+    .replace(
+      'aria-selected="true" class="mode" data-mode="patcher"',
+      'aria-selected="false" class="mode" data-mode="patcher"',
+    )
     .replace(/\s*<link\s+rel="canonical"\s+href="[^"]*"\s*\/>/, "");
   for (const [attribute, name, content] of [
     ["name", "description", description],
