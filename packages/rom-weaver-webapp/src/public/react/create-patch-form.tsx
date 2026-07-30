@@ -60,8 +60,6 @@ import {
   useWorkbenchActivity,
   useWorkflowResetActions,
 } from "./workflow-form-effects.ts";
-
-const loadBrowserApi = () => import("../../platform/browser/browser-api.ts");
 import {
   createReactWorkflowId,
   createSettingsDependencyKey,
@@ -70,6 +68,7 @@ import {
   isDismissibleWorkflowError,
   mergeSettingsWithOutput,
 } from "./workflow-form-utils.ts";
+import { loadBrowserApi } from "./workflow-loader.ts";
 import {
   createIndeterminateWorkflowProgress,
   createWaitingWorkflowProgress,
