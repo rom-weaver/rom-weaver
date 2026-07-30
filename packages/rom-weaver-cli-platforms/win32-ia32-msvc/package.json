@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/win32-ia32-msvc",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Windows ia32 binary for rom-weaver",
   "author": "Brandon Casey",
   "repository": {
