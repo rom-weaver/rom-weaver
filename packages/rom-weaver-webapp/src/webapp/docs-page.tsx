@@ -174,8 +174,12 @@ const TrailHead = ({
   const [sheet, setSheet] = useState<TrailSheet | null>(null);
   const current = route.sections[activeIndex];
   const close = () => setSheet(null);
+  // A page with no headings - the index - keeps the guide menu and drops the half
+  // of the trail that reports a position it does not have. Returning nothing here
+  // would leave that page with no breadcrumb at all on a phone, since the plain
+  // one is hidden at this width.
+  const outlined = route.sections.length > 0;
 
-  if (route.sections.length === 0) return null;
   return (
     <div className="docs-trail">
       <nav aria-label="Breadcrumb" className="trail-crumbs">
@@ -188,31 +192,37 @@ const TrailHead = ({
           Docs
           <ChevronDown aria-hidden="true" />
         </button>
-        <span aria-hidden="true" className="trail-sep">
-          /
-        </span>
-        <button
-          aria-expanded={sheet === "sections"}
-          aria-label={`Section ${activeIndex + 1} of ${route.sections.length}: ${current?.label ?? ""}. Open this guide's outline.`}
-          className="trail-crumb is-section"
-          onClick={() => setSheet("sections")}
-          type="button"
-        >
-          <b aria-hidden="true" className="trail-index">
-            {sectionNumber(activeIndex)}
-          </b>
-          <span aria-hidden="true" className="trail-label">
-            {current?.label}
-          </span>
-          <ChevronDown aria-hidden="true" />
-        </button>
+        {outlined ? (
+          <>
+            <span aria-hidden="true" className="trail-sep">
+              /
+            </span>
+            <button
+              aria-expanded={sheet === "sections"}
+              aria-label={`Section ${activeIndex + 1} of ${route.sections.length}: ${current?.label ?? ""}. Open this guide's outline.`}
+              className="trail-crumb is-section"
+              onClick={() => setSheet("sections")}
+              type="button"
+            >
+              <b aria-hidden="true" className="trail-index">
+                {sectionNumber(activeIndex)}
+              </b>
+              <span aria-hidden="true" className="trail-label">
+                {current?.label}
+              </span>
+              <ChevronDown aria-hidden="true" />
+            </button>
+          </>
+        ) : null}
       </nav>
-      <span aria-hidden="true" className="warp-gauge">
-        {route.sections.map((section, index) => (
-          <i key={section.id} style={{ flexGrow: weights[index] ?? 1 }} />
-        ))}
-        <span className="warp-gauge-weft" style={{ width: `${fraction * 100}%` }} />
-      </span>
+      {outlined ? (
+        <span aria-hidden="true" className="warp-gauge">
+          {route.sections.map((section, index) => (
+            <i key={section.id} style={{ flexGrow: weights[index] ?? 1 }} />
+          ))}
+          <span className="warp-gauge-weft" style={{ width: `${fraction * 100}%` }} />
+        </span>
+      ) : null}
 
       {/* Only the list the tapped crumb named: tapping `Docs` and getting this
           guide's outline first would break the promise the label made. */}
@@ -299,11 +309,11 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
             // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source
             dangerouslySetInnerHTML={{ __html: html }}
           />
-          {hub ? <DocsIndex currentSlug={route.slug} /> : null}
-          {/* Hub only. Sixteen guides each ending in the same three buttons made
-              the pitch furniture rather than an offer, and every guide already
-              closes on a link its author chose. The hub is where somebody is
-              still deciding what to do. */}
+          {/* Hub only, and above the index rather than below it. Sixteen guides
+              each ending in the same three buttons made the pitch furniture
+              rather than an offer, and every guide already closes on a link its
+              author chose. On the index it is the shortest answer to "what do you
+              want to do", so it goes before the list of everything. */}
           {hub ? (
             <aside className="docs-cta">
               <div>
@@ -323,6 +333,7 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
               </div>
             </aside>
           ) : null}
+          {hub ? <DocsIndex currentSlug={route.slug} /> : null}
         </section>
       </div>
       <ArticleEnd />

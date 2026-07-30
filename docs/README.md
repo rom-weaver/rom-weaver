@@ -14,8 +14,10 @@ Choose the guide that matches what you are trying to do.
 
 ## Use rom-weaver
 
-- [Usage guides](./usage/README.md): apply and create patches, choose a format,
-  and troubleshoot checksum errors in the webapp or CLI.
+- [Get started](./usage/get-started.md): what a patch is, one worked example in
+  the browser and in a terminal, and the words the guides keep using.
+- [Usage guides](./usage/README.md): the index of every page - apply and create
+  patches, choose a format, troubleshoot checksum errors, in the webapp or CLI.
 - [Bundle creation guide](./usage/create-bundles.md): build and verify a
   distributable patch bundle in the Weave webapp or CLI.
 - [CLI guide](./hosting/cli.md): installation, common workflows, command reference,

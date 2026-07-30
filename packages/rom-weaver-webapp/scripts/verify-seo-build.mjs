@@ -191,11 +191,20 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
   const legalPage = route.slug === "docs/notices" || route.slug === "docs/privacy";
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);
-  assertIncludes(docsHtml, 'href="/weave?guide=apply"', `${route.slug} guided Apply link`);
-  assertIncludes(docsHtml, 'href="/create?guide=create"', `${route.slug} guided Create link`);
-  assertIncludes(docsHtml, 'href="/docs/cli#install"', `${route.slug} CLI installation link`);
-  assertIncludes(docsHtml, `href="/${route.slug}#`, `${route.slug} in-page links`);
-  assertIncludes(docsHtml, 'aria-label="On this page"', `${route.slug} section rail`);
+  // The guided-sample offer is the hub's, not every page's: sixteen guides all
+  // closing on the same three buttons made it furniture. Each guide still reaches
+  // the samples through the prose links its own author wrote.
+  if (route.slug === "docs") {
+    assertIncludes(docsHtml, 'href="/weave?guide=apply"', `${route.slug} guided Apply link`);
+    assertIncludes(docsHtml, 'href="/create?guide=create"', `${route.slug} guided Create link`);
+    assertIncludes(docsHtml, 'href="/docs/cli#install"', `${route.slug} CLI installation link`);
+  }
+  // The hub is an index with no headings of its own, so it has neither in-page
+  // anchors nor an outline to rail. Every other page must have both.
+  if (route.sections.length > 0) {
+    assertIncludes(docsHtml, `href="/${route.slug}#`, `${route.slug} in-page links`);
+    assertIncludes(docsHtml, 'aria-label="On this page"', `${route.slug} section rail`);
+  }
   for (const section of route.sections) {
     assertIncludes(docsHtml, `href="/${route.slug}#${section.id}"`, `${route.slug} rail link for ${section.id}`);
     assertIncludes(docsHtml, `<h2 id="${section.id}"`, `${route.slug} heading for rail entry ${section.id}`);

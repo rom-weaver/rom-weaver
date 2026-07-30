@@ -381,10 +381,23 @@ Fixture description.
     ]);
     // Everything but the hub itself, so the landing page never links to itself.
     expect(index?.querySelectorAll("a")).toHaveLength(DOC_ROUTES.length - 1);
-    expect(index?.querySelector(".docs-index-blurb")?.textContent).toBe(routeFor("docs/apply-rom-patches").description);
+    // Every card carries its own page's opening sentence, matched by the page it
+    // links to rather than by position - the index order is not this test's point,
+    // and asserting on "the first card" let a page ship someone else's blurb.
+    for (const card of index?.querySelectorAll("a") ?? []) {
+      const slug = card.getAttribute("href")?.slice(1) ?? "";
+      expect(card.querySelector(".docs-index-blurb")?.textContent).toBe(routeFor(slug).description);
+    }
 
     unmount();
     render(<DocsPage active slug="docs/cli" />);
     expect(document.querySelector(".docs-index")).toBeNull();
+  });
+
+  it("gives the index and the guide it points at their own descriptions", () => {
+    // Both pages opened on the same sentence at first, which would have shipped
+    // one meta description on two routes.
+    const descriptions = DOC_ROUTES.map((route) => route.description);
+    expect(new Set(descriptions).size).toBe(descriptions.length);
   });
 });
