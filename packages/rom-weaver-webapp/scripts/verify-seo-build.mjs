@@ -79,7 +79,7 @@ for (const link of criticalAssetLinkHeaders(applyHtml)) {
 assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 robots metadata");
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
-assertIncludes(notFoundHtml, '<header class="masthead">', "404 app masthead");
+assertIncludes(notFoundHtml, '<header class="masthead"', "404 app masthead");
 assertIncludes(notFoundHtml, 'class="btn primary not-found-home" href="/apply"', "404 home action");
 assertIncludes(notFoundHtml, 'class="btn ghost not-found-docs" href="/docs"', "404 docs action");
 assertIncludes(notFoundHtml, "That page is not here.", "404 recovery heading");
