@@ -564,6 +564,16 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     let disposed = false;
     let cleanup: (() => void) | undefined;
     const stage = async () => {
+      // Load the constructor BEFORE any bookkeeping. The sync-key commit below
+      // marks the sources as staged, so everything from there to the staging
+      // enqueue must stay atomic (as it was when the constructor was a static
+      // import): a run aborted at this await has claimed nothing, and the
+      // re-run that displaced it re-derives the full diff itself. The
+      // cleared-source path stays off this await so it never pulls the chunk.
+      const hasSource = !!(original || modified);
+      const CreateWorkflowConstructor =
+        createWorkflowOverride || (hasSource ? (await loadBrowserApi()).CreateWorkflow : null);
+      if (disposed) return;
       const previousSync = stagedCreateWorkflowSyncRef.current;
       const settingsChanged = previousSync.settingsKey !== stagingSettingsKey;
       const originalKeyChanged = previousSync.originalKey !== originalSourceKey;
@@ -600,8 +610,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         return;
       }
       if (!workflow) {
-        const CreateWorkflowConstructor = createWorkflowOverride || (await loadBrowserApi()).CreateWorkflow;
-        if (disposed) return;
+        if (!CreateWorkflowConstructor) return;
         workflow = new CreateWorkflowConstructor({
           ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
           id: `${workflowIdRef.current}:stage:${generation}`,
