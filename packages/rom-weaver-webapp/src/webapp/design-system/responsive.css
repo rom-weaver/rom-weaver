@@ -12,7 +12,7 @@
   .rw-app .brand { column-gap: var(--sp-s); row-gap: 0; }
   .rw-app .site-footer { align-items: center; flex-direction: row; justify-content: flex-start; gap: var(--sp-s); overflow-x: auto; }
   .rw-app .site-footer-links { width: auto; flex: none; flex-wrap: nowrap; gap: var(--sp-s); }
-  .rw-app .site-footer-status { width: auto; flex: none; }
+  .rw-app .site-footer-status { width: auto; flex: none; margin-inline-start: auto; text-align: end; }
   /* No banner treatment here: the lead only ever renders inside `.drop.hero`, which
      strips the border/background in dropzone.css. Under plain imports specificity
      kept that reset winning, so a boxed rule at this weight was dead; layer order

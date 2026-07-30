@@ -58,12 +58,12 @@
     margin: 0;
   }
 
-  /* Narrower than desktop (icon-only, tall tap target kept) so the brand
-     column's 1fr can hold the full build line without clipping the sha.
-     24px is the floor - WCAG 2.5.8 target size - and the row is at it. */
+  /* Keep the controls compact enough for the iPhone SE while giving the icons
+     a little more visual weight. The six 28px buttons still fit beside the
+     112px brand column at the 320px viewport width. */
   .rw-app .tool {
     position: relative;
-    width: 24px;
+    width: 28px;
     height: 40px;
     min-width: 0;
     padding: 0;
@@ -75,8 +75,8 @@
   .rw-app .tool .ico-sun,
   .rw-app .tool .ico-moon {
     grid-area: 1 / 1;
-    width: 15px;
-    height: 15px;
+    width: 17px;
+    height: 17px;
   }
 
   .rw-app .updates {
