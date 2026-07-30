@@ -97,17 +97,21 @@
 .codec-combobox-option.active { background: var(--plate-2); color: var(--thread-text); }
 
 /* Prevent iOS focus zoom without disabling pinch zoom.
-   Check-value fields (.ck-input) opt out: their size is computed from the row's
-   container width so a 40-character SHA-1 holds one line (fields.css), and no phone
-   is wide enough to do that at 16px - the floor clipped the hash and left the patch
-   card's values visibly larger than the ROM card's read-only ones. They zoom on
-   focus instead, which is the friendlier half of the trade while typing 40 hex
-   digits on a phone. */
+   The checks drawer's own controls (.ck-tight) opt out - they set their size from
+   the row that holds them, and 16px does not fit in any of those rows:
+   - the value field sizes off the container so a 40-character SHA-1 holds one line
+     (fields.css), and no phone is wide enough to do that at 16px. It zoomed on
+     focus before the floor, and clipped the hash under it; zooming is the
+     friendlier half of that trade while typing 40 hex digits on a phone.
+   - the two dropdowns (add-check, input basis) ride inside a group head sized for
+     a .72rem label, so the floor overflowed the head and stretched the gap between
+     the Input and Output sections. A <select> opens a native picker rather than a
+     keyboard, so exempting these costs no zoom at all. */
 @supports (-webkit-touch-callout: none) {
   @media (pointer: coarse) {
-    .rw-app .input:not(.ck-input), .rw-app .select,
-    .rw-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not(.ck-input),
-    .rw-app textarea, .rw-app select { font-size: max(16px, 1em); }
+    .rw-app .input:not(.ck-tight), .rw-app .select:not(.ck-tight),
+    .rw-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not(.ck-tight),
+    .rw-app textarea, .rw-app select:not(.ck-tight) { font-size: max(16px, 1em); }
     /* Reassert the 16px floor against more specific field rules. */
     .rw-app .ofld .select,
     .rw-app .fname .select, .rw-app .fname .outname { font-size: max(16px, 1em); }

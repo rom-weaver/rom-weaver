@@ -4,9 +4,10 @@ import { describe, expect, test } from "vitest";
 
 /**
  * The iOS focus-zoom floor in webapp-modals.css raises every field to 16px, and its
- * layer sits after the one holding the check-value clamp - so without the `.ck-input`
- * opt-out the editable md5/sha-1 rows render at 16px, which no phone is wide enough to
- * fit: the hash clips and the patch card's values dwarf the ROM card's read-only ones.
+ * layer sits after the ones sizing the checks drawer's own controls - so without the
+ * `.ck-tight` opt-out all three render at 16px on iOS: the md5/sha-1 values, which no
+ * phone is wide enough to fit at that size, and the two dropdowns, which overflow the
+ * group head and stretch the gap between the Input and Output sections.
  *
  * Nothing in CI can catch a regression here. The rule is gated on
  * `@supports (-webkit-touch-callout: none)`, which only real Safari matches - the
@@ -29,23 +30,29 @@ const iosFloorBlock = (): string => {
   return MODALS_CSS.slice(start, end);
 };
 
-/** Every `font-size` selector in the floor block that a check-value `<input>` could match. */
-const selectorsMatchingATextInput = (block: string): string[] =>
+/** Every `font-size` selector in the floor block that an `<input>`/`<select>` could match. */
+const selectorsAControlCanMatch = (block: string): string[] =>
   [...block.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
     .filter(([, , declarations]) => declarations.includes("font-size"))
     .flatMap(([, selectorList]) => selectorList.split(","))
     .map((selector) => selector.replaceAll(/\/\*[^*]*\*+([^/*][^*]*\*+)*\//g, "").trim())
-    .filter((selector) => /(^|\s)\.?input(:|$)/.test(selector));
+    .filter((selector) => /(^|\s)\.?(input|select)(:|$)/.test(selector));
 
 describe("iOS check-value font floor", () => {
-  test("the floor exempts .ck-input from every selector a check input matches", () => {
-    const selectors = selectorsMatchingATextInput(iosFloorBlock());
+  test("the floor exempts .ck-tight from every selector a check control matches", () => {
+    const selectors = selectorsAControlCanMatch(iosFloorBlock());
     expect(selectors.length).toBeGreaterThan(0);
-    for (const selector of selectors) expect(selector).toContain(":not(.ck-input)");
+    // The reassert block deliberately re-applies the floor to named fields outside the
+    // drawer; only the broad selectors that would sweep up a .ck-tight control matter.
+    for (const selector of selectors.filter((s) => !/\.(ofld|fname)\s/.test(s))) {
+      expect(selector, selector).toContain(":not(.ck-tight)");
+    }
   });
 
-  test("the editable check row carries .ck-input", () => {
-    expect(PATCH_LIST_STEP).toContain('className="input mono popt-input ck-input"');
+  test("every checks-drawer control carries .ck-tight", () => {
+    for (const marker of ["input mono popt-input ck-tight", "ck-basis-select ck-tight", "ck-add-select ck-tight"]) {
+      expect(PATCH_LIST_STEP, marker).toContain(marker);
+    }
   });
 
   test("the exempted field still has a container-derived size to fall back to", () => {

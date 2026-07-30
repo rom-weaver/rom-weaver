@@ -206,6 +206,9 @@
 .rw-app .patch-checks-body .verification-row .ck-mark.bad { color: var(--fault); }
 .rw-app .ck-add {
   display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+  /* Its tallest child is a 12px glyph, so the label alone would sit under the
+     WCAG 2.5.8 floor once the select stops being held at 16px. */
+  min-height: 24px; box-sizing: border-box;
   /* Align the bordered control with row text, not the full-bleed frame. */
   margin-block-start: 7px; margin-inline-start: 9px; padding: 4px 10px 4px 8px;
   border: 1px dashed var(--seam-strong); border-radius: var(--r-s);

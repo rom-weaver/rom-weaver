@@ -472,7 +472,7 @@ const EditableCheckRow = ({
       <input
         aria-describedby={invalid ? errorId : undefined}
         aria-invalid={invalid || undefined}
-        className="input mono popt-input ck-input"
+        className="input mono popt-input ck-tight"
         defaultValue={value}
         id={id}
         onBlur={(event) => onCommit(event.currentTarget.value)}
@@ -727,7 +727,7 @@ const PatchChecksDrawer = ({
                   Which ROM the input checks describe
                 </label>
                 <select
-                  className="meta-target-select mono ck-basis-select"
+                  className="meta-target-select mono ck-basis-select ck-tight"
                   id={`rom-weaver-patch-basis-${index}`}
                   onChange={(event) => {
                     const next = event.currentTarget.value;
@@ -767,7 +767,7 @@ const PatchChecksDrawer = ({
               <Plus aria-hidden="true" />
               <span className="sr-only">Add {side} check</span>
               <select
-                className="ck-add-select"
+                className="ck-add-select ck-tight"
                 id={`rom-weaver-patch-${side}-add-check-${index}`}
                 onChange={(event) => {
                   const field = event.currentTarget.value as CheckField;
