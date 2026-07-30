@@ -423,6 +423,9 @@ function WebappRoot({
             dirty={Boolean(DIRTY_HASH)}
             donateHref={DONATE_URL}
             githubHref={GITHUB_URL}
+            language={typeof state.settings.language === "string" ? state.settings.language : undefined}
+            onAccentChange={actions.onAccentChange}
+            onLanguageChange={actions.onLanguageChange}
             onOpenLog={() => setLogOpen(true)}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={openSettings}

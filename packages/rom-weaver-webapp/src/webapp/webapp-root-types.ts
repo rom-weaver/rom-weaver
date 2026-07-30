@@ -60,6 +60,9 @@ type WebappRootProps = {
   urlSession?: UrlSessionParseResult | null;
   actions: {
     onSelectView: (view: WebappView) => void;
+    /** Masthead quick pickers commit straight to settings - no draft, no Save. */
+    onAccentChange: (accent: string) => void;
+    onLanguageChange: (language: string) => void;
     onDraftChange: (field: string, value: string | boolean) => void;
     onLogLevelChange: (level: string) => void;
     onOpenSettings: () => void;

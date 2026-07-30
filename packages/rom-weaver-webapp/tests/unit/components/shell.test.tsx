@@ -60,10 +60,13 @@ describe("Masthead", () => {
     expect(tabs[1]?.getAttribute("href")).toBe("create");
     fireEvent.click(tabs[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    // The external links (GitHub, Tip) lead the row; a separator
-    // fences them off from the app tools (Reset, Theme, Log, Settings) that trail
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
-    expect(container.querySelector(".language-tool")).toBeNull();
+    // The external links (GitHub, Tip) lead the row; a separator fences them off
+    // from the app tools (Reset, Theme, Accent, Language, Log, Settings) that trail
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(8);
+    // the accent and language pickers sit in anchors, so they are not direct children
+    expect(container.querySelectorAll(".masthead-tools > .tool").length).toBe(6);
+    expect(container.querySelector(".accent-tool")).toBeTruthy();
+    expect(container.querySelector(".tool-code")?.textContent).toBe("EN");
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
     const github = getByRole("link", { name: "GitHub" });
     expect(github.getAttribute("href")).toBe("https://example.com/repo");
@@ -124,6 +127,49 @@ describe("Masthead", () => {
     expect(container.querySelector(".masthead-runtime")?.getAttribute("title")).toBe(
       "Service-worker offline support is unavailable.",
     );
+  });
+
+  it("commits an accent straight from the masthead tray", () => {
+    const onAccentChange = vi.fn();
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onAccentChange={onAccentChange} />));
+    const button = container.querySelector(".accent-tool") as HTMLButtonElement;
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector(".accent-tray")).toBeNull();
+    fireEvent.click(button);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    const swatches = Array.from(container.querySelectorAll<HTMLInputElement>(".accent-tray input"));
+    expect(swatches.length).toBe(6);
+    expect(swatches.filter((swatch) => swatch.checked).map((swatch) => swatch.value)).toEqual(["madder"]);
+    fireEvent.click(swatches[1] as HTMLInputElement);
+    expect(onAccentChange).toHaveBeenCalledWith("woad");
+    // stays open so a second lot can be compared without reopening
+    expect(container.querySelector(".accent-tray")).toBeTruthy();
+  });
+
+  it("offers only languages that ship a catalog, and closes the menu on choice", () => {
+    const onLanguageChange = vi.fn();
+    const { container } = render(
+      withSettings(<Masthead {...mastheadProps} language="de" onLanguageChange={onLanguageChange} />),
+    );
+    const button = container.querySelector(".tool-code") as HTMLButtonElement;
+    expect(button.textContent).toBe("DE");
+    fireEvent.click(button);
+    const items = Array.from(container.querySelectorAll<HTMLButtonElement>(".tool-menu-item"));
+    expect(items.map((item) => item.textContent)).toEqual(["English", "Deutsch", "Español"]);
+    expect(
+      items.filter((item) => item.getAttribute("aria-checked") === "true").map((item) => item.textContent),
+    ).toEqual(["Deutsch"]);
+    fireEvent.click(items[2] as HTMLButtonElement);
+    expect(onLanguageChange).toHaveBeenCalledWith("es");
+    expect(container.querySelector(".tool-menu")).toBeNull();
+  });
+
+  it("closes an open picker on Escape", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    fireEvent.click(container.querySelector(".accent-tool") as HTMLButtonElement);
+    expect(container.querySelector(".accent-tray")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(container.querySelector(".accent-tray")).toBeNull();
   });
 
   it("preloads Settings before interaction completes", () => {

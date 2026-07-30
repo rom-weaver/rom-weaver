@@ -164,6 +164,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.step.rom": msg({ id: "ui.step.rom", message: "ROM" }),
   "ui.theme.toDark": msg({ id: "ui.theme.toDark", message: "Switch to dark theme" }),
   "ui.theme.toLight": msg({ id: "ui.theme.toLight", message: "Switch to light theme" }),
+  "ui.tools.accent": msg({ id: "ui.tools.accent", message: "Accent" }),
+  "ui.tools.language": msg({ id: "ui.tools.language", message: "Language" }),
   "ui.tools.log": msg({ id: "ui.tools.log", message: "Log" }),
   "ui.tools.theme": msg({ id: "ui.tools.theme", message: "Theme" }),
   "ui.update.later": msg({ id: "ui.update.later", message: "Later" }),

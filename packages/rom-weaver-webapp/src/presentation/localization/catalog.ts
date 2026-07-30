@@ -21,5 +21,31 @@ const MESSAGE_CATALOGS: Record<LocaleCode, Messages> = {
   es: esMessages,
 };
 
+/** Endonyms for the shipped catalogs - a language is named in its own words. */
+const LOCALE_LABELS: Record<LocaleCode, string> = {
+  de: "Deutsch",
+  en: "English",
+  es: "Español",
+};
+
+// The default locale leads (it is the fallback every other catalog degrades to);
+// the rest sort by code so the order is stable as catalogs are added.
+const compareLocales = (left: LocaleCode, right: LocaleCode): number => {
+  if (left === right) return 0;
+  if (left === DEFAULT_LOCALE) return -1;
+  if (right === DEFAULT_LOCALE) return 1;
+  return left.localeCompare(right);
+};
+
+/**
+ * The language picker's options, derived from the catalogs that actually ship.
+ * Offering a locale without a catalog is offering English under another name -
+ * every lookup falls through to `FALLBACK_MESSAGES` - so the list is generated
+ * rather than hand-maintained and cannot drift into that state.
+ */
+const LOCALE_OPTIONS: readonly { label: string; value: LocaleCode }[] = Object.keys(MESSAGE_CATALOGS)
+  .sort(compareLocales)
+  .map((value) => ({ label: LOCALE_LABELS[value] ?? value, value }));
+
 export type { LocaleCode, MessageId };
-export { DEFAULT_LOCALE, MESSAGE_CATALOGS };
+export { DEFAULT_LOCALE, LOCALE_OPTIONS, MESSAGE_CATALOGS };

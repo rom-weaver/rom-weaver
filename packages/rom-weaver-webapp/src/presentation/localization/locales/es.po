@@ -55,6 +55,11 @@ msgstr "Códec 7z"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.accent"
+msgstr "Color de acento"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "Todo local, en tu navegador — tus archivos nunca salen de tu equipo."
 
@@ -217,6 +222,11 @@ msgstr "Corregir cabecera ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
 msgstr "en un parche comprimido y compartible que otros puedan aplicar —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.language"
+msgstr "Idioma"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MESSAGE_CATALOGS } from "../../src/presentation/localization/catalog.ts";
-import { createLocalizer } from "../../src/presentation/localization/index.ts";
+import { createLocalizer, LOCALE_OPTIONS } from "../../src/presentation/localization/index.ts";
+import { SETTINGS_FIELD_METADATA } from "../../src/webapp/settings/settings-metadata.ts";
 
 /**
  * Loom UI catalog contract: the chrome reads `ui.*` ids through
@@ -68,5 +69,22 @@ describe("messageCount", () => {
     // Spanish selects a distinct plural form and translates instead of echoing English.
     expect(es.messageCount("ui.patch.offCount", 1)).toMatch(/^1 parche está/);
     expect(es.messageCount("ui.patch.offCount", 2)).toMatch(/^2 parches están/);
+  });
+});
+
+describe("LOCALE_OPTIONS", () => {
+  it("offers exactly the locales that ship a catalog", () => {
+    // A locale without a catalog would render English under another name, so
+    // the picker's list is derived from the catalogs rather than curated.
+    expect(LOCALE_OPTIONS.map((locale) => locale.value).sort()).toEqual(Object.keys(MESSAGE_CATALOGS).sort());
+  });
+
+  it("leads with the default locale and names each language in its own words", () => {
+    expect(LOCALE_OPTIONS[0]?.value).toBe("en");
+    expect(LOCALE_OPTIONS.map((locale) => locale.label)).toEqual(["English", "Deutsch", "Español"]);
+  });
+
+  it("is the settings language field's option list", () => {
+    expect(SETTINGS_FIELD_METADATA.language.options).toEqual([...LOCALE_OPTIONS]);
   });
 });
