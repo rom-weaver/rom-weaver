@@ -23,6 +23,7 @@ const DOC_SOURCES = Object.freeze([
     label: "Fix checksum errors",
     slug: "docs/fix-checksum-errors",
   }),
+  Object.freeze({ file: "usage/faq.md", label: "FAQ", slug: "docs/faq" }),
   Object.freeze({ file: "usage/patch-formats.md", label: "Patch formats", slug: "docs/patch-formats" }),
   Object.freeze({ file: "hosting/cli.md", label: "CLI and installation", slug: "docs/cli" }),
   Object.freeze({ file: "hosting/self-hosting.md", label: "Self-hosting", slug: "docs/self-hosting" }),

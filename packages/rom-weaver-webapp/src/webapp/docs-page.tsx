@@ -11,6 +11,8 @@ import { useReadingProgress } from "./use-reading-progress.ts";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
 type DocRoute = (typeof DOC_ROUTES)[number];
+type DocsGoal = "apply" | "bundle" | "create" | "fix";
+type DocsTool = "browser" | "cli";
 
 /** Shelves are fixed at build time; the route table never changes at runtime. */
 const DOC_SHELVES = groupDocRoutes(DOC_ROUTES);
@@ -141,6 +143,90 @@ const DocsIndex = ({ currentSlug }: { currentSlug: string }) => (
       </section>
     ))}
   </nav>
+);
+
+const DOC_PICKER_RESULTS: Readonly<Record<DocsTool, Readonly<Record<DocsGoal, { href: string; label: string }>>>> =
+  Object.freeze({
+    browser: Object.freeze({
+      apply: Object.freeze({ href: "/docs/apply-rom-patches", label: "Open the browser Apply guide" }),
+      bundle: Object.freeze({ href: "/docs/create-bundles", label: "Open the browser Bundle guide" }),
+      create: Object.freeze({ href: "/docs/create-rom-patches", label: "Open the browser Create guide" }),
+      fix: Object.freeze({ href: "/docs/fix-checksum-errors", label: "Fix a browser mismatch" }),
+    }),
+    cli: Object.freeze({
+      apply: Object.freeze({ href: "/docs/cli#common-workflows", label: "Open the CLI patching steps" }),
+      bundle: Object.freeze({ href: "/docs/cli#bundles", label: "Open the CLI bundle steps" }),
+      create: Object.freeze({ href: "/docs/cli#common-workflows", label: "Open the CLI patch creation steps" }),
+      fix: Object.freeze({ href: "/docs/cli#patch-validation", label: "Open CLI patch validation" }),
+    }),
+  });
+
+const DocsPicker = () => {
+  const [goal, setGoal] = useState<DocsGoal>("apply");
+  const [tool, setTool] = useState<DocsTool>("browser");
+  const result = DOC_PICKER_RESULTS[tool][goal];
+  return (
+    <section aria-labelledby="docs-picker-title" className="docs-picker">
+      <div className="docs-picker-heading">
+        <span>Start here</span>
+        <h2 id="docs-picker-title">Pick the shortest guide</h2>
+      </div>
+      <div className="docs-picker-fields">
+        <label>
+          <span>I want to</span>
+          <select
+            aria-label="What do you want to do?"
+            name="docs-goal"
+            onChange={(event) => setGoal(event.target.value as DocsGoal)}
+            value={goal}
+          >
+            <option value="apply">apply a patch</option>
+            <option value="create">create a patch</option>
+            <option value="bundle">share a patch bundle</option>
+            <option value="fix">fix a file mismatch</option>
+          </select>
+        </label>
+        <label>
+          <span>Using</span>
+          <select
+            aria-label="Which tool do you want to use?"
+            name="docs-tool"
+            onChange={(event) => setTool(event.target.value as DocsTool)}
+            value={tool}
+          >
+            <option value="browser">the browser</option>
+            <option value="cli">the terminal</option>
+          </select>
+        </label>
+      </div>
+      <a className="btn primary docs-picker-result" href={result.href}>
+        {result.label}
+      </a>
+    </section>
+  );
+};
+
+const DocsFaqPreview = () => (
+  <section aria-labelledby="docs-faq-title" className="docs-faq-preview">
+    <div className="docs-faq-heading">
+      <h2 id="docs-faq-title">Quick answers</h2>
+      <a href="/docs/faq">Read the full FAQ</a>
+    </div>
+    <div className="docs-faq-list">
+      <details>
+        <summary>Do my files get uploaded?</summary>
+        <p>No. The webapp reads, patches, and writes files on your device.</p>
+      </details>
+      <details>
+        <summary>Which patch format should I use?</summary>
+        <p>Applying a patch? Use the file you were given. Creating one? BPS is a good cartridge default.</p>
+      </details>
+      <details>
+        <summary>Why does my ROM not match?</summary>
+        <p>The region, revision, header, byte order, archive entry, or patch order differs from the author's file.</p>
+      </details>
+    </div>
+  </section>
 );
 
 /** Which list the tapped crumb promised; null while the sheet is shut. */
@@ -309,7 +395,8 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
             // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source
             dangerouslySetInnerHTML={{ __html: html }}
           />
-          {/* Hub only, and above the index rather than below it. Sixteen guides
+          {hub ? <DocsPicker /> : null}
+          {/* Hub only, and above the index rather than below it. Every guide
               each ending in the same three buttons made the pitch furniture
               rather than an offer, and every guide already closes on a link its
               author chose. On the index it is the shortest answer to "what do you
@@ -318,7 +405,7 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
             <aside className="docs-cta">
               <div>
                 <h2>Try rom-weaver</h2>
-                <p>Use a guided browser sample, or copy a CLI install command.</p>
+                <p>Learn Apply, Create, or Bundle with included homebrew files.</p>
               </div>
               <div className="docs-cta-actions">
                 <a className="btn primary" href="/apply?guide=apply">
@@ -327,12 +414,13 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
                 <a className="btn" href="/create?guide=create">
                   Guided Create
                 </a>
-                <a className="btn" href="/docs/cli#install">
-                  Install the CLI
+                <a className="btn" href="/weave?guide=bundle">
+                  Guided Bundle
                 </a>
               </div>
             </aside>
           ) : null}
+          {hub ? <DocsFaqPreview /> : null}
           {hub ? <DocsIndex currentSlug={route.slug} /> : null}
         </section>
       </div>

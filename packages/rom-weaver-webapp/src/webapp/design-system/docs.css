@@ -82,7 +82,7 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   padding: 10px 12px 8px;
   border-bottom: 1px solid var(--seam-soft);
 }
-/* Shelves: one per folder under docs/. The heading is what turns sixteen
+/* Shelves: one per folder under docs/. The heading is what turns the
    entries into four short lists you can take in at a glance. */
 .rw-app .guide-shelf { padding: 5px 5px 7px; }
 .rw-app .guide-shelf + .guide-shelf { border-top: 1px solid var(--seam-soft); }
@@ -406,6 +406,58 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   .rw-app .docs-screenshot-pair { grid-template-columns: 1fr; }
 }
 
+/* --- hub picker ---
+   Two ordinary selects keep the decision small: one job, one tool, one guide.
+   The index below remains the no-JavaScript and browse-everything path. */
+.rw-app .docs-picker {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1fr) minmax(0, 1.8fr) auto;
+  align-items: end;
+  gap: var(--sp-l);
+  padding: var(--sp-xl) var(--article-pad);
+  border-top: 1px solid var(--seam);
+  background: var(--plate-2);
+}
+.rw-app .docs-picker-heading > span {
+  display: block;
+  margin-block-end: 4px;
+  color: var(--weft);
+  font: 650 .64rem/1 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.rw-app .docs-picker h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  letter-spacing: -.01em;
+}
+.rw-app .docs-picker-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-s);
+}
+.rw-app .docs-picker label { display: grid; gap: 4px; min-width: 0; }
+.rw-app .docs-picker label > span {
+  color: var(--ink-3);
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.rw-app .docs-picker select {
+  width: 100%;
+  min-height: 44px;
+  padding-inline: var(--sp-m);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+  background: var(--well);
+  color: var(--ink);
+  font: inherit;
+  font-size: .8rem;
+}
+.rw-app .docs-picker-result { min-height: 44px; text-decoration: none; white-space: nowrap; }
+
 /* --- hub index ---
    The landing route ends with every page and the sentence it opens on, so
    "which one do I want" is answered here instead of by opening four of them. */
@@ -482,6 +534,43 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 .rw-app .docs-cta-actions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-s); }
 .rw-app .docs-cta .btn { text-decoration: none; }
 
+.rw-app .docs-faq-preview {
+  padding: var(--sp-xl) var(--article-pad) clamp(28px, 5vw, 44px);
+  border-top: 1px solid var(--seam);
+}
+.rw-app .docs-faq-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-m);
+  margin-block-end: var(--sp-m);
+}
+.rw-app .docs-faq-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  letter-spacing: -.01em;
+}
+.rw-app .docs-faq-heading a { color: var(--thread-text); font-size: .75rem; font-weight: 700; }
+.rw-app .docs-faq-list { border-block: 1px solid var(--seam-soft); }
+.rw-app .docs-faq-list details + details { border-top: 1px solid var(--seam-soft); }
+.rw-app .docs-faq-list summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding-block: var(--sp-m);
+  color: var(--ink);
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rw-app .docs-faq-list p {
+  margin: 0;
+  padding: 0 0 var(--sp-m) var(--sp-l);
+  color: var(--ink-3);
+  font-size: .78rem;
+  line-height: 1.55;
+}
+
 /* --- the end of the guide ---
    Phone-only: the desktop sidebar is sticky, so the top of the document is never
    more than a glance away there. */
@@ -493,6 +582,8 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 
 /* --- responsive --- */
 @media (max-width: 860px) {
+  .rw-app .docs-picker { grid-template-columns: 1fr; align-items: stretch; }
+  .rw-app .docs-picker-result { justify-content: center; white-space: normal; }
   .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
   .rw-app .docs-rails { display: none; }
   /* The plain breadcrumb hands its job to the trail, which does the navigating
@@ -582,7 +673,7 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   }
   /* The floor keeps a two-line section visible as a tick, at the cost of
      borrowing a pixel or two from its neighbours - so the weft can sit ~1% off
-     a boundary on a guide with sixteen sections. The label beside it is exact;
+     a boundary on a guide with many sections. The label beside it is exact;
      the gauge is the shape of the document, not a readout. */
   .rw-app .warp-gauge i {
     box-sizing: border-box;
@@ -667,6 +758,8 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 @media (max-width: 520px) {
   .rw-app .docs-workbench { --article-pad: 18px; }
   .rw-app .docs-article { padding: 22px 18px 26px; }
+  .rw-app .docs-picker { gap: var(--sp-m); padding: 18px; }
+  .rw-app .docs-picker-fields { grid-template-columns: 1fr; }
   .rw-app .docs-cta { align-items: stretch; flex-direction: column; padding: 18px; }
   .rw-app .docs-cta-actions { display: grid; grid-template-columns: 1fr; }
   /* Commands wrap rather than scroll at this width. Scrolled sideways they cut

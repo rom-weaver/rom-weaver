@@ -7,11 +7,14 @@ import { DocsPage } from "../../src/webapp/docs-page.tsx";
 import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
 
 const BUNDLE_GUIDE_ANCHORS = [
-  "decide-what-the-bundle-should-contain",
-  "create-a-bundle-in-the-weave-webapp",
-  "create-a-bundle-with-the-cli",
-  "test-the-finished-bundle",
-  "publish-and-link-the-bundle",
+  "what-a-bundle-does",
+  "practice-with-guided-bundle",
+  "choose-what-to-include",
+  "build-the-patch-recipe",
+  "create-and-download-the-bundle",
+  "test-the-finished-download",
+  "publish-a-useful-release",
+  "open-a-hosted-bundle-in-weave",
 ];
 
 const routeFor = (slug: string) => {
@@ -192,16 +195,16 @@ Fixture description.
     expect(routeFor("docs/create-bundles").sections.map((section) => section.id)).toEqual(BUNDLE_GUIDE_ANCHORS);
   });
 
-  it("publishes the bundle guide as numbered, collapsible sections", () => {
+  it("publishes the browser bundle guide as one numbered topic", () => {
     render(<DocsPage active slug="docs/create-bundles" />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "Create and share a patch bundle" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Create and share a patch bundle in the browser" }),
+    ).toBeTruthy();
     expect(document.querySelectorAll(".docs-article > h2 .docs-section-index")).toHaveLength(
       routeFor("docs/create-bundles").sections.length,
     );
-    expect(document.querySelectorAll(".docs-article details.docs-disclosure")).toHaveLength(
-      routeFor("docs/create-bundles").sections.length,
-    );
+    expect(document.querySelectorAll(".docs-article details.docs-disclosure")).toHaveLength(0);
   });
 
   it("resolves hosted documents, repository-only documents, and published images from their source file", () => {
@@ -287,7 +290,7 @@ Fixture description.
   });
 
   it("pitches the guided samples on the hub only", () => {
-    // Sixteen guides each closing on the same three buttons made the offer read as
+    // Every guide closing on the same three buttons made the offer read as
     // furniture, and every guide already ends on a link its own author chose.
     const { unmount } = render(<DocsPage active slug="docs" />);
     expect(document.querySelector(".docs-cta")).toBeTruthy();
@@ -295,6 +298,25 @@ Fixture description.
     unmount();
     render(<DocsPage active slug="docs/apply-rom-patches" />);
     expect(document.querySelector(".docs-cta")).toBeNull();
+  });
+
+  it("routes the hub picker by task and tool, and previews the FAQ", () => {
+    render(<DocsPage active slug="docs" />);
+
+    const result = document.querySelector(".docs-picker-result") as HTMLAnchorElement;
+    expect(result.getAttribute("href")).toBe("/docs/apply-rom-patches");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "What do you want to do?" }), {
+      target: { value: "bundle" },
+    });
+    expect(result.getAttribute("href")).toBe("/docs/create-bundles");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Which tool do you want to use?" }), {
+      target: { value: "cli" },
+    });
+    expect(result.getAttribute("href")).toBe("/docs/cli#bundles");
+    expect(screen.getByRole("link", { name: "Read the full FAQ" }).getAttribute("href")).toBe("/docs/faq");
+    expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();
   });
 
   it.each(["docs", "docs/apply-rom-patches"])("ends %s with nothing but the way back up", (slug) => {
