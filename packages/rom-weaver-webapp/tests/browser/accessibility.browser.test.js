@@ -92,6 +92,7 @@ afterEach(async () => {
   mountedRoot = null;
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.removeAttribute("data-accent");
+  document.documentElement.removeAttribute("data-beta-tools-enabled");
   await setViewport(DEFAULT_VIEWPORT);
 });
 
@@ -884,11 +885,12 @@ describe("webapp surface accessibility", () => {
 // masthead tablist (ModeRail) with arrow / Home / End keys and asserts focus
 // lands on the right tab and the select callback fires. (Theme-independent.)
 describe("webapp keyboard navigation", () => {
-  const renderMasthead = async (onSelectTab) =>
-    renderNode(
+  const renderMasthead = async (onSelectTab) => {
+    document.documentElement.dataset.betaToolsEnabled = "true";
+    await renderNode(
       createElement(
         RomWeaverSettingsProvider,
-        { settings: {} },
+        { settings: { betaToolsEnabled: true } },
         createElement(
           "div",
           { className: "rw-app" },
@@ -905,6 +907,7 @@ describe("webapp keyboard navigation", () => {
       ),
       "light",
     );
+  };
 
   test("skip link targets the main workflow", async () => {
     await renderMasthead(noop);
