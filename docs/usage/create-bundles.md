@@ -58,8 +58,8 @@ The practice bundle is safe to share because its ROM is project-owned
 homebrew. The guide still selects a patch-only ZIP because that is the right
 default for a public release.
 
-If you want the starting files without a tour, choose **Download the bundle**
-on [Apply](https://rom-weaver.com/apply) or
+If you want the starting files without a tour, choose **Download a test bundle**
+from the **New here?** beacon on [Apply](https://rom-weaver.com/apply) or
 [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
 
 ## Choose what to include

@@ -42,7 +42,8 @@ The Original displays `HELLO WORLD`. The Modified file displays
 `MODIFIED WORLD`. The patch made by the sample only needs to describe the
 changed word.
 
-Choose **Download the sample ROMs** on the empty Create page or
+Choose **Download the sample ROMs** from the **New here?** beacon on the
+empty Create page or
 [download `first-create.zip`](https://rom-weaver.com/first-create.zip) if you
 want to keep the pair. The same files are used for automated browser and CLI
 verification in this project.
