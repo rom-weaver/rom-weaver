@@ -233,7 +233,8 @@ test("the New here? beacon stays compact and its popover carries every start act
   // The chip rides the hero's lower corner instead of spending a band below it.
   const hero = document.querySelector(".drop.hero").getBoundingClientRect();
   expect(chipBox.bottom).toBeLessThanOrEqual(hero.bottom + 1);
-  expect(document.querySelector(".sample-tutorial-start-pop").hidden).toBe(true);
+  // Closed popover is not mounted at all - it must stay out of the prerendered shell.
+  expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
   await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);

@@ -280,54 +280,58 @@ const SampleTutorialStart = ({
         </span>
         New here?
       </button>
-      <div className="sample-tutorial-start-pop" hidden={!open} id={popId}>
-        <span aria-hidden="true" className="sample-tutorial-start-head mono">
-          Get started
-        </span>
-        <button
-          aria-busy={loading}
-          className="sample-tutorial-start-action sample-tutorial-start-primary"
-          disabled={loading}
-          onClick={onStart}
-          type="button"
-        >
-          <span aria-hidden="true" className="sample-tutorial-start-action-icon">
-            <StartIcon />
+      {/* Mounted only while open: the closed popover would otherwise ship in
+          the prerendered shell - four inline SVGs and all - on every page. */}
+      {open ? (
+        <div className="sample-tutorial-start-pop" id={popId}>
+          <span aria-hidden="true" className="sample-tutorial-start-head mono">
+            Get started
           </span>
-          {loading ? "Loading practice files…" : label}
-        </button>
-        {secondaryLabel && onSecondaryStart ? (
           <button
             aria-busy={loading}
-            className="sample-tutorial-start-action sample-tutorial-start-secondary"
+            className="sample-tutorial-start-action sample-tutorial-start-primary"
             disabled={loading}
-            onClick={onSecondaryStart}
+            onClick={onStart}
             type="button"
           >
             <span aria-hidden="true" className="sample-tutorial-start-action-icon">
-              <SecondaryIcon />
+              <StartIcon />
             </span>
-            {loading ? "Loading practice files…" : secondaryLabel}
+            {loading ? "Loading practice files…" : label}
           </button>
-        ) : null}
-        <a className="sample-tutorial-start-action sample-tutorial-start-download" download href={href}>
-          <Download aria-hidden="true" />
-          {downloadLabel}
-        </a>
-        {error ? <span role="status">{error}</span> : null}
-        <button
-          className="sample-tutorial-start-dismiss"
-          onClick={() => {
-            startLogger.debug("onboarding beacon dismissed");
-            setOpen(false);
-            setDismissed(true);
-            requestOnboardingDismiss();
-          }}
-          type="button"
-        >
-          Don't show this again
-        </button>
-      </div>
+          {secondaryLabel && onSecondaryStart ? (
+            <button
+              aria-busy={loading}
+              className="sample-tutorial-start-action sample-tutorial-start-secondary"
+              disabled={loading}
+              onClick={onSecondaryStart}
+              type="button"
+            >
+              <span aria-hidden="true" className="sample-tutorial-start-action-icon">
+                <SecondaryIcon />
+              </span>
+              {loading ? "Loading practice files…" : secondaryLabel}
+            </button>
+          ) : null}
+          <a className="sample-tutorial-start-action sample-tutorial-start-download" download href={href}>
+            <Download aria-hidden="true" />
+            {downloadLabel}
+          </a>
+          {error ? <span role="status">{error}</span> : null}
+          <button
+            className="sample-tutorial-start-dismiss"
+            onClick={() => {
+              startLogger.debug("onboarding beacon dismissed");
+              setOpen(false);
+              setDismissed(true);
+              requestOnboardingDismiss();
+            }}
+            type="button"
+          >
+            Don't show this again
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 };
