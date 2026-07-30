@@ -154,11 +154,14 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .accent-tray .accent-chip:active .accent-chip-dot { scale: 1.12; }
 
-/* The language tool shows its code instead of an icon - it is the only tool
-   whose current value is a word, and the code reads faster than a globe would.
-   Text rather than icon-plus-text keeps it inside the standard tool box, so no
-   width override has to reach across a layer into the phone dock's sizing. */
-.rw-app .tool-code { font-size: .76rem; font-weight: 650; letter-spacing: .04em; }
+/* The locale code sits over the globe so the language control stays compact. */
+.rw-app .tool-code { position: relative; }
+.rw-app .tool-language-globe { width: 19px; height: 19px; }
+.rw-app .tool-language-code {
+  position: absolute; inset: 0; display: grid; place-items: center; padding-top: 1px;
+  color: var(--thread-text); font-size: .46rem; font-weight: 750; letter-spacing: .02em; line-height: 1;
+  text-shadow: 0 0 2px var(--chassis), 0 0 2px var(--chassis); pointer-events: none;
+}
 .rw-app .tool-menu { display: flex; flex-direction: column; min-width: 152px; padding: var(--sp-xs); }
 .rw-app .tool-menu-item {
   appearance: none; cursor: pointer; display: flex; align-items: center; min-height: 34px;

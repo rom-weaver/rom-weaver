@@ -1,4 +1,15 @@
-import { createLucideIcon, Heart, Moon, Palette, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
+import {
+  createLucideIcon,
+  Globe,
+  Heart,
+  Moon,
+  Palette,
+  RotateCcw,
+  ScrollText,
+  Settings,
+  SunMedium,
+  X,
+} from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -276,7 +287,10 @@ const LanguagePicker = ({
         title={label}
         type="button"
       >
-        <span aria-hidden="true">{(current?.value || "").slice(0, 2).toUpperCase()}</span>
+        <Globe aria-hidden="true" className="tool-language-globe" />
+        <span aria-hidden="true" className="tool-language-code">
+          {(current?.value || "").slice(0, 2).toUpperCase()}
+        </span>
       </button>
       {open ? (
         <div aria-label={label} className="tool-menu" ref={menuRef} role="menu">
