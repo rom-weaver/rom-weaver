@@ -13,7 +13,7 @@
 .rw-app .brand-copy { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; min-width: 0; transform: translateY(-4px); }
 /* brand sizes ride one fluid scale: 30px @360 → ~40px @720 (the old phone
    values) → 44px cap on desktop; no discrete jumps */
-.rw-app .brand-mark { width: clamp(28px, 2.45vw + 19.2px, 40px); aspect-ratio: 1; height: auto; border-radius: 8px; }
+.rw-app .brand-mark { width: clamp(32px, 2.6vw + 21px, 46px); aspect-ratio: 1; height: auto; border-radius: 8px; }
 :root[data-theme="dark"] .brand-mark {
   filter:
     drop-shadow(0 1px 0 rgb(255 255 255 / .45))
@@ -21,7 +21,7 @@
     drop-shadow(1px 0 0 rgb(255 255 255 / .45))
     drop-shadow(-1px 0 0 rgb(255 255 255 / .45));
 }
-.rw-app .brand-word { margin: 0; font-size: clamp(1.12rem, .96rem + .72vw, 1.42rem); font-weight: 650; letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
+.rw-app .brand-word { margin: 0; font-size: clamp(1.22rem, 1.04rem + .85vw, 1.58rem); font-weight: 650; letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
 .rw-app .brand-word b { color: var(--thread-text); font-weight: 650; }
 .rw-app .brand-hy { color: var(--ink-4); font-weight: 400; }
 
@@ -81,7 +81,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 
 .rw-app .masthead-tools { display: inline-flex; gap: var(--sp-2xs); }
 .rw-app .masthead-version { display: flex; align-items: center; gap: var(--sp-xs); max-width: 100%; color: var(--ink-3); font-size: clamp(.68rem, .6rem + .36vw, .82rem); line-height: 1.25; white-space: nowrap; }
-.rw-app .masthead-slogan { grid-column: 2; grid-row: 2; justify-self: start; color: var(--ink-3); font-size: clamp(.56rem, .52rem + .2vw, .72rem); letter-spacing: .01em; line-height: 1.25; text-align: start; white-space: nowrap; transform: translateY(-4px); }
+.rw-app .masthead-slogan { grid-column: 2; grid-row: 2; justify-self: start; color: var(--ink-3); font-size: clamp(.66rem, .6rem + .25vw, .84rem); letter-spacing: .01em; line-height: 1.25; text-align: start; white-space: nowrap; transform: translateY(-4px); }
 .rw-app .masthead-threads { flex: none; }
 .rw-app .masthead-threads-short { display: none; }
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
