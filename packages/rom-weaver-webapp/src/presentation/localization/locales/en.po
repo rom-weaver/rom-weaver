@@ -55,6 +55,11 @@ msgstr "7z codec"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.masthead.slogan"
+msgstr "A ROM & Patch toolkit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Accent"
 
@@ -92,6 +97,11 @@ msgstr "at native speed"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.auto"
 msgstr "auto"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.auto"
+msgstr "Auto"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -152,6 +162,11 @@ msgstr "Create {format} Bundle"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "Create {format} ROM Bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.dark"
+msgstr "Dark"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -225,12 +240,12 @@ msgstr "into a compressed, shareable patch others can apply —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.language"
+msgid "settings.language"
 msgstr "Language"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.language"
+msgid "ui.tools.language"
 msgstr "Language"
 
 #. js-lingui-explicit-id
@@ -252,6 +267,11 @@ msgstr "Level"
 #: src/presentation/localization/messages.ts
 msgid "settings.levelOverride"
 msgstr "Level override"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.light"
+msgstr "Light"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -475,6 +495,11 @@ msgstr "Strip padding and junk blocks from ROM dumps,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Support"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.toDark"
 msgstr "Switch to dark theme"
 
@@ -530,6 +555,11 @@ msgstr "The selected source type is not supported."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.theme"
+msgstr "Theme"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.theme"
 msgstr "Theme"
 
@@ -547,11 +577,6 @@ msgstr "threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Tip"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

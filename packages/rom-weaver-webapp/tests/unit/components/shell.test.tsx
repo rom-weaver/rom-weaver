@@ -3,7 +3,7 @@ import { fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
-import { Masthead, Reveal, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
+import { Masthead, Reveal, SiteFooter, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
 
 /**
  * App-shell contract: the masthead tablist (named "Workflow" - the webapp
@@ -22,17 +22,22 @@ const TABS = [
 ];
 
 const mastheadProps = {
-  commitHash: "a1b2c3d4e5f6",
-  commitsSinceVersion: 3,
-  donateHref: "https://example.com/donate",
-  dirty: true,
-  githubHref: "https://example.com/repo",
   currentTab: "patcher",
   onOpenLog: () => undefined,
   onReset: () => undefined,
   onOpenSettings: () => undefined,
   onSelectTab: () => undefined,
   tabs: TABS,
+};
+
+const buildStatusProps = {
+  commitHash: "a1b2c3d4e5f6",
+  commitsSinceVersion: 3,
+  dirty: true,
+  donateHref: "https://example.com/donate",
+  githubHref: "https://example.com/repo",
+  legalHref: "/docs/notices",
+  privacyHref: "/docs/privacy",
   threads: 8,
   version: "1.2.3",
   versionTitle: "v1.2.3+main.dirty.a1b2c3d",
@@ -60,46 +65,23 @@ describe("Masthead", () => {
     expect(tabs[1]?.getAttribute("href")).toBe("create");
     fireEvent.click(tabs[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    // The external links (GitHub, Tip) lead the row; a separator fences them off
-    // from the app tools (Reset, Theme, Accent, Language, Log, Settings) that trail
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(8);
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
     // the accent and language pickers sit in anchors, so they are not direct children
-    expect(container.querySelectorAll(".masthead-tools > .tool").length).toBe(6);
+    expect(container.querySelectorAll(".masthead-tools > .tool").length).toBe(4);
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     expect(container.querySelector(".tool-code")?.textContent).toBe("EN");
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
-    const github = getByRole("link", { name: "GitHub" });
-    expect(github.getAttribute("href")).toBe("https://example.com/repo");
-    expect(container.querySelector(".masthead-tools > .tool")).toBe(github);
-    const donate = getByRole("link", { name: "Tip" });
-    expect(container.querySelector(".masthead-tools > .tools-sep")?.previousElementSibling).toBe(donate);
-    const settings = getByRole("button", { name: "Settings" });
-    expect(container.querySelector(".masthead-tools > .tool:last-child")).toBe(settings);
     const reset = getByRole("button", { name: "Reset" });
-    expect(container.querySelector(".masthead-threads-full")?.textContent).toBe("· 8 threads");
-    expect(container.querySelector(".masthead-threads-short")?.textContent).toBe("· 8T");
-    expect(container.querySelector(".masthead-threads .sr-only")?.textContent).toBe("8 threads");
-    expect(container.querySelector(".masthead-threads")?.getAttribute("title")).toBe("8 threads");
-    const version = getByRole("link", { name: "v1.2.3+3" });
-    expect(version.getAttribute("href")).toBe("https://example.com/repo/releases/tag/v1.2.3");
-    expect(version.classList.contains("build-version-link")).toBe(true);
-    const commit = getByRole("link", { name: "a1b2c3d" });
-    expect(commit.getAttribute("href")).toBe("https://example.com/repo/commit/a1b2c3d4e5f6");
-    expect(commit.classList.contains("build-version-link")).toBe(true);
-    expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3+3 · a1b2c3d*");
-    expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe("v1.2.3+main.dirty.a1b2c3d");
-    expect(container.querySelector(".build-version-label")?.closest("button")).toBeNull();
-    expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw");
-    expect(getByRole("link", { name: "Tip" }).getAttribute("href")).toBe("https://example.com/donate");
+    expect(container.querySelector(".masthead-version")).toBeNull();
     fireEvent.click(reset);
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 
   it("keeps diagnostics in the Log dialog", () => {
-    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} commitsSinceVersion={0} />));
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     expect(container.querySelector(".console-copy-toggle")).toBeNull();
     expect(container.querySelector(".mobile-devtools-toggle")).toBeNull();
-    expect(getByRole("link", { name: "v1.2.3" })).toBeTruthy();
+    expect(container.querySelector(".masthead-version")).toBeNull();
   });
   it("preloads the Log dialog before interaction completes", () => {
     const onPreloadLog = vi.fn();
@@ -111,18 +93,35 @@ describe("Masthead", () => {
     expect(onPreloadLog).toHaveBeenCalledTimes(3);
   });
 
-  it("shows the launch surface and service worker status beside the version", () => {
-    const { container, rerender } = render(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="active" />));
+  it("shows build metadata and service worker status in the footer", () => {
+    const { container, getByRole, rerender } = render(
+      withSettings(<SiteFooter {...buildStatusProps} serviceWorkerStatus="active" />),
+    );
     const runtimeStatus = container.querySelector(".masthead-runtime");
     expect(runtimeStatus?.textContent).toBe("· web · sw");
-    expect(runtimeStatus?.closest(".masthead-version")).toBeTruthy();
+    expect(runtimeStatus?.closest(".site-footer")).toBeTruthy();
     expect(runtimeStatus?.getAttribute("title")).toBe(
       "This page is controlled by the service worker and its offline cache is available.",
     );
     expect(container.querySelector(".runtime-badge")).toBeNull();
-    rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="ready" />));
+    expect(container.querySelector(".masthead-threads-full")?.textContent).toBe("· 8 threads");
+    expect(container.querySelector(".masthead-threads-short")?.textContent).toBe("· 8T");
+    expect(container.querySelector(".masthead-threads .sr-only")?.textContent).toBe("8 threads");
+    expect(container.querySelector(".masthead-threads")?.getAttribute("title")).toBe("8 threads");
+    const version = getByRole("link", { name: "v1.2.3+3" });
+    expect(version.getAttribute("href")).toBe("https://example.com/repo/releases/tag/v1.2.3");
+    const commit = getByRole("link", { name: "a1b2c3d" });
+    expect(commit.getAttribute("href")).toBe("https://example.com/repo/commit/a1b2c3d4e5f6");
+    expect(container.querySelector(".build-version-label")?.textContent).toBe("v1.2.3+3 · a1b2c3d*");
+    expect(container.querySelector(".build-version-label")?.getAttribute("title")).toBe("v1.2.3+main.dirty.a1b2c3d");
+    const github = getByRole("link", { name: "GitHub" });
+    expect(github.closest(".site-footer-links")).toBeTruthy();
+    expect(getByRole("link", { name: "Support" }).getAttribute("href")).toBe("https://example.com/donate");
+    expect(getByRole("link", { name: "Privacy" }).getAttribute("href")).toBe("/docs/privacy");
+    expect(getByRole("link", { name: "Legal" }).getAttribute("href")).toBe("/docs/notices");
+    rerender(withSettings(<SiteFooter {...buildStatusProps} serviceWorkerStatus="ready" />));
     expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw");
-    rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
+    rerender(withSettings(<SiteFooter {...buildStatusProps} serviceWorkerStatus="off" />));
     expect(container.querySelector(".masthead-runtime")?.textContent).toBe("· web · sw off");
     expect(container.querySelector(".masthead-runtime")?.getAttribute("title")).toBe(
       "Service-worker offline support is unavailable.",

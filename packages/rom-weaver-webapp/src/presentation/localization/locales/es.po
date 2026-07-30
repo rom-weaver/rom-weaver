@@ -55,6 +55,11 @@ msgstr "Códec 7z"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.masthead.slogan"
+msgstr "Kit de herramientas ROM y parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Color de acento"
 
@@ -92,6 +97,11 @@ msgstr "a velocidad nativa"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.auto"
 msgstr "auto"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.auto"
+msgstr "Automático"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -152,6 +162,11 @@ msgstr "Crear bundle {format}"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "Crear bundle {format} con ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.dark"
+msgstr "Oscuro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -225,12 +240,12 @@ msgstr "en un parche comprimido y compartible que otros puedan aplicar —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.language"
+msgid "settings.language"
 msgstr "Idioma"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.language"
+msgid "ui.tools.language"
 msgstr "Idioma"
 
 #. js-lingui-explicit-id
@@ -252,6 +267,11 @@ msgstr "Nivel"
 #: src/presentation/localization/messages.ts
 msgid "settings.levelOverride"
 msgstr "Nivel personalizado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.light"
+msgstr "Claro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -475,6 +495,11 @@ msgstr "Elimina relleno y bloques basura de tus volcados de ROM,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Apoyar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.toDark"
 msgstr "Cambiar a tema oscuro"
 
@@ -530,6 +555,11 @@ msgstr "El tipo de fuente seleccionado no es compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.theme"
+msgstr "Tema"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.theme"
 msgstr "Tema"
 
@@ -547,11 +577,6 @@ msgstr "hilos"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Hilos"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Propina"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

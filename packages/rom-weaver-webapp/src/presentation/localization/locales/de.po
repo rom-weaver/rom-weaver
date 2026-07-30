@@ -55,6 +55,11 @@ msgstr "7z-Codec"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.masthead.slogan"
+msgstr "Ein ROM- und Patch-Toolkit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Akzentfarbe"
 
@@ -92,6 +97,11 @@ msgstr "in nativer Geschwindigkeit"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.auto"
 msgstr "auto"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.auto"
+msgstr "Automatisch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -152,6 +162,11 @@ msgstr "{format}-Bundle erstellen"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "{format}-ROM-Bundle erstellen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.dark"
+msgstr "Dunkel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -225,12 +240,12 @@ msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können —
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.language"
+msgid "settings.language"
 msgstr "Sprache"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.language"
+msgid "ui.tools.language"
 msgstr "Sprache"
 
 #. js-lingui-explicit-id
@@ -252,6 +267,11 @@ msgstr "Stufe"
 #: src/presentation/localization/messages.ts
 msgid "settings.levelOverride"
 msgstr "Eigene Stufe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.light"
+msgstr "Hell"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -475,6 +495,11 @@ msgstr "Füllbytes und Junk-Blöcke aus ROM-Dumps entfernen,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Unterstützen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.toDark"
 msgstr "Zum dunklen Design wechseln"
 
@@ -530,6 +555,11 @@ msgstr "Der gewählte Quelltyp wird nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.theme"
+msgstr "Design"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.theme"
 msgstr "Design"
 
@@ -547,11 +577,6 @@ msgstr "Threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Trinkgeld"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

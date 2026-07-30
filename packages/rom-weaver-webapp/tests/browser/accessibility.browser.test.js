@@ -1116,10 +1116,12 @@ describe("webapp responsive navigation", () => {
     const rail = host.querySelector(".mode-rail");
     const firstRowBottom = Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom);
     const modesRect = modes.getBoundingClientRect();
+    const railRect = rail.getBoundingClientRect();
 
     expect(getComputedStyle(modes).position).toBe("static");
     expect(modesRect.top).toBeGreaterThanOrEqual(firstRowBottom);
     expect(modesRect.bottom).toBeLessThanOrEqual(masthead.getBoundingClientRect().bottom);
+    expect(railRect.width).toBeGreaterThanOrEqual(modesRect.width - 2);
     expect(rail.scrollWidth).toBeLessThanOrEqual(rail.clientWidth);
   });
 
@@ -1128,5 +1130,120 @@ describe("webapp responsive navigation", () => {
     await renderPage(emptyApplyPage(), "light");
 
     expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("485px");
+  });
+
+  test("keeps navigation below the tools until the complete rail fits", async () => {
+    for (const viewport of [
+      { height: 900, width: 360 },
+      { height: 900, width: 1270 },
+    ]) {
+      await setViewport(viewport);
+      for (const tabs of [
+        PAGE_TABS,
+        [
+          ...PAGE_TABS,
+          { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
+          { href: "tools", icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
+        ],
+      ]) {
+        await renderNode(
+          createElement(
+            RomWeaverSettingsProvider,
+            { settings: {} },
+            createElement(
+              "div",
+              { className: "rw-app" },
+              createElement(Masthead, {
+                currentTab: "patcher",
+                onOpenLog: noop,
+                onOpenSettings: noop,
+                onReset: noop,
+                onSelectTab: noop,
+                tabs,
+              }),
+            ),
+          ),
+          "light",
+        );
+
+        const masthead = host.querySelector(".masthead");
+        const brand = host.querySelector(".brand");
+        const tools = host.querySelector(".masthead-tools");
+        const modes = host.querySelector(".modes");
+        const rail = host.querySelector(".mode-rail");
+        const firstRowBottom = Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom);
+
+        if (viewport.width > 720) expect(masthead.dataset.mastheadLayout).toBe("stacked");
+        if (viewport.width > 720) {
+          expect(Number.parseFloat(getComputedStyle(rail.querySelector(".mode")).paddingInlineStart)).toBeGreaterThan(
+            15,
+          );
+        }
+        expect(modes.getBoundingClientRect().top).toBeGreaterThanOrEqual(firstRowBottom);
+        const modesRect = rail.getBoundingClientRect();
+        const mastheadRect = masthead.getBoundingClientRect();
+        expect(
+          Math.abs(modesRect.left + modesRect.width / 2 - (mastheadRect.left + mastheadRect.width / 2)),
+        ).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  test("puts the complete navigation rail between the brand and tools when it fits", async () => {
+    const cases = [
+      { tabs: PAGE_TABS, viewport: { height: 900, width: 1366 } },
+      {
+        tabs: [
+          ...PAGE_TABS,
+          { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
+          { href: "tools", icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
+        ],
+        viewport: { height: 900, width: 2200 },
+      },
+    ];
+
+    for (const { tabs, viewport } of cases) {
+      await setViewport(viewport);
+      await renderNode(
+        createElement(
+          RomWeaverSettingsProvider,
+          { settings: {} },
+          createElement(
+            "div",
+            { className: "rw-app" },
+            createElement(Masthead, {
+              currentTab: "patcher",
+              onOpenLog: noop,
+              onOpenSettings: noop,
+              onReset: noop,
+              onSelectTab: noop,
+              tabs,
+            }),
+          ),
+        ),
+        "light",
+      );
+
+      const masthead = host.querySelector(".masthead");
+      const brand = host.querySelector(".brand");
+      const tools = host.querySelector(".masthead-tools");
+      const modes = host.querySelector(".modes");
+      const mastheadRect = masthead.getBoundingClientRect();
+      const modesRect = modes.getBoundingClientRect();
+
+      expect(masthead.dataset.mastheadLayout).toBe("wide");
+      expect(Number.parseFloat(getComputedStyle(modes.querySelector(".mode")).paddingInlineStart)).toBeLessThan(15);
+      const utilityButton = tools.querySelector(".tool");
+      expect(utilityButton.getBoundingClientRect().width).toBeGreaterThan(36);
+      expect(Number.parseFloat(getComputedStyle(tools).gap)).toBeGreaterThan(4);
+      expect(modesRect.top).toBeGreaterThanOrEqual(brand.getBoundingClientRect().top);
+      expect(modesRect.bottom).toBeLessThanOrEqual(
+        Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom),
+      );
+      expect(modesRect.right).toBeLessThanOrEqual(tools.getBoundingClientRect().left);
+      expect(
+        Math.abs(modesRect.left + modesRect.width / 2 - (mastheadRect.left + mastheadRect.width / 2)),
+      ).toBeLessThanOrEqual(1);
+    }
   });
 });

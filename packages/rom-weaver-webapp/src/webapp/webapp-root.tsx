@@ -23,10 +23,10 @@ import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
-import { Masthead, UpdateBanner } from "./components/shell.tsx";
+import { Masthead, SiteFooter, UpdateBanner } from "./components/shell.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
-import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
+import { DONATE_URL, GITHUB_URL, NOTICE_URL, PRIVACY_URL } from "./project-links.ts";
 import { getSettingsUiState } from "./settings/settings-state.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
@@ -450,13 +450,7 @@ function WebappRoot({
         <div className="app">
           <Masthead
             channelBadge={CHANNEL_BADGE}
-            commitHash={COMMIT_HASH}
-            commitsSinceVersion={COMMITS_SINCE_VERSION}
-            confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={notFound ? "" : state.currentView}
-            dirty={Boolean(DIRTY_HASH)}
-            donateHref={DONATE_URL}
-            githubHref={GITHUB_URL}
             language={typeof state.settings.language === "string" ? state.settings.language : undefined}
             onAccentChange={actions.onAccentChange}
             onLanguageChange={actions.onLanguageChange}
@@ -476,10 +470,6 @@ function WebappRoot({
             settingsOpen={state.settingsDialogOpen}
             tabs={notFound ? visibleTabs.map((tab) => ({ ...tab, href: `/${tab.href}` })) : visibleTabs}
             tabsControlPanels={!notFound}
-            serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
-            threads={resolveThreads(threads)}
-            version={APP_VERSION}
-            versionTitle={`v${APP_BUILD_VERSION}`}
           />
           <UpdateBanner
             onDismiss={() => {
@@ -573,6 +563,20 @@ function WebappRoot({
               </>
             )}
           </main>
+          <SiteFooter
+            commitHash={COMMIT_HASH}
+            commitsSinceVersion={COMMITS_SINCE_VERSION}
+            confirmExternalNavigation={actions.onConfirmExternalNavigation}
+            donateHref={DONATE_URL}
+            dirty={Boolean(DIRTY_HASH)}
+            githubHref={GITHUB_URL}
+            legalHref={NOTICE_URL}
+            privacyHref={PRIVACY_URL}
+            serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+            threads={resolveThreads(threads)}
+            version={APP_VERSION}
+            versionTitle={`v${APP_BUILD_VERSION}`}
+          />
         </div>
         <ActivityFinishMarker />
         {logOpen ? (
