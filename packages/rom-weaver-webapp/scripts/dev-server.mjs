@@ -758,8 +758,13 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     }
     const encoded = Boolean(asset.brotli) && acceptsBrotli(req);
     // `_headers` last so the deployed file wins wherever it and the preview server both
-    // speak - that is the point of reading it rather than restating it here.
+    // speak. The explicit no-COOP/COEP mode is the exception: its purpose is to
+    // prove that the service worker can add isolation without help from either
+    // source of preview headers.
     const pagesHeaders = matchPagesHeaders(pagesRules, pathname);
+    if (!securityOptions.crossOriginIsolation) {
+      for (const header of Object.keys(CROSS_ORIGIN_ISOLATION_HEADERS)) delete pagesHeaders[header];
+    }
     sendEarlyHints(res, pagesHeaders, path.extname(asset.resolvedPath) === ".html");
     send(
       res,

@@ -25,6 +25,7 @@ const OFFLINE_PAGES = [
   { expectedView: "tools", label: "tools directory document", path: "tools/index.html" },
   { expectedNotFound: true, label: "not found", path: "404.html" },
 ];
+const OFFLINE_ONLY_PAGES = [{ expectedNotFound: true, label: "unknown first offline visit", path: "not-a-real-route" }];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -113,25 +114,43 @@ const stopPreview = (child) =>
     }, 2000);
   });
 
-const collectPageState = async (page) =>
-  page.evaluate(async () => {
-    const response = await fetch(location.href, { cache: "no-store", credentials: "same-origin" });
+const waitForPreviewOffline = async () => {
+  const deadline = Date.now() + 10000;
+  let consecutiveFailures = 0;
+  while (Date.now() < deadline) {
+    try {
+      await requestHeaders(ROOT_URL);
+      consecutiveFailures = 0;
+    } catch {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 5) return;
+    }
+    await wait(100);
+  }
+  throw new Error(`Preview origin still answered requests after shutdown: ${ROOT_URL}`);
+};
+
+const collectPageState = async (page, { probeHeaders = true } = {}) =>
+  page.evaluate(async (shouldProbeHeaders) => {
+    const response = shouldProbeHeaders
+      ? await fetch(location.href, { cache: "no-store", credentials: "same-origin" }).catch(() => null)
+      : null;
     const root = document.getElementById("webapp-root");
     return {
       activeView: document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") || null,
       controller: Boolean(navigator.serviceWorker?.controller),
       crossOriginIsolated: globalThis.crossOriginIsolated === true,
       headers: {
-        crossOriginEmbedderPolicy: response.headers.get("Cross-Origin-Embedder-Policy"),
-        crossOriginOpenerPolicy: response.headers.get("Cross-Origin-Opener-Policy"),
-        crossOriginResourcePolicy: response.headers.get("Cross-Origin-Resource-Policy"),
+        crossOriginEmbedderPolicy: response?.headers.get("Cross-Origin-Embedder-Policy") || null,
+        crossOriginOpenerPolicy: response?.headers.get("Cross-Origin-Opener-Policy") || null,
+        crossOriginResourcePolicy: response?.headers.get("Cross-Origin-Resource-Policy") || null,
       },
       notFound: document.documentElement.dataset.page === "not-found",
       ready: Boolean(root && !root.hasAttribute("aria-busy")),
       serviceWorkerState: window.ROM_WEAVER_SERVICE_WORKER?.getState?.() || null,
       title: document.title,
     };
-  });
+  }, probeHeaders);
 
 const waitForControlledPage = async (page) => {
   await page.waitForFunction(() => navigator.serviceWorker?.controller, undefined, { timeout: PAGE_TIMEOUT_MS });
@@ -213,9 +232,11 @@ try {
   const context = await browser.newContext({ ignoreHTTPSErrors: true, serviceWorkers: "allow" });
   const page = await context.newPage();
   const consoleErrors = [];
+  const serviceWorkerLogs = [];
   const httpErrors = [];
   const requestFailures = [];
   page.on("console", (message) => {
+    if (message.text().includes("[rom-weaver-sw]")) serviceWorkerLogs.push(message.text());
     if (message.type() === "error") consoleErrors.push(message.text());
   });
   page.on("response", (response) => {
@@ -278,18 +299,43 @@ try {
 
   await stopPreview(previewProcess);
   previewProcess = null;
-  await wait(250);
+  await waitForPreviewOffline();
+  await context.setOffline(true);
 
   const offlinePages = [];
-  for (const pageCase of OFFLINE_PAGES) {
+  for (const pageCase of [...OFFLINE_PAGES, ...OFFLINE_ONLY_PAGES]) {
     const failuresBefore = requestFailures.length;
     const httpErrorsBefore = httpErrors.length;
     const offlineResponse = await page.goto(new URL(pageCase.path, ROOT_URL).href, {
       timeout: PAGE_TIMEOUT_MS,
       waitUntil: "networkidle",
     });
-    await waitForPageReady(page, pageCase);
-    const offlineState = await collectPageState(page);
+    try {
+      await waitForPageReady(page, pageCase);
+    } catch (error) {
+      const state = await collectPageState(page, { probeHeaders: false }).catch(() => null);
+      const responseHtml = await offlineResponse
+        ?.text()
+        .then((html) => html.slice(0, 120))
+        .catch(() => "");
+      const cacheKeys = await page
+        .evaluate(async () =>
+          (
+            await Promise.all(
+              (
+                await caches.keys()
+              ).map(async (name) => (await (await caches.open(name)).keys()).map((request) => request.url)),
+            )
+          )
+            .flat()
+            .filter((url) => url.includes("not-a-real-route") || url.includes("404.html")),
+        )
+        .catch(() => []);
+      throw new Error(
+        `Offline ${pageCase.label} did not become ready: ${JSON.stringify(state)}\nResponse: ${JSON.stringify(responseHtml)}\nCache keys: ${JSON.stringify(cacheKeys)}\n${error instanceof Error ? error.message : String(error)}\n${serviceWorkerLogs.slice(-12).join("\n")}`,
+      );
+    }
+    const offlineState = await collectPageState(page, { probeHeaders: false });
     assertPageState(pageCase, offlineResponse, offlineState, "Offline");
     const routeFailures = requestFailures.slice(failuresBefore);
     if (routeFailures.length > 0) {

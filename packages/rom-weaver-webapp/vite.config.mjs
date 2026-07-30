@@ -1033,6 +1033,7 @@ export default defineConfig(({ command }) => {
             // routes up by the index form (see matchRouteDocument).
             "index.html",
             "**/index.html",
+            "404.html",
             "manifest.json",
             "logo.svg",
             "first-create.zip",

@@ -286,6 +286,7 @@ if (production) {
 // route - the one case no test navigates through. Assert it here instead, where the
 // generated manifest is on disk.
 const precacheManifest = read("cache-service-worker.js");
+assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
 for (const slug of [...DOC_ROUTES.map((route) => route.slug), "apply", "create", "tools", "trim"]) {
   assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);
 }
