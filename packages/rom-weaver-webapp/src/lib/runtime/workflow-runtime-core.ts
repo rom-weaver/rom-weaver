@@ -26,7 +26,7 @@ import type {
   WorkflowRuntimePreloadEvent,
 } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionExtractResult, PublicOutput } from "../../types/workflow-runtime-types.ts";
-import { warmupRomWeaverRunner } from "../../workers/rom-weaver/rom-weaver-runner.ts";
+import { warmupRomWeaverRunner } from "../../workers/rom-weaver/runner-control.ts";
 import {
   getRomSpecificCompressionFormatRegistration,
   type RomSpecificCompressionFormat,

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { createLogger } from "../../lib/logging.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
 import type { SelectionCandidate } from "../../types/selection.ts";
-import { setInputSelectionHandler } from "../../workers/rom-weaver/rom-weaver-runner.ts";
+import { setInputSelectionHandler } from "../../workers/rom-weaver/runner-control.ts";
 import type { CandidateSelectionChoice, CandidateSelectionPrompt } from "./public-types.ts";
 
 const logger = createLogger("input-selection-handler");

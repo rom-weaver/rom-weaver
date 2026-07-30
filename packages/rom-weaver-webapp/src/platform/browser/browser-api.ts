@@ -12,7 +12,10 @@ import { getDefaultBrowserThreadCount } from "../shared/compression-options.ts";
 import { createPublicSourcesValidator, createPublicSourceValidator } from "../shared/public-source-validation.ts";
 import { configureBrowserAssetBaseUrl } from "./browser-asset-base.ts";
 import { scheduleBrowserRuntimeWarmupExtraction } from "./browser-runtime-warmup.ts";
-import { browserRuntime } from "./workflow-runtime.ts";
+// The public browser API is itself lazy-loaded by workflow routes. Keep the
+// heavy workflow runtime behind that boundary so importing the API types and
+// route shell does not make the runner part of the shared initial graph.
+const { browserRuntime } = await import("./workflow-runtime.ts");
 
 const assertPublicSources = createPublicSourcesValidator<BrowserSourceRef>(
   createPublicSourceValidator({ environmentLabel: "browser" }),

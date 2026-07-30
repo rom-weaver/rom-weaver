@@ -238,7 +238,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
 
     // Declare sizes before staggered staging reaches the scheduler so the first
     // Rust plan splits threads across the whole drop.
-    this.runtime.noteIoBatch?.(sources.map((source) => Math.max(0, getBinarySourceSize(source as never) || 0)));
+    await this.runtime.noteIoBatch?.(sources.map((source) => Math.max(0, getBinarySourceSize(source as never) || 0)));
     // Stage independently under the Rust memory plan and OPFS path gates.
     // allSettled preserves order and lets partial failures release fulfilled
     // siblings instead of orphaning their scratch copies.
