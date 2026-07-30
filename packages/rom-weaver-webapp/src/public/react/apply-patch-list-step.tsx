@@ -477,26 +477,29 @@ const EditableCheckRow = ({
   const openedByUser = useRef(false);
   /* An empty row has no value to display, so it opens as a field either way. */
   const [editing, setEditing] = useState(!!focusOnMount || !value);
+  /* A malformed value keeps its field no matter what: collapsing to text would hide
+     both the `aria-invalid` state and the only means of correcting it. */
+  const showField = editing || invalid;
   const label = CHECK_LABELS[field];
   return (
     <div
       className={join(
         "verification-row",
-        editing && "is-editing",
+        showField && "is-editing",
         invalid && "bad",
         isHalfRowField(field) && "ck-half",
         isHashRowField(field) && "ck-hash",
       )}
       key={`${id}:${value}`}
     >
-      {editing ? (
+      {showField ? (
         <label className="ofld-l" htmlFor={id}>
           {label}
         </label>
       ) : (
         <span className="ofld-l">{label}</span>
       )}
-      {editing ? (
+      {showField ? (
         <input
           aria-describedby={invalid ? errorId : undefined}
           aria-invalid={invalid || undefined}
@@ -535,6 +538,8 @@ const EditableCheckRow = ({
           aria-describedby={invalid ? errorId : undefined}
           aria-label={`Edit ${label} check`}
           className="ck-open mono"
+          /* Derived from the field's own id so either state of the row is addressable. */
+          id={`${id}-open`}
           onClick={() => {
             openedByUser.current = true;
             setEditing(true);

@@ -83,3 +83,14 @@ describe("EditableCheckRow", () => {
     expect(document.activeElement).not.toBe(container.querySelector("input"));
   });
 });
+
+describe("EditableCheckRow, malformed value", () => {
+  it("keeps the field so the value can be corrected", () => {
+    const { container } = render(
+      <EditableCheckRow field="crc32" id="c" invalid onCommit={vi.fn()} onRemove={vi.fn()} value="nothex!!" />,
+    );
+    const input = container.querySelector("input");
+    expect(input).not.toBeNull();
+    expect(input?.getAttribute("aria-invalid")).toBe("true");
+  });
+});
