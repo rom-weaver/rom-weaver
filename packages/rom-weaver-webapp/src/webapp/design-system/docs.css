@@ -483,11 +483,8 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 .rw-app .docs-cta .btn { text-decoration: none; }
 
 /* --- the end of the guide ---
-   The guides either side of this one, and the way back up. Both sit in the
-   document rather than in fixed chrome: this is where a reader arrives actually
-   needing them, and they cost no screen while the reading is still going on.
-   Phone-only - the desktop sidebar is sticky and already offers every guide and
-   every section from wherever the reader has got to. */
+   Phone-only: the desktop sidebar is sticky, so the top of the document is never
+   more than a glance away there. */
 .rw-app .docs-onward { display: none; }
 
 /* --- the trail ---
@@ -602,66 +599,14 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
     transition: width .18s var(--ease);
   }
 
-  /* --- guides either side, then the way back up --- */
+  /* --- the way back up ---
+     Just this. Onward links are the last paragraph of every guide already, written
+     by hand and pointing at whatever follows from what you just read. */
   .rw-app .docs-onward {
-    display: block;
-    margin-block-start: var(--sp-xl);
-    padding-block-start: var(--sp-l);
-  }
-  .rw-app .docs-onward-title {
-    display: block;
-    margin-block-end: var(--sp-s);
-    color: var(--ink-3);
-    font-size: .655rem;
-    font-weight: 700;
-    font-stretch: 86%;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-  }
-  .rw-app .docs-onward-pair {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--sp-s);
-  }
-  /* The destination's own title, not a bare arrow: "Next" alone makes a reader
-     tap to find out where they are going. */
-  .rw-app .onward-link {
     display: flex;
-    align-items: center;
-    gap: var(--sp-s);
-    min-width: 0;
-    min-height: 46px;
-    padding: 5px 9px;
-    border: 1px solid color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
-    border-radius: var(--r-m);
-    background: color-mix(in oklab, var(--thread) 9%, var(--well));
-    text-decoration: none;
+    justify-content: center;
+    margin-block-start: var(--sp-l);
   }
-  .rw-app .onward-link svg { flex: none; width: 17px; height: 17px; color: var(--thread-text); }
-  .rw-app .onward-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .rw-app .onward-kind {
-    color: var(--thread-text);
-    font-size: .6rem;
-    font-weight: 750;
-    font-stretch: 86%;
-    letter-spacing: .09em;
-    text-transform: uppercase;
-  }
-  .rw-app .onward-label {
-    overflow: hidden;
-    color: var(--ink);
-    font-size: .78rem;
-    font-weight: 700;
-    font-stretch: 92%;
-    line-height: 1.2;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .rw-app .onward-link.is-next { justify-content: flex-end; text-align: end; }
-  .rw-app .onward-link.is-next .onward-copy { align-items: flex-end; }
-  .rw-app .onward-link:active { background: color-mix(in oklab, var(--thread) 16%, var(--well)); }
-
-  .rw-app .docs-to-top-row { display: flex; justify-content: center; margin-block-start: var(--sp-l); }
   .rw-app .docs-to-top {
     display: inline-flex;
     align-items: center;
@@ -687,10 +632,6 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
      want their hover halves. */
   @media (hover: hover) {
     .rw-app .trail-crumb:hover { background: var(--well); color: var(--ink); }
-    .rw-app .onward-link:hover {
-      border-color: var(--thread);
-      background: color-mix(in oklab, var(--thread) 14%, var(--well));
-    }
     .rw-app .docs-to-top:hover { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
   }
 

@@ -276,32 +276,6 @@ Fixture description.
     expect(pagesSheet?.querySelector(".warp-rail-list")).toBeNull();
   });
 
-  it("closes a guide with the guides either side of it, in shelf order", () => {
-    render(<DocsPage active slug="docs/create-rom-patches" />);
-
-    const onward = [...document.querySelectorAll(".docs-onward .onward-link")].map((link) => [
-      link.querySelector(".onward-kind")?.textContent,
-      link.getAttribute("href"),
-    ]);
-    expect(onward).toEqual([
-      ["Previous guide", "/docs/apply-rom-patches"],
-      ["Next guide", "/docs/create-bundles"],
-    ]);
-  });
-
-  it("never offers the hub as a neighbouring guide", () => {
-    // The first guide on the shelves sits directly after the hub, so an unfiltered
-    // reading order would hand it "previous guide: Docs" - the parent these all
-    // live under, and the trail's own `Docs` crumb is the way back to it.
-    render(<DocsPage active slug="docs/apply-rom-patches" />);
-
-    const onward = [...document.querySelectorAll(".docs-onward .onward-link")].map((link) => [
-      link.querySelector(".onward-kind")?.textContent,
-      link.getAttribute("href"),
-    ]);
-    expect(onward).toEqual([["Next guide", "/docs/create-rom-patches"]]);
-  });
-
   it("sends the reader back to the top of a guide from the end of it", () => {
     const scrollTo = vi.fn();
     vi.stubGlobal("scrollTo", scrollTo);
@@ -312,11 +286,16 @@ Fixture description.
     vi.unstubAllGlobals();
   });
 
-  it("leaves the neighbour pair off the hub, which already lists every guide", () => {
-    render(<DocsPage active slug="docs" />);
+  it.each(["docs", "docs/apply-rom-patches"])("ends %s with nothing but the way back up", (slug) => {
+    // Every guide's own last paragraph already links onward, in prose, to whatever
+    // follows from what was just read. A generated previous/next pair underneath
+    // that repeated it - and on the first guide it repeated the very link the
+    // paragraph above had just made.
+    render(<DocsPage active slug={slug} />);
 
-    expect(document.querySelector(".docs-onward .onward-link")).toBeNull();
-    expect(screen.getByRole("button", { name: "Back to top" })).toBeTruthy();
+    const onward = document.querySelector(".docs-onward");
+    expect(onward?.children).toHaveLength(1);
+    expect(onward?.querySelector(".docs-to-top")).toBeTruthy();
   });
 
   it("tracks the reading position as the reader scrolls", () => {

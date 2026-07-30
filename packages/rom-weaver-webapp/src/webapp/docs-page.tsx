@@ -1,5 +1,5 @@
 import "./design-system/docs-route.css";
-import { ArrowUpToLine, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowUpToLine, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
@@ -17,13 +17,6 @@ const DOC_SHELVES = groupDocRoutes(DOC_ROUTES);
 
 /** The landing route: an index of the guides rather than one of them. */
 const HUB_SLUG = "docs";
-
-/**
- * Reading order across the whole set, so a guide can name the ones either side
- * of it. The hub is not in it - it is the parent these all sit under, reachable
- * from the trail's own `Docs` crumb, and "previous guide: Docs" would be a lie.
- */
-const DOC_ORDER = DOC_SHELVES.flatMap((shelf) => shelf.routes).filter((entry) => entry.slug !== HUB_SLUG);
 
 const syncDocsSeoMetadata = (route: DocRoute) => {
   const { canonicalUrl, metadata, title } = createDocsSeoMetadata(route, CHANNEL_BADGE);
@@ -235,58 +228,26 @@ const TrailHead = ({
 };
 
 /**
- * The end of the guide: the guides either side of it, and the way back up.
+ * The way back up, at the end of the guide.
  *
- * Both belong here rather than in fixed chrome - this is where a reader arrives
- * actually needing them, and it costs no screen while they are still reading.
+ * Deliberately the only thing here. Onward links are already the last paragraph
+ * of every guide, hand-written and pointing at whatever actually follows from
+ * what you just read - "Ready to make your own? See Create a patch." An
+ * auto-generated previous/next pair sat one screen under that saying the same
+ * thing worse: shelf-adjacent is not the same as logically next, and on the
+ * first guide it duplicated a link the prose had just made.
  */
-const ArticleEnd = ({ currentSlug, hub }: { currentSlug: string; hub: boolean }) => {
-  const at = DOC_ORDER.findIndex((entry) => entry.slug === currentSlug);
-  const previous = at > 0 ? DOC_ORDER[at - 1] : undefined;
-  const next = at >= 0 ? DOC_ORDER[at + 1] : undefined;
-  return (
-    <div className="docs-onward">
-      {/* The hub already lists every guide above this point, so a pair of
-          neighbours there would just be two of those entries again. */}
-      {!hub && (previous || next) ? (
-        <nav aria-label="Nearby guides">
-          <span className="docs-onward-title">More guides</span>
-          <div className="docs-onward-pair">
-            {previous ? (
-              <a className="onward-link" href={`/${previous.slug}`}>
-                <ChevronLeft aria-hidden="true" />
-                <span className="onward-copy">
-                  <span className="onward-kind">Previous guide</span>
-                  <span className="onward-label">{previous.label}</span>
-                </span>
-              </a>
-            ) : (
-              <span />
-            )}
-            {next ? (
-              <a className="onward-link is-next" href={`/${next.slug}`}>
-                <span className="onward-copy">
-                  <span className="onward-kind">Next guide</span>
-                  <span className="onward-label">{next.label}</span>
-                </span>
-                <ChevronRight aria-hidden="true" />
-              </a>
-            ) : null}
-          </div>
-        </nav>
-      ) : null}
-      <div className="docs-to-top-row">
-        {/* A button, not an `#top` anchor: the guide routes are paths, and a hash
-            here would leave a destination in the address bar that is not one.
-            `scrollTo` still picks up the page's own `scroll-behavior`. */}
-        <button className="docs-to-top" onClick={() => window.scrollTo({ top: 0 })} type="button">
-          <ArrowUpToLine aria-hidden="true" />
-          Back to top
-        </button>
-      </div>
-    </div>
-  );
-};
+const ArticleEnd = () => (
+  <div className="docs-onward">
+    {/* A button, not an `#top` anchor: the guide routes are paths, and a hash here
+        would leave a destination in the address bar that is not one. `scrollTo`
+        still picks up the page's own `scroll-behavior`. */}
+    <button className="docs-to-top" onClick={() => window.scrollTo({ top: 0 })} type="button">
+      <ArrowUpToLine aria-hidden="true" />
+      Back to top
+    </button>
+  </div>
+);
 
 const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
   const route = findDocsRoute(slug);
@@ -358,7 +319,7 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
           </aside>
         </section>
       </div>
-      <ArticleEnd currentSlug={route.slug} hub={hub} />
+      <ArticleEnd />
     </div>
   );
 };
