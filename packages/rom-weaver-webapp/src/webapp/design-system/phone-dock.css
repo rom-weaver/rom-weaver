@@ -25,13 +25,10 @@
     padding-block: 5px 6px;
   }
 
-  .rw-app .masthead-control-rail { display: contents; }
-
   .rw-app .brand {
     grid-area: brand;
     justify-self: start;
     column-gap: var(--sp-s);
-    row-gap: 0;
     min-width: 0;
     width: 100%;
   }
@@ -54,7 +51,6 @@
      across the column - a full-width stretch floats each icon in a wide cell */
   .rw-app .masthead-tools {
     grid-area: tools;
-    order: 2;
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -63,7 +59,6 @@
        would come out of the brand column and clip the build line */
     gap: 0;
     margin: 0;
-    margin-inline-start: auto;
   }
 
   /* Keep the controls compact enough for the iPhone SE while giving the icons
@@ -86,8 +81,6 @@
     width: 17px;
     height: 17px;
   }
-
-  .rw-app .tool-language { width: 36px; }
 
   .rw-app .updates {
     gap: var(--sp-s);
@@ -136,8 +129,6 @@
     font-size: .8rem;
     line-height: 1;
   }
-
-  .rw-app .mode svg { width: 17px; height: 17px; }
 
   /* the whole empty hero is the tap target - flash it on touch so taps
      anywhere in the panel visibly register */
@@ -293,9 +284,6 @@
 
   .rw-app .modes { width: 100%; flex-basis: 100%; margin-inline: 0; }
 
-  .rw-app .masthead-tools { margin-inline-start: auto; }
-  .rw-app .mode-rail { display: flex; width: 100%; }
-  .rw-app .mode { flex: 1 1 0; min-width: 0; }
 }
 
 @media (min-width: 501px) {
@@ -303,14 +291,11 @@
     --masthead-tool-size: clamp(36px, 3vw, 48px);
     gap: clamp(4px, .7vw, 12px);
   }
-  .rw-app .masthead-tools .tool,
-  .rw-app .masthead-tools .tool-language {
+  .rw-app .masthead-tools .tool {
     width: var(--masthead-tool-size);
     height: var(--masthead-tool-size);
   }
-  .rw-app .masthead-tools .tool svg,
-  .rw-app .masthead-tools .tool .ico-sun,
-  .rw-app .masthead-tools .tool .ico-moon {
+  .rw-app .masthead-tools .tool svg {
     width: clamp(17px, 1.35vw, 22px);
     height: clamp(17px, 1.35vw, 22px);
   }
@@ -333,20 +318,11 @@
   }
   .rw-app .masthead[data-masthead-layout="wide"] .modes {
     grid-area: modes;
-    display: block;
-    width: max-content;
-    flex-basis: auto;
-    order: initial;
     justify-self: center;
-  }
-  .rw-app .masthead[data-masthead-layout="wide"] .mode-rail {
-    width: max-content;
   }
   .rw-app .masthead[data-masthead-layout="wide"] .mode {
     --mode-pad-inline: clamp(8px, .65vw, 14px);
     flex: 0 0 auto;
-    min-width: max-content;
-    justify-content: center;
     padding-inline: var(--mode-pad-inline);
     white-space: nowrap;
   }
@@ -374,9 +350,7 @@
   }
   .rw-app .masthead[data-masthead-layout="stacked"] .mode {
     --mode-pad-inline: clamp(16px, 1.4vw, 24px);
-    flex: 0 1 auto;
     min-width: max-content;
-    justify-content: center;
     padding-inline: var(--mode-pad-inline);
     white-space: nowrap;
   }
