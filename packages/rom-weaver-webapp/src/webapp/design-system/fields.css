@@ -99,6 +99,10 @@
 .rw-app .ck-more[aria-expanded="true"] .chev-i { rotate: 90deg; }
 @media (prefers-reduced-motion: reduce) { .rw-app .ck-more .chev-i { transition: none; } }
 .rw-app .patch-meta-inline { display: flex; flex-direction: column; gap: var(--sp-s); margin-block-start: 2px; }
+/* Editing replaces the description and spans the card width. Kept beside the base
+   rule: from file-cards.css this layer would win on order, not specificity. */
+.rw-app .patch-desc-line.is-editing .patch-meta-inline { min-width: 0; margin-block-start: 0; width: 100%; }
+.rw-app .patch-meta-inline .input { width: 100%; box-sizing: border-box; }
 .rw-app .patch-meta-cols { display: flex; gap: var(--sp-s); }
 .rw-app .patch-meta-cols .patch-meta-field { flex: 1 1 0; min-width: 0; }
 /* Patch actions menu */

@@ -66,8 +66,6 @@
 .rw-app .patch-desc { margin: 0; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
 /* Editing replaces the description and spans the card width. */
 .rw-app .patch-desc-line.is-editing { min-width: 0; clear: both; width: 100%; }
-.rw-app .patch-desc-line.is-editing .patch-meta-inline { min-width: 0; margin-block-start: 0; width: 100%; }
-.rw-app .patch-meta-inline .input { width: 100%; box-sizing: border-box; }
 .rw-app .tag {
   font-size: .66rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
   color: var(--ink-2); padding: 2px 6px; border: 1px solid var(--seam-strong); border-radius: 4px; white-space: nowrap;
@@ -137,7 +135,6 @@
 .rw-app .card.is-disabled .patch-desc { color: var(--ink-4); margin-block-start: 6px; }
 .rw-app .card.is-disabled .fsize { color: var(--ink-3); }
 .rw-app .card.is-disabled .meta-fmt { color: var(--ink-3); border-color: var(--seam); }
-.rw-app .card.is-disabled .cks > .cks-head .rb { color: var(--ink-3); }
 .rw-app .card.is-disabled .handle { color: var(--ink-4); }
 @media (prefers-reduced-motion: reduce) { .rw-app .patch-body, .rw-app .card { transition: none; } }
 .rw-app .patch-off-note { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .8rem; color: var(--care); }

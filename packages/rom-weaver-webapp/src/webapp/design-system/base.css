@@ -119,23 +119,6 @@
 .rw-app .stage-status { display: inline-flex; align-items: baseline; gap: var(--sp-s); font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--ink-3); white-space: nowrap; }
 .rw-app .stage-status::before { content: "·"; margin-inline-end: 1px; color: var(--ink-4); }
 .rw-app .stage-status .pct { color: var(--thread-text); font-variant-numeric: tabular-nums; font-weight: 650; }
-/* pending checksum value - invisible text the exact char length of the eventual
-   hash (so width + break-all wrapping match it), painted as a shimmering orange
-   bar; box-decoration-break makes each wrapped line carry the fill. */
-.rw-app .ck.pending { cursor: default; }
-.rw-app .ck.pending .copy { opacity: 0; }
-.rw-app .ck.pending .ck-v .pend {
-  color: transparent; user-select: none; border-radius: 3px;
-  background-image: linear-gradient(90deg,
-    color-mix(in oklab, var(--thread) 30%, var(--plate-2)) 20%,
-    color-mix(in oklab, var(--thread) 58%, var(--plate-2)) 42%,
-    color-mix(in oklab, var(--thread) 30%, var(--plate-2)) 64%);
-  background-size: 220% 100%;
-  -webkit-box-decoration-break: clone; box-decoration-break: clone;
-  animation: stage-shimmer 1.5s ease-in-out infinite;
-}
-@keyframes stage-shimmer { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
-@media (prefers-reduced-motion: reduce) { .rw-app .ck.pending .ck-v .pend { animation: none; } }
 .rw-app button { font: inherit; color: inherit; }
 .rw-app svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .rw-app a { color: var(--ink-2); text-decoration: none; }

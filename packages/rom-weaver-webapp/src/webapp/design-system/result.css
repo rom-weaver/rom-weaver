@@ -51,8 +51,13 @@
   background: var(--well); border-radius: var(--r-s); padding: var(--sp-s) var(--sp-m);
   overscroll-behavior: contain;
 }
-/* Size rows to their content so long trace lines scroll instead of clipping. */
+/* Size rows to their content so long trace lines scroll instead of clipping, and
+   strip the user-agent chrome - these are keyboard-copyable buttons. The reset has
+   to sit with the state rules below: from a later layer its transparent background
+   would erase their hover/copied feedback regardless of specificity. */
 .rw-app .tracelog .ln {
+  appearance: none; background: transparent; color: inherit; font: inherit; text-align: start;
+  border-inline: 0; border-block-start: 0; padding-inline: 0;
   display: flex; gap: var(--sp-s); white-space: nowrap; width: max-content; min-width: 100%;
   padding-block: 2px; border-block-end: 1px solid color-mix(in oklab, var(--seam-soft) 70%, transparent);
   cursor: pointer; transition: background .12s;

@@ -147,9 +147,11 @@
   .rw-app .panel.workflow .step {
     width: 100%;
     margin: 8px 0;
-    padding-block-end: 0;
     overflow: visible;
   }
+  /* The last stage keeps the scroll room webapp-modals.css gives it - this layer
+     is later, so a blanket `padding-block-end: 0` here would erase it. */
+  .rw-app .panel.workflow .step:not(:last-child) { padding-block-end: 0; }
 
   .rw-app .panel.workflow .swap-row + .step { margin-block-start: 0; }
 

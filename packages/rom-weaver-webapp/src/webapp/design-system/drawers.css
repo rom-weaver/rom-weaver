@@ -126,6 +126,9 @@
 .rw-app .cks > .cks-head .readouts > .rb:not(:last-child) { flex: none; }
 .rw-app .cks:not(.is-open) > .cks-head .rb { background: var(--plate-2); border-color: transparent; }
 .rw-app .cks > .cks-head .rb.time { color: var(--thread-text); }
+/* Dimmed with the rest of a disabled card. Kept beside the chip's own colour:
+   from file-cards.css this layer would win on order, not specificity. */
+.rw-app .card.is-disabled .cks > .cks-head .rb { color: var(--ink-3); }
 /* Verification marks stay outside the readout-chip family. */
 .rw-app .cks > .cks-head .rb-mark { flex: none; display: inline-flex; align-items: center; }
 .rw-app .cks > .cks-head .rb-mark svg { width: 16px; height: 16px; }
@@ -143,6 +146,13 @@
 .rw-app .ck-group { display: flex; flex-direction: column; gap: 0; }
 .rw-app .ckrows > .ck-group:first-child { margin-block-start: 6px; }
 .rw-app .ck-group + .ck-group { margin-block-start: 9px; }
+/* Tighter group spacing on phones. Kept beside the desktop pair so the
+   `.patch-check-columns` rule above still outranks it on specificity - from
+   responsive.css the later layer would win and flatten the columns gap. */
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .ckrows > .ck-group:first-child { margin-block-start: 2px; }
+  .rw-app .ck-group + .ck-group { margin-block-start: 4px; }
+}
 .rw-app .ck-group-head {
   display: flex; align-items: center; width: fit-content;
   position: relative; isolation: isolate;
@@ -162,6 +172,9 @@
   min-height: 26px; padding: 3px 9px; background: transparent; cursor: pointer;
   border-block: 1px solid var(--ck-seam); border-inline: 0; transition: background .15s, border-color .15s;
 }
+/* Strip user-agent chrome from the button rows. Must sit with the width rules
+   below - a later layer would win on order no matter how specific they are. */
+.rw-app button.ck { appearance: none; text-align: start; width: 100%; font: inherit; }
 /* Extend ordinary rows through the drawer's 10px inset. */
 .rw-app .ck:not(.req) { margin-inline: -10px; width: calc(100% + 20px); }
 /* Drop duplicate borders without overlapping adjacent touch targets. */
@@ -277,6 +290,30 @@
 .rw-app .ck .copy:active { transform: scale(.82); }
 .rw-app .ck .copy.copied { color: var(--verified); opacity: 1; animation: pop .32s var(--ease); }
 .rw-app .ck .copy svg { width: 13px; height: 13px; }
+/* Enlarge touch targets without changing visual layout. Lives here rather than with
+   the other coarse-pointer targets so `.cue-sub-single > .cue-copy` below still
+   places the button - a later layer would outrank it whatever its specificity. */
+@media (pointer: coarse) {
+  .rw-app .ck .copy, .rw-app .cue-copy { position: relative; }
+  .rw-app .ck .copy::before, .rw-app .cue-copy::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+}
+/* pending checksum value - invisible text the exact char length of the eventual
+   hash (so width + break-all wrapping match it), painted as a shimmering orange
+   bar; box-decoration-break makes each wrapped line carry the fill. */
+.rw-app .ck.pending { cursor: default; }
+.rw-app .ck.pending .copy { opacity: 0; }
+.rw-app .ck.pending .ck-v .pend {
+  color: transparent; user-select: none; border-radius: 3px;
+  background-image: linear-gradient(90deg,
+    color-mix(in oklab, var(--thread) 30%, var(--plate-2)) 20%,
+    color-mix(in oklab, var(--thread) 58%, var(--plate-2)) 42%,
+    color-mix(in oklab, var(--thread) 30%, var(--plate-2)) 64%);
+  background-size: 220% 100%;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  animation: stage-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes stage-shimmer { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .rw-app .ck.pending .ck-v .pend { animation: none; } }
 .rw-app .pverdict { padding: var(--sp-s) var(--sp-m); }
 /* Separate failed verdict, detail, and guidance instead of tinting all text red. */
 .rw-app .pfault {
