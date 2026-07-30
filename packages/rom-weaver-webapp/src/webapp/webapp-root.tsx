@@ -419,7 +419,7 @@ function WebappRoot({
             commitHash={COMMIT_HASH}
             commitsSinceVersion={COMMITS_SINCE_VERSION}
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
-            currentTab={state.currentView}
+            currentTab={notFound ? "" : state.currentView}
             dirty={Boolean(DIRTY_HASH)}
             donateHref={DONATE_URL}
             githubHref={GITHUB_URL}
@@ -470,13 +470,20 @@ function WebappRoot({
                       404
                     </span>
                     <span aria-hidden="true" className="not-found-label">
-                      Page not found
+                      That page is not here.
                     </span>
                   </h1>
-                  <a className="btn primary not-found-home" href="/weave">
-                    <House aria-hidden="true" />
-                    Return to Weave
-                  </a>
+                  <p className="not-found-copy">Check the address, or choose where you want to go next.</p>
+                  <div className="not-found-actions">
+                    <a className="btn primary not-found-home" href="/weave">
+                      <House aria-hidden="true" />
+                      Apply a patch
+                    </a>
+                    <a className="btn ghost not-found-docs" href="/docs">
+                      <BookOpen aria-hidden="true" />
+                      Browse docs
+                    </a>
+                  </div>
                 </div>
               </section>
             ) : (

@@ -65,6 +65,13 @@ assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
 assertIncludes(notFoundHtml, '<header class="masthead">', "404 app masthead");
 assertIncludes(notFoundHtml, 'class="btn primary not-found-home" href="/weave"', "404 home action");
+assertIncludes(notFoundHtml, 'class="btn ghost not-found-docs" href="/docs"', "404 docs action");
+assertIncludes(notFoundHtml, "That page is not here.", "404 recovery heading");
+assertIncludes(notFoundHtml, 'aria-selected="false" class="mode" data-mode="patcher"', "404 inactive workflow tab");
+if (notFoundHtml.includes('aria-selected="true" class="mode"')) {
+  throw new Error("404 page marks a workflow tab as selected");
+}
+if (notFoundHtml.includes("\u2014")) throw new Error("404 page contains an em dash");
 assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
 for (const url of [
   "https://rom-weaver.com/weave",
