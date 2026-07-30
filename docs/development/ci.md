@@ -252,8 +252,8 @@ changes ── changed paths -> rust / webapp / wasm_runtime / security / repo_l
 
              ┌── rust-host ─────┐
 changes ─────┼── rust-macos ────┼── rust (aggregate check name)
-             ├── rust-windows ──┤   (macOS/Windows on main, not PRs)
-             └── cli-platforms ─┘   (9 release targets; 1 on a pull request)
+             ├── rust-windows ──┤   (macOS/Windows on main and the release PR)
+             └── cli-platforms ─┘   (9 release targets; 1 on a review PR)
 
          ┌── webapp-static ───────┐
          ├── webapp-browser ──────┼── webapp (aggregate check name)
@@ -891,9 +891,9 @@ Darwin targets, which build on the newest macOS image and are executed back on
 the oldest one still offered - see below.
 
 `pr` marks the one entry a pull request builds: `linux-x64-gnu`. The script
-narrows to it only when `EVENT_NAME=pull_request`; every other caller -
-including the release fan-out's `plan` job, which passes no event at all - gets
-all nine.
+narrows to it only when `EVENT_NAME=pull_request` and `HEAD_REF` is not the
+release branch; every other caller - including the release fan-out's `plan` job,
+which passes no event at all - gets all nine.
 
 ### macOS support floor
 
@@ -958,6 +958,22 @@ definition, and every event other than a pull request, still selects both.
 `docker_prebuilt` gates the webapp prebuilt smoke, which needs a bundle on any
 ref and an image-side change as well on a pull request - see
 [`docker-prebuilt`](#jobs).
+
+The **release pull request** is the one pull request nothing narrows. Its tree is
+main's tree plus version strings and a changelog, and merging it is what ships,
+so classifying its diff handed the commit that ships less coverage than the
+commit it was cut from - it skipped `Rust (macOS)`, `Rust (Windows)`, the
+`CLI target runtime (aarch64-unknown-linux-musl)` leg, eight of the nine CLI
+targets, and the prebuilt webapp image's arm64 leg. `scripts/ci/release-pr.mjs`
+recognizes it from the `release-please--branches--main--components--` head-ref
+prefix rather than from its `autorelease: pending` label, because the head ref
+arrives in the event payload while the label needs an API call that can fail;
+`release.yml` keys its own release-pull-request jobs off the same prefix. The
+classifier turns every flag on for it, `cli-platform-matrix.mjs` keeps all nine
+targets, and the `changes` job publishes a `full_matrix` output that the jobs
+gating on the event name rather than on a path flag read instead. The cost is
+that every refresh of that pull request re-runs the whole matrix, and each
+dispatch force-pushes two or three commits.
 
 Changes to CI, coverage, toolchain setup, or the
 classifier fail open by selecting every stack. So does the event name: only

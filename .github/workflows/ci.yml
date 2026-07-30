@@ -42,6 +42,10 @@ jobs:
       docker_prebuilt: ${{ steps.classify.outputs.docker_prebuilt }}
       repo_lint: ${{ steps.classify.outputs.repo_lint }}
       full: ${{ steps.classify.outputs.full }}
+      # "Cover this ref the way a push to main is covered" - true for every
+      # event but an ordinary pull request. The release pull request is the
+      # exception among pull requests; scripts/ci/release-pr.mjs owns the rule.
+      full_matrix: ${{ steps.classify.outputs.full_matrix }}
       cli_platforms: ${{ steps.cli-platforms.outputs.matrix }}
     steps:
       - name: Checkout
@@ -57,6 +61,7 @@ jobs:
         id: cli-platforms
         env:
           EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
         run: node scripts/ci/cli-platform-matrix.mjs
 
       - name: Classify changed paths
@@ -65,6 +70,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
+          # Empty for anything that is not a pull request. It is what tells the
+          # release pull request apart from a review one, which is the only case
+          # where a pull request is not narrowed.
+          HEAD_REF: ${{ github.head_ref }}
         run: node scripts/ci/classify-workflow.mjs
 
       # The image table lives here rather than in the `docker` job below because
@@ -312,10 +321,11 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
-      # One architecture proves the release COPY path on a pull request. Main
-      # still builds both architectures for the nightly manifest.
+      # One architecture proves the release COPY path on a pull request. Main -
+      # and the release pull request, which is main's tree - still builds both
+      # architectures for the nightly manifest.
       matrix:
-        arch: ${{ github.event_name == 'pull_request' && fromJSON('["amd64"]') || fromJSON('["amd64", "arm64"]') }}
+        arch: ${{ needs.changes.outputs.full_matrix == 'true' && fromJSON('["amd64", "arm64"]') || fromJSON('["amd64"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -570,7 +580,8 @@ jobs:
   # .github/actions/build-cli-platform) so CI cannot cover a different set of
   # targets, or build them differently, than the one that ships.
   #
-  # Pull requests build only the linux-x64-gnu entry marked `"pr": true`.
+  # Pull requests build only the linux-x64-gnu entry marked `"pr": true` - all
+  # but the release pull request, which is the commit that ships.
   # Pushes to main, manual dispatches, and the release fan-out build all nine,
   # so repeated macOS, Windows, and cross-target release compiles stay off the
   # review path without reducing what is proven before anything ships.
@@ -629,7 +640,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     needs: [changes, cli-platforms]
     if: >-
-      github.ref_type != 'tag' && github.event_name != 'pull_request'
+      github.ref_type != 'tag' && needs.changes.outputs.full_matrix == 'true'
       && needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v7
@@ -702,7 +713,7 @@ jobs:
     timeout-minutes: 90
     needs: changes
     if: >-
-      github.ref_type != 'tag' && github.event_name != 'pull_request'
+      github.ref_type != 'tag' && needs.changes.outputs.full_matrix == 'true'
       && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
@@ -736,7 +747,7 @@ jobs:
     timeout-minutes: 90
     needs: changes
     if: >-
-      github.ref_type != 'tag' && github.event_name != 'pull_request'
+      github.ref_type != 'tag' && needs.changes.outputs.full_matrix == 'true'
       && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
@@ -855,7 +866,7 @@ jobs:
         run: >-
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
-          '${{ needs.changes.outputs.rust == 'true' && github.event_name != 'pull_request' }}'
+          '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_matrix == 'true' }}'
           'cli-linux-arm64=${{ needs.cli-linux-arm64.result }}'
           'rust-macos=${{ needs.rust-macos.result }}'
           'rust-windows=${{ needs.rust-windows.result }}'
