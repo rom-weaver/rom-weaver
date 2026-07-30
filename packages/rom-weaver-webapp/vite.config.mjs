@@ -987,7 +987,6 @@ export default defineConfig(({ command, mode }) => {
         "react",
         "react-dom",
         "react-dom/client",
-        "valibot",
       ],
     },
     plugins: [

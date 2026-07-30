@@ -1,7 +1,6 @@
 import { Download, RotateCcw, Wrench } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
-import { undoPpf } from "../../platform/browser/browser-api.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../public/react/components/ds/file-card.tsx";
@@ -142,6 +141,7 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
     abortRef.current = abort;
     setBusy(true);
     try {
+      const { undoPpf } = await import("../../platform/browser/browser-api.ts");
       const restored = await undoPpf({
         outputName: outputName.trim(),
         patch,

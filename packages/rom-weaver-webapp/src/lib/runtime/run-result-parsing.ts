@@ -11,7 +11,7 @@ import {
   isRomWeaverLiveRunEvent,
   isRomWeaverTerminalRunEvent,
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "../../workers/rom-weaver/rom-weaver-runner.ts";
+import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { markWasmFirstProgress } from "../perf/op-perf-marks.ts";
 

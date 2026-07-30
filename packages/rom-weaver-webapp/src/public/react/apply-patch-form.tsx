@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
-import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
+import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import type {
   ApplyWorkflowBundleSources,
@@ -50,6 +50,7 @@ import { useUnifiedApplyDrop } from "./use-unified-apply-drop.ts";
 import { createWorkflowFormError, getReactBinarySourceFileName, toReactProgressEvent } from "./workflow-adapters.ts";
 import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { createReactWorkflowId } from "./workflow-form-utils.ts";
+import { createWorkflowHandle, loadBrowserApi } from "./workflow-loader.ts";
 
 // A patch parses eagerly (its extraction overlaps the ROM's), but its addPatch mutation is queued
 // behind the ROM's setInput, so the staged info would otherwise only reach the card once the ROM
@@ -223,7 +224,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const forceInputWorkflowRefreshRef = useRef(false);
   const lastPatchOrderRef = useRef("");
   const forcePatchWorkflowRefreshRef = useRef(false);
-  const workflowRef = useRef<ApplyWorkflow | null>(null);
+  const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
@@ -476,8 +477,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   }, []);
 
   const resetWorkflow = useCallback(() => {
-    const workflow = workflowRef.current;
-    workflowRef.current = null;
+    const workflow = workflowHandle.reset();
     preparedWorkflowRef.current = null;
     bundleSourcesRef.current = null;
     forceInputWorkflowRefreshRef.current = false;
@@ -485,24 +485,36 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     workflowOutputOverridesKeyRef.current = "";
     prepareHandlersRef.current = null;
     void workflow?.dispose();
-  }, []);
+  }, [workflowHandle]);
 
-  const getWorkflow = useCallback(() => {
-    if (workflowRef.current) return workflowRef.current;
-    workflowRef.current = new ApplyWorkflow({
-      ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-      id: workflowIdRef.current,
-      selectFile: async (request) => {
-        const handlers = prepareHandlersRef.current;
-        const promptInputSelection = handlers?.selection?.promptInputSelection !== false;
-        const promptPatchSelection = handlers?.selection?.promptPatchSelection !== false;
-        if ((request.role === "input" && !promptInputSelection) || (request.role === "patch" && !promptPatchSelection))
-          throw createWorkflowFormError("WORKFLOW_SELECTION_SKIPPED", `${request.sourceName} requires selection`);
-        return selectFileRef.current(request);
-      },
-    });
-    return workflowRef.current;
-  }, [resolvedAssetBaseUrl]);
+  const getWorkflow = useCallback(
+    () =>
+      workflowHandle.get(() =>
+        loadBrowserApi().then(
+          ({ ApplyWorkflow }) =>
+            () =>
+              new ApplyWorkflow({
+                ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+                id: workflowIdRef.current,
+                selectFile: async (request) => {
+                  const handlers = prepareHandlersRef.current;
+                  const promptInputSelection = handlers?.selection?.promptInputSelection !== false;
+                  const promptPatchSelection = handlers?.selection?.promptPatchSelection !== false;
+                  if (
+                    (request.role === "input" && !promptInputSelection) ||
+                    (request.role === "patch" && !promptPatchSelection)
+                  )
+                    throw createWorkflowFormError(
+                      "WORKFLOW_SELECTION_SKIPPED",
+                      `${request.sourceName} requires selection`,
+                    );
+                  return selectFileRef.current(request);
+                },
+              }),
+        ),
+      ),
+    [resolvedAssetBaseUrl, workflowHandle],
+  );
 
   useEffect(
     () => () => {
@@ -568,9 +580,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       });
       setResolvedOutputCompression(getApplyOutputCompression(snapshot, null));
       setResolvedOutputNameForSnapshot(snapshot, getAutomaticApplyOutputName(snapshot, null, []));
-      const workflow = getWorkflow();
-      preparedWorkflowRef.current = workflow;
-      prepareHandlersRef.current = handlers;
+      const workflow = await getWorkflow();
+      // A reset that raced the load already cleared these refs (and disposed the
+      // workflow); don't repopulate them with the stale instance. The prepare
+      // still runs and fails on the disposed workflow like a post-sync-create
+      // reset always has.
+      if (workflowHandle.peek() === workflow) {
+        preparedWorkflowRef.current = workflow;
+        prepareHandlersRef.current = handlers;
+      }
       const handleProgress = (event: WorkflowProgress) => handlers.onProgress?.(event);
       workflow.on("progress", handleProgress);
       try {
@@ -795,7 +813,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         workflow.off("progress", handleProgress);
       }
     },
-    [getWorkflow, props.threads, setResolvedOutputNameForSnapshot, syncSelectionRefs, syncWorkflowOutputOverrides],
+    [
+      getWorkflow,
+      props.threads,
+      setResolvedOutputNameForSnapshot,
+      syncSelectionRefs,
+      syncWorkflowOutputOverrides,
+      workflowHandle,
+    ],
   );
 
   const withPreparedWorkflow = useCallback(
@@ -857,7 +882,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           workflowProgress.id.endsWith(":patch-awaiting-input")
         ) {
           const order = Number(workflowProgress.details?.order);
-          const info = Number.isInteger(order) ? buildEagerPatchStageInfo(getWorkflow(), snapshot, order) : null;
+          const activeWorkflow = workflowHandle.peek();
+          const info =
+            Number.isInteger(order) && activeWorkflow
+              ? buildEagerPatchStageInfo(activeWorkflow, snapshot, order)
+              : null;
           // Only reveal (and swallow this "waiting" event) once the patch is parsed. If it isn't yet,
           // fall through so the event routes as normal patch progress and the card keeps "Reading…".
           if (info) {
@@ -882,7 +911,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ).catch((error) => {
       for (const member of members) member.fail(error);
     });
-  }, [emitWorkflowProgress, getWorkflow, prepareWorkflow, queueMutation]);
+  }, [emitWorkflowProgress, prepareWorkflow, queueMutation, workflowHandle]);
 
   const enqueueStageBatch = useCallback(
     <TValue,>(
@@ -950,7 +979,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const executionSettingsKey = createWorkflowSettingsKey(baseSettings);
         const preparationSettingsKey = createWorkflowPreparationSettingsKey(baseSettings);
         const previousSync = workflowSyncRef.current;
-        const workflow = workflowRef.current;
+        const workflow = workflowHandle.peek();
         const workflowPrepared =
           !!workflow &&
           previousSync.preparationSettingsKey === preparationSettingsKey &&
@@ -1005,6 +1034,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       syncWorkflowOutputOverrides,
       prepareWorkflow,
       filterEnabledPatchRun,
+      workflowHandle,
     ],
   );
 
@@ -1360,7 +1390,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   // "Export bundle…" (output card secondary action): snapshots the current
   // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
-  const stagedBundleSources = (preparedWorkflowRef.current || workflowRef.current)?.getBundleExportSources();
+  const stagedBundleSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources();
   const bundleExportReady =
     (!!stagedBundleSources?.rom && stagedBundleSources.patches.length > 0) ||
     (!!bundleSourcesRef.current?.rom && bundleSourcesRef.current.patches.length > 0);
@@ -1371,7 +1401,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     getName: () => resolvedOutputController.getState().displayFileName,
     getOutputHeader: () => resolvedOutputController.getState().outputHeader,
     getSessionSources: (): ApplyWorkflowBundleSources => {
-      const workflowSources = (preparedWorkflowRef.current || workflowRef.current)?.getBundleExportSources();
+      const workflowSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources();
       if (workflowSources?.rom || workflowSources?.patches.length) return workflowSources;
       if (bundleSourcesRef.current?.rom || bundleSourcesRef.current?.patches.length) return bundleSourcesRef.current;
       return {

@@ -27,11 +27,8 @@ import {
   getRomWeaverRunEventFormat,
   getRomWeaverRunEventLabel,
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import {
-  getRomWeaverFailureMessage,
-  runRomWeaverJson,
-  withRomWeaverFailureKind,
-} from "../../workers/rom-weaver/rom-weaver-runner.ts";
+import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
+import type { runRomWeaverJson as runRomWeaverJsonType } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { parseBundleCreateResult, parseBundleParseResult } from "./bundle-result.ts";
 import {
@@ -65,6 +62,12 @@ import {
   getTerminalEvent,
   toSimpleProgress,
 } from "./run-result-parsing.ts";
+
+type RunRomWeaverJson = typeof runRomWeaverJsonType;
+let runnerModulePromise: Promise<typeof import("../../workers/rom-weaver/rom-weaver-runner.ts")> | undefined;
+const loadRomWeaverRunner = () => (runnerModulePromise ??= import("../../workers/rom-weaver/rom-weaver-runner.ts"));
+const runRomWeaverJson = async (...args: Parameters<RunRomWeaverJson>): ReturnType<RunRomWeaverJson> =>
+  (await loadRomWeaverRunner()).runRomWeaverJson(...args);
 
 const relaySimpleProgress =
   (onProgress?: (progress: NonNullable<ReturnType<typeof toSimpleProgress>>) => void) =>

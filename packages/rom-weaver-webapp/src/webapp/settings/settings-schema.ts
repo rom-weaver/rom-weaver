@@ -1,4 +1,3 @@
-import * as v from "valibot";
 import { getCompressionCodecLevelMax, getCompressionCodecLevelMin } from "../../lib/compression/codec-fields.ts";
 import { createLogger } from "../../lib/logging.ts";
 import {
@@ -57,9 +56,18 @@ type GroupedStoredSettings = {
 
 type CodecListOptions = NonNullable<Parameters<typeof normalizeCodecList>[1]>;
 
-const storedStringSchema = v.string();
-const storedBooleanSchema = v.boolean();
-const storedStringOrNumberSchema = v.union([v.string(), v.number()]);
+type StoredSchema<T> = (value: unknown) => value is T;
+
+const storedStringSchema: StoredSchema<string> = (value): value is string => typeof value === "string";
+const storedBooleanSchema: StoredSchema<boolean> = (value): value is boolean => typeof value === "boolean";
+const storedStringOrNumberSchema: StoredSchema<string | number> = (value): value is string | number =>
+  typeof value === "string" || typeof value === "number";
+const isCodecSettingValue = (value: unknown): value is string | string[] | number | null | undefined =>
+  typeof value === "string" ||
+  typeof value === "number" ||
+  value === null ||
+  value === undefined ||
+  (Array.isArray(value) && value.every((item) => typeof item === "string"));
 const BOOLEAN_SETTINGS_FIELDS = ["betaToolsEnabled", "fixChecksum"] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
@@ -80,10 +88,8 @@ const isLevelOverrideField = (fieldKey: SettingsFieldKey): boolean =>
 const isSingleCodecField = (fieldKey: SettingsFieldKey): boolean =>
   (SINGLE_CODEC_FIELDS as readonly SettingsFieldKey[]).includes(fieldKey);
 
-const readStoredField = <T>(schema: v.BaseSchema<unknown, T, v.BaseIssue<unknown>>, value: unknown): T | undefined => {
-  const result = v.safeParse(schema, value);
-  return result.success ? result.output : undefined;
-};
+const readStoredField = <T>(schema: StoredSchema<T>, value: unknown): T | undefined =>
+  schema(value) ? value : undefined;
 
 const copyObject = <T extends Record<string, unknown>>(source: T): T => Object.assign({}, source);
 
@@ -263,13 +269,13 @@ const validateChoiceSetting = <K extends SettingsFieldKey>(
   validation: SettingsValidation,
 ): SettingsState[K] => {
   const validValues = getFieldChoiceValues(fieldKey);
-  const result = v.safeParse(v.picklist(validValues), typeof value === "string" ? value.toLowerCase() : String(value));
-  if (!result.success) {
+  const normalized = typeof value === "string" ? value.toLowerCase() : String(value);
+  if (!validValues.includes(normalized)) {
     validation.messages.push(getFieldValidationMessage(fieldKey, `valid values: ${validValues.join(", ")}.`));
     validation.invalidFields.push(getSettingsFieldId(fieldKey));
     return String(validValues[0] || "") as SettingsState[K];
   }
-  return result.output as SettingsState[K];
+  return normalized as SettingsState[K];
 };
 
 const validateCodecList = (
@@ -280,8 +286,8 @@ const validateCodecList = (
 ): string => {
   const validCodecs = getFieldChoiceValues(fieldKey);
   try {
-    const parsedValue = v.parse(v.union([v.string(), v.array(v.string()), v.number(), v.null(), v.undefined()]), value);
-    return normalizeValidatedCodecSetting(fieldKey, parsedValue, allowLevels, validCodecs);
+    if (!isCodecSettingValue(value)) throw new TypeError("Invalid codec setting");
+    return normalizeValidatedCodecSetting(fieldKey, value, allowLevels, validCodecs);
   } catch {
     validation.messages.push(getFieldValidationMessage(fieldKey, getCodecValidationMessage(fieldKey, validCodecs)));
     validation.invalidFields.push(getSettingsFieldId(fieldKey));
@@ -299,9 +305,9 @@ const normalizeIntegerSetting = (
 ): number => {
   const { max, min } = getNumericFieldRange(fieldKey, settings);
   const rangeText = formatLevelRange(min, max);
-  const parsedValue = v.safeParse(storedStringOrNumberSchema, value);
+  const parsedValue = readStoredField(storedStringOrNumberSchema, value);
   try {
-    return parseIntegerInRange(parsedValue.success ? parsedValue.output : value, {
+    return parseIntegerInRange(parsedValue === undefined ? value : parsedValue, {
       failureMessage: getFieldValidationMessage(fieldKey, `valid values: ${rangeText}.`),
       max,
       min,
@@ -323,14 +329,14 @@ const normalizeThreadsSetting = (
   validation: SettingsValidation,
   settings: SettingsState = validation.settings,
 ): SettingsState["threads"] => {
-  const parsedValue = v.safeParse(storedStringOrNumberSchema, value);
-  const normalizedRaw = String(parsedValue.success ? parsedValue.output : (value ?? ""))
+  const parsedValue = readStoredField(storedStringOrNumberSchema, value);
+  const normalizedRaw = String(parsedValue === undefined ? (value ?? "") : parsedValue)
     .trim()
     .toLowerCase();
   if (normalizedRaw === "auto") return "auto";
   const { max, min } = getNumericFieldRange("threads", settings);
   try {
-    const parsed = parseIntegerInRange(parsedValue.success ? parsedValue.output : value, {
+    const parsed = parseIntegerInRange(parsedValue === undefined ? value : parsedValue, {
       failureMessage: getFieldValidationMessage("threads", `valid values: auto, ${min}-${max}.`),
       max,
       min,

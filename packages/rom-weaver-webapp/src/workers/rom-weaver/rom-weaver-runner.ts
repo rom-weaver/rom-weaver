@@ -40,13 +40,19 @@ import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protoc
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
 import {
+  markRomWeaverRunnerStale,
+  registerRunnerLifecycle,
+  resolveInputSelection,
+  resetRomWeaverRunner,
+  setInputSelectionHandler,
+  type InputSelectionHandler,
+} from "./runner-control.ts";
+import {
   getRomWeaverRunEventDetails,
   getRomWeaverRunEventElapsedMs,
-  getRomWeaverRunEventErrorKind,
-  getRomWeaverRunEventLabel,
-  isRomWeaverFailedRunEvent,
   isRomWeaverTerminalRunEvent,
 } from "./rom-weaver-run-events.ts";
+import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "./runner-errors.ts";
 import { createRunnerPool, type RunnerPool } from "./runner-pool.ts";
 import { createOperationScheduler, type OperationScheduler } from "./runner-scheduler.ts";
 
@@ -316,57 +322,6 @@ const createBrowserRunnerInitOptions = (
 /** Resolves a mid-run candidate selection request `{mode, heading, candidates:[{value,label}]}` to
  * the chosen 0-based indices (an empty array cancels). Single-select prompts resolve to one index;
  * multi-select prompts may resolve to several. Runs on the main thread. */
-type InputSelectionHandler = (request: string) => number[] | Promise<number[]>;
-
-let inputSelectionHandler: InputSelectionHandler | undefined;
-
-/** Register the UI selection handler invoked when the wasm app needs the user to pick an input
- * candidate. When unset, selection is cancelled (returns -1) - the app always registers a handler. */
-const setInputSelectionHandler = (handler?: InputSelectionHandler) => {
-  logger.trace(handler ? "input selection handler registered" : "input selection handler cleared");
-  inputSelectionHandler = handler;
-};
-
-/** Summarize a `{heading, candidates}` selection request JSON for trace logs without dumping its
- * full contents. */
-const summarizeInputSelectionRequest = (request: string): Record<string, unknown> => {
-  try {
-    const parsed = JSON.parse(request);
-    return {
-      candidateCount: Array.isArray(parsed?.candidates) ? parsed.candidates.length : 0,
-      heading: typeof parsed?.heading === "string" ? parsed.heading : "",
-      mode: typeof parsed?.mode === "string" ? parsed.mode : "single",
-    };
-  } catch {
-    return { requestBytes: request.length, unparsable: true };
-  }
-};
-
-// With concurrent operations two runners can request a candidate selection at the same moment, but the
-// single host handler drives one dialog at a time. Serialize prompt invocations through a chain so the
-// second prompt only opens once the first resolves; the operations themselves keep running in parallel.
-let inputSelectionChain: Promise<unknown> = Promise.resolve();
-
-const resolveInputSelection: InputSelectionHandler = (request) => {
-  const run = inputSelectionChain
-    .catch(() => undefined)
-    .then(() => {
-      if (!inputSelectionHandler) {
-        logger.trace("input selection requested but no handler registered - cancelling", {
-          requestBytes: typeof request === "string" ? request.length : 0,
-        });
-        return [];
-      }
-      logger.trace("forwarding input selection request to UI handler", summarizeInputSelectionRequest(request));
-      return inputSelectionHandler(request);
-    });
-  inputSelectionChain = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
-};
-
 const createBrowserRunner = async (options?: { threads?: RuntimeValue }): Promise<RomWeaverRunner> => {
   const runnerWorkerUrl = await resolveBrowserRunnerWorkerUrl();
   const client = createBrowserWorkerClient({ workerUrl: runnerWorkerUrl }) as unknown as RomWeaverWorkerClient;
@@ -413,6 +368,10 @@ const getRunnerPool = (): RunnerPool<RomWeaverRunner, RunnerCreateOptions> => {
       maxIdle: resolveWarmIdleRunners(),
       terminate: (runner) => runner.terminate?.(),
     });
+    registerRunnerLifecycle({
+      disposeAll: (options) => runnerPool?.disposeAll(options) ?? Promise.resolve(),
+      markAllStale: () => runnerPool?.markAllStale(),
+    });
   }
   return runnerPool;
 };
@@ -448,15 +407,6 @@ const getOperationScheduler = (): OperationScheduler => {
 // drop/staging layer, which alone knows every file's size up front.
 const noteRomWeaverIoBatch = (jobSizes: number[]) => {
   getOperationScheduler().noteIoBatch(Array.isArray(jobSizes) ? jobSizes : []);
-};
-
-const resetRomWeaverRunner = async (options: { terminate?: boolean } = {}) => {
-  if (!runnerPool) return;
-  await runnerPool.disposeAll(options);
-};
-
-const markRomWeaverRunnerStale = () => {
-  runnerPool?.markAllStale();
 };
 
 // #1: Keep the most recently released runner (the one that performed extraction) and dispose every other
@@ -906,112 +856,9 @@ const getResourceName = (urlLike: string) => {
   }
 };
 
-const getRecordErrorMessage = (record: { message?: unknown; kind?: unknown }) =>
-  typeof record.message === "string" && record.message.trim()
-    ? record.message.trim()
-    : typeof record.kind === "string" && record.kind.trim()
-      ? `rom-weaver error (${record.kind.trim()})`
-      : "";
-
-const getErrorContextSuffix = (context: unknown) => {
-  if (!(context && typeof context === "object")) return "";
-  const record = context as { command?: unknown; stage?: unknown };
-  const command = typeof record.command === "string" ? record.command.trim() : "";
-  const stage = typeof record.stage === "string" ? record.stage.trim() : "";
-  if (!(command || stage)) return "";
-  return ` (${[command ? `command=${command}` : "", stage ? `stage=${stage}` : ""].filter(Boolean).join(", ")})`;
-};
-
-const getErrorMessage = (value: unknown) => {
-  if (!value) return "";
-  if (typeof value === "string") return value.trim();
-  if (value instanceof Error) return String(value.message || "").trim();
-  if (typeof value === "object") {
-    const record = value as { message?: unknown; kind?: unknown; context?: unknown };
-    const message = getRecordErrorMessage(record);
-    if (!message) return "";
-    return `${message}${getErrorContextSuffix(record.context)}`;
-  }
-  return "";
-};
-
-const getRomWeaverFailureMessage = (
-  result: Partial<RomWeaverRunnerRunJsonResult> | null | undefined,
-  fallback = "rom-weaver operation failed",
-) => {
-  const events = Array.isArray(result?.events) ? result.events : [];
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (!(event && isRomWeaverFailedRunEvent(event))) continue;
-    const label = getRomWeaverRunEventLabel(event).trim();
-    if (label) return label;
-  }
-
-  const nonJsonLines = Array.isArray(result?.nonJsonLines) ? result.nonJsonLines : [];
-  for (let index = nonJsonLines.length - 1; index >= 0; index -= 1) {
-    const line = String(nonJsonLines[index] || "").trim();
-    if (line) return line;
-  }
-
-  const errorMessage = getErrorMessage((result as { error?: unknown } | null | undefined)?.error);
-  if (errorMessage) return errorMessage;
-
-  const stderr = getNonTraceStderr(result);
-  if (stderr) return stderr;
-
-  return fallback;
-};
-
-type RomWeaverFailureKind = NonNullable<ReturnType<typeof getRomWeaverRunEventErrorKind>>;
-
-// The typed `RomWeaverErrorKind` the Rust core attached to the failing terminal
-// event, if any. This is the canonical, generated-enum classification - the JS
-// `inferCoreWorkerErrorKind` regex is only a fallback for failures that arrive
-// without it (worker/panic strings, or messages wrapped in extra context).
-const getRomWeaverFailureKind = (
-  result: Partial<RomWeaverRunnerRunJsonResult> | null | undefined,
-): RomWeaverFailureKind | undefined => {
-  const events = Array.isArray(result?.events) ? result.events : [];
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (!(event && isRomWeaverFailedRunEvent(event))) continue;
-    const kind = getRomWeaverRunEventErrorKind(event);
-    if (kind) return kind;
-  }
-  return undefined;
-};
-
-// Attach the run's typed failure kind to a thrown error so the worker-error
-// classifier (`resolveWorkerErrorKind`) prefers it over message-prefix
-// inference. No-op when the run carried no typed kind, leaving the existing
-// fallback path untouched.
-const withRomWeaverFailureKind = <E extends Error>(
-  error: E,
-  result: Partial<RomWeaverRunnerRunJsonResult> | null | undefined,
-): E => {
-  const kind = getRomWeaverFailureKind(result);
-  if (kind) {
-    (error as E & { kind?: RomWeaverFailureKind }).kind = kind;
-  }
-  return error;
-};
-
-const TRACE_STDERR_LINE_REGEX = /^\d{4}-\d{2}-\d{2}T\S+\s+(?:TRACE|DEBUG|INFO|WARN|ERROR)\s+[\w:]+:/;
-
-const getNonTraceStderr = (result: Partial<RomWeaverRunnerRunJsonResult> | null | undefined) => {
-  const stderr = typeof result?.stderr === "string" ? result.stderr.trim() : "";
-  if (!stderr) return "";
-  const lines = stderr
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !TRACE_STDERR_LINE_REGEX.test(line));
-  return lines.join("\n").trim();
-};
-
 export {
   getRomWeaverFailureMessage,
   getRomWeaverRunnerMetadata,
-  markRomWeaverRunnerStale,
   noteRomWeaverIoBatch,
   recycleWarmRomWeaverRunner,
   resetRomWeaverRunner,

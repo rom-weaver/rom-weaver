@@ -6,7 +6,6 @@ import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
 import { createLogger } from "../lib/logging.ts";
 import { markDropReceived, markResultPaintedAfterFinish } from "../lib/perf/op-perf-marks.ts";
 import { perfNow, recordDrop } from "../lib/runtime/perf-latency.ts";
-import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
 import { getDefaultBrowserThreadCount } from "../platform/shared/compression-options.ts";
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
@@ -63,6 +62,9 @@ const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) 
 const LogDialog = lazy(loadLogDialog);
 const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
 const SettingsPanel = lazy(loadSettingsPanel);
+type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
+const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
+  import("../platform/browser/browser-api.ts").then(({ preloadBrowserRuntime: preload }) => preload(options));
 
 const logger = createLogger("webapp-root");
 

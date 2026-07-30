@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { browserRuntime } from "../../platform/browser/workflow-runtime.ts";
 import {
   createProgressViewModel,
   createProgressViewModelFromEvent,
@@ -49,7 +48,8 @@ type BundleExportRow = {
 };
 
 type BundleExportSources = ApplyWorkflowBundleSources;
-type BundleExportCreate = NonNullable<NonNullable<typeof browserRuntime.bundle>["create"]>;
+type BrowserRuntime = (typeof import("../../platform/browser/workflow-runtime.ts"))["browserRuntime"];
+type BundleExportCreate = NonNullable<NonNullable<BrowserRuntime["bundle"]>["create"]>;
 type BundleExportStart =
   | { create: BundleExportCreate; rom: NonNullable<BundleExportSources["rom"]> }
   | { error: string };
@@ -68,6 +68,12 @@ const validateBundleExportStart = ({
   if (!patches.length) return { error: "At least one staged patch is required to export a bundle" };
   return { create, rom };
 };
+
+let browserRuntimePromise: Promise<BrowserRuntime> | undefined;
+const loadBrowserRuntime = async (): Promise<BrowserRuntime> =>
+  (browserRuntimePromise ??= import("../../platform/browser/workflow-runtime.ts").then(
+    ({ browserRuntime }) => browserRuntime,
+  ));
 
 const reportBundleExportError = (aborted: boolean, error: unknown, setError: (message: string) => void) => {
   if (!aborted) setError(error instanceof Error ? error.message : String(error));
@@ -249,12 +255,14 @@ const validateBundleRows = (rows: BundleExportRow[], items: PatchStackItemState[
 };
 
 const preparePackagedRom = async ({
+  browserRuntime,
   bundleRom,
   compressedRomOutputs,
   rom,
   stepProgress,
   wantsBundle,
 }: {
+  browserRuntime: BrowserRuntime;
   bundleRom: boolean;
   compressedRomOutputs: PublicOutput[];
   rom: NonNullable<ApplyWorkflowBundleSources["rom"]>;
@@ -335,6 +343,7 @@ const useBundleExport = ({
       }),
     );
     try {
+      const browserRuntime = await loadBrowserRuntime();
       await browserRuntime.publicOutput.saveAs(output);
     } catch (downloadError) {
       setError(downloadError instanceof Error ? downloadError.message : String(downloadError));
@@ -349,19 +358,28 @@ const useBundleExport = ({
       await downloadExport();
       return;
     }
-    const create = browserRuntime.bundle?.create;
     const exportName = getName?.().trim() || "";
     const sources = getSessionSources();
     sourcesRef.current = { patches: sources.patches.slice(), rom: sources.rom };
     const { rom, patches } = sources;
+    const items = getStackItems();
+    const patchIds = getPatchIds();
+    const outputHeader = getOutputHeader?.();
+    const browserRuntime = await loadBrowserRuntime();
+    const create = browserRuntime.bundle?.create;
     const validation = validateBundleExportStart({ create, patches, rom });
     if ("error" in validation) {
       setError(validation.error);
       return;
     }
     const { create: exportCreate, rom: exportRom } = validation;
-    const items = getStackItems();
-    const exportRows = buildBundleExportRows({ bundleMetaById, disabledPatchIds, getPatchIds, getStackItems, patches });
+    const exportRows = buildBundleExportRows({
+      bundleMetaById,
+      disabledPatchIds,
+      getPatchIds: () => patchIds,
+      getStackItems: () => items,
+      patches,
+    });
     const stepProgress = (label: string) =>
       setProgress(
         createProgressViewModel({
@@ -385,13 +403,13 @@ const useBundleExport = ({
       const wantsBundle = format !== BUNDLE_ONLY_FORMAT;
       const bundleFileName = wantsBundle ? `${slugFileName(exportName) || "rw-bundle"}.${format}` : undefined;
       const packagedRom = await preparePackagedRom({
+        browserRuntime,
         bundleRom,
         compressedRomOutputs,
         rom: exportRom,
         stepProgress,
         wantsBundle,
       });
-      const outputHeader = getOutputHeader?.();
       // The exported rom.checks are the staged ROM's computed values; a
       // different expected base ROM is expressed as the first patch's input
       // checks (which the bundle schema prefers over rom.checks).

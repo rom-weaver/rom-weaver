@@ -1,7 +1,6 @@
 import { createLogger } from "../../lib/logging.ts";
 import { markWarmupDone, markWarmupEnd, markWarmupStart } from "../../lib/perf/op-perf-marks.ts";
-import { recycleWarmRomWeaverRunner } from "../../workers/rom-weaver/rom-weaver-runner.ts";
-import { browserRuntime } from "./workflow-runtime.ts";
+import { recycleWarmRomWeaverRunner } from "../../workers/rom-weaver/runner-control.ts";
 
 // Checksums the real first ROM-load op computes inline during ingest. The warmup requests them too so
 // the inline StreamingChecksum decode path is warm; measured on a prod build, that path is ~25ms of the
@@ -49,6 +48,7 @@ const cleanupWarmupOutputs = async (outputs: ReadonlyArray<{ cleanup?: () => Pro
 const warmupBrowserRuntimeExtraction = async (): Promise<void> => {
   if (warmupExtractionStarted) return;
   warmupExtractionStarted = true;
+  const { browserRuntime } = await import("./workflow-runtime.ts");
   const ingest = browserRuntime.ingest;
   if (!ingest?.run) return;
   const file = createWarmupZipFile();

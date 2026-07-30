@@ -47,6 +47,12 @@ while read -r id; do
     *) continue ;;
   esac
 
+  # A deployment whose latest status is success is "active"; the API refuses to
+  # delete an active deployment (422) unless it is the environment's only one.
+  # Post an inactive status first so the delete is always legal.
+  if [[ "$state" != inactive ]]; then
+    gh api --silent --method POST "repos/${GH_REPO}/deployments/${id}/statuses" -f state=inactive
+  fi
   gh api --method DELETE "repos/${GH_REPO}/deployments/${id}"
   deleted=$((deleted + 1))
 done <<< "$ids"

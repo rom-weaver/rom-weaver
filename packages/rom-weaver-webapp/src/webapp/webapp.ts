@@ -8,7 +8,7 @@ import { configureLogger, createLogger } from "../lib/logging.ts";
 import { requestGuidedSampleStart } from "../public/react/guided-sample-start.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
 import { resetBrowserTransientOpfs } from "../storage/browser/browser-opfs-cleanup.ts";
-import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/rom-weaver-runner.ts";
+import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { installLogStore } from "./log-store.ts";
