@@ -24,6 +24,7 @@ import {
 } from "./unload-guard.ts";
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
 import { createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath } from "./webapp-controller.ts";
+import { readPwaState } from "./components/shell.tsx";
 import { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { preloadWorkflowRoute } from "./workflow-routes.tsx";
 import {
@@ -122,6 +123,25 @@ async function confirmReloadUpdate() {
 }
 
 const FORCE_HTTPS_HOSTS = ["www.marcrobledo.com"];
+let applicationStatusReady = false;
+let lastApplicationStatus = "";
+function logApplicationStatus(message: string, force = false) {
+  const status = {
+    branch: GIT_BRANCH,
+    buildVersion: APP_BUILD_VERSION,
+    commit: COMMIT_HASH,
+    dirty: !!DIRTY_HASH,
+    dirtyHash: DIRTY_HASH || undefined,
+    runtime: readPwaState() ? "pwa" : "web",
+    serviceWorkerStatus: serviceWorkerClient.getState().serviceWorkerStatus,
+    threads: resolveThreads(webappController.getState().settings.threads),
+    version: APP_VERSION,
+  };
+  const serializedStatus = JSON.stringify(status);
+  if (!force && serializedStatus === lastApplicationStatus) return;
+  lastApplicationStatus = serializedStatus;
+  logger.info(message, status);
+}
 const serviceWorkerClient = createPwaServiceWorkerClient({
   appVersion: APP_BUILD_VERSION,
   cachePrefix: SERVICE_WORKER_CACHE_PREFIX,
@@ -131,6 +151,7 @@ const serviceWorkerClient = createPwaServiceWorkerClient({
   navigator: typeof navigator === "undefined" ? undefined : navigator,
   onConfirmReload: confirmReloadUpdate,
   onStateChange: () => {
+    if (applicationStatusReady) logApplicationStatus("Application status changed");
     renderWebappRootIfReady();
   },
   sessionStorage: typeof sessionStorage === "undefined" ? undefined : sessionStorage,
@@ -164,6 +185,7 @@ for (const warning of urlSessionParse.warnings) {
 
 const applySettingsToRuntime = (settings: SettingsState) => {
   configureLogger({ level: typeof settings.logLevel === "string" ? settings.logLevel : undefined });
+  if (applicationStatusReady) logApplicationStatus("Application status changed");
   logger.debug("Applying runtime settings", {
     logLevel: settings.logLevel,
     threads: settings.threads,
@@ -188,6 +210,7 @@ const webappController = createWebappRootController({
 });
 applySettingsToRuntime(webappController.getState().settings);
 logger.info("Browser environment", collectBrowserInfo());
+applicationStatusReady = true;
 
 // The landing tab's workflow form is its own chunk. Start it at module
 // evaluation, then wait for it before hydration so React does not commit a
@@ -501,6 +524,7 @@ import("./design-system/deferred.css").then(
 );
 
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("resize", () => logApplicationStatus("Application status changed"));
   window.addEventListener("storage", (event) => {
     if (event.key !== LOCAL_STORAGE_SETTINGS_ID) return;
     if (typeof localStorage !== "undefined" && event.storageArea && event.storageArea !== localStorage) return;
@@ -522,15 +546,7 @@ const initializeWebapp = () => {
   if (webappRootInitialized) return;
   webappRootInitialized = true;
 
-  logger.info("Initializing webapp", {
-    branch: GIT_BRANCH,
-    buildVersion: APP_BUILD_VERSION,
-    commit: COMMIT_HASH,
-    dirty: !!DIRTY_HASH,
-    dirtyHash: DIRTY_HASH || undefined,
-    threads: resolveThreads(webappController.getState().settings.threads),
-    version: APP_VERSION,
-  });
+  logApplicationStatus("Initializing webapp", true);
 
   serviceWorkerClient.refreshCacheVersion();
   webappController.setStartupState("loading");

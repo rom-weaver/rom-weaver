@@ -531,4 +531,4 @@ const WakeLockBanner = ({
   );
 };
 
-export { Masthead, Reveal, UpdateBanner, WakeLockBanner };
+export { Masthead, readPwaState, Reveal, UpdateBanner, WakeLockBanner };
