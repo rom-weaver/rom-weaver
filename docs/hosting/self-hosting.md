@@ -57,6 +57,22 @@ location = /rom-weaver {
     return 308 /rom-weaver/;
 }
 
+location = /rom-weaver/weave {
+    return 301 /rom-weaver/apply$is_args$args;
+}
+
+location = /rom-weaver/weave/ {
+    return 301 /rom-weaver/apply$is_args$args;
+}
+
+location = /rom-weaver/weave.html {
+    return 301 /rom-weaver/apply$is_args$args;
+}
+
+location = /rom-weaver/weave/index.html {
+    return 301 /rom-weaver/apply$is_args$args;
+}
+
 location /rom-weaver/ {
     proxy_pass http://127.0.0.1:8080/;
 }
@@ -129,14 +145,16 @@ on demand for clients that cannot take brotli.
 The `rom-weaver-webapp.tar.gz` asset on each GitHub release contains this raw
 build, so unpacking it is an alternative to building from a checkout.
 
-The build includes directory-index pages for `/weave`, `/create`, `/trim`, and
+The build includes directory-index pages for `/apply`, `/create`, `/trim`, and
 `/tools`, so ordinary static servers can resolve direct visits and refreshes
 without rewrite configuration. A server that disables directory indexes must
 instead fall back to `index.html` for those navigation requests. Redirect
 `/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History
 API routes, and the service-worker scope resolve consistently. Explicit
-directory-document URLs such as `/weave/index.html` are normalized in the
-browser to the clean `/weave` route without another request.
+directory-document URLs such as `/apply/index.html` are normalized in the
+browser to the clean `/apply` route without another request. The old `/weave`
+forms are permanent-redirected to `/apply` by the Docker image and Cloudflare
+Pages build; configure the equivalent redirect on other static hosts.
 
 Cloudflare-compatible hosts read the generated `_headers` file. On other hosts,
 the equivalent cache policy is:

@@ -36,7 +36,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(state.currentView).toBe("patcher");
     expect(state.settingsDialogOpen).toBe(false);
     expect(state.patcherSession.romFilePresent).toBe(false);
-    expect(window.location.pathname).toBe("/weave");
+    expect(window.location.pathname).toBe("/apply");
   });
 
   it("can preserve a non-workflow path for an alternate app shell", () => {
@@ -72,7 +72,7 @@ describe("createWebappRootController over the vanilla store", () => {
     window.history.replaceState({}, "", "/tools");
     const controller = createController();
     expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/weave");
+    expect(window.location.pathname).toBe("/apply");
   });
 
   it("loads the create workflow from its path", () => {
@@ -88,7 +88,7 @@ describe("createWebappRootController over the vanilla store", () => {
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
     controller.selectView("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/weave");
+    expect(window.location.pathname).toBe("/rom-weaver/apply");
   });
 
   it("normalizes a static-host index page to its clean route", () => {
@@ -96,7 +96,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(readWorkflowViewFromPath()).toBe("patcher");
     const controller = createController();
     expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/weave");
+    expect(window.location.pathname).toBe("/rom-weaver/apply");
   });
 
   it("keeps nested docs routes and returns to the app root", () => {
@@ -111,7 +111,7 @@ describe("createWebappRootController over the vanilla store", () => {
   });
 
   it("preserves URL session parameters without emitting hash routes", () => {
-    window.history.replaceState({}, "", "/weave?bundle=first-weave.zip");
+    window.history.replaceState({}, "", "/apply?bundle=first-weave.zip");
     const controller = createController();
     controller.selectView("creator");
     expect(window.location.pathname).toBe("/create");
@@ -123,7 +123,7 @@ describe("createWebappRootController over the vanilla store", () => {
     window.history.replaceState({}, "", "/#/create");
     const controller = createController();
     expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/weave");
+    expect(window.location.pathname).toBe("/apply");
     expect(window.location.hash).toBe("");
   });
 

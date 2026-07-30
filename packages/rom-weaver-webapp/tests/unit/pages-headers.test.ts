@@ -31,7 +31,7 @@ describe("pages _headers matching", () => {
 
   // A prerendered route is a different path but loads the same two assets, so it has to
   // pick up the same hints - that is why they ride in `/*` rather than a route list.
-  it.each(["/weave", "/docs/getting-started/", "/404.html"])("applies the /* block to %s", (pathname) => {
+  it.each(["/apply", "/docs/getting-started/", "/404.html"])("applies the /* block to %s", (pathname) => {
     expect(matchPagesHeaders(rules, pathname).Link).toHaveLength(2);
   });
 

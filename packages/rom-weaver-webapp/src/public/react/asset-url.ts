@@ -2,7 +2,7 @@
  * Resolves a bare asset name (`first-weave.zip`) against the app's base URL.
  *
  * The webapp passes its own base, which has the route segment stripped, so the
- * result is correct from `/weave/` and from a sub-path deployment alike. A
+ * result is correct from `/apply/` and from a sub-path deployment alike. A
  * root-absolute path would only work when the app is served from the domain
  * root, and a document-relative one resolves inside the current route.
  */

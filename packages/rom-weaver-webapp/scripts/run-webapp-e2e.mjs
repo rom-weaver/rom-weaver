@@ -149,7 +149,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
 
   try {
     for (const testCase of [
-      { finalView: "patcher", initialView: "patcher", path: "weave/", replayClick: true },
+      { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
       { finalView: "trim", initialView: "patcher", path: "trim/" },
     ]) {

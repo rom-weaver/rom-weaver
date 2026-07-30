@@ -49,11 +49,11 @@ Reading in order also works. Each guide points at the next one.
 ## Try it in the browser
 
 Nothing to install, no account to make.
-[Weave](https://rom-weaver.com/weave) applies patches.
+[Apply](https://rom-weaver.com/apply) applies patches.
 [Create](https://rom-weaver.com/create) makes them.
 
 Want to watch it work before you touch your own files? Open
-[guided Apply](https://rom-weaver.com/weave?guide=apply). It loads a tiny
+[guided Apply](https://rom-weaver.com/apply?guide=apply). It loads a tiny
 practice ROM and two patches, then walks through the important controls with
 nothing of yours at stake. [Guided Create](https://rom-weaver.com/create?guide=create)
 does the same with an original and modified ROM. Both pages also let you

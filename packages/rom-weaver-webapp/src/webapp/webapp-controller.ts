@@ -73,17 +73,20 @@ const persistWorkflowView = (storage: ControllerOptions["storage"] | undefined, 
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   creator: "create",
   docs: "docs",
-  patcher: "weave",
+  patcher: "apply",
   tools: "tools",
   trim: "trim",
 };
 const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
+  apply: "patcher",
+  "apply.html": "patcher",
   create: "creator",
   "create.html": "creator",
   docs: "docs",
   "docs.html": "docs",
   tools: "tools",
   trim: "trim",
+  // Keep old links usable when a host has not applied the server redirect.
   weave: "patcher",
   "weave.html": "patcher",
 };
@@ -103,7 +106,7 @@ const readWorkflowViewFromPath = (): WebappView | null => {
 };
 
 /**
- * Where the app itself is served, with the route segment stripped: `/weave/`
+ * Where the app itself is served, with the route segment stripped: `/apply/`
  * and `/create` both resolve to `/`, and a sub-path deployment keeps its
  * prefix. Anything the app addresses by a bare name - route links, `?bundle=`
  * targets, sample assets - has to resolve against this rather than

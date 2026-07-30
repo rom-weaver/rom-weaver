@@ -20,7 +20,7 @@ the game into a new, patched file you can play.
 ## Practice on the sample first
 
 New to this? Do not start with a game you care about. Open
-[guided Apply](https://rom-weaver.com/weave?guide=apply). It loads a tiny
+[guided Apply](https://rom-weaver.com/apply?guide=apply). It loads a tiny
 practice ROM and two patches shipped with the project, then walks through the
 ROM, patch stack, file picker, and output controls. The first patch changes
 `HELLO` to `MODIFIED`; the second changes `WORLD` to `ROM`.
@@ -76,7 +76,7 @@ mistake all get easy once you can go back to a known-good file.
 
 ## Apply a patch in the browser
 
-1. Open the [Weave page](https://rom-weaver.com/weave).
+1. Open the [Apply page](https://rom-weaver.com/apply).
 2. Add your clean copy of the game.
 3. Add the patch. Drag both onto the page or use the file pickers.
 4. Look over what rom-weaver worked out: the formats it recognized, the

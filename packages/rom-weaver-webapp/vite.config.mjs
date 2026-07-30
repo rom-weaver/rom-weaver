@@ -287,7 +287,7 @@ const injectLdJson = (html, route, includeWebsite = false) =>
 // The Trim and Tools tabs are still beta - they navigate in production but must
 // not be indexed, and they inherit the Weave page's markup, so strip the shared
 // index directive to noindex and point their canonical at themselves (rather
-// than leaking a /weave canonical that would fold them into the patcher page).
+// than leaking a /apply canonical that would fold them into the patcher page).
 const makeBetaRouteNoindex = (html, slug) =>
   html
     .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
@@ -320,7 +320,7 @@ const createNotFoundHtml = (html, channel, channelLabel) => {
 
 const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://rom-weaver.com/weave</loc></url>
+  <url><loc>https://rom-weaver.com/apply</loc></url>
   <url><loc>https://rom-weaver.com/create</loc></url>
 ${DOC_ROUTES.map(({ slug }) => `  <url><loc>https://rom-weaver.com/${slug}</loc></url>`).join("\n")}
 </urlset>
@@ -385,10 +385,10 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       if (!indexHtml.includes(patcherRoot))
         throw new Error("rom-weaver-static-assets: prerendered patcher shell not found in dist/index.html");
       // dist/index.html is served at the apex (the patcher); give it the same
-      // structured data the /weave route gets.
-      const weaveHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher, true);
-      fs.writeFileSync(path.join(distDir, "index.html"), weaveHtml);
-      fs.writeFileSync(path.join(distDir, "weave.html"), weaveHtml);
+      // structured data the /apply route gets.
+      const applyHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher, true);
+      fs.writeFileSync(path.join(distDir, "index.html"), applyHtml);
+      fs.writeFileSync(path.join(distDir, "apply.html"), applyHtml);
       fs.writeFileSync(
         path.join(distDir, "404.html"),
         createNotFoundHtml(
@@ -422,7 +422,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         fs.writeFileSync(directoryIndexPath, docsHtml);
       }
       for (const [slug, html] of [
-        ["weave", weaveHtml],
+        ["apply", applyHtml],
         ["create", createHtml],
         ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
         ["tools", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
