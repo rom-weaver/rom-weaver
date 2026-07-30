@@ -300,23 +300,29 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
             dangerouslySetInnerHTML={{ __html: html }}
           />
           {hub ? <DocsIndex currentSlug={route.slug} /> : null}
-          <aside className="docs-cta">
-            <div>
-              <h2>Try rom-weaver</h2>
-              <p>Use a guided browser sample, or copy a CLI install command.</p>
-            </div>
-            <div className="docs-cta-actions">
-              <a className="btn primary" href="/weave?guide=apply">
-                Guided Apply
-              </a>
-              <a className="btn" href="/create?guide=create">
-                Guided Create
-              </a>
-              <a className="btn" href="/docs/cli#install">
-                Install the CLI
-              </a>
-            </div>
-          </aside>
+          {/* Hub only. Sixteen guides each ending in the same three buttons made
+              the pitch furniture rather than an offer, and every guide already
+              closes on a link its author chose. The hub is where somebody is
+              still deciding what to do. */}
+          {hub ? (
+            <aside className="docs-cta">
+              <div>
+                <h2>Try rom-weaver</h2>
+                <p>Use a guided browser sample, or copy a CLI install command.</p>
+              </div>
+              <div className="docs-cta-actions">
+                <a className="btn primary" href="/weave?guide=apply">
+                  Guided Apply
+                </a>
+                <a className="btn" href="/create?guide=create">
+                  Guided Create
+                </a>
+                <a className="btn" href="/docs/cli#install">
+                  Install the CLI
+                </a>
+              </div>
+            </aside>
+          ) : null}
         </section>
       </div>
       <ArticleEnd />

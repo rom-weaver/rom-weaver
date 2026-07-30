@@ -286,6 +286,17 @@ Fixture description.
     vi.unstubAllGlobals();
   });
 
+  it("pitches the guided samples on the hub only", () => {
+    // Sixteen guides each closing on the same three buttons made the offer read as
+    // furniture, and every guide already ends on a link its own author chose.
+    const { unmount } = render(<DocsPage active slug="docs" />);
+    expect(document.querySelector(".docs-cta")).toBeTruthy();
+
+    unmount();
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+    expect(document.querySelector(".docs-cta")).toBeNull();
+  });
+
   it.each(["docs", "docs/apply-rom-patches"])("ends %s with nothing but the way back up", (slug) => {
     // Every guide's own last paragraph already links onward, in prose, to whatever
     // follows from what was just read. A generated previous/next pair underneath
