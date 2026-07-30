@@ -1,10 +1,10 @@
 import {
   Archive,
-  ArrowUpDown,
   Download,
   EllipsisVertical,
   GitCompare,
   ListChecks,
+  ListOrdered,
   Package,
   Scissors,
   SlidersHorizontal,
@@ -85,7 +85,7 @@ const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: str
   options: SlidersHorizontal,
   package: Package,
   remove: X,
-  reorder: ArrowUpDown,
+  reorder: ListOrdered,
   swap: SwapIcon,
   toggle: ToggleRight,
 };
@@ -211,13 +211,19 @@ const SampleTutorialStart = ({
   useEffect(() => setHref(downloadHref), [downloadHref]);
   return (
     <div className="first-weave-demo sample-tutorial-start">
-      <span>New here?</span>
+      <span className="sample-tutorial-start-label">New here?</span>
       <a className="btn slim sample-tutorial-start-download" download href={href}>
         <Download aria-hidden="true" />
         {downloadLabel}
       </a>
       <span className="sample-tutorial-start-or">or</span>
-      <button aria-busy={loading} className="btn ghost slim" disabled={loading} onClick={onStart} type="button">
+      <button
+        aria-busy={loading}
+        className="btn ghost slim sample-tutorial-start-primary"
+        disabled={loading}
+        onClick={onStart}
+        type="button"
+      >
         <span aria-hidden="true" className="sample-tutorial-start-beacon">
           0x
         </span>
@@ -226,7 +232,7 @@ const SampleTutorialStart = ({
       {secondaryLabel && onSecondaryStart ? (
         <button
           aria-busy={loading}
-          className="btn ghost slim"
+          className="btn ghost slim sample-tutorial-start-secondary"
           disabled={loading}
           onClick={onSecondaryStart}
           type="button"
@@ -560,10 +566,12 @@ const SampleTutorial = ({
           tracking is not a render behind the page. */}
       {targetEl ? <div aria-hidden="true" className="sample-tutorial-ring" ref={ringRef} /> : null}
       <div
+        aria-busy={!live}
         aria-describedby={bodyId}
         aria-labelledby={titleId}
         aria-modal="false"
         className="sample-tutorial-dialog"
+        data-loading={live ? undefined : "true"}
         data-moving={moving ? "true" : undefined}
         data-placement={live ? (step.placement ?? "bottom") : "bottom"}
         ref={dialogRef}
@@ -583,6 +591,16 @@ const SampleTutorial = ({
             </span>
             <h2 id={titleId}>{live ? step.title : "Loading the practice files"}</h2>
             <p id={bodyId}>{live ? step.body : loadingBody}</p>
+            {live ? null : (
+              <div
+                aria-label="Loading practice files"
+                aria-valuetext="Preparing the guided workbench"
+                className="sample-tutorial-progress"
+                role="progressbar"
+              >
+                <span />
+              </div>
+            )}
             {live && step.actions?.length ? (
               <ul aria-label="Available actions" className="sample-tutorial-action-list">
                 {step.actions.map(([action, label]) => {

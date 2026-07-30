@@ -218,6 +218,32 @@ test("WebappRoot uses the compact thread label only on mobile", async () => {
   page.viewport(1280, 900);
 });
 
+test("guided sample actions stay compact on small laptops and phones", async () => {
+  page.viewport(1024, 900);
+  mountWebappRoot();
+
+  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start .btn").length).toBe(3);
+  const start = document.querySelector(".sample-tutorial-start").getBoundingClientRect();
+  const download = document.querySelector(".sample-tutorial-start-download").getBoundingClientRect();
+  const primary = document.querySelector(".sample-tutorial-start-primary").getBoundingClientRect();
+  const secondary = document.querySelector(".sample-tutorial-start-secondary").getBoundingClientRect();
+  expect(Math.round(download.top)).toBe(Math.round(primary.top));
+  expect(Math.round(download.width)).toBe(Math.round(primary.width));
+  expect(secondary.top).toBeGreaterThan(download.bottom);
+  expect(Math.round(secondary.left + secondary.width / 2)).toBe(Math.round(start.left + start.width / 2));
+  expect(start.height).toBeLessThan(120);
+  expect(getComputedStyle(document.querySelector(".sample-tutorial-start-or")).display).toBe("none");
+
+  page.viewport(360, 740);
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start").getBoundingClientRect().right)
+    .toBeLessThanOrEqual(document.documentElement.clientWidth);
+  const phoneDownload = document.querySelector(".sample-tutorial-start-download").getBoundingClientRect();
+  const phonePrimary = document.querySelector(".sample-tutorial-start-primary").getBoundingClientRect();
+  expect(Math.round(phoneDownload.top)).toBe(Math.round(phonePrimary.top));
+  expect(Math.round(phoneDownload.width)).toBe(Math.round(phonePrimary.width));
+});
+
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {
   // "auto" in the masthead must agree with the Threads field's `auto (N)`
   // placeholder. Raw navigator.hardwareConcurrency disagrees with it on any
