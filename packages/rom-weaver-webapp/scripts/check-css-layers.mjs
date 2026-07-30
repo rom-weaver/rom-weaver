@@ -22,16 +22,22 @@ import { fileURLToPath } from "node:url";
 const DS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src", "webapp", "design-system");
 const MANIFESTS = ["index.css", "deferred.css", "docs-route.css"];
 
+// The 16px floor in webapp-modals.css (inside @supports -webkit-touch-callout) exists
+// precisely to beat the smaller per-field sizes: iOS zooms the page in when a focused
+// field's text is under 16px. Losing to it is the intent, which is why the file also
+// re-asserts it by hand for the fields whose specificity used to defeat it.
+const IOS_FONT_FLOOR =
+  "iOS 16px font-size floor - it is meant to beat the smaller per-field size, or iOS zooms on focus";
+
 // `<earlier selector> >>> <later selector>` -> why the later rule is meant to win.
 //
-// Empty on purpose. The iOS 16px font floor in webapp-modals.css used to need five
-// entries here: it is meant to beat the smaller per-field sizes (iOS zooms the page in
-// when a focused field's text is under 16px), but it did so from a later layer while
-// losing on specificity, which is exactly the trap this script hunts. Its selectors now
-// carry `:not(.ck-tight)` - excluding the checks drawer's controls, which size themselves
-// to their row and cannot be held at 16px - and that lifted it to a specificity tie, so
-// the floor no longer wins in the way this check warns about.
-const EXEMPT = new Map();
+// The three `.select` entries this list used to carry are gone: the floor now skips the
+// checks drawer's dropdowns via `:not(.ck-tight)`, which lifted `.rw-app .select` to a
+// specificity tie with them, so those pairs stopped being violations.
+const EXEMPT = new Map([
+  [".rw-app .ofld .input >>> .rw-app .input", IOS_FONT_FLOOR],
+  [".rw-app .setrow .input >>> .rw-app .input", IOS_FONT_FLOOR],
+]);
 
 const scrub = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 

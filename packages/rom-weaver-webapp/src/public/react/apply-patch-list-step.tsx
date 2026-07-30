@@ -31,7 +31,7 @@ import {
   isValidCheckValue,
   normalizeCheckInput,
 } from "./components/ds/check-fields.ts";
-import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
+import { ChecksumList, ChecksumRow, FIT_VALUE_MIN_CHARS } from "./components/ds/checksum-list.tsx";
 import { join } from "./components/ds/cx.ts";
 import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
@@ -430,7 +430,17 @@ const checkErrorMessage = (field: CheckField): string =>
 /** An editable expected-check field (user-specified, not built into the patch):
  * commits on blur, removable via the trailing X. A malformed value shows an
  * inline error; a well-formed value that was compared to the real ROM shows a
- * match/mismatch mark. */
+ * match/mismatch mark.
+ *
+ * Edit-in-place, and the indirection is load-bearing on iOS: a text field whose
+ * text is under 16px makes Safari zoom the page in when it takes focus, and no
+ * phone is wide enough to show a 40-character SHA-1 at 16px. At rest the value is
+ * therefore a button holding plain text at a read-only row's size and typeface
+ * (it keeps the user-check colour, so a user value still reads apart from an
+ * embedded one), and tapping it mounts the real field at the 16px floor before
+ * focus lands - so the field is never focused while it is small. Sizing the field
+ * on `:focus` cannot work: Safari decides whether to zoom as focus arrives, before
+ * that style applies. */
 const EditableCheckRow = ({
   focusOnMount,
   field,
@@ -461,36 +471,80 @@ const EditableCheckRow = ({
      each steal blurs the other, and the blur commits, which renders again. */
   const handedOff = useRef(false);
   if (!focusOnMount) handedOff.current = false;
+  /* One-shot: the field mounted because the user just opened it, so it takes focus
+     once. Separate from the `focusOnMount` latch above so opening a row by hand
+     never re-arms the add-a-check handoff. */
+  const openedByUser = useRef(false);
+  /* An empty row has no value to display, so it opens as a field either way. */
+  const [editing, setEditing] = useState(!!focusOnMount || !value);
+  const label = CHECK_LABELS[field];
   return (
     <div
-      className={join("verification-row", isHalfRowField(field) && "ck-half", isHashRowField(field) && "ck-hash")}
+      className={join(
+        "verification-row",
+        editing && "is-editing",
+        invalid && "bad",
+        isHalfRowField(field) && "ck-half",
+        isHashRowField(field) && "ck-hash",
+      )}
       key={`${id}:${value}`}
     >
-      <label className="ofld-l" htmlFor={id}>
-        {CHECK_LABELS[field]}
-      </label>
-      <input
-        aria-describedby={invalid ? errorId : undefined}
-        aria-invalid={invalid || undefined}
-        className="input mono popt-input ck-tight"
-        defaultValue={value}
-        id={id}
-        onBlur={(event) => onCommit(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            event.currentTarget.blur();
-          }
-        }}
-        ref={(element) => {
-          if (!(focusOnMount && element) || handedOff.current) return;
-          handedOff.current = true;
-          element.focus();
-        }}
-        spellCheck={false}
-        title={invalid ? checkErrorMessage(field) : value || undefined}
-        type="text"
-      />
+      {editing ? (
+        <label className="ofld-l" htmlFor={id}>
+          {label}
+        </label>
+      ) : (
+        <span className="ofld-l">{label}</span>
+      )}
+      {editing ? (
+        <input
+          aria-describedby={invalid ? errorId : undefined}
+          aria-invalid={invalid || undefined}
+          className="input mono popt-input"
+          defaultValue={value}
+          id={id}
+          onBlur={(event) => {
+            const raw = event.currentTarget.value;
+            /* Keep an unfillable row open rather than collapsing to a blank button. */
+            if (raw) setEditing(false);
+            onCommit(raw);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+          }}
+          ref={(element) => {
+            if (!element) return;
+            if (openedByUser.current) {
+              openedByUser.current = false;
+              element.focus();
+              return;
+            }
+            if (!focusOnMount || handedOff.current) return;
+            handedOff.current = true;
+            element.focus();
+          }}
+          spellCheck={false}
+          title={invalid ? checkErrorMessage(field) : value || undefined}
+          type="text"
+        />
+      ) : (
+        <button
+          aria-describedby={invalid ? errorId : undefined}
+          aria-label={`Edit ${label} check`}
+          className="ck-open mono"
+          onClick={() => {
+            openedByUser.current = true;
+            setEditing(true);
+          }}
+          title={invalid ? checkErrorMessage(field) : value}
+          type="button"
+        >
+          <span className={join("ck-v", value.length >= FIT_VALUE_MIN_CHARS && "ck-fit")}>{value}</span>
+        </button>
+      )}
       <span className="vrow-tail">
         {mark && !invalid ? (
           <span className={`ck-mark ${mark}`} title={mark === "ok" ? "Matches the ROM" : "Does not match the ROM"}>
@@ -1547,4 +1601,4 @@ const ApplyPatchListStep = ({
   );
 };
 
-export { ApplyPatchListStep, type RomCheckActuals };
+export { ApplyPatchListStep, EditableCheckRow, type RomCheckActuals };

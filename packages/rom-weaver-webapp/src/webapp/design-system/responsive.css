@@ -84,7 +84,10 @@
   .rw-app .ck-group-head { margin-block-end: 2px; padding-block: 2px; }
   /* Keep editable and read-only check columns aligned. */
   .rw-app .patch-checks-body .verification-row {
-    gap: var(--sp-2xs) var(--sp-s); padding-inline: 6px; min-height: 24px; padding-block: 1px;
+    gap: var(--sp-2xs) var(--sp-s); padding-inline: 6px; min-height: 24px;
+    /* Kept on the variable so the resting value cell still cancels the whole padding. */
+    --vrow-pad-y: 1px;
+    padding-block: var(--vrow-pad-y);
   }
   .rw-app .patch-checks-body .verification-row .ofld-l { font-size: .72rem; }
   .rw-app .ck-remove { width: 20px; height: 20px; }
