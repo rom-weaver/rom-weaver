@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
-import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
+import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import type {
   ApplyWorkflowBundleSources,
@@ -224,6 +224,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const lastPatchOrderRef = useRef("");
   const forcePatchWorkflowRefreshRef = useRef(false);
   const workflowRef = useRef<ApplyWorkflow | null>(null);
+  const workflowLoadRef = useRef<Promise<ApplyWorkflow> | null>(null);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
@@ -476,6 +477,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   }, []);
 
   const resetWorkflow = useCallback(() => {
+    const pendingWorkflow = workflowLoadRef.current;
+    workflowLoadRef.current = null;
     const workflow = workflowRef.current;
     workflowRef.current = null;
     preparedWorkflowRef.current = null;
@@ -485,23 +488,39 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     workflowOutputOverridesKeyRef.current = "";
     prepareHandlersRef.current = null;
     void workflow?.dispose();
+    if (pendingWorkflow && !workflow) void pendingWorkflow.then((loaded) => loaded.dispose()).catch(() => undefined);
   }, []);
 
-  const getWorkflow = useCallback(() => {
+  const getWorkflow = useCallback(async () => {
     if (workflowRef.current) return workflowRef.current;
-    workflowRef.current = new ApplyWorkflow({
-      ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-      id: workflowIdRef.current,
-      selectFile: async (request) => {
-        const handlers = prepareHandlersRef.current;
-        const promptInputSelection = handlers?.selection?.promptInputSelection !== false;
-        const promptPatchSelection = handlers?.selection?.promptPatchSelection !== false;
-        if ((request.role === "input" && !promptInputSelection) || (request.role === "patch" && !promptPatchSelection))
-          throw createWorkflowFormError("WORKFLOW_SELECTION_SKIPPED", `${request.sourceName} requires selection`);
-        return selectFileRef.current(request);
-      },
-    });
-    return workflowRef.current;
+    const pendingWorkflow =
+      workflowLoadRef.current ??
+      import("../../platform/browser/browser-api.ts").then(({ ApplyWorkflow }) => {
+        if (workflowRef.current) return workflowRef.current;
+        const workflow = new ApplyWorkflow({
+          ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+          id: workflowIdRef.current,
+          selectFile: async (request) => {
+            const handlers = prepareHandlersRef.current;
+            const promptInputSelection = handlers?.selection?.promptInputSelection !== false;
+            const promptPatchSelection = handlers?.selection?.promptPatchSelection !== false;
+            if (
+              (request.role === "input" && !promptInputSelection) ||
+              (request.role === "patch" && !promptPatchSelection)
+            )
+              throw createWorkflowFormError("WORKFLOW_SELECTION_SKIPPED", `${request.sourceName} requires selection`);
+            return selectFileRef.current(request);
+          },
+        });
+        workflowRef.current = workflow;
+        return workflow;
+      });
+    workflowLoadRef.current = pendingWorkflow;
+    try {
+      return await pendingWorkflow;
+    } finally {
+      if (workflowLoadRef.current === pendingWorkflow) workflowLoadRef.current = null;
+    }
   }, [resolvedAssetBaseUrl]);
 
   useEffect(
@@ -568,7 +587,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       });
       setResolvedOutputCompression(getApplyOutputCompression(snapshot, null));
       setResolvedOutputNameForSnapshot(snapshot, getAutomaticApplyOutputName(snapshot, null, []));
-      const workflow = getWorkflow();
+      const workflow = await getWorkflow();
       preparedWorkflowRef.current = workflow;
       prepareHandlersRef.current = handlers;
       const handleProgress = (event: WorkflowProgress) => handlers.onProgress?.(event);
@@ -857,7 +876,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           workflowProgress.id.endsWith(":patch-awaiting-input")
         ) {
           const order = Number(workflowProgress.details?.order);
-          const info = Number.isInteger(order) ? buildEagerPatchStageInfo(getWorkflow(), snapshot, order) : null;
+          const activeWorkflow = workflowRef.current;
+          const info =
+            Number.isInteger(order) && activeWorkflow
+              ? buildEagerPatchStageInfo(activeWorkflow, snapshot, order)
+              : null;
           // Only reveal (and swallow this "waiting" event) once the patch is parsed. If it isn't yet,
           // fall through so the event routes as normal patch progress and the card keeps "Reading…".
           if (info) {
@@ -882,7 +905,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ).catch((error) => {
       for (const member of members) member.fail(error);
     });
-  }, [emitWorkflowProgress, getWorkflow, prepareWorkflow, queueMutation]);
+  }, [emitWorkflowProgress, prepareWorkflow, queueMutation]);
 
   const enqueueStageBatch = useCallback(
     <TValue,>(

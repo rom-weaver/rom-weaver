@@ -7,12 +7,12 @@ import {
 } from "../../lib/compression/container-format-registry.ts";
 import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
-import {
-  type BrowserSaveDestination,
-  type BrowserTrimResult,
-  type CreateSettings,
+import type {
+  BrowserSaveDestination,
+  BrowserTrimResult,
+  CreateSettings,
   TrimWorkflow,
-  type WorkflowProgress,
+  WorkflowProgress,
 } from "../../platform/browser/browser-api.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
@@ -51,6 +51,8 @@ import {
   useWorkbenchActivity,
   useWorkflowResetActions,
 } from "./workflow-form-effects.ts";
+
+const loadBrowserApi = () => import("../../platform/browser/browser-api.ts");
 import {
   createReactWorkflowId,
   createSettingsDependencyKey,
@@ -490,7 +492,7 @@ type InternalTrimPatchFormProps = TrimPatchFormProps & {
 
 function TrimPatchForm(props: TrimPatchFormProps) {
   const internalProps = props as InternalTrimPatchFormProps;
-  const TrimWorkflowConstructor = internalProps.trimWorkflow || TrimWorkflow;
+  const trimWorkflowOverride = internalProps.trimWorkflow;
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
@@ -727,104 +729,118 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   };
 
   useEffect(() => {
-    const generation = ++stagedTrimWorkflowGenerationRef.current;
-    emitTrimFormTrace("stage.reset", {
-      generation,
-      hadStagedWorkflow: !!stagedTrimWorkflowRef.current,
-      reason: source ? "source-or-settings-changed" : "empty-source",
-      sourceName: sourceFileName,
-      stagingSettingsKey,
-    });
-    stagedTrimWorkflowRef.current?.dispose().catch(() => undefined);
-    stagedTrimWorkflowRef.current = null;
-    stagedTrimWorkflowReadyRef.current = null;
-    if (!source) {
-      setSourceState(null);
-      setSourceStaging(false);
-      return;
-    }
-    const workflow = new TrimWorkflowConstructor({
-      ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-      id: `${workflowIdRef.current}:stage:${generation}`,
-      selectFile,
-      settings: stagingSettingsRef.current,
-    });
-    emitTrimFormTrace("stage.workflow.created", {
-      generation,
-      sourceName: sourceFileName,
-      workflowId: workflow.id,
-    });
-    stagedTrimWorkflowRef.current = workflow;
-    const handleProgress = createProgressHandler("input");
-    workflow.on("progress", handleProgress);
-    setSourceStaging(true);
-    emitTrimFormTrace("stage.set-input.start", {
-      generation,
-      sourceName: sourceFileName,
-      workflowId: workflow.id,
-    });
-
-    const stagedReady = workflow
-      .setInput(source)
-      .then(() => {
-        if (stagedTrimWorkflowGenerationRef.current !== generation) return;
-        emitTrimFormTrace("stage.set-input.finish", {
-          generation,
-          input: workflow.getInput(),
-          workflowId: workflow.id,
-        });
-        setSourceState(workflow.getInput());
-      })
-      .catch((error) => {
-        if (stagedTrimWorkflowGenerationRef.current !== generation) return;
-        const normalizedError = error instanceof Error ? error : new Error(String(error));
-        emitTrimFormTrace("stage.set-input.fail", {
-          error,
-          generation,
-          input: workflow.getInput(),
-          workflowId: workflow.id,
-        });
-        const nextSourceState = workflow.getInput();
-        setSourceState(nextSourceState);
-        if (getErrorCode(normalizedError) !== "WORKFLOW_SELECTION_SKIPPED" && !hasSourceQueueWarning(nextSourceState)) {
-          setWorkflowMessage("source", normalizedError);
-          onErrorRef.current?.(normalizedError);
-        }
-      })
-      .finally(() => {
-        workflow.off("progress", handleProgress);
-        if (stagedTrimWorkflowGenerationRef.current === generation) {
-          emitTrimFormTrace("stage.finish", {
-            generation,
-            keptStagedWorkflow: stagedTrimWorkflowRef.current === workflow,
-            workflowId: workflow.id,
-          });
-          setSourceStaging(false);
-          clearProgressForStage("input");
-        } else {
-          emitTrimFormTrace("stage.finish.stale", {
-            currentGeneration: stagedTrimWorkflowGenerationRef.current,
-            generation,
-            workflowId: workflow.id,
-          });
-          void workflow.dispose();
-        }
-      });
-    stagedTrimWorkflowReadyRef.current = stagedReady;
-
-    return () => {
-      workflow.off("progress", handleProgress);
-      emitTrimFormTrace("stage.cleanup", {
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
+    const stage = async () => {
+      const generation = ++stagedTrimWorkflowGenerationRef.current;
+      emitTrimFormTrace("stage.reset", {
         generation,
-        isCurrentWorkflow: stagedTrimWorkflowRef.current === workflow,
+        hadStagedWorkflow: !!stagedTrimWorkflowRef.current,
+        reason: source ? "source-or-settings-changed" : "empty-source",
+        sourceName: sourceFileName,
+        stagingSettingsKey,
+      });
+      stagedTrimWorkflowRef.current?.dispose().catch(() => undefined);
+      stagedTrimWorkflowRef.current = null;
+      stagedTrimWorkflowReadyRef.current = null;
+      if (!source) {
+        setSourceState(null);
+        setSourceStaging(false);
+        return;
+      }
+      const TrimWorkflowConstructor = trimWorkflowOverride || (await loadBrowserApi()).TrimWorkflow;
+      if (disposed) return;
+      const workflow = new TrimWorkflowConstructor({
+        ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+        id: `${workflowIdRef.current}:stage:${generation}`,
+        selectFile,
+        settings: stagingSettingsRef.current,
+      });
+      emitTrimFormTrace("stage.workflow.created", {
+        generation,
+        sourceName: sourceFileName,
         workflowId: workflow.id,
       });
-      if (stagedTrimWorkflowRef.current === workflow) {
-        stagedTrimWorkflowGenerationRef.current += 1;
-        stagedTrimWorkflowRef.current = null;
-        stagedTrimWorkflowReadyRef.current = null;
-      }
-      workflow.dispose().catch(() => undefined);
+      stagedTrimWorkflowRef.current = workflow;
+      const handleProgress = createProgressHandler("input");
+      workflow.on("progress", handleProgress);
+      setSourceStaging(true);
+      emitTrimFormTrace("stage.set-input.start", {
+        generation,
+        sourceName: sourceFileName,
+        workflowId: workflow.id,
+      });
+
+      const stagedReady = workflow
+        .setInput(source)
+        .then(() => {
+          if (stagedTrimWorkflowGenerationRef.current !== generation) return;
+          emitTrimFormTrace("stage.set-input.finish", {
+            generation,
+            input: workflow.getInput(),
+            workflowId: workflow.id,
+          });
+          setSourceState(workflow.getInput());
+        })
+        .catch((error) => {
+          if (stagedTrimWorkflowGenerationRef.current !== generation) return;
+          const normalizedError = error instanceof Error ? error : new Error(String(error));
+          emitTrimFormTrace("stage.set-input.fail", {
+            error,
+            generation,
+            input: workflow.getInput(),
+            workflowId: workflow.id,
+          });
+          const nextSourceState = workflow.getInput();
+          setSourceState(nextSourceState);
+          if (
+            getErrorCode(normalizedError) !== "WORKFLOW_SELECTION_SKIPPED" &&
+            !hasSourceQueueWarning(nextSourceState)
+          ) {
+            setWorkflowMessage("source", normalizedError);
+            onErrorRef.current?.(normalizedError);
+          }
+        })
+        .finally(() => {
+          workflow.off("progress", handleProgress);
+          if (stagedTrimWorkflowGenerationRef.current === generation) {
+            emitTrimFormTrace("stage.finish", {
+              generation,
+              keptStagedWorkflow: stagedTrimWorkflowRef.current === workflow,
+              workflowId: workflow.id,
+            });
+            setSourceStaging(false);
+            clearProgressForStage("input");
+          } else {
+            emitTrimFormTrace("stage.finish.stale", {
+              currentGeneration: stagedTrimWorkflowGenerationRef.current,
+              generation,
+              workflowId: workflow.id,
+            });
+            void workflow.dispose();
+          }
+        });
+      stagedTrimWorkflowReadyRef.current = stagedReady;
+
+      cleanup = () => {
+        workflow.off("progress", handleProgress);
+        emitTrimFormTrace("stage.cleanup", {
+          generation,
+          isCurrentWorkflow: stagedTrimWorkflowRef.current === workflow,
+          workflowId: workflow.id,
+        });
+        if (stagedTrimWorkflowRef.current === workflow) {
+          stagedTrimWorkflowGenerationRef.current += 1;
+          stagedTrimWorkflowRef.current = null;
+          stagedTrimWorkflowReadyRef.current = null;
+        }
+        workflow.dispose().catch(() => undefined);
+      };
+    };
+    void stage();
+    return () => {
+      disposed = true;
+      cleanup?.();
     };
   }, [
     clearProgressForStage,
@@ -836,7 +852,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     sourceFileName,
     stagingSettingsKey,
     setWorkflowMessage,
-    TrimWorkflowConstructor,
+    trimWorkflowOverride,
   ]);
 
   const runTrim = async () => {
@@ -854,7 +870,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       await stagedTrimWorkflowReadyRef.current?.catch(() => undefined);
       const trimWorkflow =
         stagedTrimWorkflowRef.current ||
-        new TrimWorkflowConstructor({
+        new (trimWorkflowOverride || (await loadBrowserApi()).TrimWorkflow)({
           ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
           id: workflowIdRef.current,
           selectFile,
