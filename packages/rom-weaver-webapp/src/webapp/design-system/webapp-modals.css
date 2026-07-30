@@ -96,11 +96,17 @@
 .codec-combobox-option { min-height: 28px; display: flex; align-items: center; padding: 0 8px; border-radius: 4px; color: var(--ink); cursor: pointer; font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; font-size: var(--dropdown-fs, .8rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .codec-combobox-option.active { background: var(--plate-2); color: var(--thread-text); }
 
-/* Prevent iOS focus zoom without disabling pinch zoom. */
+/* Prevent iOS focus zoom without disabling pinch zoom.
+   Check-value fields (.ck-input) opt out: their size is computed from the row's
+   container width so a 40-character SHA-1 holds one line (fields.css), and no phone
+   is wide enough to do that at 16px - the floor clipped the hash and left the patch
+   card's values visibly larger than the ROM card's read-only ones. They zoom on
+   focus instead, which is the friendlier half of the trade while typing 40 hex
+   digits on a phone. */
 @supports (-webkit-touch-callout: none) {
   @media (pointer: coarse) {
-    .rw-app .input, .rw-app .select,
-    .rw-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+    .rw-app .input:not(.ck-input), .rw-app .select,
+    .rw-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not(.ck-input),
     .rw-app textarea, .rw-app select { font-size: max(16px, 1em); }
     /* Reassert the 16px floor against more specific field rules. */
     .rw-app .ofld .select,

@@ -472,7 +472,7 @@ const EditableCheckRow = ({
       <input
         aria-describedby={invalid ? errorId : undefined}
         aria-invalid={invalid || undefined}
-        className="input mono popt-input"
+        className="input mono popt-input ck-input"
         defaultValue={value}
         id={id}
         onBlur={(event) => onCommit(event.currentTarget.value)}
