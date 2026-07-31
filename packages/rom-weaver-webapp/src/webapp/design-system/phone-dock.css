@@ -78,8 +78,8 @@
   .rw-app .tool .ico-sun,
   .rw-app .tool .ico-moon {
     grid-area: 1 / 1;
-    width: 17px;
-    height: 17px;
+    width: var(--masthead-tool-icon, 17px);
+    height: var(--masthead-tool-icon, 17px);
   }
 
   .rw-app .updates {
@@ -284,6 +284,24 @@
 
   .rw-app .modes { width: 100%; flex-basis: 100%; margin-inline: 0; }
 
+}
+
+/* The phone masthead cannot spare a column for links the footer already carries,
+   and the six remaining tools are what the brand column is measured against. */
+@media (max-width: 500px) {
+  .rw-app .masthead-tools .masthead-link,
+  .rw-app .masthead-tools .tools-sep { display: none; }
+}
+
+/* Above the iPhone SE floor the leftover width goes back into the touch
+   targets: the six tools grow with the viewport until they reach the 36px
+   desktop size, and only then does a gap open between them. */
+@media (min-width: 361px) and (max-width: 500px) {
+  .rw-app .masthead-tools { gap: clamp(0px, 2.2vw - 6px, 5px); }
+  .rw-app .tool {
+    --masthead-tool-icon: clamp(17px, 4.4vw, 20px);
+    width: clamp(28px, 7.6vw, 36px);
+  }
 }
 
 @media (min-width: 501px) {

@@ -23,6 +23,8 @@ const TABS = [
 
 const mastheadProps = {
   currentTab: "patcher",
+  donateHref: "https://example.com/donate",
+  githubHref: "https://example.com/repo",
   onOpenLog: () => undefined,
   onReset: () => undefined,
   onOpenSettings: () => undefined,
@@ -65,11 +67,16 @@ describe("Masthead", () => {
     expect(tabs[1]?.getAttribute("href")).toBe("create");
     fireEvent.click(tabs[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
-    // the accent and language pickers sit in anchors, so they are not direct children
-    expect(container.querySelectorAll(".masthead-tools > .tool").length).toBe(4);
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
+    // the accent picker sits in an anchor, so it is not a direct child
+    expect(container.querySelectorAll(".masthead-tools > .tool").length).toBe(6);
     expect(container.querySelector(".accent-tool")).toBeTruthy();
-    expect(container.querySelector(".tool-code")?.textContent).toBe("EN");
+    // language is a settings-only field; the masthead carries no picker for it
+    expect(container.querySelector('[aria-label="Language"]')).toBeNull();
+    const mastheadGithub = getByRole("link", { name: "GitHub" });
+    expect(mastheadGithub.getAttribute("href")).toBe("https://example.com/repo");
+    expect(mastheadGithub.closest(".masthead-tools")).toBeTruthy();
+    expect(getByRole("link", { name: "Support" }).getAttribute("href")).toBe("https://example.com/donate");
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
     const reset = getByRole("button", { name: "Reset" });
     expect(container.querySelector(".masthead-version")).toBeNull();
@@ -143,24 +150,6 @@ describe("Masthead", () => {
     expect(onAccentChange).toHaveBeenCalledWith("woad");
     // stays open so a second lot can be compared without reopening
     expect(container.querySelector(".accent-tray")).toBeTruthy();
-  });
-
-  it("offers only languages that ship a catalog, and closes the menu on choice", () => {
-    const onLanguageChange = vi.fn();
-    const { container } = render(
-      withSettings(<Masthead {...mastheadProps} language="de" onLanguageChange={onLanguageChange} />),
-    );
-    const button = container.querySelector(".tool-code") as HTMLButtonElement;
-    expect(button.textContent).toBe("DE");
-    fireEvent.click(button);
-    const items = Array.from(container.querySelectorAll<HTMLButtonElement>(".tool-menu-item"));
-    expect(items.map((item) => item.textContent)).toEqual(["English", "Deutsch", "Español"]);
-    expect(
-      items.filter((item) => item.getAttribute("aria-checked") === "true").map((item) => item.textContent),
-    ).toEqual(["Deutsch"]);
-    fireEvent.click(items[2] as HTMLButtonElement);
-    expect(onLanguageChange).toHaveBeenCalledWith("es");
-    expect(container.querySelector(".tool-menu")).toBeNull();
   });
 
   it("closes an open picker on Escape", () => {
