@@ -28,7 +28,8 @@ case "$system:$machine" in
     ;;
 esac
 
-asset="rom-weaver-$platform"
+asset="rom-weaver-$platform.tar.gz"
+legacy_asset="rom-weaver-$platform"
 docs_asset="rom-weaver-cli-assets.tar.gz"
 if [ "$version" = "latest" ]; then
   release_url="https://github.com/$repo/releases/latest/download"
@@ -40,8 +41,14 @@ fi
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 
-curl --fail --location --proto '=https' --tlsv1.2 \
-  --output "$tmp_dir/$asset" "$release_url/$asset"
+# Releases up to v0.10.2 shipped the executable as a loose file instead of a
+# tar.gz; the fallback keeps pinned installs of those versions working.
+if ! curl --fail --location --proto '=https' --tlsv1.2 \
+  --output "$tmp_dir/$asset" "$release_url/$asset"; then
+  asset="$legacy_asset"
+  curl --fail --location --proto '=https' --tlsv1.2 \
+    --output "$tmp_dir/$asset" "$release_url/$asset"
+fi
 
 # Hash what actually arrived. This is the lookup key for the provenance check,
 # and it is also why there is no separate checksum step: a truncated, corrupted,
@@ -144,7 +151,15 @@ else
 fi
 
 mkdir -p "$install_dir"
-install -m 0755 "$tmp_dir/$asset" "$install_dir/rom-weaver"
+case "$asset" in
+  *.tar.gz)
+    tar --extract --gzip --file "$tmp_dir/$asset" --directory "$tmp_dir" rom-weaver
+    install -m 0755 "$tmp_dir/rom-weaver" "$install_dir/rom-weaver"
+    ;;
+  *)
+    install -m 0755 "$tmp_dir/$asset" "$install_dir/rom-weaver"
+    ;;
+esac
 echo "Installed rom-weaver to $install_dir/rom-weaver"
 
 # Documentation is a separate, platform-independent release asset so the

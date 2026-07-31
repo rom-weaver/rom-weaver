@@ -16,7 +16,7 @@ test("generates a manifest from the release checksum", () => {
       ["arm64", "win32-arm64-msvc", "c"],
     ];
     for (const [, platform, digit] of platforms) {
-      const asset = `rom-weaver-${platform}.exe`;
+      const asset = `rom-weaver-${platform}.tar.gz`;
       writeFileSync(join(checksums, `${asset}.sha256`), `${digit.repeat(64)}  ${asset}\n`);
     }
 
@@ -31,12 +31,13 @@ test("generates a manifest from the release checksum", () => {
     assert.equal(manifest.version, "1.2.3");
     assert.equal(manifest.bin, "rom-weaver.exe");
     for (const [architecture, platform, digit] of platforms) {
-      const asset = `rom-weaver-${platform}.exe`;
+      const asset = `rom-weaver-${platform}.tar.gz`;
       assert.equal(manifest.architecture[architecture].hash, digit.repeat(64));
-      // The `#/rom-weaver.exe` fragment is what makes `bin` a stable name.
+      // Scoop extracts the archive; the stable `rom-weaver.exe` inside it is
+      // what `bin` points at, so the URL carries no rename fragment.
       assert.equal(
         manifest.architecture[architecture].url,
-        `https://github.com/rom-weaver/rom-weaver/releases/download/v1.2.3/${asset}#/rom-weaver.exe`,
+        `https://github.com/rom-weaver/rom-weaver/releases/download/v1.2.3/${asset}`,
       );
     }
   } finally {

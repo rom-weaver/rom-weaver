@@ -24,6 +24,15 @@ const createDocsArchive = (directory) => {
   return archive;
 };
 
+const createBinaryArchive = (directory) => {
+  const source = join(directory, "binary-source");
+  mkdirSync(source, { recursive: true });
+  writeFileSync(join(source, "rom-weaver"), "binary\n");
+  const archive = join(directory, "binary-asset.tar.gz");
+  execFileSync("tar", ["-czf", archive, "-C", source, "rom-weaver"]);
+  return archive;
+};
+
 const DIGEST = "b".repeat(64);
 
 // install.sh hashes the download to build the attestation URL. There is no
@@ -58,6 +67,7 @@ JSON
     printf '%s' "\${ATTESTATION_STATUS:-200}"
     ;;
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
+  *.tar.gz) cp "$BINARY_ASSET_ARCHIVE" "$output" ;;
   *) echo binary > "$output" ;;
 esac
 `;
@@ -86,6 +96,7 @@ const setUpDarwinInstall = (directory, options = {}) => {
   writeExecutable(join(bin, "curl"), curlStub(attestation));
   writeExecutable(join(bin, "sha256sum"), SHA256SUM_STUB);
   createDocsArchive(directory);
+  createBinaryArchive(directory);
   return bin;
 };
 
@@ -104,6 +115,7 @@ const runInstall = (directory, bin, environment = {}) => {
       PATH: `${bin}:${extra ? `${extra}:` : ""}/usr/bin:/bin`,
       ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
       CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
+      BINARY_ASSET_ARCHIVE: join(directory, "binary-asset.tar.gz"),
       ...rest,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -137,7 +149,7 @@ test("installs the binary for the host platform", () => {
     assert.ok(output.includes(`source "${directory}/.zshrc"`));
     assert.ok(output.includes("Then run: rom-weaver --help"));
     assert.deepEqual(readFileSync(curlLog, "utf8").trim().split("\n"), [
-      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-darwin-arm64",
+      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-darwin-arm64.tar.gz",
       // No `.sha256` fetch: the provenance lookup is keyed by the hash of what
       // actually arrived, so it subsumes the checksum it used to download.
       // `predicate_type` is asserted here because dropping it silently weakens
@@ -162,6 +174,7 @@ test("selects Linux musl assets by architecture", () => {
       const curlLog = join(directory, "curl.log");
       mkdirSync(bin);
       createDocsArchive(directory);
+      createBinaryArchive(directory);
       writeExecutable(
         join(bin, "uname"),
         `#!/bin/sh
@@ -186,6 +199,7 @@ echo "$url" >> "$CURL_LOG"
 case "$url" in
   *.sha256) echo "${"a".repeat(64)}  rom-weaver-${platform}" > "$output" ;;
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
+  *.tar.gz) cp "$BINARY_ASSET_ARCHIVE" "$output" ;;
   *) echo binary > "$output" ;;
 esac
 `,
@@ -200,6 +214,7 @@ esac
           PATH: `${bin}:/usr/bin:/bin`,
           ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
           CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
+          BINARY_ASSET_ARCHIVE: join(directory, "binary-asset.tar.gz"),
           // This test is about asset selection; the provenance branches have
           // their own coverage and would only add noise to its output.
           ROM_WEAVER_SKIP_ATTESTATION: "1",
@@ -208,7 +223,7 @@ esac
 
       assert.equal(
         readFileSync(curlLog, "utf8").trim().split("\n")[0],
-        `https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-${platform}`,
+        `https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-${platform}.tar.gz`,
       );
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -257,7 +272,7 @@ const expectWarning = (directory, output) => {
 test("accepts a response carrying an attestation for these bytes", () => {
   withInstall({}, (directory, bin) => {
     const output = runInstall(directory, bin);
-    assert.match(output, /Verified build provenance for rom-weaver-darwin-arm64/);
+    assert.match(output, /Verified build provenance for rom-weaver-darwin-arm64\.tar\.gz/);
   });
 });
 
@@ -320,6 +335,51 @@ test("needs no jq and no base64 decoder", () => {
     for (const tool of ["jq", "base64", "openssl"]) {
       writeExecutable(join(bin, tool), `#!/bin/sh\necho '${tool} must not be called' >&2\nexit 127\n`);
     }
-    assert.match(runInstall(directory, bin), /Verified build provenance for rom-weaver-darwin-arm64/);
+    assert.match(runInstall(directory, bin), /Verified build provenance for rom-weaver-darwin-arm64\.tar\.gz/);
   });
+});
+
+// Releases up to v0.10.2 shipped a loose executable instead of a tar.gz. The
+// installer must fall back to that name so a pinned old version stays
+// installable.
+test("falls back to the loose binary asset for pre-archive releases", () => {
+  const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-legacy-"));
+  try {
+    const bin = setUpDarwinInstall(directory);
+    writeExecutable(
+      join(bin, "curl"),
+      `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output) output=$2; shift 2 ;;
+    --write-out) shift 2 ;;
+    -*) shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+echo "$url" >> "$CURL_LOG"
+case "$url" in
+  *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
+  *.tar.gz) exit 22 ;;
+  *) echo binary > "$output" ;;
+esac
+`,
+    );
+
+    const output = runInstall(directory, bin, { ROM_WEAVER_SKIP_ATTESTATION: "1" });
+
+    assert.equal(readFileSync(join(directory, "install", "rom-weaver"), "utf8"), "binary\n");
+    const log = readFileSync(join(directory, "curl.log"), "utf8").trim().split("\n");
+    assert.equal(
+      log[0],
+      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-darwin-arm64.tar.gz",
+    );
+    assert.equal(
+      log[1],
+      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-darwin-arm64",
+    );
+    assert.ok(output.includes("Installed rom-weaver to"));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

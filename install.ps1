@@ -21,7 +21,8 @@ $platformArchitecture = switch ($architecture) {
   default { throw "rom-weaver does not support Windows/$architecture" }
 }
 
-$asset = "rom-weaver-win32-$platformArchitecture-msvc.exe"
+$asset = "rom-weaver-win32-$platformArchitecture-msvc.tar.gz"
+$legacyAsset = "rom-weaver-win32-$platformArchitecture-msvc.exe"
 $docsAsset = 'rom-weaver-cli-assets.zip'
 $releaseUrl = if ($version -eq 'latest') {
   "https://github.com/$repo/releases/latest/download"
@@ -38,20 +39,28 @@ if ($PSVersionTable.PSEdition -eq 'Desktop') {
 $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $tempDir | Out-Null
 try {
-  $binaryPath = Join-Path $tempDir $asset
   # Invoke-WebRequest's progress bar makes the download an order of magnitude
   # slower in Windows PowerShell.
   $previousProgress = $ProgressPreference
   $ProgressPreference = 'SilentlyContinue'
   try {
-    Invoke-WebRequest -Uri "$releaseUrl/$asset" -OutFile $binaryPath -UseBasicParsing
+    # Releases up to v0.10.2 shipped the executable as a loose file instead of
+    # a tar.gz; the fallback keeps pinned installs of those versions working.
+    try {
+      $downloadPath = Join-Path $tempDir $asset
+      Invoke-WebRequest -Uri "$releaseUrl/$asset" -OutFile $downloadPath -UseBasicParsing
+    } catch {
+      $asset = $legacyAsset
+      $downloadPath = Join-Path $tempDir $asset
+      Invoke-WebRequest -Uri "$releaseUrl/$asset" -OutFile $downloadPath -UseBasicParsing
+    }
   } finally {
     $ProgressPreference = $previousProgress
   }
 
   # Hash what actually arrived - the lookup key for the provenance check, and the
   # reason there is no separate checksum step. See install.sh for the full note.
-  $actual = (Get-FileHash -Path $binaryPath -Algorithm SHA256).Hash
+  $actual = (Get-FileHash -Path $downloadPath -Algorithm SHA256).Hash
 
   # Build provenance says which workflow produced this file. The endpoint is
   # scoped to this repository and to these exact bytes, so a non-empty answer is
@@ -131,7 +140,15 @@ try {
 
   New-Item -ItemType Directory -Path $installDir -Force | Out-Null
   $target = Join-Path $installDir 'rom-weaver.exe'
-  Move-Item -Path $binaryPath -Destination $target -Force
+  if ($asset.EndsWith('.tar.gz')) {
+    # tar.exe (bsdtar) ships with Windows 10 1803+, which is older than the
+    # PowerShell 5.1 floor above.
+    & tar --extract --gzip --file $downloadPath --directory $tempDir 'rom-weaver.exe'
+    if ($LASTEXITCODE -ne 0) { throw "failed to extract $asset" }
+    Move-Item -Path (Join-Path $tempDir 'rom-weaver.exe') -Destination $target -Force
+  } else {
+    Move-Item -Path $downloadPath -Destination $target -Force
+  }
   Write-Host "Installed rom-weaver to $target"
   if ($docsPath) {
     $docsDir = Join-Path $tempDir 'docs'

@@ -17,8 +17,8 @@ test("generates a formula from release checksums", () => {
       ["linux-x64-gnu", "d"],
     ]) {
       writeFileSync(
-        join(checksums, `rom-weaver-${platform}.sha256`),
-        `${digit.repeat(64)}  rom-weaver-${platform}\n`,
+        join(checksums, `rom-weaver-${platform}.tar.gz.sha256`),
+        `${digit.repeat(64)}  rom-weaver-${platform}.tar.gz\n`,
       );
     }
     writeFileSync(
@@ -35,16 +35,17 @@ test("generates a formula from release checksums", () => {
     ]);
     const formula = readFileSync(output, "utf8");
     assert.match(formula, /version "1\.2\.3"/);
-    assert.match(formula, /releases\/download\/v1\.2\.3\/rom-weaver-darwin-arm64/);
-    assert.match(formula, /releases\/download\/v1\.2\.3\/rom-weaver-darwin-x64/);
-    assert.match(formula, /releases\/download\/v1\.2\.3\/rom-weaver-linux-arm64-musl/);
-    assert.match(formula, /releases\/download\/v1\.2\.3\/rom-weaver-linux-x64-gnu/);
+    assert.match(formula, /releases\/download\/v1\.2\.3\/rom-weaver-darwin-arm64\.tar\.gz/);
+    assert.match(formula, /releases\/download\/v1\.2\.3\/rom-weaver-darwin-x64\.tar\.gz/);
+    assert.match(formula, /releases\/download\/v1\.2\.3\/rom-weaver-linux-arm64-musl\.tar\.gz/);
+    assert.match(formula, /releases\/download\/v1\.2\.3\/rom-weaver-linux-x64-gnu\.tar\.gz/);
     assert.match(formula, new RegExp(`sha256 "${"a".repeat(64)}"`));
     assert.match(formula, new RegExp(`sha256 "${"b".repeat(64)}"`));
     assert.match(formula, new RegExp(`sha256 "${"c".repeat(64)}"`));
     assert.match(formula, new RegExp(`sha256 "${"d".repeat(64)}"`));
     assert.match(formula, /rom-weaver-cli-assets\.tar\.gz/);
     assert.match(formula, new RegExp(`sha256 "${"e".repeat(64)}"`));
+    assert.match(formula, /bin\.install "rom-weaver"/);
     assert.match(formula, /bash_completion\.install/);
     assert.match(formula, /zsh_completion\.install/);
     assert.match(formula, /fish_completion\.install/);

@@ -16,7 +16,7 @@ const runtimeArchitecture = hasPowerShell
       .trim()
   : "x64";
 const packageArchitecture = runtimeArchitecture === "x86" ? "ia32" : runtimeArchitecture;
-const asset = `rom-weaver-win32-${packageArchitecture}-msvc.exe`;
+const asset = `rom-weaver-win32-${packageArchitecture}-msvc.tar.gz`;
 
 // Invoke-WebRequest is stubbed by declaring a function of the same name in the
 // caller's scope: PowerShell resolves functions before cmdlets, and install.ps1
@@ -40,6 +40,12 @@ function Invoke-WebRequest {
     } finally {
       $archive.Dispose()
     }
+  } elseif ($Uri -like '*.tar.gz') {
+    $stage = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
+    New-Item -ItemType Directory -Path $stage | Out-Null
+    Set-Content -Path (Join-Path $stage 'rom-weaver.exe') -Value 'binary' -NoNewline
+    & tar --create --gzip --file $OutFile --directory $stage 'rom-weaver.exe'
+    Remove-Item -Recurse -Force $stage
   } else {
     Set-Content -Path $OutFile -Value 'binary' -NoNewline
   }
@@ -122,6 +128,12 @@ function Invoke-WebRequest {
     } finally {
       $archive.Dispose()
     }
+  } elseif ($Uri -like '*.tar.gz') {
+    $stage = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
+    New-Item -ItemType Directory -Path $stage | Out-Null
+    Set-Content -Path (Join-Path $stage 'rom-weaver.exe') -Value 'binary' -NoNewline
+    & tar --create --gzip --file $OutFile --directory $stage 'rom-weaver.exe'
+    Remove-Item -Recurse -Force $stage
   } else {
     Set-Content -Path $OutFile -Value 'binary' -NoNewline
   }
@@ -235,4 +247,41 @@ function Invoke-RestMethod {
     assert.match(result.stderr, /no build provenance from/);
     assert.match(result.stderr, /ROM_WEAVER_SKIP_ATTESTATION=1/);
   });
+});
+
+// Releases up to v0.10.2 shipped a loose executable instead of a tar.gz. The
+// installer must fall back to that name so a pinned old version stays
+// installable.
+test("falls back to the loose binary asset for pre-archive releases", { skip }, () => {
+  const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-ps1-legacy-"));
+  try {
+    const installDirectory = join(directory, "install");
+    const urlLog = join(directory, "urls.log");
+    const script = `
+$env:ROM_WEAVER_INSTALL_DIR = '${installDirectory}'
+$env:ROM_WEAVER_SKIP_ATTESTATION = '1'
+function Invoke-WebRequest {
+  param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
+  Add-Content -Path '${urlLog}' -Value $Uri
+  if ($Uri -like '*cli-assets.zip') {
+    throw 'no docs'
+  } elseif ($Uri -like '*.tar.gz') {
+    throw 'no archive'
+  } else {
+    Set-Content -Path $OutFile -Value 'binary' -NoNewline
+  }
+}
+& '${resolve("install.ps1")}'
+`;
+    const result = spawnSync("pwsh", ["-NoProfile", "-Command", script], { encoding: "utf8" });
+
+    assert.equal(result.status, 0, result.stderr);
+    const target = join(installDirectory, "rom-weaver.exe");
+    assert.equal(readFileSync(target, "utf8"), "binary");
+    const log = readFileSync(urlLog, "utf8").trim().split("\n");
+    assert.match(log[0], /rom-weaver-win32-.*-msvc\.tar\.gz$/);
+    assert.match(log[1], /rom-weaver-win32-.*-msvc\.exe$/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

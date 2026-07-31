@@ -15,7 +15,7 @@ const platforms = {
 };
 const checksums = Object.fromEntries(
   Object.entries(platforms).map(([architecture, platform]) => {
-    const asset = `rom-weaver-${platform}.exe`;
+    const asset = `rom-weaver-${platform}.tar.gz`;
     const checksum = readFileSync(resolve(checksumDirectory, `${asset}.sha256`), "utf8").match(
       /^[a-f0-9]{64}/,
     )?.[0];
@@ -24,8 +24,9 @@ const checksums = Object.fromEntries(
   }),
 );
 
-// The `#/rom-weaver.exe` fragment is a Scoop convention: it renames the
-// downloaded file, which is what lets `bin` be a stable name across releases.
+// Scoop extracts the tar.gz itself (fetching 7-Zip on demand), and the
+// archive already holds a stable `rom-weaver.exe`, so no rename fragment is
+// needed on the URL.
 const manifest = {
   version,
   description: "Local-first offline toolkit for ROMs and ROM hack patches",
@@ -35,7 +36,7 @@ const manifest = {
     Object.entries(checksums).map(([architecture, { asset, checksum }]) => [
       architecture,
       {
-        url: `https://github.com/rom-weaver/rom-weaver/releases/download/v${version}/${asset}#/rom-weaver.exe`,
+        url: `https://github.com/rom-weaver/rom-weaver/releases/download/v${version}/${asset}`,
         hash: checksum,
       },
     ]),
