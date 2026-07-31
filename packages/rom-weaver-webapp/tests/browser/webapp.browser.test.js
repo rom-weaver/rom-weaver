@@ -222,6 +222,48 @@ test("WebappRoot uses the compact thread label only on mobile", async () => {
   page.viewport(1280, 900);
 });
 
+test("the site footer lands inside the first phone screen with an empty bench", async () => {
+  // The empty hero is sized as `100svh - --hero-chrome`, so every band the page
+  // spends outside the hero has to be in that budget. The mobile scroll reserve
+  // under the form was not, and it pushed the footer ~85px under the fold on
+  // first paint. The narrowest phone is the tight case: the brand column wraps
+  // there and the masthead grows taller than it is at 390px.
+  //
+  // Only viewports tall enough to clear the hero's 300px min-height are checked.
+  // Below roughly 575px of svh that floor wins over the budget on purpose - a
+  // hero sized to the leftover space there would be too small to aim at - and
+  // the page is meant to scroll.
+  for (const [width, height] of [
+    [320, 640],
+    [360, 640],
+    [390, 844],
+    [430, 932],
+  ]) {
+    page.viewport(width, height);
+    mountWebappRoot();
+    await expect.poll(() => document.querySelector(".step.is-input.is-empty .drop.hero")).toBeTruthy();
+    await expect
+      .poll(() => document.querySelector(".site-footer")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
+      .toBeLessThanOrEqual(height);
+  }
+  page.viewport(1280, 900);
+});
+
+test("the mobile scroll reserve returns once the bench holds a card", async () => {
+  // The reserve keeps the last card clear of the phone browser's collapsing
+  // bottom toolbar. It is only suppressed while the bench is empty; dropping
+  // the suppression on a staged bench would hide the run/download slot again.
+  page.viewport(390, 844);
+  mountWebappRoot();
+  const workflowBody = await waitForState(() => document.querySelector(".workflow-body"));
+  expect(workflowBody).not.toBeNull();
+  expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("0px");
+
+  document.querySelector(".step.is-input.is-empty").classList.remove("is-empty");
+  expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("96px");
+  page.viewport(1280, 900);
+});
+
 test("the New here? beacon stays compact and its popover carries every start action", async () => {
   page.viewport(1024, 900);
   mountWebappRoot();

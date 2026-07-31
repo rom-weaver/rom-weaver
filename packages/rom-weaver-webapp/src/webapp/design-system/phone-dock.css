@@ -13,6 +13,20 @@
      overlaps the bottom of the viewport, so at max scroll the final card would
      otherwise stay hidden behind it. */
   .rw-app .workflow-body { padding-block-end: max(96px, env(safe-area-inset-bottom, 0px) + 72px); }
+  /* An empty bench has no last card to clear, so the reserve is pure dead
+     height - and it was exactly what pushed the footer under the fold on a
+     phone's first paint. The hero already budgets `--hero-chrome` for the rest
+     of the page, footer included. */
+  .rw-app .workflow-body:has(.step.is-input.is-empty) { padding-block-end: 0; }
+
+  /* Below 348px the brand column can no longer sit beside the tools, so the
+     masthead wraps to a second line and grows 19px. That is chrome the hero
+     budget above does not know about, and on a 320px phone it was the last
+     thing keeping the footer off the first screen. The wrap point is
+     locale-stable: the brand word and the slogan beside it are untranslated. */
+  @media (max-width: 347px) {
+    .rw-app { --hero-chrome: calc(var(--mobile-input-head-h) + 236px); }
+  }
 
   .rw-app .masthead {
     display: grid;
