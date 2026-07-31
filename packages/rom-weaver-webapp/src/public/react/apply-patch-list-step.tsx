@@ -1369,7 +1369,6 @@ const PatchCard = ({
           ) : null}
           {isDisabled ? null : (
             <ExtractDrawer
-              always={!!meta || (staging && patchExtracting)}
               fileName={item.fileName}
               fileSize={item.fileSize}
               parentCompressions={item.archivePathEntries}

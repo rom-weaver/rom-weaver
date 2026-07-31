@@ -690,7 +690,6 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
   return {
     card: {
       extract: {
-        always: true,
         fileEntries,
         fileName: romInput.info.fileName,
         fileSize: romBytes,
@@ -864,7 +863,6 @@ const renderDiscGroup = (
         fileSize: totalFileBytes || totalBytes || undefined,
         legacyFileClassName: "rom-weaver-input-stack-file",
         parentCompressions: groupRows.find((row) => row.archivePathEntries?.length)?.archivePathEntries,
-        always: true,
       },
       meta:
         totalBytes || discRomTypeTag || staging ? (

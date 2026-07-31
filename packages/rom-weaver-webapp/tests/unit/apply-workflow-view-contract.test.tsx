@@ -321,7 +321,7 @@ describe("apply workflow view - staged bench", () => {
     const patchLabels = Array.from(container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab")).map(
       (el) => el.textContent,
     );
-    expect(patchLabels).toEqual(["Checks"]);
+    expect(patchLabels).toEqual(["Files", "Checks"]);
   });
 
   it("renders ROM and patch cards with the structural classes the browser tests query", () => {
@@ -345,6 +345,8 @@ describe("apply workflow view - staged bench", () => {
     expect(patchCard?.classList.contains("ok")).toBe(true);
     expect(patchCard?.querySelector(".card-meta .meta-fmt")?.textContent).toBe("ips");
     expect(patchCard?.querySelector(".card-meta .fsize")?.textContent).toBeTruthy();
+    expect(patchCard?.querySelector(".extract-d .lab")?.textContent).toBe("Files");
+    expect(patchCard?.querySelector(".extract-d .tree-name")?.textContent).toBe("change.ips");
     const patchPosition = patchCard?.querySelector("button.phandle") as HTMLButtonElement;
     expect(patchPosition.textContent).toContain("1");
     expect(patchPosition.disabled).toBe(true);

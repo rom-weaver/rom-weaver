@@ -73,21 +73,21 @@ test("extraction tree keeps extract metadata for prepared single-level inputs", 
   expect(document.querySelector(".extract-d .tree-name")?.textContent || "").toBe("game.iso");
 });
 
-test("extraction tree stays compact for raw single-file inputs", async () => {
+test("extraction tree keeps a Files drawer for raw single-file inputs", async () => {
   mount(
     createElement(ExtractionTree, {
       levels: [{ name: "game.bin", sizeBytes: 4096, sizeLabel: "4.1 KB" }],
     }),
   );
 
-  await expect.poll(() => document.querySelector(".nmline .nm")?.textContent || "").toBe("game.bin");
-  expect(document.querySelector(".extract-d")).toBeNull();
+  await expect.poll(() => document.querySelector(".extract-d .lab")?.textContent || "").toBe("Files");
+  expect(document.querySelector(".extract-d .rb:not(.time)")?.textContent || "").toBe("4.1 KB");
+  expect(document.querySelector(".extract-d .tree-name")?.textContent || "").toBe("game.bin");
 });
 
 test("files drawer lists sibling disc files below archive provenance", async () => {
   mount(
     createElement(ExtractDrawer, {
-      always: true,
       fileEntries: [
         { fileName: "game.cue", fileSize: 64 },
         { fileName: "game.bin", fileSize: 4096 },
