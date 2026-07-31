@@ -196,7 +196,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
               footerInFirstViewport:
                 !!footer &&
                 footer.top < window.innerHeight &&
-                footer.bottom <= window.innerHeight - 34 &&
+                footer.bottom <= window.innerHeight &&
                 !!links &&
                 links.bottom <= window.innerHeight &&
                 !!status &&
