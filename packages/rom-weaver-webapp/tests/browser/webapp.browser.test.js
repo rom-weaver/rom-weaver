@@ -286,7 +286,7 @@ test("PWA side insets move footer content without shifting the shell", async () 
   page.viewport(1280, 900);
 });
 
-test("PWA vertical insets keep the initial footer above device chrome", async () => {
+test("PWA vertical insets keep the initial footer visible without moving it up", async () => {
   const safeTop = 59;
   const safeBottom = 34;
   const height = 852;
@@ -302,7 +302,7 @@ test("PWA vertical insets keep the initial footer above device chrome", async ()
       .toBeGreaterThanOrEqual(safeTop);
     await expect
       .poll(() => document.querySelector(".site-footer")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
-      .toBeLessThanOrEqual(height - safeBottom);
+      .toBeLessThanOrEqual(height);
   } finally {
     simulatedSafeArea.remove();
   }
