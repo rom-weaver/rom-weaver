@@ -1314,9 +1314,8 @@ jobs:
       statuses: write
       deployments: write
     if: needs.deploy-plan.outputs.preview_branch != ''
-    # Do not attach an Actions environment here. GitHub creates its deployment
-    # record when the job starts, including on a cache miss; the fallback below
-    # is the only job that should register the preview environment in that case.
+    # Do not attach an Actions environment here. This job creates its explicit
+    # deployment record only after the cached preview has actually uploaded.
     outputs:
       # False on a cache miss (the deploy step never ran) and equally false if
       # wrangler failed, so `deploy` picks the preview back up in both cases.
@@ -1397,6 +1396,7 @@ jobs:
     permissions:
       contents: read
       statuses: write
+      deployments: write
     # `!cancelled()` because deploy-preview-fast is skipped outright on tags and
     # main, and a skipped dependency would otherwise skip this job with it. That
     # weakens the implicit "only after a good wasm build" gate, so state it.
@@ -1412,9 +1412,6 @@ jobs:
       needs.deploy-plan.outputs.targets != '' &&
       needs.deploy-plan.outputs.targets != '[]' &&
       needs.deploy-preview-fast.outputs.deployed != 'true'
-    environment:
-      name: ${{ matrix.target.env }}
-      url: ${{ steps.pages.outputs.url }}
     strategy:
       # Separate Pages projects with no shared state, so they upload in
       # parallel; a release's three channels land in the time of one. The
@@ -1468,8 +1465,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DEPLOYMENT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           DEPLOYMENT_CHANNEL: ${{ matrix.target.channel }}
           DEPLOYMENT_URL: ${{ steps.pages.outputs.url }}
+          DEPLOYMENT_RECORD: "true"
+          DEPLOYMENT_ENVIRONMENT: ${{ matrix.target.env }}
           STATUS_CONTEXT: Webapp Deploy / ${{ matrix.target.channel }}
         run: node scripts/ci/deployment-status.mjs
 
@@ -1492,11 +1492,10 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: node scripts/ci/ensure-cloudflare-assets-cache-rule.mjs
 
-  # Both preview paths declare the same GitHub environment. A cache miss opens
-  # a record in the fast path before the fallback deploys, and each later
-  # deployment of the shared environment makes the previous record inactive.
-  # Remove those repository objects so their timeline entries disappear from
-  # the pull request, retaining the newest success and newest failure.
+  # Both preview paths create explicit transient GitHub Deployment records. The
+  # cleanup removes superseded repository objects so their timeline entries
+  # disappear from the pull request, retaining the newest success and newest
+  # failure.
   cleanup-preview-deployments:
     name: Webapp deploy (prune superseded history)
     runs-on: ubuntu-24.04
