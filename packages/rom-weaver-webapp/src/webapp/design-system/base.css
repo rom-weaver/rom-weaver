@@ -91,16 +91,6 @@
   -webkit-font-smoothing: antialiased;
   transition: background .25s, color .25s;
 }
-/* A standalone PWA can report zero safe-area insets for its first style pass
-   while the viewport is settling. Keep the prerendered shell clear of the
-   rounded status-bar and home-indicator corners during that pass; real insets
-   win as soon as WebKit exposes them. */
-@media (display-mode: standalone) {
-  .rw-app {
-    --safe-t: max(env(safe-area-inset-top, 0px), 24px);
-    --safe-b: max(env(safe-area-inset-bottom, 0px), 24px);
-  }
-}
 /* mono/checksum content rides Archivo's width axis a notch tighter than the
    UI text so long hashes pack more per line without changing the typeface */
 .rw-app .mono { font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; }
