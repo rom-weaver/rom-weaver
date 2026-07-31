@@ -932,6 +932,12 @@ export async function writeGuestFile(rootHandle, guestPath, contents) {
   await writable.close();
 }
 
+export async function readGuestFile(rootHandle, guestPath) {
+  const fileHandle = await getGuestFileHandle(rootHandle, guestPath);
+  const file = await fileHandle.getFile();
+  return new Uint8Array(await file.arrayBuffer());
+}
+
 // Deterministic per-offset byte scramble (integer finalizer mix). Well-distributed with no long
 // runs, so a mutated region built from it neither compresses nor matches any contiguous window of
 // the un-mutated ramp - which is what forces a delta patch to carry the region as literals.

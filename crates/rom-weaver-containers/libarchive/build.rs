@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
+const LZMA_SDK_PATCH_ROOT: &str = "lzma-sdk/patches";
 const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
 const VENDORED_LZMA_SDK: &str = "lzma-sdk/vendor/C";
 // rom-weaver's own opaque wrapper over the SDK. libarchive ships its own
@@ -38,8 +39,9 @@ const LZMA_SDK_THREADED_SOURCES: &[&str] = &["LzFindMt.c", "MtCoder.c", "MtDec.c
 // probes for one and the build silently falls back to the C loop when there is
 // none. See docs/development/vendor-code.md for the per-platform matrix.
 const VENDORED_LZMA_SDK_ASM: &str = "lzma-sdk/vendor/Asm";
-const LZMA_SDK_ARM64_ASM_SOURCES: &[&str] = &["arm64/LzmaDecOpt.S"];
-const LZMA_SDK_X86_ASM_SOURCE: &str = "x86/LzmaDecOpt.asm";
+const LZMA_SDK_ARM64_ASM_SOURCE: &str = "LzmaDecOpt.S";
+const LZMA_SDK_ARM64_ASM_INCLUDE: &str = "7zAsm.S";
+const LZMA_SDK_X86_ASM_SOURCE: &str = "LzmaDecOpt.asm";
 // Probed in order. jwasm is first because it is the one that builds from source
 // on any host in seconds (Sybase Open Watcom licence, plain C), which is what
 // the Docker/CI images install. asmc is upstream's own default and ships a
@@ -57,6 +59,12 @@ const WASM_PATCH_FILES: &[&str] = &[
     "archive_util_tempdir.original.txt",
     "archive_util_tempdir.replacement.txt",
     "cmakelists_drop_entries.txt",
+];
+const LZMA_SDK_PATCH_FILES: &[&str] = &[
+    "portable/lzma-dec-short-distance-copy.original.txt",
+    "portable/lzma-dec-short-distance-copy.replacement.txt",
+    "arm64/lzma-dec-short-distance-copy.original.txt",
+    "arm64/lzma-dec-short-distance-copy.replacement.txt",
 ];
 
 const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
@@ -229,7 +237,7 @@ pub fn build() {
 
     println!("cargo:rerun-if-changed={}", libarchive_dir.display());
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_LIBARCHIVE_WRITE_EXTRA");
-    emit_wasm_patch_rerun_if_changed(&manifest_dir);
+    emit_vendor_patch_rerun_if_changed(&manifest_dir);
 
     let source_dir = prepare_source_tree(&manifest_dir, &libarchive_dir, &out_dir);
     let target_sysroot = target_compiler_sysroot();
@@ -244,7 +252,13 @@ pub fn build() {
     // After libarchive: the 7z reader/writer objects inside libarchive.a
     // reference these symbols, and single-pass static linkers only resolve
     // backwards through the link line.
-    build_lzma_sdk(&lzma_sdk_dir, &lzma_glue_dir, &lzma_asm_dir);
+    build_lzma_sdk(
+        &manifest_dir,
+        &lzma_sdk_dir,
+        &lzma_glue_dir,
+        &lzma_asm_dir,
+        &out_dir,
+    );
     generate_bindings(&source_dir, target_sysroot.as_deref());
 }
 
@@ -264,7 +278,7 @@ pub fn build() {
 ///
 /// The *decoder* is unaffected and stays on the SDK everywhere: LzmaDec and
 /// Lzma2Dec have no threads.
-fn lzma_sdk_threads_enabled() -> bool {
+fn lzma_sdk_lzma2_encoder_available() -> bool {
     !is_wasm32_target()
 }
 
@@ -321,7 +335,7 @@ fn lzma_sdk_asm_candidates() -> Vec<String> {
 /// static library. Every failure path returns `None` after a `cargo:warning`:
 /// the assembler is an optimisation, and a machine without one must still get a
 /// working build.
-fn lzma_sdk_x86_asm_object(asm_dir: &Path, out_dir: &Path) -> Option<PathBuf> {
+fn lzma_sdk_x86_asm_object(source: &Path, out_dir: &Path) -> Option<PathBuf> {
     let format_flags = match lzma_sdk_x86_asm_format() {
         Some(flags) => flags,
         None => {
@@ -334,7 +348,6 @@ docs/development/vendor-code.md."
         }
     };
 
-    let source = asm_dir.join(LZMA_SDK_X86_ASM_SOURCE);
     if !source.is_file() {
         println!(
             "cargo:warning=lzma-sdk: {} is missing; 7z decode uses the portable C loop.",
@@ -372,7 +385,7 @@ docs/development/vendor-code.md."
                 .arg(format!("-I{}", include_dir.display()))
                 .arg(format!("-Fo{}", object.display()));
         }
-        command.arg(&source);
+        command.arg(source);
 
         let _ = fs::remove_file(&object);
         match command.output() {
@@ -414,7 +427,73 @@ uses the portable C loop (slower than 7zz). Install jwasm or set ROM_WEAVER_LZMA
     None
 }
 
-fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path) {
+fn lzma_sdk_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
+    manifest_dir.join(LZMA_SDK_PATCH_ROOT).join(relative_path)
+}
+
+fn prepare_lzma_sdk_portable_decoder(
+    manifest_dir: &Path,
+    source_dir: &Path,
+    out_dir: &Path,
+) -> PathBuf {
+    let staged = out_dir.join("lzma-sdk-portable-LzmaDec.c");
+    fs::copy(source_dir.join("LzmaDec.c"), &staged)
+        .expect("failed to stage the portable LZMA SDK decoder");
+    replace_file_fragment(
+        &staged,
+        &lzma_sdk_patch_path(
+            manifest_dir,
+            "portable/lzma-dec-short-distance-copy.original.txt",
+        ),
+        &lzma_sdk_patch_path(
+            manifest_dir,
+            "portable/lzma-dec-short-distance-copy.replacement.txt",
+        ),
+        "portable LZMA SDK short-distance match copy",
+    )
+    .expect("failed to patch the portable LZMA SDK decoder");
+    staged
+}
+
+fn prepare_lzma_sdk_asm_decoder(
+    manifest_dir: &Path,
+    asm_dir: &Path,
+    out_dir: &Path,
+    architecture: &str,
+    source_name: &str,
+    include_name: &str,
+) -> PathBuf {
+    let source_dir = asm_dir.join(architecture);
+    let staged_dir = out_dir.join(format!("lzma-sdk-{architecture}-asm"));
+    fs::create_dir_all(&staged_dir).expect("failed to create staged LZMA SDK assembly directory");
+    fs::copy(source_dir.join(include_name), staged_dir.join(include_name))
+        .expect("failed to stage the LZMA SDK assembly include");
+    let staged = staged_dir.join(source_name);
+    fs::copy(source_dir.join(source_name), &staged)
+        .expect("failed to stage the LZMA SDK assembly decoder");
+    replace_file_fragment(
+        &staged,
+        &lzma_sdk_patch_path(
+            manifest_dir,
+            &format!("{architecture}/lzma-dec-short-distance-copy.original.txt"),
+        ),
+        &lzma_sdk_patch_path(
+            manifest_dir,
+            &format!("{architecture}/lzma-dec-short-distance-copy.replacement.txt"),
+        ),
+        &format!("{architecture} LZMA SDK short-distance match copy"),
+    )
+    .expect("failed to patch the LZMA SDK assembly decoder");
+    staged
+}
+
+fn build_lzma_sdk(
+    manifest_dir: &Path,
+    source_dir: &Path,
+    glue_dir: &Path,
+    asm_dir: &Path,
+    out_dir: &Path,
+) {
     let mut build = cc::Build::new();
     build
         .include(source_dir)
@@ -426,14 +505,22 @@ fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path) {
         .warnings(false)
         .extra_warnings(false);
 
+    // Give every portable C target the assembly loop's fast paths for repeated
+    // short-distance matches while keeping the vendored SDK snapshot
+    // byte-for-byte upstream.
+    let portable_decoder = prepare_lzma_sdk_portable_decoder(manifest_dir, source_dir, out_dir);
     for source in LZMA_SDK_CORE_SOURCES {
+        if *source == "LzmaDec.c" {
+            build.file(&portable_decoder);
+            continue;
+        }
         build.file(source_dir.join(source));
     }
     for source in LZMA_SDK_GLUE_SOURCES {
         build.file(glue_dir.join(source));
     }
 
-    if lzma_sdk_threads_enabled() {
+    if lzma_sdk_lzma2_encoder_available() {
         for source in LZMA_SDK_THREADED_SOURCES {
             build.file(source_dir.join(source));
         }
@@ -441,7 +528,7 @@ fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path) {
         // Z7_ST compiles the SDK's whole mt layer - and the glue's encoder
         // bridge with it - out of the build. wasm32-wasip1 has no threads at
         // all, and wasm32-wasip1-threads cannot nest them (see
-        // lzma_sdk_threads_enabled).
+        // lzma_sdk_lzma2_encoder_available).
         build.define("Z7_ST", None);
     }
 
@@ -452,19 +539,27 @@ fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path) {
     }
 
     if lzma_sdk_arm64_asm_enabled() {
+        let source = prepare_lzma_sdk_asm_decoder(
+            manifest_dir,
+            asm_dir,
+            out_dir,
+            "arm64",
+            LZMA_SDK_ARM64_ASM_SOURCE,
+            LZMA_SDK_ARM64_ASM_INCLUDE,
+        );
         build.define("Z7_LZMA_DEC_OPT", None);
-        build.include(asm_dir.join("arm64"));
-        for source in LZMA_SDK_ARM64_ASM_SOURCES {
-            build.file(asm_dir.join(source));
+        build.include(source.parent().unwrap());
+        build.file(source);
+    } else if is_x86_64_target() {
+        let source = asm_dir.join("x86").join(LZMA_SDK_X86_ASM_SOURCE);
+        if let Some(object) =
+            lzma_sdk_x86_asm_object(&source, &PathBuf::from(env::var("OUT_DIR").unwrap()))
+        {
+            // Assembled ahead of cc's own invocation because it is MASM syntax that
+            // no C compiler driver understands; the object just joins the archive.
+            build.define("Z7_LZMA_DEC_OPT", None);
+            build.object(object);
         }
-    } else if is_x86_64_target()
-        && let Some(object) =
-            lzma_sdk_x86_asm_object(asm_dir, &PathBuf::from(env::var("OUT_DIR").unwrap()))
-    {
-        // Assembled ahead of cc's own invocation because it is MASM syntax that
-        // no C compiler driver understands; the object just joins the archive.
-        build.define("Z7_LZMA_DEC_OPT", None);
-        build.object(object);
     }
 
     build.compile("lzma_sdk");
@@ -546,11 +641,17 @@ fn wasm_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
     manifest_dir.join(WASM_PATCH_ROOT).join(relative_path)
 }
 
-fn emit_wasm_patch_rerun_if_changed(manifest_dir: &Path) {
+fn emit_vendor_patch_rerun_if_changed(manifest_dir: &Path) {
     for patch_file in WASM_PATCH_FILES {
         println!(
             "cargo:rerun-if-changed={}",
             wasm_patch_path(manifest_dir, patch_file).display()
+        );
+    }
+    for patch_file in LZMA_SDK_PATCH_FILES {
+        println!(
+            "cargo:rerun-if-changed={}",
+            lzma_sdk_patch_path(manifest_dir, patch_file).display()
         );
     }
 }
@@ -643,8 +744,16 @@ fn replace_file_fragment(
     description: &str,
 ) -> std::io::Result<()> {
     let content = fs::read_to_string(target_path)?;
-    let original = fs::read_to_string(original_fragment_path)?;
-    let replacement = fs::read_to_string(replacement_fragment_path)?;
+    let normalize_line_endings = |fragment: String| {
+        let fragment = fragment.replace("\r\n", "\n");
+        if content.contains("\r\n") {
+            fragment.replace('\n', "\r\n")
+        } else {
+            fragment
+        }
+    };
+    let original = normalize_line_endings(fs::read_to_string(original_fragment_path)?);
+    let replacement = normalize_line_endings(fs::read_to_string(replacement_fragment_path)?);
 
     if content.contains(&replacement) {
         return Ok(());
@@ -804,19 +913,19 @@ fn should_drop_cmakelists_line(trimmed: &str, drop_entries: &HashSet<String>) ->
 
 fn build_libarchive(libarchive_dir: &Path, lzma_glue_dir: &Path, target_sysroot: Option<&Path>) {
     // The 7z reader/writer compile against the glue header only - never the SDK
-    // headers - and gate every SDK code path on this define, so a source tree
-    // without the vendor drop still builds on liblzma alone.
+    // headers. The decoder is always available; the native LZMA2 encoder is a
+    // separate capability because its bridge depends on the SDK thread layer.
     // Z7_ST never reaches here: it changes no public SDK header, only which
     // translation units build_lzma_sdk compiles.
-    let mut sdk_flags = vec![
-        "-DROM_WEAVER_LZMA_SDK=1".to_string(),
+    let mut sdk_capability_flags = vec![
+        "-DROM_WEAVER_7Z_SDK_DECODER=1".to_string(),
         format!("-I{}", lzma_glue_dir.display()),
     ];
-    if lzma_sdk_threads_enabled() {
-        sdk_flags.push("-DROM_WEAVER_LZMA_SDK_MT=1".to_string());
+    if lzma_sdk_lzma2_encoder_available() {
+        sdk_capability_flags.push("-DROM_WEAVER_7Z_SDK_LZMA2_ENCODER=1".to_string());
     }
     let mut cmake_config = cmake::Config::new(libarchive_dir);
-    for flag in &sdk_flags {
+    for flag in &sdk_capability_flags {
         cmake_config.cflag(flag);
     }
     cmake_config
@@ -847,7 +956,7 @@ fn build_libarchive(libarchive_dir: &Path, lzma_glue_dir: &Path, target_sysroot:
         let mut target_flags = wasm_cmake_flags(&target);
         // An explicit -DCMAKE_C_FLAGS wins over the CFLAGS env var cmake-rs
         // derives from cflag(), so the SDK flags have to be folded in here too.
-        target_flags.extend(sdk_flags.iter().cloned());
+        target_flags.extend(sdk_capability_flags.iter().cloned());
         let joined = target_flags.join(" ");
         cmake_config
             .define("CMAKE_C_COMPILER_TARGET", target.as_str())

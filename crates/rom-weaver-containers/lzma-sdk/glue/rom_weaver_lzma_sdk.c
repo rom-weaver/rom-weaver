@@ -127,7 +127,7 @@ rw_lzma_dec_run(rw_lzma_dec *dec, uint8_t *dest, size_t *dest_len,
  * Z7_ST means the SDK was built without its thread layer (wasm32-wasip1, which
  * has no threads at all). The bridge below needs a thread to run the blocking
  * encoder on, so that target keeps liblzma - which is what libarchive's own
- * ROM_WEAVER_LZMA_SDK_MT gate reflects on the writer side.
+ * ROM_WEAVER_7Z_SDK_LZMA2_ENCODER gate reflects on the writer side.
  */
 #ifndef Z7_ST
 

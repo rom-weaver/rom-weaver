@@ -57,7 +57,7 @@ int rw_lzma_dec_run(rw_lzma_dec *dec, uint8_t *dest, size_t *dest_len,
 /*
  * Only present when the SDK was built with its thread layer; the encoder shim
  * runs the SDK's blocking coder on a thread of its own. libarchive gates its
- * calls on ROM_WEAVER_LZMA_SDK_MT, which build.rs defines under the same
+ * calls on ROM_WEAVER_7Z_SDK_LZMA2_ENCODER, which build.rs defines under the same
  * condition.
  */
 

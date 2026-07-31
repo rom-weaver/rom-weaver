@@ -14,6 +14,7 @@ why, and the exact steps to go back to upstream.
   - [Refreshing the snapshot](#refreshing-the-snapshot)
   - [Going back to upstream](#going-back-to-upstream)
 - [LZMA SDK, inlined into `rom-weaver-containers`](#lzma-sdk-inlined-into-rom-weaver-containers)
+  - [One 7z LZMA backend policy](#one-7z-lzma-backend-policy)
   - [The SDK encoder is native-only](#the-sdk-encoder-is-native-only)
   - [Which platforms get the assembly decode loop](#which-platforms-get-the-assembly-decode-loop)
 - [`nod`, inlined into `rom-weaver-containers`](#nod-inlined-into-rom-weaver-containers)
@@ -140,8 +141,9 @@ whatever 7z reader is on `PATH`, and copies only the files the coders need
 (`VENDORED_FILES` in the script): LZMA1/LZMA2 encode+decode, the match finders,
 the SDK's `Threads`/`MtCoder`/`MtDec` layer, and the shared headers. Everything
 else in the SDK's `C/` directory - AES, PPMd, BCJ2, the 7z archive reader, the
-sample programs - stays out of the tree. The copy is **verbatim**: there are no
-local patches, and a refresh is a copy rather than a merge. Keep it that way.
+sample programs - stays out of the tree. The copy is **verbatim**: local C and
+assembly patches live outside `vendor/` and apply only to staged sources under
+`OUT_DIR`, so a refresh stays a copy rather than a merge. Keep it that way.
 
 Build wiring lives in `libarchive/build.rs`:
 
@@ -156,12 +158,59 @@ Build wiring lives in `libarchive/build.rs`:
   `Lzma2Dec` have no threads.
 - `Z7_AFFINITY_DISABLE` is set on every wasm target: wasi-libc has no
   `sched_setaffinity` and no `<cpuid.h>`/`<sys/auxv.h>`.
+- Every portable-C decoder stages `LzmaDec.c` and ports the assembly loop's
+  short-distance match copies: distance 1 uses `memset`, while distances 2
+  through 8 cache and copy one full period of the repeated pattern. Clang
+  lowers the fill to WebAssembly `memory.fill` and the short patterns to fixed
+  loads and stores. Other matches and the serial range decoder stay on the
+  upstream C loop.
 - The SDK's hand-written decode loop (`vendor/Asm/`, selected with
   `Z7_LZMA_DEC_OPT`) replaces `LzmaDec.c`'s C loop wherever it can be
-  assembled. It is the same bitstream and is what `7zz` itself runs; it is worth
-  ~26% of a 1 GiB LZMA1 extract, and **without it the SDK's C decoder is no
-  faster than liblzma's** - the whole 7z extract win is this file. Which
-  platforms get it is the matrix below.
+  assembled. Its staged ARM64 source caches the same distance-2 through
+  distance-8 periods as the portable loop. It is the same bitstream and is what
+  `7zz` itself runs; the upstream loop is worth ~26% of a 1 GiB LZMA1 extract
+  before these short-period copies. Which platforms get it is the matrix below.
+
+The portable fill was measured separately because it is deliberately narrower
+than the assembly port. On an arm64 native build forced onto the C decoder, a
+256 MiB repeated-byte LZMA2 stream fell from a 497 ms median to 123 ms
+(4.0x), while a 128 MiB literal-heavy stream stayed effectively flat
+(66.4 ms to 64.6 ms). In the browser-WASM runner the same change improved the
+repeated-byte case from 1.055 s to 0.853 s (19%) and left the literal-heavy case
+within 2%. The distance-2 path reduced a 512 MiB alternating-byte stream from
+873 ms to 310 ms on the same portable native decoder (2.8x), and a 256 MiB
+browser-WASM extraction from 2.302 s to 2.105 s (8.5%). Extending the same
+cached-pattern copy to periods 3 through 8 cut native decoder CPU by 2.3x to
+3.2x on 512 MiB pure-pattern streams. End-to-end 128 MiB browser extractions
+improved by 2.2% to 6.5%; period 1, period 2, periodic 4 KiB, and random-data
+controls stayed within run-to-run variation. These are targeted
+microbenchmarks, not a claim that every archive gets faster.
+
+The assembly version was measured end-to-end on native ARM64 over ten runs per
+case. Against the unmodified SDK assembly loop, 512 MiB period-2 through
+period-8 archives were 1.67x to 2.49x faster by median wall time; period 1 was
+unchanged, and literal-heavy random data was within 2%. The x86 assembly loop
+stays unpatched: its port of these copies is staged separately so it can be
+reviewed and measured on x86 hardware on its own.
+
+### One 7z LZMA backend policy
+
+`libarchive` always owns the 7z container framing, folder graph, and backend
+routing. It is not a third LZMA implementation. The two codec providers have
+one policy:
+
+| Operation | Targets | Codec provider | Reason |
+| --- | --- | --- | --- |
+| Read LZMA1/LZMA2 without a liblzma-executed filter chain | all | 7-Zip SDK decoder | One decoder API everywhere; its implementation is assembly where supported and portable C otherwise |
+| Read LZMA filter chains | all | liblzma | liblzma already owns delta and architecture-filter execution |
+| Write LZMA1 | all | liblzma | The SDK integration adds no LZMA1 encoder |
+| Write LZMA2 | native | 7-Zip SDK encoder by default; liblzma fallback/override | Matches `7zz` speed while retaining a safe fallback |
+| Write LZMA2 | WebAssembly | liblzma | The browser worker pool cannot support the SDK encoder's nested threads |
+
+The SDK decoder's assembly and C loops are implementations of the same
+`rw_lzma_dec_*` interface, not separate backends. Build flags name the two
+actual capabilities independently: `ROM_WEAVER_7Z_SDK_DECODER` and
+`ROM_WEAVER_7Z_SDK_LZMA2_ENCODER`.
 
 ### The SDK encoder is native-only
 
@@ -182,12 +231,12 @@ handles, and it is genuinely parallel there - so wasm keeps it. Forcing the SDK
 encoder single-threaded to fit would have made every `effective_threads > 1` the
 browser reports a lie.
 
-`lzma_sdk_threads_enabled()` in `libarchive/build.rs` is the single switch:
-false for wasm, which drops `Z7_ST`-guarded code from the SDK build and leaves
-`ROM_WEAVER_LZMA_SDK_MT` undefined so the writer never reaches for it. The
-planner in `handlers/sevenz.rs` mirrors the split with `cfg(target_family =
-"wasm")` so its worker-memory and parallelism model describes the backend that
-actually runs.
+`lzma_sdk_lzma2_encoder_available()` in `libarchive/build.rs` is the single
+switch: false for wasm, which drops `Z7_ST`-guarded code from the SDK build and
+leaves `ROM_WEAVER_7Z_SDK_LZMA2_ENCODER` undefined so the writer never reaches
+for it. The planner in `handlers/sevenz.rs` mirrors the split with
+`cfg(target_family = "wasm")` so its worker-memory and parallelism model
+describes the backend that actually runs.
 
 Native builds keep a second safety net: if the bridge thread cannot start for
 any reason, `compression_init_encoder_lzma2_sdk` returns `ARCHIVE_FAILED`
@@ -197,12 +246,13 @@ without setting an archive error and the writer falls through to liblzma.
 
 | Target | Decode loop | Why |
 | --- | --- | --- |
-| `aarch64-*` (macOS, Linux, Windows) | assembly, always | `Asm/arm64/LzmaDecOpt.S` is GNU-as syntax; clang assembles it with no extra tool |
+| `aarch64-*` except Windows | assembly, always | The staged `Asm/arm64/LzmaDecOpt.S` is GNU-as syntax; clang assembles it with no extra tool |
+| `aarch64-pc-windows-*` | portable C with short-period copies | The MSVC build path does not assemble the SDK's GNU-as `.S` file |
 | `x86_64-*-linux-*`, BSDs | assembly when a MASM-compatible assembler is on `PATH` | `Asm/x86/LzmaDecOpt.asm` is MASM syntax and no C compiler reads it. `-elf64 -DABI_LINUX` |
 | `x86_64-pc-windows-*` | assembly when `ml64` (or jwasm/asmc/uasm) is on `PATH` | MSVC's own `ml64` is already there under `VsDevCmd`. `-win64` |
-| `x86_64-apple-darwin` | C loop, always | Nothing in reach emits Mach-O: jwasm has no Mach-O writer, asmc only bootstraps on an x86 host, and uasm's tree does not compile on a current Unix host |
-| `i686-*`, other arches | C loop | The SDK ships no loop this build uses for them |
-| `wasm32-*` | C loop | No assembler |
+| `x86_64-apple-darwin` | portable C with short-period copies | Nothing in reach emits Mach-O: jwasm has no Mach-O writer, asmc only bootstraps on an x86 host, and uasm's tree does not compile on a current Unix host |
+| `i686-*`, other arches | portable C with short-period copies | The SDK ships no loop this build uses for them |
+| `wasm32-*` | portable C with short-period copies | No assembler; clang lowers the fill to `memory.fill` and the cached periods to fixed loads/stores |
 
 `build.rs` probes `jwasm`, `asmc`, `asmc64`, `uasm`, then `ml64`, or takes an
 explicit path from `ROM_WEAVER_LZMA_ASM` (`ROM_WEAVER_UASM` is accepted as an
@@ -228,9 +278,11 @@ during `pre-build`, so it cannot call the script), which would apply to every
 `cross` leg of the release fan-out. `linux-x64-gnu`, the Docker image, and
 anything built from source with the assembler present are unaffected.
 
-The libarchive CMake build gets `-DROM_WEAVER_LZMA_SDK=1` plus the SDK include
-directory, so the 7z sources can gate every SDK code path behind one define and
-still build on liblzma alone if the vendor drop is absent.
+The libarchive CMake build always gets
+`-DROM_WEAVER_7Z_SDK_DECODER=1`; native builds also get
+`-DROM_WEAVER_7Z_SDK_LZMA2_ENCODER=1`. Both get only the opaque glue include
+directory, never the SDK headers, so the two capability boundaries remain
+independent.
 
 ## `nod`, inlined into `rom-weaver-containers`
 

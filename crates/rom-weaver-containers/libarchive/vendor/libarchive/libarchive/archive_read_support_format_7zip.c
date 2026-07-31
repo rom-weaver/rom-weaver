@@ -49,7 +49,7 @@
 #ifdef HAVE_ZSTD_H
 #include <zstd.h>
 #endif
-#if ROM_WEAVER_LZMA_SDK
+#if ROM_WEAVER_7Z_SDK_DECODER
 /* 7-Zip's own LZMA1/LZMA2 coders (public domain LZMA SDK, vendored at
  * crates/rom-weaver-containers/lzma-sdk). They decode the same bitstream as
  * liblzma, so every folder whose liblzma filter chain would have been a bare
@@ -333,7 +333,7 @@ struct _7zip {
 	lzma_stream		 lzstream;
 	int			 lzstream_valid;
 #endif
-#if ROM_WEAVER_LZMA_SDK
+#if ROM_WEAVER_7Z_SDK_DECODER
 	/* Non-NULL when 7-Zip's own coder decodes this folder, not liblzma. */
 	rw_lzma_dec		*sdk_dec;
 #endif
@@ -1342,7 +1342,7 @@ ppmd_read(void *p)
 	return (b);
 }
 
-#if ROM_WEAVER_LZMA_SDK
+#if ROM_WEAVER_7Z_SDK_DECODER
 static void
 free_sdk_lzma_decoder(struct _7zip *zip)
 {
@@ -1364,7 +1364,7 @@ init_sdk_lzma_decoder(struct archive_read *a, struct _7zip *zip,
 	}
 	return (ARCHIVE_OK);
 }
-#endif /* ROM_WEAVER_LZMA_SDK */
+#endif /* ROM_WEAVER_7Z_SDK_DECODER */
 
 static int
 init_decompression(struct archive_read *a, struct _7zip *zip,
@@ -1375,7 +1375,7 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 	zip->codec = coder1->codec;
 	zip->codec2 = -1;
 
-#if ROM_WEAVER_LZMA_SDK
+#if ROM_WEAVER_7Z_SDK_DECODER
 	/* A folder that is not LZMA at all must not keep the previous folder's
 	 * dictionary alive - it can be hundreds of megabytes. */
 	if (zip->codec != _7Z_LZMA && zip->codec != _7Z_LZMA2)
@@ -1528,7 +1528,7 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
 			}
 		}
 
-#if ROM_WEAVER_LZMA_SDK
+#if ROM_WEAVER_7Z_SDK_DECODER
 		/* fi == 0 means liblzma would be handed a bare LZMA1/LZMA2
 		 * filter: either the folder has no branch filter at all, or it
 		 * has one libarchive decodes itself after the fact (BCJ2, and
@@ -1824,7 +1824,7 @@ decompress(struct archive_read *a, struct _7zip *zip,
 	}
 #ifdef HAVE_LZMA_H
 	case _7Z_LZMA: case _7Z_LZMA2:
-#if ROM_WEAVER_LZMA_SDK
+#if ROM_WEAVER_7Z_SDK_DECODER
 		if (zip->sdk_dec != NULL) {
 			size_t sdk_out = t_avail_out;
 			size_t sdk_in = t_avail_in;
@@ -2096,7 +2096,7 @@ free_decompression(struct archive_read *a, struct _7zip *zip)
 	if (zip->lzstream_valid)
 		lzma_end(&(zip->lzstream));
 #endif
-#if ROM_WEAVER_LZMA_SDK
+#if ROM_WEAVER_7Z_SDK_DECODER
 	free_sdk_lzma_decoder(zip);
 #endif
 #if defined(HAVE_BZLIB_H) && defined(BZ_CONFIG_ERROR)

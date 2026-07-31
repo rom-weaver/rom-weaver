@@ -9,6 +9,7 @@ import {
   assertRunJsonSucceeded,
   getGuestFileSize,
   joinGuestPath,
+  readGuestFile,
   runFullFormatMatrix,
   runPatchMatrix,
   runProgressMatrix,
@@ -732,6 +733,60 @@ describe("rom-weaver-wasm browser runner parity", () => {
       },
     );
   });
+
+  it(
+    "round trips short-period LZMA2 matches in the portable decoder",
+    async () => {
+      await withTempFixture(
+        async ({ dir, worker, opfsHandle }) => {
+          const sourcePath = joinGuestPath(dir, "short-period-source.bin");
+          const archivePath = joinGuestPath(dir, "short-period.7z");
+          const extractDir = joinGuestPath(dir, "short-period-extract");
+          const blockSize = 128 * 1024;
+          const source = new Uint8Array(7 * blockSize);
+          for (let block = 0; block < 7; block += 1) {
+            const period = block + 2;
+            const start = block * blockSize;
+            for (let index = 0; index < blockSize; index += 1) {
+              source[start + index] = 0x41 + (index % period);
+            }
+          }
+          await writeGuestFile(opfsHandle, sourcePath, source);
+
+          assertRunJsonSucceeded(
+            await worker.runJson([
+              "compress",
+              "--input",
+              sourcePath,
+              "--format",
+              "7z",
+              "--codec",
+              "lzma2:5",
+              "--output",
+              archivePath,
+              "--threads",
+              "1",
+            ]),
+            { command: "compress" },
+          );
+          assertRunJsonSucceeded(
+            await worker.runJson(["extract", "--input", archivePath, "--out-dir", extractDir, "--threads", "1"]),
+            { command: "extract" },
+          );
+
+          const actual = await readGuestFile(opfsHandle, joinGuestPath(extractDir, "short-period-source.bin"));
+          expect(actual.length).toBe(source.length);
+          expect(actual.every((byte, index) => byte === source[index])).toBe(true);
+        },
+        {
+          initOptions: {
+            wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
+          },
+        },
+      );
+    },
+    LONG_MATRIX_TIMEOUT_MS,
+  );
 
   it(
     "threaded browser runner emits 7z lzma2 level 5 codec progress for large compress",
