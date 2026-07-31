@@ -323,12 +323,6 @@ Fixture description.
     fireEvent.click(shelves[2]?.querySelector("summary") as HTMLElement);
     expect(shelves[2]?.open).toBe(true);
 
-    fireEvent.click(document.querySelector(".trail-crumb") as HTMLElement);
-    const mobileShelves = [
-      ...(document.querySelector(".rw-modal.guide-sheet")?.querySelectorAll<HTMLDetailsElement>(".guide-shelf") ?? []),
-    ];
-    expect(mobileShelves.map((shelf) => shelf.open)).toEqual([true, false, true, false, false, false]);
-
     unmount();
     render(<DocsPage active slug="docs/privacy" />);
     await vi.waitFor(() =>
@@ -336,36 +330,6 @@ Fixture description.
         [...document.querySelectorAll<HTMLDetailsElement>(".docs-rails .guide-shelf")].map((shelf) => shelf.open),
       ).toEqual([true, false, true, false, false, false]),
     );
-  });
-
-  it("gives each trail crumb the list its own label promised", () => {
-    render(<DocsPage active slug="docs/apply-rom-patches" />);
-
-    const sections = routeFor("docs/apply-rom-patches").sections;
-    // One warp tick per section: the gauge is the shape of the document.
-    expect(document.querySelectorAll(".warp-gauge i")).toHaveLength(sections.length);
-
-    // The section crumb opens this guide's outline, and nothing else.
-    fireEvent.click(screen.getByRole("button", { name: /Open this guide's outline/ }));
-    const outlineSheet = document.querySelector(".rw-modal.guide-sheet");
-    expect(outlineSheet?.querySelectorAll(".warp-rail-list a")).toHaveLength(sections.length);
-    expect(outlineSheet?.querySelector(".guide-nav-list")).toBeNull();
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    // `Docs` opens every guide, and nothing else - tapping it and landing on this
-    // guide's outline would break the promise the label made.
-    fireEvent.click(screen.getByRole("button", { name: "Docs" }));
-    const pagesSheet = document.querySelector(".rw-modal.guide-sheet");
-    expect(pagesSheet?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
-    expect(pagesSheet?.querySelector(".warp-rail-list")).toBeNull();
-  });
-
-  it("does not add a second stop after a question in the mobile outline label", () => {
-    render(<DocsPage active slug="docs/fix-checksum-errors" />);
-
-    const label = document.querySelector(".trail-crumb.is-section")?.getAttribute("aria-label");
-    expect(label).toContain("? Open this guide's outline.");
-    expect(label).not.toContain("?.");
   });
 
   it("sends the reader back to the top of a guide from the end of it", () => {
@@ -393,13 +357,67 @@ Fixture description.
     render(<DocsPage active slug="docs" />);
 
     const index = document.querySelector(".docs-index");
-    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(screen.getAllByRole("combobox", { name: "Search documentation" })).toHaveLength(2);
     expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain("Browser usage");
     expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("CLI reference");
     expect(index?.querySelector('a[href="/docs/install"]')?.textContent).toContain("Install");
     expect(index?.querySelector('a[href="/docs/self-hosting"]')?.textContent).toContain("Self-hosting");
     expect(screen.getByRole("link", { name: "Read the full FAQ" }).getAttribute("href")).toBe("/docs/faq");
     expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();
+  });
+
+  it("fuzzy-searches guide text and links directly to the matching section", () => {
+    render(<DocsPage active slug="docs" />);
+
+    const input = screen.getAllByRole("combobox", { name: "Search documentation" })[0] as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "checksumm warning" } });
+
+    const section = routeFor("docs/fix-checksum-errors").sections.find(
+      (entry) => entry.id === "what-does-the-warning-mean",
+    );
+    expect(section).toBeTruthy();
+    const resultLink = document.querySelector<HTMLAnchorElement>(
+      `.docs-search-results a[href^="/docs/fix-checksum-errors?highlight="][href$="#${section?.id}"]`,
+    );
+    expect(resultLink).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toMatch(/result/);
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect((input as HTMLInputElement).value).toBe("");
+    expect(document.querySelector(".guide-shelf")).toBeTruthy();
+  });
+
+  it("shares search state with the mobile search", () => {
+    render(<DocsPage active slug="docs" />);
+    const inputs = screen.getAllByRole("combobox", { name: "Search documentation" });
+    fireEvent.change(inputs.at(-1) as HTMLElement, { target: { value: "OPFS" } });
+
+    expect(document.querySelectorAll(".docs-trail .docs-search-results a[href*='#']").length).toBeGreaterThan(0);
+  });
+
+  it("highlights and centers the selected search term in its section", async () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    const input = screen.getAllByRole("combobox", { name: "Search documentation" })[0] as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Nintendo 64" } });
+    await vi.waitFor(
+      () =>
+        expect(
+          document.querySelector('.docs-search-results a[href*="apply-rom-patches"][href*="highlight="]'),
+        ).toBeTruthy(),
+      { timeout: 10_000 },
+    );
+    const link = document.querySelector<HTMLAnchorElement>(
+      '.docs-search-results a[href*="apply-rom-patches"][href*="highlight="]',
+    );
+    fireEvent.click(link as HTMLAnchorElement);
+
+    await vi.waitFor(() => expect(document.querySelector("mark.docs-search-highlight")?.textContent).toBe("Nintendo"));
+    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" }));
   });
 
   it.each(["docs", "docs/apply-rom-patches"])("ends %s with nothing but the way back up", (slug) => {
@@ -453,24 +471,15 @@ Fixture description.
       // geometry, which was taken before these rects existed.
       fireEvent(window, new Event("resize"));
       return {
-        index: document.querySelector(".trail-index")?.textContent,
-        label: document.querySelector(".trail-label")?.textContent,
         weft: (document.querySelector(".warp-gauge-weft") as HTMLElement | null)?.style.width,
       };
     };
 
     // Reading line is 108px, so the second heading (1000px) becomes current
     // once the page has scrolled just past 892.
-    expect(readAt(0).index).toBe("01");
-    expect(readAt(950).index).toBe("02");
-    expect(readAt(950).label).toBe(sections[1]?.label);
-    // 2000 puts the fourth heading exactly on the line and leaves the fifth
-    // 500px below it.
-    expect(readAt(2000).index).toBe("04");
     // The last section stays reachable at the scroll limit even though its
     // heading never crosses the reading line.
     const atLimit = readAt(4600);
-    expect(atLimit.index).toBe(String(sections.length).padStart(2, "0"));
     expect(atLimit.weft).toBe("100%");
   });
 

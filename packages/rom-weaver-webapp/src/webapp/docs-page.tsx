@@ -1,18 +1,19 @@
 import "./design-system/docs-route.css";
-import { ArrowUpToLine, ChevronDown } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { MouseEvent } from "react";
+import { ArrowUpToLine } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
-import { Modal } from "../public/react/components/ds/modal.tsx";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes } from "./docs-routing.mjs";
+import { createDocsSearchIndex, findSearchToken, searchDocs } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
-import { SITE_NAME } from "./workflow-seo.mjs";
 
 type DocRoute = (typeof DOC_ROUTES)[number];
+type DocSearchRoute = ReturnType<typeof createDocsSearchIndex>[number];
+type DocSearchResult = ReturnType<typeof searchDocs>[number];
 
 /** Shelves are fixed at build time; the route table never changes at runtime. */
 const DOC_SHELVES = groupDocRoutes(DOC_ROUTES);
@@ -138,6 +139,115 @@ const SectionRail = ({
   </nav>
 );
 
+const DocsSearch = ({
+  onNavigate,
+  onSelect,
+  onQueryChange,
+  query,
+  results,
+}: {
+  onNavigate?: () => void;
+  onSelect?: (result: DocSearchResult, query: string) => void;
+  onQueryChange: (query: string) => void;
+  query: string;
+  results: readonly DocSearchResult[];
+}) => {
+  const inputId = useId();
+  const resultListId = `${inputId}-results`;
+  const statusId = `${inputId}-status`;
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [open, setOpen] = useState(false);
+  const hasQuery = query.trim().length > 0;
+  const showResults = hasQuery && open;
+
+  useEffect(() => {
+    if (query !== "") setActiveIndex(-1);
+    if (query === "") setOpen(false);
+  }, [query]);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onQueryChange("");
+      setOpen(false);
+      return;
+    }
+    if (!results.length) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((current) => (current + 1) % results.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((current) => (current <= 0 ? results.length - 1 : current - 1));
+    } else if (event.key === "Enter" && activeIndex >= 0) {
+      event.preventDefault();
+      document.getElementById(`${resultListId}-${activeIndex}`)?.click();
+    }
+  };
+
+  return (
+    <div className="docs-search">
+      <input
+        aria-activedescendant={activeIndex >= 0 ? `${resultListId}-${activeIndex}` : undefined}
+        aria-controls={resultListId}
+        aria-describedby={statusId}
+        aria-expanded={showResults}
+        aria-label="Search documentation"
+        autoComplete="off"
+        className="input"
+        id={inputId}
+        onChange={(event) => {
+          setOpen(true);
+          onQueryChange(event.currentTarget.value);
+        }}
+        onKeyDown={onKeyDown}
+        onFocus={() => setOpen(true)}
+        placeholder="Search docs"
+        role="combobox"
+        type="search"
+        value={query}
+      />
+      {showResults ? (
+        <div className="docs-search-results">
+          <p aria-live="polite" className="docs-search-status" id={statusId} role="status">
+            {results.length === 0
+              ? "No matching documentation."
+              : `${results.length} ${results.length === 1 ? "result" : "results"}`}
+          </p>
+          {results.length > 0 ? (
+            <ul className="guide-nav-list docs-search-result-list" id={resultListId}>
+              {results.map((result, index) => {
+                const highlight = new URLSearchParams({ highlight: query.trim() });
+                const href = `/${result.route.slug}?${highlight}${result.entry.id ? `#${result.entry.id}` : ""}`;
+                return (
+                  <li key={`${result.route.slug}:${result.entry.id ?? "introduction"}`}>
+                    <a
+                      aria-label={`${result.entry.label}, ${result.route.title}`}
+                      className={index === activeIndex ? "is-active" : undefined}
+                      href={href}
+                      id={`${resultListId}-${index}`}
+                      onClick={() => {
+                        onSelect?.(result, query);
+                        onQueryChange("");
+                        setOpen(false);
+                        onNavigate?.();
+                      }}
+                    >
+                      <strong className="docs-search-result-title">{result.entry.label}</strong>
+                      <small>in {result.route.title}</small>
+                      <small>{result.snippet}</small>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 /** Every page, on the shelf its folder puts it on. */
 const DocsNav = ({
   currentSlug,
@@ -244,83 +354,44 @@ const DocsFaqPreview = () => (
 );
 
 /** Which list the tapped crumb promised; null while the sheet is shut. */
-type TrailSheet = "pages" | "sections";
-
 /**
- * The trail: phone-width navigation folded into the breadcrumb it replaces.
+ * The trail: phone-width search and reading progress.
  *
- * A guide already needs a breadcrumb, so on a phone that row does the
- * navigating too - `Docs` opens every guide, the section crumb opens this
- * guide's outline - and the reading position rides its bottom edge as a warp of
- * one tick per section. Two crumbs, not four: the masthead brands the page and
- * the guide's own title is the heading below, which buys the room to name the
- * section, the one part of the trail that changes while you read.
+ * It sticks to the top rather than holding the bottom of the screen. The
+ * bottom is where the phone browser parks its own collapsing toolbar.
  *
- * It sticks to the top rather than holding the bottom of the screen. The bottom
- * is where the phone browser parks its own collapsing toolbar, which is what
- * the old bar had to reserve scroll room to clear.
+ * The gauge remains attached to the search surface so the reader can still see
+ * where they are in a long guide without carrying another navigation label.
  */
 const TrailHead = ({
-  activeIndex,
   fraction,
-  onShelfToggle,
-  openShelves,
+  onSearchSelect,
+  onSearchQueryChange,
   route,
+  searchQuery,
+  searchResults,
   weights,
 }: {
-  activeIndex: number;
   fraction: number;
-  onShelfToggle: (title: string, open: boolean) => void;
-  openShelves: DocShelfState;
+  onSearchSelect: (result: DocSearchResult, query: string) => void;
+  onSearchQueryChange: (query: string) => void;
   route: DocRoute;
+  searchQuery: string;
+  searchResults: readonly DocSearchResult[];
   weights: readonly number[];
 }) => {
-  const [sheet, setSheet] = useState<TrailSheet | null>(null);
-  const current = route.sections[activeIndex];
-  const currentLabel = current?.label ?? "";
-  const currentLabelEnd = /[.!?]$/.test(currentLabel) ? "" : ".";
-  const close = () => setSheet(null);
-  // A page with no headings - the index - keeps the guide menu and drops the half
-  // of the trail that reports a position it does not have. Returning nothing here
-  // would leave that page with no breadcrumb at all on a phone, since the plain
-  // one is hidden at this width.
   const outlined = route.sections.length > 0;
 
   return (
     <div className="docs-trail">
-      <nav aria-label="Breadcrumb" className="trail-crumbs">
-        <button
-          aria-expanded={sheet === "pages"}
-          className="trail-crumb"
-          onClick={() => setSheet("pages")}
-          type="button"
-        >
-          Docs
-          <ChevronDown aria-hidden="true" />
-        </button>
-        {outlined ? (
-          <>
-            <span aria-hidden="true" className="trail-sep">
-              /
-            </span>
-            <button
-              aria-expanded={sheet === "sections"}
-              aria-label={`Section ${activeIndex + 1} of ${route.sections.length}: ${currentLabel}${currentLabelEnd} Open this guide's outline.`}
-              className="trail-crumb is-section"
-              onClick={() => setSheet("sections")}
-              type="button"
-            >
-              <b aria-hidden="true" className="trail-index">
-                {sectionNumber(activeIndex)}
-              </b>
-              <span aria-hidden="true" className="trail-label">
-                {current?.label}
-              </span>
-              <ChevronDown aria-hidden="true" />
-            </button>
-          </>
-        ) : null}
-      </nav>
+      <div className="docs-trail-search">
+        <DocsSearch
+          onQueryChange={onSearchQueryChange}
+          onSelect={onSearchSelect}
+          query={searchQuery}
+          results={searchResults}
+        />
+      </div>
       {outlined ? (
         <span aria-hidden="true" className="warp-gauge">
           {route.sections.map((section, index) => (
@@ -329,21 +400,6 @@ const TrailHead = ({
           <span className="warp-gauge-weft" style={{ width: `${fraction * 100}%` }} />
         </span>
       ) : null}
-
-      {/* Only the list the tapped crumb named: tapping `Docs` and getting this
-          guide's outline first would break the promise the label made. */}
-      <Modal onClose={close} open={sheet !== null} title={route.title} variant="guide-sheet">
-        {sheet === "sections" ? (
-          <SectionRail activeIndex={activeIndex} onNavigate={close} route={route} />
-        ) : (
-          <DocsNav
-            currentSlug={route.slug}
-            onNavigate={close}
-            onShelfToggle={onShelfToggle}
-            openShelves={openShelves}
-          />
-        )}
-      </Modal>
     </div>
   );
 };
@@ -374,6 +430,68 @@ const isPlainLeftClick = (event: MouseEvent<HTMLAnchorElement>) =>
   event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
 const ignoreGuide = (_guide: GuidedSample) => undefined;
 
+const readDocsHighlight = (routeSlug?: string) => {
+  if (typeof window === "undefined") return { query: "", sectionId: null };
+  const url = new URL(window.location.href);
+  if (routeSlug && !url.pathname.replace(/\/$/, "").endsWith(`/${routeSlug}`)) {
+    return { query: "", sectionId: null };
+  }
+  return {
+    query: url.searchParams.get("highlight") ?? "",
+    sectionId: url.hash ? decodeURIComponent(url.hash.slice(1)) : null,
+  };
+};
+
+const clearDocsHighlightParam = () => {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("highlight")) return;
+  url.searchParams.delete("highlight");
+  window.history.replaceState(window.history.state, "", url);
+};
+
+const highlightDocsTerm = (article: HTMLElement, query: string, sectionId: string | null) => {
+  for (const mark of article.querySelectorAll("mark.docs-search-highlight")) {
+    mark.replaceWith(document.createTextNode(mark.textContent ?? ""));
+  }
+  const heading = sectionId ? document.getElementById(sectionId) : null;
+  const nextHeading = heading
+    ? [...article.querySelectorAll("h2")].find(
+        (candidate) => heading.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING,
+      )
+    : null;
+  const textNodes: Text[] = [];
+  const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    const textNode = node as Text;
+    const parent = textNode.parentElement;
+    const afterHeading =
+      !heading ||
+      (parent &&
+        (heading === parent || Boolean(heading.compareDocumentPosition(parent) & Node.DOCUMENT_POSITION_FOLLOWING)));
+    const beforeNextHeading =
+      !nextHeading ||
+      (parent &&
+        (nextHeading === parent ||
+          Boolean(nextHeading.compareDocumentPosition(parent) & Node.DOCUMENT_POSITION_PRECEDING)));
+    if (parent && afterHeading && beforeNextHeading) textNodes.push(textNode);
+    node = walker.nextNode();
+  }
+  for (const textNode of textNodes) {
+    const match = findSearchToken(textNode.nodeValue ?? "", query);
+    if (!match) continue;
+    const mark = document.createElement("mark");
+    mark.className = "docs-search-highlight";
+    const range = document.createRange();
+    range.setStart(textNode, match.index);
+    range.setEnd(textNode, match.index + match.text.length);
+    range.surroundContents(mark);
+    return mark;
+  }
+  return null;
+};
+
 const DocsPage = ({
   active,
   onGuideIntent = ignoreGuide,
@@ -392,6 +510,12 @@ const DocsPage = ({
   const { activeIndex, fraction, weights } = useReadingProgress(route.sections, active);
   const { onShelfToggle, openShelves } = useDocShelfState();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchIndex, setSearchIndex] = useState<readonly DocSearchRoute[]>([]);
+  const searchResults = useMemo(() => searchDocs(searchIndex, searchQuery), [searchIndex, searchQuery]);
+  const initialHighlight = readDocsHighlight();
+  const [highlightQuery, setHighlightQuery] = useState(initialHighlight.query);
+  const [highlightSection, setHighlightSection] = useState<string | null>(initialHighlight.sectionId);
   // Starts on the base the guides are authored against, which is what the
   // served document was rendered with, so hydration has nothing to reconcile.
   // The deployment's own base applies after mount, and only re-renders the
@@ -402,31 +526,58 @@ const DocsPage = ({
     if (!active) return;
     syncDocsSeoMetadata(route);
   }, [active, route]);
+  useEffect(() => {
+    if (!active) {
+      setSearchIndex([]);
+      setSearchQuery("");
+      return;
+    }
+    setSearchIndex(createDocsSearchIndex(DOC_ROUTES));
+  }, [active]);
   useEffect(() => setSampleBase(assetBaseUrl || AUTHORED_SAMPLE_BASE), [assetBaseUrl]);
+  useEffect(() => {
+    if (!active) return;
+    const highlight = readDocsHighlight(route.slug);
+    setHighlightQuery(highlight.query);
+    setHighlightSection(highlight.sectionId);
+  }, [active, route.slug]);
+  useEffect(() => {
+    if (!(active && highlightQuery && html)) return;
+    const article = document.querySelector<HTMLElement>(".docs-article");
+    if (!article) return;
+    const mark = highlightDocsTerm(article, highlightQuery, highlightSection);
+    const frame = window.requestAnimationFrame(() => {
+      (mark ?? (highlightSection ? document.getElementById(highlightSection) : null))?.scrollIntoView({
+        block: "center",
+      });
+      clearDocsHighlightParam();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, highlightQuery, highlightSection, html]);
+  const onSearchSelect = useCallback((result: DocSearchResult, query: string) => {
+    setHighlightQuery(query);
+    setHighlightSection(result.entry.id);
+  }, []);
   return (
     <div className="docs-workbench" id="main">
-      <nav aria-label="Breadcrumb" className="docs-breadcrumbs">
-        <a href="/apply">{SITE_NAME}</a>
-        <span aria-hidden="true">/</span>
-        {hub ? (
-          <span aria-current="page">Docs</span>
-        ) : (
-          <>
-            <a href="/docs">Docs</a>
-            <span aria-hidden="true">/</span>
-            <span aria-current="page">{route.label}</span>
-          </>
-        )}
-      </nav>
+      <div className="docs-search-header">
+        <DocsSearch
+          onSelect={onSearchSelect}
+          onQueryChange={setSearchQuery}
+          query={searchQuery}
+          results={searchResults}
+        />
+      </div>
       {/* Keyed on the route so moving to another guide closes the sheet with it,
           rather than leaving it open over a guide it no longer describes. */}
       <TrailHead
-        activeIndex={activeIndex}
         fraction={fraction}
         key={route.slug}
-        onShelfToggle={onShelfToggle}
-        openShelves={openShelves}
+        onSearchSelect={onSearchSelect}
+        onSearchQueryChange={setSearchQuery}
         route={route}
+        searchQuery={searchQuery}
+        searchResults={searchResults}
         weights={weights}
       />
       <div className="docs-layout">

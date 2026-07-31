@@ -25,10 +25,10 @@
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 162500,
-        "maxRawBytes": 165000,
-        "expectedBrotliBytes": 27700,
-        "maxBrotliBytes": 28500
+        "expectedRawBytes": 166500,
+        "maxRawBytes": 169000,
+        "expectedBrotliBytes": 28400,
+        "maxBrotliBytes": 29200
       },
       {
         "name": "WASM",
