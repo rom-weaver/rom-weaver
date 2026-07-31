@@ -22,6 +22,10 @@ jobs:
       artifact-metadata: write
       id-token: write
     steps:
+      # Only here to put `.github/actions/attest-retry` on disk - a local action
+      # resolves against the workspace, so an uncheckedout job cannot use one.
+      - uses: actions/checkout@v7
+
       - name: Create the subject
         run: |
           set -euo pipefail
@@ -29,6 +33,6 @@ jobs:
             "$GITHUB_RUN_ID" "$GITHUB_SHA" > subject.bin
 
       - name: Attest the subject
-        uses: actions/attest-build-provenance@v4
+        uses: ./.github/actions/attest-retry
         with:
           subject-path: subject.bin

@@ -288,7 +288,7 @@ jobs:
       # The manifest list, not either architecture's image: that is what a pull
       # of `:nightly` resolves against.
       - name: Sign build provenance
-        uses: actions/attest@v4
+        uses: ./.github/actions/attest-retry
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/rom-weaver-cli
           subject-digest: ${{ steps.manifest.outputs.digest }}
@@ -398,7 +398,7 @@ jobs:
           tags: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp:nightly
 
       - name: Sign build provenance
-        uses: actions/attest@v4
+        uses: ./.github/actions/attest-retry
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp
           subject-digest: ${{ steps.manifest.outputs.digest }}

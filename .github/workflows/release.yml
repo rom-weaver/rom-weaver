@@ -570,7 +570,7 @@ jobs:
       # asset list, so it neither touches the draft nor conflicts with
       # immutability.
       - name: Attest the static webapp tarball
-        uses: actions/attest-build-provenance@v4
+        uses: ./.github/actions/attest-retry
         with:
           subject-path: rom-weaver-webapp.tar.gz
 
