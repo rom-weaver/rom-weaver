@@ -11,8 +11,13 @@ explains the basics and includes a safe practice run. Then open the Browser
 usage section below and pick the guide for your task.
 
 The [Formats guide](formats.md) lists the common archives and compressed files
-rom-weaver can open and the formats it can create.
+rom-weaver can open and the formats it can create. The
+[Compression formats guide](compression-formats.md) helps you pick between
+CHD, RVZ, Z3DS, ZIP, and 7z, and the
+[Supported formats reference](../reference/formats.md) has the full tables.
 
-Use [CLI usage](../hosting/cli.md) for terminal commands, scripts, batch jobs,
-and CI. You can also jump straight to [CLI installation](../hosting/cli.md#install)
-or [self-hosting the webapp](../hosting/self-hosting.md).
+Use the [CLI guides](../cli/get-started.md) for terminal commands, scripts,
+batch jobs, and CI, with the [CLI reference](../cli/reference.md) for every
+command and flag. You can also jump straight to
+[CLI installation](../cli/install.md) or
+[self-hosting the webapp](../hosting/self-hosting.md).

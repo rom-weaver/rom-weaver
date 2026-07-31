@@ -18,7 +18,7 @@ files are not uploaded.
 
 Use [Apply](https://rom-weaver.com/apply) in the browser to open a supported
 archive while applying patches, or choose ZIP or 7z as the compressed output.
-The [CLI](../hosting/cli.md) exposes the same archive handlers directly:
+The [CLI](../cli/reference.md) exposes the same archive handlers directly:
 
 ```sh
 rom-weaver extract --input patches.7z --output extracted-patches
@@ -63,7 +63,7 @@ rom-weaver can create these two general-purpose archive formats:
 
 The browser exposes the matching codec settings when the input is compatible.
 The CLI format table has the complete aliases, codec values, and command-line
-options: [container and compression formats](../hosting/cli.md#container-and-compression-formats).
+options: [container and compression formats](../reference/formats.md#container-and-compression-formats).
 
 ## Formats you can only open
 
@@ -74,4 +74,4 @@ when you need the files without applying a patch.
 
 Specialized disc and ROM containers are intentionally outside this guide for
 now. Their capabilities are listed in the
-[CLI format table](../hosting/cli.md#container-and-compression-formats).
+[CLI format table](../reference/formats.md#container-and-compression-formats).

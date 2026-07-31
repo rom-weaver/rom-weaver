@@ -57,7 +57,7 @@ the result came out right.
 That makes it a strong default for cartridge games, as long as your audience
 uses a patcher from this century. rom-weaver applies and creates BPS. In the
 webapp, choose BPS in the **0x04 Patch** format selector. For a scripted
-release, use the separate [CLI usage guide](../hosting/cli.md#common-workflows).
+release, use the separate [CLI patch creation guide](../cli/create.md).
 
 ## IPS and IPS32
 
@@ -115,7 +115,7 @@ PAT, EBP, BDF/BSDIFF40, BSP, MOD, DLDI, DPS, and the Dreamcast-specific DCP
 workflow. Support for applying and support for creating are not the same for
 every one of these.
 
-The [full format table](../hosting/cli.md#patch-formats) is the authoritative list of
+The [full format table](../reference/formats.md#patch-formats) is the authoritative list of
 names, extensions, and what rom-weaver can currently apply and create.
 
 ## Which format should I choose?

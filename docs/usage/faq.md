@@ -250,8 +250,8 @@ commands, and large jobs.
 
 They use the same core patch and container logic, but the interfaces are
 different. Browser documentation stays focused on visible controls. The
-[CLI usage guide](../hosting/cli.md) owns installation, shell commands, options, and
-the command reference.
+[CLI guides](../cli/get-started.md) own installation and shell workflows, and
+the [CLI reference](../cli/reference.md) owns options and commands.
 
 ### Where can I report a bug?
 

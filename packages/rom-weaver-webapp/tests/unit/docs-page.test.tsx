@@ -277,7 +277,7 @@ Fixture description.
 
 ## Resources
 
-[Install](../hosting/cli.md#install)
+[Install](../cli/reference.md#install)
 [Maintainer notes](../development/mobile-safari-verification.md)
 ![Sample](../../packages/rom-weaver-webapp/design/first-sample-modified-world.webp)
 `,
@@ -308,16 +308,18 @@ Fixture description.
     const nav = document.querySelector(".docs-rails .guide-nav");
     expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual([
       "Browser usage",
-      "Install & hosting",
+      "CLI",
+      "Hosting",
+      "Reference",
       "Development",
       "Legal",
     ]);
     // Every published route reaches the nav, so a new guide can never be
     // stranded off the shelves.
     expect(nav?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
-    expect(nav?.querySelector('a[aria-current="page"]')?.textContent).toBe("CLI usage");
+    expect(nav?.querySelector('a[aria-current="page"]')?.textContent).toBe("CLI reference");
     const shelves = [...(nav?.querySelectorAll<HTMLDetailsElement>(".guide-shelf") ?? [])];
-    expect(shelves.map((shelf) => shelf.open)).toEqual([true, false, false, false]);
+    expect(shelves.map((shelf) => shelf.open)).toEqual([true, false, false, false, false, false]);
     fireEvent.click(shelves[2]?.querySelector("summary") as HTMLElement);
     expect(shelves[2]?.open).toBe(true);
 
@@ -325,14 +327,14 @@ Fixture description.
     const mobileShelves = [
       ...(document.querySelector(".rw-modal.guide-sheet")?.querySelectorAll<HTMLDetailsElement>(".guide-shelf") ?? []),
     ];
-    expect(mobileShelves.map((shelf) => shelf.open)).toEqual([true, false, true, false]);
+    expect(mobileShelves.map((shelf) => shelf.open)).toEqual([true, false, true, false, false, false]);
 
     unmount();
     render(<DocsPage active slug="docs/privacy" />);
     await vi.waitFor(() =>
       expect(
         [...document.querySelectorAll<HTMLDetailsElement>(".docs-rails .guide-shelf")].map((shelf) => shelf.open),
-      ).toEqual([true, false, true, false]),
+      ).toEqual([true, false, true, false, false, false]),
     );
   });
 
@@ -393,8 +395,8 @@ Fixture description.
     const index = document.querySelector(".docs-index");
     expect(screen.queryAllByRole("combobox")).toHaveLength(0);
     expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain("Browser usage");
-    expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("CLI usage");
-    expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("Install");
+    expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("CLI reference");
+    expect(index?.querySelector('a[href="/docs/install"]')?.textContent).toContain("Install");
     expect(index?.querySelector('a[href="/docs/self-hosting"]')?.textContent).toContain("Self-hosting");
     expect(screen.getByRole("link", { name: "Read the full FAQ" }).getAttribute("href")).toBe("/docs/faq");
     expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();
@@ -479,11 +481,13 @@ Fixture description.
     const shelves = [...(index?.querySelectorAll<HTMLDetailsElement>(".docs-index-shelf") ?? [])];
     expect(shelves.map((shelf) => shelf.querySelector(".docs-index-title")?.textContent)).toEqual([
       "Browser usage",
-      "Install & hosting",
+      "CLI",
+      "Hosting",
+      "Reference",
       "Development",
       "Legal",
     ]);
-    expect(shelves.map((shelf) => shelf.open)).toEqual([true, false, false, false]);
+    expect(shelves.map((shelf) => shelf.open)).toEqual([true, false, false, false, false, false]);
     fireEvent.click(shelves[1]?.querySelector("summary") as HTMLElement);
     expect(shelves[1]?.open).toBe(true);
     // Everything but the hub itself, so the landing page never links to itself.

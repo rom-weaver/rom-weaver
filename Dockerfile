@@ -4,7 +4,7 @@
 # Bind-mounted files keep their host ownership, so anything the container writes
 # must run as an id the host directory accepts. Pass `--user "$(id -u):$(id -g)"`
 # for that; the image needs no passwd entry for it because rom-weaver reads no
-# home directory or user config. See docs/cli.md ("Run in Docker").
+# home directory or user config. See docs/cli/install.md ("Run in Docker").
 #
 # `--build-arg BINARY=prebuilt` skips the compile and takes the target
 # architecture's `prebuilt/<arch>/rom-weaver` out of the build context instead.

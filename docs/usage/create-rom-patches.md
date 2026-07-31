@@ -191,5 +191,5 @@ update. It requires users to install version 1 first and in the exact expected
 state. That can be intentional, but say so clearly if you choose it.
 
 For scripts or command-line publishing, use the
-[CLI patch creation guide](../hosting/cli.md#common-workflows). Back to the
+[CLI patch creation guide](../cli/create.md). Back to the
 [browser guide index](README.md).

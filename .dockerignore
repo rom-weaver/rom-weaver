@@ -28,8 +28,12 @@ third_party
 docs/*
 !docs/usage
 !docs/usage/**
+!docs/cli
+!docs/cli/**
 !docs/hosting
 !docs/hosting/**
+!docs/reference
+!docs/reference/**
 !docs/development
 !docs/development/**
 !docs/legal

@@ -20,6 +20,8 @@ Choose the guide that matches what you are trying to do.
   safe worked example with the included homebrew files.
 - [Archive formats](./usage/formats.md): which archives and compressed files
   rom-weaver can open and which formats it can create.
+- [Compression formats](./usage/compression-formats.md): pick between CHD, RVZ,
+  Z3DS, ZIP, and 7z, and when trimming beats compressing.
 - [Apply patches](./usage/apply-rom-patches.md): the complete Weave workflow,
   with focused screenshots for desktop, mobile, light, and dark themes.
 - [Create patches](./usage/create-rom-patches.md): compare Original and
@@ -28,9 +30,17 @@ Choose the guide that matches what you are trying to do.
   patch-only release in the Weave webapp.
 - [FAQ](./usage/faq.md): privacy, matching ROMs, patch formats, bundles,
   offline use, devices, and choosing between browser and CLI.
-- [CLI usage](./hosting/cli.md): installation, common workflows, command reference,
-  supported formats, compression, checksums, trimming, and JSON output.
-- [Man pages](./hosting/cli.md#man-pages): generate `rom-weaver(1)` and one page per
+- [Install the CLI](./cli/install.md): package managers, verified install
+  scripts, npm, Docker, and building from source.
+- [CLI get started](./cli/get-started.md): a first weave, then practice patch
+  creation and bundling with the same homebrew samples.
+- [CLI apply](./cli/apply.md), [CLI create](./cli/create.md), and
+  [CLI bundles](./cli/bundles.md): task guides for patching from the terminal.
+- [CLI reference](./cli/reference.md): every command, global flag, JSON
+  output, exit codes, permissions, and completions.
+- [Supported formats](./reference/formats.md): the full patch, container,
+  codec, checksum, trim, and header support tables.
+- [Man pages](./cli/reference.md#man-pages): generate `rom-weaver(1)` and one page per
   visible CLI command directly from Clap.
 - [Screenshots](./development/screenshots.md): reproducible, focused desktop
   and mobile captures plus the runnable sample ROMs before and after patching.
