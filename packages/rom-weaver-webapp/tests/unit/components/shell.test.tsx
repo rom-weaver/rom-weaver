@@ -90,6 +90,20 @@ describe("Masthead", () => {
     expect(container.querySelector(".mobile-devtools-toggle")).toBeNull();
     expect(container.querySelector(".masthead-version")).toBeNull();
   });
+
+  it("links pull request build badges to their pull request", () => {
+    const { container, getByRole, rerender } = render(
+      withSettings(<Masthead {...mastheadProps} channelBadge="pr-123" />),
+    );
+    const badge = getByRole("link", { name: "Open pull request 123" });
+    expect(badge.classList.contains("channel-badge")).toBe(true);
+    expect(badge.getAttribute("href")).toBe("https://example.com/repo/pull/123");
+    expect(badge.getAttribute("target")).toBe("_blank");
+
+    rerender(withSettings(<Masthead {...mastheadProps} channelBadge="nightly" />));
+    expect(container.querySelector(".channel-badge")?.tagName).toBe("SPAN");
+  });
+
   it("preloads the Log dialog before interaction completes", () => {
     const onPreloadLog = vi.fn();
     const { getByRole } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
