@@ -12,8 +12,9 @@
 /.tokensave/
 /dist/
 
-# Generated CLI man pages (produced from Clap definitions via `mise run manpages`)
+# Generated CLI documentation (produced from Clap definitions via `mise run manpages`)
 /docs/man/
+/docs/completions/
 
 # Generated wasm artifacts
 /dist/wasm/

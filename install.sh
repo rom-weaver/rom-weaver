@@ -29,6 +29,7 @@ case "$system:$machine" in
 esac
 
 asset="rom-weaver-$platform"
+docs_asset="rom-weaver-cli-assets.tar.gz"
 if [ "$version" = "latest" ]; then
   release_url="https://github.com/$repo/releases/latest/download"
 else
@@ -145,6 +146,31 @@ fi
 mkdir -p "$install_dir"
 install -m 0755 "$tmp_dir/$asset" "$install_dir/rom-weaver"
 echo "Installed rom-weaver to $install_dir/rom-weaver"
+
+# Documentation is a separate, platform-independent release asset so the
+# executable remains usable by cargo-binstall, mise, and package managers that
+# only understand one binary. Older releases may not have it yet; keep the
+# binary install successful in that case.
+if curl --fail --location --proto '=https' --tlsv1.2 \
+  --output "$tmp_dir/$docs_asset" "$release_url/$docs_asset"; then
+  tar --extract --gzip --file "$tmp_dir/$docs_asset" --directory "$tmp_dir"
+  man_dir="${ROM_WEAVER_MAN_DIR:-$HOME/.local/share/man/man1}"
+  bash_completion_dir="${ROM_WEAVER_BASH_COMPLETION_DIR:-$HOME/.local/share/bash-completion/completions}"
+  zsh_completion_dir="${ROM_WEAVER_ZSH_COMPLETION_DIR:-$HOME/.zfunc}"
+  fish_completion_dir="${ROM_WEAVER_FISH_COMPLETION_DIR:-$HOME/.config/fish/completions}"
+  elvish_completion_dir="${ROM_WEAVER_ELVISH_COMPLETION_DIR:-$HOME/.config/elvish/lib}"
+  mkdir -p "$man_dir" "$bash_completion_dir" "$zsh_completion_dir" "$fish_completion_dir" "$elvish_completion_dir"
+  for page in "$tmp_dir"/man/*.1; do
+    install -m 0644 "$page" "$man_dir/"
+  done
+  install -m 0644 "$tmp_dir/completions/rom-weaver.bash" "$bash_completion_dir/rom-weaver"
+  install -m 0644 "$tmp_dir/completions/_rom-weaver" "$zsh_completion_dir/_rom-weaver"
+  install -m 0644 "$tmp_dir/completions/rom-weaver.fish" "$fish_completion_dir/rom-weaver.fish"
+  install -m 0644 "$tmp_dir/completions/rom-weaver.elv" "$elvish_completion_dir/rom-weaver.elv"
+  echo "Installed man pages and shell completions"
+else
+  echo "rom-weaver: CLI documentation asset unavailable; installed the binary only" >&2
+fi
 
 case ":$PATH:" in
   *":$install_dir:"*) echo "Run: rom-weaver --help" ;;

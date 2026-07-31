@@ -60,6 +60,11 @@ Every method here installs a binary built for the release: macOS arm64 and
 x86-64; Linux x86-64 GNU plus x86-64, arm64, and i686 musl; and Windows
 arm64, x86-64, and x86.
 
+Homebrew, the install scripts, and npm also carry the generated CLI manpages
+and shell completions. Scoop, cargo-binstall, mise, and `cargo install` install
+the executable only; use the [completion](#shell-completions) and [man page](#man-pages)
+commands below for those methods.
+
 #### Homebrew (macOS arm64/Intel, Linux arm64/x86-64)
 
 ```bash
@@ -79,7 +84,9 @@ Downloads the latest release to `~/.local/bin` and checks its build provenance,
 refusing to install a binary this repository did not publish. Set
 `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to
 install a specific release. See [Verifying a download](#verifying-a-download)
-for what that check does and does not prove.
+for what that check does and does not prove. It also installs manpages under
+`~/.local/share/man/man1` and completions under the standard per-user shell
+directories.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
@@ -89,7 +96,8 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 #### Install script (Windows)
 
 The PowerShell equivalent, installing to `%LOCALAPPDATA%\rom-weaver\bin`. It
-honors the same environment variables and runs the same checks.
+honors the same environment variables and runs the same checks. The PowerShell
+completion is installed under that directory's `completions` folder.
 
 ```powershell
 irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex
@@ -963,14 +971,18 @@ rom-weaver completions fish > ~/.config/fish/completions/rom-weaver.fish
 
 `bash`, `zsh`, `fish`, `powershell`, and `elvish` are supported.
 
+The Homebrew and script installers already place these files. npm packages
+ship them under `docs/completions`; for the other install methods, redirect the
+command to the path your shell uses.
+
 For format specifications and upstream implementations, see
 [`references.md`](../development/references.md).
 
 ## Man pages
 
 The pages under `docs/man` come from the same Clap definitions as `--help`, so
-they always match it. They are not checked in; run the generator to produce
-them (the npm `prepack` step does this automatically before publishing):
+they always match it. They are generated during release packaging and are
+installed by Homebrew and the install scripts. In a source checkout, run:
 
 ```bash
 mise run manpages

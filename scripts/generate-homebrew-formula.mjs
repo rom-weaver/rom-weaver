@@ -19,6 +19,10 @@ const checksums = Object.fromEntries(
     return [platform, checksum];
   }),
 );
+const assetsChecksum = readFileSync(resolve(checksumDirectory, "rom-weaver-cli-assets.tar.gz.sha256"), "utf8").match(
+  /^[a-f0-9]{64}/,
+ )?.[0];
+if (!assetsChecksum) throw new Error("invalid checksum for rom-weaver-cli-assets.tar.gz");
 
 const releaseUrl = `https://github.com/rom-weaver/rom-weaver/releases/download/v${version}`;
 const source = `class RomWeaver < Formula
@@ -26,6 +30,11 @@ const source = `class RomWeaver < Formula
   homepage "https://rom-weaver.com"
   version "${version}"
   license "AGPL-3.0-or-later"
+
+  resource "cli-assets" do
+    url "${releaseUrl}/rom-weaver-cli-assets.tar.gz"
+    sha256 "${assetsChecksum}"
+  end
 
   on_macos do
     on_arm do
@@ -51,6 +60,12 @@ const source = `class RomWeaver < Formula
 
   def install
     bin.install Dir["rom-weaver-*"].first => "rom-weaver"
+    resource("cli-assets").stage do
+      man1.install Dir["man/*.1"]
+      bash_completion.install "completions/rom-weaver.bash" => "rom-weaver"
+      zsh_completion.install "completions/_rom-weaver"
+      fish_completion.install "completions/rom-weaver.fish"
+    end
   end
 
   test do
