@@ -76,36 +76,36 @@ path = "src/typegen_main.rs"
 required-features = ["typescript-types"]
 
 [package.metadata.binstall]
-pkg-fmt = "bin"
+pkg-fmt = "tgz"
 bin-dir = "{ bin }{ binary-ext }"
 disabled-strategies = ["quick-install", "compile"]
 
 [package.metadata.binstall.overrides.aarch64-apple-darwin]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-darwin-arm64"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-darwin-arm64.tgz"
 
 [package.metadata.binstall.overrides.x86_64-apple-darwin]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-darwin-x64"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-darwin-x64.tgz"
 
 [package.metadata.binstall.overrides.x86_64-unknown-linux-gnu]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-x64-gnu"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-x64-gnu.tgz"
 
 [package.metadata.binstall.overrides.aarch64-unknown-linux-musl]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-arm64-musl"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-arm64-musl.tgz"
 
 [package.metadata.binstall.overrides.i686-unknown-linux-musl]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-ia32-musl"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-ia32-musl.tgz"
 
 [package.metadata.binstall.overrides.x86_64-unknown-linux-musl]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-x64-musl"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-x64-musl.tgz"
 
 [package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-arm64-msvc.exe"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-arm64-msvc.tgz"
 
 [package.metadata.binstall.overrides.i686-pc-windows-msvc]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-ia32-msvc.exe"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-ia32-msvc.tgz"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-x64-msvc.exe"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-x64-msvc.tgz"
 
 [lints]
 workspace = true
