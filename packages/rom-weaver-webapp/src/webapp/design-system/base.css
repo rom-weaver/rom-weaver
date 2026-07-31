@@ -59,16 +59,14 @@
      staging shimmer (sized by char count) matches the resolved value at any
      viewport width. */
   --mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  /* `viewport-fit=cover` exposes the PWA's status-bar and home-indicator
-     insets; browser tabs resolve these to zero. */
-  --safe-t: env(safe-area-inset-top, 0px);
-  --safe-b: env(safe-area-inset-bottom, 0px);
+  /* `viewport-fit=cover` exposes the PWA's side insets; browser tabs resolve
+     these to zero. The footer uses them locally so the shell does not shift. */
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   /* the empty 0x01 hero fills the first screen at every width: 100svh minus
      the chrome around it (masthead + banner slack + step head + the ghost-next
      line + margins) */
-  --hero-chrome: calc(242px + var(--safe-t) + var(--safe-b));
+  --hero-chrome: 242px;
   /* the empty-section family recipe (hero drop, add-row, needs-input, ghost
      slots): solid seam + thread-tinted fill strung with warp, lighting up on
      hover. Composed from theme-switched vars, so no per-theme overrides are

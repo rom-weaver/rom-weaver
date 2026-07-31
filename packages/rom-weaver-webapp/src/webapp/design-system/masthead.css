@@ -96,7 +96,11 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .mode[data-beta-tool] { displ
 .rw-app .site-footer-link { display: inline-flex; align-items: center; gap: var(--sp-xs); color: var(--ink-2); font-size: .76rem; white-space: nowrap; }
 .rw-app .site-footer-link.support-link { color: var(--thread-text); }
 .rw-app .site-footer-link svg { width: 15px; height: 15px; }
-.rw-app .site-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-m); min-width: 0; padding-block: var(--sp-s); border-block-start: 1px solid var(--seam-soft); }
+.rw-app .site-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-m); min-width: 0;
+  padding-block: var(--sp-s); padding-inline: max(var(--sp-s), var(--safe-l)) max(var(--sp-s), var(--safe-r));
+  border-block-start: 1px solid var(--seam-soft);
+}
 .rw-app .site-footer-status { min-width: 0; }
 .rw-app .site-footer .masthead-version { min-width: 0; overflow: hidden; }
 @media (hover: hover) {

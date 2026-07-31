@@ -249,23 +249,37 @@ test("the site footer lands inside the first phone screen with an empty bench", 
   page.viewport(1280, 900);
 });
 
-test("the PWA safe area keeps the shell clear of device chrome", async () => {
-  const safeTop = 59;
-  const safeBottom = 34;
+test("PWA side insets move footer content without shifting the shell", async () => {
+  const safeLeft = 18;
+  const safeRight = 18;
   const height = 852;
   page.viewport(393, height);
   mountWebappRoot();
+  await expect.poll(() => document.querySelector(".site-footer")).toBeTruthy();
+  const readLayout = () => {
+    const masthead = document.querySelector(".masthead")?.getBoundingClientRect();
+    const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
+    const links = document.querySelector(".site-footer-links")?.getBoundingClientRect();
+    const status = document.querySelector(".site-footer-status")?.getBoundingClientRect();
+    return {
+      footerBottom: footer?.bottom ?? 0,
+      footerTop: footer?.top ?? 0,
+      linksLeft: links?.left ?? 0,
+      mastheadTop: masthead?.top ?? 0,
+      statusRight: status?.right ?? 0,
+    };
+  };
+  const before = readLayout();
   const simulatedSafeArea = document.createElement("style");
-  simulatedSafeArea.textContent = `.rw-app { --safe-t: ${safeTop}px; --safe-b: ${safeBottom}px; }`;
+  simulatedSafeArea.textContent = `.rw-app { --safe-l: ${safeLeft}px; --safe-r: ${safeRight}px; }`;
   document.head.append(simulatedSafeArea);
   try {
-    await expect.poll(() => document.querySelector(".step.is-input.is-empty .drop.hero")).toBeTruthy();
-    await expect
-      .poll(() => document.querySelector(".masthead")?.getBoundingClientRect().top ?? -1)
-      .toBeGreaterThanOrEqual(safeTop);
-    await expect
-      .poll(() => document.querySelector(".site-footer")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
-      .toBeLessThanOrEqual(height - safeBottom);
+    const after = readLayout();
+    expect(after.mastheadTop).toBe(before.mastheadTop);
+    expect(after.footerTop).toBe(before.footerTop);
+    expect(after.footerBottom).toBe(before.footerBottom);
+    expect(after.linksLeft).toBeGreaterThan(before.linksLeft);
+    expect(after.statusRight).toBeLessThan(before.statusRight);
   } finally {
     simulatedSafeArea.remove();
   }
