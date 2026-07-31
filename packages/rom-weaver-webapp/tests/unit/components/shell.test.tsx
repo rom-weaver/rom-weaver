@@ -93,6 +93,7 @@ describe("Masthead", () => {
     );
     const badge = getByRole("link", { name: "Open pull request 123" });
     expect(badge.classList.contains("channel-badge")).toBe(true);
+    expect(badge.classList.contains("channel-badge-link")).toBe(true);
     expect(badge.getAttribute("href")).toBe("https://example.com/repo/pull/123");
     expect(badge.getAttribute("target")).toBe("_blank");
 
