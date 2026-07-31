@@ -257,7 +257,7 @@ jobs:
       # interact with immutable releases - it is safe on a rerun and safe after
       # the release is published.
       - name: Attest the release binary
-        uses: actions/attest-build-provenance@v4
+        uses: ./.github/actions/attest-retry
         with:
           subject-path: ${{ steps.asset.outputs.name }}
 

@@ -18,6 +18,7 @@ publishing, and retry procedures - see the [release guide](../../.github/RELEASI
   - [`.github/actions/wasm-cache`](#githubactionswasm-cache)
   - [`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform)
   - [`.github/actions/docker-build-arch` and `docker-manifest`](#githubactionsdocker-build-arch-and-docker-manifest)
+  - [`.github/actions/attest-retry`](#githubactionsattest-retry)
   - [`.github/cli-platforms.json`](#githubcli-platformsjson)
   - [macOS support floor](#macos-support-floor)
   - [`scripts/ci/assert-jobs.mjs`](#scriptsciassert-jobsmjs)
@@ -883,6 +884,35 @@ them for the `nightly` channel and `docker-publish.yml` for everything else, so
 the exporter, the per-architecture cache refs, and the digest hand-off are
 defined once. See [Multi-arch images](#multi-arch-images) for why the split
 exists and what it is worth.
+
+### `.github/actions/attest-retry`
+
+Every build-provenance attestation in the repository goes through this, and
+nothing calls `actions/attest*` directly. It runs the attestation, and on
+failure runs it once more.
+
+The retry exists because the attestation is the one publish step that depends on
+a service nobody here operates. Repository visibility picks the Sigstore
+instance - public repositories get the public-good instance
+(`rekor.sigstore.dev`) - and `actions/attest` exposes no retry, timeout, or
+instance input, so there is nothing to tune. v0.10.2's `Package static webapp`
+died to a 60s `error fetching tlog entry` timeout raised *after* the tarball was
+built, packaged, and uploaded, which cost a re-run of the whole fan-out.
+
+Two subject shapes, because the underlying actions are not interchangeable:
+`subject-path` for a file on disk (wrapping `actions/attest-build-provenance`),
+or `subject-name` plus `subject-digest` for an image already in a registry
+(wrapping `actions/attest`). Passing both, or neither, fails the step rather
+than attesting nothing and letting `gh attestation verify` discover it later in
+someone's install script.
+
+Being a local action, it resolves against the workspace, so a calling job must
+check the repository out first - that is the only reason the two
+`attestation-dry-run` jobs check out at all.
+
+A retry can leave two attestations for one subject when the first attempt
+signed but timed out reading the log back. That is harmless: attestations are
+additive and every consumer here asks for at least one, never exactly one.
 
 ### `.github/cli-platforms.json`
 

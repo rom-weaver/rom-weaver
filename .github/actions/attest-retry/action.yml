@@ -1,0 +1,113 @@
+name: Attest build provenance with retry
+description: >-
+  Build-provenance attestation that survives one transient Sigstore failure.
+  A public repository is pinned to the public-good Sigstore instance
+  (rekor.sigstore.dev) - the instance is chosen by repository visibility and
+  `actions/attest` exposes no retry, timeout, or instance input - so a slow
+  transparency log fails an otherwise finished publish job. v0.10.2 lost
+  `Package static webapp` this way, to a 60s `error fetching tlog entry`
+  timeout raised after the tarball had already been built and uploaded.
+  Attempt twice before giving up.
+
+  Two subject shapes, because the underlying actions are not interchangeable:
+  pass `subject-path` for a file on disk, or `subject-name` plus
+  `subject-digest` for an image already pushed to a registry.
+
+inputs:
+  subject-path:
+    description: >-
+      Path to the file being attested. Selects the file shape; mutually
+      exclusive with subject-digest.
+    required: false
+    default: ""
+  subject-name:
+    description: Subject name recorded in the attestation. Required with subject-digest.
+    required: false
+    default: ""
+  subject-digest:
+    description: >-
+      Digest of an already-published subject, as `algorithm:hex`. Selects the
+      image shape; mutually exclusive with subject-path.
+    required: false
+    default: ""
+  push-to-registry:
+    description: Whether to push the attestation to the image registry.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # Neither shape given is always a miswired caller, and the attest actions
+    # answer that with a success and no attestation - which then fails much
+    # later, at `gh attestation verify` in someone's install script.
+    - name: Verify a subject was given
+      shell: bash
+      env:
+        SUBJECT_PATH: ${{ inputs.subject-path }}
+        SUBJECT_DIGEST: ${{ inputs.subject-digest }}
+        SUBJECT_NAME: ${{ inputs.subject-name }}
+      run: |
+        set -euo pipefail
+        if [ -n "$SUBJECT_PATH" ] && [ -n "$SUBJECT_DIGEST" ]; then
+          echo "::error::attest-retry takes subject-path or subject-digest, not both"
+          exit 1
+        fi
+        if [ -z "$SUBJECT_PATH" ] && [ -z "$SUBJECT_DIGEST" ]; then
+          echo "::error::attest-retry needs either subject-path or subject-digest"
+          exit 1
+        fi
+        if [ -n "$SUBJECT_DIGEST" ] && [ -z "$SUBJECT_NAME" ]; then
+          echo "::error::attest-retry needs subject-name alongside subject-digest"
+          exit 1
+        fi
+
+    # `continue-on-error` records the failure as this step's `outcome` while
+    # leaving `conclusion` a success, so the job survives to reach the retry.
+    - name: Attest the file
+      id: file
+      if: inputs.subject-path != ''
+      continue-on-error: true
+      uses: actions/attest-build-provenance@v4
+      with:
+        subject-path: ${{ inputs.subject-path }}
+
+    # A second attestation for a subject that did get logged the first time is
+    # harmless: attestations are additive, and every consumer here - `gh
+    # attestation verify`, the install scripts' API check - asks for at least
+    # one valid attestation, never exactly one.
+    - name: Attest the file (retry)
+      if: inputs.subject-path != '' && steps.file.outcome == 'failure'
+      uses: actions/attest-build-provenance@v4
+      with:
+        subject-path: ${{ inputs.subject-path }}
+
+    - name: Attest the image
+      id: image
+      if: inputs.subject-digest != ''
+      continue-on-error: true
+      uses: actions/attest@v4
+      with:
+        subject-name: ${{ inputs.subject-name }}
+        subject-digest: ${{ inputs.subject-digest }}
+        push-to-registry: ${{ inputs.push-to-registry }}
+
+    - name: Attest the image (retry)
+      if: inputs.subject-digest != '' && steps.image.outcome == 'failure'
+      uses: actions/attest@v4
+      with:
+        subject-name: ${{ inputs.subject-name }}
+        subject-digest: ${{ inputs.subject-digest }}
+        push-to-registry: ${{ inputs.push-to-registry }}
+
+    # Both attempts failing is a real outage, not a blip, and the retry step's
+    # own failure is what surfaces it. This only reports the recovery, which
+    # would otherwise be invisible: a green job whose first attempt failed
+    # looks identical to one that never stumbled.
+    - name: Report a recovered attestation
+      if: steps.file.outcome == 'failure' || steps.image.outcome == 'failure'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::warning::attestation failed once and succeeded on retry - Sigstore was flaky, the artifact is attested"
+        echo "**Attestation retried** - the first attempt failed, the second succeeded." >> "$GITHUB_STEP_SUMMARY"
