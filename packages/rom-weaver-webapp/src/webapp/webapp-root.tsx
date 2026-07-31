@@ -638,4 +638,4 @@ function WebappRoot({
   );
 }
 
-export { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot };
+export { resolveThreads, selectViewWithTransition, WebappRoot };

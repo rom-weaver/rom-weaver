@@ -1,10 +1,17 @@
 /* ── base ── */
 .rw-app *, .rw-app *::before, .rw-app *::after, .dlg *, .dlg *::before, .dlg *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
-/* The prerendered boot shell (aria-busy until React mounts) must paint with its
-   panel settled while its ambient loops keep moving. Hydration preserves those
-   loops, then the first client layout fast-forwards entry animations. */
-#webapp-root[aria-busy="true"] .workflow-body { animation: none !important; }
+/* The prerendered boot shell must stay settled through hydration. Releasing
+   aria-busy and starting panel-in in separate steps lets standalone WebKit
+   paint a visible upward jump. */
+#webapp-root[aria-busy="true"] #panel-patcher .workflow-body,
+#webapp-root[data-shell-settled="true"] #panel-patcher .workflow-body {
+  animation: none !important;
+  /* The prerendered empty bench must not inherit the mobile card scroll reserve.
+     Keep this first-paint fallback independent of :has(), so older standalone
+     WebKit builds still paint the footer in the opening viewport. */
+  padding-block-end: 0 !important;
+}
 #webapp-root[aria-busy="true"] .tool { background: transparent; border-color: transparent; transition: none; }
 /* base scale - bumped up (text read a touch small) but still responsive so it
    eases down on narrow phones instead of a flat size */
@@ -59,10 +66,18 @@
      staging shimmer (sized by char count) matches the resolved value at any
      viewport width. */
   --mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* `viewport-fit=cover` exposes the PWA's device insets; browser tabs resolve
+     these to zero. Vertical insets belong to the shell, while side insets are
+     applied locally to the footer below. */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --pwa-footer-reserve: 0px;
   /* the empty 0x01 hero fills the first screen at every width: 100svh minus
      the chrome around it (masthead + banner slack + step head + the ghost-next
      line + margins) */
-  --hero-chrome: 242px;
+  --hero-chrome: calc(242px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
   /* the empty-section family recipe (hero drop, add-row, needs-input, ghost
      slots): solid seam + thread-tinted fill strung with warp, lighting up on
      hover. Composed from theme-switched vars, so no per-theme overrides are
@@ -125,6 +140,9 @@
 @media (hover: hover) {
   .rw-app a:hover { color: var(--thread-text); }
 }
+@media (display-mode: standalone) {
+  .rw-app { --pwa-footer-reserve: var(--sp-l); }
+}
 /* Touch devices need active feedback because they lack hover. */
 .rw-app a:active { color: var(--thread-text); }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -135,6 +153,6 @@
 
 .rw-app .app {
   max-width: 1220px; width: 100%; margin-inline: auto; flex: 1 0 auto;
-  padding: 0 var(--gutter);
+  padding-block-start: var(--safe-t); padding-inline: var(--gutter);
   display: flex; flex-direction: column;
 }

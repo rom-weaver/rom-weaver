@@ -27,7 +27,7 @@ import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
 import { createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath } from "./webapp-controller.ts";
 import { readPwaState } from "./components/shell.tsx";
 import { getSoftNavigationUrl } from "./soft-navigation.ts";
-import { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
+import { resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { preloadWorkflowRoute } from "./workflow-routes.tsx";
 import {
   type ConfirmationDialogState,
@@ -238,30 +238,11 @@ const markWebappMounted = () => {
   const appRootElement = document.getElementById("webapp-root");
   if (!appRootElement) return;
   const firstMount = appRootElement.hasAttribute("aria-busy");
+  if (firstMount && hadPrerenderedShell) appRootElement.dataset.shellSettled = "true";
   appRootElement.removeAttribute("aria-busy");
   if (!firstMount) return;
-  if (hadPrerenderedShell) settleShellHandoff(appRootElement);
   // Last, so any state change it triggers lands on a fully settled first frame.
   replayShellClicks(appRootElement);
-};
-
-const settleShellHandoff = (appRootElement: HTMLElement) => {
-  // Removing aria-busy enables the mounted tree's entry animations. The shell
-  // has already painted in its natural state, so finish only those animations
-  // before the next frame. Hydration preserves the ambient animation nodes and
-  // their clocks without any manual carryover.
-  void appRootElement.offsetWidth;
-  for (const animation of appRootElement.getAnimations({ subtree: true })) {
-    if (!(animation instanceof CSSAnimation)) continue;
-    try {
-      if (ENTRY_ANIMATIONS.has(animation.animationName)) animation.finish();
-    } catch (error) {
-      logger.trace("Unable to settle animation across the first mount", {
-        animationName: animation.animationName,
-        message: error instanceof Error ? error.message : String(error || ""),
-      });
-    }
-  }
 };
 
 const WebappClientRoot = (props: WebappRootProps) => {

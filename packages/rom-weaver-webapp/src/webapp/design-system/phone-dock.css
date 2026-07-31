@@ -5,7 +5,7 @@
     --mobile-input-head-h: 38px;
     /* Includes the first-weave action below the hero so the empty bench still
        occupies one phone viewport. */
-    --hero-chrome: calc(var(--mobile-input-head-h) + 217px);
+    --hero-chrome: calc(var(--mobile-input-head-h) + 217px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
   }
 
   /* Enough scroll room below the form that the last card (the run/progress/
@@ -25,7 +25,7 @@
      thing keeping the footer off the first screen. The wrap point is
      locale-stable: the brand word and the slogan beside it are untranslated. */
   @media (max-width: 347px) {
-    .rw-app { --hero-chrome: calc(var(--mobile-input-head-h) + 236px); }
+    .rw-app { --hero-chrome: calc(var(--mobile-input-head-h) + 236px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve)); }
   }
 
   .rw-app .masthead {
