@@ -102,8 +102,18 @@ Pruning is also what keeps the published crate viable: the full tree packages to
 about 6.3 MB against crates.io's 10 MiB limit, the pruned one to about 1.3 MB.
 
 Every transformation - the test-subdirectory strip, the wasm patches in
-`libarchive/patches/wasm/`, and the `CMakeLists.txt` source-list edits - is
-applied to a staged copy under `OUT_DIR`, never to the committed tree.
+`libarchive/patches/wasm/`, the all-target patches in `libarchive/patches/`, and
+the `CMakeLists.txt` source-list edits - is applied to a staged copy under
+`OUT_DIR`, never to the committed tree.
+
+`libarchive/patches/7zip_solid_block.c` is the one all-target patch today. It
+appends `rom_weaver_7zip_entry_solid_block()` to the staged 7zip reader so
+extract chunking can see which solid block an entry lives in; the accessor has
+to live in that translation unit because `struct _7zip` is file-local, and it is
+declared by hand in `src/libarchive/read.rs` rather than through bindgen because
+no header declares it. `build.rs` asserts every struct field the accessor reads
+before appending, so a refresh that renames one fails the build with the field
+name instead of a compiler error in a generated file.
 
 ### Going back to upstream
 

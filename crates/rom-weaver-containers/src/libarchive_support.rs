@@ -722,6 +722,9 @@ struct LibarchiveExtractTask {
     write_path: PathBuf,
     is_dir: bool,
     logical_bytes: Option<u64>,
+    // 7z solid block this entry's data lives in; `None` for other formats and for
+    // stream-less entries. See `libarchive_extract_solid_block_ids`.
+    solid_block: Option<u64>,
 }
 
 // Below this total uncompressed size a multi-file archive extract runs serially instead of spawning a
@@ -749,15 +752,56 @@ fn libarchive_extract_total_logical_bytes(tasks: &[LibarchiveExtractTask]) -> u6
 // that otherwise runs inline on the decode thread and extends the critical path by the full write
 // cost. Reference extractors overlap the same way (7zz decodes and checks/writes on separate
 // threads), so the inline-serial single-file path measurably loses to them on wall clock alone.
+// `parallel_units` caps this at the number of independently decodable units - see
+// `libarchive_extract_parallel_units`. Without that cap a one-solid-block 7z stands up a
+// worker per entry and every one of them redundantly decodes the same block.
 fn libarchive_extract_achievable_threads(
     total_logical_bytes: u64,
     file_task_count: usize,
+    parallel_units: usize,
 ) -> usize {
     if total_logical_bytes <= LIBARCHIVE_EXTRACT_MT_THRESHOLD_BYTES {
         1
     } else {
-        file_task_count.max(2)
+        file_task_count.min(parallel_units.max(1)).max(2)
     }
+}
+
+// How many workers this archive can usefully decode with. For 7z that is the number of solid
+// blocks the file entries span: everything inside one block decodes as a single chain from the
+// block's start, so a second worker assigned entries from a block another worker already holds
+// decodes that whole block again for nothing. Every other format reports no block information,
+// and each entry decodes independently, so the entry count stands.
+fn libarchive_extract_parallel_units(tasks: &[LibarchiveExtractTask]) -> usize {
+    let file_tasks = || tasks.iter().filter(|task| !task.is_dir);
+    let mut blocks: Vec<u64> = file_tasks().filter_map(|task| task.solid_block).collect();
+    if blocks.is_empty() {
+        return file_tasks().count();
+    }
+    blocks.sort_unstable();
+    blocks.dedup();
+    // Stream-less file entries (empty files) carry no block; they cost no decode and ride along
+    // with a neighbour, so they never add a unit.
+    blocks.len()
+}
+
+// Solid block id per task, with stream-less entries (directories, empty files) folded into the
+// block of the nearest preceding entry that has one - they cost nothing to decode, so grouping
+// them with a neighbour is always free. `None` means the archive exposes no solid blocks at
+// all (any non-7z format), in which case chunking may split anywhere.
+fn libarchive_extract_solid_block_ids(tasks: &[LibarchiveExtractTask]) -> Option<Vec<u64>> {
+    let mut current = tasks.iter().find_map(|task| task.solid_block)?;
+    Some(
+        tasks
+            .iter()
+            .map(|task| {
+                if let Some(block) = task.solid_block {
+                    current = block;
+                }
+                current
+            })
+            .collect(),
+    )
 }
 
 // A worker is only worth spawning if it has real decode work. Each one opens its own reader over the
@@ -774,6 +818,12 @@ const LIBARCHIVE_EXTRACT_MIN_CHUNK_BYTES: u64 = 4 << 20;
 // count-split of `[dir, 2 MB, 2 MB, 1190 MB, 384 B, 198 B]` hands the two trailing metadata entries to
 // their own worker, which must decode all 1.19 GB to reach them. Weighting by bytes leaves them with
 // the chunk already decoding that data.
+//
+// Byte weight alone cannot help when several similarly-sized large entries share one 7z solid block:
+// each worker then has real work and still decodes from the block's start to reach it. So chunks only
+// ever close on a solid-block boundary. On a single-block archive that collapses to one chunk - the
+// only split that decodes each byte once, and no wall clock is lost because the decode chain was
+// serial to begin with. Formats that report no blocks keep splitting anywhere.
 fn libarchive_extract_chunks(
     tasks: &[LibarchiveExtractTask],
     worker_count: usize,
@@ -785,6 +835,12 @@ fn libarchive_extract_chunks(
     if workers == 1 {
         return vec![tasks];
     }
+    let solid_blocks = libarchive_extract_solid_block_ids(tasks);
+    // A chunk may only end where the next task starts a different solid block.
+    let ends_a_solid_block = |offset: usize| match solid_blocks.as_ref() {
+        Some(blocks) => blocks.get(offset) != blocks.get(offset + 1),
+        None => true,
+    };
     let total_bytes = libarchive_extract_total_logical_bytes(tasks);
     if total_bytes == 0 {
         // No size information to balance against (directory-only, or a header without sizes); fall back
@@ -809,7 +865,9 @@ fn libarchive_extract_chunks(
         // Stop growing this chunk once it carries its share, unless it is the final chunk we can afford -
         // the remaining tasks must then all land here rather than spilling into an extra worker.
         let chunks_remaining = workers.saturating_sub(ranges.len());
-        if is_last || (chunk_bytes >= target_bytes && chunks_remaining > 1) {
+        if is_last
+            || (chunk_bytes >= target_bytes && chunks_remaining > 1 && ends_a_solid_block(offset))
+        {
             ranges.push(start..offset + 1);
             start = offset + 1;
             chunk_bytes = 0;
@@ -1457,6 +1515,7 @@ fn build_libarchive_extract_tasks(
             output_path,
             is_dir,
             logical_bytes: if is_dir { Some(0) } else { entry.size },
+            solid_block: entry.solid_block,
         };
         if kind_filter.enabled() {
             if kind_filter.matches_payload_name(&archive_name) {
@@ -1934,8 +1993,19 @@ pub(crate) fn extract_regular_archive_with_libarchive(
     } else {
         let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
         let total_logical_bytes = libarchive_extract_total_logical_bytes(&tasks);
-        let achievable_threads =
-            libarchive_extract_achievable_threads(total_logical_bytes, file_task_count);
+        let parallel_units = libarchive_extract_parallel_units(&tasks);
+        let achievable_threads = libarchive_extract_achievable_threads(
+            total_logical_bytes,
+            file_task_count,
+            parallel_units,
+        );
+        trace!(
+            format = format_name,
+            file_task_count,
+            parallel_units,
+            achievable_threads,
+            "libarchive extract parallel unit plan"
+        );
         // Only stand up the shared worker pool when this extract will actually parallelize. A small
         // archive (under the MT floor, or a single file) negotiates serial, and building the
         // budget-sized operation pool for it would spawn a worker per budget thread that the serial
@@ -2318,6 +2388,64 @@ mod tests {
         file.write_all(bytes).expect("write test output file");
     }
 
+    #[test]
+    fn sevenz_entries_report_their_real_solid_block() {
+        let dir = unique_temp_dir("solid-block");
+        let archive_path = dir.join("solid.7z");
+        let mut archive = WriteArchive::new("create test 7z").expect("allocate writer");
+        archive
+            .set_format(LibarchiveCreateFormat::SevenZ, "select 7z format")
+            .expect("select 7z format");
+        archive
+            .add_filter(LibarchiveCreateFilter::None, "select no filter")
+            .expect("select no filter");
+        archive
+            .set_format_option(None, "compression", "lzma2", "select lzma2")
+            .expect("select lzma2");
+        archive
+            .set_format_option(None, "threads", "1", "select one thread")
+            .expect("select one thread");
+        archive
+            .set_7zip_size_hint(6, "set test size hint")
+            .expect("set size hint");
+        archive
+            .open_filename(&archive_path, "test output", "open test 7z")
+            .expect("open test 7z");
+        for (name, bytes) in [("a.bin", b"abc".as_slice()), ("b.bin", b"def".as_slice())] {
+            archive
+                .start_entry(
+                    EntrySpec {
+                        pathname: name,
+                        file_type: EntryFileType::Regular,
+                        perm: 0o644,
+                        size: bytes.len() as u64,
+                    },
+                    "start test entry",
+                )
+                .expect("start test entry");
+            archive
+                .write_data_all(bytes, "write test entry", ZeroWriteBehavior::Error)
+                .expect("write test entry");
+            archive
+                .finish_entry("finish test entry")
+                .expect("finish test entry");
+        }
+        archive
+            .close("close test 7z", "free test 7z")
+            .expect("close test 7z");
+
+        let entries = list_regular_archive_entries(&archive_path, "7z").expect("list test 7z");
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| entry.solid_block)
+                .collect::<Vec<_>>(),
+            [Some(0), Some(0)],
+            "both files in the one-folder archive must expose libarchive's folder index"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
     fn extract_task(out_dir: &Path, index: usize, relative_path: &str) -> LibarchiveExtractTask {
         let relative_path = PathBuf::from(relative_path);
         let output_path = out_dir.join(&relative_path);
@@ -2329,6 +2457,7 @@ mod tests {
             output_path,
             is_dir: false,
             logical_bytes: Some(3),
+            solid_block: None,
         }
     }
 
@@ -2599,6 +2728,21 @@ mod tests {
             relative_path,
             is_dir,
             logical_bytes: (!is_dir).then_some(logical_bytes),
+            solid_block: None,
+        }
+    }
+
+    // A 7z entry: `solid_block` is the folder libarchive reports for it, `None` for the
+    // stream-less entries (directories, empty files) the format leaves out of every folder.
+    fn solid_task(
+        index: usize,
+        logical_bytes: u64,
+        is_dir: bool,
+        solid_block: Option<u64>,
+    ) -> LibarchiveExtractTask {
+        LibarchiveExtractTask {
+            solid_block,
+            ..sized_task(index, logical_bytes, is_dir)
         }
     }
 
@@ -2690,6 +2834,150 @@ mod tests {
                 "empty chunks would spawn a worker with no decode work"
             );
         }
+    }
+
+    // The shape byte balancing alone cannot fix: four equally large entries in one solid block.
+    // Any split gives every worker real work and still makes each decode the block from its start.
+    #[test]
+    fn extract_chunks_keep_one_solid_block_on_one_worker() {
+        let tasks: Vec<_> = (0..4)
+            .map(|index| solid_task(index, 96 * MB, false, Some(0)))
+            .collect();
+
+        let chunks = libarchive_extract_chunks(&tasks, 4);
+
+        assert_eq!(
+            chunk_indices(&chunks),
+            vec![vec![0, 1, 2, 3]],
+            "entries sharing a solid block must not each buy a redundant decode of it"
+        );
+    }
+
+    #[test]
+    fn extract_chunks_split_on_solid_block_boundaries() {
+        let tasks: Vec<_> = (0..8)
+            .map(|index| solid_task(index, 96 * MB, false, Some(index as u64 / 4)))
+            .collect();
+
+        let chunks = libarchive_extract_chunks(&tasks, 8);
+
+        assert_eq!(
+            chunk_indices(&chunks),
+            vec![vec![0, 1, 2, 3], vec![4, 5, 6, 7]],
+            "independent solid blocks must decode in parallel, one worker each"
+        );
+    }
+
+    // Directories and empty files sit in no folder at all. They cost nothing to decode, so they must
+    // ride along with a neighbour rather than opening a split inside a block.
+    #[test]
+    fn extract_chunks_do_not_split_a_solid_block_at_a_streamless_entry() {
+        let tasks = vec![
+            solid_task(0, 0, true, None),
+            solid_task(1, 200 * MB, false, Some(0)),
+            solid_task(2, 0, false, None),
+            solid_task(3, 200 * MB, false, Some(0)),
+        ];
+
+        let chunks = libarchive_extract_chunks(&tasks, 4);
+
+        assert_eq!(
+            chunk_indices(&chunks),
+            vec![vec![0, 1, 2, 3]],
+            "a stream-less entry inside a solid block must not become a split point"
+        );
+    }
+
+    #[test]
+    fn extract_chunks_cover_every_task_contiguously_across_solid_blocks() {
+        let tasks: Vec<_> = (0..12)
+            .map(|index| {
+                let block = match index {
+                    0 => None,
+                    index if index < 5 => Some(0),
+                    index if index < 9 => Some(1),
+                    _ => Some(2),
+                };
+                solid_task(index, 40 * MB, index == 0, block)
+            })
+            .collect();
+
+        for workers in 1..=8 {
+            let chunks = libarchive_extract_chunks(&tasks, workers);
+            let covered: Vec<usize> = chunks
+                .iter()
+                .flat_map(|chunk| chunk.iter().map(|task| task.index))
+                .collect();
+            assert_eq!(
+                covered,
+                (0..tasks.len()).collect::<Vec<_>>(),
+                "solid chunks for {workers} workers must cover every task in order"
+            );
+            assert!(
+                chunks.len() <= 3,
+                "{workers} workers must not exceed the 3 solid blocks"
+            );
+            assert!(
+                chunks.iter().all(|chunk| !chunk.is_empty()),
+                "empty chunks would spawn a worker with no decode work"
+            );
+            // A chunk may hold several whole blocks, but no block may appear in two chunks - that is
+            // exactly the redundant decode this chunking exists to avoid.
+            let mut seen = BTreeSet::new();
+            for chunk in &chunks {
+                let blocks: BTreeSet<u64> =
+                    chunk.iter().filter_map(|task| task.solid_block).collect();
+                for block in blocks {
+                    assert!(
+                        seen.insert(block),
+                        "solid block {block} is split across chunks at {workers} workers"
+                    );
+                }
+            }
+        }
+    }
+
+    // A zip of N equal entries has no solid blocks, so it must keep splitting N ways.
+    #[test]
+    fn extract_parallel_units_track_solid_blocks() {
+        let non_solid: Vec<_> = (0..6)
+            .map(|index| sized_task(index, 96 * MB, false))
+            .collect();
+        assert_eq!(libarchive_extract_parallel_units(&non_solid), 6);
+
+        let one_block: Vec<_> = (0..6)
+            .map(|index| solid_task(index, 96 * MB, false, Some(0)))
+            .collect();
+        assert_eq!(libarchive_extract_parallel_units(&one_block), 1);
+
+        let two_blocks: Vec<_> = (0..6)
+            .map(|index| solid_task(index, 96 * MB, false, Some(index as u64 / 3)))
+            .collect();
+        assert_eq!(libarchive_extract_parallel_units(&two_blocks), 2);
+
+        // Directories never add a unit; a directory-only task list has nothing to decode.
+        let directories: Vec<_> = (0..3).map(|index| sized_task(index, 0, true)).collect();
+        assert_eq!(libarchive_extract_parallel_units(&directories), 0);
+    }
+
+    #[test]
+    fn extract_achievable_threads_never_exceed_the_solid_block_count() {
+        assert_eq!(
+            libarchive_extract_achievable_threads(600 * MB, 6, 1),
+            2,
+            "a single solid block must not stand up a worker per entry"
+        );
+        assert_eq!(libarchive_extract_achievable_threads(600 * MB, 6, 6), 6);
+        assert_eq!(
+            libarchive_extract_achievable_threads(600 * MB, 3, 6),
+            3,
+            "there is never more work than there are entries"
+        );
+        assert_eq!(
+            libarchive_extract_achievable_threads(MB, 6, 6),
+            1,
+            "the multithreading floor still wins"
+        );
     }
 
     #[test]
