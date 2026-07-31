@@ -171,6 +171,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           await scriptsReleased;
           await route.continue();
         });
+        await page.setViewportSize({ height: 852, width: 393 });
       }
 
       try {
@@ -178,6 +179,26 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         if (testCase.replayClick) {
           const settings = page.getByRole("button", { name: "Settings" });
           await settings.waitFor({ state: "visible" });
+          const initialShell = await page.evaluate(() => {
+            const root = document.getElementById("webapp-root");
+            const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
+            const links = document.querySelector(".site-footer-links")?.getBoundingClientRect();
+            const status = document.querySelector(".site-footer-status")?.getBoundingClientRect();
+            return {
+              footerInFirstViewport:
+                !!footer &&
+                footer.top < window.innerHeight &&
+                footer.bottom <= window.innerHeight &&
+                !!links &&
+                links.bottom <= window.innerHeight &&
+                !!status &&
+                status.bottom <= window.innerHeight,
+              prerendered: root?.hasAttribute("aria-busy") === true,
+            };
+          });
+          if (!(initialShell.prerendered && initialShell.footerInFirstViewport)) {
+            throw new Error(`initial shell footer is not visible: ${JSON.stringify(initialShell)}`);
+          }
           await settings.click();
           releaseScripts();
         }
