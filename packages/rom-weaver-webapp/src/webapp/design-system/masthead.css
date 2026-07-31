@@ -116,6 +116,14 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .mode[data-beta-tool] { displ
 }
 .rw-app .tool:active { background: var(--plate-2); }
 .rw-app .tool svg { width: 17px; height: 17px; }
+/* the support link keeps the accent so it reads as an invitation, not a tool */
+.rw-app .masthead-donate { color: var(--thread-text); }
+@media (hover: hover) {
+  .rw-app .masthead-donate:hover { color: var(--thread); }
+}
+.rw-app .masthead-donate:active { color: var(--thread); }
+/* hairline between the external links (GitHub/Support) and the app tools */
+.rw-app .tools-sep { display: block; flex: none; align-self: center; width: 1px; height: 20px; margin-inline: 5px; background: var(--seam); }
 .rw-app .build-version-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-app .build-version-link {
   display: inline-flex;
@@ -125,22 +133,21 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .mode[data-beta-tool] { displ
   text-decoration: underline dotted var(--ink-4);
   text-underline-offset: 2px;
 }
-/* Most tools are icon-only; the title/aria-label carries the name, while the
-   language control keeps its short locale code visible beside its icon. */
+/* The tools are icon-only; the title/aria-label carries the name. */
 .rw-app .tool-text { display: none; }
-/* ── quick pickers (accent / language) ──
-   Both trays are anchored rather than inline: unrolling six dots into the
-   toolbar reflows every tool to its right, and on a phone it wraps the whole
-   row onto a second line. Anchored, the click count is the same and nothing
-   moves. */
+/* ── accent quick picker ──
+   The tray is anchored rather than inline: unrolling six dots into the toolbar
+   reflows every tool to its right, and on a phone it wraps the whole row onto a
+   second line. Anchored, the click count is the same and nothing moves. */
 .rw-app .tool-anchor { position: relative; display: inline-flex; }
-.rw-app .accent-tray, .rw-app .tool-menu {
+.rw-app .accent-tray {
   position: absolute; z-index: 30; inset-block-start: calc(100% + var(--sp-xs)); inset-inline-end: 0;
+  display: flex; gap: var(--sp-s); padding: var(--sp-s) var(--sp-m);
   border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate);
   box-shadow: var(--overlay-shadow); animation: drop-in .16s var(--ease);
 }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .accent-tray, .rw-app .tool-menu { animation: none; }
+  .rw-app .accent-tray { animation: none; }
 }
 
 /* the tool wears the live dye so the current lot is readable without opening */
@@ -152,28 +159,10 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .mode[data-beta-tool] { displ
 }
 /* the swatches themselves are accents.css's .accent-chip - shared with the
    settings picker, ring colour and all */
-.rw-app .accent-tray { display: flex; gap: var(--sp-s); padding: var(--sp-s) var(--sp-m); }
 @media (hover: hover) {
   .rw-app .accent-tray .accent-chip:hover .accent-chip-dot { scale: 1.12; }
 }
 .rw-app .accent-tray .accent-chip:active .accent-chip-dot { scale: 1.12; }
-
-/* The language control is a compact two-letter locale mark. */
-.rw-app .tool-language { width: 36px; display: grid; place-items: center; }
-.rw-app .tool-language-label { color: var(--thread-text); font-size: 17px; font-weight: 750; letter-spacing: .02em; line-height: 17px; }
-.rw-app .tool-menu { display: flex; flex-direction: column; min-width: 152px; padding: var(--sp-xs); }
-.rw-app .tool-menu-item {
-  appearance: none; cursor: pointer; display: flex; align-items: center; min-height: 34px;
-  padding: var(--sp-s) var(--sp-m); border: 0; border-radius: var(--r-s);
-  background: transparent; color: var(--ink-2); font: inherit; font-size: .82rem; text-align: start;
-}
-.rw-app .tool-menu-item[aria-checked="true"] { color: var(--thread-text); font-weight: 650; }
-/* background only - recolouring on hover would erase the checked marker */
-@media (hover: hover) {
-  .rw-app .tool-menu-item:hover { background: var(--well); }
-}
-.rw-app .tool-menu-item:active { background: var(--well); }
-.rw-app .tool-menu-item:focus-visible { outline: 2px solid var(--thread); outline-offset: -2px; }
 
 /* sun/moon cross-morph */
 .rw-app .tool .ico-sun, .rw-app .tool .ico-moon { grid-area: 1 / 1; transition: transform .4s var(--ease), opacity .3s; }

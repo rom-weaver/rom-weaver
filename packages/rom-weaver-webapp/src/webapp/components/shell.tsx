@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
-import { LOCALE_OPTIONS, type Localizer } from "../../presentation/localization/index.ts";
+import type { Localizer } from "../../presentation/localization/index.ts";
 import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
 import { useRomWeaverSettings, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
@@ -198,8 +198,6 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   );
 };
 
-type QuickTool = "accent" | "language";
-
 /**
  * Accent quick picker: the button wears the live dye, and opening it drops the
  * six lots below the toolbar. Choosing one commits immediately - the picker
@@ -258,68 +256,6 @@ const AccentPicker = ({
               />
               <span aria-hidden="true" className="accent-chip-dot" style={{ background: entry.swatch }} />
             </label>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
-/**
- * Language quick picker. The list is `LOCALE_OPTIONS` - one entry per shipped
- * catalog - so every choice here actually changes what the app says.
- */
-const LanguagePicker = ({
-  language,
-  localizer,
-  onChange,
-  onToggle,
-  open,
-}: {
-  language: string;
-  localizer: Localizer;
-  onChange: (language: string) => void;
-  onToggle: () => void;
-  open: boolean;
-}) => {
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const label = localizer.message("ui.tools.language");
-  const current = LOCALE_OPTIONS.find((locale) => locale.value === language) || LOCALE_OPTIONS[0];
-
-  useEffect(() => {
-    if (!open) return;
-    menuRef.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
-  }, [open]);
-
-  return (
-    <div className="tool-anchor">
-      <button
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={label}
-        className="tool tool-code tool-language"
-        onClick={onToggle}
-        title={label}
-        type="button"
-      >
-        <span aria-hidden="true" className="tool-language-label">
-          {(current?.value || "").slice(0, 2).toUpperCase()}
-        </span>
-      </button>
-      {open ? (
-        <div aria-label={label} className="tool-menu" ref={menuRef} role="menu">
-          {LOCALE_OPTIONS.map((locale) => (
-            <button
-              aria-checked={locale.value === language}
-              className="tool-menu-item"
-              key={locale.value}
-              lang={locale.value}
-              onClick={() => onChange(locale.value)}
-              role="menuitemradio"
-              type="button"
-            >
-              {locale.label}
-            </button>
           ))}
         </div>
       ) : null}
@@ -475,9 +411,7 @@ const Masthead = ({
   channelBadge,
   commitHash,
   commitsSinceVersion,
-  language,
   onAccentChange,
-  onLanguageChange,
   tabs,
   currentTab,
   dirty,
@@ -491,6 +425,7 @@ const Masthead = ({
   serviceWorkerStatus,
   confirmExternalNavigation,
   githubHref,
+  donateHref,
   settingsOpen,
   threads,
   version,
@@ -500,9 +435,7 @@ const Masthead = ({
   channelBadge?: string;
   commitHash?: string;
   commitsSinceVersion?: number | null;
-  language?: string;
   onAccentChange?: (accent: string) => void;
-  onLanguageChange?: (language: string) => void;
   tabs: WorkflowTab[];
   currentTab: string;
   dirty?: boolean;
@@ -525,9 +458,7 @@ const Masthead = ({
   const settings = useRomWeaverSettings();
   const localizer = useUiLocalizer();
   const betaToolsEnabled = settings.betaToolsEnabled !== false;
-  // One slot, so opening either picker closes the other - the two trays sit
-  // side by side and would otherwise overlap.
-  const [openTool, setOpenTool] = useState<QuickTool | null>(null);
+  const [accentOpen, setAccentOpen] = useState(false);
   const [wideMasthead, setWideMasthead] = useState(false);
   const mastheadRef = useRef<HTMLElement | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
@@ -580,15 +511,15 @@ const Masthead = ({
   // Pointer-down rather than click so a press that starts outside dismisses
   // before the target's own handler runs.
   useEffect(() => {
-    if (!openTool) return undefined;
+    if (!accentOpen) return undefined;
     const dismiss = (event: Event) => {
       const tools = toolsRef.current;
       if (tools && event.target instanceof Node && tools.contains(event.target)) return;
-      setOpenTool(null);
+      setAccentOpen(false);
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      setOpenTool(null);
+      setAccentOpen(false);
       toolsRef.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
     };
     document.addEventListener("pointerdown", dismiss);
@@ -597,9 +528,7 @@ const Masthead = ({
       document.removeEventListener("pointerdown", dismiss);
       document.removeEventListener("keydown", dismissOnEscape);
     };
-  }, [openTool]);
-
-  const toggleTool = (tool: QuickTool) => setOpenTool((previous) => (previous === tool ? null : tool));
+  }, [accentOpen]);
 
   const guardExternalClick = (event: { preventDefault: () => void }, href: string) => {
     if (!confirmExternalNavigation) return;
@@ -706,6 +635,33 @@ const Masthead = ({
             tabs={tabs}
           />
           <div className="masthead-tools" ref={toolsRef}>
+            {githubHref ? (
+              <a
+                aria-label="GitHub"
+                className="tool masthead-link"
+                href={githubHref}
+                onClick={(event) => guardExternalClick(event, githubHref)}
+                rel="noreferrer"
+                target="_blank"
+                title="GitHub"
+              >
+                <Github aria-hidden="true" />
+              </a>
+            ) : null}
+            {donateHref ? (
+              <a
+                aria-label={localizer.message("ui.footer.donate")}
+                className="tool masthead-link masthead-donate"
+                href={donateHref}
+                onClick={(event) => guardExternalClick(event, donateHref)}
+                rel="noreferrer"
+                target="_blank"
+                title={localizer.message("ui.footer.donate")}
+              >
+                <Heart aria-hidden="true" />
+              </a>
+            ) : null}
+            {githubHref || donateHref ? <span aria-hidden="true" className="tools-sep" /> : null}
             <button
               aria-label={localizer.message("ui.settings.reset")}
               className="tool"
@@ -724,18 +680,8 @@ const Masthead = ({
             <AccentPicker
               localizer={localizer}
               onChange={(accent) => onAccentChange?.(accent)}
-              onToggle={() => toggleTool("accent")}
-              open={openTool === "accent"}
-            />
-            <LanguagePicker
-              language={language || ""}
-              localizer={localizer}
-              onChange={(next) => {
-                onLanguageChange?.(next);
-                setOpenTool(null);
-              }}
-              onToggle={() => toggleTool("language")}
-              open={openTool === "language"}
+              onToggle={() => setAccentOpen((open) => !open)}
+              open={accentOpen}
             />
             <button
               aria-haspopup="dialog"

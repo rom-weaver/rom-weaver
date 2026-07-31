@@ -449,10 +449,11 @@ function WebappRoot({
         <div className="app">
           <Masthead
             channelBadge={CHANNEL_BADGE}
+            confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={notFound ? "" : state.currentView}
-            language={typeof state.settings.language === "string" ? state.settings.language : undefined}
+            donateHref={DONATE_URL}
+            githubHref={GITHUB_URL}
             onAccentChange={actions.onAccentChange}
-            onLanguageChange={actions.onLanguageChange}
             onOpenLog={() => setLogOpen(true)}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={openSettings}
