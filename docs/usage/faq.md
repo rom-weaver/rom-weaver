@@ -97,6 +97,9 @@ choose when several entries could be the ROM or patch. Create is different:
 extract your Original and Modified files before making a patch so archive
 packaging does not become part of the comparison.
 
+See the [Formats guide](formats.md) for the core libarchive input list and the
+ZIP and 7z output options.
+
 ### Why does the expected filename not match?
 
 A filename is advisory. The author may have named the ROM one way while your
