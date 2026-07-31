@@ -113,7 +113,25 @@
 
 /* Keep the PR link a badge, but underline its label so the destination is
    legible at rest. */
-.rw-app .channel-badge-link { text-decoration: underline; }
+.rw-app .channel-badge-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--thread) 55%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+@media (hover: hover) {
+  .rw-app .channel-badge-link:hover {
+    border-color: var(--thread);
+    background: color-mix(in oklab, var(--thread) 24%, transparent);
+    text-decoration-color: var(--thread);
+  }
+}
+.rw-app .channel-badge-link:active {
+  border-color: var(--thread);
+  background: color-mix(in oklab, var(--thread) 24%, transparent);
+  text-decoration-color: var(--thread);
+}
 
 /* ── accent picker (settings) ──
    Swatches rather than a <select>: the colour is the choice, and Safari ignores
