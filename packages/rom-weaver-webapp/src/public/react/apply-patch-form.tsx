@@ -416,6 +416,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     return disabledPatchIds.size ? "partial" : "full";
   }, [activeBundleSession, bundleMetaById, currentPatchNames, disabledPatchIds]);
 
+  const bundleSessionMatches = useMemo(() => {
+    const session = activeBundleSession;
+    if (!(session?.entries.length && currentPatchNames.length)) return false;
+    const expected = session.entries.map((entry) => entry.fileName);
+    return (
+      currentPatchNames.length === expected.length && expected.every((name, index) => currentPatchNames[index] === name)
+    );
+  }, [activeBundleSession, currentPatchNames]);
+
   // Reactive owner of the bundle's expected-output check: engaged only while the
   // full authored chain is enabled (the bundle's output.checks describe exactly
   // that result), stood down otherwise. Runs through the same per-patch option
@@ -1495,6 +1504,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       <ApplyWorkflowFormView
         bundleExport={bundleExport}
         bundleMetaById={bundleMetaById}
+        bundleSessionMatches={bundleSessionMatches}
         controllers={{
           dialog: controllers?.dialog || inertDialogController,
           notice: controllers?.notice || localNoticeController,

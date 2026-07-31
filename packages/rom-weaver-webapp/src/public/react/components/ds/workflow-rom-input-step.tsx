@@ -8,7 +8,7 @@ import { RomInputPanels } from "./rom-input-panels.tsx";
 type WorkflowRomInputStepItem = {
   card?: Omit<ComponentProps<typeof FileCard>, "children" | "name"> & {
     children?: ReactNode;
-    extract: ExtractPanelProps & { always?: boolean };
+    extract: ExtractPanelProps;
     panels?: ComponentProps<typeof RomInputPanels>;
   };
   id: string;

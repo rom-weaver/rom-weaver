@@ -8,9 +8,9 @@ import { Drawer, DrawerReadout } from "./drawer.tsx";
 
 /**
  * Nested-extraction view. The extracted file leads as the card's name line;
- * when it came out of one or more archives, the full chain (sizes + timings)
- * lives in a collapsible Files drawer rendered as the loom tree. Shared by
- * every workflow's file card.
+ * The full source chain (including a raw file's single level) lives in a
+ * collapsible Files drawer rendered as the loom tree. Shared by every
+ * workflow's file card.
  */
 
 type ExtractionLevel = {
@@ -138,10 +138,6 @@ const ExtractionTree = ({ levels, timing }: { levels: ExtractionLevel[]; timing?
     </div>
   );
 
-  // Raw, non-extracted inputs stay compact. Prepared single-level inputs still
-  // show the extract summary so timing and metadata remain visible.
-  if (levels.length === 1 && !timing) return nameLine;
-
   const first = levels[0];
   const sizeText =
     levels.length === 1
@@ -264,20 +260,16 @@ const ExtractName = ({
 
 /** Just the Files drawer (no name line) - for cards that render the name separately. */
 const ExtractDrawer = ({
-  always = false,
   decompressionTimeMs,
   fileName,
   fileSize,
   fileEntries,
   parentCompressions,
   timing,
-}: ExtractPanelProps & { always?: boolean }) => {
+}: ExtractPanelProps) => {
   const levels = buildExtractionLevels(fileName, fileSize, fileEntries, parentCompressions);
   const resolvedTiming = timing ?? formatExtractionElapsedMs(decompressionTimeMs);
   const timingLabel = formatExtractionTimingLabel(resolvedTiming);
-  // Bundle sessions and in-flight extraction placeholders force the drawer so
-  // the card keeps the same structure when extraction metadata lands.
-  if (!always && levels.length <= 1 && !resolvedTiming) return null;
   const first = levels[0];
   const last = levels.at(-1);
   if (!last) return null;
