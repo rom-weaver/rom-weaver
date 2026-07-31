@@ -111,27 +111,25 @@
   .rw-app .channel-badge { padding-inline: var(--sp-xs); font-size: .58rem; letter-spacing: .04em; }
 }
 
-/* A PR badge is an actual destination, so give it link affordance instead of
-   making the clickable text look like another status chip. */
+/* Keep the PR link a badge, but underline its label so the destination is
+   legible at rest. */
 .rw-app .channel-badge-link {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--thread-text);
+  cursor: pointer;
   text-decoration: underline;
   text-decoration-color: color-mix(in oklab, var(--thread) 55%, transparent);
   text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
+  text-underline-offset: 2px;
 }
 @media (hover: hover) {
   .rw-app .channel-badge-link:hover {
-    color: var(--thread);
+    border-color: var(--thread);
+    background: color-mix(in oklab, var(--thread) 24%, transparent);
     text-decoration-color: var(--thread);
   }
 }
 .rw-app .channel-badge-link:active {
-  color: var(--thread);
+  border-color: var(--thread);
+  background: color-mix(in oklab, var(--thread) 24%, transparent);
   text-decoration-color: var(--thread);
 }
 
