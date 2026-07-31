@@ -42,10 +42,15 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 .rw-app .docs-breadcrumbs a:active { color: var(--thread-text); }
 
 .rw-app .docs-search-header {
+  display: grid;
+  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
+  justify-content: center;
+  gap: clamp(18px, 3vw, 30px);
   position: relative;
   z-index: 70;
   margin-block: calc(var(--sp-l) * -1) var(--sp-l);
 }
+.rw-app .docs-search-header .docs-search { grid-column: 2; }
 
 /* --- layout --- */
 .rw-app .docs-layout {
