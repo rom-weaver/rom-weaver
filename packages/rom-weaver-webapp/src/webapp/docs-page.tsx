@@ -238,7 +238,7 @@ const DocsSearch = ({
                       }}
                     >
                       <span className="docs-search-result-title">{result.entry.label}</span>
-                      <span className="docs-search-result-guide">{result.route.title}</span>
+                      <span className="docs-search-result-guide">in {result.route.title}</span>
                       <span className="docs-search-result-snippet">{result.snippet}</span>
                     </a>
                   </li>

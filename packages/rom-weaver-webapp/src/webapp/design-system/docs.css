@@ -131,7 +131,14 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   color: var(--ink-3);
   font-size: .68rem;
 }
-.rw-app .docs-search-result-list a { display: grid; }
+.rw-app .docs-search-result-list a {
+  display: grid;
+  gap: 3px;
+}
+.rw-app .docs-search-result-title,
+.rw-app .docs-search-result-guide,
+.rw-app .docs-search-result-snippet { display: block; }
+.rw-app .docs-search-result-title { color: var(--ink); font-weight: 750; }
 @media (hover: hover) {
   .rw-app .docs-search-result-list a:hover { background: var(--well); color: var(--ink); }
 }
@@ -154,8 +161,9 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 .rw-app .docs-search-highlight {
   padding-inline: .08em;
   border-radius: 2px;
-  background: color-mix(in oklab, var(--weft) 38%, var(--plate));
-  color: var(--ink);
+  outline: 2px solid color-mix(in oklab, var(--weft) 55%, transparent);
+  background: var(--weft);
+  color: var(--chassis);
   scroll-margin-block: 6rem;
 }
 /* Shelves: one per folder under docs/. Browser usage opens first; after that,
