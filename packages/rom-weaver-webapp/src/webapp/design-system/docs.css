@@ -23,10 +23,10 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 
 /* --- breadcrumbs --- */
 .rw-app .docs-breadcrumbs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-s);
+  display: grid;
+  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
+  justify-content: center;
+  gap: clamp(18px, 3vw, 30px);
   margin: 0 0 var(--sp-l);
   color: var(--ink-3);
   font-size: .69rem;
@@ -34,6 +34,13 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   font-stretch: 88%;
   letter-spacing: .07em;
   text-transform: uppercase;
+}
+.rw-app .docs-breadcrumb-trail {
+  display: flex;
+  grid-column: 2;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-s);
 }
 .rw-app .docs-breadcrumbs a { color: var(--ink-3); text-decoration: none; }
 @media (hover: hover) {
@@ -713,6 +720,15 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
     min-width: 0;
     min-height: 36px;
     padding-block: 2px 4px;
+  }
+  .rw-app .trail-site {
+    flex: none;
+    color: var(--ink-3);
+    font-size: .69rem;
+    font-weight: 700;
+    font-stretch: 88%;
+    letter-spacing: .06em;
+    text-transform: uppercase;
   }
   .rw-app .trail-sep { flex: none; color: var(--seam-strong); font-size: .7rem; }
   .rw-app .trail-crumb {

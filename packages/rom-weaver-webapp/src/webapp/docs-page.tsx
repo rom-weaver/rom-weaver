@@ -411,6 +411,10 @@ const TrailHead = ({
   return (
     <div className="docs-trail">
       <nav aria-label="Breadcrumb" className="trail-crumbs">
+        <span className="trail-site">{SITE_NAME}</span>
+        <span aria-hidden="true" className="trail-sep">
+          /
+        </span>
         <button
           aria-expanded={sheet === "pages"}
           className="trail-crumb"
@@ -635,17 +639,19 @@ const DocsPage = ({
   return (
     <div className="docs-workbench" id="main">
       <nav aria-label="Breadcrumb" className="docs-breadcrumbs">
-        <a href="/apply">{SITE_NAME}</a>
-        <span aria-hidden="true">/</span>
-        {hub ? (
-          <span aria-current="page">Docs</span>
-        ) : (
-          <>
-            <a href="/docs">Docs</a>
-            <span aria-hidden="true">/</span>
-            <span aria-current="page">{route.label}</span>
-          </>
-        )}
+        <span className="docs-breadcrumb-trail">
+          <a href="/apply">{SITE_NAME}</a>
+          <span aria-hidden="true">/</span>
+          {hub ? (
+            <span aria-current="page">Docs</span>
+          ) : (
+            <>
+              <a href="/docs">Docs</a>
+              <span aria-hidden="true">/</span>
+              <span aria-current="page">{route.label}</span>
+            </>
+          )}
+        </span>
       </nav>
       <div className="docs-search-header">
         <DocsSearch
