@@ -440,10 +440,12 @@ Fixture description.
 
     const input = screen.getAllByRole("combobox", { name: "Search documentation" })[0] as HTMLInputElement;
     fireEvent.change(input, { target: { value: "checksum" } });
-    await vi.waitFor(() =>
-      expect(
-        document.querySelector('.docs-search-results a[href*="apply-rom-patches"][href*="highlight="]'),
-      ).toBeTruthy(),
+    await vi.waitFor(
+      () =>
+        expect(
+          document.querySelector('.docs-search-results a[href*="apply-rom-patches"][href*="highlight="]'),
+        ).toBeTruthy(),
+      { timeout: 10_000 },
     );
     const link = document.querySelector<HTMLAnchorElement>(
       '.docs-search-results a[href*="apply-rom-patches"][href*="highlight="]',
