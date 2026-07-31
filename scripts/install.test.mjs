@@ -67,7 +67,7 @@ JSON
     printf '%s' "\${ATTESTATION_STATUS:-200}"
     ;;
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
-  *.tar.gz) cp "$BINARY_ASSET_ARCHIVE" "$output" ;;
+  *.tar.gz) cp "$BINARY_ASSET_ARCHIVE" "$output"; printf '200' ;;
   *) echo binary > "$output" ;;
 esac
 `;
@@ -199,7 +199,7 @@ echo "$url" >> "$CURL_LOG"
 case "$url" in
   *.sha256) echo "${"a".repeat(64)}  rom-weaver-${platform}" > "$output" ;;
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
-  *.tar.gz) cp "$BINARY_ASSET_ARCHIVE" "$output" ;;
+  *.tar.gz) cp "$BINARY_ASSET_ARCHIVE" "$output"; printf '200' ;;
   *) echo binary > "$output" ;;
 esac
 `,
@@ -360,7 +360,7 @@ done
 echo "$url" >> "$CURL_LOG"
 case "$url" in
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
-  *.tar.gz) exit 22 ;;
+  *.tar.gz) printf '404' ;;
   *) echo binary > "$output" ;;
 esac
 `,
@@ -379,6 +379,45 @@ esac
       "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-darwin-arm64",
     );
     assert.ok(output.includes("Installed rom-weaver to"));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+// The mirror image of the fallback: only a definite 404 may reroute to the
+// legacy name. A transient failure must surface as itself, not as the legacy
+// asset's error.
+test("does not fall back on a transient download failure", () => {
+  const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-transient-"));
+  try {
+    const bin = setUpDarwinInstall(directory);
+    writeExecutable(
+      join(bin, "curl"),
+      `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output) output=$2; shift 2 ;;
+    --write-out) shift 2 ;;
+    -*) shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+echo "$url" >> "$CURL_LOG"
+printf '500'
+`,
+    );
+
+    let output;
+    try {
+      runInstall(directory, bin, { ROM_WEAVER_SKIP_ATTESTATION: "1" });
+    } catch (error) {
+      output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
+    }
+    assert.ok(output !== undefined, "expected install.sh to exit non-zero");
+    assert.match(output, /HTTP 500/);
+    const log = readFileSync(join(directory, "curl.log"), "utf8");
+    assert.ok(!log.includes("download/rom-weaver-darwin-arm64\n"), "must not retry the legacy asset");
+    assert.ok(!existsSync(join(directory, "install", "rom-weaver")));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

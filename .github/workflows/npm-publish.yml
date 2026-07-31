@@ -299,6 +299,11 @@ jobs:
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             binary_path+=".exe"
           fi
+          # The artifact transfer strips the executable bit and the publish
+          # step's helper restores it; the tar below records the on-disk mode
+          # and Homebrew installs the member as-is. Fail here rather than ship
+          # a 0644 binary if that ordering is ever broken.
+          [[ "${{ runner.os }}" == "Windows" ]] || test -x "$binary_path"
           binary_name="$(basename "$binary_path")"
           asset_name="rom-weaver-${{ matrix.package }}.tar.gz"
           archive_dir="$(mktemp -d)"

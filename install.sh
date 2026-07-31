@@ -42,12 +42,21 @@ tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 
 # Releases up to v0.10.2 shipped the executable as a loose file instead of a
-# tar.gz; the fallback keeps pinned installs of those versions working.
-if ! curl --fail --location --proto '=https' --tlsv1.2 \
-  --output "$tmp_dir/$asset" "$release_url/$asset"; then
+# tar.gz. Fall back only on a definite 404 - the pinned version predates the
+# archive - so a transient failure surfaces as itself instead of as the legacy
+# asset's error. `|| status=000` covers a network-level failure, where curl
+# exits non-zero and no code was ever received.
+download_status=$(curl --silent --location --proto '=https' --tlsv1.2 \
+  --output "$tmp_dir/$asset" \
+  --write-out '%{http_code}' \
+  "$release_url/$asset") || download_status=000
+if [ "$download_status" = 404 ]; then
   asset="$legacy_asset"
   curl --fail --location --proto '=https' --tlsv1.2 \
     --output "$tmp_dir/$asset" "$release_url/$asset"
+elif [ "$download_status" != 200 ]; then
+  echo "rom-weaver: failed to download $release_url/$asset (HTTP $download_status)" >&2
+  exit 1
 fi
 
 # Hash what actually arrived. This is the lookup key for the provenance check,

@@ -266,7 +266,8 @@ function Invoke-WebRequest {
   if ($Uri -like '*cli-assets.zip') {
     throw 'no docs'
   } elseif ($Uri -like '*.tar.gz') {
-    throw 'no archive'
+    $response = [System.Net.Http.HttpResponseMessage]::new(404)
+    throw [Microsoft.PowerShell.Commands.HttpResponseException]::new('Not Found', $response)
   } else {
     Set-Content -Path $OutFile -Value 'binary' -NoNewline
   }
@@ -281,6 +282,35 @@ function Invoke-WebRequest {
     const log = readFileSync(urlLog, "utf8").trim().split("\n");
     assert.match(log[0], /rom-weaver-win32-.*-msvc\.tar\.gz$/);
     assert.match(log[1], /rom-weaver-win32-.*-msvc\.exe$/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+// Only a definite 404 may reroute to the legacy name; a transient failure must
+// surface as itself.
+test("does not fall back on a transient download failure", { skip }, () => {
+  const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-ps1-transient-"));
+  try {
+    const urlLog = join(directory, "urls.log");
+    const script = `
+$env:ROM_WEAVER_INSTALL_DIR = '${join(directory, "install")}'
+$env:ROM_WEAVER_SKIP_ATTESTATION = '1'
+function Invoke-WebRequest {
+  param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
+  Add-Content -Path '${urlLog}' -Value $Uri
+  throw [System.Net.Http.HttpRequestException]::new('connection reset')
+}
+& '${resolve("install.ps1")}'
+`;
+    const result = spawnSync("pwsh", ["-NoProfile", "-Command", script], { encoding: "utf8" });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /connection reset/);
+    const log = readFileSync(urlLog, "utf8").trim().split("\n");
+    assert.equal(log.length, 1, "must not retry the legacy asset");
+    assert.match(log[0], /\.tar\.gz$/);
+    assert.ok(!existsSync(join(directory, "install", "rom-weaver.exe")));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
