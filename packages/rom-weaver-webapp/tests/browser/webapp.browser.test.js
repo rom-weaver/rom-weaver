@@ -249,6 +249,29 @@ test("the site footer lands inside the first phone screen with an empty bench", 
   page.viewport(1280, 900);
 });
 
+test("the PWA safe area keeps the shell clear of device chrome", async () => {
+  const safeTop = 59;
+  const safeBottom = 34;
+  const height = 852;
+  page.viewport(393, height);
+  mountWebappRoot();
+  const simulatedSafeArea = document.createElement("style");
+  simulatedSafeArea.textContent = `.rw-app { --safe-t: ${safeTop}px; --safe-b: ${safeBottom}px; }`;
+  document.head.append(simulatedSafeArea);
+  try {
+    await expect.poll(() => document.querySelector(".step.is-input.is-empty .drop.hero")).toBeTruthy();
+    await expect
+      .poll(() => document.querySelector(".masthead")?.getBoundingClientRect().top ?? -1)
+      .toBeGreaterThanOrEqual(safeTop);
+    await expect
+      .poll(() => document.querySelector(".site-footer")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
+      .toBeLessThanOrEqual(height - safeBottom);
+  } finally {
+    simulatedSafeArea.remove();
+  }
+  page.viewport(1280, 900);
+});
+
 test("the mobile scroll reserve returns once the bench holds a card", async () => {
   // The reserve keeps the last card clear of the phone browser's collapsing
   // bottom toolbar. It is only suppressed while the bench is empty; dropping
