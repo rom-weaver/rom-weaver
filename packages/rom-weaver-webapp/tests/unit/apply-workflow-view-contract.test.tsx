@@ -29,7 +29,7 @@ const storeOf = <State,>(state: State) => ({
 
 const outputState = (overrides: Partial<PatcherOutputState> = {}): PatcherOutputState =>
   ({
-    applyButton: { disabled: true, label: "WEAVE & DOWNLOAD", loading: false, progress: null, title: "" },
+    applyButton: { disabled: true, label: "APPLY & DOWNLOAD", loading: false, progress: null, title: "" },
     applyTiming: "",
     compress: null,
     compressTiming: "",

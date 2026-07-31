@@ -26,12 +26,12 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 #~ msgid "ui.output.verified"
-#~ msgstr "Das gewebte Ergebnis wird gegen die erwartete Ausgabe überprüft."
+#~ msgstr "Das angewendete Ergebnis wird gegen die erwartete Ausgabe überprüft."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
-msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst gewebt wird."
+msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -601,17 +601,17 @@ msgstr "mit den Undo-Daten des Patches —"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.verifiedDuringWeave"
-msgstr "wird beim Weben überprüft"
+msgstr "wird beim Anwenden überprüft"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.step.apply"
-msgstr "Weben"
+msgstr "Anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_APPLY_FAILED"
-msgstr "Das Einweben des Patches ist fehlgeschlagen."
+msgstr "Das Anwenden des Patches ist fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

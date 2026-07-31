@@ -26,12 +26,12 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 #~ msgid "ui.output.verified"
-#~ msgstr "The woven result will be verified against the expected output."
+#~ msgstr "The applied result will be verified against the expected output."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
-msgstr "“{patch}” expects “{predecessor}” woven first."
+msgstr "“{patch}” expects “{predecessor}” applied first."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -601,17 +601,17 @@ msgstr "using the patch's own undo data —"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.verifiedDuringWeave"
-msgstr "verified during the weave"
+msgstr "verified during apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.step.apply"
-msgstr "Weave"
+msgstr "Apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_APPLY_FAILED"
-msgstr "Weaving the patch failed."
+msgstr "Applying the patch failed."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

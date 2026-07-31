@@ -329,7 +329,7 @@ describe("sample tutorial", () => {
       <div className="rw-app">
         <section id="tutorial-cta">
           <button className="btn run" type="button">
-            Weave
+            Apply
           </button>
         </section>
         {guided ? <SampleTutorial loadingBody="Loading." onClose={vi.fn()} ready steps={ctaSteps} /> : null}
@@ -338,7 +338,7 @@ describe("sample tutorial", () => {
     const { rerender } = render(workbench(false));
     rerender(workbench(true));
 
-    const button = screen.getByRole("button", { name: "Weave" });
+    const button = screen.getByRole("button", { name: "Apply" });
     await waitFor(() => expect(button.dataset.guideCta).toBe("true"));
     rerender(workbench(false));
     expect(button.dataset.guideCta).toBeUndefined();

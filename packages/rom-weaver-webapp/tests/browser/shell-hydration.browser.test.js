@@ -8,7 +8,7 @@ import { Masthead, SiteFooter } from "../../src/webapp/components/shell.tsx";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const tabs = [
-  { href: "weave", icon: createElement("svg", { "aria-hidden": true }), id: "patcher", label: "Weave" },
+  { href: "apply", icon: createElement("svg", { "aria-hidden": true }), id: "patcher", label: "Apply" },
   { href: "create", icon: createElement("svg", { "aria-hidden": true }), id: "creator", label: "Create" },
   { href: "trim", icon: createElement("svg", { "aria-hidden": true }), id: "trim", label: "Trim" },
   { href: "tools", icon: createElement("svg", { "aria-hidden": true }), id: "tools", label: "Tools" },

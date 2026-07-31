@@ -194,7 +194,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
     }
     try {
       const [inputSource, ...patchSources] = workerSources;
-      if (!inputSource) throw new Error("Patch worker input was not staged for weaving");
+      if (!inputSource) throw new Error("Patch worker input was not staged for applying");
       const workerStartedAt = Date.now();
       traceRuntimePatchApply(traceContext, "patch.apply.worker.dispatch", {
         input: summarizeRuntimeWorkerPathSource(inputSource),

@@ -344,7 +344,7 @@ describe("design-system sections + states (expanded)", () => {
 // their empty bench. All page scans add best-practice + landmark rules.
 
 const outputState = () => ({
-  applyButton: { disabled: true, label: "WEAVE & DOWNLOAD", loading: false, progress: null, title: "" },
+  applyButton: { disabled: true, label: "APPLY & DOWNLOAD", loading: false, progress: null, title: "" },
   applyTiming: "",
   compress: null,
   compressionFormat: "zip",
@@ -395,7 +395,7 @@ const stagedPatchItem = (fileName) => ({
 });
 
 const PAGE_TABS = [
-  { href: "weave", icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Weave" },
+  { href: "apply", icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Apply" },
   { href: "create", icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
   { href: "trim", icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
 ];

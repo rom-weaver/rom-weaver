@@ -13,7 +13,7 @@ const SHELL_MARKUP = `
   <header>
     <button aria-label="Settings" class="tool" type="button"><span class="tool-text">Settings</span></button>
     <button class="mode" data-mode="creator" role="tab" type="button">Create</button>
-    <button class="tool" disabled type="button">Weave</button>
+    <button class="tool" disabled type="button">Apply</button>
     <span class="masthead-threads">· 8 threads</span>
   </header>
   <section class="step is-input">
@@ -127,11 +127,11 @@ test("drops clicks that landed too long before the mount", () => {
 });
 
 test("does not replay onto a target the mount left disabled", () => {
-  const weave = Array.from(appRoot.querySelectorAll("button")).find((button) => button.textContent === "Weave");
-  weave.removeAttribute("disabled");
-  weave.click();
+  const apply = Array.from(appRoot.querySelectorAll("button")).find((button) => button.textContent === "Apply");
+  apply.removeAttribute("disabled");
+  apply.click();
   captureShellClicks();
-  weave.setAttribute("disabled", "");
+  apply.setAttribute("disabled", "");
   hydrateShell();
   replayShellClicks(appRoot);
 

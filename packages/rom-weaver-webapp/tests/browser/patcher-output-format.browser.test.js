@@ -54,7 +54,7 @@ test("changing output format invalidates pending download and removes OPFS outpu
 
   await expect
     .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
-    .toContain("Weave");
+    .toContain("Apply");
   await expect.poll(async () => (await listOpfsOutputFiles()).length, { timeout: 30000 }).toBe(0);
 });
 

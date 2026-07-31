@@ -160,7 +160,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(romInput).toBeInTheDocument();
 
   await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /weave/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: /apply/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /create/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /tools/i })).toBeInTheDocument();
 
@@ -169,8 +169,8 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
   await waitForInputStackFile("game.bin");
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
-  // The output section (and its weave button) renders once the workflow has files.
-  await expect.element(page.getByRole("button", { name: /weave & download/i })).toBeInTheDocument();
+  // The output section (and its apply button) renders once the workflow has files.
+  await expect.element(page.getByRole("button", { name: /apply & download/i })).toBeInTheDocument();
 
   await page.getByRole("button", { name: "Clear ROM input" }).click();
   await expect
@@ -197,7 +197,7 @@ test("WebappRoot keeps Trim and Tools behind the beta flag and Guides in front o
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Weave", "Create", "Docs"]);
+    .toEqual(["Apply", "Create", "Docs"]);
 });
 
 test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {
