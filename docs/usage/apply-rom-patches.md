@@ -73,9 +73,10 @@ but a known-good copy makes updates and troubleshooting much easier.
 4. If an archive contains several possible files, choose the entry the patch
    author named.
 
-You can add ZIP, 7z, RAR, tar, and other supported archives without extracting
-them first. rom-weaver looks inside, including inside nested archives. Disc
-containers such as CHD and RVZ are unpacked to the form the patch expects.
+You can add [supported archives](formats.md), including ZIP, 7z, RAR, and tar,
+without extracting them first. rom-weaver looks inside, including inside nested
+archives. Disc containers such as CHD and RVZ are unpacked to the form the
+patch expects.
 
 The page changes after the files are understood. **0x02 ROM** holds the game,
 **0x03 Patches** holds the patch stack, and **0x04 Weave** controls the new

@@ -1,16 +1,16 @@
 # Extract, convert, and compress archive formats
 
-rom-weaver can inspect and extract libarchive-backed archives and compressed
-files, then create ZIP or 7z outputs. Everything runs locally in the browser or
-through the CLI; files are not uploaded.
+rom-weaver can open common archives and single compressed files, then create
+ZIP or 7z outputs. Everything runs locally in the browser or through the CLI;
+files are not uploaded.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Choose an operation](#choose-an-operation)
-- [Supported libarchive inputs](#supported-libarchive-inputs)
-- [Create or compress to ZIP and 7z](#create-or-compress-to-zip-and-7z)
-- [Extract-only inputs](#extract-only-inputs)
+- [Formats you can open](#formats-you-can-open)
+- [Formats you can create](#formats-you-can-create)
+- [Formats you can only open](#formats-you-can-only-open)
 
 <!-- END doctoc -->
 
@@ -21,19 +21,20 @@ archive while applying patches, or choose ZIP or 7z as the compressed output.
 The [CLI](../hosting/cli.md) exposes the same archive handlers directly:
 
 ```sh
-rom-weaver extract --input patches.7z --output patches
-rom-weaver compress --input patches --output patches.zip
+rom-weaver extract --input patches.7z --output extracted-patches
+rom-weaver compress --input extracted-patches --output patches.zip
 ```
 
-Extraction and creation are format-aware. A conversion first extracts the
-input, then creates a supported output; not every input format can be created
-again.
+Those two commands convert the 7z archive to ZIP: first extract it to a
+directory, then compress that directory. `compress` does not unpack an archive
+input by itself. If you pass `patches.7z` directly, the new archive contains
+the `patches.7z` file.
 
-## Supported libarchive inputs
+## Formats you can open
 
 These formats can be opened and extracted:
 
-| Format | Extensions | Extract | Create/compress |
+| Format | Extensions | Open/extract | Create |
 | --- | --- | :---: | :---: |
 | ZIP | `.zip` | yes | yes |
 | ZIPX | `.zipx` | yes | no |
@@ -51,25 +52,26 @@ These formats can be opened and extracted:
 Archives can contain nested archives. Gzip, Bzip2, XZ, and Zstandard inputs
 are single compressed streams and are extracted to their payload file.
 
-## Create or compress to ZIP and 7z
+## Formats you can create
 
-These are the libarchive-backed output formats currently available:
+rom-weaver can create these two general-purpose archive formats:
 
-| Output | Typical conversion | Compression options |
+| Format | Output extension | Compression options |
 | --- | --- | --- |
-| ZIP | Files or ROMs → `.zip` | Store, deflate, or Zstandard |
-| 7z | Files or ROMs → `.7z` | LZMA2 |
+| ZIP | `.zip` | Store, deflate, or Zstandard |
+| 7z | `.7z` | LZMA2 |
 
 The browser exposes the matching codec settings when the input is compatible.
 The CLI format table has the complete aliases, codec values, and command-line
 options: [container and compression formats](../hosting/cli.md#container-and-compression-formats).
 
-## Extract-only inputs
+## Formats you can only open
 
-rom-weaver extracts ZIPX, RAR, TAR, TAR.GZ, TAR.BZ2, TAR.XZ, Gzip, Bzip2, XZ,
-and Zstandard, but does not create those formats. Use [Apply patches](apply-rom-patches.md)
-to work with an extracted file, or the CLI's `extract` command when you need
-the files without applying a patch.
+rom-weaver can open ZIPX, RAR, TAR, TAR.GZ, TAR.BZ2, TAR.XZ, Gzip, Bzip2, XZ,
+and Zstandard, but cannot create them. Use [Apply patches](apply-rom-patches.md)
+to work with a file inside one of these formats, or the CLI's `extract` command
+when you need the files without applying a patch.
 
 Specialized disc and ROM containers are intentionally outside this guide for
-now.
+now. Their capabilities are listed in the
+[CLI format table](../hosting/cli.md#container-and-compression-formats).
