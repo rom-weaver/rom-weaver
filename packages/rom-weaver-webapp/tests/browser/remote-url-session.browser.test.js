@@ -246,7 +246,7 @@ test("sample action stays in-page and flows through the drop pipeline to a green
   const href = location.href;
   await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
   document.querySelector(".sample-tutorial-start-chip").click();
-  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLButtonElement);
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
   document.querySelector(".sample-tutorial-start-primary").click();
   expect(location.href).toBe(href);
 
