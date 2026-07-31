@@ -22,11 +22,14 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 }
 
 /* --- breadcrumbs --- */
-.rw-app .docs-breadcrumbs {
+.rw-app .docs-breadcrumbs,
+.rw-app .docs-search-header {
   display: grid;
   grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
   justify-content: center;
   gap: clamp(18px, 3vw, 30px);
+}
+.rw-app .docs-breadcrumbs {
   margin: 0 0 var(--sp-l);
   color: var(--ink-3);
   font-size: .69rem;
@@ -49,10 +52,6 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 .rw-app .docs-breadcrumbs a:active { color: var(--thread-text); }
 
 .rw-app .docs-search-header {
-  display: grid;
-  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
-  justify-content: center;
-  gap: clamp(18px, 3vw, 30px);
   position: relative;
   z-index: 70;
   margin-block: calc(var(--sp-l) * -1) var(--sp-l);
@@ -105,18 +104,11 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   position: relative;
 }
 .rw-app .docs-search-label {
-  display: block;
   margin-block-end: 6px;
-  color: var(--ink-3);
-  font-size: .655rem;
-  font-weight: 700;
-  font-stretch: 86%;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  padding: 0;
+  border: 0;
 }
 .rw-app .docs-search input {
-  box-sizing: border-box;
-  width: 100%;
   background: var(--plate-2);
   font-size: .82rem;
 }
@@ -142,24 +134,18 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   display: grid;
   gap: 3px;
 }
-.rw-app .docs-search-result-title,
-.rw-app .docs-search-result-guide,
-.rw-app .docs-search-result-snippet { display: block; }
+.rw-app .docs-search-result-list strong,
+.rw-app .docs-search-result-list small { display: block; }
 .rw-app .docs-search-result-title { color: var(--ink); font-weight: 750; }
-@media (hover: hover) {
-  .rw-app .docs-search-result-list a:hover { background: var(--well); color: var(--ink); }
-}
-.rw-app .docs-search-result-list a:active,
 .rw-app .docs-search-result-list a.is-active {
   background: var(--well);
   color: var(--ink);
 }
-.rw-app .docs-search-result-guide,
-.rw-app .docs-search-result-snippet {
+.rw-app .docs-search-result-list small {
   color: var(--ink-3);
   font-size: .67rem;
 }
-.rw-app .docs-search-result-snippet {
+.rw-app .docs-search-result-list small:last-child {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -168,7 +154,6 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 .rw-app .docs-search-highlight {
   padding-inline: .08em;
   border-radius: 2px;
-  outline: 2px solid color-mix(in oklab, var(--weft) 55%, transparent);
   background: var(--weft);
   color: var(--chassis);
   scroll-margin-block: 6rem;
@@ -709,10 +694,6 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   }
   .rw-app .docs-trail-search .docs-search-label { margin-inline: 2px; }
   .rw-app .docs-trail-search .docs-search input { background: var(--plate); }
-  .rw-app .docs-trail-search .docs-search-results {
-    inset-inline: 0;
-    max-height: min(60vh, 30rem);
-  }
   .rw-app .trail-crumbs {
     display: flex;
     align-items: center;
@@ -721,14 +702,17 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
     min-height: 36px;
     padding-block: 2px 4px;
   }
-  .rw-app .trail-site {
-    flex: none;
-    color: var(--ink-3);
+  .rw-app .trail-site,
+  .rw-app .trail-crumb {
     font-size: .69rem;
     font-weight: 700;
     font-stretch: 88%;
     letter-spacing: .06em;
     text-transform: uppercase;
+  }
+  .rw-app .trail-site {
+    flex: none;
+    color: var(--ink-3);
   }
   .rw-app .trail-sep { flex: none; color: var(--seam-strong); font-size: .7rem; }
   .rw-app .trail-crumb {
@@ -743,11 +727,6 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
     background: transparent;
     color: var(--ink-3);
     font: inherit;
-    font-size: .69rem;
-    font-weight: 700;
-    font-stretch: 88%;
-    letter-spacing: .06em;
-    text-transform: uppercase;
     cursor: pointer;
   }
   .rw-app .trail-crumb svg { flex: none; width: 12px; height: 12px; }

@@ -189,7 +189,7 @@ const DocsSearch = ({
 
   return (
     <div className="docs-search">
-      <label className="docs-search-label" htmlFor={inputId}>
+      <label className="guide-nav-title docs-search-label" htmlFor={inputId}>
         Search documentation
       </label>
       <input
@@ -237,9 +237,9 @@ const DocsSearch = ({
                         onNavigate?.();
                       }}
                     >
-                      <span className="docs-search-result-title">{result.entry.label}</span>
-                      <span className="docs-search-result-guide">in {result.route.title}</span>
-                      <span className="docs-search-result-snippet">{result.snippet}</span>
+                      <strong className="docs-search-result-title">{result.entry.label}</strong>
+                      <small>in {result.route.title}</small>
+                      <small>{result.snippet}</small>
                     </a>
                   </li>
                 );
