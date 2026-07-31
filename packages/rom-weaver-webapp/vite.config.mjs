@@ -312,8 +312,11 @@ const makeBetaRouteNoindex = (html, slug) =>
 const createNotFoundHtml = (html, channel, channelLabel) => {
   const title = `Page not found | ${SITE_NAME}${channel === "prod" ? "" : ` ${channelLabel}`}`;
   const description = "The requested rom-weaver page could not be found.";
+  // Cloudflare serves 404.html as the body at whatever URL missed, so the
+  // base:"./" relative asset URLs resolve wrong at any nested path without this.
   let notFoundHtml = html
     .replace("<html ", '<html data-page="not-found" ')
+    .replace("<head>", '<head>\n    <base href="/" />')
     .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
     .replace(/(<meta\s+name="robots"\s+content=")[^"]*(")/, "$1noindex$2")
     .replace(
@@ -483,6 +486,10 @@ const writeCloudflareHeadersAsset = (channel) => {
     closeBundle() {
       const headers = {
         ...crossOriginIsolationHeaders,
+        // Deploys replace the whole asset set, so HTML held past a redeploy
+        // references hashed URLs that now 404 - force revalidation on every
+        // document load. /assets/* and the SW script detach this below.
+        "Cache-Control": "no-cache",
         "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
         ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
       };
@@ -502,7 +509,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {
