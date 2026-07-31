@@ -62,7 +62,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   const outDir = resolve(env.ROM_WEAVER_WASM_OUT_DIR || join(root, "packages/rom-weaver-webapp/src/wasm"));
   const packageDir = join(root, "packages/rom-weaver-webapp/src/wasm");
   const artifact = join(outDir, "rom-weaver-app.wasm");
-  const builtArtifact = join(root, "target", target, "wasm-release", "rom-weaver-app.wasm");
+  const builtArtifact = join(root, "target", target, "wasm-release", "examples", "rom-weaver-app.wasm");
   const fingerprintFile = `${artifact}.prod.sha256`;
   const sourceFingerprintFile = `${artifact}.source.sha256`;
   const sourceFingerprint = createWasmSourceFingerprint(root);
@@ -72,7 +72,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   mkdirSync(outDir, { recursive: true });
 
   process.stdout.write(`building ${target} -> ${artifact}\n`);
-  run("cargo", ["build", "-p", "rom-weaver-cli", "--features", "wasm-app", "--bin", "rom-weaver-app", "--profile", "wasm-release", "--target", target]);
+  run("cargo", ["build", "-p", "rom-weaver-cli", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target]);
 
   if (mode === "prod") {
     if (!existsExecutable("wasm-opt")) throw new Error("missing command: wasm-opt (install via mise or brew install binaryen)");

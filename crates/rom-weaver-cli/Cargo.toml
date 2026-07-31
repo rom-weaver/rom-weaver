@@ -54,7 +54,7 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["fmt", "std"] }
 
-[dev-dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_cmd.workspace = true
 assert_fs.workspace = true
 clap_mangen = "0.3.0"
@@ -65,12 +65,12 @@ tar.workspace = true
 name = "rom-weaver"
 path = "src/main.rs"
 
-[[bin]]
+[[example]]
 name = "rom-weaver-app"
 path = "src/wasm_main.rs"
 required-features = ["wasm-app"]
 
-[[bin]]
+[[example]]
 name = "rom-weaver-typegen"
 path = "src/typegen_main.rs"
 required-features = ["typescript-types"]

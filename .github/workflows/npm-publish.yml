@@ -301,9 +301,7 @@ jobs:
 
       # This replaced the `.sha256` sidecar that used to ship beside each asset.
       # The sidecar was written by this same job, so it proved the download was
-      # not corrupted and nothing about where the binary came from; the
-      # attestation covers both, because a corrupted download no longer matches
-      # the digest it was signed over.
+      # not corrupted and nothing about where the binary came from.
       #
       # Attestations live in the repository's attestation store, not in the
       # release's asset list, so this adds nothing to the draft and cannot

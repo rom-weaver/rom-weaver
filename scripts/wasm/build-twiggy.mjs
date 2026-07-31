@@ -16,8 +16,8 @@ runMain(() => {
   const root = process.env.MISE_PROJECT_ROOT || process.cwd();
   const outDir = resolve(process.env.ROM_WEAVER_WASM_TWIGGY_OUT_DIR || join(root, "target/wasm-twiggy"));
   mkdirSync(outDir, { recursive: true });
-  execFileSync("cargo", ["build", "-p", "rom-weaver-cli", "--features", "wasm-app", "--bin", "rom-weaver-app", "--profile", "wasm-release", "--target", TARGET], { stdio: "inherit" });
+  execFileSync("cargo", ["build", "-p", "rom-weaver-cli", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", TARGET], { stdio: "inherit" });
   const artifact = join(outDir, "rom-weaver-app.wasm");
-  cpSync(join(root, "target", TARGET, "wasm-release", "rom-weaver-app.wasm"), artifact);
+  cpSync(join(root, "target", TARGET, "wasm-release", "examples", "rom-weaver-app.wasm"), artifact);
   process.stdout.write(`twiggy-ready artifact: ${artifact}\nrun: twiggy top -n 80 ${artifact}\n`);
 });
