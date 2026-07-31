@@ -321,7 +321,7 @@ describe("apply workflow view - staged bench", () => {
     const patchLabels = Array.from(container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab")).map(
       (el) => el.textContent,
     );
-    expect(patchLabels).toEqual(["Files", "Checks"]);
+    expect(patchLabels).toEqual(["Checks"]);
   });
 
   it("renders ROM and patch cards with the structural classes the browser tests query", () => {

@@ -1367,7 +1367,7 @@ const PatchCard = ({
           {verdict === "bad" ? (
             <PatchFaultWell message={item.validationMessage} overrideAvailable={overrideAvailable} />
           ) : null}
-          {isDisabled ? null : (
+          {isDisabled || (staging && !patchExtracting && !meta) ? null : (
             <ExtractDrawer
               fileName={item.fileName}
               fileSize={item.fileSize}
