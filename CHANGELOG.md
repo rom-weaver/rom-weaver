@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.11.0](https://github.com/rom-weaver/rom-weaver/compare/v0.10.2...v0.11.0) (2026-07-31)
+
+
+### Features
+
+* **cli:** install docs and completions ([#352](https://github.com/rom-weaver/rom-weaver/issues/352)) ([ecda6b3](https://github.com/rom-weaver/rom-weaver/commit/ecda6b37914d9d338bd781947c6c3e3f401d6f92))
+* **docs:** add fuzzy documentation search ([#354](https://github.com/rom-weaver/rom-weaver/issues/354)) ([746e4d9](https://github.com/rom-weaver/rom-weaver/commit/746e4d99ee4585bcd46b4883eae51a54ea51cb1c))
+* **release:** ship the CLI release assets as tar.gz archives ([#360](https://github.com/rom-weaver/rom-weaver/issues/360)) ([917600e](https://github.com/rom-weaver/rom-weaver/commit/917600e75cd21e25c2c52733160fc6b0e21f43ef))
+
+
+### Bug Fixes
+
+* **ci:** keep fallback preview deployments active ([#356](https://github.com/rom-weaver/rom-weaver/issues/356)) ([a967d7a](https://github.com/rom-weaver/rom-weaver/commit/a967d7aaca0b558e77622081ca92ca16c4db0273))
+* **release:** keep rom-weaver as the only binary so cargo-binstall resolves ([#358](https://github.com/rom-weaver/rom-weaver/issues/358)) ([09ab199](https://github.com/rom-weaver/rom-weaver/commit/09ab199082839f020440c05e3901c29a8819f667))
+* **webapp:** base 404 assets at the root and revalidate cached html ([#365](https://github.com/rom-weaver/rom-weaver/issues/365)) ([ad51821](https://github.com/rom-weaver/rom-weaver/commit/ad518212305c11d3f491e99dfa078255808c1aff))
+* **webapp:** center masthead mode rail ([#357](https://github.com/rom-weaver/rom-weaver/issues/357)) ([59260d2](https://github.com/rom-weaver/rom-weaver/commit/59260d27116d47a78c28d35a9eb26af1fa7dd24f))
+* **webapp:** link guided sample starts ([#362](https://github.com/rom-weaver/rom-weaver/issues/362)) ([7d5d9f1](https://github.com/rom-weaver/rom-weaver/commit/7d5d9f1f1b8f42e1713bae2aea9c6efb355873d2))
+* **webapp:** link pull request build badges ([#359](https://github.com/rom-weaver/rom-weaver/issues/359)) ([946619a](https://github.com/rom-weaver/rom-weaver/commit/946619af4ee5ef3f0ced2937428c1d808b71725c))
+* **webapp:** protect PWA footer safe area ([#351](https://github.com/rom-weaver/rom-weaver/issues/351)) ([02a4e56](https://github.com/rom-weaver/rom-weaver/commit/02a4e56301882090bba540f25d3153e28cb9b038))
+* **webapp:** rename weave UI to apply ([#364](https://github.com/rom-weaver/rom-weaver/issues/364)) ([724ae54](https://github.com/rom-weaver/rom-weaver/commit/724ae5463516157d822c9dbee5c0e30f8e90b5ab))
+* **webapp:** show files drawer for raw inputs ([#355](https://github.com/rom-weaver/rom-weaver/issues/355)) ([5932eef](https://github.com/rom-weaver/rom-weaver/commit/5932eef386d4f9e2c31c538e4d235f26c993eb59))
+
+
+### Performance Improvements
+
+* **7z:** adopt the 7-zip lzma sdk for the 7z read and write paths ([#248](https://github.com/rom-weaver/rom-weaver/issues/248)) ([de33b7d](https://github.com/rom-weaver/rom-weaver/commit/de33b7da078977a90e6bc23af163bf4fab3aa7fd))
+* **7z:** optimize short-period lzma match copies ([#249](https://github.com/rom-weaver/rom-weaver/issues/249)) ([f998a0f](https://github.com/rom-weaver/rom-weaver/commit/f998a0fe8bc8332363d259b33035c5ec1ec4fa82))
+* **containers:** align parallel extract chunks to 7z solid blocks ([#271](https://github.com/rom-weaver/rom-weaver/issues/271)) ([0e6d064](https://github.com/rom-weaver/rom-weaver/commit/0e6d064e3b3c42e9e083eff85bcd726f2c8435d7))
+
+
+### Reverts
+
+* **perf:** exclude 7z solid-block alignment from release ([#366](https://github.com/rom-weaver/rom-weaver/issues/366)) ([719a863](https://github.com/rom-weaver/rom-weaver/commit/719a86381e6f32dcae91cbef4a4aeb862d6d6c6c))
+
+
+### Documentation
+
+* **cli:** split the cli monolith into task guides and references ([#353](https://github.com/rom-weaver/rom-weaver/issues/353)) ([92995ec](https://github.com/rom-weaver/rom-weaver/commit/92995ecc640c1c2ffc5c6123b818d5f2e56f1a8e))
+* document webapp self-hosting ([#363](https://github.com/rom-weaver/rom-weaver/issues/363)) ([2ad5639](https://github.com/rom-weaver/rom-weaver/commit/2ad5639ea6a3e8a87aace65cd5211912c7e50bcf))
+
+
+### Styles
+
+* **webapp:** show PR badges as links ([#361](https://github.com/rom-weaver/rom-weaver/issues/361)) ([ed5b7f7](https://github.com/rom-weaver/rom-weaver/commit/ed5b7f72482c87c149e5f95cb316d028783deb75))
+
+
+### Internal
+
+* **attest:** retry a flaky sigstore attestation before failing the job ([#349](https://github.com/rom-weaver/rom-weaver/issues/349)) ([f00543c](https://github.com/rom-weaver/rom-weaver/commit/f00543c820052995622742fedce510bd96f99641))
+* fold the stray test/fixtures dir into tests/fixtures ([#350](https://github.com/rom-weaver/rom-weaver/issues/350)) ([7cb6b1f](https://github.com/rom-weaver/rom-weaver/commit/7cb6b1fddca6d42e6c13543f7006666d4772f386))
+
 ## [0.10.2](https://github.com/rom-weaver/rom-weaver/compare/v0.10.1...v0.10.2) (2026-07-31)
 
 
