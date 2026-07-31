@@ -42,6 +42,7 @@ const VENDORED_LZMA_SDK_ASM: &str = "lzma-sdk/vendor/Asm";
 const LZMA_SDK_ARM64_ASM_SOURCE: &str = "LzmaDecOpt.S";
 const LZMA_SDK_ARM64_ASM_INCLUDE: &str = "7zAsm.S";
 const LZMA_SDK_X86_ASM_SOURCE: &str = "LzmaDecOpt.asm";
+const LZMA_SDK_X86_ASM_INCLUDE: &str = "7zAsm.asm";
 // Probed in order. jwasm is first because it is the one that builds from source
 // on any host in seconds (Sybase Open Watcom licence, plain C), which is what
 // the Docker/CI images install. asmc is upstream's own default and ships a
@@ -65,6 +66,8 @@ const LZMA_SDK_PATCH_FILES: &[&str] = &[
     "portable/lzma-dec-short-distance-copy.replacement.txt",
     "arm64/lzma-dec-short-distance-copy.original.txt",
     "arm64/lzma-dec-short-distance-copy.replacement.txt",
+    "x86/lzma-dec-short-distance-copy.original.txt",
+    "x86/lzma-dec-short-distance-copy.replacement.txt",
 ];
 
 const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
@@ -551,7 +554,14 @@ fn build_lzma_sdk(
         build.include(source.parent().unwrap());
         build.file(source);
     } else if is_x86_64_target() {
-        let source = asm_dir.join("x86").join(LZMA_SDK_X86_ASM_SOURCE);
+        let source = prepare_lzma_sdk_asm_decoder(
+            manifest_dir,
+            asm_dir,
+            out_dir,
+            "x86",
+            LZMA_SDK_X86_ASM_SOURCE,
+            LZMA_SDK_X86_ASM_INCLUDE,
+        );
         if let Some(object) =
             lzma_sdk_x86_asm_object(&source, &PathBuf::from(env::var("OUT_DIR").unwrap()))
         {

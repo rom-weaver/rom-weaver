@@ -1,0 +1,114 @@
+; ---------- COPY MATCH FAST ----------
+        ; Byte *dest = dic + dicPos;
+        ; mov     r1, dic
+        ; ptrdiff_t src = (ptrdiff_t)pos - (ptrdiff_t)dicPos;
+        ; sub   t0_R, dicPos
+        ; dicPos += curLen;
+
+        ; const Byte *lim = dest + curLen;
+        add     t0_R, dic
+
+COPY_MATCH_PATTERN macro pattern_size:req
+local next_pattern, pattern_loop, pattern_tail, pattern_done
+        cmp     x1, pattern_size
+        jne     next_pattern
+        mov     t1_R, dicPos
+        sub     t1_R, cnt_R
+        mov     len_temp, cnt
+
+if pattern_size eq 2
+        movzx   sym, word ptr[t0_R]
+elseif pattern_size eq 3
+        movzx   sym, word ptr[t0_R]
+        movzx   match, byte ptr[t0_R + 2]
+elseif pattern_size eq 4
+        mov     sym, dword ptr[t0_R]
+elseif pattern_size eq 5
+        mov     sym, dword ptr[t0_R]
+        movzx   match, byte ptr[t0_R + 4]
+elseif pattern_size eq 6
+        mov     sym, dword ptr[t0_R]
+        movzx   pbPos, word ptr[t0_R + 4]
+elseif pattern_size eq 7
+        mov     sym, dword ptr[t0_R]
+        movzx   pbPos, word ptr[t0_R + 4]
+        movzx   match, byte ptr[t0_R + 6]
+elseif pattern_size eq 8
+        mov     sym_R, qword ptr[t0_R]
+endif
+
+pattern_loop:
+if pattern_size eq 2
+        mov     word ptr[t1_R], x3_W
+elseif pattern_size eq 3
+        mov     word ptr[t1_R], x3_W
+        mov     byte ptr[t1_R + 2], x9_L
+elseif pattern_size eq 4
+        mov     dword ptr[t1_R], sym
+elseif pattern_size eq 5
+        mov     dword ptr[t1_R], sym
+        mov     byte ptr[t1_R + 4], x9_L
+elseif pattern_size eq 6
+        mov     dword ptr[t1_R], sym
+        mov     word ptr[t1_R + 4], x1_W
+elseif pattern_size eq 7
+        mov     dword ptr[t1_R], sym
+        mov     word ptr[t1_R + 4], x1_W
+        mov     byte ptr[t1_R + 6], x9_L
+elseif pattern_size eq 8
+        mov     qword ptr[t1_R], sym_R
+endif
+        add     t1_R, pattern_size
+        sub     len_temp, pattern_size
+        cmp     len_temp, pattern_size
+        jae     pattern_loop
+
+        test    len_temp, len_temp
+        jz      pattern_done
+        mov     match_R, t0_R
+pattern_tail:
+        mov     sym_L, byte ptr[match_R]
+        mov     byte ptr[t1_R], sym_L
+        inc     match_R
+        inc     t1_R
+        dec     len_temp
+        jnz     pattern_tail
+pattern_done:
+        jmp     copy_match_pattern_done
+next_pattern:
+endm
+
+        mov     x1, LOC rep0
+        cmp     x1, 2
+        jb      copy_match_pattern_fallback
+        cmp     x1, 8
+        ja      copy_match_pattern_fallback
+        cmp     cnt, x1
+        jb      copy_match_pattern_fallback
+        COPY_MATCH_PATTERN 2
+        COPY_MATCH_PATTERN 3
+        COPY_MATCH_PATTERN 4
+        COPY_MATCH_PATTERN 5
+        COPY_MATCH_PATTERN 6
+        COPY_MATCH_PATTERN 7
+        COPY_MATCH_PATTERN 8
+
+copy_match_pattern_done:
+        ; len_temp is x12, the low half of r12 - the same register dic lives
+        ; in - so the pattern loop above destroyed dic. The shared tail needs
+        ; it back: LITERAL MATCHED, reached straight through copy_end, reads
+        ; dic without reloading it (upstream's `mov dic, LOC dic_Spec` there
+        ; is commented out precisely because the copy used to leave r12
+        ; alone). Restoring here covers every path out of copy_end at once.
+        mov     dic, LOC dic_Spec
+        IsMatchBranch_Pre
+        dec     dicPos
+        mov     sym_L, byte ptr[dicPos]
+        jmp     copy_end
+
+copy_match_pattern_fallback:
+        movzx   sym, byte ptr[t0_R]
+        add     t0_R, cnt_R
+        neg     cnt_R
+        ; lea     r1, [dicPos - 1]
+copy_common:

@@ -166,7 +166,7 @@ Build wiring lives in `libarchive/build.rs`:
   upstream C loop.
 - The SDK's hand-written decode loop (`vendor/Asm/`, selected with
   `Z7_LZMA_DEC_OPT`) replaces `LzmaDec.c`'s C loop wherever it can be
-  assembled. Its staged ARM64 source caches the same distance-2 through
+  assembled. Its staged ARM64 and x86 sources cache the same distance-2 through
   distance-8 periods as the portable loop. It is the same bitstream and is what
   `7zz` itself runs; the upstream loop is worth ~26% of a 1 GiB LZMA1 extract
   before these short-period copies. Which platforms get it is the matrix below.
@@ -189,9 +189,10 @@ microbenchmarks, not a claim that every archive gets faster.
 The assembly version was measured end-to-end on native ARM64 over ten runs per
 case. Against the unmodified SDK assembly loop, 512 MiB period-2 through
 period-8 archives were 1.67x to 2.49x faster by median wall time; period 1 was
-unchanged, and literal-heavy random data was within 2%. The x86 assembly loop
-stays unpatched: its port of these copies is staged separately so it can be
-reviewed and measured on x86 hardware on its own.
+unchanged, and literal-heavy random data was within 2%. JWasm v2.20 assembled
+the staged x86 source as ELF64/SysV with no warnings, and that exact emitted
+function body decoded 16 MiB period-1 through period-8 fixtures byte-for-byte
+under Rosetta. No x86 speed claim is made without an x86 hardware benchmark.
 
 ### One 7z LZMA backend policy
 
@@ -248,7 +249,7 @@ without setting an archive error and the writer falls through to liblzma.
 | --- | --- | --- |
 | `aarch64-*` except Windows | assembly, always | The staged `Asm/arm64/LzmaDecOpt.S` is GNU-as syntax; clang assembles it with no extra tool |
 | `aarch64-pc-windows-*` | portable C with short-period copies | The MSVC build path does not assemble the SDK's GNU-as `.S` file |
-| `x86_64-*-linux-*`, BSDs | assembly when a MASM-compatible assembler is on `PATH` | `Asm/x86/LzmaDecOpt.asm` is MASM syntax and no C compiler reads it. `-elf64 -DABI_LINUX` |
+| `x86_64-*-linux-*`, BSDs | assembly when a MASM-compatible assembler is on `PATH` | The staged `Asm/x86/LzmaDecOpt.asm` is MASM syntax and no C compiler reads it. `-elf64 -DABI_LINUX` |
 | `x86_64-pc-windows-*` | assembly when `ml64` (or jwasm/asmc/uasm) is on `PATH` | MSVC's own `ml64` is already there under `VsDevCmd`. `-win64` |
 | `x86_64-apple-darwin` | portable C with short-period copies | Nothing in reach emits Mach-O: jwasm has no Mach-O writer, asmc only bootstraps on an x86 host, and uasm's tree does not compile on a current Unix host |
 | `i686-*`, other arches | portable C with short-period copies | The SDK ships no loop this build uses for them |

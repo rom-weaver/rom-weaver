@@ -2532,7 +2532,7 @@ mod tests {
             let handler = registry.find_by_name("7z").expect("7z handler");
 
             // These inputs make the LZMA2 encoder emit the overlapping match
-            // distances handled by the portable and ARM64 fast loops.
+            // distances handled by the portable, ARM64, and x86 fast loops.
             for period in 2usize..=8 {
                 let input_path = temp_dir.join(format!("period-{period}.bin"));
                 let archive_path = temp_dir.join(format!("period-{period}.7z"));
