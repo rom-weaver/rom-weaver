@@ -421,7 +421,7 @@ support continued development through
 Copyright (C) Brandon Casey and rom-weaver contributors
 
 The public distribution is licensed under
-[AGPL-3.0-or-later](LICENSE). [Commercial licensing](COMMERCIAL_LICENSE.md) is
+[AGPL-3.0-or-later](LICENSE). [Commercial licensing](COMMERCIAL.md) is
 also available for first-party rom-weaver code. Bundled third-party components
 retain their own licenses. Release builds include a generated
 [combined attribution and license inventory](https://rom-weaver.com/NOTICE) and

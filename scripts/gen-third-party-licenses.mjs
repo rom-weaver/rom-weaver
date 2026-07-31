@@ -34,7 +34,7 @@ const PROJECT_NOTICE = [
   "2. Separate commercial terms available from Brandon Casey",
   "",
   "You may use first-party rom-weaver code under the terms of either license. See",
-  "LICENSE and COMMERCIAL_LICENSE.md.",
+  "LICENSE and COMMERCIAL.md.",
   "",
   "Bundled third-party components remain subject to their own licenses. Release",
   "artifacts include the applicable third-party attribution and license inventory.",
