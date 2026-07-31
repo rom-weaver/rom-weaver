@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
-import type { GuidedSample } from "../public/react/guided-sample-start.ts";
+import { GUIDED_SAMPLE_HREFS, type GuidedSample } from "../public/react/guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes } from "./docs-routing.mjs";
 import { createDocsSearchIndex, findSearchToken, searchDocs } from "./docs-search.mjs";
@@ -607,7 +607,7 @@ const DocsPage = ({
               <div className="docs-cta-actions">
                 <a
                   className="btn primary"
-                  href="/apply?guide=apply"
+                  href={GUIDED_SAMPLE_HREFS.apply}
                   onClick={(event) => {
                     if (!isPlainLeftClick(event)) return;
                     if (onStartGuide("apply") !== false) event.preventDefault();
@@ -619,7 +619,7 @@ const DocsPage = ({
                 </a>
                 <a
                   className="btn"
-                  href="/create?guide=create"
+                  href={GUIDED_SAMPLE_HREFS.create}
                   onClick={(event) => {
                     if (!isPlainLeftClick(event)) return;
                     if (onStartGuide("create") !== false) event.preventDefault();
@@ -631,7 +631,7 @@ const DocsPage = ({
                 </a>
                 <a
                   className="btn"
-                  href="/apply?guide=bundle"
+                  href={GUIDED_SAMPLE_HREFS.bundle}
                   onClick={(event) => {
                     if (!isPlainLeftClick(event)) return;
                     if (onStartGuide("bundle") !== false) event.preventDefault();

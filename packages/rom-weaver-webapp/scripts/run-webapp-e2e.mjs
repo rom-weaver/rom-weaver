@@ -413,7 +413,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     const onboardingChip = page.getByRole("button", { name: "New here?" });
     await onboardingChip.waitFor({ state: "visible", timeout: 60_000 });
     await onboardingChip.click();
-    const guidedApply = page.getByRole("button", { name: "Start guided Apply" });
+    const guidedApply = page.getByRole("link", { name: "Start guided Apply" });
     await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
     await guidedApply.click();
     const tutorial = page.locator(".sample-tutorial-dialog");
@@ -480,7 +480,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     const createOnboardingChip = page.getByRole("button", { name: "New here?" });
     await createOnboardingChip.waitFor({ state: "visible" });
     await createOnboardingChip.click();
-    const guidedCreate = page.getByRole("button", { name: "Start guided Create" });
+    const guidedCreate = page.getByRole("link", { name: "Start guided Create" });
     await guidedCreate.waitFor({ state: "visible" });
     await guidedCreate.click();
     await tutorial.waitFor({ state: "visible" });

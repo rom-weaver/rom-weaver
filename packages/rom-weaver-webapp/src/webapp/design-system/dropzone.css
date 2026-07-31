@@ -331,7 +331,7 @@
   }
 }
 .rw-app .sample-tutorial-start-action:active { background: color-mix(in oklab, var(--thread) 10%, transparent); }
-.rw-app .sample-tutorial-start-action:disabled { color: var(--ink-4); cursor: default; }
+.rw-app .sample-tutorial-start-action[aria-disabled="true"] { color: var(--ink-4); cursor: default; }
 .rw-app .sample-tutorial-start-action svg { width: 14px; height: 14px; color: var(--thread-text); flex: none; }
 .rw-app .sample-tutorial-start-action-icon { display: inline-flex; flex: none; }
 /* The quest marker: a bold ! on a round badge, the way a game flags the NPC

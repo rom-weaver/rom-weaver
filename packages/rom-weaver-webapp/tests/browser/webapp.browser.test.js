@@ -280,6 +280,8 @@ test("the New here? beacon stays compact and its popover carries every start act
 
   chip.click();
   await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
+  expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe("/apply?guide=apply");
+  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href")).toBe("/apply?guide=bundle");
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();
   expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(pop.top).toBeGreaterThanOrEqual(0);
