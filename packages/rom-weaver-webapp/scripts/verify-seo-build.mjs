@@ -64,18 +64,26 @@ const robots = read("robots.txt");
 for (const route of ["apply", "create", "trim", "tools"]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
+assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
 assertIncludes(
   headers,
-  "/assets/*\n  Cache-Control: public, max-age=31536000, immutable",
+  "/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable",
   "fingerprinted asset cache headers",
 );
-assertIncludes(headers, "/cache-service-worker.js\n  Cache-Control: no-cache", "service worker cache headers");
+assertIncludes(
+  headers,
+  "/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache",
+  "service worker cache headers",
+);
 // The Early Hints preload has to name the exact hashed URLs the document requests; a stale
 // hint would fetch a dead asset and leave the real ones on the post-parse critical path.
 // Derived from the same module the build emits from, so the check cannot drift from it.
 for (const link of criticalAssetLinkHeaders(applyHtml)) {
   assertIncludes(headers, link, "critical asset preload hint");
 }
+// The 404 body is served at whatever URL missed, so its relative asset URLs
+// need an absolute base to resolve at nested paths.
+assertIncludes(notFoundHtml, '<base href="/" />', "404 asset base");
 assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 robots metadata");
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
