@@ -101,8 +101,15 @@ Pruning is also what keeps the published crate viable: the full tree packages to
 about 6.3 MB against crates.io's 10 MiB limit, the pruned one to about 1.3 MB.
 
 Every transformation - the test-subdirectory strip, the wasm patches in
-`libarchive/patches/wasm/`, and the `CMakeLists.txt` source-list edits - is
-applied to a staged copy under `OUT_DIR`, never to the committed tree.
+`libarchive/patches/wasm/`, the all-target patches in
+`libarchive/patches/common/`, and
+the `CMakeLists.txt` source-list edits - is applied to a staged copy under
+`OUT_DIR`, never to the committed tree.
+
+The all-target fragments under `libarchive/patches/common/` add the decoder
+memory-limit diagnostics and the liblzma filtered-chain preflight. `build.rs`
+requires every expected fragment, so a vendor refresh fails at staging instead
+of silently dropping a patch.
 
 ### Going back to upstream
 
@@ -156,6 +163,10 @@ Build wiring lives in `libarchive/build.rs`:
   [The SDK encoder is native-only](#the-sdk-encoder-is-native-only) for why. The
   *decoder* is unaffected and stays on the SDK everywhere - `LzmaDec` and
   `Lzma2Dec` have no threads.
+- The decoder glue uses a shared bounded allocator. Rust publishes one process-wide
+  ceiling before the first reader is created; every live bare SDK stream reserves
+  while allocating, and filtered liblzma chains reserve their predicted usage from
+  the same pool until teardown.
 - `Z7_AFFINITY_DISABLE` is set on every wasm target: wasi-libc has no
   `sched_setaffinity` and no `<cpuid.h>`/`<sys/auxv.h>`.
 - Every portable-C decoder stages `LzmaDec.c` and ports the assembly loop's

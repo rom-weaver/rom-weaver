@@ -1,0 +1,37 @@
+#ifdef HAVE_LZMA_H
+static void
+free_liblzma_decoder(struct _7zip *zip)
+{
+	if (zip->lzstream_valid) {
+		zip->lzstream_valid = 0;
+		lzma_end(&(zip->lzstream));
+	}
+	if (zip->lzstream_reserved != 0) {
+		rw_lzma_dec_release(zip->lzstream_reserved);
+		zip->lzstream_reserved = 0;
+	}
+}
+#endif
+
+static int
+init_sdk_lzma_decoder(struct archive_read *a, struct _7zip *zip,
+    const struct _7z_coder *coder1)
+{
+	int error;
+
+	free_sdk_lzma_decoder(zip);
+	zip->sdk_dec = rw_lzma_dec_new(zip->codec == _7Z_LZMA2,
+	    coder1->properties, (size_t)coder1->propertiesSize, &error);
+	if (zip->sdk_dec == NULL) {
+		if (error == RW_LZMA_ERR_LIMIT)
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "7-Zip LZMA decoder memory exceeds the shared %llu-byte "
+			    "limit; raise ROM_WEAVER_7Z_MEM_BUDGET_MB",
+			    (unsigned long long)rw_lzma_dec_memlimit());
+		else
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Couldn't initialize the LZMA decoder");
+		return (ARCHIVE_FAILED);
+	}
+	return (ARCHIVE_OK);
+}

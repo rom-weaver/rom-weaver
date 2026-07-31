@@ -28,6 +28,7 @@ extern "C" {
 #define RW_LZMA_ERR_DATA	3
 #define RW_LZMA_ERR_PARAM	4
 #define RW_LZMA_ERR_THREAD	5
+#define RW_LZMA_ERR_LIMIT	6
 /* Anything at or above this is the SDK's own SRes plus this base, so an
  * unexpected coder failure keeps its own identity in the error message. */
 #define RW_LZMA_ERR_SRES_BASE	100
@@ -36,12 +37,19 @@ extern "C" {
 
 typedef struct rw_lzma_dec rw_lzma_dec;
 
+/* Implemented in Rust. A zero limit leaves decoder allocations unrestricted. */
+uint64_t rw_lzma_dec_memlimit(void);
+/* Shared by every live SDK and liblzma decoder. */
+int rw_lzma_dec_reserve(uint64_t bytes);
+void rw_lzma_dec_release(uint64_t bytes);
+
 /*
  * lzma2 != 0 selects LZMA2 (props is the single dictionary-size byte);
  * otherwise LZMA1 (props is the 5-byte header). Returns NULL on allocation
  * failure or malformed properties.
  */
-rw_lzma_dec *rw_lzma_dec_new(int lzma2, const uint8_t *props, size_t props_size);
+rw_lzma_dec *rw_lzma_dec_new(int lzma2, const uint8_t *props,
+    size_t props_size, int *error);
 void rw_lzma_dec_free(rw_lzma_dec *dec);
 
 /*

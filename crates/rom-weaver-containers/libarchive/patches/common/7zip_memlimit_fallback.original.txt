@@ -1,0 +1,2 @@
+		r = lzma_raw_decoder(&(zip->lzstream), filters);
+		free(ff->options);

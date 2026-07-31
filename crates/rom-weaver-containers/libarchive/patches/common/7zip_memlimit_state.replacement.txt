@@ -1,0 +1,5 @@
+#ifdef HAVE_LZMA_H
+	lzma_stream		 lzstream;
+	int			 lzstream_valid;
+	uint64_t		 lzstream_reserved;
+#endif

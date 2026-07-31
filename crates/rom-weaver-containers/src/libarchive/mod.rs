@@ -53,6 +53,7 @@ use sys::{
 
 mod entries;
 mod ffi;
+mod memlimit;
 mod read;
 mod write;
 

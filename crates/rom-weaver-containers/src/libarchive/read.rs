@@ -42,6 +42,7 @@ pub struct ReadArchive {
 
 impl ReadArchive {
     pub fn new(context: &str) -> Result<Self> {
+        super::memlimit::install_lzma_decoder_memlimit();
         let ptr = unsafe { archive_read_new() };
         let ptr = NonNull::new(ptr).ok_or_else(|| {
             RomWeaverError::Validation(format!(

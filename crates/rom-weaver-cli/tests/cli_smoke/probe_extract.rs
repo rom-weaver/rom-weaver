@@ -1973,3 +1973,139 @@ fn probe_reads_stdin_for_dash_input() {
     assert_eq!(json["details"]["container"]["entry_count"], 1);
     assert_eq!(json["details"]["container"]["entries"][0], "sample.bin");
 }
+
+/// Rewrite an uncompressed 7z end header to declare a chosen LZMA2 dictionary.
+/// When `filtered` is true, add a Delta coder and bind pair so libarchive routes
+/// the folder through its liblzma fallback. The oversized tests fail while
+/// initializing the decoder, before the deliberately unchanged payload matters.
+fn rewrite_7z_lzma2_dictionary(archive: &Path, property: u8, filtered: bool) {
+    let mut bytes = fs::read(archive).expect("read 7z");
+    let next_header_offset =
+        u64::from_le_bytes(bytes[12..20].try_into().expect("next header offset")) as usize;
+    let mut next_header_size =
+        u64::from_le_bytes(bytes[20..28].try_into().expect("next header size")) as usize;
+    let start = 32 + next_header_offset;
+    let end = start + next_header_size;
+    let coder = bytes[start..end]
+        .windows(3)
+        .position(|window| window == [0x21, 0x21, 0x01])
+        .expect("LZMA2 coder record in the 7z end header");
+    let coder = start + coder;
+
+    bytes[coder + 3] = property;
+    if filtered {
+        assert_eq!(bytes[coder - 1], 1, "expected one coder in the folder");
+        bytes[coder - 1] = 2;
+        bytes.splice(coder + 4..coder + 4, [0x21, 0x03, 0x01, 0x00]);
+        bytes.splice(coder + 8..coder + 8, [0x01, 0x00]);
+        // Two coders have two equally sized outputs. Duplicate the writer's
+        // original 7z-encoded unpack size for the added Delta coder.
+        assert_eq!(bytes[coder + 10], 0x0c, "expected coder unpack sizes");
+        let size_start = coder + 11;
+        let encoded_size_len = bytes[size_start].leading_ones() as usize + 1;
+        let unpack_size = bytes[size_start..size_start + encoded_size_len].to_vec();
+        bytes.splice(size_start..size_start, unpack_size);
+        next_header_size += 6 + encoded_size_len;
+        bytes[20..28].copy_from_slice(&(next_header_size as u64).to_le_bytes());
+    }
+
+    let end = start + next_header_size;
+    let next_header_crc = crc32fast::hash(&bytes[start..end]);
+    bytes[28..32].copy_from_slice(&next_header_crc.to_le_bytes());
+    let start_header_crc = crc32fast::hash(&bytes[12..32]);
+    bytes[8..12].copy_from_slice(&start_header_crc.to_le_bytes());
+    fs::write(archive, bytes).expect("write 7z");
+}
+
+fn write_dictionary_7z(temp: &TempDir, name: &str, property: u8, filtered: bool) -> PathBuf {
+    let payload = temp.child("payload.bin");
+    fs::write(payload.path(), b"rom-weaver 7z dictionary guard".repeat(64)).expect("fixture");
+    let archive = temp.child(name);
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            payload.path().to_str().expect("path"),
+            "--format",
+            "7z",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    rewrite_7z_lzma2_dictionary(archive.path(), property, filtered);
+    archive.path().to_path_buf()
+}
+
+fn extract_7z_with_memory_budget(
+    archive: &Path,
+    output: &Path,
+    budget_mb: &str,
+    expected_code: i32,
+) -> String {
+    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    let output = command
+        .args([
+            "extract",
+            "--input",
+            archive.to_str().expect("path"),
+            "--output",
+            output.to_str().expect("path"),
+            "--no-ignore",
+        ])
+        .env("ROM_WEAVER_7Z_MEM_BUDGET_MB", budget_mb)
+        .assert()
+        .code(expected_code)
+        .get_output()
+        .clone();
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+fn assert_memory_limit_error(stderr: &str) {
+    assert!(
+        stderr.contains("7-Zip LZMA decoder memory exceeds"),
+        "expected a decoder memory limit error, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("ROM_WEAVER_7Z_MEM_BUDGET_MB"),
+        "expected the error to name the override, got: {stderr}"
+    );
+}
+
+#[test]
+fn extract_rejects_an_sdk_7z_dictionary_over_the_memory_budget() {
+    let temp = setup_temp_dir();
+    // Property 37 declares the format maximum: a 1.5 GiB dictionary.
+    let archive = write_dictionary_7z(&temp, "huge-sdk-dictionary.7z", 37, false);
+
+    let stderr = extract_7z_with_memory_budget(&archive, temp.child("out").path(), "256", 1);
+
+    assert_memory_limit_error(&stderr);
+}
+
+#[test]
+fn extract_rejects_a_filtered_7z_dictionary_over_the_memory_budget() {
+    let temp = setup_temp_dir();
+    let archive = write_dictionary_7z(&temp, "huge-filtered-dictionary.7z", 37, true);
+
+    let stderr = extract_7z_with_memory_budget(&archive, temp.child("out").path(), "256", 1);
+
+    assert_memory_limit_error(&stderr);
+}
+
+#[test]
+fn extract_accepts_a_typical_7z_dictionary_at_the_minimum_limit() {
+    let temp = setup_temp_dir();
+    // Property 28 declares a 64 MiB dictionary. The 65 MiB floor also covers
+    // the decoder's probabilities and state when the 128 MiB budget is halved.
+    let archive = write_dictionary_7z(&temp, "typical-dictionary.7z", 28, false);
+    let output = temp.child("out");
+
+    extract_7z_with_memory_budget(&archive, output.path(), "128", 0);
+
+    assert_eq!(
+        fs::read(output.path().join("payload.bin")).expect("extracted payload"),
+        b"rom-weaver 7z dictionary guard".repeat(64)
+    );
+}

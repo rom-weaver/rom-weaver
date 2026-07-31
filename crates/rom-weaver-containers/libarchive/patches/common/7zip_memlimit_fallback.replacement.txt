@@ -1,0 +1,25 @@
+		{
+			uint64_t memory = 0;
+			if (rw_lzma_dec_memlimit() != 0)
+				memory = lzma_raw_decoder_memusage(filters);
+			if (memory == UINT64_MAX) {
+				free(ff->options);
+				archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+				    "Couldn't determine 7-Zip LZMA decoder memory");
+				return (ARCHIVE_FAILED);
+			}
+			if (!rw_lzma_dec_reserve(memory)) {
+				free(ff->options);
+				archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+				    "7-Zip LZMA decoder memory exceeds the shared %llu-byte "
+				    "limit; raise ROM_WEAVER_7Z_MEM_BUDGET_MB",
+				    (unsigned long long)rw_lzma_dec_memlimit());
+				return (ARCHIVE_FAILED);
+			}
+			r = lzma_raw_decoder(&(zip->lzstream), filters);
+			free(ff->options);
+			if (r != LZMA_OK)
+				rw_lzma_dec_release(memory);
+			else
+				zip->lzstream_reserved = memory;
+		}

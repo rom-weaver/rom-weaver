@@ -1,0 +1,14 @@
+static int
+init_sdk_lzma_decoder(struct archive_read *a, struct _7zip *zip,
+    const struct _7z_coder *coder1)
+{
+	free_sdk_lzma_decoder(zip);
+	zip->sdk_dec = rw_lzma_dec_new(zip->codec == _7Z_LZMA2,
+	    coder1->properties, (size_t)coder1->propertiesSize);
+	if (zip->sdk_dec == NULL) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Couldn't initialize the LZMA decoder");
+		return (ARCHIVE_FAILED);
+	}
+	return (ARCHIVE_OK);
+}

@@ -1,0 +1,3 @@
+#ifdef HAVE_LZMA_H
+	free_liblzma_decoder(zip);
+#endif

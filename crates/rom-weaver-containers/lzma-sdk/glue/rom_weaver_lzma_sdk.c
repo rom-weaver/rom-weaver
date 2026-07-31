@@ -32,32 +32,72 @@ rw_sdk_free(ISzAllocPtr self, void *address)
 static const ISzAlloc rw_sdk_allocator = { rw_sdk_alloc, rw_sdk_free };
 
 struct rw_lzma_dec {
+	ISzAlloc	allocator;
+	uint64_t	allocated;
+	int		limit_exceeded;
 	int		is_lzma2;
 	CLzmaDec	lzma1;
 	CLzma2Dec	lzma2;
 };
 
+static void *
+rw_lzma_dec_alloc(ISzAllocPtr self, size_t size)
+{
+	rw_lzma_dec *dec = (rw_lzma_dec *)self;
+	void *address;
+
+	if (!rw_lzma_dec_reserve((uint64_t)size)) {
+		dec->limit_exceeded = 1;
+		return NULL;
+	}
+	address = malloc(size);
+	if (address == NULL) {
+		rw_lzma_dec_release((uint64_t)size);
+		return NULL;
+	}
+	dec->allocated += (uint64_t)size;
+	return address;
+}
+
 rw_lzma_dec *
-rw_lzma_dec_new(int lzma2, const uint8_t *props, size_t props_size)
+rw_lzma_dec_new(int lzma2, const uint8_t *props, size_t props_size, int *error)
 {
 	rw_lzma_dec *dec;
 	SRes res;
 
-	if (props == NULL)
+	if (error != NULL)
+		*error = RW_LZMA_OK;
+	if (props == NULL) {
+		if (error != NULL)
+			*error = RW_LZMA_ERR_PROPS;
 		return NULL;
-	if (lzma2 ? props_size != 1 : props_size != LZMA_PROPS_SIZE)
+	}
+	if (lzma2 ? props_size != 1 : props_size != LZMA_PROPS_SIZE) {
+		if (error != NULL)
+			*error = RW_LZMA_ERR_PROPS;
 		return NULL;
+	}
 
 	dec = calloc(1, sizeof(*dec));
-	if (dec == NULL)
+	if (dec == NULL) {
+		if (error != NULL)
+			*error = RW_LZMA_ERR_MEM;
 		return NULL;
+	}
+	dec->allocator.Alloc = rw_lzma_dec_alloc;
+	dec->allocator.Free = rw_sdk_free;
 	dec->is_lzma2 = lzma2 ? 1 : 0;
 
 	if (dec->is_lzma2) {
 		Lzma2Dec_CONSTRUCT(&dec->lzma2);
 		res = Lzma2Dec_Allocate(&dec->lzma2, (Byte)props[0],
-		    &rw_sdk_allocator);
+		    &dec->allocator);
 		if (res != SZ_OK) {
+			if (error != NULL)
+				*error = dec->limit_exceeded ? RW_LZMA_ERR_LIMIT :
+				    (res == SZ_ERROR_MEM ? RW_LZMA_ERR_MEM :
+				    RW_LZMA_ERR_PROPS);
+			rw_lzma_dec_release(dec->allocated);
 			free(dec);
 			return NULL;
 		}
@@ -65,8 +105,13 @@ rw_lzma_dec_new(int lzma2, const uint8_t *props, size_t props_size)
 	} else {
 		LzmaDec_CONSTRUCT(&dec->lzma1);
 		res = LzmaDec_Allocate(&dec->lzma1, (const Byte *)props,
-		    LZMA_PROPS_SIZE, &rw_sdk_allocator);
+		    LZMA_PROPS_SIZE, &dec->allocator);
 		if (res != SZ_OK) {
+			if (error != NULL)
+				*error = dec->limit_exceeded ? RW_LZMA_ERR_LIMIT :
+				    (res == SZ_ERROR_MEM ? RW_LZMA_ERR_MEM :
+				    RW_LZMA_ERR_PROPS);
+			rw_lzma_dec_release(dec->allocated);
 			free(dec);
 			return NULL;
 		}
@@ -81,9 +126,10 @@ rw_lzma_dec_free(rw_lzma_dec *dec)
 	if (dec == NULL)
 		return;
 	if (dec->is_lzma2)
-		Lzma2Dec_Free(&dec->lzma2, &rw_sdk_allocator);
+		Lzma2Dec_Free(&dec->lzma2, &dec->allocator);
 	else
-		LzmaDec_Free(&dec->lzma1, &rw_sdk_allocator);
+		LzmaDec_Free(&dec->lzma1, &dec->allocator);
+	rw_lzma_dec_release(dec->allocated);
 	free(dec);
 }
 

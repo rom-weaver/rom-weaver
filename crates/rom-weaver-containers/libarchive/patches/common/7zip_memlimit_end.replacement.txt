@@ -1,0 +1,1 @@
+			free_liblzma_decoder(zip);

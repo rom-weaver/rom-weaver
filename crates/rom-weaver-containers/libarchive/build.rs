@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
+const COMMON_PATCH_ROOT: &str = "libarchive/patches/common";
 const LZMA_SDK_PATCH_ROOT: &str = "lzma-sdk/patches";
 const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
 const VENDORED_LZMA_SDK: &str = "lzma-sdk/vendor/C";
@@ -59,6 +60,18 @@ const WASM_PATCH_FILES: &[&str] = &[
     "archive_util_tempdir.original.txt",
     "archive_util_tempdir.replacement.txt",
     "cmakelists_drop_entries.txt",
+];
+const COMMON_PATCH_FILES: &[&str] = &[
+    "7zip_memlimit_state.original.txt",
+    "7zip_memlimit_state.replacement.txt",
+    "7zip_memlimit_sdk.original.txt",
+    "7zip_memlimit_sdk.replacement.txt",
+    "7zip_memlimit_fallback.original.txt",
+    "7zip_memlimit_fallback.replacement.txt",
+    "7zip_memlimit_end.original.txt",
+    "7zip_memlimit_end.replacement.txt",
+    "7zip_memlimit_free.original.txt",
+    "7zip_memlimit_free.replacement.txt",
 ];
 const LZMA_SDK_PATCH_FILES: &[&str] = &[
     "portable/lzma-dec-short-distance-copy.original.txt",
@@ -619,6 +632,12 @@ fn wasm_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
 }
 
 fn emit_vendor_patch_rerun_if_changed(manifest_dir: &Path) {
+    for patch_file in COMMON_PATCH_FILES {
+        println!(
+            "cargo:rerun-if-changed={}",
+            common_patch_path(manifest_dir, patch_file).display()
+        );
+    }
     for patch_file in WASM_PATCH_FILES {
         println!(
             "cargo:rerun-if-changed={}",
@@ -656,6 +675,11 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
     let write_extra = write_extra_enabled();
     add_wasm_archive_write_format_shim(manifest_dir, &staged.join("libarchive"))
         .expect("failed to add libarchive format shim");
+    patch_archive_read_support_format_7zip_memlimit(
+        manifest_dir,
+        &staged.join("libarchive/archive_read_support_format_7zip.c"),
+    )
+    .expect("failed to patch libarchive 7zip decoder memory limits");
     if wasm_target {
         patch_archive_util_tempdir_for_wasm(
             manifest_dir,
@@ -741,6 +765,44 @@ fn replace_file_fragment(
     }
 
     fs::write(target_path, patched)?;
+    Ok(())
+}
+
+fn common_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
+    manifest_dir.join(COMMON_PATCH_ROOT).join(relative_path)
+}
+
+fn patch_archive_read_support_format_7zip_memlimit(
+    manifest_dir: &Path,
+    sevenz_path: &Path,
+) -> std::io::Result<()> {
+    for (name, description) in [
+        ("7zip_memlimit_state", "7zip liblzma reservation state"),
+        ("7zip_memlimit_sdk", "7zip SDK decoder memory limit"),
+        (
+            "7zip_memlimit_fallback",
+            "7zip liblzma fallback memory limit",
+        ),
+        ("7zip_memlimit_end", "7zip liblzma stream-end release"),
+        ("7zip_memlimit_free", "7zip liblzma teardown release"),
+    ] {
+        replace_file_fragment(
+            sevenz_path,
+            &common_patch_path(manifest_dir, &format!("{name}.original.txt")),
+            &common_patch_path(manifest_dir, &format!("{name}.replacement.txt")),
+            description,
+        )?;
+    }
+    let patched = fs::read_to_string(sevenz_path)?;
+    if patched.matches("lzma_end(&(zip->lzstream))").count() != 1 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "7zip liblzma cleanup was not fully patched in {}",
+                sevenz_path.display()
+            ),
+        ));
+    }
     Ok(())
 }
 
