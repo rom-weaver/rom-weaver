@@ -54,7 +54,7 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["fmt", "std"] }
 
-[dev-dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_cmd.workspace = true
 assert_fs.workspace = true
 clap_mangen = "0.3.0"
@@ -65,47 +65,47 @@ tar.workspace = true
 name = "rom-weaver"
 path = "src/main.rs"
 
-[[bin]]
+[[example]]
 name = "rom-weaver-app"
 path = "src/wasm_main.rs"
 required-features = ["wasm-app"]
 
-[[bin]]
+[[example]]
 name = "rom-weaver-typegen"
 path = "src/typegen_main.rs"
 required-features = ["typescript-types"]
 
 [package.metadata.binstall]
-pkg-fmt = "tgz"
+pkg-fmt = "bin"
 bin-dir = "{ bin }{ binary-ext }"
 disabled-strategies = ["quick-install", "compile"]
 
 [package.metadata.binstall.overrides.aarch64-apple-darwin]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-darwin-arm64.tgz"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-darwin-arm64"
 
 [package.metadata.binstall.overrides.x86_64-apple-darwin]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-darwin-x64.tgz"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-darwin-x64"
 
 [package.metadata.binstall.overrides.x86_64-unknown-linux-gnu]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-x64-gnu.tgz"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-x64-gnu"
 
 [package.metadata.binstall.overrides.aarch64-unknown-linux-musl]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-arm64-musl.tgz"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-arm64-musl"
 
 [package.metadata.binstall.overrides.i686-unknown-linux-musl]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-ia32-musl.tgz"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-ia32-musl"
 
 [package.metadata.binstall.overrides.x86_64-unknown-linux-musl]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-x64-musl.tgz"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-linux-x64-musl"
 
 [package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-arm64-msvc.tgz"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-arm64-msvc.exe"
 
 [package.metadata.binstall.overrides.i686-pc-windows-msvc]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-ia32-msvc.tgz"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-ia32-msvc.exe"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
-pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-x64-msvc.tgz"
+pkg-url = "{ repo }/releases/download/v{ version }/rom-weaver-win32-x64-msvc.exe"
 
 [lints]
 workspace = true

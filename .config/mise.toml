@@ -158,11 +158,11 @@ run = "cargo clippy --workspace --all-targets --no-deps -- -D warnings"
 
 [tasks.typegen]
 description = "Regenerate TypeScript bindings from Rust"
-run = "cargo run -p rom-weaver-cli --features typescript-types --bin rom-weaver-typegen -- --write"
+run = "cargo run -p rom-weaver-cli --features typescript-types --example rom-weaver-typegen -- --write"
 
 [tasks.typegen-check]
 description = "Verify TypeScript bindings are up to date"
-run = "cargo run -p rom-weaver-cli --features typescript-types --bin rom-weaver-typegen -- --check"
+run = "cargo run -p rom-weaver-cli --features typescript-types --example rom-weaver-typegen -- --check"
 
 [tasks.manpages]
 description = "Regenerate CLI man pages from Clap definitions"

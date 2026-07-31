@@ -299,32 +299,9 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --clobber
           echo "name=$asset_name" >> "$GITHUB_OUTPUT"
 
-      - name: Upload cargo-binstall archive to GitHub release
-        id: binstall-asset
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          package_path=packages/rom-weaver-cli-platforms/${{ matrix.package }}
-          binary_path="$package_path/bin/rom-weaver"
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            binary_path+=".exe"
-          fi
-          binary_name="$(basename "$binary_path")"
-          asset_name="rom-weaver-${{ matrix.package }}.tgz"
-          archive_dir="$(mktemp -d)"
-          cp "$binary_path" "$archive_dir/$binary_name"
-          tar --create --gzip --file "$asset_name" --directory "$archive_dir" "$binary_name"
-          test "$(tar --list --file "$asset_name")" = "$binary_name"
-          gh release upload "v${{ inputs.version }}" "$asset_name" \
-            --repo "$GITHUB_REPOSITORY" --clobber
-          echo "name=$asset_name" >> "$GITHUB_OUTPUT"
-
-      # These replaced the `.sha256` sidecars that used to ship beside each
-      # asset. The sidecars were written by this same job, so they proved
-      # neither that the download was not corrupted nor where the binary came
-      # from; attestations cover both the loose binary and the cargo-binstall
-      # archive.
+      # This replaced the `.sha256` sidecar that used to ship beside each asset.
+      # The sidecar was written by this same job, so it proved the download was
+      # not corrupted and nothing about where the binary came from.
       #
       # Attestations live in the repository's attestation store, not in the
       # release's asset list, so this adds nothing to the draft and cannot
@@ -334,11 +311,6 @@ jobs:
         uses: ./.github/actions/attest-retry
         with:
           subject-path: ${{ steps.asset.outputs.name }}
-
-      - name: Attest the cargo-binstall archive
-        uses: ./.github/actions/attest-retry
-        with:
-          subject-path: ${{ steps.binstall-asset.outputs.name }}
 
   launcher:
     needs: [platform, cli-assets]
