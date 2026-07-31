@@ -1180,6 +1180,7 @@ const getPatchCardVerdict = (validationState: string | undefined, isDisabled: bo
 
 const PatchCard = ({
   basisSelectVisible,
+  bundleSessionMatches,
   canReorder,
   chainChip,
   handleProps,
@@ -1203,6 +1204,8 @@ const PatchCard = ({
 }: {
   /** Show the input-basis select in the card's Checks drawer. */
   basisSelectVisible?: boolean;
+  /** A loaded bundle's patch list matches this card list; metadata may still be landing. */
+  bundleSessionMatches?: boolean;
   canReorder: boolean;
   /** Plain-language chain verdict for the Checks drawer header readout. */
   chainChip?: { text: string; warn?: boolean } | null;
@@ -1367,7 +1370,7 @@ const PatchCard = ({
           {verdict === "bad" ? (
             <PatchFaultWell message={item.validationMessage} overrideAvailable={overrideAvailable} />
           ) : null}
-          {isDisabled || (staging && !patchExtracting && !meta) ? null : (
+          {isDisabled || (staging && !patchExtracting && !meta) || (bundleSessionMatches && !meta) ? null : (
             <ExtractDrawer
               fileName={item.fileName}
               fileSize={item.fileSize}
@@ -1403,6 +1406,7 @@ const PatchCard = ({
 
 const ApplyPatchListStep = ({
   bundleOutputCheckHint,
+  bundleSessionMatches,
   disabledFlags,
   emptyState,
   fault,
@@ -1422,6 +1426,8 @@ const ApplyPatchListStep = ({
   /** The run has optional/skipped patches: hint on the chain-output card that its
    * expected output only describes the full chain. */
   bundleOutputCheckHint?: boolean;
+  /** A loaded bundle's delivered patch names match the current patch list. */
+  bundleSessionMatches?: boolean;
   disabledFlags?: readonly boolean[];
   /** Fixture shown when no patches (and no embedded/optional patch choices) are present. */
   emptyState?: ReactNode;
@@ -1506,6 +1512,7 @@ const ApplyPatchListStep = ({
         {patches.map((item, index) => (
           <PatchCard
             basisSelectVisible={enabledIndexes.length >= 2 || !!bundleMeta?.[index]?.basis}
+            bundleSessionMatches={bundleSessionMatches}
             canReorder={canReorder}
             chainChip={chainChipText(item, enabledIndexes, localizer)}
             handleProps={reorderList.handleProps(index)}

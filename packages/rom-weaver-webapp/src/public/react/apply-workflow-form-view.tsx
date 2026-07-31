@@ -1232,6 +1232,7 @@ function ApplyWorkflowFormView({
   bundleExpectedRomChecks,
   bundleExport,
   bundleMetaById,
+  bundleSessionMatches,
   bundleRomExpectation,
   bundleTools,
   onBundleMetaChange,
@@ -1255,6 +1256,8 @@ function ApplyWorkflowFormView({
   bundleExpectedRomChecks?: ParsedBundleChecks;
   /** Per-patch bundle metadata (label/description chips), keyed by stable source id. */
   bundleMetaById?: ReadonlyMap<string, BundlePatchMeta>;
+  /** A loaded bundle's delivered patch names match the current patch list. */
+  bundleSessionMatches?: boolean;
   /** Shown while the bundle session waits for the user to supply the expected ROM. */
   bundleRomExpectation?: BundleRomExpectation;
   onBundleMetaChange?: (id: string, updates: Partial<BundlePatchMeta>) => void;
@@ -1616,6 +1619,7 @@ function ApplyWorkflowFormView({
           <ApplyPatchListStep
             bundleMeta={bundleMeta}
             bundleOutputCheckHint={!!bundleTools?.hasOptionalEntries}
+            bundleSessionMatches={bundleSessionMatches}
             disabledFlags={disabledPatchFlags}
             emptyState={patchesNeedsInput}
             fault={applyFailed}
