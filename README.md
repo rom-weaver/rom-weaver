@@ -170,6 +170,9 @@ For a guided explanation, use
 [guided Apply](https://rom-weaver.com/apply?guide=apply),
 [guided Create](https://rom-weaver.com/create?guide=create), or
 [guided Bundle](https://rom-weaver.com/apply?guide=bundle).
+To run the webapp on your own host, see the
+[self-hosting guide](./docs/hosting/self-hosting.md) for the release tarball,
+Docker, and Docker Compose setups.
 
 <a name="self-host-the-webapp"></a>
 
