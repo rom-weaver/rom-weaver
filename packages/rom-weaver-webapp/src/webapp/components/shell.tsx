@@ -570,7 +570,7 @@ const Masthead = ({
                 channelBadgeHref ? (
                   <a
                     aria-label={`Open pull request ${channelBadgePrNumber}`}
-                    className="channel-badge"
+                    className="channel-badge channel-badge-link"
                     href={channelBadgeHref}
                     onClick={(event) => guardExternalClick(event, channelBadgeHref)}
                     rel="noreferrer"

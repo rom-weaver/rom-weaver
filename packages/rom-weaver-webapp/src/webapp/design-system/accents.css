@@ -111,6 +111,30 @@
   .rw-app .channel-badge { padding-inline: var(--sp-xs); font-size: .58rem; letter-spacing: .04em; }
 }
 
+/* A PR badge is an actual destination, so give it link affordance instead of
+   making the clickable text look like another status chip. */
+.rw-app .channel-badge-link {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--thread-text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--thread) 55%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+@media (hover: hover) {
+  .rw-app .channel-badge-link:hover {
+    color: var(--thread);
+    text-decoration-color: var(--thread);
+  }
+}
+.rw-app .channel-badge-link:active {
+  color: var(--thread);
+  text-decoration-color: var(--thread);
+}
+
 /* ── accent picker (settings) ──
    Swatches rather than a <select>: the colour is the choice, and Safari ignores
    option styling outright. The selection ring is --ink, not --thread: the draft
