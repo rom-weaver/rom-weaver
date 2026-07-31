@@ -104,11 +104,13 @@ describe("sample tutorial start", () => {
         downloadLabel="Download a test bundle"
         downloadName="first-weave.zip"
         error=""
+        guideHref="/apply?guide=apply"
         label="Start guided Apply"
         loading={false}
         onStart={onStart}
         onSecondaryStart={onSecondaryStart}
         secondaryLabel="Create a sharable bundle"
+        secondaryHref="/apply?guide=bundle"
       />,
     );
 
@@ -117,11 +119,29 @@ describe("sample tutorial start", () => {
     expect(download.getAttribute("href")).toBe("/first-weave.zip");
     expect(download.hasAttribute("download")).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: /Start guided Apply/ }));
+    const guidedApply = screen.getByRole("link", { name: /Start guided Apply/ });
+    expect(guidedApply.getAttribute("href")).toBe("/apply?guide=apply");
+    fireEvent.click(guidedApply);
     expect(onStart).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: /Create a sharable bundle/ }));
+    const guidedBundle = screen.getByRole("link", { name: /Create a sharable bundle/ });
+    expect(guidedBundle.getAttribute("href")).toBe("/apply?guide=bundle");
+    fireEvent.click(guidedBundle);
     expect(onSecondaryStart).toHaveBeenCalledOnce();
   });
+});
+
+it("removes the guide query when the tutorial ends", () => {
+  window.history.replaceState(null, "", "/apply?guide=apply");
+  const onClose = vi.fn();
+  render(
+    <div className="rw-app">
+      <SampleTutorial loadingBody="Loading." onClose={onClose} ready steps={STEPS} />
+    </div>,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "End guide" }));
+  expect(window.location.search).toBe("");
+  expect(onClose).toHaveBeenCalledOnce();
 });
 
 describe("sample tutorial", () => {

@@ -12,7 +12,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, MouseEvent } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createLogger } from "../../../../lib/logging.ts";
@@ -20,6 +20,7 @@ import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
 import {
   GUIDED_SAMPLE_START_EVENT,
   GUIDED_SAMPLE_VIEW_EVENT,
+  clearGuidedSampleQuery,
   type GuidedSample,
   requestOnboardingDismiss,
 } from "../../guided-sample-start.ts";
@@ -27,6 +28,9 @@ import { useRomWeaverSettings } from "../../settings-context.tsx";
 import { SwapIcon } from "./swap-icon.tsx";
 
 const startLogger = createLogger("sample-tutorial");
+
+const isPlainLeftClick = (event: MouseEvent<HTMLAnchorElement>) =>
+  event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
 
 type SampleTutorialAction =
   | "apply"
@@ -56,6 +60,7 @@ const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismis
     };
     const dismissHiddenGuide = (event: Event) => {
       if (!(event instanceof CustomEvent) || event.detail === ownerView) return;
+      clearGuidedSampleQuery();
       onDismissRef.current();
     };
     window.addEventListener(GUIDED_SAMPLE_START_EVENT, startRequestedGuide);
@@ -197,11 +202,13 @@ const SampleTutorialStart = ({
   downloadLabel,
   downloadName,
   error,
+  guideHref,
   label,
   loading,
   onStart,
   secondaryLabel,
   onSecondaryStart,
+  secondaryHref,
   startAction = "apply",
   secondaryAction = "package",
 }: {
@@ -209,11 +216,13 @@ const SampleTutorialStart = ({
   downloadLabel: string;
   downloadName: string;
   error: string;
+  guideHref: string;
   label: string;
   loading: boolean;
   onStart: () => void;
   secondaryLabel?: string;
   onSecondaryStart?: () => void;
+  secondaryHref?: string;
   /** Icons for the guided actions, keyed into the tutorial's action icon set. */
   startAction?: SampleTutorialAction;
   secondaryAction?: SampleTutorialAction;
@@ -287,31 +296,39 @@ const SampleTutorialStart = ({
           <span aria-hidden="true" className="sample-tutorial-start-head mono">
             Get started
           </span>
-          <button
+          <a
             aria-busy={loading}
+            aria-disabled={loading || undefined}
             className="sample-tutorial-start-action sample-tutorial-start-primary"
-            disabled={loading}
-            onClick={onStart}
-            type="button"
+            href={guideHref}
+            onClick={(event) => {
+              if (!isPlainLeftClick(event)) return;
+              event.preventDefault();
+              if (!loading) onStart();
+            }}
           >
             <span aria-hidden="true" className="sample-tutorial-start-action-icon">
               <StartIcon />
             </span>
             {loading ? "Loading practice files…" : label}
-          </button>
-          {secondaryLabel && onSecondaryStart ? (
-            <button
+          </a>
+          {secondaryLabel && onSecondaryStart && secondaryHref ? (
+            <a
               aria-busy={loading}
+              aria-disabled={loading || undefined}
               className="sample-tutorial-start-action sample-tutorial-start-secondary"
-              disabled={loading}
-              onClick={onSecondaryStart}
-              type="button"
+              href={secondaryHref}
+              onClick={(event) => {
+                if (!isPlainLeftClick(event)) return;
+                event.preventDefault();
+                if (!loading) onSecondaryStart();
+              }}
             >
               <span aria-hidden="true" className="sample-tutorial-start-action-icon">
                 <SecondaryIcon />
               </span>
               {loading ? "Loading practice files…" : secondaryLabel}
-            </button>
+            </a>
           ) : null}
           <a className="sample-tutorial-start-action sample-tutorial-start-download" download href={href}>
             <Download aria-hidden="true" />
@@ -362,6 +379,10 @@ const SampleTutorial = ({
   const motionRef = useRef<Animation | null>(null);
   const arrivingRef = useRef(false);
   const step = steps[stepIndex];
+  const endGuide = () => {
+    clearGuidedSampleQuery();
+    onClose();
+  };
   // Resolved once: re-querying per render hands createPortal a different
   // container the moment .rw-app appears, which tears the whole overlay down
   // and rebuilds it - dropping focus and the live region instead of updating.
@@ -714,7 +735,7 @@ const SampleTutorial = ({
                 // A second press mid-handoff would cancel the exit the first one
                 // started, stranding the card invisible on a step it never left.
                 if (moving) return;
-                if (finalStep) onClose();
+                if (finalStep) endGuide();
                 else beginMove(() => setStepIndex((current) => current + 1));
               }}
               type="button"
@@ -722,7 +743,7 @@ const SampleTutorial = ({
               {finalStep ? "Done" : "Continue"}
             </button>
           ) : null}
-          <button className="btn ghost slim" onClick={onClose} type="button">
+          <button className="btn ghost slim" onClick={endGuide} type="button">
             End guide
           </button>
         </div>
