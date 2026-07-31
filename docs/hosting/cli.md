@@ -797,6 +797,9 @@ but not applied, and PDS is unsupported.
 
 ### Container and compression formats
 
+For a shorter guide focused on everyday archive files, see
+[Archive formats](../usage/formats.md).
+
 | Format | Aliases | Extensions | Probe | Extract | Create |
 | --- | --- | --- | :---: | :---: | :---: |
 | ZIP | none | `.zip` | yes | yes | yes |

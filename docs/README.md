@@ -18,6 +18,8 @@ Choose the guide that matches what you are trying to do.
   samples, installation, self-hosting, every guide, and quick answers.
 - [Browser usage](./usage/get-started.md): what a patch is and one
   safe worked example with the included homebrew files.
+- [Archive formats](./usage/formats.md): which archives and compressed files
+  rom-weaver can open and which formats it can create.
 - [Apply patches](./usage/apply-rom-patches.md): the complete Weave workflow,
   with focused screenshots for desktop, mobile, light, and dark themes.
 - [Create patches](./usage/create-rom-patches.md): compare Original and
