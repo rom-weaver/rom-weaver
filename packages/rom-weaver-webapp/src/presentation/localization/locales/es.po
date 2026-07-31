@@ -26,12 +26,12 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 #~ msgid "ui.output.verified"
-#~ msgstr "El resultado tejido se verificará contra la salida esperada."
+#~ msgstr "El resultado aplicado se verificará contra la salida esperada."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
-msgstr "“{patch}” espera que “{predecessor}” se teja primero."
+msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -601,17 +601,17 @@ msgstr "usando los datos de deshacer del propio parche —"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.verifiedDuringWeave"
-msgstr "se verifica durante el tejido"
+msgstr "se verifica durante la aplicación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.step.apply"
-msgstr "Tejer"
+msgstr "Aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_APPLY_FAILED"
-msgstr "No se pudo tejer el parche."
+msgstr "No se pudo aplicar el parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

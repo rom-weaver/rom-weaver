@@ -178,7 +178,7 @@ export const waitForApplyOutcome = async () => {
     if (!(applyButton instanceof HTMLButtonElement)) return null;
     const isDownloadReady = !applyButton.disabled && (applyButton.textContent || "").includes("Download");
     if (isDownloadReady) return { kind: "download" };
-    const canTriggerApply = !applyButton.disabled && (applyButton.textContent || "").toLowerCase().includes("weave");
+    const canTriggerApply = !applyButton.disabled && (applyButton.textContent || "").toLowerCase().includes("apply");
     if (canTriggerApply && !hasStagingProgress()) applyButton.click();
     return null;
   }, 60000);

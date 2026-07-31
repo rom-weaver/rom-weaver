@@ -486,7 +486,7 @@ const applyPatchesToAsset = async ({
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
   const patchLabel =
     patchNames.length === 1 ? patchNames[0] || "patch" : `${patchNames.length || assetPatches.length} patches`;
-  const applyLabel = `Weaving ${patchLabel} into ${asset.fileName || "ROM"}`;
+  const applyLabel = `Applying ${patchLabel} to ${asset.fileName || "ROM"}`;
   const workerOutput = (await applyPatchInRuntime({
     input: toWorkerSourceRef(asset.file, asset.fileName || "input.bin"),
     logLevel: getApplyLogLevel(options),
@@ -553,7 +553,7 @@ const applyPreparedPatches = async ({
     });
     return { applyTimeMs, hasApplyTimeMs, patchedById, targets };
   }
-  deps.reportProgress(options, { label: "Weaving patch...", percent: null, stage: "apply" });
+  deps.reportProgress(options, { label: "Applying patch...", percent: null, stage: "apply" });
   targets.push(
     ...(await traceWorkflowStageBlock(
       options,
@@ -569,7 +569,7 @@ const applyPreparedPatches = async ({
   );
   const patchesByTarget = groupPatchesByTarget(targets, patches);
   const applyPatchInRuntime = runtime.patch?.applyPatch;
-  if (!applyPatchInRuntime) throw new Error("Patch worker support is required for weave workflows");
+  if (!applyPatchInRuntime) throw new Error("Patch worker support is required for apply workflows");
   for (const asset of assets) {
     const assetPatches = patchesByTarget.get(asset.id);
     if (!assetPatches?.length) continue;

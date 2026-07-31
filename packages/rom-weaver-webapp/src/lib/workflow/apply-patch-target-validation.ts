@@ -232,8 +232,8 @@ const applyPlanValidationResult = <TSource>(
       (status === "valid"
         ? "Patch validation passed"
         : status === "invalid"
-          ? "Patch cannot be woven into this ROM"
-          : "Input state is only provable during the weave"),
+          ? "Patch cannot be applied to this ROM"
+          : "Input state is only provable during apply"),
     status,
   });
   prepared.entry.stage.state.chainVerdict = {
@@ -260,7 +260,7 @@ const applyPerPatchValidationResult = <TSource>(
   applyPatchVerdict(prepared.entry.stage, prepared.entry.target, validationKey, startedAt, {
     message:
       verdict.message ||
-      (verdict.status === "passed" ? "Patch validation passed" : "Patch cannot be woven into this ROM"),
+      (verdict.status === "passed" ? "Patch validation passed" : "Patch cannot be applied to this ROM"),
     status: verdict.status === "passed" ? "valid" : "invalid",
   });
 };

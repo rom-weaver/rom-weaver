@@ -228,7 +228,7 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
       ["package", "Bundle"],
       ["apply", "Apply & download"],
     ],
-    body: "Choose the output name, format, compression, header, and bundle settings. Then press WEAVE & DOWNLOAD to apply both patches.",
+    body: "Choose the output name, format, compression, header, and bundle settings. Then press APPLY & DOWNLOAD to apply both patches.",
     cta: ".btn.run",
     openDrawers: true,
     placement: "top",
@@ -1161,10 +1161,10 @@ const BundleOutputFields = ({
 }) => {
   const exportTypeInfo = {
     items: [
-      "A rom-weaver bundle is a portable recipe for weaving a specific patch chain into a ROM; it is not a pre-patched ROM.",
+      "A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM; it is not a pre-patched ROM.",
       "The required rom-weaver-bundle.json index contains the schema version, optional ROM description/checks, ordered patch entries, and optional output defaults/checks. Patch entries carry their sources, selections, header rules, and expected ROM-state checks.",
       "The archive holds that index plus the patch files. The “+ ROM” variants also include the original ROM, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
-      "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player weaves it.",
+      "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player applies it.",
     ],
     summary:
       "Exports this session as a distributable rom-weaver bundle: a portable patch recipe defined by rom-weaver-bundle.json.",
@@ -1205,7 +1205,7 @@ const renderApplyTimingMeta = (applyDone: boolean, applyTiming?: string, compres
       <>
         {applyTiming ? (
           <span className="rb mono done-chip">
-            <span className="k">Weave</span>
+            <span className="k">Apply</span>
             <span className="t">{applyTiming}</span>
           </span>
         ) : null}
@@ -1221,7 +1221,7 @@ const renderApplyTimingMeta = (applyDone: boolean, applyTiming?: string, compres
   if (!applyTiming) return undefined;
   return (
     <span className="rb mono">
-      <span className="k">Weave</span>
+      <span className="k">Apply</span>
       <span className="t">{applyTiming}</span>
     </span>
   );
@@ -1561,7 +1561,7 @@ function ApplyWorkflowFormView({
                   <li>chd, rvz/wia/gcz, and z3ds files are decompressed before patching.</li>
                   <li>Nested archives (7z in rar, chd in 7z, …) are handled recursively.</li>
                   <li>
-                    A rom-weaver bundle is a portable recipe for weaving a specific patch chain into a ROM. Its{" "}
+                    A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM. Its{" "}
                     <code>rom-weaver-bundle.json</code> file is the required index. The JSON contains the schema
                     version, optional ROM description/checks, ordered patch entries, and optional output
                     defaults/checks.
@@ -1696,7 +1696,7 @@ function ApplyWorkflowFormView({
             num="0x04"
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
-            title="Weave"
+            title="Apply"
             woven={applyDone || running}
           />
         </>

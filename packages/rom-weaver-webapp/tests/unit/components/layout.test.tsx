@@ -25,7 +25,7 @@ describe("StepSection", () => {
 
   it("flags woven and faulted stages", () => {
     const { container } = render(
-      <StepSection fault num="0x04" title="Weave" woven>
+      <StepSection fault num="0x04" title="Apply" woven>
         <div />
       </StepSection>,
     );

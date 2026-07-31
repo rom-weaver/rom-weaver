@@ -43,8 +43,8 @@ import {
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS = [
-  // "Weave": the tab both applies patch chains and edits/exports them as bundles.
-  { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Weave" },
+  // "Apply": the tab both applies patch chains and edits/exports them as bundles.
+  { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
   // Reference rather than a workflow, but it earns a slot because the people it
   // is written for are the least likely to go looking in an icon tray. It is

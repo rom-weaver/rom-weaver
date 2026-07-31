@@ -64,7 +64,7 @@ function PatcherPrimaryAction({
 
   return (
     <ProgressActionButton
-      cancelLabel="Cancel weaving"
+      cancelLabel="Cancel applying"
       disabled={state.applyButton.disabled || !!disableRun}
       icon={<ApplyBandaidIcon className="apply-button-icon" />}
       id="rom-weaver-button-apply"
