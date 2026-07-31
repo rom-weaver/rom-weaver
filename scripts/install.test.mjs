@@ -53,7 +53,7 @@ esac
 // real bytes is the point: install.sh looks for a fixed string rather than
 // parsing, so a hand-written response could agree with the code while
 // disagreeing with GitHub.
-const REAL_RESPONSE = readFileSync(resolve("test/fixtures/attestations-response.json"), "utf8");
+const REAL_RESPONSE = readFileSync(resolve("tests/fixtures/attestations-response.json"), "utf8");
 
 // What the same endpoint returns for a repository that has attestations but none
 // for these bytes - also captured verbatim, from `cli/cli`. The blank line
