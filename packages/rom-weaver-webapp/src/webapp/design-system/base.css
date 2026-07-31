@@ -1,10 +1,11 @@
 /* ── base ── */
 .rw-app *, .rw-app *::before, .rw-app *::after, .dlg *, .dlg *::before, .dlg *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
-/* The prerendered boot shell (aria-busy until React mounts) must paint with its
-   panel settled while its ambient loops keep moving. Hydration preserves those
-   loops, then the first client layout fast-forwards entry animations. */
-#webapp-root[aria-busy="true"] #panel-patcher .workflow-body {
+/* The prerendered boot shell must stay settled through hydration. Releasing
+   aria-busy and starting panel-in in separate steps lets standalone WebKit
+   paint a visible upward jump. */
+#webapp-root[aria-busy="true"] #panel-patcher .workflow-body,
+#webapp-root[data-shell-settled="true"] #panel-patcher .workflow-body {
   animation: none !important;
   /* The prerendered empty bench must not inherit the mobile card scroll reserve.
      Keep this first-paint fallback independent of :has(), so older standalone

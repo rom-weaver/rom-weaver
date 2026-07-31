@@ -174,6 +174,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         await page.setViewportSize({ height: 852, width: 393 });
       }
 
+      let initialShellLayout = null;
       try {
         const navigation = page.goto(`${baseUrl}${testCase.path}`, { waitUntil: "domcontentloaded" });
         if (testCase.replayClick) {
@@ -190,6 +191,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
             const links = document.querySelector(".site-footer-links")?.getBoundingClientRect();
             const status = document.querySelector(".site-footer-status")?.getBoundingClientRect();
+            const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
             return {
               footerInFirstViewport:
                 !!footer &&
@@ -200,8 +202,11 @@ const runHydrationAudit = async (createContext, baseUrl) => {
                 !!status &&
                 status.bottom <= window.innerHeight,
               prerendered: root?.hasAttribute("aria-busy") === true,
+              footerTop: footer?.top ?? null,
+              workflowTop: workflow?.top ?? null,
             };
           });
+          initialShellLayout = initialShell;
           if (!(initialShell.prerendered && initialShell.footerInFirstViewport)) {
             throw new Error(`initial shell footer is not visible: ${JSON.stringify(initialShell)}`);
           }
@@ -219,8 +224,12 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
         );
 
-        const result = await page.evaluate(() => {
+        const result = await page.evaluate((initialLayout) => {
           const audit = window.__romWeaverHydrationAudit;
+          const root = document.getElementById("webapp-root");
+          const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
+          const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
+          const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
           return {
             finalTheme: document.documentElement.dataset.theme || "",
             finalView: document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") || "",
@@ -230,8 +239,14 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             runtimeTexts: audit.runtimeTexts,
             threadRetained: document.querySelector(".masthead-threads") === audit.threads,
             threadTexts: audit.threadTexts,
+            shellHandoffStable:
+              !initialLayout ||
+              (Math.abs((footer?.top ?? 0) - initialLayout.footerTop) <= 0.5 &&
+                Math.abs((workflow?.top ?? 0) - initialLayout.workflowTop) <= 0.5),
+            shellSettled: root?.dataset.shellSettled === "true",
+            panelAnimation: workflowStyle ? getComputedStyle(workflowStyle).animationName : "",
           };
-        });
+        }, initialShellLayout);
         const problems = [];
         if (!result.threadRetained) problems.push("thread node was replaced");
         if (!result.runtimeRetained) problems.push("runtime node was replaced");
@@ -243,6 +258,10 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           problems.push(`theme changed: ${result.initialTheme} -> ${result.finalTheme}`);
         if (result.initialView !== testCase.initialView || result.finalView !== testCase.finalView)
           problems.push(`view changed unexpectedly: ${result.initialView} -> ${result.finalView}`);
+        if (testCase.replayClick && !result.shellHandoffStable)
+          problems.push("prerendered shell moved during hydration");
+        if (testCase.replayClick && (!result.shellSettled || result.panelAnimation !== "none"))
+          problems.push(`prerendered panel was not settled: ${JSON.stringify(result)}`);
         if (failures.length) problems.push(`browser errors: ${failures.join(" | ")}`);
         if (problems.length)
           throw new Error(
