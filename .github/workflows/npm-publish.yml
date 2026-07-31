@@ -171,6 +171,59 @@ jobs:
         shell: bash
         run: node scripts/ci/npm-publish-package.mjs --dry-run packages/rom-weaver-cli-platforms/${{ matrix.package }}
 
+  cli-assets:
+    name: Package CLI documentation
+    needs: platform-build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config zip
+
+      - name: Generate CLI documentation
+        run: cargo run --locked -p rom-weaver-cli --example generate_manpages -- --write
+
+      - name: Package CLI documentation
+        run: |
+          tar -czf rom-weaver-cli-assets.tar.gz -C docs man completions
+          (cd docs && zip -qr ../rom-weaver-cli-assets.zip man completions)
+
+      - name: Upload CLI documentation artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-assets
+          path: |
+            rom-weaver-cli-assets.tar.gz
+            rom-weaver-cli-assets.zip
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+      - name: Upload CLI documentation release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "v${{ inputs.version }}" rom-weaver-cli-assets.tar.gz rom-weaver-cli-assets.zip --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Attest CLI documentation
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: rom-weaver-cli-assets.tar.gz
+
+      - name: Attest Windows CLI documentation
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: rom-weaver-cli-assets.zip
+
   # A matrix dependency is a barrier over every matrix entry. No registry
   # publish starts unless all nine downloaded platform artifacts passed the
   # same publish helper in dry-run mode on their target operating systems.
@@ -262,7 +315,7 @@ jobs:
           subject-path: ${{ steps.asset.outputs.name }}
 
   launcher:
-    needs: platform
+    needs: [platform, cli-assets]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -277,6 +330,15 @@ jobs:
 
       - name: Install npm dependencies
         run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+
+      - name: Add generated CLI documentation to launcher package
+        uses: actions/download-artifact@v8
+        with:
+          name: cli-assets
+          path: .tmp/cli-assets
+
+      - name: Extract generated CLI documentation
+        run: tar -xzf .tmp/cli-assets/rom-weaver-cli-assets.tar.gz -C docs
 
       - name: Publish launcher package
         run: node scripts/ci/npm-publish-package.mjs

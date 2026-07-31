@@ -30,7 +30,19 @@ $env:ROM_WEAVER_SKIP_ATTESTATION = '1'
 function Invoke-WebRequest {
   param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
   Add-Content -Path '${urlLog}' -Value $Uri
-  Set-Content -Path $OutFile -Value 'binary' -NoNewline
+  if ($Uri -like '*cli-assets.zip') {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::Open($OutFile, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+      $entry = $archive.CreateEntry('completions/rom-weaver.ps1')
+      $writer = [System.IO.StreamWriter]::new($entry.Open())
+      try { $writer.Write('completion') } finally { $writer.Dispose() }
+    } finally {
+      $archive.Dispose()
+    }
+  } else {
+    Set-Content -Path $OutFile -Value 'binary' -NoNewline
+  }
 }
 & '${resolve("install.ps1")}'
 `;
@@ -48,9 +60,11 @@ test("installs the binary", { skip: hasPowerShell ? false : "pwsh not available"
 
     const target = join(installDirectory, "rom-weaver.exe");
     assert.equal(readFileSync(target, "utf8"), "binary");
+    assert.equal(readFileSync(join(installDirectory, "completions/rom-weaver.ps1"), "utf8"), "completion");
     assert.ok(output.includes(`Installed rom-weaver to ${target}`));
     assert.deepEqual(readFileSync(urlLog, "utf8").trim().split("\n"), [
       `https://github.com/rom-weaver/rom-weaver/releases/latest/download/${asset}`,
+      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-cli-assets.zip",
     ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -98,7 +112,19 @@ const PROVENANCE_PREAMBLE = (installDirectory) => `
 $env:ROM_WEAVER_INSTALL_DIR = '${installDirectory}'
 function Invoke-WebRequest {
   param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
-  Set-Content -Path $OutFile -Value 'binary' -NoNewline
+  if ($Uri -like '*cli-assets.zip') {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::Open($OutFile, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+      $entry = $archive.CreateEntry('completions/rom-weaver.ps1')
+      $writer = [System.IO.StreamWriter]::new($entry.Open())
+      try { $writer.Write('completion') } finally { $writer.Dispose() }
+    } finally {
+      $archive.Dispose()
+    }
+  } else {
+    Set-Content -Path $OutFile -Value 'binary' -NoNewline
+  }
 }
 `;
 

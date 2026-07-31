@@ -22,6 +22,7 @@ $platformArchitecture = switch ($architecture) {
 }
 
 $asset = "rom-weaver-win32-$platformArchitecture-msvc.exe"
+$docsAsset = 'rom-weaver-cli-assets.zip'
 $releaseUrl = if ($version -eq 'latest') {
   "https://github.com/$repo/releases/latest/download"
 } else {
@@ -120,10 +121,26 @@ try {
     }
   }
 
+  $docsPath = Join-Path $tempDir $docsAsset
+  try {
+    Invoke-WebRequest -Uri "$releaseUrl/$docsAsset" -OutFile $docsPath -UseBasicParsing
+  } catch {
+    Write-Warning 'CLI documentation asset unavailable; installing the binary only'
+    $docsPath = $null
+  }
+
   New-Item -ItemType Directory -Path $installDir -Force | Out-Null
   $target = Join-Path $installDir 'rom-weaver.exe'
   Move-Item -Path $binaryPath -Destination $target -Force
   Write-Host "Installed rom-weaver to $target"
+  if ($docsPath) {
+    $docsDir = Join-Path $tempDir 'docs'
+    Expand-Archive -LiteralPath $docsPath -DestinationPath $docsDir -Force
+    $completionDir = Join-Path $installDir 'completions'
+    New-Item -ItemType Directory -Path $completionDir -Force | Out-Null
+    Copy-Item (Join-Path $docsDir 'completions/rom-weaver.ps1') (Join-Path $completionDir 'rom-weaver.ps1') -Force
+    Write-Host "Installed PowerShell completion to $(Join-Path $completionDir 'rom-weaver.ps1')"
+  }
 } finally {
   Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
 }

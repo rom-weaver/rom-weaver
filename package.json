@@ -53,6 +53,7 @@
   "files": [
     "bin/rom-weaver.mjs",
     "docs/man/*.1",
+    "docs/completions/*",
     "LICENSE"
   ],
   "publishConfig": {

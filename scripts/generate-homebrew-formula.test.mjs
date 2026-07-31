@@ -21,6 +21,10 @@ test("generates a formula from release checksums", () => {
         `${digit.repeat(64)}  rom-weaver-${platform}\n`,
       );
     }
+    writeFileSync(
+      join(checksums, "rom-weaver-cli-assets.tar.gz.sha256"),
+      `${"e".repeat(64)}  rom-weaver-cli-assets.tar.gz\n`,
+    );
 
     const output = join(directory, "Formula", "rom-weaver.rb");
     execFileSync(process.execPath, [
@@ -39,6 +43,11 @@ test("generates a formula from release checksums", () => {
     assert.match(formula, new RegExp(`sha256 "${"b".repeat(64)}"`));
     assert.match(formula, new RegExp(`sha256 "${"c".repeat(64)}"`));
     assert.match(formula, new RegExp(`sha256 "${"d".repeat(64)}"`));
+    assert.match(formula, /rom-weaver-cli-assets\.tar\.gz/);
+    assert.match(formula, new RegExp(`sha256 "${"e".repeat(64)}"`));
+    assert.match(formula, /bash_completion\.install/);
+    assert.match(formula, /zsh_completion\.install/);
+    assert.match(formula, /fish_completion\.install/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

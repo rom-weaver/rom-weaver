@@ -10,6 +10,20 @@ const writeExecutable = (path, source) => {
   chmodSync(path, 0o755);
 };
 
+const createDocsArchive = (directory) => {
+  const source = join(directory, "docs-source");
+  mkdirSync(join(source, "man"), { recursive: true });
+  mkdirSync(join(source, "completions"), { recursive: true });
+  writeFileSync(join(source, "man", "rom-weaver.1"), "man page\n");
+  writeFileSync(join(source, "completions", "rom-weaver.bash"), "bash completion\n");
+  writeFileSync(join(source, "completions", "_rom-weaver"), "zsh completion\n");
+  writeFileSync(join(source, "completions", "rom-weaver.fish"), "fish completion\n");
+  writeFileSync(join(source, "completions", "rom-weaver.elv"), "elvish completion\n");
+  const archive = join(directory, "cli-assets.tar.gz");
+  execFileSync("tar", ["-czf", archive, "-C", source, "man", "completions"]);
+  return archive;
+};
+
 const DIGEST = "b".repeat(64);
 
 // install.sh hashes the download to build the attestation URL. There is no
@@ -43,6 +57,7 @@ JSON
     fi
     printf '%s' "\${ATTESTATION_STATUS:-200}"
     ;;
+  *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
   *) echo binary > "$output" ;;
 esac
 `;
@@ -70,6 +85,7 @@ const setUpDarwinInstall = (directory, options = {}) => {
   writeExecutable(join(bin, "uname"), '#!/bin/sh\ncase "$1" in\n  -s) echo Darwin ;;\n  -m) echo arm64 ;;\nesac\n');
   writeExecutable(join(bin, "curl"), curlStub(attestation));
   writeExecutable(join(bin, "sha256sum"), SHA256SUM_STUB);
+  createDocsArchive(directory);
   return bin;
 };
 
@@ -87,6 +103,7 @@ const runInstall = (directory, bin, environment = {}) => {
       HOME: directory,
       PATH: `${bin}:${extra ? `${extra}:` : ""}/usr/bin:/bin`,
       ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
+      CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
       ...rest,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -103,6 +120,14 @@ test("installs the binary for the host platform", () => {
     const output = runInstall(directory, bin, { SHELL: "/bin/zsh" });
 
     assert.equal(readFileSync(join(installDirectory, "rom-weaver"), "utf8"), "binary\n");
+    assert.equal(readFileSync(join(directory, ".local/share/man/man1/rom-weaver.1"), "utf8"), "man page\n");
+    assert.equal(
+      readFileSync(join(directory, ".local/share/bash-completion/completions/rom-weaver"), "utf8"),
+      "bash completion\n",
+    );
+    assert.equal(readFileSync(join(directory, ".zfunc/_rom-weaver"), "utf8"), "zsh completion\n");
+    assert.equal(readFileSync(join(directory, ".config/fish/completions/rom-weaver.fish"), "utf8"), "fish completion\n");
+    assert.equal(readFileSync(join(directory, ".config/elvish/lib/rom-weaver.elv"), "utf8"), "elvish completion\n");
     assert.ok(output.includes(`Installed rom-weaver to ${installDirectory}/rom-weaver`));
     assert.ok(
       output.includes(
@@ -118,6 +143,7 @@ test("installs the binary for the host platform", () => {
       // `predicate_type` is asserted here because dropping it silently weakens
       // the check: GitHub's automatic release attestation would answer instead.
       `https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${DIGEST}?predicate_type=https://slsa.dev/provenance/v1`,
+      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-cli-assets.tar.gz",
     ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -135,6 +161,7 @@ test("selects Linux musl assets by architecture", () => {
       const bin = join(directory, "bin");
       const curlLog = join(directory, "curl.log");
       mkdirSync(bin);
+      createDocsArchive(directory);
       writeExecutable(
         join(bin, "uname"),
         `#!/bin/sh
@@ -158,6 +185,7 @@ done
 echo "$url" >> "$CURL_LOG"
 case "$url" in
   *.sha256) echo "${"a".repeat(64)}  rom-weaver-${platform}" > "$output" ;;
+  *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
   *) echo binary > "$output" ;;
 esac
 `,
@@ -171,6 +199,7 @@ esac
           HOME: directory,
           PATH: `${bin}:/usr/bin:/bin`,
           ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
+          CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
           // This test is about asset selection; the provenance branches have
           // their own coverage and would only add noise to its output.
           ROM_WEAVER_SKIP_ATTESTATION: "1",

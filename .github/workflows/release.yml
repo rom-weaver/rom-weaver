@@ -656,6 +656,11 @@ jobs:
             printf '%s  rom-weaver-%s\n' "$checksum" "$platform" > \
               "checksums/rom-weaver-$platform.sha256"
           done
+          curl --fail --location --output rom-weaver-cli-assets.tar.gz \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/rom-weaver-cli-assets.tar.gz"
+          printf '%s  rom-weaver-cli-assets.tar.gz\n' \
+            "$(sha256sum rom-weaver-cli-assets.tar.gz | cut -d ' ' -f 1)" > \
+            checksums/rom-weaver-cli-assets.tar.gz.sha256
 
       - name: Checkout Homebrew tap
         uses: actions/checkout@v7

@@ -230,6 +230,7 @@ scoop install rom-weaver
 
 Downloads the latest release to `~/.local/bin` and verifies its checksum.
 Override with `ROM_WEAVER_INSTALL_DIR` or pin with `ROM_WEAVER_VERSION`.
+The script also installs manpages and shell completions for the current user.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
@@ -242,6 +243,7 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 <summary>Install script (Windows)</summary>
 
 The same thing for PowerShell, installing to `%LOCALAPPDATA%\rom-weaver\bin`.
+It also installs the PowerShell completion beside the executable.
 
 ```powershell
 irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex

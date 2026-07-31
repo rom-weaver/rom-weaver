@@ -6,6 +6,7 @@ use std::{
 };
 
 use clap::Command;
+use clap_complete::{Shell, generate};
 
 fn assert_documented(command: &Command, path: &[String]) {
     let invocation = path.join(" ");
@@ -82,6 +83,28 @@ fn output_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/man")
 }
 
+fn completions_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/completions")
+}
+
+fn expected_completions() -> BTreeMap<String, Vec<u8>> {
+    [
+        (Shell::Bash, "rom-weaver.bash"),
+        (Shell::Zsh, "_rom-weaver"),
+        (Shell::Fish, "rom-weaver.fish"),
+        (Shell::PowerShell, "rom-weaver.ps1"),
+        (Shell::Elvish, "rom-weaver.elv"),
+    ]
+    .into_iter()
+    .map(|(shell, name)| {
+        let mut command = rom_weaver_app::cli_command();
+        let mut rendered = Vec::new();
+        generate(shell, &mut command, "rom-weaver", &mut rendered);
+        (name.to_string(), rendered)
+    })
+    .collect()
+}
+
 fn write_pages(output_dir: &Path, pages: &BTreeMap<String, Vec<u8>>) -> std::io::Result<()> {
     fs::create_dir_all(output_dir)?;
     for entry in fs::read_dir(output_dir)? {
@@ -119,38 +142,91 @@ fn check_pages(output_dir: &Path, pages: &BTreeMap<String, Vec<u8>>) -> std::io:
     Ok(names_match && contents_match)
 }
 
+fn write_completions(
+    output_dir: &Path,
+    completions: &BTreeMap<String, Vec<u8>>,
+) -> std::io::Result<()> {
+    fs::create_dir_all(output_dir)?;
+    for entry in fs::read_dir(output_dir)? {
+        let path = entry?.path();
+        let is_expected = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| completions.contains_key(name));
+        if path.is_file() && !is_expected {
+            fs::remove_file(path)?;
+        }
+    }
+    for (name, contents) in completions {
+        fs::write(output_dir.join(name), contents)?;
+    }
+    Ok(())
+}
+
+fn check_completions(
+    output_dir: &Path,
+    completions: &BTreeMap<String, Vec<u8>>,
+) -> std::io::Result<bool> {
+    let actual_names = if output_dir.is_dir() {
+        fs::read_dir(output_dir)?
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    let names_match = actual_names.len() == completions.len()
+        && actual_names
+            .iter()
+            .all(|name| completions.contains_key(name));
+    let contents_match = completions.iter().all(|(name, expected)| {
+        fs::read(output_dir.join(name)).is_ok_and(|actual| actual == *expected)
+    });
+    Ok(names_match && contents_match)
+}
+
 fn main() -> ExitCode {
     let mode = env::args().nth(1).unwrap_or_else(|| "--write".to_string());
     let pages = expected_pages();
     let output_dir = output_dir();
+    let completions = expected_completions();
+    let completions_dir = completions_dir();
     match mode.as_str() {
-        "--write" => match write_pages(&output_dir, &pages) {
-            Ok(()) => {
+        "--write" => match (
+            write_pages(&output_dir, &pages),
+            write_completions(&completions_dir, &completions),
+        ) {
+            (Ok(()), Ok(())) => {
                 println!(
-                    "generated {} man pages in {}",
+                    "generated {} man pages and {} shell completions",
                     pages.len(),
-                    output_dir.display()
+                    completions.len()
                 );
                 ExitCode::SUCCESS
             }
-            Err(error) => {
-                eprintln!("failed to generate man pages: {error}");
+            (Err(error), _) | (_, Err(error)) => {
+                eprintln!("failed to generate CLI documentation: {error}");
                 ExitCode::FAILURE
             }
         },
-        "--check" => match check_pages(&output_dir, &pages) {
-            Ok(true) => {
-                println!("{} generated man pages are up to date", pages.len());
+        "--check" => match (
+            check_pages(&output_dir, &pages),
+            check_completions(&completions_dir, &completions),
+        ) {
+            (Ok(true), Ok(true)) => {
+                println!(
+                    "{} generated man pages and {} shell completions are up to date",
+                    pages.len(),
+                    completions.len()
+                );
                 ExitCode::SUCCESS
             }
-            Ok(false) => {
-                eprintln!(
-                    "generated man pages are stale; run `cargo run -p rom-weaver-cli --example generate_manpages -- --write`"
-                );
+            (Ok(false), _) | (_, Ok(false)) => {
+                eprintln!("generated CLI documentation is stale; run `mise run manpages`");
                 ExitCode::FAILURE
             }
-            Err(error) => {
-                eprintln!("failed to check generated man pages: {error}");
+            (Err(error), _) | (_, Err(error)) => {
+                eprintln!("failed to check generated CLI documentation: {error}");
                 ExitCode::FAILURE
             }
         },
