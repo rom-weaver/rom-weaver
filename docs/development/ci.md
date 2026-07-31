@@ -1293,9 +1293,9 @@ The installers' fallback is duplicated into that workflow rather than invoked,
 because `install.sh` verifies only an asset it downloaded from a release and the
 dry run's subject is not one. `scripts/install.test.mjs` covers the same code
 against a captured real API response
-(`test/fixtures/attestations-response.json`), so the duplication is checked from
-both ends: the fixture proves the shell agrees with GitHub's response shape, and
-the dry run proves it agrees with a live attestation.
+(`tests/fixtures/attestations-response.json`), so the duplication is checked
+from both ends: the fixture proves the shell agrees with GitHub's response
+shape, and the dry run proves it agrees with a live attestation.
 
 ## Actions cache budget
 
