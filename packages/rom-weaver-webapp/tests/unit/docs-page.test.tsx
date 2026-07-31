@@ -393,13 +393,47 @@ Fixture description.
     render(<DocsPage active slug="docs" />);
 
     const index = document.querySelector(".docs-index");
-    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(screen.getByRole("combobox", { name: "Search documentation" })).toBeTruthy();
     expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain("Browser usage");
     expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("CLI reference");
     expect(index?.querySelector('a[href="/docs/install"]')?.textContent).toContain("Install");
     expect(index?.querySelector('a[href="/docs/self-hosting"]')?.textContent).toContain("Self-hosting");
     expect(screen.getByRole("link", { name: "Read the full FAQ" }).getAttribute("href")).toBe("/docs/faq");
     expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();
+  });
+
+  it("fuzzy-searches guide text and links directly to the matching section", () => {
+    render(<DocsPage active slug="docs" />);
+
+    const input = screen.getByRole("combobox", { name: "Search documentation" });
+    fireEvent.change(input, { target: { value: "checksumm warning" } });
+
+    const section = routeFor("docs/fix-checksum-errors").sections.find(
+      (entry) => entry.id === "what-does-the-warning-mean",
+    );
+    expect(section).toBeTruthy();
+    expect(
+      document.querySelector(`.docs-search-results a[href="/docs/fix-checksum-errors#${section?.id}"]`),
+    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toMatch(/result/);
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect((input as HTMLInputElement).value).toBe("");
+    expect(document.querySelector(".guide-shelf")).toBeTruthy();
+  });
+
+  it("shares search state with the mobile docs sheet", () => {
+    render(<DocsPage active slug="docs" />);
+    fireEvent.click(screen.getByRole("button", { name: "Docs" }));
+
+    const inputs = screen.getAllByRole("combobox", { name: "Search documentation" });
+    fireEvent.change(inputs.at(-1) as HTMLElement, { target: { value: "OPFS" } });
+
+    expect(document.querySelectorAll('.rw-modal.guide-sheet .docs-search-results a[href*="#"]').length).toBeGreaterThan(
+      0,
+    );
   });
 
   it.each(["docs", "docs/apply-rom-patches"])("ends %s with nothing but the way back up", (slug) => {

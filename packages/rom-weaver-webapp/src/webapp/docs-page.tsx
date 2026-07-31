@@ -1,18 +1,21 @@
 import "./design-system/docs-route.css";
 import { ArrowUpToLine, ChevronDown } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { MouseEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { Modal } from "../public/react/components/ds/modal.tsx";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes } from "./docs-routing.mjs";
+import { createDocsSearchIndex, searchDocs } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
 type DocRoute = (typeof DOC_ROUTES)[number];
+type DocSearchRoute = ReturnType<typeof createDocsSearchIndex>[number];
+type DocSearchResult = ReturnType<typeof searchDocs>[number];
 
 /** Shelves are fixed at build time; the route table never changes at runtime. */
 const DOC_SHELVES = groupDocRoutes(DOC_ROUTES);
@@ -138,45 +141,157 @@ const SectionRail = ({
   </nav>
 );
 
+const DocsSearch = ({
+  onNavigate,
+  onQueryChange,
+  query,
+  results,
+}: {
+  onNavigate?: () => void;
+  onQueryChange: (query: string) => void;
+  query: string;
+  results: readonly DocSearchResult[];
+}) => {
+  const inputId = useId();
+  const resultListId = `${inputId}-results`;
+  const statusId = `${inputId}-status`;
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const hasQuery = query.trim().length > 0;
+
+  useEffect(() => {
+    if (query !== "") setActiveIndex(-1);
+  }, [query]);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onQueryChange("");
+      return;
+    }
+    if (!results.length) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((current) => (current + 1) % results.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((current) => (current <= 0 ? results.length - 1 : current - 1));
+    } else if (event.key === "Enter" && activeIndex >= 0) {
+      event.preventDefault();
+      document.getElementById(`${resultListId}-${activeIndex}`)?.click();
+    }
+  };
+
+  return (
+    <div className="docs-search">
+      <label className="guide-nav-title docs-search-label" htmlFor={inputId}>
+        Search documentation
+      </label>
+      <input
+        aria-activedescendant={activeIndex >= 0 ? `${resultListId}-${activeIndex}` : undefined}
+        aria-controls={resultListId}
+        aria-describedby={statusId}
+        aria-expanded={hasQuery}
+        autoComplete="off"
+        className="input"
+        id={inputId}
+        onChange={(event) => onQueryChange(event.currentTarget.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Search docs"
+        role="combobox"
+        type="search"
+        value={query}
+      />
+      {hasQuery ? (
+        <div className="docs-search-results">
+          <p aria-live="polite" className="docs-search-status" id={statusId} role="status">
+            {results.length === 0
+              ? "No matching documentation."
+              : `${results.length} ${results.length === 1 ? "result" : "results"}`}
+          </p>
+          {results.length > 0 ? (
+            <ul className="guide-nav-list docs-search-result-list" id={resultListId}>
+              {results.map((result, index) => {
+                const href = `/${result.route.slug}${result.entry.id ? `#${result.entry.id}` : ""}`;
+                return (
+                  <li key={`${result.route.slug}:${result.entry.id ?? "introduction"}`}>
+                    <a
+                      aria-label={`${result.entry.label}, ${result.route.title}`}
+                      className={index === activeIndex ? "is-active" : undefined}
+                      href={href}
+                      id={`${resultListId}-${index}`}
+                      onClick={() => {
+                        onQueryChange("");
+                        onNavigate?.();
+                      }}
+                    >
+                      <span className="docs-search-result-title">{result.entry.label}</span>
+                      <span className="docs-search-result-guide">{result.route.title}</span>
+                      <span className="docs-search-result-snippet">{result.snippet}</span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 /** Every page, on the shelf its folder puts it on. */
 const DocsNav = ({
   currentSlug,
   onNavigate,
   onShelfToggle,
   openShelves,
+  searchQuery,
+  searchResults,
+  onSearchQueryChange,
 }: {
   currentSlug: string;
   onNavigate?: () => void;
   onShelfToggle: (title: string, open: boolean) => void;
   openShelves: DocShelfState;
+  searchQuery: string;
+  searchResults: readonly DocSearchResult[];
+  onSearchQueryChange: (query: string) => void;
 }) => (
   <nav aria-label="Docs" className="guide-nav">
     <span className="guide-nav-title">Docs</span>
-    {DOC_SHELVES.map((shelf) => (
-      <details
-        className="guide-shelf"
-        key={shelf.title}
-        onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
-        open={openShelves[shelf.title]}
-      >
-        <summary>
-          <h3 className="guide-shelf-title">{shelf.title}</h3>
-        </summary>
-        <ul className="guide-nav-list">
-          {shelf.routes.map((entry) => (
-            <li key={entry.slug}>
-              <a
-                aria-current={entry.slug === currentSlug ? "page" : undefined}
-                href={`/${entry.slug}`}
-                onClick={onNavigate}
-              >
-                {entry.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </details>
-    ))}
+    <DocsSearch
+      onNavigate={onNavigate}
+      onQueryChange={onSearchQueryChange}
+      query={searchQuery}
+      results={searchResults}
+    />
+    {searchQuery.trim()
+      ? null
+      : DOC_SHELVES.map((shelf) => (
+          <details
+            className="guide-shelf"
+            key={shelf.title}
+            onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
+            open={openShelves[shelf.title]}
+          >
+            <summary>
+              <h3 className="guide-shelf-title">{shelf.title}</h3>
+            </summary>
+            <ul className="guide-nav-list">
+              {shelf.routes.map((entry) => (
+                <li key={entry.slug}>
+                  <a
+                    aria-current={entry.slug === currentSlug ? "page" : undefined}
+                    href={`/${entry.slug}`}
+                    onClick={onNavigate}
+                  >
+                    {entry.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ))}
   </nav>
 );
 
@@ -264,15 +379,21 @@ const TrailHead = ({
   activeIndex,
   fraction,
   onShelfToggle,
+  onSearchQueryChange,
   openShelves,
   route,
+  searchQuery,
+  searchResults,
   weights,
 }: {
   activeIndex: number;
   fraction: number;
   onShelfToggle: (title: string, open: boolean) => void;
+  onSearchQueryChange: (query: string) => void;
   openShelves: DocShelfState;
   route: DocRoute;
+  searchQuery: string;
+  searchResults: readonly DocSearchResult[];
   weights: readonly number[];
 }) => {
   const [sheet, setSheet] = useState<TrailSheet | null>(null);
@@ -339,8 +460,11 @@ const TrailHead = ({
           <DocsNav
             currentSlug={route.slug}
             onNavigate={close}
+            onSearchQueryChange={onSearchQueryChange}
             onShelfToggle={onShelfToggle}
             openShelves={openShelves}
+            searchQuery={searchQuery}
+            searchResults={searchResults}
           />
         )}
       </Modal>
@@ -392,6 +516,9 @@ const DocsPage = ({
   const { activeIndex, fraction, weights } = useReadingProgress(route.sections, active);
   const { onShelfToggle, openShelves } = useDocShelfState();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchIndex, setSearchIndex] = useState<readonly DocSearchRoute[]>([]);
+  const searchResults = useMemo(() => searchDocs(searchIndex, searchQuery), [searchIndex, searchQuery]);
   // Starts on the base the guides are authored against, which is what the
   // served document was rendered with, so hydration has nothing to reconcile.
   // The deployment's own base applies after mount, and only re-renders the
@@ -402,6 +529,14 @@ const DocsPage = ({
     if (!active) return;
     syncDocsSeoMetadata(route);
   }, [active, route]);
+  useEffect(() => {
+    if (!active) {
+      setSearchIndex([]);
+      setSearchQuery("");
+      return;
+    }
+    setSearchIndex(createDocsSearchIndex(DOC_ROUTES));
+  }, [active]);
   useEffect(() => setSampleBase(assetBaseUrl || AUTHORED_SAMPLE_BASE), [assetBaseUrl]);
   return (
     <div className="docs-workbench" id="main">
@@ -424,14 +559,24 @@ const DocsPage = ({
         activeIndex={activeIndex}
         fraction={fraction}
         key={route.slug}
+        onSearchQueryChange={setSearchQuery}
         onShelfToggle={onShelfToggle}
         openShelves={openShelves}
         route={route}
+        searchQuery={searchQuery}
+        searchResults={searchResults}
         weights={weights}
       />
       <div className="docs-layout">
         <div className="docs-rails">
-          <DocsNav currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} />
+          <DocsNav
+            currentSlug={route.slug}
+            onSearchQueryChange={setSearchQuery}
+            onShelfToggle={onShelfToggle}
+            openShelves={openShelves}
+            searchQuery={searchQuery}
+            searchResults={searchResults}
+          />
           {route.sections.length > 0 ? <SectionRail activeIndex={activeIndex} route={route} /> : null}
         </div>
         <section className="docs-panel">

@@ -82,6 +82,34 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   padding: 10px 12px 8px;
   border-bottom: 1px solid var(--seam-soft);
 }
+
+.rw-app .docs-search {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--seam-soft);
+}
+.rw-app .docs-search .docs-search-label { padding: 0 4px 5px; border: 0; }
+.rw-app .docs-search input {
+  background: var(--plate-2);
+  font-size: .78rem;
+}
+.rw-app .docs-search-result-list a { display: grid; }
+@media (hover: hover) {
+  .rw-app .docs-search-result-list a:hover { background: var(--well); color: var(--ink); }
+}
+.rw-app .docs-search-result-list a:active,
+.rw-app .docs-search-result-list a.is-active {
+  background: var(--well);
+  color: var(--ink);
+}
+.rw-app .docs-search-result-guide,
+.rw-app .docs-search-result-snippet {
+  color: var(--ink-3);
+  font-size: .67rem;
+}
+.rw-app .docs-search-result-snippet {
+  display: -webkit-box;
+  overflow: hidden;
+}
 /* Shelves: one per folder under docs/. Browser usage opens first; after that,
    the reader's choices carry across pages. */
 .rw-app .guide-shelf { padding: 3px 5px; }
