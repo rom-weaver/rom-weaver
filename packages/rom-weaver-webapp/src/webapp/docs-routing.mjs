@@ -26,7 +26,17 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({ file: "usage/faq.md", label: "FAQ", slug: "docs/faq" }),
   Object.freeze({ file: "usage/patch-formats.md", label: "Patch formats", slug: "docs/patch-formats" }),
-  Object.freeze({ file: "hosting/cli.md", label: "CLI usage", slug: "docs/cli" }),
+  Object.freeze({
+    file: "usage/compression-formats.md",
+    label: "Compression formats",
+    slug: "docs/compression-formats",
+  }),
+  Object.freeze({ file: "cli/install.md", label: "Install", slug: "docs/install" }),
+  Object.freeze({ file: "cli/get-started.md", label: "Get started", slug: "docs/cli-get-started" }),
+  Object.freeze({ file: "cli/apply.md", label: "Apply patches", slug: "docs/cli-apply" }),
+  Object.freeze({ file: "cli/create.md", label: "Create patches", slug: "docs/cli-create" }),
+  Object.freeze({ file: "cli/bundles.md", label: "Bundles", slug: "docs/cli-bundles" }),
+  Object.freeze({ file: "cli/reference.md", label: "CLI reference", slug: "docs/cli" }),
   Object.freeze({ file: "hosting/self-hosting.md", label: "Self-hosting", slug: "docs/self-hosting" }),
   Object.freeze({
     file: "hosting/webapp-integration.md",
@@ -35,6 +45,11 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({ file: "hosting/env-vars.md", label: "Environment variables", slug: "docs/environment-variables" }),
   Object.freeze({ file: "hosting/webapp-runtime-status.md", label: "Webapp status", slug: "docs/webapp-status" }),
+  Object.freeze({
+    file: "reference/formats.md",
+    label: "Supported formats",
+    slug: "docs/supported-formats",
+  }),
   Object.freeze({ file: "development/ARCHITECTURE.md", label: "Architecture", slug: "docs/architecture" }),
   Object.freeze({ file: "development/development.md", label: "Development", slug: "docs/development" }),
   Object.freeze({ file: "development/references.md", label: "References", slug: "docs/references" }),
@@ -49,7 +64,7 @@ const DOC_SOURCES = Object.freeze([
  * not already the words we want to show.
  */
 /** @type {Readonly<Record<string, string>>} */
-const DOC_GROUP_TITLES = Object.freeze({ hosting: "Install & hosting", usage: "Browser usage" });
+const DOC_GROUP_TITLES = Object.freeze({ cli: "CLI", hosting: "Hosting", usage: "Browser usage" });
 
 /**
  * Title of the shelf a source file sits on, from its directory under `docs/`.

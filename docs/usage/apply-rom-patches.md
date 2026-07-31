@@ -204,6 +204,6 @@ Do not delete the clean original. Give the patched result a name that includes
 the project and version so you can tell it apart later.
 
 If you need automation or terminal commands, switch to the complete
-[CLI usage guide](../hosting/cli.md#common-workflows). If you want to make your own
+[CLI apply guide](../cli/apply.md). If you want to make your own
 change, continue with [Create a ROM patch](create-rom-patches.md). Back to the
 [browser guide index](README.md).

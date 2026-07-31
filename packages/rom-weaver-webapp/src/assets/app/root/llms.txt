@@ -12,7 +12,11 @@
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
 - [Create bundles guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only bundle in the Weave webapp.
 - [FAQ](https://rom-weaver.com/docs/faq): Privacy, ROM matching, formats, bundles, devices, offline use, and browser versus CLI.
-- [CLI usage](https://rom-weaver.com/docs/cli): Install rom-weaver and practice Apply, Create, and Bundle with the same test assets.
+- [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick between CHD, RVZ, Z3DS, ZIP, and 7z, and learn when trimming beats compressing.
+- [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
+- [CLI get started](https://rom-weaver.com/docs/cli-get-started): Practice Apply, Create, and Bundle in the terminal with the same test assets.
+- [CLI reference](https://rom-weaver.com/docs/cli): Every command, global flag, JSON output, exit codes, shell completions, and man pages.
+- [Supported formats](https://rom-weaver.com/docs/supported-formats): The full patch, container, codec, checksum, trim, and header support tables.
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
 - [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
 
@@ -20,7 +24,9 @@
 
 - [Documentation index](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md): Choose the guide for using, integrating, deploying, or developing rom-weaver.
 - [Browser guides](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/usage/README.md): Browser-first Apply, Create, Bundle, troubleshooting, and FAQ pages.
-- [CLI usage](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/cli.md): Installation, commands, supported formats, compression, checksums, trimming, and JSON output.
+- [Install the CLI](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/cli/install.md): Package managers, verified install scripts, npm, Docker, and source builds.
+- [CLI reference](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/cli/reference.md): Commands, global flags, JSON output, exit codes, permissions, and completions.
+- [Supported formats](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/formats.md): Patch, container, codec, checksum, trim, and header support tables.
 - [Web app integration](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/webapp-integration.md): Preloaded URLs and same-origin OPFS integration.
 - [Self-hosting](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/self-hosting.md): Docker, static hosting, reverse proxies, subpaths, HTTPS, and browser isolation headers.
 - [Architecture](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/ARCHITECTURE.md): Crate graph, registries, browser workers, OPFS, and the Rust-TypeScript boundary.

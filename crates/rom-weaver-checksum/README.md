@@ -69,7 +69,7 @@ yourself.
 
 ## Documentation
 
-- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/hosting/cli.md#supported-formats): the full algorithm and variant tables.
+- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/reference/formats.md#checksum-support): the full algorithm and variant tables.
 - [Documentation index](https://github.com/rom-weaver/rom-weaver/blob/main/docs/README.md)
 
 ## License

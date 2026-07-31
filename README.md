@@ -109,7 +109,7 @@ general speed claim.
   and the threaded WASM webapp, with line-delimited JSON output for scripting.
 
 The complete format, codec, and checksum compatibility tables are maintained
-in the [CLI guide](./docs/hosting/cli.md#supported-formats).
+in the [CLI guide](./docs/reference/formats.md).
 
 ## Notices
 
@@ -316,7 +316,7 @@ docker run --rm \
 Mount your ROM directory at `/work` and pass paths under it. `--user` matters:
 bind-mounted files keep their host ownership, so without it the container cannot
 read files it does not own and leaves anything it writes owned by an unknown uid.
-See [Run in Docker](./docs/hosting/cli.md#run-in-docker).
+See [Run in Docker](./docs/cli/install.md#run-in-docker).
 
 </details>
 
@@ -338,7 +338,7 @@ toolchain.
 </details>
 
 Hitting `Permission denied`? See
-[File permissions](./docs/hosting/cli.md#file-permissions).
+[File permissions](./docs/cli/reference.md#file-permissions).
 
 The [development guide](./docs/development/development.md) covers the full toolchain setup,
 webapp builds, and tests.

@@ -33,7 +33,7 @@ test("usage guide changes build the webapp", () =>
   assert.equal(classify("docs/usage/apply-rom-patches.md").webapp, "true"));
 test("every published guide builds the webapp, whatever folder it sits in", () => {
   for (const path of [
-    "docs/hosting/cli.md",
+    "docs/cli/reference.md",
     "docs/legal/privacy.md",
     "docs/development/ARCHITECTURE.md",
   ]) {

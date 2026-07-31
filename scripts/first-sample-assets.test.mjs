@@ -16,7 +16,7 @@ import {
 // change to the sample ROMs silently publishes a wrong value on three pages.
 const DOCUMENTED_WEAVE_SHA256 = "e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e";
 const DOCS_PUBLISHING_THE_DIGEST = [
-  "docs/hosting/cli.md",
+  "docs/cli/get-started.md",
   "docs/usage/get-started.md",
   "docs/usage/apply-rom-patches.md",
 ];

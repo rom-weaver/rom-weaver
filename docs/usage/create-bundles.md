@@ -199,5 +199,5 @@ resolved against the recipe URL.
 The [webapp integration guide](../hosting/webapp-integration.md) covers
 multiple URL parameters, same-origin files, hosting headers, and error
 handling. For scripted bundle creation, use the separate
-[CLI bundle guide](../hosting/cli.md#bundles). Back to the
+[CLI bundle guide](../cli/bundles.md). Back to the
 [browser guide index](README.md).

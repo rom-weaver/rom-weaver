@@ -169,6 +169,6 @@ use, find the matching Original instead.
 
 Once the checks match, return to
 [Apply a ROM patch](apply-rom-patches.md). If you need terminal diagnostics,
-the [CLI patch validation reference](../hosting/cli.md#patch-validation) keeps
+the [CLI patch validation reference](../cli/apply.md#patch-validation) keeps
 those commands in one place. The [FAQ](faq.md) covers related filename,
 privacy, and format questions.

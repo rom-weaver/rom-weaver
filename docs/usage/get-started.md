@@ -97,8 +97,8 @@ app. Your ROMs, patches, and results stay on your device.
 Use the command-line tool when you want repeatable scripts, batch jobs, CI, or
 exact flags you can paste into release instructions. The commands do the same
 core work, but the interface is intentionally different. The
-[CLI usage guide](../hosting/cli.md) owns installation, terminal examples, and the
-full command reference. Browser guides do not mix terminal steps into the
+[CLI guides](../cli/get-started.md) own installation, terminal examples, and
+the full [command reference](../cli/reference.md). Browser guides do not mix terminal steps into the
 middle of a visual workflow.
 
 If you are unsure, start in the browser. You can move to the CLI later without
@@ -146,7 +146,7 @@ patch or patch-only bundle, not the copyrighted original ROM.
   repeatable release.
 - [Fix a checksum error](fix-checksum-errors.md) when a file does not match.
 - [Pick a patch format](patch-formats.md) when you are publishing.
-- [Use the CLI](../hosting/cli.md) for installation and terminal commands.
+- [Use the CLI](../cli/get-started.md) for installation and terminal commands.
 
 For privacy details, read [Privacy](../legal/privacy.md). For licensing and
 third-party components, read [Notices](https://rom-weaver.com/docs/notices).
