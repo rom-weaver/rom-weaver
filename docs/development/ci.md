@@ -854,6 +854,15 @@ build dependencies, `cross` for the musl targets, and - for Windows - the
 `vswhere` + `VsDevCmd.bat` dance that puts the right MSVC toolchain on `PATH`
 for the cross-arch legs.
 
+Non-cross Linux x86-64 legs also run `scripts/install-jwasm.sh` so the LZMA
+SDK's assembly decode loop is compiled in (see `docs/vendor-code.md`); a
+missing assembler downgrades that binary to the portable C loop with a build
+warning, never a failure. The musl legs build through `cross`, whose container
+never runs that script, so they keep the C loop. Windows x86-64 needs no step -
+MSVC's own `ml64` is already on `PATH` from the `VsDevCmd.bat` call below. The
+`rust-host` job installs it too, so the Rust suite covers the assembled loop
+rather than only the arm64 one.
+
 The Windows legs also relocate `CARGO_HOME`/`RUSTUP_HOME` to `D:` and
 `TMP`/`TEMP` to `RUNNER_TEMP` before the toolchain and cache steps, for the same
 IOPS reason `rust-windows` does it. The `D:` half is skipped when the runner has

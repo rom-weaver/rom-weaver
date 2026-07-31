@@ -111,7 +111,7 @@ async function initializeRuntime() {
     defaultThreads: PARALLEL_THREADS,
     opfsHandle: fixtureRootHandle,
     runtimeMounts: [WORK_GUEST_ROOT],
-    wasmUrl: "/rom-weaver-app.wasm",
+    wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
     workGuestPath: WORK_GUEST_ROOT,
   });
 

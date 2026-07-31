@@ -175,6 +175,26 @@ const IN_SOURCE_DEPENDENCIES = [
       path.join(REPO_ROOT, "crates", "rom-weaver-containers", "src", "xdvdfs", "LICENSE"),
     ],
   },
+  {
+    // Public domain, so no attribution is legally owed - but the SDK's coders
+    // are linked into every binary, and someone auditing what ships should
+    // find it beside the other vendored drops rather than have to read
+    // build.rs to learn it is there.
+    name: "lzma-sdk",
+    versionFile: path.join(
+      REPO_ROOT,
+      "crates",
+      "rom-weaver-containers",
+      "lzma-sdk",
+      "LZMA_SDK_VERSION",
+    ),
+    versionKey: "version",
+    sourceKey: "source",
+    license: "public domain",
+    licenseFiles: [
+      path.join(REPO_ROOT, "crates", "rom-weaver-containers", "lzma-sdk", "vendor", "lzma-sdk.txt"),
+    ],
+  },
 ];
 
 /**

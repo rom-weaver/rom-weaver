@@ -13,6 +13,9 @@ why, and the exact steps to go back to upstream.
 - [`libarchive`, inlined into `rom-weaver-containers`](#libarchive-inlined-into-rom-weaver-containers)
   - [Refreshing the snapshot](#refreshing-the-snapshot)
   - [Going back to upstream](#going-back-to-upstream)
+- [LZMA SDK, inlined into `rom-weaver-containers`](#lzma-sdk-inlined-into-rom-weaver-containers)
+  - [The SDK encoder is native-only](#the-sdk-encoder-is-native-only)
+  - [Which platforms get the assembly decode loop](#which-platforms-get-the-assembly-decode-loop)
 - [`nod`, inlined into `rom-weaver-containers`](#nod-inlined-into-rom-weaver-containers)
 - [`xdvdfs`, inlined into `rom-weaver-containers`](#xdvdfs-inlined-into-rom-weaver-containers)
   - [Why it is not a crates.io dependency](#why-it-is-not-a-cratesio-dependency)
@@ -48,6 +51,7 @@ See [`src/xdvdfs`](#xdvdfs-inlined-into-rom-weaver-containers) below.
 | Code | Form | Packaged as | Reason |
 | --- | --- | --- | --- |
 | `crates/rom-weaver-containers/libarchive/vendor/libarchive` | Inlined C sources | part of `rom-weaver-containers` | Built by `crates/rom-weaver-containers/libarchive/build.rs`; carries local patches upstream has not taken |
+| `crates/rom-weaver-containers/lzma-sdk/vendor/C` | Inlined C sources | part of `rom-weaver-containers` | 7-Zip's own LZMA1/LZMA2 coders, so the 7z paths match `7zz` speed instead of liblzma's |
 | `crates/rom-weaver-containers/src/nod` | Inlined module | part of `rom-weaver-containers` | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
 | `crates/rom-weaver-containers/src/xdvdfs` | Inlined module | part of `rom-weaver-containers` | Upstream's published `write` feature forces `wax` |
 
@@ -107,6 +111,126 @@ a C library, and `libarchive-sys` style crates do not carry the local patches or
 the wasm build. The realistic end state is upstream accepting the fork's
 commits, at which point the fork resets to an upstream tag and the snapshot is
 refreshed from it. Track that in the fork's branches, not here.
+
+## LZMA SDK, inlined into `rom-weaver-containers`
+
+7-Zip's own LZMA SDK (public domain) supplies the LZMA1/LZMA2 coders the 7z
+reader and writer use. The C sources live at
+`crates/rom-weaver-containers/lzma-sdk/vendor/C/`, upstream's `lzma-sdk.txt`
+sits beside them, and `libarchive/build.rs` compiles them with `cc` into a
+`lzma_sdk` static library that links after `libarchive.a`.
+
+Why it is here at all: liblzma is a *format* library first, and its LZMA2
+encoder/decoder are measurably slower than 7-Zip's, which is what `7zz` itself
+runs. Matching 7zz's wall time on 7z create/extract is not reachable through
+liblzma, and the SDK is public domain so vendoring it costs nothing in license
+surface.
+
+The exact upstream drop is pinned in
+`crates/rom-weaver-containers/lzma-sdk/LZMA_SDK_VERSION` (version, source URL,
+and the SHA-256 of the published `.7z`). Refresh it with:
+
+```bash
+node scripts/vendor-lzma-sdk.mjs           # re-fetch the pinned version
+node scripts/vendor-lzma-sdk.mjs 26.03     # move the pin
+```
+
+The script fetches `https://www.7-zip.org/a/lzma<ver>.7z`, extracts it with
+whatever 7z reader is on `PATH`, and copies only the files the coders need
+(`VENDORED_FILES` in the script): LZMA1/LZMA2 encode+decode, the match finders,
+the SDK's `Threads`/`MtCoder`/`MtDec` layer, and the shared headers. Everything
+else in the SDK's `C/` directory - AES, PPMd, BCJ2, the 7z archive reader, the
+sample programs - stays out of the tree. The copy is **verbatim**: there are no
+local patches, and a refresh is a copy rather than a merge. Keep it that way.
+
+Build wiring lives in `libarchive/build.rs`:
+
+- `build_lzma_sdk` compiles the sources at `-O3` regardless of the Cargo
+  profile. They are third-party coders nobody steps through, and a debug-profile
+  build of them makes the test suite unusably slow.
+- The threaded units (`LzFindMt`, `MtCoder`, `MtDec`, `Threads`) are dropped and
+  `Z7_ST` is defined on **every** wasm target, which also drops the glue's
+  encoder bridge and leaves `rom-weaver-app.wasm` encoding 7z with liblzma. See
+  [The SDK encoder is native-only](#the-sdk-encoder-is-native-only) for why. The
+  *decoder* is unaffected and stays on the SDK everywhere - `LzmaDec` and
+  `Lzma2Dec` have no threads.
+- `Z7_AFFINITY_DISABLE` is set on every wasm target: wasi-libc has no
+  `sched_setaffinity` and no `<cpuid.h>`/`<sys/auxv.h>`.
+- The SDK's hand-written decode loop (`vendor/Asm/`, selected with
+  `Z7_LZMA_DEC_OPT`) replaces `LzmaDec.c`'s C loop wherever it can be
+  assembled. It is the same bitstream and is what `7zz` itself runs; it is worth
+  ~26% of a 1 GiB LZMA1 extract, and **without it the SDK's C decoder is no
+  faster than liblzma's** - the whole 7z extract win is this file. Which
+  platforms get it is the matrix below.
+
+### The SDK encoder is native-only
+
+The SDK's LZMA2 encoder is a blocking one-shot over stream callbacks, so
+`glue/rom_weaver_lzma_sdk.c` drives it from a thread of its own and rendezvouses
+with libarchive's push-shaped `la_zstream`. The SDK then spawns its own
+match-finder and block threads **from that thread**, and those nested spawns do
+not survive the browser's WASI thread pool:
+
+- A run that asks for one thread gets a *zero-sized* pool
+  (`resolveBrowserThreadPoolSizeFromCount` returns 0 for `<= 1`), so even the
+  bridge thread fails with `EAGAIN` and no 7z archive can be written at all.
+- With a large pool the bridge thread starts, but the SDK's nested spawn from it
+  never gets its start ack and comes back `SZ_ERROR_THREAD` carrying errno 6.
+
+liblzma's encoder spawns its workers from the main thread, which the pool
+handles, and it is genuinely parallel there - so wasm keeps it. Forcing the SDK
+encoder single-threaded to fit would have made every `effective_threads > 1` the
+browser reports a lie.
+
+`lzma_sdk_threads_enabled()` in `libarchive/build.rs` is the single switch:
+false for wasm, which drops `Z7_ST`-guarded code from the SDK build and leaves
+`ROM_WEAVER_LZMA_SDK_MT` undefined so the writer never reaches for it. The
+planner in `handlers/sevenz.rs` mirrors the split with `cfg(target_family =
+"wasm")` so its worker-memory and parallelism model describes the backend that
+actually runs.
+
+Native builds keep a second safety net: if the bridge thread cannot start for
+any reason, `compression_init_encoder_lzma2_sdk` returns `ARCHIVE_FAILED`
+without setting an archive error and the writer falls through to liblzma.
+
+### Which platforms get the assembly decode loop
+
+| Target | Decode loop | Why |
+| --- | --- | --- |
+| `aarch64-*` (macOS, Linux, Windows) | assembly, always | `Asm/arm64/LzmaDecOpt.S` is GNU-as syntax; clang assembles it with no extra tool |
+| `x86_64-*-linux-*`, BSDs | assembly when a MASM-compatible assembler is on `PATH` | `Asm/x86/LzmaDecOpt.asm` is MASM syntax and no C compiler reads it. `-elf64 -DABI_LINUX` |
+| `x86_64-pc-windows-*` | assembly when `ml64` (or jwasm/asmc/uasm) is on `PATH` | MSVC's own `ml64` is already there under `VsDevCmd`. `-win64` |
+| `x86_64-apple-darwin` | C loop, always | Nothing in reach emits Mach-O: jwasm has no Mach-O writer, asmc only bootstraps on an x86 host, and uasm's tree does not compile on a current Unix host |
+| `i686-*`, other arches | C loop | The SDK ships no loop this build uses for them |
+| `wasm32-*` | C loop | No assembler |
+
+`build.rs` probes `jwasm`, `asmc`, `asmc64`, `uasm`, then `ml64`, or takes an
+explicit path from `ROM_WEAVER_LZMA_ASM` (`ROM_WEAVER_UASM` is accepted as an
+alias). **A missing assembler is never a build failure** - it prints a
+`cargo:warning` naming what it looked for and compiles the C loop instead. A
+build that found one says so in a warning too, so which loop a binary carries is
+always visible in its build log.
+
+`scripts/install-jwasm.sh` builds and installs the assembler (pinned to JWasm
+`v2.20`; plain C, builds anywhere in seconds). It runs in the `Dockerfile`
+builder stage on `amd64`, in `.github/actions/build-cli-platform` for the native
+x86-64 Linux leg, and in `ci.yml`'s Rust job so the test suite actually covers
+the x86-64 loop. JWasm rather than the alternatives because asmc is itself
+written in assembly (so it only bootstraps on an x86 host, and its repo ships
+prebuilt binaries instead) and uasm's tree no longer compiles on a current Unix
+host; all three emit a byte-identical object from this source.
+
+**Known gap:** the `linux-x64-musl` npm package builds through `cross`, which
+compiles inside cross-rs' own container where that script never runs, so that
+one binary keeps the C loop. Closing it means a repo-root `Cross.toml` with a
+`pre-build` that inlines the install (the project directory is not mounted
+during `pre-build`, so it cannot call the script), which would apply to every
+`cross` leg of the release fan-out. `linux-x64-gnu`, the Docker image, and
+anything built from source with the assembler present are unaffected.
+
+The libarchive CMake build gets `-DROM_WEAVER_LZMA_SDK=1` plus the SDK include
+directory, so the 7z sources can gate every SDK code path behind one define and
+still build on liblzma alone if the vendor drop is absent.
 
 ## `nod`, inlined into `rom-weaver-containers`
 

@@ -875,7 +875,7 @@ async function initializeRuntime() {
       defaultThreads: THREAD_COUNT,
       opfsHandle: fixtureRootHandle,
       runtimeMounts: [WORK_GUEST_ROOT],
-      wasmUrl: "/rom-weaver-app.wasm",
+      wasmUrl: new URL("../../src/wasm/rom-weaver-app.wasm", import.meta.url).href,
       workGuestPath: WORK_GUEST_ROOT,
     });
     workersByRuntime.set(wasmRuntime, worker);

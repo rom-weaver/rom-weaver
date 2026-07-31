@@ -9,6 +9,8 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    #[cfg(not(target_family = "wasm"))]
+    use crate::lzma2_sdk_threads_for_budget_with_limits;
     use crate::nod::{
         common::{Compression as NodCompression, Format as NodFormat},
         read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
@@ -21,8 +23,8 @@ mod tests {
         ChdCodec, ChdContainerHandler, ContainerCreateRequest, ContainerRegistry, GCZ,
         NodHandlerCore, RVZ, RvzContainerHandler, SEVEN_Z, SelectionMatcher,
         SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler, ZipContainerHandler,
-        copy_progress_buffer_size, lzma2_preset_dict_bytes, lzma2_threads_for_budget,
-        lzma2_threads_for_budget_with_limits, zstd_threads_for_budget,
+        copy_progress_buffer_size, lzma2_liblzma_threads_for_budget_with_limits,
+        lzma2_preset_dict_bytes, lzma2_threads_for_budget, zstd_threads_for_budget,
     };
     use chd::{
         header::Header,
@@ -2617,21 +2619,83 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_family = "wasm"))]
     fn seven_z_memory_budget_scales_thread_cap() {
         // 64 MiB at level 9 reduces the dictionary to 64 MiB (input-limited),
-        // ~1 GiB per seeded worker, so the worker count tracks the budget: a
-        // 1 GiB host collapses to a single encoder (7-Zip-like footprint),
-        // larger budgets allow more.
+        // ~1.25 GiB per SDK block encoder. The cap must also be safe for the
+        // automatic liblzma fallback.
         let total = 64 * 1024 * 1024;
         let gib = 1024 * 1024 * 1024;
-        assert_eq!(lzma2_threads_for_budget(total, 9, gib), 1);
-        assert_eq!(lzma2_threads_for_budget(total, 9, 2 * gib), 2);
-        assert_eq!(lzma2_threads_for_budget(total, 9, 4 * gib), 4);
-        // Never zero, even with no budget.
-        assert_eq!(lzma2_threads_for_budget(total, 9, 0), 1);
+        assert_eq!(
+            lzma2_sdk_threads_for_budget_with_limits(total, 9, gib, None),
+            1
+        );
+        assert_eq!(
+            lzma2_sdk_threads_for_budget_with_limits(total, 9, 2 * gib, None),
+            2
+        );
+        assert_eq!(
+            lzma2_sdk_threads_for_budget_with_limits(total, 9, 4 * gib, None),
+            4
+        );
+        // Never zero, even when the minimum encoder itself exceeds the budget.
+        assert_eq!(
+            lzma2_sdk_threads_for_budget_with_limits(total, 9, 0, None),
+            1
+        );
         // A tiny input reduces the dictionary, so the same budget allows many
         // more workers (cheap per-worker memory).
         assert!(lzma2_threads_for_budget(1024 * 1024, 9, gib) > 10);
+    }
+
+    #[test]
+    #[cfg(not(target_family = "wasm"))]
+    fn seven_z_sdk_thread_plan_matches_level_normalization() {
+        let total = 5 * 1024 * 1024;
+        let budget = 1024 * 1024 * 1024;
+
+        // Levels below 5 use one match-finder thread per 1 MiB SDK block.
+        assert_eq!(
+            lzma2_sdk_threads_for_budget_with_limits(total, 0, budget, Some(8)),
+            5
+        );
+        assert_eq!(
+            lzma2_sdk_threads_for_budget_with_limits(total, 0, 2 * 1024 * 1024, Some(8)),
+            1
+        );
+        // Levels 5+ use pairs, so an odd requested cap is rounded down to the
+        // count the SDK will actually run.
+        assert_eq!(
+            lzma2_sdk_threads_for_budget_with_limits(64 * 1024 * 1024, 6, 4 * budget, Some(3)),
+            2
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_family = "wasm"))]
+    fn seven_z_sdk_thread_plan_stays_inside_mtcoder_limits() {
+        // A huge input with a tiny dictionary would otherwise plan one block
+        // thread per 1 MiB block; MtCoder clamps at MTCODER_THREADS_MAX (64),
+        // and level 0 runs one match-finder thread per block thread.
+        let huge = 8 * 1024 * 1024 * 1024u64;
+        let unbounded = u64::MAX / 4;
+        assert_eq!(
+            lzma2_sdk_threads_for_budget_with_limits(huge, 0, unbounded, None),
+            64
+        );
+
+        // The output ring outnumbers the workers, so a budget that fits N
+        // encoders does not fit N blocks. 256 MiB input at level 9 takes a
+        // 256 MiB dictionary, a 256 MiB block and a ~256 MiB output buffer:
+        // 12x dict + block is ~3.25 GiB per worker, and the ring adds more.
+        let total = 256 * 1024 * 1024;
+        let gib = 1024 * 1024 * 1024;
+        let planned = lzma2_sdk_threads_for_budget_with_limits(total, 9, 8 * gib, None);
+        assert!(
+            planned <= 2,
+            "8 GiB cannot hold more than one SDK block encoder plus its ring, planned {planned}"
+        );
+        assert!(planned >= 1, "the plan must never reach zero");
     }
 
     #[test]
@@ -2641,16 +2705,38 @@ mod tests {
         let gib = 1024 * 1024 * 1024;
         let wasm_max_threads = Some(2);
 
+        // Uncapped: a large input keeps the full dictionary and only affords a
+        // single block encoder, while a smaller one reduces the dictionary and
+        // fits several under the same budget.
         assert_eq!(
-            lzma2_threads_for_budget_with_limits(large_total, 9, gib, wasm_max_threads),
+            lzma2_liblzma_threads_for_budget_with_limits(large_total, 9, gib, None),
             1
         );
         assert_eq!(
-            lzma2_threads_for_budget_with_limits(reduced_dict_total, 9, gib, wasm_max_threads),
+            lzma2_liblzma_threads_for_budget_with_limits(reduced_dict_total, 9, gib, None),
+            4
+        );
+        // The wasm ceiling binds in both cases.
+        assert_eq!(
+            lzma2_liblzma_threads_for_budget_with_limits(large_total, 9, gib, wasm_max_threads),
+            1
+        );
+        assert_eq!(
+            lzma2_liblzma_threads_for_budget_with_limits(
+                reduced_dict_total,
+                9,
+                gib,
+                wasm_max_threads
+            ),
             2
         );
         assert_eq!(
-            lzma2_threads_for_budget_with_limits(reduced_dict_total, 9, 4 * gib, wasm_max_threads),
+            lzma2_liblzma_threads_for_budget_with_limits(
+                reduced_dict_total,
+                9,
+                4 * gib,
+                wasm_max_threads
+            ),
             2
         );
     }
@@ -2661,11 +2747,21 @@ mod tests {
         let wasm_max_threads = Some(2);
 
         assert_eq!(
-            lzma2_threads_for_budget_with_limits(32 * 1024 * 1024, 5, gib, wasm_max_threads),
+            lzma2_liblzma_threads_for_budget_with_limits(
+                32 * 1024 * 1024,
+                5,
+                gib,
+                wasm_max_threads
+            ),
             2
         );
         assert_eq!(
-            lzma2_threads_for_budget_with_limits(128 * 1024 * 1024, 5, gib, wasm_max_threads),
+            lzma2_liblzma_threads_for_budget_with_limits(
+                128 * 1024 * 1024,
+                5,
+                gib,
+                wasm_max_threads
+            ),
             1
         );
     }
