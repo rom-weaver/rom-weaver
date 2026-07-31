@@ -179,14 +179,33 @@ Docker, and Docker Compose setups.
 <details>
 <summary>Self-host the webapp</summary>
 
-The Docker source build serves the full webapp: it builds the WASM module, adds
-cross-origin isolation headers, supports client-side routes, and precompresses
-assets. The
-[self-hosting guide](./docs/hosting/self-hosting.md) covers reverse proxies, subpath
-routing, HTTPS certificates, service-worker scope, and the required COOP/COEP
-headers.
+For a quick setup, choose static files, Docker Run, or Docker Compose. The
+[full self-hosting guide](./docs/hosting/self-hosting.md) covers reverse proxies,
+subpath routing, HTTPS certificates, service-worker scope, and the required
+COOP/COEP headers.
 
-Build and start it with Docker Compose:
+Static release files:
+
+```bash
+mkdir -p rom-weaver-webapp
+curl --fail --location --proto '=https' --tlsv1.2 \
+  --output rom-weaver-webapp.tar.gz \
+  https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-webapp.tar.gz
+tar --extract --gzip --file rom-weaver-webapp.tar.gz --directory rom-weaver-webapp
+```
+
+Serve the extracted `rom-weaver-webapp` directory from an HTTPS static host.
+For a pinned release, replace `latest` in the URL with its tag.
+
+Docker Run:
+
+```bash
+docker run --detach --name rom-weaver-webapp \
+  --publish 8080:8080 \
+  ghcr.io/brandonocasey/rom-weaver-webapp:latest
+```
+
+Docker Compose, building from source:
 
 ```bash
 git clone https://github.com/rom-weaver/rom-weaver.git
