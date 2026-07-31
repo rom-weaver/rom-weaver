@@ -1,17 +1,15 @@
 import "./design-system/docs-route.css";
-import { ArrowUpToLine, ChevronDown } from "lucide-react";
+import { ArrowUpToLine } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
-import { Modal } from "../public/react/components/ds/modal.tsx";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes } from "./docs-routing.mjs";
 import { createDocsSearchIndex, findSearchToken, searchDocs } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
-import { SITE_NAME } from "./workflow-seo.mjs";
 
 type DocRoute = (typeof DOC_ROUTES)[number];
 type DocSearchRoute = ReturnType<typeof createDocsSearchIndex>[number];
@@ -189,14 +187,12 @@ const DocsSearch = ({
 
   return (
     <div className="docs-search">
-      <label className="guide-nav-title docs-search-label" htmlFor={inputId}>
-        Search documentation
-      </label>
       <input
         aria-activedescendant={activeIndex >= 0 ? `${resultListId}-${activeIndex}` : undefined}
         aria-controls={resultListId}
         aria-describedby={statusId}
         aria-expanded={showResults}
+        aria-label="Search documentation"
         autoComplete="off"
         className="input"
         id={inputId}
@@ -358,95 +354,36 @@ const DocsFaqPreview = () => (
 );
 
 /** Which list the tapped crumb promised; null while the sheet is shut. */
-type TrailSheet = "pages" | "sections";
-
 /**
- * The trail: phone-width navigation folded into the breadcrumb it replaces.
+ * The trail: phone-width search and reading progress.
  *
- * A guide already needs a breadcrumb, so on a phone that row does the
- * navigating too - `Docs` opens every guide, the section crumb opens this
- * guide's outline - and the reading position rides its bottom edge as a warp of
- * one tick per section. Two crumbs, not four: the masthead brands the page and
- * the guide's own title is the heading below, which buys the room to name the
- * section, the one part of the trail that changes while you read.
+ * It sticks to the top rather than holding the bottom of the screen. The
+ * bottom is where the phone browser parks its own collapsing toolbar.
  *
- * It sticks to the top rather than holding the bottom of the screen. The bottom
- * is where the phone browser parks its own collapsing toolbar, which is what
- * the old bar had to reserve scroll room to clear.
+ * The gauge remains attached to the search surface so the reader can still see
+ * where they are in a long guide without carrying another navigation label.
  */
 const TrailHead = ({
-  activeIndex,
   fraction,
-  onShelfToggle,
   onSearchSelect,
   onSearchQueryChange,
-  openShelves,
   route,
   searchQuery,
   searchResults,
   weights,
 }: {
-  activeIndex: number;
   fraction: number;
-  onShelfToggle: (title: string, open: boolean) => void;
   onSearchSelect: (result: DocSearchResult, query: string) => void;
   onSearchQueryChange: (query: string) => void;
-  openShelves: DocShelfState;
   route: DocRoute;
   searchQuery: string;
   searchResults: readonly DocSearchResult[];
   weights: readonly number[];
 }) => {
-  const [sheet, setSheet] = useState<TrailSheet | null>(null);
-  const current = route.sections[activeIndex];
-  const currentLabel = current?.label ?? "";
-  const currentLabelEnd = /[.!?]$/.test(currentLabel) ? "" : ".";
-  const close = () => setSheet(null);
-  // A page with no headings - the index - keeps the guide menu and drops the half
-  // of the trail that reports a position it does not have. Returning nothing here
-  // would leave that page with no breadcrumb at all on a phone, since the plain
-  // one is hidden at this width.
   const outlined = route.sections.length > 0;
 
   return (
     <div className="docs-trail">
-      <nav aria-label="Breadcrumb" className="trail-crumbs">
-        <span className="trail-site">{SITE_NAME}</span>
-        <span aria-hidden="true" className="trail-sep">
-          /
-        </span>
-        <button
-          aria-expanded={sheet === "pages"}
-          className="trail-crumb"
-          onClick={() => setSheet("pages")}
-          type="button"
-        >
-          Docs
-          <ChevronDown aria-hidden="true" />
-        </button>
-        {outlined ? (
-          <>
-            <span aria-hidden="true" className="trail-sep">
-              /
-            </span>
-            <button
-              aria-expanded={sheet === "sections"}
-              aria-label={`Section ${activeIndex + 1} of ${route.sections.length}: ${currentLabel}${currentLabelEnd} Open this guide's outline.`}
-              className="trail-crumb is-section"
-              onClick={() => setSheet("sections")}
-              type="button"
-            >
-              <b aria-hidden="true" className="trail-index">
-                {sectionNumber(activeIndex)}
-              </b>
-              <span aria-hidden="true" className="trail-label">
-                {current?.label}
-              </span>
-              <ChevronDown aria-hidden="true" />
-            </button>
-          </>
-        ) : null}
-      </nav>
       <div className="docs-trail-search">
         <DocsSearch
           onQueryChange={onSearchQueryChange}
@@ -463,21 +400,6 @@ const TrailHead = ({
           <span className="warp-gauge-weft" style={{ width: `${fraction * 100}%` }} />
         </span>
       ) : null}
-
-      {/* Only the list the tapped crumb named: tapping `Docs` and getting this
-          guide's outline first would break the promise the label made. */}
-      <Modal onClose={close} open={sheet !== null} title={route.title} variant="guide-sheet">
-        {sheet === "sections" ? (
-          <SectionRail activeIndex={activeIndex} onNavigate={close} route={route} />
-        ) : (
-          <DocsNav
-            currentSlug={route.slug}
-            onNavigate={close}
-            onShelfToggle={onShelfToggle}
-            openShelves={openShelves}
-          />
-        )}
-      </Modal>
     </div>
   );
 };
@@ -638,21 +560,6 @@ const DocsPage = ({
   }, []);
   return (
     <div className="docs-workbench" id="main">
-      <nav aria-label="Breadcrumb" className="docs-breadcrumbs">
-        <span className="docs-breadcrumb-trail">
-          <a href="/apply">{SITE_NAME}</a>
-          <span aria-hidden="true">/</span>
-          {hub ? (
-            <span aria-current="page">Docs</span>
-          ) : (
-            <>
-              <a href="/docs">Docs</a>
-              <span aria-hidden="true">/</span>
-              <span aria-current="page">{route.label}</span>
-            </>
-          )}
-        </span>
-      </nav>
       <div className="docs-search-header">
         <DocsSearch
           onSelect={onSearchSelect}
@@ -664,13 +571,10 @@ const DocsPage = ({
       {/* Keyed on the route so moving to another guide closes the sheet with it,
           rather than leaving it open over a guide it no longer describes. */}
       <TrailHead
-        activeIndex={activeIndex}
         fraction={fraction}
         key={route.slug}
         onSearchSelect={onSearchSelect}
         onSearchQueryChange={setSearchQuery}
-        onShelfToggle={onShelfToggle}
-        openShelves={openShelves}
         route={route}
         searchQuery={searchQuery}
         searchResults={searchResults}

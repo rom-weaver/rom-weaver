@@ -21,37 +21,12 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
 }
 
-/* --- breadcrumbs --- */
-.rw-app .docs-breadcrumbs,
+/* --- search --- */
 .rw-app .docs-search-header {
   display: grid;
   grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
   justify-content: center;
   gap: clamp(18px, 3vw, 30px);
-}
-.rw-app .docs-breadcrumbs {
-  margin: 0 0 var(--sp-l);
-  color: var(--ink-3);
-  font-size: .69rem;
-  font-weight: 650;
-  font-stretch: 88%;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-}
-.rw-app .docs-breadcrumb-trail {
-  display: flex;
-  grid-column: 2;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-s);
-}
-.rw-app .docs-breadcrumbs a { color: var(--ink-3); text-decoration: none; }
-@media (hover: hover) {
-  .rw-app .docs-breadcrumbs a:hover { color: var(--thread-text); }
-}
-.rw-app .docs-breadcrumbs a:active { color: var(--thread-text); }
-
-.rw-app .docs-search-header {
   position: relative;
   z-index: 70;
   margin-block: calc(var(--sp-l) * -1) var(--sp-l);
@@ -102,11 +77,6 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 
 .rw-app .docs-search {
   position: relative;
-}
-.rw-app .docs-search-label {
-  margin-block-end: 6px;
-  padding: 0;
-  border: 0;
 }
 .rw-app .docs-search input {
   background: var(--plate-2);
@@ -663,17 +633,11 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 @media (max-width: 860px) {
   .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
   .rw-app .docs-rails { display: none; }
-  /* The plain breadcrumb hands its job to the trail, which does the navigating
-     as well as the naming. */
-  .rw-app .docs-breadcrumbs { display: none; }
 
   /* Sticky rather than fixed, and at the top rather than the bottom: the bottom
      of a phone screen is where the browser parks its own collapsing toolbar, so
      a dock there had to reserve scroll room to clear it. Nothing is fixed now,
-     so the guide just ends.
-     The seam is unconditional rather than appearing on pin - detecting "stuck"
-     needs a scroll observer, and at the top of the guide a rule under the trail
-     reads as the divider the breadcrumb used to have anyway. */
+     so the guide just ends. */
   .rw-app .docs-trail {
     position: sticky;
     top: 0;
@@ -692,62 +656,7 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   .rw-app .docs-trail-search {
     padding-block: 0 8px;
   }
-  .rw-app .docs-trail-search .docs-search-label { margin-inline: 2px; }
   .rw-app .docs-trail-search .docs-search input { background: var(--plate); }
-  .rw-app .trail-crumbs {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    min-width: 0;
-    min-height: 36px;
-    padding-block: 2px 4px;
-  }
-  .rw-app .trail-site,
-  .rw-app .trail-crumb {
-    font-size: .69rem;
-    font-weight: 700;
-    font-stretch: 88%;
-    letter-spacing: .06em;
-    text-transform: uppercase;
-  }
-  .rw-app .trail-site {
-    flex: none;
-    color: var(--ink-3);
-  }
-  .rw-app .trail-sep { flex: none; color: var(--seam-strong); font-size: .7rem; }
-  .rw-app .trail-crumb {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    min-width: 0;
-    min-height: 32px;
-    padding: 0 5px;
-    border: 0;
-    border-radius: var(--r-s);
-    background: transparent;
-    color: var(--ink-3);
-    font: inherit;
-    cursor: pointer;
-  }
-  .rw-app .trail-crumb svg { flex: none; width: 12px; height: 12px; }
-  .rw-app .trail-crumb.is-section { color: var(--ink); }
-  .rw-app .trail-label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .rw-app .trail-index {
-    flex: none;
-    color: var(--weft);
-    font-family: var(--mono);
-    font-size: .66rem;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0;
-  }
-  .rw-app .trail-crumb:active { background: var(--well); }
-
   /* The warp, woven: one tick per section, each as wide as its section is long,
      so the crossing weft is a plain scroll fraction that still lands inside the
      right tick. Ticks are divided by a border rather than a gap, which keeps
@@ -809,41 +718,12 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   .rw-app .docs-to-top svg { flex: none; width: 15px; height: 15px; color: var(--weft); }
   .rw-app .docs-to-top:active { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
 
-  /* A narrow desktop window gets this layout too, so the phone controls still
-     want their hover halves. */
+  /* A narrow desktop window gets this layout too, so the phone button still
+     wants its hover half. */
   @media (hover: hover) {
-    .rw-app .trail-crumb:hover { background: var(--well); color: var(--ink); }
     .rw-app .docs-to-top:hover { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
   }
 
-  /* --- the sheet the bar opens ---
-     Its overrides of the modal frame itself (the card's size, corners and entry
-     transform) live in webapp-modals.css beside the other `.rw-modal` variants:
-     that layer is later than this one, so from here they would lose to the plain
-     `.rw-modal-card` however specific they are. */
-  /* One list per sheet now that each crumb opens the one it named, so the outline
-     runs to its full length and the body is the only scroll container. The cap
-     and the sticky heading this used to need existed to keep the guide list
-     visible underneath it; nothing sits underneath it any more. */
-  .rw-modal.guide-sheet .modal-body {
-    display: block;
-    padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom, 0px));
-  }
-  .rw-modal.guide-sheet .warp-rail-title { padding: 0 0 var(--sp-s) 2.35rem; }
-  .rw-modal.guide-sheet .warp-rail-list a { min-height: 40px; align-items: center; }
-  /* The sidebar card clips to keep its rounded corners; in the sheet that
-     clipping would hide every shelf past the fold, and the body is the thing
-     that scrolls. */
-  .rw-modal.guide-sheet .guide-nav { background: none; overflow: visible; }
-  .rw-modal.guide-sheet .guide-shelf > summary { min-height: 44px; }
-  .rw-modal.guide-sheet .guide-nav-list a { min-height: 40px; padding-block: 10px; }
-  /* The woven fill reads as cloth across a full-width sidebar row; at sheet
-     width it is just a grid of dots, so the current page takes a flat dye. The
-     dye stops at 12%: --thread-text over it is 4.62:1 on the weakest accent,
-     and the sidebar's warp lines are not here to carry any of the contrast. */
-  .rw-modal.guide-sheet .guide-nav-list a[aria-current="page"] {
-    background: color-mix(in oklab, var(--thread) 12%, var(--well));
-  }
 }
 
 @media (max-width: 520px) {
