@@ -4,14 +4,6 @@ use tracing::trace;
 
 type SupportFunction = unsafe extern "C" fn(*mut archive) -> c_int;
 
-// Appended to the staged archive_read_support_format_7zip.c by
-// crates/rom-weaver-containers/libarchive/build.rs. Declared by hand rather than through
-// bindgen because it is not in any libarchive header - the vendored tree stays a verbatim
-// snapshot of the fork, and the accessor only exists in the staged build copy.
-unsafe extern "C" {
-    fn rom_weaver_7zip_entry_solid_block(archive: *mut archive) -> i64;
-}
-
 const REGULAR_ARCHIVE_SUPPORT: &[(&str, SupportFunction)] = &[
     ("ar format", archive_read_support_format_ar),
     ("cpio format", archive_read_support_format_cpio),
@@ -247,15 +239,6 @@ impl<'a> ReadArchiveEntry<'a> {
         unsafe { CStr::from_ptr(pathname) }
             .to_str()
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
-    }
-
-    // Index of the 7z solid block (libarchive calls it a folder) holding this entry's
-    // data, or `None` for any other format and for entries with no stream at all
-    // (directories, empty files). Everything in one block decodes as a single chain, so
-    // two workers assigned entries from the same block each decode the whole block.
-    pub(crate) fn solid_block(&self) -> Option<u64> {
-        let index = unsafe { rom_weaver_7zip_entry_solid_block(self.archive.as_ptr()) };
-        u64::try_from(index).ok()
     }
 
     pub(crate) fn into_reader(self) -> ArchiveDataReader<'a> {
