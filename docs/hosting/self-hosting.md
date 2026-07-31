@@ -14,8 +14,11 @@ At the root, its service worker can control every path on that origin. Under
 ## Table of contents
 
 - [Docker](#docker)
+  - [Run the published image](#run-the-published-image)
   - [Build from source with Compose](#build-from-source-with-compose)
 - [Static files](#static-files)
+  - [Download a release tarball](#download-a-release-tarball)
+  - [Build static files from source](#build-static-files-from-source)
 - [Cross-origin isolation](#cross-origin-isolation)
 - [Service worker and subpaths](#service-worker-and-subpaths)
 - [Host integration](#host-integration)
@@ -23,6 +26,41 @@ At the root, its service worker can control every path on that origin. Under
 <!-- END doctoc -->
 
 ## Docker
+
+### Run the published image
+
+The release image includes the built webapp and its static server. Run it on
+port 8080 for an HTTPS reverse proxy or local testing:
+
+```bash
+docker run --detach --name rom-weaver-webapp \
+  --publish 8080:8080 \
+  ghcr.io/brandonocasey/rom-weaver-webapp:latest
+```
+
+Check it with `curl http://localhost:8080/health`. Stop and remove it with:
+
+```bash
+docker rm --force rom-weaver-webapp
+```
+
+The currently published legacy image is under `ghcr.io/brandonocasey`; new
+releases publish the same image under `ghcr.io/rom-weaver/rom-weaver-webapp`.
+
+For standalone HTTPS, mount a certificate pair and set `HTTPS_PORT`:
+
+```bash
+docker run --detach --name rom-weaver-webapp \
+  --publish 8443:8080 \
+  --env HTTPS_PORT=8443 \
+  --volume "$PWD/certs:/certs:ro" \
+  ghcr.io/brandonocasey/rom-weaver-webapp:latest
+```
+
+With `fullchain.pem` and `privkey.pem` in `./certs`, open
+`https://localhost:8443/`. The image can generate a temporary self-signed
+certificate when `/certs` does not contain both files; use a trusted
+certificate for anything beyond local testing.
 
 ### Build from source with Compose
 
@@ -121,6 +159,32 @@ docker compose down
 
 ## Static files
 
+### Download a release tarball
+
+Each GitHub release includes the same static build without the Docker image.
+Download and extract the latest one into the directory your static host serves:
+
+```bash
+mkdir -p rom-weaver-webapp
+curl --fail --location --proto '=https' --tlsv1.2 \
+  --output rom-weaver-webapp.tar.gz \
+  https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-webapp.tar.gz
+tar --extract --gzip \
+  --file rom-weaver-webapp.tar.gz \
+  --directory rom-weaver-webapp
+```
+
+Serve the extracted `rom-weaver-webapp` directory from an HTTPS static host,
+preserve its directory structure, and configure the
+[host requirements](#cross-origin-isolation) below. A subdomain is simplest;
+for a subpath, redirect its bare path to a trailing slash, such as
+`/rom-weaver` to `/rom-weaver/`.
+
+To pin a release, replace `latest` in the URL with its tag, for example
+`v0.10.2`.
+
+### Build static files from source
+
 Install the system tools from the [development guide](../development/development.md#prerequisites),
 then build the static files from a checkout:
 
@@ -141,9 +205,6 @@ should enable Brotli or gzip compression when available, especially for the
 WASM file. The Docker image is the only distribution that adds static `.br`
 siblings, because its bundled server is configured to consume them; it gzips
 on demand for clients that cannot take brotli.
-
-The `rom-weaver-webapp.tar.gz` asset on each GitHub release contains this raw
-build, so unpacking it is an alternative to building from a checkout.
 
 The build includes directory-index pages for `/apply`, `/create`, `/trim`, and
 `/tools`, so ordinary static servers can resolve direct visits and refreshes
