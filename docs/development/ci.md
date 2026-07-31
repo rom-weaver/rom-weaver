@@ -910,6 +910,18 @@ Being a local action, it resolves against the workspace, so a calling job must
 check the repository out first - that is the only reason the two
 `attestation-dry-run` jobs check out at all.
 
+That also means it is resolved from the *checked-out ref*, not from the ref the
+workflow file came from. `docker-publish.yml` checks out the released tag, so
+dispatching it by hand for a version tagged before this action existed fails at
+`Sign build provenance` - after the images are already pushed. This is not new
+to this action: `docker-build-arch` and `docker-manifest` are resolved the same
+way, which is the deliberate design (a re-push should build the way that release
+built). It self-heals for every version tagged since. Pinning the action to the
+workflow's own ref instead was rejected: on the release path this workflow is
+called from a `pull_request: closed` event, where a bare checkout resolves to
+the pull request's merge ref, which would put new fragility on the release path
+to fix a manual re-push of an old tag.
+
 A retry can leave two attestations for one subject when the first attempt
 signed but timed out reading the log back. That is harmless: attestations are
 additive and every consumer here asks for at least one, never exactly one.
@@ -1256,7 +1268,7 @@ images come from `ci.yml` - the CLI from the `docker` job's source build, the
 webapp from `docker-prebuilt` - and carry the same change gating as the deploy
 they mirror, so a push touching neither image leaves `nightly` where it is.
 They are attested exactly like the release images: `provenance: mode=max`, an
-SBOM, and an `actions/attest` signature pushed to the registry. Every published
+SBOM, and an `attest-retry` signature pushed to the registry. Every published
 image carries the same evidence regardless of which workflow built it.
 
 Attestation is gated on the push rather than set outright, because it needs an
@@ -1273,7 +1285,7 @@ can verify does not depend on which channel they installed from:
 | 9 CLI platform binaries | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job |
 | static webapp tarball | the same, in `release.yml`'s `static-webapp` |
 | npm packages | `npm publish --provenance` (`scripts/ci/npm-publish-package.mjs`) |
-| container images | `provenance: mode=max` + `actions/attest`, in `docker-publish.yml` for `latest`/`beta` and in `ci.yml` for `nightly` |
+| container images | `provenance: mode=max` + `attest-retry`, in `docker-publish.yml` for `latest`/`beta` and in `ci.yml` for `nightly` |
 
 Two gaps remain, both because no mechanism exists: crates.io has no attestation
 story, and neither does a Cloudflare Pages deploy. Homebrew and Scoop need none
