@@ -72,10 +72,11 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
+  --pwa-footer-reserve: 0px;
   /* the empty 0x01 hero fills the first screen at every width: 100svh minus
      the chrome around it (masthead + banner slack + step head + the ghost-next
      line + margins) */
-  --hero-chrome: calc(242px + var(--safe-t) + var(--safe-b));
+  --hero-chrome: calc(242px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
   /* the empty-section family recipe (hero drop, add-row, needs-input, ghost
      slots): solid seam + thread-tinted fill strung with warp, lighting up on
      hover. Composed from theme-switched vars, so no per-theme overrides are
@@ -137,6 +138,9 @@
 .rw-app a { color: var(--ink-2); text-decoration: none; }
 @media (hover: hover) {
   .rw-app a:hover { color: var(--thread-text); }
+}
+@media (display-mode: standalone) {
+  .rw-app { --pwa-footer-reserve: var(--sp-l); }
 }
 /* Touch devices need active feedback because they lack hover. */
 .rw-app a:active { color: var(--thread-text); }
