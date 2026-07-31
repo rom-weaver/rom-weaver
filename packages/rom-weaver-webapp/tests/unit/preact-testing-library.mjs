@@ -27,6 +27,8 @@ const fireEvent = Object.assign((...args) => preactFireEvent(...args), preactFir
     element.focus();
     return true;
   },
+  // preact/compat normalizes React's blur handler to the bubbling focusout event.
+  blur: (element, init) => preactFireEvent.focusOut(element, init),
 });
 
 export * from "@testing-library/preact";
