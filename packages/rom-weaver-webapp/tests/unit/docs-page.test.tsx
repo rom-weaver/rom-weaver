@@ -439,7 +439,7 @@ Fixture description.
     render(<DocsPage active slug="docs/apply-rom-patches" />);
 
     const input = screen.getAllByRole("combobox", { name: "Search documentation" })[0] as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "checksum" } });
+    fireEvent.change(input, { target: { value: "Nintendo 64" } });
     await vi.waitFor(
       () =>
         expect(
@@ -452,7 +452,7 @@ Fixture description.
     );
     fireEvent.click(link as HTMLAnchorElement);
 
-    await vi.waitFor(() => expect(document.querySelector("mark.docs-search-highlight")?.textContent).toBe("checksum"));
+    await vi.waitFor(() => expect(document.querySelector("mark.docs-search-highlight")?.textContent).toBe("Nintendo"));
     await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" }));
   });
 
