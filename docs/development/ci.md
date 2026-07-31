@@ -1282,14 +1282,14 @@ can verify does not depend on which channel they installed from:
 
 | Artifact | Attested by |
 | --- | --- |
-| 9 CLI platform binaries | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job |
+| 9 CLI platform archives | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job |
 | static webapp tarball | the same, in `release.yml`'s `static-webapp` |
 | npm packages | `npm publish --provenance` (`scripts/ci/npm-publish-package.mjs`) |
 | container images | `provenance: mode=max` + `attest-retry`, in `docker-publish.yml` for `latest`/`beta` and in `ci.yml` for `nightly` |
 
 Two gaps remain, both because no mechanism exists: crates.io has no attestation
 story, and neither does a Cloudflare Pages deploy. Homebrew and Scoop need none
-of their own - both pin the release assets by sha256, so attesting the binaries
+of their own - both pin the release assets by sha256, so attesting the archives
 covers them.
 
 Immutable releases separately make GitHub attest every release automatically,

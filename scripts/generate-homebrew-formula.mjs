@@ -11,7 +11,7 @@ if (!version || !checksumDirectory) {
 const platforms = ["darwin-arm64", "darwin-x64", "linux-arm64-musl", "linux-x64-gnu"];
 const checksums = Object.fromEntries(
   platforms.map((platform) => {
-    const asset = `rom-weaver-${platform}`;
+    const asset = `rom-weaver-${platform}.tar.gz`;
     const checksum = readFileSync(resolve(checksumDirectory, `${asset}.sha256`), "utf8").match(
       /^[a-f0-9]{64}/,
     )?.[0];
@@ -38,28 +38,28 @@ const source = `class RomWeaver < Formula
 
   on_macos do
     on_arm do
-      url "${releaseUrl}/rom-weaver-darwin-arm64"
+      url "${releaseUrl}/rom-weaver-darwin-arm64.tar.gz"
       sha256 "${checksums["darwin-arm64"]}"
     end
     on_intel do
-      url "${releaseUrl}/rom-weaver-darwin-x64"
+      url "${releaseUrl}/rom-weaver-darwin-x64.tar.gz"
       sha256 "${checksums["darwin-x64"]}"
     end
   end
 
   on_linux do
     on_arm do
-      url "${releaseUrl}/rom-weaver-linux-arm64-musl"
+      url "${releaseUrl}/rom-weaver-linux-arm64-musl.tar.gz"
       sha256 "${checksums["linux-arm64-musl"]}"
     end
     on_intel do
-      url "${releaseUrl}/rom-weaver-linux-x64-gnu"
+      url "${releaseUrl}/rom-weaver-linux-x64-gnu.tar.gz"
       sha256 "${checksums["linux-x64-gnu"]}"
     end
   end
 
   def install
-    bin.install Dir["rom-weaver-*"].first => "rom-weaver"
+    bin.install "rom-weaver"
     resource("cli-assets").stage do
       man1.install Dir["man/*.1"]
       bash_completion.install "completions/rom-weaver.bash" => "rom-weaver"

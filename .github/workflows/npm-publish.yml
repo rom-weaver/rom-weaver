@@ -234,9 +234,10 @@ jobs:
     permissions:
       contents: write
       id-token: write
-      # Signed provenance for the release binary. npm generates its own for the
-      # package from the same OIDC token; this covers the loose binary, which
-      # `install.sh`, Homebrew, and Scoop hand to users without going near npm.
+      # Signed provenance for the release archive. npm generates its own for
+      # the package from the same OIDC token; this covers the tar.gz asset,
+      # which `install.sh`, Homebrew, and Scoop hand to users without going
+      # near npm.
       attestations: write
       artifact-metadata: write
     strategy:
@@ -281,7 +282,13 @@ jobs:
 
       # After the npm publish, not before: npm is the irreversible half, so a
       # release-asset failure must not be able to skip it.
-      - name: Upload platform binary to GitHub release
+      #
+      # The asset is a tar.gz holding the single executable, not the loose
+      # binary it used to be: cargo-binstall needs an archive layout to resolve,
+      # and the compression roughly halves every installer's download. The
+      # archive is what gets attested, so consumers verify the exact bytes they
+      # fetched.
+      - name: Upload platform archive to GitHub release
         id: asset
         shell: bash
         env:
@@ -289,12 +296,20 @@ jobs:
         run: |
           package_path=packages/rom-weaver-cli-platforms/${{ matrix.package }}
           binary_path="$package_path/bin/rom-weaver"
-          asset_name="rom-weaver-${{ matrix.package }}"
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             binary_path+=".exe"
-            asset_name+=".exe"
           fi
-          cp "$binary_path" "$asset_name"
+          # The artifact transfer strips the executable bit and the publish
+          # step's helper restores it; the tar below records the on-disk mode
+          # and Homebrew installs the member as-is. Fail here rather than ship
+          # a 0644 binary if that ordering is ever broken.
+          [[ "${{ runner.os }}" == "Windows" ]] || test -x "$binary_path"
+          binary_name="$(basename "$binary_path")"
+          asset_name="rom-weaver-${{ matrix.package }}.tar.gz"
+          archive_dir="$(mktemp -d)"
+          cp "$binary_path" "$archive_dir/$binary_name"
+          tar --create --gzip --file "$asset_name" --directory "$archive_dir" "$binary_name"
+          test "$(tar --list --file "$asset_name")" = "$binary_name"
           gh release upload "v${{ inputs.version }}" "$asset_name" \
             --repo "$GITHUB_REPOSITORY" --clobber
           echo "name=$asset_name" >> "$GITHUB_OUTPUT"
@@ -307,7 +322,7 @@ jobs:
       # release's asset list, so this adds nothing to the draft and cannot
       # interact with immutable releases - it is safe on a rerun and safe after
       # the release is published.
-      - name: Attest the release binary
+      - name: Attest the release archive
         uses: ./.github/actions/attest-retry
         with:
           subject-path: ${{ steps.asset.outputs.name }}

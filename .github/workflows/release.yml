@@ -614,49 +614,29 @@ jobs:
       !contains(needs.release.outputs.version, '-')
     runs-on: ubuntu-24.04
     permissions:
-      actions: read
       contents: read
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release.outputs.sha }}
 
-      - name: Download darwin arm64 package
-        uses: actions/download-artifact@v8
-        with:
-          name: npm-platform-darwin-arm64
-          path: platform-artifacts/darwin-arm64
-
-      - name: Download darwin x64 package
-        uses: actions/download-artifact@v8
-        with:
-          name: npm-platform-darwin-x64
-          path: platform-artifacts/darwin-x64
-
-      - name: Download linux x64 package
-        uses: actions/download-artifact@v8
-        with:
-          name: npm-platform-linux-x64-gnu
-          path: platform-artifacts/linux-x64-gnu
-
-      - name: Download linux arm64 package
-        uses: actions/download-artifact@v8
-        with:
-          name: npm-platform-linux-arm64-musl
-          path: platform-artifacts/linux-arm64-musl
-
+      # The formula must hash the exact published bytes, and a tar.gz built
+      # here would not reproduce them (tar member metadata and gzip headers
+      # differ run to run), so the archives are downloaded from the release
+      # rather than rebuilt from the platform artifacts. This job runs after
+      # publish-release, so the assets are publicly downloadable.
       - name: Calculate release checksums
         run: |
           set -euo pipefail
           mkdir checksums
           for platform in darwin-arm64 darwin-x64 linux-arm64-musl linux-x64-gnu; do
-            binary="platform-artifacts/$platform/bin/rom-weaver"
-            test -f "$binary"
-            checksum="$(sha256sum "$binary" | cut -d ' ' -f 1)"
-            printf '%s  rom-weaver-%s\n' "$checksum" "$platform" > \
-              "checksums/rom-weaver-$platform.sha256"
+            asset="rom-weaver-$platform.tar.gz"
+            curl --fail --location --retry 5 --retry-delay 2 --output "$asset" \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/$asset"
+            printf '%s  %s\n' "$(sha256sum "$asset" | cut -d ' ' -f 1)" "$asset" > \
+              "checksums/$asset.sha256"
           done
-          curl --fail --location --output rom-weaver-cli-assets.tar.gz \
+          curl --fail --location --retry 5 --retry-delay 2 --output rom-weaver-cli-assets.tar.gz \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/rom-weaver-cli-assets.tar.gz"
           printf '%s  rom-weaver-cli-assets.tar.gz\n' \
             "$(sha256sum rom-weaver-cli-assets.tar.gz | cut -d ' ' -f 1)" > \
@@ -699,40 +679,23 @@ jobs:
       !contains(needs.release.outputs.version, '-')
     runs-on: ubuntu-24.04
     permissions:
-      actions: read
       contents: read
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release.outputs.sha }}
 
-      - name: Download win32 arm64 package
-        uses: actions/download-artifact@v8
-        with:
-          name: npm-platform-win32-arm64-msvc
-          path: platform-artifacts/win32-arm64-msvc
-
-      - name: Download win32 ia32 package
-        uses: actions/download-artifact@v8
-        with:
-          name: npm-platform-win32-ia32-msvc
-          path: platform-artifacts/win32-ia32-msvc
-
-      - name: Download win32 x64 package
-        uses: actions/download-artifact@v8
-        with:
-          name: npm-platform-win32-x64-msvc
-          path: platform-artifacts/win32-x64-msvc
-
+      # Same rationale as publish-homebrew: hash the published archives, which
+      # cannot be reproduced from the platform artifacts.
       - name: Calculate release checksums
         run: |
           set -euo pipefail
           mkdir checksums
           for platform in win32-arm64-msvc win32-ia32-msvc win32-x64-msvc; do
-            asset="rom-weaver-$platform.exe"
-            binary="platform-artifacts/$platform/bin/rom-weaver.exe"
-            test -f "$binary"
-            printf '%s  %s\n' "$(sha256sum "$binary" | cut -d ' ' -f 1)" "$asset" > \
+            asset="rom-weaver-$platform.tar.gz"
+            curl --fail --location --retry 5 --retry-delay 2 --output "$asset" \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/$asset"
+            printf '%s  %s\n' "$(sha256sum "$asset" | cut -d ' ' -f 1)" "$asset" > \
               "checksums/$asset.sha256"
           done
 

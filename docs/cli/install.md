@@ -80,7 +80,7 @@ irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | i
 ### Verifying a download
 
 Every published artifact carries signed [build provenance][slsa]: the platform
-binaries and the webapp tarball on each release, the npm packages, and the
+archives and the webapp tarball on each release, the npm packages, and the
 container images. It records which workflow, run, and commit produced the file,
 so an asset uploaded by anything other than the release workflow - a stolen
 token, a maintainer's laptop - has none.
@@ -92,7 +92,7 @@ exactly those bytes. Nothing needs installing - this is the same check both
 install scripts run:
 
 ```bash
-file=rom-weaver-linux-x64-gnu
+file=rom-weaver-linux-x64-gnu.tar.gz
 
 # sha256sum on Linux; macOS ships shasum instead. Probed rather than tried and
 # fallen back from: `$(missing | cut)` exits 0, so a fallback keyed on the exit
@@ -115,7 +115,7 @@ fi
 The PowerShell equivalent:
 
 ```powershell
-$file = 'rom-weaver-win32-x64-msvc.exe'
+$file = 'rom-weaver-win32-x64-msvc.tar.gz'
 $digest = (Get-FileHash -Path $file -Algorithm SHA256).Hash.ToLower()
 $uri = "https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${digest}" +
   '?predicate_type=https://slsa.dev/provenance/v1'
@@ -159,7 +159,7 @@ signature. For that - signature, certificate chain, and transparency-log
 inclusion - use `gh`, which must be signed in even for a public repository:
 
 ```bash
-gh attestation verify rom-weaver-linux-x64-gnu --repo rom-weaver/rom-weaver
+gh attestation verify rom-weaver-linux-x64-gnu.tar.gz --repo rom-weaver/rom-weaver
 gh attestation verify oci://ghcr.io/rom-weaver/rom-weaver-cli:latest \
   --repo rom-weaver/rom-weaver
 ```
