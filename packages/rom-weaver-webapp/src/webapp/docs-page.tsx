@@ -8,7 +8,7 @@ import { Modal } from "../public/react/components/ds/modal.tsx";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes } from "./docs-routing.mjs";
-import { createDocsSearchIndex, searchDocs } from "./docs-search.mjs";
+import { createDocsSearchIndex, findSearchToken, searchDocs } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
 import { SITE_NAME } from "./workflow-seo.mjs";
@@ -143,11 +143,13 @@ const SectionRail = ({
 
 const DocsSearch = ({
   onNavigate,
+  onSelect,
   onQueryChange,
   query,
   results,
 }: {
   onNavigate?: () => void;
+  onSelect?: (result: DocSearchResult, query: string) => void;
   onQueryChange: (query: string) => void;
   query: string;
   results: readonly DocSearchResult[];
@@ -156,16 +158,20 @@ const DocsSearch = ({
   const resultListId = `${inputId}-results`;
   const statusId = `${inputId}-status`;
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [open, setOpen] = useState(false);
   const hasQuery = query.trim().length > 0;
+  const showResults = hasQuery && open;
 
   useEffect(() => {
     if (query !== "") setActiveIndex(-1);
+    if (query === "") setOpen(false);
   }, [query]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
       onQueryChange("");
+      setOpen(false);
       return;
     }
     if (!results.length) return;
@@ -183,25 +189,29 @@ const DocsSearch = ({
 
   return (
     <div className="docs-search">
-      <label className="guide-nav-title docs-search-label" htmlFor={inputId}>
+      <label className="docs-search-label" htmlFor={inputId}>
         Search documentation
       </label>
       <input
         aria-activedescendant={activeIndex >= 0 ? `${resultListId}-${activeIndex}` : undefined}
         aria-controls={resultListId}
         aria-describedby={statusId}
-        aria-expanded={hasQuery}
+        aria-expanded={showResults}
         autoComplete="off"
         className="input"
         id={inputId}
-        onChange={(event) => onQueryChange(event.currentTarget.value)}
+        onChange={(event) => {
+          setOpen(true);
+          onQueryChange(event.currentTarget.value);
+        }}
         onKeyDown={onKeyDown}
+        onFocus={() => setOpen(true)}
         placeholder="Search docs"
         role="combobox"
         type="search"
         value={query}
       />
-      {hasQuery ? (
+      {showResults ? (
         <div className="docs-search-results">
           <p aria-live="polite" className="docs-search-status" id={statusId} role="status">
             {results.length === 0
@@ -211,7 +221,8 @@ const DocsSearch = ({
           {results.length > 0 ? (
             <ul className="guide-nav-list docs-search-result-list" id={resultListId}>
               {results.map((result, index) => {
-                const href = `/${result.route.slug}${result.entry.id ? `#${result.entry.id}` : ""}`;
+                const highlight = new URLSearchParams({ highlight: query.trim() });
+                const href = `/${result.route.slug}?${highlight}${result.entry.id ? `#${result.entry.id}` : ""}`;
                 return (
                   <li key={`${result.route.slug}:${result.entry.id ?? "introduction"}`}>
                     <a
@@ -220,7 +231,9 @@ const DocsSearch = ({
                       href={href}
                       id={`${resultListId}-${index}`}
                       onClick={() => {
+                        onSelect?.(result, query);
                         onQueryChange("");
+                        setOpen(false);
                         onNavigate?.();
                       }}
                     >
@@ -245,53 +258,39 @@ const DocsNav = ({
   onNavigate,
   onShelfToggle,
   openShelves,
-  searchQuery,
-  searchResults,
-  onSearchQueryChange,
 }: {
   currentSlug: string;
   onNavigate?: () => void;
   onShelfToggle: (title: string, open: boolean) => void;
   openShelves: DocShelfState;
-  searchQuery: string;
-  searchResults: readonly DocSearchResult[];
-  onSearchQueryChange: (query: string) => void;
 }) => (
   <nav aria-label="Docs" className="guide-nav">
     <span className="guide-nav-title">Docs</span>
-    <DocsSearch
-      onNavigate={onNavigate}
-      onQueryChange={onSearchQueryChange}
-      query={searchQuery}
-      results={searchResults}
-    />
-    {searchQuery.trim()
-      ? null
-      : DOC_SHELVES.map((shelf) => (
-          <details
-            className="guide-shelf"
-            key={shelf.title}
-            onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
-            open={openShelves[shelf.title]}
-          >
-            <summary>
-              <h3 className="guide-shelf-title">{shelf.title}</h3>
-            </summary>
-            <ul className="guide-nav-list">
-              {shelf.routes.map((entry) => (
-                <li key={entry.slug}>
-                  <a
-                    aria-current={entry.slug === currentSlug ? "page" : undefined}
-                    href={`/${entry.slug}`}
-                    onClick={onNavigate}
-                  >
-                    {entry.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ))}
+    {DOC_SHELVES.map((shelf) => (
+      <details
+        className="guide-shelf"
+        key={shelf.title}
+        onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
+        open={openShelves[shelf.title]}
+      >
+        <summary>
+          <h3 className="guide-shelf-title">{shelf.title}</h3>
+        </summary>
+        <ul className="guide-nav-list">
+          {shelf.routes.map((entry) => (
+            <li key={entry.slug}>
+              <a
+                aria-current={entry.slug === currentSlug ? "page" : undefined}
+                href={`/${entry.slug}`}
+                onClick={onNavigate}
+              >
+                {entry.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </details>
+    ))}
   </nav>
 );
 
@@ -379,6 +378,7 @@ const TrailHead = ({
   activeIndex,
   fraction,
   onShelfToggle,
+  onSearchSelect,
   onSearchQueryChange,
   openShelves,
   route,
@@ -389,6 +389,7 @@ const TrailHead = ({
   activeIndex: number;
   fraction: number;
   onShelfToggle: (title: string, open: boolean) => void;
+  onSearchSelect: (result: DocSearchResult, query: string) => void;
   onSearchQueryChange: (query: string) => void;
   openShelves: DocShelfState;
   route: DocRoute;
@@ -442,6 +443,14 @@ const TrailHead = ({
           </>
         ) : null}
       </nav>
+      <div className="docs-trail-search">
+        <DocsSearch
+          onQueryChange={onSearchQueryChange}
+          onSelect={onSearchSelect}
+          query={searchQuery}
+          results={searchResults}
+        />
+      </div>
       {outlined ? (
         <span aria-hidden="true" className="warp-gauge">
           {route.sections.map((section, index) => (
@@ -460,11 +469,8 @@ const TrailHead = ({
           <DocsNav
             currentSlug={route.slug}
             onNavigate={close}
-            onSearchQueryChange={onSearchQueryChange}
             onShelfToggle={onShelfToggle}
             openShelves={openShelves}
-            searchQuery={searchQuery}
-            searchResults={searchResults}
           />
         )}
       </Modal>
@@ -498,6 +504,68 @@ const isPlainLeftClick = (event: MouseEvent<HTMLAnchorElement>) =>
   event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
 const ignoreGuide = (_guide: GuidedSample) => undefined;
 
+const readDocsHighlight = (routeSlug?: string) => {
+  if (typeof window === "undefined") return { query: "", sectionId: null };
+  const url = new URL(window.location.href);
+  if (routeSlug && !url.pathname.replace(/\/$/, "").endsWith(`/${routeSlug}`)) {
+    return { query: "", sectionId: null };
+  }
+  return {
+    query: url.searchParams.get("highlight") ?? "",
+    sectionId: url.hash ? decodeURIComponent(url.hash.slice(1)) : null,
+  };
+};
+
+const clearDocsHighlightParam = () => {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("highlight")) return;
+  url.searchParams.delete("highlight");
+  window.history.replaceState(window.history.state, "", url);
+};
+
+const highlightDocsTerm = (article: HTMLElement, query: string, sectionId: string | null) => {
+  for (const mark of article.querySelectorAll("mark.docs-search-highlight")) {
+    mark.replaceWith(document.createTextNode(mark.textContent ?? ""));
+  }
+  const heading = sectionId ? document.getElementById(sectionId) : null;
+  const nextHeading = heading
+    ? [...article.querySelectorAll("h2")].find(
+        (candidate) => heading.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING,
+      )
+    : null;
+  const textNodes: Text[] = [];
+  const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    const textNode = node as Text;
+    const parent = textNode.parentElement;
+    const afterHeading =
+      !heading ||
+      (parent &&
+        (heading === parent || Boolean(heading.compareDocumentPosition(parent) & Node.DOCUMENT_POSITION_FOLLOWING)));
+    const beforeNextHeading =
+      !nextHeading ||
+      (parent &&
+        (nextHeading === parent ||
+          Boolean(nextHeading.compareDocumentPosition(parent) & Node.DOCUMENT_POSITION_PRECEDING)));
+    if (parent && afterHeading && beforeNextHeading) textNodes.push(textNode);
+    node = walker.nextNode();
+  }
+  for (const textNode of textNodes) {
+    const match = findSearchToken(textNode.nodeValue ?? "", query);
+    if (!match) continue;
+    const mark = document.createElement("mark");
+    mark.className = "docs-search-highlight";
+    const range = document.createRange();
+    range.setStart(textNode, match.index);
+    range.setEnd(textNode, match.index + match.text.length);
+    range.surroundContents(mark);
+    return mark;
+  }
+  return null;
+};
+
 const DocsPage = ({
   active,
   onGuideIntent = ignoreGuide,
@@ -519,6 +587,9 @@ const DocsPage = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchIndex, setSearchIndex] = useState<readonly DocSearchRoute[]>([]);
   const searchResults = useMemo(() => searchDocs(searchIndex, searchQuery), [searchIndex, searchQuery]);
+  const initialHighlight = readDocsHighlight();
+  const [highlightQuery, setHighlightQuery] = useState(initialHighlight.query);
+  const [highlightSection, setHighlightSection] = useState<string | null>(initialHighlight.sectionId);
   // Starts on the base the guides are authored against, which is what the
   // served document was rendered with, so hydration has nothing to reconcile.
   // The deployment's own base applies after mount, and only re-renders the
@@ -538,6 +609,29 @@ const DocsPage = ({
     setSearchIndex(createDocsSearchIndex(DOC_ROUTES));
   }, [active]);
   useEffect(() => setSampleBase(assetBaseUrl || AUTHORED_SAMPLE_BASE), [assetBaseUrl]);
+  useEffect(() => {
+    if (!active) return;
+    const highlight = readDocsHighlight(route.slug);
+    setHighlightQuery(highlight.query);
+    setHighlightSection(highlight.sectionId);
+  }, [active, route.slug]);
+  useEffect(() => {
+    if (!(active && highlightQuery && html)) return;
+    const article = document.querySelector<HTMLElement>(".docs-article");
+    if (!article) return;
+    const mark = highlightDocsTerm(article, highlightQuery, highlightSection);
+    const frame = window.requestAnimationFrame(() => {
+      (mark ?? (highlightSection ? document.getElementById(highlightSection) : null))?.scrollIntoView({
+        block: "center",
+      });
+      clearDocsHighlightParam();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, highlightQuery, highlightSection, html]);
+  const onSearchSelect = useCallback((result: DocSearchResult, query: string) => {
+    setHighlightQuery(query);
+    setHighlightSection(result.entry.id);
+  }, []);
   return (
     <div className="docs-workbench" id="main">
       <nav aria-label="Breadcrumb" className="docs-breadcrumbs">
@@ -553,12 +647,21 @@ const DocsPage = ({
           </>
         )}
       </nav>
+      <div className="docs-search-header">
+        <DocsSearch
+          onSelect={onSearchSelect}
+          onQueryChange={setSearchQuery}
+          query={searchQuery}
+          results={searchResults}
+        />
+      </div>
       {/* Keyed on the route so moving to another guide closes the sheet with it,
           rather than leaving it open over a guide it no longer describes. */}
       <TrailHead
         activeIndex={activeIndex}
         fraction={fraction}
         key={route.slug}
+        onSearchSelect={onSearchSelect}
         onSearchQueryChange={setSearchQuery}
         onShelfToggle={onShelfToggle}
         openShelves={openShelves}
@@ -569,14 +672,7 @@ const DocsPage = ({
       />
       <div className="docs-layout">
         <div className="docs-rails">
-          <DocsNav
-            currentSlug={route.slug}
-            onSearchQueryChange={setSearchQuery}
-            onShelfToggle={onShelfToggle}
-            openShelves={openShelves}
-            searchQuery={searchQuery}
-            searchResults={searchResults}
-          />
+          <DocsNav currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} />
           {route.sections.length > 0 ? <SectionRail activeIndex={activeIndex} route={route} /> : null}
         </div>
         <section className="docs-panel">

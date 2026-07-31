@@ -3,6 +3,7 @@
  * @typedef {{ description: string, html: string, label: string, sections: readonly { id: string, label: string }[], slug: string, title: string }} SearchSourceRoute
  * @typedef {SearchSourceRoute & { searchEntries: readonly SearchEntry[] }} SearchRoute
  * @typedef {{ entry: SearchEntry, route: SearchRoute, routeIndex: number, entryIndex: number, score: number, snippet: string }} SearchMatch
+ * @typedef {{ index: number, score: number, text: string }} SearchTokenMatch
  */
 
 /** @param {string} value */
@@ -45,6 +46,19 @@ const tokenMatchScore = (query, candidate) => {
   if (candidate.includes(query)) return 0.72;
   if (query.length < 3) return 0;
   return editDistance(query, candidate, 1) === 1 ? 0.58 : 0;
+};
+
+/** @param {string} text @param {string} query @returns {SearchTokenMatch | null} */
+const findSearchToken = (text, query) => {
+  const queryTokens = searchTokens(query);
+  if (!queryTokens.length) return null;
+  let best = null;
+  for (const match of String(text).matchAll(/[\p{Letter}\p{Number}]+/gu)) {
+    const candidate = normalizeSearchText(match[0]);
+    const score = Math.max(...queryTokens.map((queryToken) => tokenMatchScore(queryToken, candidate)));
+    if (!best || score > best.score) best = { index: match.index ?? 0, score, text: match[0] };
+  }
+  return best && best.score > 0 ? best : null;
 };
 
 /** @param {string[]} query @param {Array<{ tokens: string[], weight: number }>} fields */
@@ -159,4 +173,4 @@ const searchDocs = (routes, query, limit = 8) => {
     .map(({ entry, route, score, snippet }) => ({ entry, route, score, snippet }));
 };
 
-export { createDocsSearchIndex, searchDocs, searchTokens };
+export { createDocsSearchIndex, findSearchToken, searchDocs, searchTokens };

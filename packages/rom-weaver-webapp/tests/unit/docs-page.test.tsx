@@ -393,7 +393,7 @@ Fixture description.
     render(<DocsPage active slug="docs" />);
 
     const index = document.querySelector(".docs-index");
-    expect(screen.getByRole("combobox", { name: "Search documentation" })).toBeTruthy();
+    expect(screen.getAllByRole("combobox", { name: "Search documentation" })).toHaveLength(2);
     expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain("Browser usage");
     expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("CLI reference");
     expect(index?.querySelector('a[href="/docs/install"]')?.textContent).toContain("Install");
@@ -405,16 +405,17 @@ Fixture description.
   it("fuzzy-searches guide text and links directly to the matching section", () => {
     render(<DocsPage active slug="docs" />);
 
-    const input = screen.getByRole("combobox", { name: "Search documentation" });
+    const input = screen.getAllByRole("combobox", { name: "Search documentation" })[0] as HTMLInputElement;
     fireEvent.change(input, { target: { value: "checksumm warning" } });
 
     const section = routeFor("docs/fix-checksum-errors").sections.find(
       (entry) => entry.id === "what-does-the-warning-mean",
     );
     expect(section).toBeTruthy();
-    expect(
-      document.querySelector(`.docs-search-results a[href="/docs/fix-checksum-errors#${section?.id}"]`),
-    ).toBeTruthy();
+    const resultLink = document.querySelector<HTMLAnchorElement>(
+      `.docs-search-results a[href^="/docs/fix-checksum-errors?highlight="][href$="#${section?.id}"]`,
+    );
+    expect(resultLink).toBeTruthy();
     expect(screen.getByRole("status").textContent).toMatch(/result/);
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
@@ -424,16 +425,29 @@ Fixture description.
     expect(document.querySelector(".guide-shelf")).toBeTruthy();
   });
 
-  it("shares search state with the mobile docs sheet", () => {
+  it("shares search state with the mobile breadcrumb search", () => {
     render(<DocsPage active slug="docs" />);
-    fireEvent.click(screen.getByRole("button", { name: "Docs" }));
-
     const inputs = screen.getAllByRole("combobox", { name: "Search documentation" });
     fireEvent.change(inputs.at(-1) as HTMLElement, { target: { value: "OPFS" } });
 
-    expect(document.querySelectorAll('.rw-modal.guide-sheet .docs-search-results a[href*="#"]').length).toBeGreaterThan(
-      0,
+    expect(document.querySelectorAll(".docs-trail .docs-search-results a[href*='#']").length).toBeGreaterThan(0);
+  });
+
+  it("highlights and centers the selected search term in its section", async () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    const input = screen.getAllByRole("combobox", { name: "Search documentation" })[0] as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "checksum" } });
+    const link = document.querySelector<HTMLAnchorElement>(
+      '.docs-search-results a[href*="apply-rom-patches"][href*="highlight="]',
     );
+    expect(link).toBeTruthy();
+    fireEvent.click(link as HTMLAnchorElement);
+
+    await vi.waitFor(() => expect(document.querySelector("mark.docs-search-highlight")?.textContent).toBe("checksum"));
+    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" }));
   });
 
   it.each(["docs", "docs/apply-rom-patches"])("ends %s with nothing but the way back up", (slug) => {

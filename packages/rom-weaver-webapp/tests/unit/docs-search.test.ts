@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
-import { createDocsSearchIndex, searchDocs, searchTokens } from "../../src/webapp/docs-search.mjs";
+import { createDocsSearchIndex, findSearchToken, searchDocs, searchTokens } from "../../src/webapp/docs-search.mjs";
 
 const route = createDocRoute(
   { file: "usage/fixture.md", label: "Checksum guide", slug: "docs/fixture" },
@@ -32,6 +32,10 @@ describe("docs search", () => {
     expect(result?.entry.id).toBe("repair-checksum-errors");
     expect(result?.route.slug).toBe("docs/fixture");
     expect(result?.snippet).toContain("checksum tool");
+  });
+
+  it("returns the closest source word to highlight after a fuzzy match", () => {
+    expect(findSearchToken("Use the checksum tool here.", "checksumm")?.text).toBe("checksum");
   });
 
   it("searches body text and returns a page-relative result when needed", () => {
