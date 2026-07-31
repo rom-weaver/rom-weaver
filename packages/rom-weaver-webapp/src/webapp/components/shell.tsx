@@ -538,6 +538,9 @@ const Masthead = ({
     });
   };
   const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
+  const channelBadgePrNumber = channelBadge?.match(/^pr-(\d+)$/)?.[1];
+  const channelBadgeHref =
+    channelBadgePrNumber && githubBaseHref ? `${githubBaseHref}pull/${channelBadgePrNumber}` : undefined;
   const versionHref = version && githubBaseHref ? `${githubBaseHref}releases/tag/v${version}` : undefined;
   const commitHref = commitHash && githubBaseHref ? `${githubBaseHref}commit/${commitHash}` : undefined;
   const commitDistance =
@@ -562,7 +565,22 @@ const Masthead = ({
                   <b>weaver</b>
                 </BrandHeading>
               </a>
-              {channelBadge ? <span className="channel-badge">{channelBadge}</span> : null}
+              {channelBadge ? (
+                channelBadgeHref ? (
+                  <a
+                    aria-label={`Open pull request ${channelBadgePrNumber}`}
+                    className="channel-badge"
+                    href={channelBadgeHref}
+                    onClick={(event) => guardExternalClick(event, channelBadgeHref)}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {channelBadge}
+                  </a>
+                ) : (
+                  <span className="channel-badge">{channelBadge}</span>
+                )
+              ) : null}
             </span>
             {version ? (
               <span className="masthead-version mono">
