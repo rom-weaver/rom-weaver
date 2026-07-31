@@ -31,12 +31,15 @@ function Invoke-WebRequest {
   param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
   Add-Content -Path '${urlLog}' -Value $Uri
   if ($Uri -like '*cli-assets.zip') {
-    $source = Join-Path $env:TEMP 'docs'
-    $completionDir = Join-Path $source 'completions'
-    New-Item -ItemType Directory -Path $completionDir -Force | Out-Null
-    Set-Content -Path (Join-Path $completionDir 'rom-weaver.ps1') -Value 'completion' -NoNewline
-    Compress-Archive -Path (Join-Path $source '*') -DestinationPath $OutFile -Force
-    Remove-Item -Path $source -Recurse -Force
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::Open($OutFile, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+      $entry = $archive.CreateEntry('completions/rom-weaver.ps1')
+      $writer = [System.IO.StreamWriter]::new($entry.Open())
+      try { $writer.Write('completion') } finally { $writer.Dispose() }
+    } finally {
+      $archive.Dispose()
+    }
   } else {
     Set-Content -Path $OutFile -Value 'binary' -NoNewline
   }
@@ -110,12 +113,15 @@ $env:ROM_WEAVER_INSTALL_DIR = '${installDirectory}'
 function Invoke-WebRequest {
   param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
   if ($Uri -like '*cli-assets.zip') {
-    $source = Join-Path $env:TEMP 'docs'
-    $completionDir = Join-Path $source 'completions'
-    New-Item -ItemType Directory -Path $completionDir -Force | Out-Null
-    Set-Content -Path (Join-Path $completionDir 'rom-weaver.ps1') -Value 'completion' -NoNewline
-    Compress-Archive -Path (Join-Path $source '*') -DestinationPath $OutFile -Force
-    Remove-Item -Path $source -Recurse -Force
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::Open($OutFile, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+      $entry = $archive.CreateEntry('completions/rom-weaver.ps1')
+      $writer = [System.IO.StreamWriter]::new($entry.Open())
+      try { $writer.Write('completion') } finally { $writer.Dispose() }
+    } finally {
+      $archive.Dispose()
+    }
   } else {
     Set-Content -Path $OutFile -Value 'binary' -NoNewline
   }
