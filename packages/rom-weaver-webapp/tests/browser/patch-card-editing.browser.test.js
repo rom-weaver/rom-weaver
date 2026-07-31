@@ -208,3 +208,44 @@ test("bundle output verification stands down for partial selections and diverged
   );
   expect(divergedNotice.textContent).toContain("differs from the bundle");
 });
+
+test("two freshly added checks hand off focus once each instead of trading it forever", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
+  await waitForApplyButtonEnabled();
+
+  document.getElementById("rom-weaver-patch-meta-edit-0")?.click();
+  document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
+  const addCheck = await waitForState(() => document.getElementById("rom-weaver-patch-input-add-check-0"));
+
+  /* Each added row focuses itself through a ref callback, and a ref callback is
+     re-invoked on every render. Count the focus() calls rather than the renders:
+     two empty rows re-focusing would blur each other, and each blur commits and
+     renders again. The cap keeps a regression a failed assertion instead of a
+     hung browser. */
+  const FOCUS_CAP = 25;
+  const realFocus = HTMLElement.prototype.focus;
+  let focusCalls = 0;
+  HTMLElement.prototype.focus = function countedFocus(...args) {
+    focusCalls += 1;
+    if (focusCalls > FOCUS_CAP) return undefined;
+    return realFocus.apply(this, args);
+  };
+  try {
+    for (const field of ["md5", "sha1"]) {
+      addCheck.value = field;
+      addCheck.dispatchEvent(new Event("change", { bubbles: true }));
+      await waitForState(() => document.getElementById(`rom-weaver-patch-input-${field}-0`));
+    }
+    // Let any pending commit/render cascade settle before sampling the count.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } finally {
+    HTMLElement.prototype.focus = realFocus;
+  }
+
+  expect(focusCalls).toBeLessThanOrEqual(FOCUS_CAP);
+  // One deliberate hand-off per row, and both rows survive.
+  expect(focusCalls).toBeLessThanOrEqual(4);
+  expect(document.getElementById("rom-weaver-patch-input-md5-0")).not.toBeNull();
+  expect(document.getElementById("rom-weaver-patch-input-sha1-0")).not.toBeNull();
+});

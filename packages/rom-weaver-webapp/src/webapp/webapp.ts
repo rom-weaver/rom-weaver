@@ -5,9 +5,12 @@ import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
+import { ONBOARDING_DISMISS_EVENT, requestGuidedSampleStart } from "../public/react/guided-sample-start.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
-import { markRomWeaverRunnerStale } from "../workers/rom-weaver/rom-weaver-runner.ts";
+import { resetBrowserTransientOpfs } from "../storage/browser/browser-opfs-cleanup.ts";
+import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
+import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
@@ -22,6 +25,8 @@ import {
 } from "./unload-guard.ts";
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
 import { createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath } from "./webapp-controller.ts";
+import { readPwaState } from "./components/shell.tsx";
+import { getSoftNavigationUrl } from "./soft-navigation.ts";
 import { ENTRY_ANIMATIONS, resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { preloadWorkflowRoute } from "./workflow-routes.tsx";
 import {
@@ -29,6 +34,7 @@ import {
   createEmptyConfirmationDialogState,
   type WebappRootProps,
 } from "./webapp-root-types.ts";
+import type { WebappView } from "./webapp-state-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
 // localStorage.setItem(LOCAL_STORAGE_SETTINGS_ID, JSON.stringify(settings))
@@ -56,6 +62,12 @@ let confirmationDialogState = createEmptyConfirmationDialogState();
 let renderWebappRootIfReady = () => undefined;
 let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
+let pageResetKey = 0;
+if (typeof window !== "undefined") {
+  void resetBrowserTransientOpfs().catch((error: unknown) => {
+    logger.warn("Initial OPFS cleanup failed", { message: error instanceof Error ? error.message : String(error) });
+  });
+}
 // Suppresses the first render until cross-origin isolation settles so the un-isolated first document
 // never flashes before the service worker reloads the page. Decided synchronously at construction.
 const serviceWorkerBootGate = createServiceWorkerBootGate({
@@ -113,6 +125,25 @@ async function confirmReloadUpdate() {
 }
 
 const FORCE_HTTPS_HOSTS = ["www.marcrobledo.com"];
+let applicationStatusReady = false;
+let lastApplicationStatus = "";
+function logApplicationStatus(message: string, force = false) {
+  const status = {
+    branch: GIT_BRANCH,
+    buildVersion: APP_BUILD_VERSION,
+    commit: COMMIT_HASH,
+    dirty: !!DIRTY_HASH,
+    dirtyHash: DIRTY_HASH || undefined,
+    runtime: readPwaState() ? "pwa" : "web",
+    serviceWorkerStatus: serviceWorkerClient.getState().serviceWorkerStatus,
+    threads: resolveThreads(webappController.getState().settings.threads),
+    version: APP_VERSION,
+  };
+  const serializedStatus = JSON.stringify(status);
+  if (!force && serializedStatus === lastApplicationStatus) return;
+  lastApplicationStatus = serializedStatus;
+  logger.info(message, status);
+}
 const serviceWorkerClient = createPwaServiceWorkerClient({
   appVersion: APP_BUILD_VERSION,
   cachePrefix: SERVICE_WORKER_CACHE_PREFIX,
@@ -122,6 +153,7 @@ const serviceWorkerClient = createPwaServiceWorkerClient({
   navigator: typeof navigator === "undefined" ? undefined : navigator,
   onConfirmReload: confirmReloadUpdate,
   onStateChange: () => {
+    if (applicationStatusReady) logApplicationStatus("Application status changed");
     renderWebappRootIfReady();
   },
   sessionStorage: typeof sessionStorage === "undefined" ? undefined : sessionStorage,
@@ -155,6 +187,7 @@ for (const warning of urlSessionParse.warnings) {
 
 const applySettingsToRuntime = (settings: SettingsState) => {
   configureLogger({ level: typeof settings.logLevel === "string" ? settings.logLevel : undefined });
+  if (applicationStatusReady) logApplicationStatus("Application status changed");
   logger.debug("Applying runtime settings", {
     logLevel: settings.logLevel,
     threads: settings.threads,
@@ -162,6 +195,10 @@ const applySettingsToRuntime = (settings: SettingsState) => {
 };
 
 const isNotFoundPage = document.documentElement.dataset.page === "not-found";
+// Which static document the host actually served, captured before the
+// controller runs: restoring a persisted tab rewrites the path, which would
+// otherwise erase the only evidence of what is in the DOM.
+const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "patcher";
 const webappController = createWebappRootController({
   initialHistoryMode: isNotFoundPage ? "none" : "replace",
   onApplySettings: applySettingsToRuntime,
@@ -175,6 +212,7 @@ const webappController = createWebappRootController({
 });
 applySettingsToRuntime(webappController.getState().settings);
 logger.info("Browser environment", collectBrowserInfo());
+applicationStatusReady = true;
 
 // The landing tab's workflow form is its own chunk. Start it at module
 // evaluation, then wait for it before hydration so React does not commit a
@@ -315,6 +353,19 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
   deferViteReload({ label: payload?.path, source: "vite" });
 });
 
+// Views the build emits a prerendered shell for. Trim and Tools deliberately
+// inherit the patcher's markup, so they hydrate as "patcher" - that is what is
+// actually in the document.
+const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs"]);
+
+// Hydration has to start from the view the *served document* was rendered as,
+// or React discards the whole shell - never from controller state, which may
+// already have restored a persisted tab the document knows nothing about.
+const readHydrationView = (): WebappView =>
+  PRERENDERED_VIEWS.has(servedDocumentView) ? servedDocumentView : "patcher";
+
+const readHydrationBetaToolsEnabled = (): boolean => document.documentElement.dataset.betaToolsEnabled === "true";
+
 const renderWebappRoot = (): undefined => {
   // Suppress all renders (including reactive ones from the service worker state machine) while the boot
   // gate is closed, so the un-isolated first document stays on the static background until the SW reload.
@@ -339,12 +390,16 @@ const renderWebappRoot = (): undefined => {
   const serviceWorkerCache = serviceWorkerClient.getState();
   const state = webappController.getState();
   const hydrationSettings = shouldHydrate
-    ? { ...getDefaultSettings(), threads: state.settings.threads }
+    ? {
+        ...getDefaultSettings(),
+        betaToolsEnabled: readHydrationBetaToolsEnabled(),
+        threads: state.settings.threads,
+      }
     : state.settings;
   const rootState: WebappRootProps["state"] = shouldHydrate
     ? {
         ...state,
-        currentView: state.currentView === "creator" ? "creator" : "patcher",
+        currentView: readHydrationView(),
         draftSettings: { ...hydrationSettings },
         settings: hydrationSettings,
         startup: { message: "", status: "ready" as const },
@@ -370,6 +425,7 @@ const renderWebappRoot = (): undefined => {
           if (accepted) webappController.discardDraftSettings();
         })();
       },
+      onAccentChange: (accent) => webappController.setAccent(accent),
       onConfirmConfirmation: () => closeConfirmationDialog(true),
       onConfirmExternalNavigation: async () => {
         const navigationGuardState = getNavigationGuardState();
@@ -388,6 +444,7 @@ const renderWebappRoot = (): undefined => {
       onCreatorSettingsChange: (settings) => webappController.setCreatorSettingsState(settings),
       onDraftChange: (field, value) =>
         webappController.updateDraftSetting(field as Parameters<typeof webappController.updateDraftSetting>[0], value),
+      onLanguageChange: (language) => webappController.setLanguage(language),
       onLogLevelChange: (level) => webappController.setLogLevel(level),
       onOpenSettings: () => webappController.openSettings(),
       onPatcherBundlePackageChange: (value) => webappController.setBundlePackage(value),
@@ -401,12 +458,21 @@ const renderWebappRoot = (): undefined => {
         void (async () => {
           const accepted = await requestConfirmation({
             cancelLabel: "Stay here",
-            confirmLabel: "Reload page",
+            confirmLabel: "Reset page",
             level: "warning",
-            message: "Reloading will clear the current page state. Continue?",
+            message: "Resetting will clear the current page state. Continue?",
             title: "Reset the page?",
           });
-          if (accepted) window.location.reload();
+          if (!accepted) return;
+          await resetRomWeaverRunner({ terminate: true });
+          webappController.resetPage();
+          pageResetKey += 1;
+          renderWebappRoot();
+          await resetBrowserTransientOpfs().catch((error: unknown) => {
+            logger.warn("Reset OPFS cleanup failed", {
+              message: error instanceof Error ? error.message : String(error),
+            });
+          });
         })();
       },
       onRestoreDefaults: () => webappController.restoreDefaults(),
@@ -414,12 +480,22 @@ const renderWebappRoot = (): undefined => {
         webappController.saveDraftSettings();
       },
       onSelectView: (view) => webappController.selectView(view),
+      onStartGuide: (guide) => {
+        const view = guide === "create" ? "creator" : "patcher";
+        if (webappController.selectView(view) !== view) return;
+        const url = new URL(window.location.href);
+        url.search = "";
+        url.searchParams.set("guide", guide);
+        window.history.replaceState(window.history.state, "", url);
+        requestGuidedSampleStart(guide);
+      },
       onToolsSessionChange: (active) => webappController.setToolsSessionState(active),
       onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),
       onTrimSettingsChange: (settings) => webappController.setTrimSettingsState(settings),
       onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
     },
     confirmationDialog: confirmationDialogState,
+    docsSlug: readDocsSlugFromPathname(window.location.pathname),
     notFound: isNotFoundPage,
     pageUpdate: shouldHydrate
       ? getPageUpdateState({
@@ -432,7 +508,8 @@ const renderWebappRoot = (): undefined => {
         }),
     serviceWorkerCache,
     state: rootState,
-    urlSession: shouldHydrate ? null : urlSessionParse.request ? urlSessionParse : null,
+    urlSession: shouldHydrate || pageResetKey > 0 ? null : urlSessionParse.request ? urlSessionParse : null,
+    key: pageResetKey,
   });
   if (shouldHydrate && appRootElement) {
     appRootHydrating = true;
@@ -451,37 +528,65 @@ renderWebappRootIfReady = renderWebappRoot;
 webappController.subscribe(renderWebappRoot);
 installViteReloadGuard();
 
+// Dialogs, drawers, modals, and run readouts cannot appear before the visitor interacts,
+// so their stylesheet is a dynamic import: it starts fetching at boot but never blocks
+// first render the way a <link> in the head would. Immediate rather than idle-scheduled,
+// so the earliest possible interaction still finds the styles in place. The layer order
+// in design-system/index.css keeps its cascade priority intact regardless of when it
+// arrives.
+import("./design-system/deferred.css").then(
+  () => logger.trace("Deferred stylesheet loaded"),
+  (error: unknown) =>
+    logger.warn("Deferred stylesheet failed to load", {
+      message: error instanceof Error ? error.message : String(error || ""),
+    }),
+);
+
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("storage", (event) => {
     if (event.key !== LOCAL_STORAGE_SETTINGS_ID) return;
     if (typeof localStorage !== "undefined" && event.storageArea && event.storageArea !== localStorage) return;
     webappController.reloadPersistedSettings();
   });
-  if (!isNotFoundPage)
-    window.addEventListener("popstate", () => {
+  // "Don't show this again" on the New here? beacon persists through the
+  // settings so the Settings panel checkbox can bring it back.
+  window.addEventListener(ONBOARDING_DISMISS_EVENT, () => webappController.setOnboardingEnabled(false));
+  if (!isNotFoundPage) {
+    const syncRouteFromUrl = () => {
       const view = readWorkflowViewFromPath();
-      if (view && view !== webappController.getState().currentView) {
-        selectViewWithTransition(() => {
-          const selectedView = webappController.selectView(view, { historyMode: "none" });
-          if (selectedView !== view) webappController.selectView(selectedView, { historyMode: "replace" });
-        });
-      }
+      if (!view) return;
+      selectViewWithTransition(() => {
+        const selectedView = webappController.selectView(view, { historyMode: "none" });
+        if (selectedView !== view) webappController.selectView(selectedView, { historyMode: "replace" });
+      });
+    };
+
+    window.addEventListener("popstate", syncRouteFromUrl);
+    document.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) return;
+      const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+      if (!anchor) return;
+      const url = getSoftNavigationUrl(event, anchor, new URL(window.location.href));
+      if (!url) return;
+      event.preventDefault();
+      window.history.pushState(window.history.state, "", url);
+      syncRouteFromUrl();
+      window.requestAnimationFrame(() => {
+        if (url.hash) {
+          document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" });
+        } else {
+          window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        }
+      });
     });
+  }
 }
 
 const initializeWebapp = () => {
   if (webappRootInitialized) return;
   webappRootInitialized = true;
 
-  logger.info("Initializing webapp", {
-    branch: GIT_BRANCH,
-    buildVersion: APP_BUILD_VERSION,
-    commit: COMMIT_HASH,
-    dirty: !!DIRTY_HASH,
-    dirtyHash: DIRTY_HASH || undefined,
-    threads: resolveThreads(webappController.getState().settings.threads),
-    version: APP_VERSION,
-  });
+  logApplicationStatus("Initializing webapp", true);
 
   serviceWorkerClient.refreshCacheVersion();
   webappController.setStartupState("loading");

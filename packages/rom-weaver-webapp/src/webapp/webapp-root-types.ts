@@ -1,4 +1,5 @@
 import type { PageUpdateState } from "./page-update-state.ts";
+import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import type { ServiceWorkerStatus } from "./pwa/service-worker-cache-state.ts";
 import type { UrlSessionParseResult } from "./url-session/url-session-request.ts";
 import type {
@@ -7,7 +8,7 @@ import type {
   StartupState,
   TrimSessionState,
   ValidationState,
-  WorkflowView,
+  WebappView,
 } from "./webapp-state-types.ts";
 
 type ConfirmationDialogState = {
@@ -29,11 +30,12 @@ const createEmptyConfirmationDialogState = (): ConfirmationDialogState => ({
 });
 
 type WebappRootProps = {
+  docsSlug?: string;
   /** Render the normal app chrome with a not-found workbench. */
   notFound?: boolean;
   state: {
     creatorSession: CreatorSessionState;
-    currentView: WorkflowView;
+    currentView: WebappView;
     patcherSession: PatcherSessionState;
     toolsSession: { active: boolean };
     trimSession: TrimSessionState;
@@ -58,7 +60,11 @@ type WebappRootProps = {
   /** Boot-time `?bundle=` / `?rom=&patch=` session request, when present. */
   urlSession?: UrlSessionParseResult | null;
   actions: {
-    onSelectView: (view: WorkflowView) => void;
+    onStartGuide: (guide: GuidedSample) => void;
+    onSelectView: (view: WebappView) => void;
+    /** Masthead quick pickers commit straight to settings - no draft, no Save. */
+    onAccentChange: (accent: string) => void;
+    onLanguageChange: (language: string) => void;
     onDraftChange: (field: string, value: string | boolean) => void;
     onLogLevelChange: (level: string) => void;
     onOpenSettings: () => void;

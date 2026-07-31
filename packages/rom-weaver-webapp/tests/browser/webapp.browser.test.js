@@ -8,6 +8,9 @@ import { getDefaultSettings } from "../../src/webapp/settings/settings-state.ts"
 import { WebappRoot } from "../../src/webapp/webapp-root.tsx";
 import { createEmptyConfirmationDialogState } from "../../src/webapp/webapp-root-types.ts";
 import "../../src/webapp/design-system/index.css";
+// deferred.css ships lazily in production (webapp.ts loads it at boot); the dialog and
+// drawer surfaces under test live in it.
+import "../../src/webapp/design-system/deferred.css";
 import {
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
@@ -184,6 +187,19 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
+test("WebappRoot keeps Trim and Tools behind the beta flag and Guides in front of it", async () => {
+  mountWebappRoot();
+  // Docs is reference rather than a workflow, but it rides in the rail so the
+  // readers it is written for do not have to go hunting for it.
+  await expect
+    .poll(() =>
+      [...document.querySelectorAll('.mode-rail [role="tab"]')]
+        .filter((tab) => getComputedStyle(tab).display !== "none")
+        .map((tab) => tab.textContent),
+    )
+    .toEqual(["Weave", "Create", "Docs"]);
+});
+
 test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {
   // The masthead thread count must follow the Threads setting. It once called
   // resolveThreads() with no argument, so it always fell through to
@@ -204,6 +220,84 @@ test("WebappRoot uses the compact thread label only on mobile", async () => {
   await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-full")).display).toBe("none");
   await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-short")).display).toBe("inline");
   page.viewport(1280, 900);
+});
+
+test("the site footer lands inside the first phone screen with an empty bench", async () => {
+  // The empty hero is sized as `100svh - --hero-chrome`, so every band the page
+  // spends outside the hero has to be in that budget. The mobile scroll reserve
+  // under the form was not, and it pushed the footer ~85px under the fold on
+  // first paint. The narrowest phone is the tight case: the brand column wraps
+  // there and the masthead grows taller than it is at 390px.
+  //
+  // Only viewports tall enough to clear the hero's 300px min-height are checked.
+  // Below roughly 575px of svh that floor wins over the budget on purpose - a
+  // hero sized to the leftover space there would be too small to aim at - and
+  // the page is meant to scroll.
+  for (const [width, height] of [
+    [320, 640],
+    [360, 640],
+    [390, 844],
+    [430, 932],
+  ]) {
+    page.viewport(width, height);
+    mountWebappRoot();
+    await expect.poll(() => document.querySelector(".step.is-input.is-empty .drop.hero")).toBeTruthy();
+    await expect
+      .poll(() => document.querySelector(".site-footer")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
+      .toBeLessThanOrEqual(height);
+  }
+  page.viewport(1280, 900);
+});
+
+test("the mobile scroll reserve returns once the bench holds a card", async () => {
+  // The reserve keeps the last card clear of the phone browser's collapsing
+  // bottom toolbar. It is only suppressed while the bench is empty; dropping
+  // the suppression on a staged bench would hide the run/download slot again.
+  page.viewport(390, 844);
+  mountWebappRoot();
+  const workflowBody = await waitForState(() => document.querySelector(".workflow-body"));
+  expect(workflowBody).not.toBeNull();
+  expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("0px");
+
+  document.querySelector(".step.is-input.is-empty").classList.remove("is-empty");
+  expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("96px");
+  page.viewport(1280, 900);
+});
+
+test("the New here? beacon stays compact and its popover carries every start action", async () => {
+  page.viewport(1024, 900);
+  mountWebappRoot();
+
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
+  const chip = document.querySelector(".sample-tutorial-start-chip");
+  const chipBox = chip.getBoundingClientRect();
+  expect(chipBox.height).toBeLessThan(40);
+  // The chip rides the hero's lower corner instead of spending a band below it.
+  const hero = document.querySelector(".drop.hero").getBoundingClientRect();
+  expect(chipBox.bottom).toBeLessThanOrEqual(hero.bottom + 1);
+  // Closed popover is not mounted at all - it must stay out of the prerendered shell.
+  expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
+
+  chip.click();
+  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
+  const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();
+  expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+  expect(pop.top).toBeGreaterThanOrEqual(0);
+
+  page.viewport(360, 740);
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().right)
+    .toBeLessThanOrEqual(document.documentElement.clientWidth);
+  expect(document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+
+  // Dismissal hides the beacon in place.
+  document.querySelector(".sample-tutorial-start-dismiss").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeNull();
+
+  // The persisted form of the same choice: onboardingEnabled=false renders no beacon.
+  mountWebappRoot({ settings: { ...getDefaultSettings(), onboardingEnabled: false } });
+  await expect.poll(() => document.querySelector(".drop.hero")).toBeTruthy();
+  expect(document.querySelector(".sample-tutorial-start-chip")).toBeNull();
 });
 
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {

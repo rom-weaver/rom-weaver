@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getProgressStagedInputInfo } from "../../src/public/react/apply-session-inputs.ts";
+import {
+  getChecksumProgressInfoPatch,
+  getProgressStagedInputInfo,
+} from "../../src/public/react/apply-session-inputs.ts";
 import type { ProgressEvent } from "../../src/types/workflow-runtime-types.ts";
 
 const event = (details: Record<string, unknown>): ProgressEvent => ({
@@ -31,6 +34,50 @@ describe("getProgressStagedInputInfo romType from probe-manifest", () => {
   it("leaves romType undefined for non-manifest progress events", () => {
     const info = getProgressStagedInputInfo(event({ sourceId: "input-1", stage: "checksum" }));
     expect(info.romType).toBeUndefined();
+  });
+
+  it("surfaces the engine's recommended container so the output format settles mid-run", () => {
+    const info = getProgressStagedInputInfo(
+      event({
+        probe_manifest: { disc_format: "DVD", platform: "Nintendo GameCube", recommended_format: "rvz" },
+        sourceId: "input-1",
+        stage: "probe-identity",
+      }),
+    );
+    expect(info.romType).toEqual({
+      discFormat: "DVD",
+      platform: "Nintendo GameCube",
+      recommendedFormat: "rvz",
+    });
+  });
+
+  it("omits recommendedFormat when the engine surfaced no rom-specific container", () => {
+    const info = getProgressStagedInputInfo(
+      event({ probe_manifest: { platform: "Nintendo Entertainment System" }, sourceId: "input-1" }),
+    );
+    expect(info.romType).toEqual({ discFormat: undefined, platform: "Nintendo Entertainment System" });
+  });
+});
+
+describe("getChecksumProgressInfoPatch validationPhase for identity-only events", () => {
+  it("does not report extracting for a bare source's probe-identity event", () => {
+    // A bare source is hashed in place; its identity event carries a probe_manifest payload only to
+    // share the parser, so it must not flip the card to "Extracting…".
+    const patch = getChecksumProgressInfoPatch({
+      fileName: "game.iso",
+      probe_manifest: { platform: "Nintendo GameCube", recommended_format: "rvz" },
+      stage: "probe-identity",
+    });
+    expect(patch.info?.validationPhase).toBeUndefined();
+  });
+
+  it("still reports extracting for a container's probe-manifest event", () => {
+    const patch = getChecksumProgressInfoPatch({
+      fileName: "game.zip",
+      probe_manifest: { is_rom: true },
+      stage: "probe-manifest",
+    });
+    expect(patch.info?.validationPhase).toBe("extract");
   });
 });
 

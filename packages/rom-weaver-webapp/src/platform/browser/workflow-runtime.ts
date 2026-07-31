@@ -38,7 +38,7 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntime,
 } from "../../types/workflow-runtime-adapter.ts";
-import { noteRomWeaverIoBatch } from "../../workers/rom-weaver/rom-weaver-runner.ts";
+import { noteRomWeaverIoBatch } from "../../workers/rom-weaver/runner-control.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 import { triggerBrowserDownload } from "./browser-download.ts";
 import { createBrowserRuntimeVfsIo } from "./browser-runtime-vfs.ts";

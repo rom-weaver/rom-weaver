@@ -544,6 +544,16 @@ impl CliApp {
             });
         }
         // Bare ROM: checksum the source bytes in a single pass - no extraction, no copy.
+        // Resolve identity up front (bounded prefix read, no decode) so the recommended container is
+        // known before the hash rather than after it: a bare multi-GB disc image otherwise leaves the
+        // host guessing its output format for the entire checksum pass.
+        let identity = rom_weaver_checksum::detect_rom_identity_for_path(source);
+        let recommended_format = Self::rom_specific_recommended_format(
+            self.containers
+                .recommend_compress_format(source)
+                .format_name,
+        );
+        self.emit_bare_identity_manifest(source, &identity, recommended_format);
         let canonical = fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
         let file_name = canonical
             .file_name()
@@ -556,9 +566,11 @@ impl CliApp {
             kind: Self::infer_emitted_file_kind(&canonical).map(str::to_string),
             checksums: BTreeMap::new(),
             checksum_variants: Vec::new(),
-            platform: None,
-            disc_format: None,
-            recommended_format: None,
+            platform: identity.platform.map(str::to_string),
+            disc_format: identity
+                .disc_format
+                .map(|medium| medium.label().to_string()),
+            recommended_format: recommended_format.map(str::to_string),
             disc_group_id: None,
             track_number: None,
             cue_text: None,
@@ -1072,6 +1084,51 @@ impl CliApp {
             .unwrap_or_else(|| "unknown".to_string())
     }
 
+    /// Stream a bare (non-container) source's identity before the checksum pass begins, so the host
+    /// can tag the platform and settle its automatic output format immediately instead of waiting out
+    /// a multi-GB hash. Purely additive and gated on streaming output (`emit_progress_events`).
+    ///
+    /// Reuses the `probe-identity` stage and `details.probe_manifest` payload that a decoded archive
+    /// leaf emits (see `rom_weaver_containers::extract_support::emit_extract_identity`), so hosts
+    /// share one parser. Deliberately NOT `probe-manifest`: that stage additionally carries the
+    /// ROM-vs-patch routing verdict (`is_rom`) and doubles as the host's "this source is being
+    /// extracted" signal, neither of which applies to a bare source hashed in place.
+    fn emit_bare_identity_manifest(
+        &self,
+        source: &Path,
+        identity: &rom_weaver_checksum::rom_identity::RomIdentity,
+        recommended_format: Option<&'static str>,
+    ) {
+        if !self.emit_progress_events || (identity.is_empty() && recommended_format.is_none()) {
+            return;
+        }
+        let mut manifest = Map::new();
+        identity.write_into(&mut manifest);
+        if let Some(format_name) = recommended_format {
+            manifest.insert("recommended_format".to_string(), json!(format_name));
+        }
+        let mut details = Map::new();
+        details.insert("probe_manifest".to_string(), Value::Object(manifest));
+        trace!(
+            source = %source.display(),
+            platform = ?identity.platform,
+            recommended_format = ?recommended_format,
+            "emitting bare source identity event"
+        );
+        self.reporter.emit(ProgressEvent {
+            command: "ingest".to_string(),
+            family: OperationFamily::Container,
+            format: None,
+            stage: "probe-identity".to_string(),
+            label: format!("identified `{}`", source.display()),
+            details: Some(Value::Object(details)),
+            percent: None,
+            elapsed_ms: None,
+            status: OperationStatus::Running,
+            ..ProgressEvent::from_thread_execution(None)
+        });
+    }
+
     /// Stream the sidecar patch descriptors the instant they are enumerated - before the ROM is
     /// hashed - so the host can open the patch-selection dialog while the (slower) ROM checksum runs,
     /// instead of waiting for the whole ingest to return. Purely additive and gated on streaming
@@ -1146,8 +1203,10 @@ impl CliApp {
                     asset.platform.as_deref(),
                     asset.disc_format.as_deref(),
                 );
-                if matches!(recommendation.format_name, "chd" | "rvz" | "z3ds") {
-                    asset.recommended_format = Some(recommendation.format_name.to_string());
+                if let Some(format_name) =
+                    Self::rom_specific_recommended_format(recommendation.format_name)
+                {
+                    asset.recommended_format = Some(format_name.to_string());
                 }
                 asset
             })

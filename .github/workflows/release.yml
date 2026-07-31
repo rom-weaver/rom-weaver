@@ -27,14 +27,68 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A release pull request must describe a commit that already cleared the
+  # full main push matrix. Wait here instead of relying on the operator to
+  # inspect Actions first; the exact SHA matters because the release workflow
+  # can be dispatched while main is moving.
+  verify-main-ci:
+    name: Verify main CI
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Wait for successful CI push run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for _ in {1..360}; do
+            response=$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?event=push&head_sha=$TARGET_SHA&per_page=100")
+            IFS=$'\t' read -r run_state conclusion url <<< "$(
+              jq -r '[.workflow_runs[]] | sort_by(.created_at) | last // {} | [.status // "", .conclusion // "", .html_url // ""] | @tsv' <<< "$response"
+            )"
+
+            if [[ "$run_state" == completed ]]; then
+              if [[ "$conclusion" == success ]]; then
+                echo "CI passed for $TARGET_SHA: $url"
+                exit 0
+              fi
+              echo "::error::CI for $TARGET_SHA concluded $conclusion: $url"
+              exit 1
+            fi
+
+            if [[ -n "$run_state" ]]; then
+              echo "CI for $TARGET_SHA is $run_state; waiting"
+            else
+              echo "No push CI run found for $TARGET_SHA; waiting"
+            fi
+            sleep 30
+          done
+
+          echo "::error::Timed out waiting for CI for $TARGET_SHA"
+          exit 1
+
   release:
+    needs: verify-main-ci
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      always() &&
       (
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.merged == true &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        startsWith(github.event.pull_request.head.ref, 'release-please--branches--main--components--')
+        github.event_name != 'workflow_dispatch' ||
+        needs.verify-main-ci.result == 'success'
+      ) &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          startsWith(github.event.pull_request.head.ref, 'release-please--branches--main--components--')
+        )
       )
     runs-on: ubuntu-24.04
     permissions:
@@ -162,16 +216,17 @@ jobs:
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: node scripts/aggregate-release-changelog.mjs
 
-      # These PNGs belong in the release PR so the merge contains the exact
+      # These WebPs belong in the release PR so the merge contains the exact
       # captures the release will ship. Capturing them reuses the production
-      # WASM artifact from main's CI run for this commit, so dispatch once that
-      # run is green; otherwise the resolver finds nothing and the fallback
-      # below rebuilds WASM from source, adding ~6.5 min.
+      # WASM artifact from main's CI run for this commit. The verify-main-ci job
+      # above guarantees the run is complete; the fallback remains for a green
+      # run that did not build WASM for its changed-path classification.
       - name: Set up screenshot capture
         if: steps.release-pr.outputs.found == 'true'
         uses: ./.github/actions/setup-build-env
         with:
           tools: node
+          apt-packages: imagemagick
           cargo-cache: "false"
           cache-save: "false"
           playwright: "true"
@@ -225,13 +280,15 @@ jobs:
         if: steps.release-pr.outputs.found == 'true'
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
-      - name: Build production webapp for screenshots
+      - name: Build production webapp for docs screenshots
         if: steps.release-pr.outputs.found == 'true'
         env:
           ROM_WEAVER_CHANNEL: prod
         run: npm --prefix packages/rom-weaver-webapp run build
 
-      - name: Capture release screenshots
+      # capture:screenshots loads first-weave.zip and the first-create sample
+      # assets, so the published guides show reproducible, copyright-safe data.
+      - name: Capture docs screenshots from bundled samples
         if: steps.release-pr.outputs.found == 'true'
         run: |
           set -euo pipefail
@@ -252,7 +309,7 @@ jobs:
           fi
           npm --prefix packages/rom-weaver-webapp run capture:screenshots
 
-      - name: Commit release screenshots
+      - name: Commit docs screenshots
         if: steps.release-pr.outputs.found == 'true'
         env:
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
@@ -260,7 +317,7 @@ jobs:
           set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add packages/rom-weaver-webapp/design/*-{desktop,mobile}-{light,dark}.png
+          git add packages/rom-weaver-webapp/design/*-{desktop,mobile}-{light,dark}.webp
           if git diff --cached --quiet; then
             echo "Release screenshots are already current"
             exit 0
@@ -277,10 +334,22 @@ jobs:
   #
   # Safe to run alongside the publishing jobs: it publishes nothing, so it needs
   # no registry credentials and cannot half-release anything on failure.
+  # `!cancelled()` here and on every other job downstream of `release` is
+  # load-bearing, not decoration. `release` needs `verify-main-ci`, which is
+  # skipped on the `pull_request` path - and a skip propagates down the whole
+  # dependency chain, past `release`'s own `always()`, unless each descendant
+  # opts out of it. Without this the entire fan-out skipped on a run that cut
+  # the draft release and reported success, leaving v0.10.0 a draft with no
+  # assets. Every job that gains it also asserts the `result` of the needs it
+  # actually depends on, because opting out of skip propagation means failed
+  # and skipped ancestors no longer stop it either.
   semver-check:
     name: Check for breaking API changes
     needs: release
-    if: needs.release.outputs.release_created == 'true'
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -352,7 +421,10 @@ jobs:
   cargo-publish-dry-run:
     name: Dry-run Cargo publish
     needs: release
-    if: needs.release.outputs.release_created == 'true'
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -380,7 +452,10 @@ jobs:
   static-webapp:
     name: Package static webapp
     needs: release
-    if: needs.release.outputs.release_created == 'true'
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -502,6 +577,8 @@ jobs:
   publish-npm:
     needs: [release, cargo-publish-dry-run]
     if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
       needs.release.outputs.release_created == 'true' &&
       needs.cargo-publish-dry-run.result == 'success'
     permissions:
@@ -530,6 +607,9 @@ jobs:
   publish-homebrew:
     needs: [release, publish-release]
     if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.publish-release.result == 'success' &&
       needs.release.outputs.release_created == 'true' &&
       !contains(needs.release.outputs.version, '-')
     runs-on: ubuntu-24.04
@@ -607,6 +687,9 @@ jobs:
   publish-scoop:
     needs: [release, publish-release]
     if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.publish-release.result == 'success' &&
       needs.release.outputs.release_created == 'true' &&
       !contains(needs.release.outputs.version, '-')
     runs-on: ubuntu-24.04
@@ -680,7 +763,12 @@ jobs:
   # missing, which is what a standalone workflow_dispatch gets.
   publish-containers:
     needs: [release, static-webapp, publish-npm]
-    if: needs.release.outputs.release_created == 'true'
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.static-webapp.result == 'success' &&
+      needs.publish-npm.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
     permissions:
       # Belt and braces for the artifact download in docker-publish.yml. A
       # same-run download authenticates with the runner's ACTIONS_RUNTIME_TOKEN

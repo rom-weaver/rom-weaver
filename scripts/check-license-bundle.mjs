@@ -32,6 +32,9 @@ runMain(() => {
         return [filename, notice];
       }),
     );
+    const noticesPage = readFileSync(join(output, "notices.md"), "utf8");
+    if (!noticesPage.startsWith("# Notices\n"))
+      throw new Error("generated webapp notices page is missing");
     if (!/\| nod\s+\|/.test(notices.CLI_NOTICE))
       throw new Error("CLI_NOTICE is missing the in-source nod component");
     if (/\| react\s+\|/.test(notices.CLI_NOTICE))

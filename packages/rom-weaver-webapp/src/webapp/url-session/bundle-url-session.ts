@@ -9,7 +9,6 @@ import { buildBundleApplySessionPlan } from "../../lib/bundle/bundle-session-mod
 import { createLogger } from "../../lib/logging.ts";
 import type { RemoteFetchEntry } from "../../lib/remote/remote-file-fetch.ts";
 import { fetchRemoteFiles } from "../../lib/remote/remote-file-fetch.ts";
-import { browserRuntime } from "../../platform/browser/workflow-runtime.ts";
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 
 const logger = createLogger("bundle-url-session");
@@ -95,6 +94,7 @@ const loadBundleUrlSession = async (
     signal,
   );
   if (!bundleFetch) throw new Error(`Bundle download returned no file: ${bundleUrl}`);
+  const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
   const parse = browserRuntime.bundle?.parse;
   if (!parse) {
     await bundleFetch.cleanup();

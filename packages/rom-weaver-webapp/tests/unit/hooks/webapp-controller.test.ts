@@ -36,7 +36,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(state.currentView).toBe("patcher");
     expect(state.settingsDialogOpen).toBe(false);
     expect(state.patcherSession.romFilePresent).toBe(false);
-    expect(window.location.pathname).toBe("/weave");
+    expect(window.location.pathname).toBe("/apply");
   });
 
   it("can preserve a non-workflow path for an alternate app shell", () => {
@@ -72,7 +72,7 @@ describe("createWebappRootController over the vanilla store", () => {
     window.history.replaceState({}, "", "/tools");
     const controller = createController();
     expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/weave");
+    expect(window.location.pathname).toBe("/apply");
   });
 
   it("loads the create workflow from its path", () => {
@@ -83,12 +83,18 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/create");
   });
 
+  it("resolves a candidate URL without changing the current browser path", () => {
+    expect(readWorkflowViewFromPath("/docs/apply-rom-patches")).toBe("docs");
+    expect(readWorkflowViewFromPath("/create")).toBe("creator");
+    expect(window.location.pathname).toBe("/");
+  });
+
   it("preserves a self-hosted subpath while switching workflows", () => {
     window.history.replaceState({}, "", "/rom-weaver/create/");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
     controller.selectView("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/weave");
+    expect(window.location.pathname).toBe("/rom-weaver/apply");
   });
 
   it("normalizes a static-host index page to its clean route", () => {
@@ -96,11 +102,22 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(readWorkflowViewFromPath()).toBe("patcher");
     const controller = createController();
     expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/weave");
+    expect(window.location.pathname).toBe("/rom-weaver/apply");
+  });
+
+  it("keeps nested docs routes and returns to the app root", () => {
+    window.history.replaceState({}, "", "/rom-weaver/docs/apply-rom-patches");
+    const controller = createController();
+    expect(controller.getState().currentView).toBe("docs");
+    expect(readWorkflowViewFromPath()).toBe("docs");
+    expect(window.location.pathname).toBe("/rom-weaver/docs/apply-rom-patches");
+
+    controller.selectView("creator");
+    expect(window.location.pathname).toBe("/rom-weaver/create");
   });
 
   it("preserves URL session parameters without emitting hash routes", () => {
-    window.history.replaceState({}, "", "/weave?bundle=first-weave.zip");
+    window.history.replaceState({}, "", "/apply?bundle=first-weave.zip");
     const controller = createController();
     controller.selectView("creator");
     expect(window.location.pathname).toBe("/create");
@@ -112,7 +129,7 @@ describe("createWebappRootController over the vanilla store", () => {
     window.history.replaceState({}, "", "/#/create");
     const controller = createController();
     expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/weave");
+    expect(window.location.pathname).toBe("/apply");
     expect(window.location.hash).toBe("");
   });
 
@@ -139,6 +156,31 @@ describe("createWebappRootController over the vanilla store", () => {
     controller.setLanguage("de");
     expect(controller.getState().settings.language).toBe("de");
     expect(controller.getState().draftSettings.language).toBe("de");
+  });
+
+  it("rejects a language with no shipped catalog", () => {
+    const controller = createController();
+    const before = controller.getState().settings.language;
+    controller.setLanguage("fr");
+    expect(controller.getState().settings.language).toBe(before);
+  });
+
+  it("commits and persists an accent change from the masthead picker", () => {
+    const storage = createStorage();
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+    controller.setAccent("woad");
+    expect(controller.getState().settings.accent).toBe("woad");
+    expect(controller.getState().draftSettings.accent).toBe("woad");
+    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").common?.accent).toBe("woad");
+    // An unknown dye lot is rejected rather than persisted.
+    controller.setAccent("chartreuse");
+    expect(controller.getState().settings.accent).toBe("woad");
   });
 
   it("commits and persists the bundle package selection from the output card", () => {
@@ -179,5 +221,71 @@ describe("createWebappRootController over the vanilla store", () => {
     const session = controller.getState().patcherSession;
     expect(session.romFilePresent).toBe(true);
     expect(session.patchCount).toBe(1);
+  });
+
+  it("resets transient page state without changing saved settings or the current view", () => {
+    const controller = createController();
+    controller.selectView("creator");
+    controller.setCreatorModifiedState({});
+    controller.setPatcherInputState([{}]);
+    controller.setPatcherPatchState([{}]);
+    controller.setToolsSessionState(true);
+    controller.setTrimSourceState({});
+    controller.setStartupState("error", "failed");
+    controller.openSettings();
+    controller.updateDraftSetting("language", "de");
+
+    controller.resetPage();
+
+    const state = controller.getState();
+    expect(state.currentView).toBe("creator");
+    expect(state.creatorSession.modifiedFilePresent).toBe(false);
+    expect(state.patcherSession).toEqual({
+      outputCompression: "none",
+      outputName: "",
+      patchCount: 0,
+      pendingDownloadFileName: null,
+      romFilePresent: false,
+    });
+    expect(state.settingsDialogOpen).toBe(false);
+    expect(state.draftSettings).toEqual(state.settings);
+    expect(state.startup).toEqual({ message: "", status: "ready" });
+    expect(state.toolsSession.active).toBe(false);
+    expect(state.trimSession.sourceFilePresent).toBe(false);
+    expect(state.validation).toEqual({ invalidFields: [], messages: [] });
+  });
+
+  // Reading a guide must not decide where the site root lands: docs is a
+  // document route, not a workflow tab with state to resume.
+  it("never stores the guides as the tab to resume", () => {
+    const storage = createStorage();
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+
+    controller.selectView("creator");
+    expect(storage.getItem("rom-weaver-active-view")).toBe("creator");
+
+    controller.selectView("docs");
+    expect(controller.getState().currentView).toBe("docs");
+    expect(storage.getItem("rom-weaver-active-view")).toBe("creator");
+  });
+
+  it("ignores a guides value stored before that rule existed", () => {
+    const storage = createStorage();
+    storage.setItem("rom-weaver-active-view", "docs");
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+
+    expect(controller.getState().currentView).toBe("patcher");
   });
 });

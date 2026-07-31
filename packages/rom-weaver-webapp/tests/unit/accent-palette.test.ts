@@ -51,3 +51,18 @@ describe("accent palette", () => {
     expect(new Set(swatches).size).toBe(swatches.length);
   });
 });
+
+/**
+ * index.html resolves data-accent before first paint, from a literal list it
+ * cannot import. An accent missing from that list is not rejected - it falls
+ * through to the channel default, paints wrong, then snaps when accent.ts boots.
+ */
+describe("parser-time accent resolver", () => {
+  test("index.html lists exactly the accents accent.ts defines", () => {
+    const html = read("../../index.html");
+    const listed = /const accents = \[([^\]]*)\]/.exec(html)?.[1];
+    expect(listed).toBeDefined();
+    const values = (listed as string).split(",").map((entry) => entry.trim().replace(/^"|"$/g, ""));
+    expect(values.sort()).toEqual(ACCENTS.map((accent) => accent.value).sort());
+  });
+});

@@ -2,9 +2,9 @@ import { Download, GitCompare } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
 import { resolveAutomaticSelection } from "../../lib/input/selection.ts";
-import {
-  type BrowserCreateResult,
-  type CreateSettings,
+import type {
+  BrowserCreateResult,
+  CreateSettings,
   CreateWorkflow,
   getCreatePatchFormatCandidates,
 } from "../../platform/browser/browser-api.ts";
@@ -16,7 +16,12 @@ import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./
 import { Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
-import { SampleTutorial, SampleTutorialStart, type SampleTutorialStep } from "./components/ds/sample-tutorial.tsx";
+import {
+  SampleTutorial,
+  SampleTutorialStart,
+  type SampleTutorialStep,
+  useGuidedSampleStart,
+} from "./components/ds/sample-tutorial.tsx";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { CreatePatchFormView, type CreatePatchFormViewModel } from "./create-patch-form-view.tsx";
@@ -63,6 +68,7 @@ import {
   isDismissibleWorkflowError,
   mergeSettingsWithOutput,
 } from "./workflow-form-utils.ts";
+import { loadBrowserApi } from "./workflow-loader.ts";
 import {
   createIndeterminateWorkflowProgress,
   createWaitingWorkflowProgress,
@@ -151,9 +157,15 @@ type InternalCreatePatchFormProps = CreatePatchFormProps & {
 function CreatePatchForm(props: CreatePatchFormProps) {
   const { onError } = props;
   const internalProps = props as InternalCreatePatchFormProps;
-  const CreateWorkflowConstructor = internalProps.createWorkflow || CreateWorkflow;
-  const resolveCreatePatchFormatCandidates =
-    internalProps.getCreatePatchFormatCandidates || getCreatePatchFormatCandidates;
+  const createWorkflowOverride = internalProps.createWorkflow;
+  const createPatchFormatCandidatesOverride = internalProps.getCreatePatchFormatCandidates;
+  const resolveCreatePatchFormatCandidates = useCallback(
+    (options: Parameters<typeof getCreatePatchFormatCandidates>[0]) =>
+      createPatchFormatCandidatesOverride
+        ? createPatchFormatCandidatesOverride(options)
+        : loadBrowserApi().then(({ getCreatePatchFormatCandidates }) => getCreatePatchFormatCandidates(options)),
+    [createPatchFormatCandidatesOverride],
+  );
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
@@ -470,6 +482,14 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       setSampleLoading(false);
     }
   };
+  useGuidedSampleStart(
+    "create",
+    () => {
+      setSampleTutorialActive(true);
+      void loadCreateSample();
+    },
+    () => setSampleTutorialActive(false),
+  );
   const swapCreateSources = () => {
     const workflow = stagedCreateWorkflowRef.current;
     const bothStaged = !!workflow && originalState?.status === "ready" && modifiedState?.status === "ready";
@@ -541,153 +561,171 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   );
 
   useEffect(() => {
-    const previousSync = stagedCreateWorkflowSyncRef.current;
-    const settingsChanged = previousSync.settingsKey !== stagingSettingsKey;
-    const originalKeyChanged = previousSync.originalKey !== originalSourceKey;
-    const modifiedKeyChanged = previousSync.modifiedKey !== modifiedSourceKey;
-    const sourceCleared = (originalKeyChanged && !original) || (modifiedKeyChanged && !modified);
-    const workflowReset = settingsChanged || sourceCleared;
-    const originalChanged = settingsChanged || originalKeyChanged || (workflowReset && !!original);
-    const modifiedChanged = settingsChanged || modifiedKeyChanged || (workflowReset && !!modified);
-    let workflow = stagedCreateWorkflowRef.current;
-    const generation = workflowReset
-      ? ++stagedCreateWorkflowGenerationRef.current
-      : stagedCreateWorkflowGenerationRef.current;
-    if (workflowReset) {
-      workflow?.dispose().catch(() => undefined);
-      workflow = null;
-      stagedCreateWorkflowRef.current = null;
-    }
-    const originalGeneration = originalChanged
-      ? ++stagingOriginalGenerationRef.current
-      : stagingOriginalGenerationRef.current;
-    const modifiedGeneration = modifiedChanged
-      ? ++stagingModifiedGenerationRef.current
-      : stagingModifiedGenerationRef.current;
-    if (originalChanged) setOriginalState(null);
-    if (modifiedChanged) setModifiedState(null);
-    stagedCreateWorkflowSyncRef.current = {
-      modifiedKey: modifiedSourceKey,
-      originalKey: originalSourceKey,
-      settingsKey: stagingSettingsKey,
-    };
-    if (!(original || modified)) {
-      setStagingRole(null);
-      setProgress((current) => (current?.stage === "input" ? null : current));
-      return;
-    }
-    if (!workflow) {
-      workflow = new CreateWorkflowConstructor({
-        ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-        id: `${workflowIdRef.current}:stage:${generation}`,
-        selectFile: async (request) =>
-          createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
-        settings: stagingSettingsRef.current,
-      });
-      stagedCreateWorkflowRef.current = workflow;
-    }
-    const activeWorkflow = workflow;
-    const handleProgress = createProgressHandler("input");
-    activeWorkflow.on("progress", handleProgress);
-    const isCurrentStaging = () =>
-      stagedCreateWorkflowGenerationRef.current === generation && stagedCreateWorkflowRef.current === activeWorkflow;
-    const isCurrentRoleStaging = (role: "modified" | "original", roleGeneration: number) =>
-      isCurrentStaging() &&
-      (role === "original"
-        ? stagingOriginalGenerationRef.current === roleGeneration
-        : stagingModifiedGenerationRef.current === roleGeneration);
-    const enqueueSourceStage = (role: "modified" | "original", run: () => Promise<void>) => {
-      const queued = sourceStageQueueRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          if (!isCurrentStaging()) return;
-          setStagingRole(role);
-          await run();
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
+    const stage = async () => {
+      // Load the constructor BEFORE any bookkeeping. The sync-key commit below
+      // marks the sources as staged, so everything from there to the staging
+      // enqueue must stay atomic (as it was when the constructor was a static
+      // import): a run aborted at this await has claimed nothing, and the
+      // re-run that displaced it re-derives the full diff itself. The
+      // cleared-source path stays off this await so it never pulls the chunk.
+      const hasSource = !!(original || modified);
+      const CreateWorkflowConstructor =
+        createWorkflowOverride || (hasSource ? (await loadBrowserApi()).CreateWorkflow : null);
+      if (disposed) return;
+      const previousSync = stagedCreateWorkflowSyncRef.current;
+      const settingsChanged = previousSync.settingsKey !== stagingSettingsKey;
+      const originalKeyChanged = previousSync.originalKey !== originalSourceKey;
+      const modifiedKeyChanged = previousSync.modifiedKey !== modifiedSourceKey;
+      const sourceCleared = (originalKeyChanged && !original) || (modifiedKeyChanged && !modified);
+      const workflowReset = settingsChanged || sourceCleared;
+      const originalChanged = settingsChanged || originalKeyChanged || (workflowReset && !!original);
+      const modifiedChanged = settingsChanged || modifiedKeyChanged || (workflowReset && !!modified);
+      let workflow = stagedCreateWorkflowRef.current;
+      const generation = workflowReset
+        ? ++stagedCreateWorkflowGenerationRef.current
+        : stagedCreateWorkflowGenerationRef.current;
+      if (workflowReset) {
+        workflow?.dispose().catch(() => undefined);
+        workflow = null;
+        stagedCreateWorkflowRef.current = null;
+      }
+      const originalGeneration = originalChanged
+        ? ++stagingOriginalGenerationRef.current
+        : stagingOriginalGenerationRef.current;
+      const modifiedGeneration = modifiedChanged
+        ? ++stagingModifiedGenerationRef.current
+        : stagingModifiedGenerationRef.current;
+      if (originalChanged) setOriginalState(null);
+      if (modifiedChanged) setModifiedState(null);
+      stagedCreateWorkflowSyncRef.current = {
+        modifiedKey: modifiedSourceKey,
+        originalKey: originalSourceKey,
+        settingsKey: stagingSettingsKey,
+      };
+      if (!(original || modified)) {
+        setStagingRole(null);
+        setProgress((current) => (current?.stage === "input" ? null : current));
+        return;
+      }
+      if (!workflow) {
+        if (!CreateWorkflowConstructor) return;
+        workflow = new CreateWorkflowConstructor({
+          ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+          id: `${workflowIdRef.current}:stage:${generation}`,
+          selectFile: async (request) =>
+            createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
+          settings: stagingSettingsRef.current,
         });
-      sourceStageQueueRef.current = queued.then(
-        () => undefined,
-        () => undefined,
-      );
-      return queued;
-    };
-    const stageCreateRole = async (
-      role: "modified" | "original",
-      changed: boolean,
-      source: BinarySource | null,
-      roleGeneration: number,
-      setSource: () => Promise<void>,
-      commit: () => void,
-    ) => {
-      if (!changed) return true;
-      if (!source) return true;
-      await enqueueSourceStage(role, setSource);
-      return finishCreateRoleStaging(role, roleGeneration, isCurrentStaging, isCurrentRoleStaging, commit, () =>
-        clearProgressForStage("input"),
-      );
-    };
-    let activeRole: "modified" | "original" | null = null;
-    const stageCreateRoles = async () => {
-      if (originalChanged && original) {
-        activeRole = "original";
-        const originalStaged = await stageCreateRole(
-          "original",
-          originalChanged,
-          original,
-          originalGeneration,
-          () => activeWorkflow.setOriginal(original),
-          () => setOriginalState(activeWorkflow.getOriginal()),
-        );
-        if (!originalStaged) return false;
-        activeRole = null;
+        stagedCreateWorkflowRef.current = workflow;
       }
-      if (modifiedChanged && modified) {
-        activeRole = "modified";
-        const modifiedStaged = await stageCreateRole(
-          "modified",
-          modifiedChanged,
-          modified,
-          modifiedGeneration,
-          () => activeWorkflow.setModified(modified),
-          () => setModifiedState(activeWorkflow.getModified()),
+      const activeWorkflow = workflow;
+      const handleProgress = createProgressHandler("input");
+      activeWorkflow.on("progress", handleProgress);
+      const isCurrentStaging = () =>
+        stagedCreateWorkflowGenerationRef.current === generation && stagedCreateWorkflowRef.current === activeWorkflow;
+      const isCurrentRoleStaging = (role: "modified" | "original", roleGeneration: number) =>
+        isCurrentStaging() &&
+        (role === "original"
+          ? stagingOriginalGenerationRef.current === roleGeneration
+          : stagingModifiedGenerationRef.current === roleGeneration);
+      const enqueueSourceStage = (role: "modified" | "original", run: () => Promise<void>) => {
+        const queued = sourceStageQueueRef.current
+          .catch(() => undefined)
+          .then(async () => {
+            if (!isCurrentStaging()) return;
+            setStagingRole(role);
+            await run();
+          });
+        sourceStageQueueRef.current = queued.then(
+          () => undefined,
+          () => undefined,
         );
-        if (!modifiedStaged) return false;
-        activeRole = null;
-      }
-      return true;
-    };
-    const finishStaging = async () => {
-      try {
-        if (!(await stageCreateRoles())) return;
-      } catch (error) {
-        const normalizedError = error instanceof Error ? error : new Error(String(error));
-        const code = getErrorCode(normalizedError);
-        if (code === "WORKFLOW_SELECTION_SKIPPED" || !isCurrentStaging()) return;
-        setOriginalState(activeWorkflow.getOriginal());
-        setModifiedState(activeWorkflow.getModified());
-        const failedRole = activeRole || "output";
-        const failedSource =
-          failedRole === "original"
-            ? activeWorkflow.getOriginal()
-            : failedRole === "modified"
-              ? activeWorkflow.getModified()
-              : null;
-        if (!hasSourceQueueWarning(failedSource)) setWorkflowMessage(failedRole, normalizedError);
-        onError?.(normalizedError);
-      } finally {
-        activeWorkflow.off("progress", handleProgress);
-        if (isCurrentStaging()) {
-          setStagingRole(null);
-          clearProgressForStage("input");
+        return queued;
+      };
+      const stageCreateRole = async (
+        role: "modified" | "original",
+        changed: boolean,
+        source: BinarySource | null,
+        roleGeneration: number,
+        setSource: () => Promise<void>,
+        commit: () => void,
+      ) => {
+        if (!changed) return true;
+        if (!source) return true;
+        await enqueueSourceStage(role, setSource);
+        return finishCreateRoleStaging(role, roleGeneration, isCurrentStaging, isCurrentRoleStaging, commit, () =>
+          clearProgressForStage("input"),
+        );
+      };
+      let activeRole: "modified" | "original" | null = null;
+      const stageCreateRoles = async () => {
+        if (originalChanged && original) {
+          activeRole = "original";
+          const originalStaged = await stageCreateRole(
+            "original",
+            originalChanged,
+            original,
+            originalGeneration,
+            () => activeWorkflow.setOriginal(original),
+            () => setOriginalState(activeWorkflow.getOriginal()),
+          );
+          if (!originalStaged) return false;
+          activeRole = null;
         }
-      }
+        if (modifiedChanged && modified) {
+          activeRole = "modified";
+          const modifiedStaged = await stageCreateRole(
+            "modified",
+            modifiedChanged,
+            modified,
+            modifiedGeneration,
+            () => activeWorkflow.setModified(modified),
+            () => setModifiedState(activeWorkflow.getModified()),
+          );
+          if (!modifiedStaged) return false;
+          activeRole = null;
+        }
+        return true;
+      };
+      const finishStaging = async () => {
+        try {
+          if (!(await stageCreateRoles())) return;
+        } catch (error) {
+          const normalizedError = error instanceof Error ? error : new Error(String(error));
+          const code = getErrorCode(normalizedError);
+          if (code === "WORKFLOW_SELECTION_SKIPPED" || !isCurrentStaging()) return;
+          setOriginalState(activeWorkflow.getOriginal());
+          setModifiedState(activeWorkflow.getModified());
+          const failedRole = activeRole || "output";
+          const failedSource =
+            failedRole === "original"
+              ? activeWorkflow.getOriginal()
+              : failedRole === "modified"
+                ? activeWorkflow.getModified()
+                : null;
+          if (!hasSourceQueueWarning(failedSource)) setWorkflowMessage(failedRole, normalizedError);
+          onError?.(normalizedError);
+        } finally {
+          activeWorkflow.off("progress", handleProgress);
+          if (isCurrentStaging()) {
+            setStagingRole(null);
+            clearProgressForStage("input");
+          }
+        }
+      };
+      void finishStaging();
+      cleanup = () => activeWorkflow.off("progress", handleProgress);
     };
-    void finishStaging();
+    void stage();
     return () => {
-      activeWorkflow.off("progress", handleProgress);
+      disposed = true;
+      cleanup?.();
     };
   }, [
     clearProgressForStage,
-    CreateWorkflowConstructor,
+    createWorkflowOverride,
     createProgressHandler,
     createSelectFileHandler,
     modified,
@@ -748,7 +786,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     await runWorkflow(async (abortController, registerCleanup) => {
       const createWorkflow =
         stagedCreateWorkflowRef.current ||
-        new CreateWorkflowConstructor({
+        new (createWorkflowOverride || (await loadBrowserApi()).CreateWorkflow)({
           ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
           id: workflowIdRef.current,
           selectFile: async (request) =>
@@ -904,6 +942,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           downloadLabel="Download the sample ROMs"
           error={sampleError}
           label="Start guided Create"
+          startAction="create"
           loading={sampleLoading}
           onStart={() => {
             setSampleTutorialActive(true);

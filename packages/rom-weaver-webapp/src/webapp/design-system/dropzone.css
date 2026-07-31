@@ -21,7 +21,12 @@
 .rw-app .drop .pointer-copy.coarse { display: none; }
 
 /* Empty-state hero */
-.rw-app .drop.hero { min-height: 0; gap: clamp(28px, 4.8vw, 62px); padding: 0; justify-content: center; }
+/* Every fluid step in the hero is capped by BOTH axes. A wide-but-short window
+   (a laptop with devtools open, a landscape tablet) resolves the vw term to its
+   maximum while there is no height to spend it in, so the stack outgrows the
+   panel and presses flat against its edges. The svh term is what makes it shrink
+   instead. */
+.rw-app .drop.hero { min-height: 0; gap: clamp(20px, min(4.8vw, 7svh), 62px); padding: 0; justify-content: center; }
 .rw-app .drop.hero .main { flex: none; flex-direction: row; padding: 0; border: 0; background: none; box-shadow: none; }
 /* the shuttle bead: the single focal control on the empty page. a raised disc
    riding the fell line, lit from above, that warms and lifts as it arms */
@@ -30,7 +35,7 @@
   --bead-lift: 0px; --bead-scale: 1; --bead-rim: 38%; --bead-halo: 0; --bead-glyph: 0px;
   position: relative;
   justify-content: center;
-  width: clamp(56px, 7vw, 68px); aspect-ratio: 1; padding: 0; border-radius: 50%;
+  width: clamp(44px, min(7vw, 11svh), 68px); aspect-ratio: 1; padding: 0; border-radius: 50%;
   background:
     radial-gradient(115% 115% at 50% 8%, color-mix(in oklab, var(--thread) 30%, var(--plate-2)), var(--plate-2) 76%);
   box-shadow:
@@ -67,7 +72,7 @@
 .rw-app .drop.hero .fell-thread { flex: 1 1 0; min-width: 20px; height: 2px; border-radius: 2px; }
 .rw-app .drop.hero .fell-thread:first-child { background: linear-gradient(to right, transparent, color-mix(in oklab, var(--thread) 88%, transparent)); }
 .rw-app .drop.hero .fell-thread:last-child { background: linear-gradient(to left, transparent, color-mix(in oklab, var(--thread) 88%, transparent)); }
-.rw-app .drop.hero .drop-base { align-self: stretch; display: flex; flex-direction: column; align-items: center; gap: clamp(20px, 2.6vw, 34px); }
+.rw-app .drop.hero .drop-base { align-self: stretch; display: flex; flex-direction: column; align-items: center; gap: clamp(12px, min(2.6vw, 3.8svh), 34px); }
 .rw-app .drop.hero .drop-belowlabel {
   display: block; max-width: min(94%, 42ch); margin-inline: auto; text-align: center; text-wrap: balance;
   font-size: clamp(.9rem, .85rem + .3vw, 1.02rem); font-weight: 600; line-height: 1.35; color: var(--ink-2);
@@ -114,7 +119,7 @@
   border: 0; border-radius: 0; background: none;
 }
 .rw-app .drop.hero > .hero-lead::before, .rw-app .drop.hero > .hero-lead::after { display: none; }
-.rw-app .hero-lead .lead-title { font-size: clamp(1.2rem, 3.25vw, 2.5rem); font-weight: 760; letter-spacing: -.018em; line-height: 1.14; color: var(--ink); max-width: min(97%, 1160px); margin-inline: auto; text-wrap: balance; }
+.rw-app .hero-lead .lead-title { font-size: clamp(1.2rem, min(3.25vw, 7.2svh), 2.5rem); font-weight: 760; letter-spacing: -.018em; line-height: 1.14; color: var(--ink); max-width: min(97%, 1160px); margin-inline: auto; text-wrap: balance; }
 .rw-app .hero-lead .lead-line { display: inline; }
 .rw-app .hero-lead .lead-accent { color: var(--thread-text); }
 .rw-app .hero-lead .lead-sub {
@@ -130,7 +135,7 @@
   width: 24px; height: 24px; stroke-width: 2.2; color: var(--thread-text);
 }
 .rw-app .drop.hero .formats {
-  display: grid; flex: none; gap: var(--sp-xs); width: min(100%, 46rem); margin-block-start: 0; padding-block-end: clamp(16px, 3vw, 24px); overflow: hidden; pointer-events: none;
+  display: grid; flex: none; gap: var(--sp-xs); width: min(100%, 46rem); margin-block-start: 0; padding-block-end: clamp(8px, min(3vw, 2.6svh), 24px); overflow: hidden; pointer-events: none;
   /* Fade format pills before the clipped edges. */
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
@@ -262,32 +267,91 @@
    below still fit above the fold */
 .rw-app .step.is-input.is-empty .drop.hero {
   min-height: clamp(360px, calc(100svh - var(--hero-chrome)), 920px);
-  padding-block: 0;
+  /* Border-box padding, so at comfortable heights the min-height still governs
+     and this only absorbs slack. Once the stack outgrows the panel it is the
+     margin that keeps the headline off the seam instead of flush against it. */
+  padding-block: clamp(12px, 2.4svh, 28px);
 }
 .rw-app .step.is-input.is-empty .step-body { padding-block-end: 0; }
+/* The New here? beacon: a small dismissible chip riding the hero's lower-right
+   corner; its popover carries the guided runs and the practice download. The
+   wrapper spends no flow height - the chip lifts up into the hero above it. */
 .rw-app .first-weave-demo {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-s);
-  padding-block: var(--sp-s); color: var(--ink-3); font-size: .78rem;
+  position: relative; height: 0;
+  display: flex; justify-content: flex-end;
 }
-.rw-app .sample-tutorial-start .btn {
-  border-style: dashed;
-  border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
-  color: var(--thread-text);
+.rw-app .sample-tutorial-start-chip {
+  position: absolute; right: var(--sp-m); bottom: var(--sp-m); z-index: 3;
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px dashed color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--thread) 8%, var(--plate));
+  color: var(--ink-2); font-size: .74rem; font-weight: 650;
+  padding: 4px 12px 4px 6px; cursor: pointer;
+  transition: border-color .15s var(--ease), color .15s var(--ease);
 }
-/* The download leads; the guided run is the alternative beside it. */
-.rw-app .sample-tutorial-start-download {
-  border-style: solid; text-decoration: none;
-  border-color: color-mix(in oklab, var(--thread) 70%, var(--seam-strong));
-  background: color-mix(in oklab, var(--thread) 10%, var(--plate));
+@media (hover: hover) {
+  .rw-app .sample-tutorial-start-chip:hover { border-color: var(--thread); color: var(--ink); }
 }
-.rw-app .sample-tutorial-start-or { color: var(--ink-4); font-size: .72rem; }
+.rw-app .sample-tutorial-start-chip:active { border-color: var(--thread); color: var(--ink); }
+/* The beacon breathes until it is engaged, so a first visit notices it. */
+.rw-app .sample-tutorial-start-chip[aria-expanded="false"] .sample-tutorial-start-beacon {
+  animation: onboarding-beacon-pulse 2.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .sample-tutorial-start-chip[aria-expanded="false"] .sample-tutorial-start-beacon { animation: none; }
+}
+@keyframes onboarding-beacon-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--thread) 45%, transparent); }
+  60% { box-shadow: 0 0 0 6px transparent; }
+}
+/* A drag gesture owns the hero - the chip yields until the files land. */
+.rw-app .step-body:has(.drop.dragging) .sample-tutorial-start-chip { opacity: 0; pointer-events: none; }
+.rw-app .sample-tutorial-start-pop {
+  position: absolute; right: var(--sp-m); bottom: calc(var(--sp-m) + 36px); z-index: 4;
+  display: grid; gap: var(--sp-2xs); min-width: 232px; padding: var(--sp-s);
+  border: 1px solid var(--seam); border-radius: var(--r-m);
+  background: var(--plate-2);
+  box-shadow: 0 12px 30px -10px color-mix(in oklab, var(--scrim) 65%, transparent);
+}
+.rw-app .sample-tutorial-start-pop[hidden] { display: none; }
+.rw-app .sample-tutorial-start-head {
+  font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-4); padding: var(--sp-2xs) var(--sp-s);
+}
+.rw-app .sample-tutorial-start-action {
+  display: flex; align-items: center; gap: var(--sp-s);
+  border: none; border-radius: var(--r-s); background: none;
+  color: var(--ink); font-size: .8rem; font-weight: 600; text-align: left; text-decoration: none;
+  padding: 7px var(--sp-s); cursor: pointer;
+}
+@media (hover: hover) {
+  .rw-app .sample-tutorial-start-action:hover {
+    background: color-mix(in oklab, var(--thread) 10%, transparent);
+  }
+}
+.rw-app .sample-tutorial-start-action:active { background: color-mix(in oklab, var(--thread) 10%, transparent); }
+.rw-app .sample-tutorial-start-action:disabled { color: var(--ink-4); cursor: default; }
+.rw-app .sample-tutorial-start-action svg { width: 14px; height: 14px; color: var(--thread-text); flex: none; }
+.rw-app .sample-tutorial-start-action-icon { display: inline-flex; flex: none; }
+/* The quest marker: a bold ! on a round badge, the way a game flags the NPC
+   with something to offer. */
 .rw-app .sample-tutorial-start-beacon {
-  display: inline-grid; place-items: center; width: 24px; height: 18px;
-  border: 1px solid color-mix(in oklab, var(--thread) 65%, var(--seam-strong)); border-radius: 3px;
+  display: inline-grid; place-items: center; width: 18px; height: 18px; flex: none;
+  border: 1px solid color-mix(in oklab, var(--thread) 65%, var(--seam-strong)); border-radius: 50%;
   background: color-mix(in oklab, var(--thread) 12%, var(--plate)); color: var(--thread-text);
-  font-family: var(--mono); font-size: .58rem; font-weight: 850; letter-spacing: -.04em;
+  font-family: var(--mono); font-size: .78rem; font-weight: 850; line-height: 1;
 }
-.rw-app .sample-tutorial-start [role="status"] { flex-basis: 100%; color: var(--fault); text-align: center; }
+.rw-app .sample-tutorial-start [role="status"] { color: var(--fault); font-size: .72rem; padding-inline: var(--sp-s); }
+.rw-app .sample-tutorial-start-dismiss {
+  margin-top: var(--sp-2xs); border: none; border-top: 1px solid var(--seam-soft); background: none;
+  color: var(--ink-4); font-size: .7rem; text-align: center;
+  padding: var(--sp-xs) var(--sp-s) var(--sp-2xs); cursor: pointer;
+}
+@media (hover: hover) {
+  .rw-app .sample-tutorial-start-dismiss:hover { color: var(--ink-2); }
+}
+.rw-app .sample-tutorial-start-dismiss:active { color: var(--ink-2); }
 
 /* Guided samples trace the same numbered loom stages as the workbench. The
    dimmer never traps input: each live section remains available while its
@@ -299,6 +363,7 @@
   /* Pushes the un-highlighted workbench back so the lifted row reads as the
      only thing in focus; the row sits above this layer and stays crisp. */
   backdrop-filter: blur(1.5px);
+  animation: sample-tutorial-scrim-in .3s var(--ease) both;
 }
 .rw-app .sample-tutorial-stage {
   position: relative !important;
@@ -317,15 +382,22 @@
 .rw-app .sample-tutorial-lift {
   position: relative !important; z-index: 1002 !important; overflow: visible !important;
 }
+/* Absolute, in document coordinates, so the page scrolls the ring along with
+   the row it frames - on the compositor, with no main-thread work per frame. A
+   fixed ring has to be re-placed from a scroll handler, which can only ever
+   trail the composited scroll, and the highlight shakes the whole way down.
+   .rw-app is static and untransformed, so this resolves against the document. */
 .rw-app .sample-tutorial-ring {
-  position: fixed; z-index: 1002; pointer-events: none;
+  position: absolute; z-index: 1002; pointer-events: none;
   border: 3px solid color-mix(in oklab, var(--thread) 88%, var(--thread-hi)); border-radius: var(--r-m);
   box-shadow:
     0 0 0 6px color-mix(in oklab, var(--thread) 20%, transparent),
     0 0 34px 6px color-mix(in oklab, var(--thread) 34%, transparent);
+  /* The ring unmounts between steps, so this intro replays as it locks onto
+     each new row. */
   animation:
-    sample-tutorial-ring-in .24s var(--ease) both,
-    sample-tutorial-ring-breathe 2.8s var(--ease) .24s infinite;
+    sample-tutorial-ring-in .28s var(--ease) both,
+    sample-tutorial-ring-breathe 2.8s var(--ease) .28s infinite;
 }
 /* The button the final step asks for. Skipped while disabled - nothing should
    beckon at a control that cannot be pressed. */
@@ -354,15 +426,24 @@
   top: max(18px, env(safe-area-inset-top));
   bottom: auto;
 }
-/* Anchored beside its row on desktop: the component supplies left/top, so the
-   viewport-pinned insets have to release or the box stays over-constrained. */
-.rw-app .sample-tutorial-dialog[data-anchored="true"] {
-  inset-inline: auto; bottom: auto; margin-inline: 0;
+.rw-app .sample-tutorial-dialog[data-loading="true"] {
+  top: 50%; bottom: auto;
+  width: min(560px, calc(100vw - 2 * var(--gutter))); max-height: calc(100dvh - 36px);
+  translate: 0 -50%;
+  animation-name: sample-tutorial-loading-in;
 }
-/* Only when moving between steps. Scroll tracking sets no glide, so the card
-   stays locked to its row instead of rubber-banding behind it. */
-.rw-app .sample-tutorial-dialog[data-glide="true"] {
-  transition: top .34s var(--ease), left .34s var(--ease);
+/* Anchored beside its row on desktop: the component supplies left/top, so the
+   viewport-pinned insets have to release or the box stays over-constrained.
+   Absolute for the same reason as the ring - the card rides the page rather
+   than chasing it, so the pair never drifts apart mid-scroll. */
+.rw-app .sample-tutorial-dialog[data-anchored="true"] {
+  position: absolute; inset-inline: auto; bottom: auto; margin-inline: 0;
+}
+/* Parked between anchors: the card has left its old row and the next one is not
+   placed yet, so it waits out of sight rather than sliding across the page.
+   The component's arrival animation brings it back once the new spot is written. */
+.rw-app .sample-tutorial-dialog[data-moving="true"] {
+  opacity: 0; pointer-events: none;
 }
 .rw-app .sample-tutorial-beacon {
   display: grid; place-items: center; width: 48px; height: 48px;
@@ -371,9 +452,6 @@
   font-family: var(--mono); font-size: .9rem; font-weight: 850; letter-spacing: -.04em;
 }
 .rw-app .sample-tutorial-live { min-width: 0; }
-.rw-app .sample-tutorial-copy {
-  animation: sample-tutorial-copy-in .18s var(--ease) both;
-}
 .rw-app .sample-tutorial-kicker {
   display: block; margin-block-end: var(--sp-xs);
   color: var(--thread-text); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
@@ -384,6 +462,17 @@
 }
 .rw-app .sample-tutorial-copy p {
   margin: 0; color: var(--ink-2); font-size: .86rem; line-height: 1.5;
+}
+.rw-app .sample-tutorial-progress {
+  height: 7px; margin-block-start: var(--sp-m); overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--thread) 55%, var(--seam-strong)); border-radius: 999px;
+  background: color-mix(in oklab, var(--thread) 10%, var(--well));
+}
+.rw-app .sample-tutorial-progress > span {
+  display: block; width: 42%; height: 100%; border-radius: inherit;
+  background: linear-gradient(90deg, var(--thread), var(--thread-hi));
+  box-shadow: 0 0 12px color-mix(in oklab, var(--thread) 55%, transparent);
+  animation: sample-tutorial-progress 1.05s var(--ease) infinite alternate;
 }
 .rw-app .sample-tutorial-action-list {
   display: flex; flex-wrap: wrap; gap: var(--sp-xs); margin: var(--sp-s) 0 0; padding: 0; list-style: none;
@@ -404,8 +493,13 @@
   display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-s);
 }
 .rw-app .sample-tutorial-actions .btn { white-space: nowrap; }
+@keyframes sample-tutorial-scrim-in {
+  from { opacity: 0; }
+}
 @keyframes sample-tutorial-ring-in {
   from {
+    opacity: 0;
+    scale: 1.035;
     border-color: transparent;
     box-shadow: 0 0 0 2px transparent;
   }
@@ -426,8 +520,12 @@
 @keyframes sample-tutorial-dialog-in {
   from { opacity: 0; translate: 0 12px; }
 }
-@keyframes sample-tutorial-copy-in {
-  from { opacity: 0; translate: 8px 0; }
+@keyframes sample-tutorial-loading-in {
+  from { opacity: 0; translate: 0 calc(-50% + 12px); }
+}
+@keyframes sample-tutorial-progress {
+  from { translate: -8% 0; }
+  to { translate: 146% 0; }
 }
 @media (max-width: 640px) {
   .rw-app .sample-tutorial-dialog {
@@ -439,20 +537,26 @@
     top: max(10px, env(safe-area-inset-top));
     bottom: auto;
   }
+  .rw-app .sample-tutorial-dialog[data-loading="true"] {
+    top: 50%; bottom: auto; max-height: calc(100dvh - 20px);
+  }
   .rw-app .sample-tutorial-beacon { width: 38px; height: 38px; font-size: 1rem; }
   .rw-app .sample-tutorial-actions {
     grid-column: 1 / -1; flex-direction: row-reverse; justify-content: flex-start;
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .rw-app .sample-tutorial-scrim,
   .rw-app .sample-tutorial-ring,
   .rw-app .sample-tutorial-dialog,
-  .rw-app .sample-tutorial-copy,
+  .rw-app .sample-tutorial-progress > span,
   .rw-app .btn[data-guide-cta="true"]:not(:disabled) {
     animation: none;
   }
-  .rw-app .sample-tutorial-ring[data-glide="true"],
-  .rw-app .sample-tutorial-dialog[data-glide="true"] {
+  .rw-app .sample-tutorial-progress > span {
+    width: 100%;
+  }
+  .rw-app .sample-tutorial-ring[data-glide="true"] {
     transition: none;
   }
 }

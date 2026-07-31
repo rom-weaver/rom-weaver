@@ -3,10 +3,13 @@ import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.t
 import { createLogger } from "../../lib/logging.ts";
 import type { RemoteFetchEntry, RemoteFetchErrorKind } from "../../lib/remote/remote-file-fetch.ts";
 import { fetchRemoteFiles, RemoteFetchError } from "../../lib/remote/remote-file-fetch.ts";
-import { loadBundleUrlSession } from "./bundle-url-session.ts";
 import type { UrlSessionRequest } from "./url-session-request.ts";
 
 const logger = createLogger("url-session");
+type BundleUrlSessionModule = typeof import("./bundle-url-session.ts");
+let bundleUrlSessionModulePromise: Promise<BundleUrlSessionModule> | null = null;
+const loadBundleUrlSessionModule = (): Promise<BundleUrlSessionModule> =>
+  (bundleUrlSessionModulePromise ??= import("./bundle-url-session.ts"));
 
 type UrlSessionBootState = {
   phase: "idle" | "fetching" | "done" | "error";
@@ -93,26 +96,30 @@ function useUrlSessionBoot(
         deliverRef.current(files.map((entry) => entry.file));
       });
     } else {
-      run = loadBundleUrlSession(request.bundleUrl, {
-        onBundleName: (name) => {
-          if (!cancelled) setState((previous) => ({ ...previous, bundleName: name }));
-        },
-        onProgress: (id, progress) => {
-          loadedByEntry.set(id, progress.loadedBytes);
-          totalsByEntry.set(id, progress.totalBytes);
-          reportProgress();
-        },
-        signal: controller.signal,
-      }).then(async ({ cleanup, files, session }) => {
-        cleanupSessionFiles = cleanup;
-        if (cancelled) {
-          await cleanup();
-          return;
-        }
-        // A retry after failure must re-seed the form, so the session identity carries the attempt.
-        bundleSessionRef.current?.({ ...session, key: `${session.key}#${attempt}` });
-        deliverRef.current(files);
-      });
+      run = loadBundleUrlSessionModule()
+        .then(({ loadBundleUrlSession }) =>
+          loadBundleUrlSession(request.bundleUrl, {
+            onBundleName: (name) => {
+              if (!cancelled) setState((previous) => ({ ...previous, bundleName: name }));
+            },
+            onProgress: (id, progress) => {
+              loadedByEntry.set(id, progress.loadedBytes);
+              totalsByEntry.set(id, progress.totalBytes);
+              reportProgress();
+            },
+            signal: controller.signal,
+          }),
+        )
+        .then(async ({ cleanup, files, session }) => {
+          cleanupSessionFiles = cleanup;
+          if (cancelled) {
+            await cleanup();
+            return;
+          }
+          // A retry after failure must re-seed the form, so the session identity carries the attempt.
+          bundleSessionRef.current?.({ ...session, key: `${session.key}#${attempt}` });
+          deliverRef.current(files);
+        });
     }
     run
       .then(() => {

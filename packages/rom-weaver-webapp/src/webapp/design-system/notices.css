@@ -33,3 +33,7 @@
 
 .rw-app .checkrow { display: flex; align-items: center; gap: var(--sp-s); margin-block: 2px 10px; font-size: .82rem; color: var(--ink-2); }
 .rw-app .checkrow.warn { color: var(--care); }
+/* Lives here with the base rule, not in file-cards.css: notices is the later cascade
+   layer, so an override left there loses to the base rule above (light-theme axe
+   contrast caught exactly that). */
+:root[data-theme="light"] .checkrow.warn { color: #7a5300; }

@@ -1,4 +1,5 @@
 type WorkflowView = "patcher" | "creator" | "trim" | "tools";
+type WebappView = WorkflowView | "docs";
 
 type ValidationState = {
   messages: string[];
@@ -70,6 +71,7 @@ export type {
   ToolsSessionState,
   TrimSessionState,
   ValidationState,
+  WebappView,
   WorkflowView,
 };
 export {

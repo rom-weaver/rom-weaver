@@ -18,7 +18,7 @@
 > (`rom-weaver-core`, `-checksum`, `-containers`, `-patches`) are published only
 > so this one can be; using them directly is unsupported.
 
-## What this crate is
+## What does this crate do?
 
 The installable end of rom-weaver. It ships the `rom-weaver` binary and the
 `rom_weaver_app` command library that both frontends share. The native CLI and
@@ -102,10 +102,10 @@ A few commands and flags answer to more than one name: `weave` is the short
 name for `patch apply`, `inspect` for `probe`, and `trim --untrim`/`--restore`
 for `trim --revert`. Format names have alternates too, so `--format 7zip` and
 `--format 7z` are the same. The
-[CLI guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#alternate-names)
+[CLI guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/hosting/cli.md#alternate-names)
 lists them all.
 
-The [CLI guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md)
+The [CLI guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/hosting/cli.md)
 covers every command, the supported-format tables, compression settings, JSON
 output, man pages, Docker usage, and file permissions.
 
@@ -130,7 +130,7 @@ supported API.
 
 ## Documentation
 
-- [CLI guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md)
+- [CLI guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/hosting/cli.md)
 - [Documentation index](https://github.com/rom-weaver/rom-weaver/blob/main/docs/README.md)
 - [Project README](https://github.com/rom-weaver/rom-weaver#readme)
 

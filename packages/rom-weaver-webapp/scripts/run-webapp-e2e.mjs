@@ -10,6 +10,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium, webkit } from "playwright";
+import { DOC_SOURCES, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
 import { summarizeCssCoverage } from "./css-coverage.mjs";
 
@@ -21,6 +22,8 @@ const CSS_COVERAGE_BUDGET = JSON.parse(
 ).cssCoverage;
 const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb";
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
+// Derived from the route table, so a new guide is audited without a second edit.
+const DOCS_ROUTES = DOC_SOURCES.map((source) => source.slug);
 const A11Y_VIEWPORTS = [
   { height: 720, label: "desktop", width: 1280 },
   { height: 844, label: "mobile", width: 390 },
@@ -146,7 +149,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
 
   try {
     for (const testCase of [
-      { finalView: "patcher", initialView: "patcher", path: "weave/", replayClick: true },
+      { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
       { finalView: "trim", initialView: "patcher", path: "trim/" },
     ]) {
@@ -229,7 +232,31 @@ const runHydrationAudit = async (createContext, baseUrl) => {
   }
 };
 
+/**
+ * axe measures composited colour, so an element caught mid-fade reads as a
+ * contrast failure that does not exist once the animation lands - and a
+ * transition is not something Playwright's "visible" waits on. Settle the
+ * finite animations before scanning; the looping ones (the guide's breathing
+ * ring, the CTA pulse, the weave drift) never finish and are skipped. Repeated
+ * because one animation commonly starts the next - the guide card's arrival
+ * begins as its exit ends.
+ */
+const settleAnimations = async (page) => {
+  for (let pass = 0; pass < 3; pass += 1) {
+    const settled = await page.evaluate(async () => {
+      const running = document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Number.POSITIVE_INFINITY);
+      if (running.length === 0) return true;
+      await Promise.all(running.map((animation) => animation.finished.catch(() => undefined)));
+      return false;
+    });
+    if (settled) return;
+  }
+};
+
 const scanLiveApp = async (page, label) => {
+  await settleAnimations(page);
   const violations = await page.evaluate(async (tags) => {
     const results = await window.axe.run(document, {
       resultTypes: ["violations"],
@@ -302,6 +329,11 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (browserName === "chromium") await page.coverage.startCSSCoverage();
     await page.goto(new URL("404.html", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator(".not-found-page").waitFor({ state: "visible" });
+    if ((await page.locator('.mode[aria-selected="true"]').count()) !== 0) {
+      throw new Error("404 page marks a workflow tab as selected");
+    }
+    await page.getByRole("link", { name: "Apply a patch" }).waitFor({ state: "visible" });
+    await page.getByRole("link", { name: "Browse docs" }).waitFor({ state: "visible" });
     await installAuditTools();
     await scanVariants("not found");
     if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
@@ -378,6 +410,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
+    const onboardingChip = page.getByRole("button", { name: "New here?" });
+    await onboardingChip.waitFor({ state: "visible", timeout: 60_000 });
+    await onboardingChip.click();
     const guidedApply = page.getByRole("button", { name: "Start guided Apply" });
     await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
     await guidedApply.click();
@@ -387,6 +422,29 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     for (let step = 1; step <= 4; step += 1) {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Apply ${step}/4`);
+      await tutorial.getByRole("button", { name: step === 4 ? "Done" : "Continue" }).click();
+    }
+    await tutorial.waitFor({ state: "hidden" });
+
+    await page.goto(new URL("weave?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
+    await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+    await installAuditTools();
+    await tutorial.waitFor({ state: "visible" });
+    await scanLiveApp(page, "guided Bundle loading (desktop, light)");
+    for (let step = 1; step <= 4; step += 1) {
+      await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
+      await scanVariants(`guided Bundle ${step}/4`);
+      if (step === 4) {
+        await page.getByRole("button", { name: "Create ZIP Bundle", exact: true }).click();
+        const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
+        await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
+        const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });
+        await downloadButton.click();
+        const download = await downloadPromise;
+        if (!download.suggestedFilename().endsWith(".zip")) {
+          throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
+        }
+      }
       await tutorial.getByRole("button", { name: step === 4 ? "Done" : "Continue" }).click();
     }
     await tutorial.waitFor({ state: "hidden" });
@@ -419,6 +477,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
     await page.locator('[role="tab"][data-mode="creator"]').click();
+    const createOnboardingChip = page.getByRole("button", { name: "New here?" });
+    await createOnboardingChip.waitFor({ state: "visible" });
+    await createOnboardingChip.click();
     const guidedCreate = page.getByRole("button", { name: "Start guided Create" });
     await guidedCreate.waitFor({ state: "visible" });
     await guidedCreate.click();
@@ -431,11 +492,57 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     }
     await tutorial.waitFor({ state: "hidden" });
 
-    if (failures.length) throw new Error(`live app accessibility audit page errors:\n${failures.join("\n")}`);
-    if (browserName === "chromium") {
-      cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
-      checkCssCoverage(cssCoverageEntries);
+    // Last, because each guide is its own served document: the audits above all
+    // run against the app page and would have to re-enter it afterwards.
+    // Loading them for real rather than switching to them in-app is the only
+    // way a hydration mismatch against the served HTML surfaces as a page error.
+    // Coverage is per-document and resets on navigation, so bank what the app
+    // page used before leaving it - otherwise only the last guide's sheet
+    // survives to the budget check and the whole app's CSS reads as unused.
+    if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
+
+    let retargetedSamples = 0;
+    for (const slug of DOCS_ROUTES) {
+      if (browserName === "chromium") await page.coverage.startCSSCoverage();
+      await page.goto(`${baseUrl.replace(/\/$/, "")}/${slug}`, { waitUntil: "domcontentloaded" });
+      await page.locator(".docs-article h1").waitFor({ state: "visible" });
+      await installAuditTools();
+      const headings = await page.locator("h1").count();
+      if (headings !== 1) throw new Error(`${slug} rendered ${headings} level-one headings; expected exactly 1`);
+      // This origin is not production, so once the page is live every sample
+      // download has to have moved to it. The served HTML still names
+      // production, which is the right answer for a crawler but the wrong one
+      // for anyone copying a command out of a beta or preview deployment.
+      await page.waitForFunction(() => !document.getElementById("webapp-root")?.hasAttribute("aria-busy"));
+      const samples = await page.evaluate((productionOrigin) => {
+        // Origins are compared after parsing so a lookalike host such as
+        // `rom-weaver.com.example` can never read as either origin.
+        const origins = [...document.querySelectorAll(".docs-article pre code")].map((block) =>
+          (block.textContent || "")
+            .match(/https?:\/\/[^\s"'<>]+/g)
+            ?.flatMap((value) => (URL.canParse(value) ? [new URL(value).origin] : [])),
+        );
+        const countBlocksNaming = (origin) => origins.filter((block) => block?.includes(origin)).length;
+        return {
+          local: countBlocksNaming(location.origin),
+          production: countBlocksNaming(productionOrigin),
+        };
+      }, SITE_ORIGIN);
+      if (samples.production)
+        throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
+      retargetedSamples += samples.local;
+      await scanVariants(slug);
+      if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
     }
+    // Without this the checks above pass just as happily when the swap stops
+    // running and no guide offers a sample download at all.
+    if (!retargetedSamples) throw new Error("no guide sample was retargeted to the serving origin");
+    process.stdout.write(`PASS docs samples retargeted (${retargetedSamples} blocks)\n`);
+
+    if (failures.length) throw new Error(`live app accessibility audit page errors:\n${failures.join("\n")}`);
+    // Every page above banked its own coverage as it finished; nothing is still
+    // recording here.
+    if (browserName === "chromium") checkCssCoverage(cssCoverageEntries);
   } finally {
     await context.close();
   }

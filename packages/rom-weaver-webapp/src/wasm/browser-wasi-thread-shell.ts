@@ -1,6 +1,6 @@
 import type { ThreadStartControl } from "./browser-wasi-thread-protocol.ts";
 import { THREAD_SLOT_LENGTH, THREAD_SLOT_STATE_INDEX } from "./browser-wasi-thread-protocol.ts";
-// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/ARCHITECTURE.md.
+// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/development/ARCHITECTURE.md.
 import BUILT_THREAD_WORKER_URL from "./workers/browser-wasi-thread-worker.ts?worker&url";
 
 export const THREAD_WORKER_READY_TIMEOUT_MS = 5000;

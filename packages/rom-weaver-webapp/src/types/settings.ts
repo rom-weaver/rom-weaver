@@ -35,6 +35,7 @@ type LoggingSettings = {
 };
 
 type CommonSettings = {
+  betaToolsEnabled?: boolean;
   defaultCompression?: DefaultCompression;
   input?: InputSettings;
   logging?: LoggingSettings;

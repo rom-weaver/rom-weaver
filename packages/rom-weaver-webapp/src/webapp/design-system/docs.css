@@ -1,0 +1,788 @@
+/* Guides.
+   The app chrome is a loom: condensed type, hairline seams, warp strung across
+   waiting surfaces. Long-form reading extends that rather than replacing it.
+   The warp is a piece's lengthwise structure, which is exactly what a document
+   outline is - so the section list becomes a warp rail, and the section being
+   read is marked by a weft pick crossing it. That rail is the only loud thing
+   on the page; the prose stays quiet and opens up (font-stretch 100% against
+   the app's 94%) to signal a reading mode rather than a working mode. */
+
+html:has(.docs-workbench) { scroll-behavior: smooth; }
+
+.rw-app .docs-workbench {
+  /* Prose sits at a comfortable measure; code and screenshots may run wider,
+     because a wrapped command line and a squinting screenshot both cost more
+     than the extra width does. */
+  --measure: 35rem;
+  --measure-wide: 39rem;
+  --article-pad: clamp(22px, 4.5vw, 44px);
+  max-width: 62rem;
+  margin-inline: auto;
+  padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
+}
+
+/* --- breadcrumbs --- */
+.rw-app .docs-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-s);
+  margin: 0 0 var(--sp-l);
+  color: var(--ink-3);
+  font-size: .69rem;
+  font-weight: 650;
+  font-stretch: 88%;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.rw-app .docs-breadcrumbs a { color: var(--ink-3); text-decoration: none; }
+@media (hover: hover) {
+  .rw-app .docs-breadcrumbs a:hover { color: var(--thread-text); }
+}
+.rw-app .docs-breadcrumbs a:active { color: var(--thread-text); }
+
+/* --- layout --- */
+.rw-app .docs-layout {
+  display: grid;
+  /* The article column is exactly as wide as the panel can be, so the pair
+     centres as one block instead of stranding a gutter inside the card. */
+  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
+  align-items: start;
+  justify-content: center;
+  gap: clamp(18px, 3vw, 30px);
+}
+.rw-app .docs-rails {
+  position: sticky;
+  top: var(--sp-l);
+  display: grid;
+  gap: var(--sp-l);
+  overflow-y: auto;
+  max-height: calc(100vh - var(--sp-xl));
+  scrollbar-width: thin;
+}
+
+/* --- guide switcher --- */
+.rw-app .guide-nav {
+  overflow: hidden;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate);
+}
+.rw-app .guide-nav-title,
+.rw-app .warp-rail-title {
+  display: block;
+  color: var(--ink-3);
+  font-size: .655rem;
+  font-weight: 700;
+  font-stretch: 86%;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.rw-app .guide-nav-title {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--seam-soft);
+}
+/* Shelves: one per folder under docs/. Browser usage opens first; after that,
+   the reader's choices carry across pages. */
+.rw-app .guide-shelf { padding: 3px 5px; }
+.rw-app .guide-shelf + .guide-shelf { border-top: 1px solid var(--seam-soft); }
+.rw-app .guide-shelf > summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  border-radius: var(--r-s);
+  cursor: pointer;
+  list-style: none;
+}
+.rw-app .guide-shelf > summary::-webkit-details-marker { display: none; }
+.rw-app .guide-shelf > summary::after {
+  content: "+";
+  width: 1rem;
+  margin-inline-end: 7px;
+  color: var(--thread-text);
+  font: 700 .78rem/1 var(--mono);
+  text-align: center;
+}
+.rw-app .guide-shelf[open] > summary::after { content: "−"; }
+@media (hover: hover) {
+  .rw-app .guide-shelf > summary:hover { background: var(--well); }
+}
+.rw-app .guide-shelf > summary:active { background: var(--well); }
+.rw-app .guide-shelf-title {
+  flex: 1;
+  margin: 0;
+  padding: 6px 9px;
+  color: var(--ink-4);
+  font-size: .625rem;
+  font-weight: 700;
+  font-stretch: 86%;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.rw-app .guide-nav-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rw-app .guide-nav-list li { margin: 0; }
+.rw-app .guide-nav-list a {
+  display: block;
+  padding: 7px 9px;
+  border-radius: var(--r-s);
+  color: var(--ink-2);
+  font-size: .78rem;
+  font-weight: 600;
+  font-stretch: 92%;
+  line-height: 1.3;
+  text-decoration: none;
+}
+@media (hover: hover) {
+  .rw-app .guide-nav-list a:hover { background: var(--well); color: var(--ink); }
+}
+.rw-app .guide-nav-list a:active { background: var(--well); color: var(--ink); }
+.rw-app .guide-nav-list a[aria-current="page"] {
+  background: var(--warp-lines), color-mix(in oklab, var(--thread) 10%, var(--well));
+  color: var(--thread-text);
+}
+
+/* --- warp rail: the signature --- */
+.rw-app .warp-rail { padding-inline: 2px; }
+.rw-app .warp-rail-title { padding: 0 0 var(--sp-s) 2.35rem; }
+.rw-app .warp-rail-list {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* the warp thread the whole outline hangs from */
+.rw-app .warp-rail-list::before {
+  position: absolute;
+  inset-block: .55rem;
+  left: .4rem;
+  width: 1px;
+  background: var(--seam);
+  content: "";
+}
+.rw-app .warp-rail-list li { margin: 0; }
+.rw-app .warp-rail-list a {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.2rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: .45rem;
+  padding: .3rem 0 .3rem 1.15rem;
+  color: var(--ink-3);
+  font-size: .755rem;
+  font-weight: 600;
+  font-stretch: 90%;
+  line-height: 1.35;
+  text-decoration: none;
+}
+/* the weft pick: one crossing thread, travelling down the warp as you read */
+.rw-app .warp-pick {
+  position: absolute;
+  top: .84rem;
+  left: 0;
+  width: .95rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--thread);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform .3s var(--ease);
+}
+.rw-app .warp-index {
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: .66rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.rw-app .warp-label { min-width: 0; }
+@media (hover: hover) {
+  .rw-app .warp-rail-list a:hover { color: var(--ink); }
+  .rw-app .warp-rail-list a:hover .warp-index { color: var(--weft); }
+}
+.rw-app .warp-rail-list a:active { color: var(--ink); }
+.rw-app .warp-rail-list a:active .warp-index { color: var(--weft); }
+.rw-app .warp-rail-list a[aria-current="true"] { color: var(--ink); font-weight: 700; }
+.rw-app .warp-rail-list a[aria-current="true"] .warp-index { color: var(--weft); }
+.rw-app .warp-rail-list a[aria-current="true"] .warp-pick { transform: scaleX(1); }
+
+/* --- article --- */
+.rw-app .docs-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-l);
+  background: var(--plate);
+  box-shadow: 0 18px 50px -38px rgb(0 0 0 / .7);
+}
+.rw-app .docs-article {
+  padding: var(--article-pad);
+  /* long-form opens up; the surrounding app chrome stays condensed */
+  font-stretch: 100%;
+}
+.rw-app .docs-article > * { max-width: var(--measure); }
+.rw-app .docs-article h1,
+.rw-app .docs-article h2,
+.rw-app .docs-article h3 {
+  color: var(--ink);
+  letter-spacing: -.022em;
+  line-height: 1.14;
+  text-wrap: balance;
+}
+.rw-app .docs-article h1 {
+  max-width: 17ch;
+  margin: 0 0 var(--sp-l);
+  font-size: clamp(2rem, 1.4rem + 2.6vw, 2.9rem);
+  font-weight: 780;
+  font-stretch: 92%;
+}
+.rw-app .docs-article h2 {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: var(--sp-s);
+  align-items: baseline;
+  margin: clamp(44px, 7vw, 68px) 0 var(--sp-m);
+  font-size: clamp(1.3rem, 1.08rem + .9vw, 1.6rem);
+  font-weight: 720;
+  font-stretch: 96%;
+  scroll-margin-top: 5.5rem;
+}
+.rw-app .docs-section-index {
+  color: var(--weft);
+  font: 600 .7rem/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.rw-app .docs-article h3 {
+  margin: var(--sp-xl) 0 var(--sp-s);
+  font-size: 1.02rem;
+  font-weight: 700;
+  scroll-margin-top: 5.5rem;
+}
+/* the standfirst: the paragraph that answers "is this the right page?" */
+.rw-app .docs-article h1 + p {
+  margin: 0;
+  padding-bottom: var(--sp-xl);
+  border-bottom: 1px solid var(--seam-soft);
+  color: var(--ink-2);
+  font-size: 1.06rem;
+  line-height: 1.6;
+}
+.rw-app .docs-article p,
+.rw-app .docs-article li {
+  color: var(--ink-2);
+  line-height: 1.72;
+}
+.rw-app .docs-article p { margin-block: var(--sp-l); }
+.rw-app .docs-article ul,
+.rw-app .docs-article ol { margin-block: var(--sp-l); padding-inline-start: 1.15rem; }
+.rw-app .docs-article li { margin-block: var(--sp-s); padding-inline-start: .3rem; }
+.rw-app .docs-article li::marker { color: var(--seam-strong); }
+.rw-app .docs-article strong { color: var(--ink); font-weight: 700; }
+.rw-app .docs-article a {
+  color: var(--thread-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--thread) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .17em;
+}
+@media (hover: hover) {
+  .rw-app .docs-article a:hover { text-decoration-color: var(--thread); }
+}
+.rw-app .docs-article a:active { text-decoration-color: var(--thread); }
+
+.rw-app .docs-disclosure {
+  max-width: var(--measure-wide);
+  margin-block: 0 var(--sp-xl);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+}
+.rw-app .docs-disclosure > summary {
+  padding: var(--sp-m) var(--sp-l);
+  color: var(--ink);
+  font-size: .86rem;
+  font-weight: 700;
+  line-height: 1.45;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .rw-app .docs-disclosure > summary:hover { color: var(--thread-text); }
+}
+.rw-app .docs-disclosure > summary:active { color: var(--thread-text); }
+.rw-app .docs-disclosure[open] > summary { border-bottom: 1px solid var(--seam-soft); }
+.rw-app .docs-disclosure > :not(summary) { margin-inline: var(--sp-l); }
+.rw-app .docs-disclosure > :last-child { margin-bottom: var(--sp-l); }
+
+/* The hub's workflow chooser is the reason most people open the guides, so it
+   reads as a set of destinations rather than a bulleted list. Keyed off the
+   heading's own id: if that section is renamed the list simply renders plain.
+   The marker is emptied rather than removed with `list-style: none`, which is
+   what strips list semantics from VoiceOver. */
+.rw-app .docs-article #choose-a-workflow + ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--sp-m);
+  max-width: var(--measure-wide);
+  margin-block: var(--sp-l);
+  padding-inline-start: 0;
+}
+.rw-app .docs-article #choose-a-workflow + ul li {
+  margin: 0;
+  padding: var(--sp-l);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+  font-size: .84rem;
+  line-height: 1.6;
+}
+.rw-app .docs-article #choose-a-workflow + ul li::marker { content: ""; }
+.rw-app .docs-article #choose-a-workflow + ul a {
+  display: block;
+  margin-bottom: .15rem;
+  font-size: .95rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* --- code, figures, quotes: allowed past the prose measure --- */
+.rw-app .docs-article code {
+  padding: .1rem .3rem;
+  border: 1px solid var(--seam-soft);
+  border-radius: 4px;
+  background: var(--well);
+  color: var(--weft);
+  font: .85em/1.5 var(--mono);
+}
+.rw-app .docs-article :not(pre) > code { overflow-wrap: anywhere; }
+.rw-app .docs-article pre {
+  overflow-x: auto;
+  max-width: var(--measure-wide);
+  margin-block: var(--sp-xl);
+  padding: var(--sp-l);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--well);
+}
+.rw-app .docs-article pre code { padding: 0; border: 0; background: transparent; color: var(--ink-2); }
+.rw-app .docs-article blockquote {
+  margin-block: var(--sp-xl);
+  padding: var(--sp-xs) 0 var(--sp-xs) var(--sp-l);
+  border-left: 2px solid var(--thread);
+  color: var(--ink-2);
+}
+.rw-app .docs-article blockquote > :first-child { margin-top: 0; }
+.rw-app .docs-article blockquote > :last-child { margin-bottom: 0; }
+.rw-app .docs-article table {
+  width: 100%;
+  max-width: var(--measure-wide);
+  border-spacing: 0;
+  border-collapse: collapse;
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.rw-app .docs-article th,
+.rw-app .docs-article td {
+  padding: var(--sp-s);
+  border: 1px solid var(--seam-soft);
+  color: var(--ink-2);
+  text-align: left;
+  vertical-align: top;
+}
+.rw-app .docs-article th { background: var(--well); color: var(--ink); }
+.rw-app .docs-article img { max-width: 100%; height: auto; }
+.rw-app .docs-screenshot { max-width: var(--measure-wide); margin-block: var(--sp-xl); }
+.rw-app .docs-screenshot picture { display: block; }
+.rw-app .docs-screenshot picture[data-docs-screenshot-theme="dark"] { display: none; }
+:root[data-theme="dark"] .rw-app .docs-screenshot picture[data-docs-screenshot-theme="light"] { display: none; }
+:root[data-theme="dark"] .rw-app .docs-screenshot picture[data-docs-screenshot-theme="dark"] { display: block; }
+.rw-app .docs-screenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--well);
+}
+.rw-app .docs-screenshot figcaption {
+  margin-top: var(--sp-s);
+  color: var(--ink-3);
+  font-size: .72rem;
+  font-stretch: 92%;
+  line-height: 1.5;
+}
+.rw-app .docs-screenshot-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-l);
+  max-width: var(--measure-wide);
+  margin-block: var(--sp-xl);
+}
+.rw-app .docs-screenshot-pair .docs-screenshot { margin-block: 0; }
+@media (max-width: 600px) {
+  .rw-app .docs-screenshot-pair { grid-template-columns: 1fr; }
+}
+
+/* --- hub index ---
+   Browser usage opens first. The longer reference shelves stay one tap away. */
+.rw-app .docs-index {
+  display: grid;
+  gap: var(--sp-s);
+  padding: var(--sp-xl) var(--article-pad) clamp(28px, 5vw, 44px);
+  border-top: 1px solid var(--seam);
+}
+.rw-app .docs-index-shelf {
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+}
+.rw-app .docs-index-shelf > summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  gap: var(--sp-m);
+  padding: var(--sp-m) var(--sp-l);
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+.rw-app .docs-index-shelf > summary::-webkit-details-marker { display: none; }
+.rw-app .docs-index-shelf > summary::before {
+  content: "+";
+  width: 1rem;
+  color: var(--thread-text);
+  font: 700 .9rem/1 var(--mono);
+  text-align: center;
+}
+.rw-app .docs-index-shelf[open] > summary::before { content: "−"; }
+@media (hover: hover) {
+  .rw-app .docs-index-shelf > summary:hover { background: var(--well); }
+}
+.rw-app .docs-index-shelf > summary:active { background: var(--well); }
+.rw-app .docs-index-title {
+  flex: 1;
+  margin: 0;
+  color: var(--ink);
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: -.005em;
+}
+.rw-app .docs-index-count {
+  color: var(--ink-3);
+  font-size: .68rem;
+  font-weight: 650;
+}
+.rw-app .docs-index ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--sp-s);
+  margin: 0 var(--sp-m) var(--sp-m);
+  padding: var(--sp-m) 0 0;
+  border-top: 1px solid var(--seam-soft);
+  list-style: none;
+}
+.rw-app .docs-index li { margin: 0; }
+.rw-app .docs-index a {
+  display: grid;
+  gap: 3px;
+  height: 100%;
+  padding: var(--sp-m) var(--sp-l);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  background: var(--plate-2);
+  text-decoration: none;
+  transition: border-color .18s, background .18s;
+}
+@media (hover: hover) {
+  .rw-app .docs-index a:hover { border-color: var(--thread); background: var(--well); }
+}
+.rw-app .docs-index a:active { border-color: var(--thread); background: var(--well); }
+.rw-app .docs-index-label { color: var(--ink); font-size: .88rem; font-weight: 700; letter-spacing: -.01em; }
+.rw-app .docs-index-blurb {
+  /* Two lines of the opening sentence: enough to choose by, never enough to
+     turn the index into a second copy of the guide. */
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--ink-3);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+/* --- closing call to action --- */
+.rw-app .docs-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-l);
+  padding: var(--sp-l) clamp(24px, 4.5vw, 46px);
+  border-top: 1px solid var(--seam);
+  background: var(--warp-lines), color-mix(in oklab, var(--thread) 4%, var(--plate-2));
+}
+.rw-app .docs-cta h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.rw-app .docs-cta p { margin: 3px 0 0; color: var(--ink-3); font-size: .78rem; }
+.rw-app .docs-cta-actions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-s); }
+.rw-app .docs-cta .btn { text-decoration: none; }
+
+.rw-app .docs-faq-preview {
+  padding: var(--sp-xl) var(--article-pad) clamp(28px, 5vw, 44px);
+  border-top: 1px solid var(--seam);
+}
+.rw-app .docs-faq-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-m);
+  margin-block-end: var(--sp-m);
+}
+.rw-app .docs-faq-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  letter-spacing: -.01em;
+}
+.rw-app .docs-faq-heading a { color: var(--thread-text); font-size: .75rem; font-weight: 700; }
+.rw-app .docs-faq-list { border-block: 1px solid var(--seam-soft); }
+.rw-app .docs-faq-list details + details { border-top: 1px solid var(--seam-soft); }
+.rw-app .docs-faq-list summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding-block: var(--sp-m);
+  color: var(--ink);
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rw-app .docs-faq-list p {
+  margin: 0;
+  padding: 0 0 var(--sp-m) var(--sp-l);
+  color: var(--ink-3);
+  font-size: .78rem;
+  line-height: 1.55;
+}
+
+/* --- the end of the guide ---
+   Phone-only: the desktop sidebar is sticky, so the top of the document is never
+   more than a glance away there. */
+.rw-app .docs-onward { display: none; }
+
+/* --- the trail ---
+   Desktop keeps the sidebar and never shows this. */
+.rw-app .docs-trail { display: none; }
+
+/* --- responsive --- */
+@media (max-width: 860px) {
+  .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
+  .rw-app .docs-rails { display: none; }
+  /* The plain breadcrumb hands its job to the trail, which does the navigating
+     as well as the naming. */
+  .rw-app .docs-breadcrumbs { display: none; }
+
+  /* Sticky rather than fixed, and at the top rather than the bottom: the bottom
+     of a phone screen is where the browser parks its own collapsing toolbar, so
+     a dock there had to reserve scroll room to clear it. Nothing is fixed now,
+     so the guide just ends.
+     The seam is unconditional rather than appearing on pin - detecting "stuck"
+     needs a scroll observer, and at the top of the guide a rule under the trail
+     reads as the divider the breadcrumb used to have anyway. */
+  .rw-app .docs-trail {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    display: block;
+    /* Chrome, not a card: full-bleed past the app column's gutter, which is an
+       exact inset (`.app` sets `padding: 0 var(--gutter)`) rather than a `vw`
+       guess that would overflow beside a classic scrollbar. */
+    margin-inline: calc(var(--gutter) * -1);
+    margin-block-end: var(--sp-m);
+    padding-inline: var(--gutter);
+    border-block-end: 1px solid var(--seam);
+    background: var(--chassis);
+  }
+  .rw-app .trail-crumbs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    min-height: 36px;
+    padding-block: 2px 4px;
+  }
+  .rw-app .trail-sep { flex: none; color: var(--seam-strong); font-size: .7rem; }
+  .rw-app .trail-crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    min-height: 32px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: var(--r-s);
+    background: transparent;
+    color: var(--ink-3);
+    font: inherit;
+    font-size: .69rem;
+    font-weight: 700;
+    font-stretch: 88%;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .rw-app .trail-crumb svg { flex: none; width: 12px; height: 12px; }
+  .rw-app .trail-crumb.is-section { color: var(--ink); }
+  .rw-app .trail-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rw-app .trail-index {
+    flex: none;
+    color: var(--weft);
+    font-family: var(--mono);
+    font-size: .66rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+  }
+  .rw-app .trail-crumb:active { background: var(--well); }
+
+  /* The warp, woven: one tick per section, each as wide as its section is long,
+     so the crossing weft is a plain scroll fraction that still lands inside the
+     right tick. Ticks are divided by a border rather than a gap, which keeps
+     them edge to edge and the boundaries exactly where the weft stops. It rides
+     the trail's bottom edge, which is the only place it lives now that nothing
+     holds the bottom of the screen. */
+  .rw-app .warp-gauge {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: 1;
+    display: flex;
+    height: 2px;
+  }
+  /* The floor keeps a two-line section visible as a tick, at the cost of
+     borrowing a pixel or two from its neighbours - so the weft can sit ~1% off
+     a boundary on a guide with many sections. The label beside it is exact;
+     the gauge is the shape of the document, not a readout. */
+  .rw-app .warp-gauge i {
+    box-sizing: border-box;
+    flex: 1 1 0;
+    min-width: 2px;
+    border-right: 1px solid var(--chassis);
+    background: var(--seam-soft);
+  }
+  .rw-app .warp-gauge i:last-of-type { border-right: 0; }
+  .rw-app .warp-gauge-weft {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--thread);
+    transition: width .18s var(--ease);
+  }
+
+  /* --- the way back up ---
+     Just this. Onward links are the last paragraph of every guide already, written
+     by hand and pointing at whatever follows from what you just read. */
+  .rw-app .docs-onward {
+    display: flex;
+    justify-content: center;
+    margin-block-start: var(--sp-l);
+  }
+  .rw-app .docs-to-top {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-s);
+    min-height: 44px;
+    padding-inline: var(--sp-l);
+    border: 1px solid var(--seam);
+    border-radius: 999px;
+    background: var(--well);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: .7rem;
+    font-weight: 750;
+    font-stretch: 88%;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .rw-app .docs-to-top svg { flex: none; width: 15px; height: 15px; color: var(--weft); }
+  .rw-app .docs-to-top:active { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
+
+  /* A narrow desktop window gets this layout too, so the phone controls still
+     want their hover halves. */
+  @media (hover: hover) {
+    .rw-app .trail-crumb:hover { background: var(--well); color: var(--ink); }
+    .rw-app .docs-to-top:hover { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
+  }
+
+  /* --- the sheet the bar opens ---
+     Its overrides of the modal frame itself (the card's size, corners and entry
+     transform) live in webapp-modals.css beside the other `.rw-modal` variants:
+     that layer is later than this one, so from here they would lose to the plain
+     `.rw-modal-card` however specific they are. */
+  /* One list per sheet now that each crumb opens the one it named, so the outline
+     runs to its full length and the body is the only scroll container. The cap
+     and the sticky heading this used to need existed to keep the guide list
+     visible underneath it; nothing sits underneath it any more. */
+  .rw-modal.guide-sheet .modal-body {
+    display: block;
+    padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom, 0px));
+  }
+  .rw-modal.guide-sheet .warp-rail-title { padding: 0 0 var(--sp-s) 2.35rem; }
+  .rw-modal.guide-sheet .warp-rail-list a { min-height: 40px; align-items: center; }
+  /* The sidebar card clips to keep its rounded corners; in the sheet that
+     clipping would hide every shelf past the fold, and the body is the thing
+     that scrolls. */
+  .rw-modal.guide-sheet .guide-nav { background: none; overflow: visible; }
+  .rw-modal.guide-sheet .guide-shelf > summary { min-height: 44px; }
+  .rw-modal.guide-sheet .guide-nav-list a { min-height: 40px; padding-block: 10px; }
+  /* The woven fill reads as cloth across a full-width sidebar row; at sheet
+     width it is just a grid of dots, so the current page takes a flat dye. The
+     dye stops at 12%: --thread-text over it is 4.62:1 on the weakest accent,
+     and the sidebar's warp lines are not here to carry any of the contrast. */
+  .rw-modal.guide-sheet .guide-nav-list a[aria-current="page"] {
+    background: color-mix(in oklab, var(--thread) 12%, var(--well));
+  }
+}
+
+@media (max-width: 520px) {
+  .rw-app .docs-workbench { --article-pad: 18px; }
+  .rw-app .docs-article { padding: 22px 18px 26px; }
+  .rw-app .docs-cta { align-items: stretch; flex-direction: column; padding: 18px; }
+  .rw-app .docs-cta-actions { display: grid; grid-template-columns: 1fr; }
+  /* Commands wrap rather than scroll at this width. Scrolled sideways they cut
+     off mid-flag with nothing to say so - and these guides exist to be copied,
+     so a command that looks complete but is not is the worst thing on the page.
+     Wrapping also keeps a sideways scroller out of the middle of a page the
+     reader is scrolling down. */
+  .rw-app .docs-article pre {
+    padding: var(--sp-m);
+    overflow-x: visible;
+  }
+  .rw-app .docs-article table { display: block; overflow-x: auto; }
+  /* No hanging indent for wrapped lines: `text-indent` on a `pre` applies once
+     to the block, not per line, so it shifts every real line of the command as
+     well and invents nesting that is not in the source. The trailing `\` is
+     what marks a continuation here. */
+  .rw-app .docs-article pre code {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:has(.docs-workbench) { scroll-behavior: auto; }
+  .rw-app .warp-pick { transition: none; }
+}

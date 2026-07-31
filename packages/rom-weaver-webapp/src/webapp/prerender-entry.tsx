@@ -24,6 +24,7 @@ import { preloadWorkflowRoute } from "./workflow-routes.tsx";
 const noop = () => undefined;
 
 const createPrerenderActions = (): WebappRootProps["actions"] => ({
+  onAccentChange: noop,
   onCancelConfirmation: noop,
   onCloseSettings: noop,
   onConfirmConfirmation: noop,
@@ -33,6 +34,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onCreatorPatchTypeChange: noop,
   onCreatorSettingsChange: noop,
   onDraftChange: noop,
+  onLanguageChange: noop,
   onLogLevelChange: noop,
   onOpenSettings: noop,
   onPatcherBundlePackageChange: noop,
@@ -44,6 +46,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onRestoreDefaults: noop,
   onSaveClose: noop,
   onSelectView: noop,
+  onStartGuide: noop,
   onToolsSessionChange: noop,
   onTrimOutputFormatChange: noop,
   onTrimSettingsChange: noop,
@@ -51,8 +54,9 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
 });
 
 const renderLandingShellHtml = async (
-  currentView: Extract<WebappRootProps["state"]["currentView"], "patcher" | "creator"> = "patcher",
+  currentView: Extract<WebappRootProps["state"]["currentView"], "patcher" | "creator" | "docs"> = "patcher",
   notFound = false,
+  docsSlug = "docs",
 ): Promise<string> => {
   if (!notFound) await preloadWorkflowRoute(currentView);
   const controller = createWebappRootController({
@@ -73,6 +77,7 @@ const renderLandingShellHtml = async (
     createElement(WebappRoot, {
       actions: createPrerenderActions(),
       confirmationDialog: createEmptyConfirmationDialogState(),
+      docsSlug,
       notFound,
       pageUpdate: getPageUpdateState({
         serviceWorkerCache: { updateReady: false },

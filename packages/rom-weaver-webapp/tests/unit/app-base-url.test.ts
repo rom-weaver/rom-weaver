@@ -14,16 +14,16 @@ describe("readAppBaseUrl", () => {
   });
 
   test("strips a route segment, with or without a trailing slash", () => {
-    // The trailing-slash form is what prod serves: /weave 308-redirects to
-    // /weave/, which made a bare ?bundle= resolve to /weave/<file>.
-    expect(new URL(at("/weave/")).pathname).toBe("/");
-    expect(new URL(at("/weave")).pathname).toBe("/");
+    expect(new URL(at("/apply/")).pathname).toBe("/");
+    expect(new URL(at("/apply")).pathname).toBe("/");
+    expect(new URL(at("/apply.html")).pathname).toBe("/");
     expect(new URL(at("/create")).pathname).toBe("/");
+    expect(new URL(at("/create.html")).pathname).toBe("/");
     expect(new URL(at("/trim/")).pathname).toBe("/");
   });
 
   test("keeps a sub-path deployment prefix", () => {
-    expect(new URL(at("/roms/weave/")).pathname).toBe("/roms/");
+    expect(new URL(at("/roms/apply/")).pathname).toBe("/roms/");
     expect(new URL(at("/roms/create")).pathname).toBe("/roms/");
     expect(new URL(at("/roms/")).pathname).toBe("/roms/");
   });
@@ -35,7 +35,7 @@ describe("readAppBaseUrl", () => {
   });
 
   test("drops any query and hash so it is usable as a base", () => {
-    const base = new URL(at("/weave/?bundle=first-weave.zip#frag"));
+    const base = new URL(at("/apply/?bundle=first-weave.zip#frag"));
     expect(base.search).toBe("");
     expect(base.hash).toBe("");
   });

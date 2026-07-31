@@ -11,6 +11,21 @@ const PORT = new URL(ROOT_URL).port || "4173";
 // runner can spend minutes there before the preview server prints its URL.
 const STARTUP_TIMEOUT_MS = Number(process.env.ROM_WEAVER_VERIFY_STARTUP_TIMEOUT_MS || 300000);
 const PAGE_TIMEOUT_MS = 20000;
+const OFFLINE_PAGES = [
+  { expectedView: "patcher", label: "apex", path: "" },
+  { expectedView: "patcher", label: "apply slashless", path: "apply.html" },
+  { expectedView: "patcher", label: "apply directory", path: "apply/" },
+  { expectedView: "patcher", label: "apply directory document", path: "apply/index.html" },
+  { expectedView: "creator", label: "create slashless", path: "create.html" },
+  { expectedView: "creator", label: "create directory", path: "create/" },
+  { expectedView: "creator", label: "create directory document", path: "create/index.html" },
+  { expectedView: "trim", label: "trim directory", path: "trim/" },
+  { expectedView: "trim", label: "trim directory document", path: "trim/index.html" },
+  { expectedView: "tools", label: "tools directory", path: "tools/" },
+  { expectedView: "tools", label: "tools directory document", path: "tools/index.html" },
+  { expectedNotFound: true, label: "not found", path: "404.html" },
+];
+const OFFLINE_ONLY_PAGES = [{ expectedNotFound: true, label: "unknown first offline visit", path: "not-a-real-route" }];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -99,26 +114,105 @@ const stopPreview = (child) =>
     }, 2000);
   });
 
-const collectPageState = async (page) =>
-  page.evaluate(async () => {
-    const response = await fetch(location.href, { cache: "no-store", credentials: "same-origin" });
+const waitForPreviewOffline = async () => {
+  const deadline = Date.now() + 10000;
+  let consecutiveFailures = 0;
+  while (Date.now() < deadline) {
+    try {
+      await requestHeaders(ROOT_URL);
+      consecutiveFailures = 0;
+    } catch {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 5) return;
+    }
+    await wait(100);
+  }
+  throw new Error(`Preview origin still answered requests after shutdown: ${ROOT_URL}`);
+};
+
+const collectPageState = async (page, { probeHeaders = true } = {}) =>
+  page.evaluate(async (shouldProbeHeaders) => {
+    const response = shouldProbeHeaders
+      ? await fetch(location.href, { cache: "no-store", credentials: "same-origin" }).catch(() => null)
+      : null;
+    const root = document.getElementById("webapp-root");
     return {
+      activeView: document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") || null,
       controller: Boolean(navigator.serviceWorker?.controller),
       crossOriginIsolated: globalThis.crossOriginIsolated === true,
       headers: {
-        crossOriginEmbedderPolicy: response.headers.get("Cross-Origin-Embedder-Policy"),
-        crossOriginOpenerPolicy: response.headers.get("Cross-Origin-Opener-Policy"),
-        crossOriginResourcePolicy: response.headers.get("Cross-Origin-Resource-Policy"),
+        crossOriginEmbedderPolicy: response?.headers.get("Cross-Origin-Embedder-Policy") || null,
+        crossOriginOpenerPolicy: response?.headers.get("Cross-Origin-Opener-Policy") || null,
+        crossOriginResourcePolicy: response?.headers.get("Cross-Origin-Resource-Policy") || null,
       },
+      notFound: document.documentElement.dataset.page === "not-found",
+      ready: Boolean(root && !root.hasAttribute("aria-busy")),
       serviceWorkerState: window.ROM_WEAVER_SERVICE_WORKER?.getState?.() || null,
       title: document.title,
     };
-  });
+  }, probeHeaders);
 
 const waitForControlledPage = async (page) => {
   await page.waitForFunction(() => navigator.serviceWorker?.controller, undefined, { timeout: PAGE_TIMEOUT_MS });
   await page.waitForFunction(() => globalThis.crossOriginIsolated === true, undefined, { timeout: PAGE_TIMEOUT_MS });
 };
+
+const waitForPageReady = async (page, pageCase) => {
+  await page.waitForFunction(
+    ({ expectedNotFound, expectedView }) => {
+      const root = document.getElementById("webapp-root");
+      if (!root || root.hasAttribute("aria-busy")) return false;
+      if (expectedNotFound) return document.documentElement.dataset.page === "not-found";
+      const panel = document.getElementById(`panel-${expectedView}`);
+      return (
+        document.querySelector(`[role="tab"][aria-selected="true"][data-mode="${expectedView}"]`) &&
+        panel &&
+        !panel.hasAttribute("hidden") &&
+        Boolean(panel.querySelector(".workflow-body")?.textContent?.trim())
+      );
+    },
+    pageCase,
+    { timeout: PAGE_TIMEOUT_MS },
+  );
+};
+
+const enableBetaToolsForRouteChecks = async (page) => {
+  await page.evaluate(() => {
+    const key = "rom-weaver-settings";
+    const stored = JSON.parse(localStorage.getItem(key) || "{}");
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        ...stored,
+        common: { ...stored.common, betaToolsEnabled: true },
+        version: 5,
+      }),
+    );
+  });
+};
+
+const assertPageState = (pageCase, response, state, phase) => {
+  if (response?.status() !== 200) throw new Error(`${phase} ${pageCase.label} returned ${response?.status()}`);
+  const pageReady = state.controller && state.crossOriginIsolated && state.ready;
+  if (!pageReady || state.serviceWorkerState?.serviceWorkerStatus !== "active") {
+    throw new Error(`${phase} ${pageCase.label} was not controlled, isolated, and ready: ${JSON.stringify(state)}`);
+  }
+  if (Boolean(pageCase.expectedNotFound) !== state.notFound) {
+    throw new Error(`${phase} ${pageCase.label} had the wrong not-found state: ${JSON.stringify(state)}`);
+  }
+  if (!pageCase.expectedNotFound && state.activeView !== pageCase.expectedView) {
+    throw new Error(`${phase} ${pageCase.label} selected ${state.activeView}, expected ${pageCase.expectedView}`);
+  }
+};
+
+const summarizePageState = (state) => ({
+  activeView: state.activeView,
+  controller: state.controller,
+  crossOriginIsolated: state.crossOriginIsolated,
+  notFound: state.notFound,
+  ready: state.ready,
+  serviceWorkerStatus: state.serviceWorkerState?.serviceWorkerStatus || null,
+});
 
 let previewProcess;
 let browser;
@@ -138,9 +232,21 @@ try {
   const context = await browser.newContext({ ignoreHTTPSErrors: true, serviceWorkers: "allow" });
   const page = await context.newPage();
   const consoleErrors = [];
+  const serviceWorkerLogs = [];
+  const httpErrors = [];
   const requestFailures = [];
   page.on("console", (message) => {
+    if (message.text().includes("[rom-weaver-sw]")) serviceWorkerLogs.push(message.text());
     if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      httpErrors.push({
+        resourceType: response.request().resourceType(),
+        status: response.status(),
+        url: response.url(),
+      });
+    }
   });
   page.on("requestfailed", (request) => {
     const error = request.failure()?.errorText || "unknown request failure";
@@ -153,7 +259,7 @@ try {
     });
   });
 
-  await page.goto(ROOT_URL, { waitUntil: "networkidle", timeout: PAGE_TIMEOUT_MS });
+  const initialResponse = await page.goto(ROOT_URL, { waitUntil: "networkidle", timeout: PAGE_TIMEOUT_MS });
 
   if (!(await page.evaluate(() => Boolean(navigator.serviceWorker?.controller)))) {
     await Promise.all([
@@ -165,34 +271,94 @@ try {
   await waitForControlledPage(page);
   await page.waitForLoadState("networkidle", { timeout: PAGE_TIMEOUT_MS }).catch(() => undefined);
   await wait(250);
+  if (httpErrors.length > 0) {
+    throw new Error(`Controlled page had HTTP errors: ${JSON.stringify(httpErrors, null, 2)}`);
+  }
   if (requestFailures.length > 0) {
     throw new Error(`Controlled page had failed requests: ${JSON.stringify(requestFailures, null, 2)}`);
   }
-  const controlledState = await collectPageState(page);
+
+  const onlinePages = [];
+  for (const [index, pageCase] of OFFLINE_PAGES.entries()) {
+    let response = initialResponse;
+    if (index === 0) {
+      await waitForPageReady(page, pageCase);
+    } else {
+      response = await page.goto(new URL(pageCase.path, ROOT_URL).href, {
+        timeout: PAGE_TIMEOUT_MS,
+        waitUntil: "networkidle",
+      });
+      await waitForControlledPage(page);
+      await waitForPageReady(page, pageCase);
+    }
+    const state = await collectPageState(page);
+    assertPageState(pageCase, response, state, "Online");
+    onlinePages.push({ path: pageCase.path || "/", state: summarizePageState(state) });
+    if (index === 0) await enableBetaToolsForRouteChecks(page);
+  }
 
   await stopPreview(previewProcess);
   previewProcess = null;
-  await wait(250);
-  const offlineResponse = await page.reload({ waitUntil: "networkidle", timeout: PAGE_TIMEOUT_MS });
-  const offlineState = await collectPageState(page);
+  await waitForPreviewOffline();
+  await context.setOffline(true);
 
-  if (requestFailures.length > 0) {
-    throw new Error(`Offline reload had failed requests: ${JSON.stringify(requestFailures, null, 2)}`);
+  const offlinePages = [];
+  for (const pageCase of [...OFFLINE_PAGES, ...OFFLINE_ONLY_PAGES]) {
+    const failuresBefore = requestFailures.length;
+    const httpErrorsBefore = httpErrors.length;
+    const offlineResponse = await page.goto(new URL(pageCase.path, ROOT_URL).href, {
+      timeout: PAGE_TIMEOUT_MS,
+      waitUntil: "networkidle",
+    });
+    try {
+      await waitForPageReady(page, pageCase);
+    } catch (error) {
+      const state = await collectPageState(page, { probeHeaders: false }).catch(() => null);
+      const responseHtml = await offlineResponse
+        ?.text()
+        .then((html) => html.slice(0, 120))
+        .catch(() => "");
+      const cacheKeys = await page
+        .evaluate(async () =>
+          (
+            await Promise.all(
+              (
+                await caches.keys()
+              ).map(async (name) => (await (await caches.open(name)).keys()).map((request) => request.url)),
+            )
+          )
+            .flat()
+            .filter((url) => url.includes("not-a-real-route") || url.includes("404.html")),
+        )
+        .catch(() => []);
+      throw new Error(
+        `Offline ${pageCase.label} did not become ready: ${JSON.stringify(state)}\nResponse: ${JSON.stringify(responseHtml)}\nCache keys: ${JSON.stringify(cacheKeys)}\n${error instanceof Error ? error.message : String(error)}\n${serviceWorkerLogs.slice(-12).join("\n")}`,
+      );
+    }
+    const offlineState = await collectPageState(page, { probeHeaders: false });
+    assertPageState(pageCase, offlineResponse, offlineState, "Offline");
+    const routeFailures = requestFailures.slice(failuresBefore);
+    if (routeFailures.length > 0) {
+      throw new Error(`Offline ${pageCase.label} had failed requests: ${JSON.stringify(routeFailures, null, 2)}`);
+    }
+    const routeHttpErrors = httpErrors.slice(httpErrorsBefore);
+    if (routeHttpErrors.length > 0) {
+      throw new Error(`Offline ${pageCase.label} had HTTP errors: ${JSON.stringify(routeHttpErrors, null, 2)}`);
+    }
+    offlinePages.push({ path: pageCase.path || "/", state: summarizePageState(offlineState) });
   }
-  if (offlineResponse?.status() !== 200) throw new Error(`Offline reload returned ${offlineResponse?.status()}`);
-  if (!(offlineState.controller && offlineState.crossOriginIsolated)) {
-    throw new Error(`Offline reload was not controlled and isolated: ${JSON.stringify(offlineState)}`);
+
+  if (consoleErrors.length > 0) {
+    throw new Error(`Service-worker page matrix had console errors: ${JSON.stringify(consoleErrors, null, 2)}`);
   }
 
   console.log(
     JSON.stringify(
       {
         consoleErrors,
-        controlledState,
-        offlineReload: {
-          status: offlineResponse.status(),
-          state: offlineState,
-        },
+        httpErrors,
+        offlinePages,
+        onlinePages,
         originHeaders,
         requestFailures,
       },

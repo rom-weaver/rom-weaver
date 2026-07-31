@@ -13,6 +13,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 import { createServer as createViteServer } from "vite";
+import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 
 // An unset channel builds as production (see resolveAppChannel in
 // vite.config.mjs), which is right for the release artifacts and for anyone
@@ -36,6 +37,7 @@ const DYNAMIC_BROTLI_MAX_BYTES = 256 * 1024;
 const DYNAMIC_BROTLI_TYPES = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg"]);
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
+  ".avif": "image/avif",
   ".gif": "image/gif",
   ".html": "text/html; charset=utf-8",
   ".ico": "image/x-icon",
@@ -712,7 +714,19 @@ const readPreviewAsset = (cache, filePath, fallbackPath, allowFallback, callback
   });
 };
 
-const handlePreviewRequest = (distDir, cache, req, res, securityOptions) => {
+// Cloudflare replays the `Link:` hints in a 103 before the document response, which is the
+// whole point of emitting them - a preview that only sent them on the 200 would grade a
+// discovery path production does not have. The preview server is HTTP/2, which is what
+// Chrome requires to act on a 103. Documents only: Pages hints every response, but a
+// subresource ignores them, and sending a 103 ahead of one is noise the audit would
+// measure.
+const sendEarlyHints = (res, pagesHeaders, isDocument) => {
+  if (!(isDocument && pagesHeaders.Link)) return;
+  if (typeof res.writeEarlyHints !== "function") return;
+  res.writeEarlyHints({ link: pagesHeaders.Link });
+};
+
+const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRules = []) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
     send(res, 405, { Allow: "GET, HEAD" }, "Method Not Allowed", securityOptions);
     return;
@@ -734,12 +748,24 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions) => {
   const fallbackPath = path.join(distDir, "index.html");
   const acceptHeader = req.headers.accept || "";
   const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
+  // Pages matches `_headers` against the requested path, not the file the SPA fallback
+  // resolves to, so `/apply` picks up the `/*` block the same way `/` does.
+  const pathname = new URL(req.url, "https://localhost").pathname;
   readPreviewAsset(cache, filePath, fallbackPath, allowFallback, (readError, asset) => {
     if (readError) {
       send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found", securityOptions);
       return;
     }
     const encoded = Boolean(asset.brotli) && acceptsBrotli(req);
+    // `_headers` last so the deployed file wins wherever it and the preview server both
+    // speak. The explicit no-COOP/COEP mode is the exception: its purpose is to
+    // prove that the service worker can add isolation without help from either
+    // source of preview headers.
+    const pagesHeaders = matchPagesHeaders(pagesRules, pathname);
+    if (!securityOptions.crossOriginIsolation) {
+      for (const header of Object.keys(CROSS_ORIGIN_ISOLATION_HEADERS)) delete pagesHeaders[header];
+    }
+    sendEarlyHints(res, pagesHeaders, path.extname(asset.resolvedPath) === ".html");
     send(
       res,
       200,
@@ -749,6 +775,7 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions) => {
         "Content-Type": getContentType(asset.resolvedPath),
         ...(asset.brotli ? { Vary: "Accept-Encoding" } : {}),
         ...(encoded ? { "Content-Encoding": "br" } : {}),
+        ...pagesHeaders,
       },
       req.method === "HEAD" ? null : encoded ? asset.brotli : asset.data,
       securityOptions,
@@ -765,6 +792,10 @@ const startPreviewServer = async (options) => {
   const certificate = ensureCertificate(lanAddresses);
   const securityOptions = { crossOriginIsolation: !options.noCoopCoep };
   const cache = new Map();
+  // Read once: `dist` cannot change under a preview session, and the Lighthouse gate must
+  // not measure this server re-reading a file on every document request.
+  const headersPath = path.join(distDir, "_headers");
+  const pagesRules = fs.existsSync(headersPath) ? parsePagesHeaders(fs.readFileSync(headersPath, "utf8")) : [];
   // HTTP/2, because the bundle is many hashed chunks and HTTP/1.1 caps a client
   // at ~6 connections per origin - the resulting head-of-line blocking is
   // measured by Lighthouse and is not something production has. `allowHTTP1`
@@ -777,7 +808,7 @@ const startPreviewServer = async (options) => {
       key: certificate.key,
     },
     (req, res) => {
-      handlePreviewRequest(distDir, cache, req, res, securityOptions);
+      handlePreviewRequest(distDir, cache, req, res, securityOptions, pagesRules);
     },
   );
   const httpRedirectServer = http.createServer((req, res) => {

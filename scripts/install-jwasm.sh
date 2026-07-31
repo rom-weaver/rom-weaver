@@ -10,7 +10,7 @@
 # JWasm rather than asmc or uasm: it is plain C that builds anywhere in seconds,
 # where asmc is written in assembly (so it only bootstraps on an x86 host) and
 # uasm's tree does not compile on a current Unix host. All three emit the same
-# object; see docs/vendor-code.md.
+# object; see docs/development/vendor-code.md.
 #
 #   scripts/install-jwasm.sh [prefix]      # default prefix /usr/local/bin
 #

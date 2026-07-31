@@ -1,13 +1,12 @@
-import { getManagedOpfsFileHandle } from "../protocol/opfs-path.ts";
+import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
 import { getWorkerErrorMessage, postCloneSafeWorkerMessage } from "../shared/worker-message-utils.ts";
 
-// OPFS write/truncate worker. Input staging (copying a Blob into OPFS) was retired - browser inputs now
-// read directly via the per-thread FileReaderSync fast path or the OPFS proxy handle (see
-// browser-opfs-source-ref). This worker only services output-side writes and truncates. The
-// "stage-error" response action is kept as the generic failure reply for every action.
+// OPFS list/write/truncate/cleanup worker. Input staging (copying a Blob into OPFS) was retired - browser
+// inputs now read directly via the per-thread FileReaderSync fast path or the OPFS proxy handle (see
+// browser-opfs-source-ref). The "stage-error" response action is kept as the generic failure reply.
 
 type StorageRequest = {
-  action: "truncate" | "write";
+  action: "list" | "remove" | "truncate" | "write";
   bytes?: Uint8Array;
   filePath?: string;
   position?: number;
@@ -16,7 +15,8 @@ type StorageRequest = {
 };
 
 type StorageResponse = {
-  action: "stage-error" | "truncate-complete" | "write-complete";
+  action: "list-complete" | "remove-complete" | "stage-error" | "truncate-complete" | "write-complete";
+  entries?: Array<{ kind: "directory" | "file"; path: string; size?: number }>;
   error?: { message: string };
   filePath?: string;
   requestId?: string;
@@ -25,6 +25,8 @@ type StorageResponse = {
 };
 
 const workerScope = self as DedicatedWorkerGlobalScope;
+
+const REMOVE_BUSY_RETRY_DELAYS_MS = [25, 50, 100, 200, 400, 800];
 
 type SyncAccessMode = "readwrite" | "readwrite-unsafe";
 type SyncCapableFileHandle = FileSystemFileHandle & {
@@ -163,10 +165,57 @@ const writeBytesToOpfsPath = async (request: StorageRequest): Promise<StorageRes
   };
 };
 
+const removeOpfsPath = async (request: StorageRequest): Promise<StorageResponse> => {
+  const filePath = String(request.filePath || "").trim();
+  if (!filePath) throw new Error("Browser OPFS remove requires a path");
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await removeManagedOpfsPath(filePath, navigator, { ignoreErrors: false });
+      return {
+        action: "remove-complete",
+        filePath,
+        requestId: request.requestId,
+        success: true,
+      };
+    } catch (error) {
+      const delay = REMOVE_BUSY_RETRY_DELAYS_MS[attempt];
+      if ((error as { name?: string } | null)?.name !== "NoModificationAllowedError" || delay === undefined)
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+};
+
+const listOpfsPaths = async (request: StorageRequest): Promise<StorageResponse> => {
+  const root = await navigator.storage.getDirectory();
+  const entries: Array<{ kind: "directory" | "file"; path: string; size?: number }> = [];
+  const walk = async (directory: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
+    for await (const [name, handle] of directory.entries()) {
+      const path = `${prefix}/${name}`;
+      if (handle.kind === "directory") {
+        entries.push({ kind: "directory", path });
+        await walk(handle, path);
+      } else {
+        entries.push({ kind: "file", path, size: (await handle.getFile()).size });
+      }
+    }
+  };
+  await walk(root, "");
+  entries.sort((left, right) => left.path.localeCompare(right.path));
+  return {
+    action: "list-complete",
+    entries,
+    requestId: request.requestId,
+    success: true,
+  };
+};
+
 workerScope.onmessage = (event: MessageEvent<StorageRequest>) => {
   const request = event.data || ({} as StorageRequest);
   let run: Promise<StorageResponse>;
-  if (request.action === "truncate") run = truncateOpfsPath(request);
+  if (request.action === "list") run = listOpfsPaths(request);
+  else if (request.action === "remove") run = removeOpfsPath(request);
+  else if (request.action === "truncate") run = truncateOpfsPath(request);
   else if (request.action === "write") run = writeBytesToOpfsPath(request);
   else run = Promise.reject(new Error(`unsupported OPFS storage action: ${String(request.action)}`));
   run

@@ -1,5 +1,5 @@
 import { createWorkerRequestId } from "../shared/worker-request-id.ts";
-// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/ARCHITECTURE.md.
+// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/development/ARCHITECTURE.md.
 import BUNDLED_STAGING_WORKER_URL from "../storage/browser-opfs-staging.worker.ts?worker&url";
 
 type WorkerAssetRoot = typeof globalThis & {
@@ -7,9 +7,15 @@ type WorkerAssetRoot = typeof globalThis & {
 };
 
 // Input staging is retired (browser inputs read directly - see browser-opfs-source-ref), so this client
-// only drives output-side OPFS writes and truncates. "stage-error" remains the generic failure reply for
-// every action.
-type BrowserOpfsStorageAction = "truncate" | "write";
+// drives OPFS listing, output-side writes, truncates, and transient-tree cleanup. "stage-error" remains the
+// generic failure reply for every action.
+type BrowserOpfsStorageAction = "list" | "remove" | "truncate" | "write";
+
+type BrowserOpfsEntry = {
+  kind: "directory" | "file";
+  path: string;
+  size?: number;
+};
 
 type BrowserOpfsStorageRequest = {
   action: BrowserOpfsStorageAction;
@@ -21,8 +27,9 @@ type BrowserOpfsStorageRequest = {
 };
 
 type BrowserOpfsStorageResponse = {
-  action: "stage-error" | "truncate-complete" | "write-complete";
+  action: "list-complete" | "remove-complete" | "stage-error" | "truncate-complete" | "write-complete";
   error?: { message?: string };
+  entries?: BrowserOpfsEntry[];
   filePath?: string;
   requestId?: string;
   size?: number;
@@ -98,4 +105,5 @@ const requestBrowserOpfsStorage = (request: BrowserOpfsStorageRequest): Promise<
   });
 };
 
+export type { BrowserOpfsEntry };
 export { requestBrowserOpfsStorage };

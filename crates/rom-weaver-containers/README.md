@@ -19,7 +19,7 @@
 > documented beyond this page, changes without notice between minor releases,
 > and using it in another project is unsupported.
 
-## What this crate is
+## What does this crate do?
 
 The container registry and one handler per format, each implementing
 `rom-weaver-core`'s `ContainerHandler` trait.
@@ -77,9 +77,9 @@ yourself.
 
 ## Documentation
 
-- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md#supported-formats): the full container, codec, and capability tables.
-- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/ARCHITECTURE.md): registry traits and the threading model.
-- [Vendored third-party code](https://github.com/rom-weaver/rom-weaver/blob/main/docs/vendor-code.md): what is vendored here and why.
+- [Supported formats](https://github.com/rom-weaver/rom-weaver/blob/main/docs/hosting/cli.md#supported-formats): the full container, codec, and capability tables.
+- [Architecture guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/development/ARCHITECTURE.md): registry traits and the threading model.
+- [Vendored third-party code](https://github.com/rom-weaver/rom-weaver/blob/main/docs/development/vendor-code.md): what is vendored here and why.
 
 ## License
 

@@ -44,11 +44,44 @@
 }
 /* Touch devices need active feedback because they lack hover. */
 .rw-app .updates-ver:active { color: var(--thread-text); }
-.rw-app .changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-m); }
-.rw-app .changelog-item { display: flex; flex-direction: column; gap: var(--sp-2xs); }
-.rw-app .changelog-subject { font-size: .9rem; }
-.rw-app .changelog-meta { font-size: .72rem; color: var(--ink-3); }
 .rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: var(--sp-s) 0; }
+.rw-app .changelog-head-meta { display: flex; align-items: baseline; justify-content: flex-end; gap: var(--sp-xs) var(--sp-m); flex-wrap: wrap; }
+.rw-app .changelog-head-transition { font-size: .78rem; color: var(--ink-3); overflow-wrap: anywhere; }
+.rw-app .changelog-head-link { font-size: .78rem; white-space: nowrap; }
+.rw-app .release-changelog-section + .release-changelog-section { margin-block-start: var(--sp-l); border-block-start: 1px solid var(--seam-soft); padding-block-start: var(--sp-l); }
+/* The version is the anchor for everything under it, so it outranks the group
+   headings rather than sitting a shade below them. */
+.rw-app .release-changelog-heading { margin-block: 0 var(--sp-s); font-size: 1.02rem; font-weight: 700; letter-spacing: .01em; }
+.rw-app .release-changelog-heading a { color: var(--ink); }
+.rw-app .changelog-more { font-size: .82rem; }
+/* Every link in this dialog sits inside running text with no other affordance -
+   no button chrome, no icon - so an underline is the only thing marking it as a
+   link. The app default drops it, which left versions, hashes and refs reading
+   as differently-colored prose. */
+.rw-app .changelog-head-meta a,
+.rw-app .release-changelog-heading a,
+.rw-app .release-changelog-entries a,
+.rw-app .changelog-more {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: .18em;
+  text-decoration-color: color-mix(in srgb, currentcolor 40%, transparent);
+}
+/* The two standalone "go read the rest" links, which are the ones a reader is
+   actually looking for. */
+.rw-app .changelog-head-link, .rw-app .changelog-more { color: var(--thread-text); }
+.rw-app .release-changelog-entries a:active,
+.rw-app .changelog-head-transition a:active { text-decoration-color: currentcolor; }
+@media (hover: hover) {
+  .rw-app .release-changelog-entries a:hover,
+  .rw-app .changelog-head-transition a:hover { text-decoration-color: currentcolor; }
+}
+.rw-app .release-changelog { font-size: .88rem; line-height: 1.5; }
+.rw-app .release-changelog + .release-changelog { margin-block-start: var(--sp-m); }
+.rw-app .release-changelog-group { margin-block: 0 var(--sp-xs); font-size: .82rem; font-weight: 650; color: var(--ink-2); }
+.rw-app .release-changelog-entries { margin: 0; padding-inline-start: 1.25rem; }
+.rw-app .release-changelog-entries li + li { margin-block-start: var(--sp-xs); }
+.rw-app .release-changelog-ref { font-size: .78rem; color: var(--ink-2); white-space: nowrap; }
 .rw-app .changelog-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); padding-top: 8px; }
 /* banner dismiss (update + wake-lock) - sized to --ctrl-h so it reads as a
    sibling of the other row controls, not a stray small glyph */
@@ -88,9 +121,10 @@
   mask-image: var(--weave-mask); mask-size: 28px 28px;
   opacity: .07;
   --drift: 0 28px;
-  animation: weave-drift 1.6s linear infinite;
+  animation: weave-drift 1.6s linear infinite paused;
 }
 .rw-app.rw-page-dragging .dropveil { opacity: 1; visibility: visible; }
+.rw-app.rw-page-dragging .dropveil::before { animation-play-state: running; }
 .rw-app .dropveil-text {
   position: relative; display: inline-flex; align-items: center; gap: var(--sp-m);
   font-size: 1.05rem; font-weight: 700; color: var(--ink);

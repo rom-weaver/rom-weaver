@@ -14,7 +14,6 @@ export type ThreadSpawnerRuntime = Omit<BrowserOpfsRuntime, "virtualFiles"> & {
 /** Runtime payload forwarded to thread workers; handles are re-resolved inside the worker. */
 type ThreadWorkerRuntimePayload = ThreadSpawnerRuntime & {
   resolveMountHandlesInWorker: true;
-  virtualOnlyMounts: true;
 };
 
 /** Structured clone of an Error posted by a thread worker (see worker serializeError). */
@@ -109,7 +108,6 @@ export function createThreadWorkerRuntimePayload(
   const payload: ThreadWorkerRuntimePayload = {
     ...rest,
     resolveMountHandlesInWorker: true,
-    virtualOnlyMounts: true,
   };
   return payload;
 }

@@ -55,7 +55,7 @@ Examples:
   # Shrink a disc image; the .cue brings its tracks along
   rom-weaver compress --input game.cue --output game.chd
 
-Full guide: https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli.md";
+Full guide: https://github.com/rom-weaver/rom-weaver/blob/main/docs/hosting/cli.md";
 
 #[derive(Debug)]
 #[cfg(not(target_arch = "wasm32"))]

@@ -39,7 +39,7 @@ test("settings persistence round-trips every visible settings field", () => {
     compressionProfile: "medium",
     defaultCompression: "7z only",
     fixChecksum: true,
-    language: "fr",
+    language: "de",
     logLevel: "debug",
     requireInputChecksumMatch: false,
     rvzBlockSize: 262144,

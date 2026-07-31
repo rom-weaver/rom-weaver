@@ -153,8 +153,8 @@ test("the status context matches the one the ruleset requires", () => {
   const context = readFileSync(script, "utf8").match(/STATUS_CONTEXT = "(.+?)"/)[1];
   assert.equal(context, STATUS_CONTEXT);
   assert.ok(
-    readFileSync(join(repoRoot, "docs/ci.md"), "utf8").includes(`\`${STATUS_CONTEXT}\``),
-    "docs/ci.md must name the status context the ruleset requires",
+    readFileSync(join(repoRoot, "docs/development/ci.md"), "utf8").includes(`\`${STATUS_CONTEXT}\``),
+    "docs/development/ci.md must name the status context the ruleset requires",
   );
 });
 

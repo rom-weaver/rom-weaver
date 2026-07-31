@@ -11,6 +11,7 @@ import type { WorkboxPlugin } from "workbox-core/types.js";
 import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
+import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 
 declare let self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<string | { revision?: string | null; url: string }>;
@@ -138,7 +139,7 @@ const shouldUseNetworkFirst = (request: Request, url: URL) => {
 const getCrossOriginIsolationHeaders = (sourceHeaders: HeadersInit = {}, credentialless = coepCredentialless) => {
   const headers = new Headers(sourceHeaders);
   // A response that already names a COEP came from a host that serves the isolation trio itself
-  // (the deployed _headers file, or a self-host configured per docs/self-hosting.md). Pass it
+  // (the deployed _headers file, or a self-host configured per docs/hosting/self-hosting.md). Pass it
   // through untouched: rewriting a served require-corp to credentialless would un-isolate the page
   // in browsers that cannot parse credentialless and send them into the reload dance for nothing.
   if (headers.has(COI_HEADER_COEP)) return headers;
@@ -186,6 +187,14 @@ const fetchAndUpdateCache = async (request: Request): Promise<Response> => {
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
 
+const matchRouteDocument = async (url: URL) => {
+  for (const candidate of routeDocumentCandidates(url.pathname)) {
+    const response = await matchPrecache(candidate);
+    if (response) return response;
+  }
+  return undefined;
+};
+
 const matchCachedResponse = async (request: Request, url: URL) => {
   const credentialless = await ensureCoepModeHydrated();
   const cachedResponse = await caches.match(request);
@@ -195,7 +204,9 @@ const matchCachedResponse = async (request: Request, url: URL) => {
     return withCrossOriginIsolationHeaders(manifest, credentialless) || manifest;
   }
   if (isHtmlRequest(request, url)) {
-    const html = (await matchPrecache("index.html")) || (await matchPrecache("/"));
+    const routeDocument = await matchRouteDocument(url);
+    const fallbackDocument = url.pathname === "/" ? await matchPrecache("index.html") : await matchPrecache("404.html");
+    const html = routeDocument || fallbackDocument || (await matchPrecache("index.html")) || (await matchPrecache("/"));
     return withCrossOriginIsolationHeaders(html, credentialless) || html;
   }
   return undefined;

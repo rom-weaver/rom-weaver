@@ -1,0 +1,6 @@
+/* Imported by docs-page.tsx so the docs styles ride the lazy docs route chunk instead of
+   the render-critical entry stylesheet - the apex routes never need them. Docs documents
+   still paint their prerendered shell styled: the build injects this chunk's stylesheet
+   render-blocking into every docs route page (rom-weaver-preload-workflow-route-chunks).
+   The layer order declared in index.css keeps its cascade priority, not its load order. */
+@import "./docs.css" layer(docs);

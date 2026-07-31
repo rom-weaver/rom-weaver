@@ -1,4 +1,3 @@
-import { browserRuntime } from "../../platform/browser/workflow-runtime.ts";
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 import type { ParsedBundleSourceRef } from "../../types/bundle.ts";
 import { setBundleRomProvenance } from "../input/bundle-rom-provenance.ts";
@@ -102,6 +101,7 @@ async function loadLocalBundleSession(
   droppedFiles: File[],
   { probe = false, signal }: LoadLocalBundleOptions = {},
 ): Promise<LoadedLocalBundle | null> {
+  const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
   const parse = browserRuntime.bundle?.parse;
   if (!parse) throw new Error("Bundle parsing is not available in this runtime");
   let parsed: Awaited<ReturnType<typeof parse>>;

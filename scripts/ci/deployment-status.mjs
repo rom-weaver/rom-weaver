@@ -10,9 +10,12 @@ const {
   GH_TOKEN,
   GITHUB_REPOSITORY: REPO,
   DEPLOYMENT_SHA,
+  DEPLOYMENT_REF = DEPLOYMENT_SHA,
   DEPLOYMENT_CHANNEL,
   DEPLOYMENT_STATE = "",
   DEPLOYMENT_URL = "",
+  DEPLOYMENT_RECORD = "false",
+  DEPLOYMENT_ENVIRONMENT = "",
   STATUS_CONTEXT,
   GITHUB_API_URL = "https://api.github.com",
   GITHUB_SERVER_URL = "https://github.com",
@@ -46,6 +49,14 @@ const description =
       ? `Deploying webapp to ${DEPLOYMENT_CHANNEL}`
       : `Webapp deployment to ${DEPLOYMENT_CHANNEL} failed`;
 
+const createDeploymentRecord = DEPLOYMENT_RECORD === "true";
+if (createDeploymentRecord && !DEPLOYMENT_ENVIRONMENT) {
+  throw new Error("deployment-status: DEPLOYMENT_ENVIRONMENT is required for a deployment record");
+}
+if (createDeploymentRecord && !["error", "failure", "success"].includes(state)) {
+  throw new Error(`deployment-status: cannot create a final deployment record for ${state}`);
+}
+
 const { api } = createGitHubApi({
   token: GH_TOKEN,
   apiUrl: GITHUB_API_URL,
@@ -58,5 +69,31 @@ await createStatusPoster({
   sha: DEPLOYMENT_SHA,
   context: STATUS_CONTEXT,
 })(state, description, targetUrl);
+
+if (createDeploymentRecord) {
+  const deployment = await api(`/repos/${REPO}/deployments`, {
+    method: "POST",
+    body: {
+      ref: DEPLOYMENT_REF,
+      task: "deploy",
+      auto_merge: false,
+      required_contexts: [],
+      environment: DEPLOYMENT_ENVIRONMENT,
+      description,
+      transient_environment: DEPLOYMENT_CHANNEL === "preview",
+      production_environment: false,
+    },
+  });
+
+  await api(`/repos/${REPO}/deployments/${deployment.id}/statuses`, {
+    method: "POST",
+    body: {
+      state,
+      target_url: targetUrl,
+      environment_url: DEPLOYMENT_URL || undefined,
+      description,
+    },
+  });
+}
 
 console.log(`${STATUS_CONTEXT} ${state} on ${DEPLOYMENT_SHA}: ${targetUrl}`);

@@ -1,11 +1,12 @@
-import { createLucideIcon, Heart, Moon, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
+import { createLucideIcon, Heart, Moon, Palette, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
+import { ACCENTS, useAccent } from "../accent.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
-import { viewTransitionsUnavailable } from "../../public/react/components/ds/flat-transition.ts";
-import { useUiLocalizer } from "../../public/react/settings-context.tsx";
+import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
+import { useRomWeaverSettings, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
@@ -34,8 +35,46 @@ const readPwaState = () => {
 };
 
 type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
+const isBetaWorkflowTab = (tab: WorkflowTab) => tab.id === "trim" || tab.id === "tools";
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
+const WIDE_MASTHEAD_MIN_WIDTH = 1300;
+
+const measureIntrinsicModeRailWidth = (rail: HTMLElement) => {
+  const buttons = [...rail.querySelectorAll<HTMLElement>(".mode")];
+  const previousWidth = rail.style.width;
+  const previousFlex = buttons.map((button) => button.style.flex);
+  rail.style.width = "max-content";
+  for (const button of buttons) {
+    button.style.flex = "0 0 auto";
+  }
+  const width = rail.getBoundingClientRect().width;
+  rail.style.width = previousWidth;
+  for (const [index, button] of buttons.entries()) {
+    button.style.flex = previousFlex[index] ?? "";
+  }
+  return width;
+};
+
+/** Reveal light/dark changes from the theme control that caused them. */
+const runThemeWipe = (update: () => void, source: HTMLElement | null) => {
+  const root = document.documentElement;
+  if (viewTransitionsUnsupported()) {
+    update();
+    return;
+  }
+  const rect = source?.getBoundingClientRect();
+  const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+  const cy = rect ? rect.top + rect.height / 2 : 0;
+  const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
+  root.style.setProperty("--wipe-x", `${cx}px`);
+  root.style.setProperty("--wipe-y", `${cy}px`);
+  root.style.setProperty("--wipe-r", `${radius}px`);
+  const release = holdTransitionClasses(["vt-theme"]);
+  const transition = document.startViewTransition(update);
+  transition.ready.catch(() => undefined);
+  transition.finished.then(release, release);
+};
 
 /**
  * Workflow mode rail: tabs with a sliding thumb. Where CSS anchor positioning
@@ -43,11 +82,13 @@ const supportsAnchoredThumb = () =>
  * measure positions it (and re-positions on resize / font swap).
  */
 const ModeRail = ({
+  betaToolsEnabled = true,
   tabs,
   current,
   onSelect,
   controlsPanels = true,
 }: {
+  betaToolsEnabled?: boolean;
   tabs: WorkflowTab[];
   current: string;
   onSelect: (id: string) => void;
@@ -78,9 +119,16 @@ const ModeRail = ({
     return () => window.removeEventListener("resize", reposition);
   }, []);
 
+  // A tablist needs exactly one tabIndex 0 to stay keyboard reachable, and the
+  // current view is not always one of these tabs - the 404 shell renders the
+  // rail with nothing selected. Roving focus falls back to the first tab.
+  const interactiveTabs = betaToolsEnabled ? tabs : tabs.filter((tab) => !isBetaWorkflowTab(tab));
+  const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
+  const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
+
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    const order = tabs.map((tab) => tab.id);
-    const currentIndex = order.indexOf(current);
+    const order = interactiveTabs.map((tab) => tab.id);
+    const currentIndex = focusIndex;
     let next = -1;
     if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (currentIndex + 1) % order.length;
     if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (currentIndex + order.length - 1) % order.length;
@@ -104,11 +152,12 @@ const ModeRail = ({
         role="tablist"
       >
         <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
-        {tabs.map((tab) => (
+        {tabs.map((tab, index) => (
           <a
             aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
             aria-selected={tab.id === current}
             className="mode"
+            data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
             data-mode={tab.id}
             href={tab.href}
             id={`tab-${tab.id}`}
@@ -119,7 +168,7 @@ const ModeRail = ({
               onSelect(tab.id);
             }}
             role="tab"
-            tabIndex={tab.id === current ? 0 : -1}
+            tabIndex={index === focusIndex ? 0 : -1}
           >
             {tab.icon}
             <span>{tab.label}</span>
@@ -130,33 +179,13 @@ const ModeRail = ({
   );
 };
 
-/**
- * Theme toggle with the loom circle-wipe: the new theme clip-reveals from the
- * button via a view transition. The wipe itself is the CSS `theme-wipe`
- * keyframe; this only feeds the origin custom properties and flips the theme.
- */
+/** Theme toggle with the loom circle-wipe, retained as a fast masthead action. */
 const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   const { theme, toggleTheme } = useTheme();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const label = localizer.message(theme === "dark" ? "ui.theme.toLight" : "ui.theme.toDark");
   const handleClick = () => {
-    const root = document.documentElement;
-    if (viewTransitionsUnavailable()) {
-      toggleTheme();
-      return;
-    }
-    const rect = buttonRef.current?.getBoundingClientRect();
-    const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-    const cy = rect ? rect.top + rect.height / 2 : 0;
-    const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
-    root.style.setProperty("--wipe-x", `${cx}px`);
-    root.style.setProperty("--wipe-y", `${cy}px`);
-    root.style.setProperty("--wipe-r", `${radius}px`);
-    root.classList.add("vt-theme");
-    const transition = document.startViewTransition(() => toggleTheme());
-    transition.ready.catch(() => undefined);
-    const clear = () => root.classList.remove("vt-theme");
-    transition.finished.then(clear, clear);
+    runThemeWipe(toggleTheme, buttonRef.current);
   };
   return (
     <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">
@@ -169,10 +198,223 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   );
 };
 
+/**
+ * Accent quick picker: the button wears the live dye, and opening it drops the
+ * six lots below the toolbar. Choosing one commits immediately - the picker
+ * exists precisely to skip the settings panel's draft/Save round trip, and an
+ * accent is self-evidently reversible.
+ *
+ * Same swatch radios as the settings panel's picker, so arrow-key roving comes
+ * from the native radio group rather than a hand-rolled one.
+ */
+const AccentPicker = ({
+  localizer,
+  onChange,
+  onToggle,
+  open,
+}: {
+  localizer: Localizer;
+  onChange: (accent: string) => void;
+  onToggle: () => void;
+  open: boolean;
+}) => {
+  const accent = useAccent();
+  const trayRef = useRef<HTMLDivElement | null>(null);
+  const label = localizer.message("ui.tools.accent");
+
+  // Opening with the keyboard has to land somewhere; the current lot is the
+  // only sensible anchor for the arrow keys that follow.
+  useEffect(() => {
+    if (!open) return;
+    trayRef.current?.querySelector<HTMLInputElement>("input:checked")?.focus();
+  }, [open]);
+
+  return (
+    <div className="tool-anchor">
+      <button
+        aria-expanded={open}
+        aria-label={label}
+        className="tool accent-tool"
+        onClick={onToggle}
+        title={label}
+        type="button"
+      >
+        <Palette aria-hidden="true" />
+        <span aria-hidden="true" className="accent-tool-dot" />
+      </button>
+      {open ? (
+        <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
+          {ACCENTS.map((entry) => (
+            <label className="accent-chip" key={entry.value} title={entry.label}>
+              <input
+                aria-label={entry.label}
+                checked={entry.value === accent}
+                name="masthead-accent"
+                onChange={() => onChange(entry.value)}
+                type="radio"
+                value={entry.value}
+              />
+              <span aria-hidden="true" className="accent-chip-dot" style={{ background: entry.swatch }} />
+            </label>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+/**
+ * The prerendered shells ship a placeholder runtime status that the parser-time
+ * resolver in `index.html` rewrites before React loads - that is what stops the
+ * value visibly changing at hydration. The resolver decides synchronously, from
+ * the isolation flag and `navigator.serviceWorker.controller`; the store's
+ * status arrives from an async registration and reads "off" until it lands.
+ *
+ * So the first render has to answer the way the resolver already did, or React
+ * hydrates "sw off" against the DOM's "sw", throws, and discards the server
+ * HTML for the whole page. Keep this in step with the resolver in `index.html`.
+ */
+const readResolvedServiceWorkerStatus = (): ServiceWorkerStatus | null => {
+  if (typeof document === "undefined" || typeof navigator === "undefined") return null;
+  const enabled = document.documentElement.dataset.serviceWorkerEnabled === "true";
+  const serviceWorker = navigator.serviceWorker;
+  if (!(enabled && serviceWorker)) return "off";
+  if (serviceWorker.controller) return typeof MessageChannel === "function" ? "active" : "ready";
+  return null;
+};
+
+const useHydratedServiceWorkerStatus = (status: ServiceWorkerStatus | null | undefined) => {
+  const [resolved] = useState(readResolvedServiceWorkerStatus);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  return hydrated ? status : resolved;
+};
+
+type BuildStatusProps = {
+  commitHash?: string;
+  commitsSinceVersion?: number | null;
+  dirty?: boolean;
+  serviceWorkerStatus?: ServiceWorkerStatus | null;
+  confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  githubHref?: string;
+  threads?: number;
+  version?: string;
+  versionTitle?: string;
+};
+
+const guardFooterExternalClick = (
+  event: { preventDefault: () => void },
+  href: string,
+  confirmExternalNavigation?: (href: string) => Promise<boolean>,
+) => {
+  if (!confirmExternalNavigation) return;
+  event.preventDefault();
+  void confirmExternalNavigation(href).then((accepted) => {
+    if (accepted) window.open(href, "_blank", "noopener,noreferrer");
+  });
+};
+
+const BuildStatus = ({
+  commitHash,
+  commitsSinceVersion,
+  dirty,
+  serviceWorkerStatus,
+  confirmExternalNavigation,
+  githubHref,
+  threads,
+  version,
+  versionTitle,
+}: BuildStatusProps) => {
+  const localizer = useUiLocalizer();
+  const threadsLabel = localizer.message("ui.env.threads");
+  const isPwa = readPwaState();
+  const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
+  const runtimeStatus = `· ${isPwa ? "pwa" : "web"} · ${hydratedStatus === "off" ? "sw off" : "sw"}`;
+  const runtimeStatusTitle =
+    hydratedStatus === "active"
+      ? "This page is controlled by the service worker and its offline cache is available."
+      : hydratedStatus === "ready"
+        ? "A service worker is installed and ready to take control."
+        : hydratedStatus === "off"
+          ? "Service-worker offline support is unavailable."
+          : undefined;
+  const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
+  const versionHref = version && githubBaseHref ? `${githubBaseHref}releases/tag/v${version}` : undefined;
+  const commitHref = commitHash && githubBaseHref ? `${githubBaseHref}commit/${commitHash}` : undefined;
+  const commitDistance =
+    typeof commitsSinceVersion === "number" && Number.isInteger(commitsSinceVersion) && commitsSinceVersion > 0
+      ? commitsSinceVersion
+      : 0;
+  if (!version) return null;
+  return (
+    <span className="masthead-version mono">
+      <span className="build-version-label" title={versionTitle}>
+        {versionHref ? (
+          <a
+            className="build-version-link"
+            href={versionHref}
+            onClick={(event) => guardFooterExternalClick(event, versionHref, confirmExternalNavigation)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            v{version}
+            {commitDistance ? `+${commitDistance}` : null}
+          </a>
+        ) : (
+          `v${version}${commitDistance ? `+${commitDistance}` : ""}`
+        )}
+        {commitHash ? (
+          <>
+            <span aria-hidden="true"> · </span>
+            {commitHref ? (
+              <a
+                className="build-version-link"
+                href={commitHref}
+                onClick={(event) => guardFooterExternalClick(event, commitHref, confirmExternalNavigation)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                {commitHash.slice(0, 7)}
+              </a>
+            ) : (
+              commitHash.slice(0, 7)
+            )}
+            {dirty ? "*" : null}
+          </>
+        ) : null}
+      </span>
+      <span
+        className="masthead-threads"
+        data-thread-label={threadsLabel}
+        title={threads ? `${threads} ${threadsLabel}` : undefined}
+      >
+        {threads ? (
+          <>
+            <span aria-hidden="true" className="masthead-threads-full">
+              {`· ${threads} ${threadsLabel}`}
+            </span>
+            <span aria-hidden="true" className="masthead-threads-short">
+              {`· ${threads}T`}
+            </span>
+            <span className="sr-only">{`${threads} ${threadsLabel}`}</span>
+          </>
+        ) : null}
+      </span>
+      <span className="masthead-runtime" title={runtimeStatusTitle}>
+        {runtimeStatus}
+      </span>
+    </span>
+  );
+};
+
 const Masthead = ({
   channelBadge,
+  commitHash,
+  commitsSinceVersion,
+  onAccentChange,
   tabs,
   currentTab,
+  dirty,
   onSelectTab,
   onOpenLog,
   onPreloadLog,
@@ -191,8 +433,12 @@ const Masthead = ({
 }: {
   /** Deploy channel marker; empty on production, which wears the plain brand. */
   channelBadge?: string;
+  commitHash?: string;
+  commitsSinceVersion?: number | null;
+  onAccentChange?: (accent: string) => void;
   tabs: WorkflowTab[];
   currentTab: string;
+  dirty?: boolean;
   onSelectTab: (id: string) => void;
   onOpenLog: () => void;
   onPreloadLog?: () => void;
@@ -209,21 +455,81 @@ const Masthead = ({
   version?: string;
   versionTitle?: string;
 }) => {
+  const settings = useRomWeaverSettings();
   const localizer = useUiLocalizer();
+  const betaToolsEnabled = settings.betaToolsEnabled !== false;
+  const [accentOpen, setAccentOpen] = useState(false);
+  const [wideMasthead, setWideMasthead] = useState(false);
+  const mastheadRef = useRef<HTMLElement | null>(null);
+  const toolsRef = useRef<HTMLDivElement | null>(null);
+  const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const logLabel = localizer.message("ui.tools.log");
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const isPwa = readPwaState();
-  const serviceWorkerLabel = serviceWorkerStatus === "off" ? "sw off" : "sw";
+  const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
+  const serviceWorkerLabel = hydratedStatus === "off" ? "sw off" : "sw";
   const runtimeStatus = `· ${isPwa ? "pwa" : "web"} · ${serviceWorkerLabel}`;
   const runtimeStatusTitle =
-    serviceWorkerStatus === "active"
+    hydratedStatus === "active"
       ? "This page is controlled by the service worker and its offline cache is available."
-      : serviceWorkerStatus === "ready"
+      : hydratedStatus === "ready"
         ? "A service worker is installed and ready to take control."
-        : serviceWorkerStatus === "off"
+        : hydratedStatus === "off"
           ? "Service-worker offline support is unavailable."
           : undefined;
+
+  useLayoutEffect(() => {
+    const masthead = mastheadRef.current;
+    const brand = masthead?.querySelector<HTMLElement>(".brand");
+    const modes = masthead?.querySelector<HTMLElement>(".modes");
+    const modeRail = modes?.querySelector<HTMLElement>(".mode-rail");
+    const tools = toolsRef.current;
+    if (!(masthead && brand && modes && modeRail && tools)) return undefined;
+
+    const measure = () => {
+      const gap = Number.parseFloat(getComputedStyle(masthead).columnGap) || 0;
+      const requiredWidth =
+        brand.getBoundingClientRect().width +
+        measureIntrinsicModeRailWidth(modeRail) +
+        tools.getBoundingClientRect().width +
+        gap * 2;
+      const viewportWidth = typeof window === "undefined" ? masthead.clientWidth : window.innerWidth;
+      setWideMasthead(requiredWidth <= masthead.clientWidth && viewportWidth >= WIDE_MASTHEAD_MIN_WIDTH);
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+    if (typeof ResizeObserver === "undefined") return () => window.removeEventListener("resize", measure);
+    const observer = new ResizeObserver(measure);
+    for (const element of [masthead, brand, modes, modeRail, tools]) observer.observe(element);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+  // Pointer-down rather than click so a press that starts outside dismisses
+  // before the target's own handler runs.
+  useEffect(() => {
+    if (!accentOpen) return undefined;
+    const dismiss = (event: Event) => {
+      const tools = toolsRef.current;
+      if (tools && event.target instanceof Node && tools.contains(event.target)) return;
+      setAccentOpen(false);
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setAccentOpen(false);
+      toolsRef.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [accentOpen]);
+
   const guardExternalClick = (event: { preventDefault: () => void }, href: string) => {
     if (!confirmExternalNavigation) return;
     event.preventDefault();
@@ -231,26 +537,69 @@ const Masthead = ({
       if (accepted) window.open(href, "_blank", "noopener,noreferrer");
     });
   };
+  const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
+  const versionHref = version && githubBaseHref ? `${githubBaseHref}releases/tag/v${version}` : undefined;
+  const commitHref = commitHash && githubBaseHref ? `${githubBaseHref}commit/${commitHash}` : undefined;
+  const commitDistance =
+    typeof commitsSinceVersion === "number" && Number.isInteger(commitsSinceVersion) && commitsSinceVersion > 0
+      ? commitsSinceVersion
+      : 0;
   return (
     <>
       <a className="skip-link" href="#main-content">
         {localizer.message("ui.common.skipToMain")}
       </a>
-      <header className="masthead">
+      <header className="masthead" data-masthead-layout={wideMasthead ? "wide" : "stacked"} ref={mastheadRef}>
         <span className="brand">
-          <BrandMark />
+          <a aria-label="Home" className="brand-mark-link" href="/">
+            <BrandMark />
+          </a>
           <span className="brand-copy">
             <span className="brand-line">
-              <h1 className="brand-word">
-                rom<span className="brand-hy">-</span>
-                <b>weaver</b>
-              </h1>
+              <a aria-label="rom-weaver home" href="/">
+                <BrandHeading className="brand-word">
+                  rom<span className="brand-hy">-</span>
+                  <b>weaver</b>
+                </BrandHeading>
+              </a>
               {channelBadge ? <span className="channel-badge">{channelBadge}</span> : null}
             </span>
             {version ? (
               <span className="masthead-version mono">
                 <span className="build-version-label" title={versionTitle}>
-                  {version}
+                  {versionHref ? (
+                    <a
+                      className="build-version-link"
+                      href={versionHref}
+                      onClick={(event) => guardExternalClick(event, versionHref)}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      v{version}
+                      {commitDistance ? `+${commitDistance}` : null}
+                    </a>
+                  ) : (
+                    `v${version}${commitDistance ? `+${commitDistance}` : ""}`
+                  )}
+                  {commitHash ? (
+                    <>
+                      <span aria-hidden="true"> · </span>
+                      {commitHref ? (
+                        <a
+                          className="build-version-link"
+                          href={commitHref}
+                          onClick={(event) => guardExternalClick(event, commitHref)}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {commitHash.slice(0, 7)}
+                        </a>
+                      ) : (
+                        commitHash.slice(0, 7)
+                      )}
+                      {dirty ? "*" : null}
+                    </>
+                  ) : null}
                 </span>
                 <span
                   className="masthead-threads"
@@ -275,91 +624,158 @@ const Masthead = ({
               </span>
             ) : null}
           </span>
+          <span className="masthead-slogan">{localizer.message("ui.masthead.slogan")}</span>
         </span>
-        <ModeRail controlsPanels={tabsControlPanels} current={currentTab} onSelect={onSelectTab} tabs={tabs} />
-        <div className="masthead-tools">
-          {githubHref ? (
-            <a
-              aria-label="GitHub"
+        <div className="masthead-control-rail">
+          <ModeRail
+            betaToolsEnabled={betaToolsEnabled}
+            controlsPanels={tabsControlPanels}
+            current={currentTab}
+            onSelect={onSelectTab}
+            tabs={tabs}
+          />
+          <div className="masthead-tools" ref={toolsRef}>
+            {githubHref ? (
+              <a
+                aria-label="GitHub"
+                className="tool masthead-link"
+                href={githubHref}
+                onClick={(event) => guardExternalClick(event, githubHref)}
+                rel="noreferrer"
+                target="_blank"
+                title="GitHub"
+              >
+                <Github aria-hidden="true" />
+              </a>
+            ) : null}
+            {donateHref ? (
+              <a
+                aria-label={localizer.message("ui.footer.donate")}
+                className="tool masthead-link masthead-donate"
+                href={donateHref}
+                onClick={(event) => guardExternalClick(event, donateHref)}
+                rel="noreferrer"
+                target="_blank"
+                title={localizer.message("ui.footer.donate")}
+              >
+                <Heart aria-hidden="true" />
+              </a>
+            ) : null}
+            {githubHref || donateHref ? <span aria-hidden="true" className="tools-sep" /> : null}
+            <button
+              aria-label={localizer.message("ui.settings.reset")}
               className="tool"
-              href={githubHref}
-              onClick={(event) => guardExternalClick(event, githubHref)}
-              rel="noreferrer"
-              target="_blank"
-              title="GitHub"
+              onClick={onReset}
+              title={localizer.message("ui.settings.reset")}
+              type="button"
             >
-              <Github aria-hidden="true" />
+              <RotateCcw aria-hidden="true" />
               <span aria-hidden="true" className="tool-text">
-                GitHub
+                {localizer.message("ui.settings.reset")}
               </span>
-            </a>
-          ) : null}
-          {donateHref ? (
-            <a
-              aria-label={localizer.message("ui.footer.donate")}
-              className="tool masthead-donate"
-              href={donateHref}
-              onClick={(event) => guardExternalClick(event, donateHref)}
-              rel="noreferrer"
-              target="_blank"
-              title={localizer.message("ui.footer.donate")}
+            </button>
+            <ThemeToggle localizer={localizer} />
+            {/* stays open on pick: arrow keys walk the radio group, and comparing
+              two lots should not cost a reopen */}
+            <AccentPicker
+              localizer={localizer}
+              onChange={(accent) => onAccentChange?.(accent)}
+              onToggle={() => setAccentOpen((open) => !open)}
+              open={accentOpen}
+            />
+            <button
+              aria-haspopup="dialog"
+              aria-label={logLabel}
+              className="tool"
+              onClick={onOpenLog}
+              onFocus={onPreloadLog}
+              onPointerDown={onPreloadLog}
+              onPointerEnter={onPreloadLog}
+              title={logLabel}
+              type="button"
             >
-              <Heart aria-hidden="true" />
+              <ScrollText aria-hidden="true" />
               <span aria-hidden="true" className="tool-text">
-                {localizer.message("ui.footer.donate")}
+                {logLabel}
               </span>
-            </a>
-          ) : null}
-          {githubHref || donateHref ? <span aria-hidden="true" className="tools-sep" /> : null}
-          <button
-            aria-label={localizer.message("ui.settings.reset")}
-            className="tool"
-            onClick={onReset}
-            title={localizer.message("ui.settings.reset")}
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              {localizer.message("ui.settings.reset")}
-            </span>
-          </button>
-          <ThemeToggle localizer={localizer} />
-          <button
-            aria-haspopup="dialog"
-            aria-label={logLabel}
-            className="tool"
-            onClick={onOpenLog}
-            onFocus={onPreloadLog}
-            onPointerDown={onPreloadLog}
-            onPointerEnter={onPreloadLog}
-            title={logLabel}
-            type="button"
-          >
-            <ScrollText aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              {logLabel}
-            </span>
-          </button>
-          <button
-            aria-expanded={settingsOpen}
-            aria-haspopup="dialog"
-            aria-label={settingsLabel}
-            className="tool"
-            onClick={onOpenSettings}
-            onFocus={onPreloadSettings}
-            onPointerDown={onPreloadSettings}
-            onPointerEnter={onPreloadSettings}
-            title={settingsLabel}
-            type="button"
-          >
-            <Settings aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              {settingsLabel}
-            </span>
-          </button>
+            </button>
+            <button
+              aria-expanded={settingsOpen}
+              aria-haspopup="dialog"
+              aria-label={settingsLabel}
+              className="tool"
+              onClick={onOpenSettings}
+              onFocus={onPreloadSettings}
+              onPointerDown={onPreloadSettings}
+              onPointerEnter={onPreloadSettings}
+              title={settingsLabel}
+              type="button"
+            >
+              <Settings aria-hidden="true" />
+              <span aria-hidden="true" className="tool-text">
+                {settingsLabel}
+              </span>
+            </button>
+          </div>
         </div>
       </header>
     </>
+  );
+};
+
+type SiteFooterProps = BuildStatusProps & {
+  donateHref?: string;
+  legalHref?: string;
+  privacyHref?: string;
+};
+
+const SiteFooter = ({ donateHref, githubHref, legalHref, privacyHref, ...buildStatusProps }: SiteFooterProps) => {
+  const localizer = useUiLocalizer();
+  const confirmExternalNavigation = buildStatusProps.confirmExternalNavigation;
+  return (
+    <footer className="site-footer">
+      <div className="site-footer-links">
+        {githubHref ? (
+          <a
+            aria-label="GitHub"
+            className="site-footer-link"
+            href={githubHref}
+            onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Github aria-hidden="true" />
+            <span>GitHub</span>
+          </a>
+        ) : null}
+        {donateHref ? (
+          <a
+            aria-label={localizer.message("ui.footer.donate")}
+            className="site-footer-link support-link"
+            href={donateHref}
+            onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Heart aria-hidden="true" />
+            <span>{localizer.message("ui.footer.donate")}</span>
+          </a>
+        ) : null}
+        {privacyHref ? (
+          <a className="site-footer-link" href={privacyHref}>
+            <span>Privacy</span>
+          </a>
+        ) : null}
+        {legalHref ? (
+          <a className="site-footer-link" href={legalHref}>
+            <span>Legal</span>
+          </a>
+        ) : null}
+      </div>
+      <div className="site-footer-status">
+        <BuildStatus {...buildStatusProps} githubHref={githubHref} />
+      </div>
+    </footer>
   );
 };
 
@@ -442,4 +858,4 @@ const WakeLockBanner = ({
   );
 };
 
-export { Masthead, Reveal, UpdateBanner, WakeLockBanner };
+export { Masthead, readPwaState, Reveal, SiteFooter, UpdateBanner, WakeLockBanner };

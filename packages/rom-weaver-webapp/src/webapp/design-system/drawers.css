@@ -5,10 +5,30 @@
 .rw-app .cks {
   position: relative; border: 1px solid var(--seam-soft); border-radius: var(--r-s); background: var(--well);
   transition: background .14s, border-color .14s;
+  /* The action rides the header, so it tracks the header's height - never the
+     expanded drawer's. */
+  --drawer-head-h: 36px;
+  /* Check-row metrics live on the drawer so read-only (.ck) and editable
+     (.verification-row) rows resolve identical columns and value sizes.
+     --ck-label-w is the widest label ("SHA-1") plus a hair; --ck-fit-reserve is
+     everything the value track does NOT get (padding, label, gaps, copy glyph)
+     and is what the value's font clamp subtracts to keep a 40-character SHA-1
+     on one line. */
+  --ck-label-w: 38px;
+  --ck-fit-reserve: 96px;
+  /* A per-row match mark takes a fourth cell and one more gap out of the value. */
+  --ck-mark-reserve: 0px;
+  /* The em-width of a 40-character SHA-1, and so the divisor that turns the
+     value track's px width into a font size holding one line: 40 cells at the
+     --mono stack's .618em advance (measured, not the .6em a monospace is assumed
+     to have) plus the .03em tracking below, rounded up for margin. */
+  --ck-v-divisor: 26;
+  /* Share a theme-aware seam across full and paired rows. */
+  --ck-seam: var(--seam-soft);
 }
 .rw-app .cks:has(> .drawer-action) > .cks-head { padding-inline-end: 38px; }
 .rw-app .drawer-action {
-  position: absolute; z-index: 2; inset-inline-end: 11px; top: 18px; translate: 0 -50%;
+  position: absolute; z-index: 2; inset-inline-end: 11px; inset-block-start: 0; height: var(--drawer-head-h);
   display: inline-flex; align-items: center;
 }
 .rw-app .drawer-action .info { font-size: 1rem; }
@@ -57,7 +77,7 @@
 .rw-app .cks > .cks-head {
   appearance: none; border: 0; background: transparent; color: inherit; font: inherit; text-align: start;
   width: 100%; cursor: pointer; display: flex; align-items: center; gap: var(--sp-xs);
-  min-height: 36px; padding-block: 4px; padding-inline: 7px 11px; border-radius: inherit; transition: background .14s;
+  min-height: var(--drawer-head-h); padding-block: 4px; padding-inline: 7px 11px; border-radius: inherit; transition: background .14s;
   /* Prevent selection and iOS callouts from stealing header taps. */
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
@@ -111,6 +131,9 @@
 .rw-app .cks > .cks-head .readouts > .rb:not(:last-child) { flex: none; }
 .rw-app .cks:not(.is-open) > .cks-head .rb { background: var(--plate-2); border-color: transparent; }
 .rw-app .cks > .cks-head .rb.time { color: var(--thread-text); }
+/* Dimmed with the rest of a disabled card. Kept beside the chip's own colour:
+   from file-cards.css this layer would win on order, not specificity. */
+.rw-app .card.is-disabled .cks > .cks-head .rb { color: var(--ink-3); }
 /* Verification marks stay outside the readout-chip family. */
 .rw-app .cks > .cks-head .rb-mark { flex: none; display: inline-flex; align-items: center; }
 .rw-app .cks > .cks-head .rb-mark svg { width: 16px; height: 16px; }
@@ -128,6 +151,13 @@
 .rw-app .ck-group { display: flex; flex-direction: column; gap: 0; }
 .rw-app .ckrows > .ck-group:first-child { margin-block-start: 6px; }
 .rw-app .ck-group + .ck-group { margin-block-start: 9px; }
+/* Tighter group spacing on phones. Kept beside the desktop pair so the
+   `.patch-check-columns` rule above still outranks it on specificity - from
+   responsive.css the later layer would win and flatten the columns gap. */
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .ckrows > .ck-group:first-child { margin-block-start: 2px; }
+  .rw-app .ck-group + .ck-group { margin-block-start: 4px; }
+}
 .rw-app .ck-group-head {
   display: flex; align-items: center; width: fit-content;
   position: relative; isolation: isolate;
@@ -142,13 +172,14 @@
   mask-image: var(--weave-mask); mask-size: 7px 7px;
 }
 .rw-app .ck {
-  /* Fixed label width aligns independently gridded rows. */
-  margin: 0; display: grid; grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto; align-items: center; gap: var(--sp-xs) var(--sp-s);
+  /* The label track floor aligns independently gridded rows. */
+  margin: 0; display: grid; grid-template-columns: minmax(var(--ck-label-w), max-content) minmax(0, 1fr) auto; align-items: center; gap: var(--sp-xs) var(--sp-s);
   min-height: 26px; padding: 3px 9px; background: transparent; cursor: pointer;
-  /* Share a theme-aware seam across full and paired rows. */
-  --ck-seam: var(--seam-soft);
   border-block: 1px solid var(--ck-seam); border-inline: 0; transition: background .15s, border-color .15s;
 }
+/* Strip user-agent chrome from the button rows. Must sit with the width rules
+   below - a later layer would win on order no matter how specific they are. */
+.rw-app button.ck { appearance: none; text-align: start; width: 100%; font: inherit; }
 /* Extend ordinary rows through the drawer's 10px inset. */
 .rw-app .ck:not(.req) { margin-inline: -10px; width: calc(100% + 20px); }
 /* Drop duplicate borders without overlapping adjacent touch targets. */
@@ -163,27 +194,49 @@
 .rw-app .ck:active { background: color-mix(in oklab, var(--thread) 7%, var(--well)); }
 .rw-app .ck.bad { background: color-mix(in oklab, var(--fault) 10%, var(--well)); }
 .rw-app .ck .ck-k { font-size: .74rem; color: var(--ink-4); margin: 0; text-transform: lowercase; letter-spacing: .02em; }
-/* Scale all values together so a 40-character SHA-1 stays on one line. */
+/* Scale all values together so a 40-character SHA-1 stays on one line.
+   --ck-v-span is the slice of the container the row spans: a full row reads the
+   whole width, a paired row only half of it. */
 .rw-app .ck .ck-v {
   margin: 0; color: var(--weft); white-space: nowrap; text-transform: uppercase; letter-spacing: .03em;
-  font-size: clamp(.46rem, calc((100cqi - 85px) / 25.2), .97rem);
+  font-size: clamp(.46rem, calc((var(--ck-v-span, 100cqi) - var(--ck-fit-reserve) - var(--ck-mark-reserve)) / var(--ck-v-divisor)), .97rem);
 }
 /* Pair short checksum rows while full rows and groups span both tracks. */
-.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) {
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) {
   display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; align-items: start;
   margin-inline: -10px;
 }
-.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) > * { grid-column: 1 / -1; min-width: 0; }
-.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) .ck:not(.req) { margin-inline: 0; width: 100%; }
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) > * { grid-column: 1 / -1; min-width: 0; }
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) .ck:not(.req) { margin-inline: 0; width: 100%; }
 .rw-app .ckrows .ck-group { display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; }
 .rw-app .ckrows .ck-group > * { grid-column: 1 / -1; min-width: 0; }
 .rw-app .ckrows .ck-group .ck:not(.req) { margin-inline: 0; width: 100%; }
-.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half) > .ck.ck-half:not(.req),
-.rw-app .ckrows:not(.patch-check-columns) .ck-group > .ck.ck-half:not(.req) { grid-column: auto / span 1; }
+/* Read-only and editable rows pair identically, so the patch card's short
+   checks sit two-up exactly like the ROM card's. */
+.rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) > :is(.ck, .verification-row).ck-half:not(.req),
+.rw-app .ckrows:not(.patch-check-columns) .ck-group > :is(.ck, .verification-row).ck-half:not(.req) { grid-column: auto / span 1; }
 /* Restore the seam that stacked-row border collapse removed. */
-.rw-app .ckrows:not(.patch-check-columns) .ck.ck-half:not(.req) + .ck.ck-half:not(.req) {
+.rw-app .ckrows:not(.patch-check-columns) :is(.ck, .verification-row).ck-half:not(.req) + :is(.ck, .verification-row).ck-half:not(.req) {
   border-inline-start: 1px solid var(--ck-seam);
   border-block-start-color: var(--ck-seam);
+}
+
+/* Pair MD5 with SHA-1 the way CRC32 pairs with BYTES, but only once half the
+   row still fits a 40-character hash near the unpaired size - below that the
+   two long values are better off owning a full row each. Only an adjacent
+   md5/sha-1 pair halves, so a lone hash never leaves a dead half-row beside it. */
+@container (min-width: 900px) {
+  .rw-app .ckrows:not(.patch-check-columns) :is(.ck, .verification-row).ck-hash:not(.req):has(+ :is(.ck, .verification-row).ck-hash:not(.req)),
+  .rw-app .ckrows:not(.patch-check-columns) :is(.ck, .verification-row).ck-hash:not(.req) + :is(.ck, .verification-row).ck-hash:not(.req) { grid-column: auto / span 1; }
+  .rw-app .ckrows:not(.patch-check-columns) :is(.ck, .verification-row).ck-hash:not(.req) + :is(.ck, .verification-row).ck-hash:not(.req) {
+    border-inline-start: 1px solid var(--ck-seam);
+    border-block-start-color: var(--ck-seam);
+  }
+  /* Paired rows only get half the container, so the whole list re-sizes off
+     half of it - values keep one shared size the way they do unpaired. */
+  .rw-app .ckrows:not(.patch-check-columns):has(:is(.ck, .verification-row).ck-hash:not(.req) + :is(.ck, .verification-row).ck-hash:not(.req)) :is(.ck, .verification-row):not(.req) {
+    --ck-v-span: 50cqi;
+  }
 }
 
 /* Split multiple groups into independently sized columns on wide drawers. */
@@ -209,14 +262,20 @@
     border-block-start-color: var(--ck-seam);
   }
 }
-/* Stack long hashes when the minimum font size no longer fits. */
-@container (max-width: calc(11.6rem + 64px)) {
-  .rw-app .ck:not(.req):has(.ck-v.ck-fit) { grid-template-columns: minmax(0, 1fr) auto; }
+/* Stack long hashes when the minimum font size no longer fits: 11.96rem is the
+   clamp floor times --ck-v-divisor, so the sum is the width where the value stops
+   shrinking and would start overflowing. Container queries cannot read custom
+   properties, so this uses the largest reserve (a desktop row with a mark) and
+   stacks the lighter rows slightly early rather than one pixel too late. */
+@container (max-width: calc(11.96rem + 116px)) {
+  .rw-app .ck:not(.req):has(.ck-v.ck-fit) { grid-template-columns: minmax(0, 1fr) auto auto; }
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-k { grid-row: 1; grid-column: 1; }
-  .rw-app .ck:not(.req):has(.ck-v.ck-fit) .copy { grid-row: 1; grid-column: 2; }
+  /* The mark keeps its own cell beside the copy glyph; without an explicit
+     placement it auto-flows into the value's row and lands on top of it. */
+  .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-mark { grid-row: 1; grid-column: 2; }
+  .rw-app .ck:not(.req):has(.ck-v.ck-fit) .copy { grid-row: 1; grid-column: 3; }
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) .ck-v { grid-row: 2; grid-column: 1 / -1; }
 }
-.rw-app .ck .ck-v .exp { color: var(--fault); }
 .rw-app .ck .ck-v.copied { animation: copied-value .55s var(--ease); }
 @keyframes copied-value {
   35% {
@@ -224,8 +283,9 @@
     text-shadow: 0 0 10px color-mix(in oklab, var(--verified) 70%, transparent);
   }
 }
-:root[data-theme="dark"] .ck .ck-v, :root[data-theme="dark"] .ck.req .ck-v { color: var(--thread-text); }
-:root[data-theme="light"] .ck { --ck-seam: var(--seam-strong); border-color: var(--ck-seam); }
+:root[data-theme="dark"] .ck .ck-v{ color: var(--thread-text); }
+:root[data-theme="light"] .cks { --ck-seam: var(--seam-strong); }
+:root[data-theme="light"] .ck { border-color: var(--ck-seam); }
 /* Preserve label contrast over tinted light-theme rows. */
 :root[data-theme="light"] .ck .ck-k { color: var(--ink-2); }
 .rw-app .ck .copy { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--ink-4); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 5px; opacity: .6; transition: transform .12s, color .15s, opacity .15s; }
@@ -235,30 +295,30 @@
 .rw-app .ck .copy:active { transform: scale(.82); }
 .rw-app .ck .copy.copied { color: var(--verified); opacity: 1; animation: pop .32s var(--ease); }
 .rw-app .ck .copy svg { width: 13px; height: 13px; }
-/* A shared subgrid aligns verification columns across groups. */
-.rw-app .cks .trackrows:has(.ck.req) { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto auto; align-items: center; }
-.rw-app .cks .trackrows:has(.ck.req) > .ckgrp { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; padding-inline-start: 0; }
-/* Only row labels should size the first column. */
-.rw-app .cks .trackrows:has(.ck.req) > .ckgrp > * { grid-column: 1 / -1; }
-.rw-app .cks .trackrows:has(.ck.req) > .ckgrp > .ckrows { display: grid; grid-template-columns: subgrid; }
-.rw-app .ck.req { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; column-gap: var(--sp-m); border: 0; border-block-end: 1px solid var(--seam-soft); border-radius: 0; }
-.rw-app .ck.req .ck-k { text-transform: uppercase; letter-spacing: .03em; }
-.rw-app .ck.req .ck-v { text-transform: uppercase; letter-spacing: .03em; color: var(--weft); }
-.rw-app .ck.req .reqstat { display: inline-flex; align-items: center; }
-.rw-app .ck.req .reqstat svg { width: 14px; height: 14px; color: var(--verified); }
-.rw-app .ck.req.bad .reqstat svg { color: var(--fault); }
-.rw-app .ck.req.bad dd { color: var(--fault); }
-.rw-app .ck.req:not(.bad) .ck-v {
-  text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 55%, transparent);
-  text-underline-offset: 4px;
+/* Enlarge touch targets without changing visual layout. Lives here rather than with
+   the other coarse-pointer targets so `.cue-sub-single > .cue-copy` below still
+   places the button - a later layer would outrank it whatever its specificity. */
+@media (pointer: coarse) {
+  .rw-app .ck .copy, .rw-app .cue-copy { position: relative; }
+  .rw-app .ck .copy::before, .rw-app .cue-copy::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 }
-.rw-app .dryrun-verdict { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .82rem; font-weight: 600; }
-.rw-app .dryrun-verdict svg { width: 15px; height: 15px; flex: none; }
-.rw-app .dryrun-verdict.bad { color: var(--fault); }
-.rw-app .dryrun-verdict:not(.bad) {
-  text-decoration: underline 1px dashed color-mix(in oklab, var(--verified) 55%, transparent);
-  text-underline-offset: 4px;
+/* pending checksum value - invisible text the exact char length of the eventual
+   hash (so width + break-all wrapping match it), painted as a shimmering orange
+   bar; box-decoration-break makes each wrapped line carry the fill. */
+.rw-app .ck.pending { cursor: default; }
+.rw-app .ck.pending .copy { opacity: 0; }
+.rw-app .ck.pending .ck-v .pend {
+  color: transparent; user-select: none; border-radius: 3px;
+  background-image: linear-gradient(90deg,
+    color-mix(in oklab, var(--thread) 30%, var(--plate-2)) 20%,
+    color-mix(in oklab, var(--thread) 58%, var(--plate-2)) 42%,
+    color-mix(in oklab, var(--thread) 30%, var(--plate-2)) 64%);
+  background-size: 220% 100%;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  animation: stage-shimmer 1.5s ease-in-out infinite;
 }
+@keyframes stage-shimmer { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .rw-app .ck.pending .ck-v .pend { animation: none; } }
 .rw-app .pverdict { padding: var(--sp-s) var(--sp-m); }
 /* Separate failed verdict, detail, and guidance instead of tinting all text red. */
 .rw-app .pfault {
@@ -272,56 +332,12 @@
 .rw-app .pfault-title svg { width: 15px; height: 15px; flex: none; animation: pverdict-mark .34s var(--ease) both; }
 .rw-app .pfault-detail { margin: 0; font-size: .8rem; color: var(--ink-2); overflow-wrap: anywhere; }
 .rw-app .pfault-hint { margin: 0; font-size: .74rem; color: var(--ink-3); }
-.rw-app .pverdict.dryrun-verdict { animation: pverdict-in .3s var(--ease) both; }
-.rw-app .pverdict.dryrun-verdict svg { animation: pverdict-mark .34s var(--ease) both; }
 @keyframes pverdict-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes pverdict-mark { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .pverdict.dryrun-verdict,
-  .rw-app .pverdict.dryrun-verdict svg,
   .rw-app .pfault,
   .rw-app .pfault-title svg { animation: none; }
 }
-
-/* Inline help */
-.rw-app .info { position: relative; display: inline-flex; flex: none; align-self: center; vertical-align: middle; font-size: .8rem; }
-.rw-app .step-head .info { margin-inline-start: 0; font-size: .76rem; }
-.rw-app .info-btn {
-  position: relative; appearance: none; cursor: pointer; width: 24px; height: 24px; padding: 0;
-  border: 0; background: none; color: var(--ink-4);
-  display: grid; place-items: center;
-  transition: color .15s;
-}
-.rw-app .info-btn svg { width: 1em; height: 1em; }
-/* Add breathing room around the already-compliant 24px control. */
-.rw-app .info-btn::after { content: ""; position: absolute; inset: -7px; }
-@media (hover: hover) {
-  .rw-app .info-btn:hover { color: var(--ink-2); }
-}
-.rw-app .info-btn:active { color: var(--ink-2); }
-.rw-app .info-btn[aria-expanded="true"] { color: var(--thread-text); }
-.rw-app .info-pop {
-  position: absolute; top: calc(100% + 7px); inset-inline-start: -6px; z-index: 70;
-  width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
-  padding: var(--sp-m);
-  border: 1px solid var(--seam-strong); border-radius: var(--r-m); background: var(--plate-2);
-  box-shadow: var(--overlay-shadow);
-  font-size: .78rem; font-weight: 500; line-height: 1.5; color: var(--ink-2);
-  letter-spacing: 0; text-transform: none; white-space: normal; text-align: start;
-  animation: drop-in .2s var(--ease);
-}
-.rw-app .step-meta .info-pop { inset-inline-start: auto; inset-inline-end: -6px; }
-.rw-app .info-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-xs); }
-.rw-app .info-list li { position: relative; padding-inline-start: 14px; }
-.rw-app .info-list li::before {
-  content: ""; position: absolute; inset-inline-start: 3px; top: .55em;
-  width: 4px; height: 4px; border-radius: 50%; background: var(--thread-text);
-}
-.rw-app .info-support { display: flex; flex-direction: column; gap: var(--sp-s); }
-.rw-app .info-list + .info-support { margin-block-start: 9px; padding-block-start: 9px; border-block-start: 1px solid var(--seam); }
-.rw-app .info-support p { margin: 0; }
-.rw-app .info-support b { display: block; color: var(--ink); font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; }
-.rw-app .info-support .mono { color: var(--ink-3); font-size: .72rem; overflow-wrap: anywhere; }
 
 /* Keep cue text selectable by placing copy in the heading. */
 .rw-app .cue-sub { border: 1px solid var(--seam); border-radius: var(--r-s); background: var(--chassis); overflow: hidden; }
@@ -354,5 +370,4 @@
 
 /* Tracks and per-file task history */
 .rw-app .trackrows, .rw-app .taskbody { display: flex; flex-direction: column; gap: var(--sp-2xs); padding-block: 4px 2px; }
-.rw-app .ckgrp { padding-inline-start: 0; }
 .rw-app .popt { display: flex; align-items: center; gap: var(--sp-s); font-size: .78rem; color: var(--ink-2); }

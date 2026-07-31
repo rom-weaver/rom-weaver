@@ -404,30 +404,35 @@ test("typed input checksum is format-validated and re-verifies the ROM", async (
   expect(crcInput).toBeInstanceOf(HTMLInputElement);
   expect(crcInput.value).toBe("");
   expect(crcInput.readOnly).toBe(false);
-  const commit = (value) => {
-    const input = document.getElementById("rom-weaver-patch-input-crc32-0");
+  /* Committing a valid value returns the row to text, so reopen it before typing the
+     next one - the field only exists while the row is being edited (EditableCheckRow
+     keeps it out of the way so iOS never focuses a sub-16px field). A row left invalid
+     keeps its field, and the click is then a no-op. */
+  const commit = async (value) => {
+    document.getElementById("rom-weaver-patch-input-crc32-0-open")?.click();
+    const input = await waitForState(() => document.getElementById("rom-weaver-patch-input-crc32-0"), 30000);
     input.value = value;
     input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
   };
 
   // Malformed hex flags the field and never reaches verification.
-  commit("nothex!!");
+  await commit("nothex!!");
   await expect
     .poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")?.getAttribute("aria-invalid"))
     .toBe("true");
   expect(document.querySelector("#rom-weaver-list-input-stack .file.bad")).toBeNull();
 
   // A well-formed but wrong crc32 verifies against the ROM and flags it.
-  commit("00000000");
+  await commit("00000000");
   await expect
     .poll(() => document.querySelector("#rom-weaver-list-input-stack .file.bad"), { timeout: 30000 })
     .not.toBeNull();
-  await expect
-    .poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")?.getAttribute("aria-invalid"))
-    .toBe(null);
+  // A well-formed value clears the malformed state, which a settled row reports by
+  // no longer marking itself bad (the field itself has gone back to text).
+  await expect.poll(() => document.querySelector("#rom-weaver-list-patch-stack .verification-row.bad")).toBeNull();
 
   // The ROM's actual crc32 re-verifies to a match.
-  commit("c6fb1252");
+  await commit("c6fb1252");
   await expect
     .poll(() => document.querySelector("#rom-weaver-list-input-stack .file.ok"), { timeout: 30000 })
     .not.toBeNull();

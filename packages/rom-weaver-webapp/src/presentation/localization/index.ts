@@ -1,6 +1,6 @@
 import { type I18n, type Messages, setupI18n } from "@lingui/core";
 import { formatBytes, formatCount, formatDuration, formatList } from "../formatting/index.ts";
-import { DEFAULT_LOCALE, type LocaleCode, MESSAGE_CATALOGS, type MessageId } from "./catalog.ts";
+import { DEFAULT_LOCALE, LOCALE_OPTIONS, type LocaleCode, MESSAGE_CATALOGS, type MessageId } from "./catalog.ts";
 
 type Localizer = {
   locale: LocaleCode;
@@ -95,4 +95,4 @@ const createBrowserLocalizer = (locale?: string): Localizer =>
   createLocalizer(locale || negotiateLocale(getBrowserLocaleCandidates()));
 
 export type { Localizer };
-export { createBrowserLocalizer, createLocalizer, getBrowserLocaleCandidates, negotiateLocale };
+export { createBrowserLocalizer, createLocalizer, getBrowserLocaleCandidates, LOCALE_OPTIONS, negotiateLocale };

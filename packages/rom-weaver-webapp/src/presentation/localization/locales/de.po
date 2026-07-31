@@ -55,6 +55,16 @@ msgstr "7z-Codec"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.masthead.slogan"
+msgstr "Ein ROM- und Patch-Toolkit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.accent"
+msgstr "Akzentfarbe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "Alles lokal in deinem Browser — deine Dateien verlassen nie deinen Rechner."
 
@@ -87,6 +97,11 @@ msgstr "in nativer Geschwindigkeit"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.auto"
 msgstr "auto"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.auto"
+msgstr "Automatisch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -147,6 +162,11 @@ msgstr "{format}-Bundle erstellen"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "{format}-ROM-Bundle erstellen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.dark"
+msgstr "Dunkel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -225,6 +245,11 @@ msgstr "Sprache"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.language"
+msgstr "Sprache"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.viewPrevious"
 msgstr "Vorheriges"
 
@@ -242,6 +267,11 @@ msgstr "Stufe"
 #: src/presentation/localization/messages.ts
 msgid "settings.levelOverride"
 msgstr "Eigene Stufe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.light"
+msgstr "Hell"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -450,6 +480,11 @@ msgstr "Download der geteilten Sitzung fehlgeschlagen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.onboardingEnabled"
+msgstr "Schnellstart-Tipps („New here?“) anzeigen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Zum Hauptinhalt springen"
 
@@ -462,6 +497,11 @@ msgstr "Speicher ist nicht verfügbar."
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
 msgstr "Füllbytes und Junk-Blöcke aus ROM-Dumps entfernen,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.footer.donate"
+msgstr "Unterstützen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -520,6 +560,11 @@ msgstr "Der gewählte Quelltyp wird nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.theme"
+msgstr "Design"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.theme"
 msgstr "Design"
 
@@ -537,11 +582,6 @@ msgstr "Threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Trinkgeld"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

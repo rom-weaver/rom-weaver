@@ -6,15 +6,10 @@
   transition: border-color .15s, box-shadow .15s;
 }
 .rw-app .select { appearance: none; padding-inline-end: 30px; cursor: pointer;
+  font-size: var(--dropdown-fs, .92rem);
   background-image: var(--chevron);
   background-repeat: no-repeat; background-position: right 10px center;
 }
-/* Overlay the native datalist picker on the shared chevron. */
-.rw-app .input.combo { padding-inline-end: 30px;
-  background-image: var(--chevron);
-  background-repeat: no-repeat; background-position: right 10px center;
-}
-.rw-app .input.combo::-webkit-calendar-picker-indicator { opacity: 0; width: 24px; margin: 0; padding: 0; cursor: pointer; }
 .rw-app .input:focus-visible, .rw-app .select:focus-visible { outline: none; border-color: var(--thread); box-shadow: 0 0 0 1px var(--thread); }
 .rw-app .input[aria-invalid="true"], .rw-app .select[aria-invalid="true"] { border-color: var(--fault); box-shadow: 0 0 0 1px color-mix(in oklab, var(--fault) 50%, transparent); }
 .rw-app .input:disabled, .rw-app .select:disabled { opacity: .5; cursor: not-allowed; }
@@ -66,22 +61,21 @@
 .rw-app .cks .opts-lab svg { width: 13px; height: 13px; color: var(--thread-text); flex: none; }
 .rw-app .optsbody { display: flex; flex-direction: column; gap: var(--sp-m); padding-block: 9px 2px; }
 .rw-app .optsgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--sp-m); }
-.rw-app .patch-name-field { grid-column: 1 / -1; }
 .rw-app .patch-description-field { grid-column: 1 / -1; }
 /* Ellipsize long export types instead of stretching the grid. */
 .rw-app .export-type-field { min-width: 0; }
 .rw-app .export-type-field .select { text-overflow: ellipsis; }
 .rw-app .patch-description-field textarea.input { height: auto; min-height: 36px; padding-block: 8px; line-height: 1.4; resize: vertical; overflow: hidden; }
-.rw-app .verification-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: var(--sp-m); margin-block-start: 3px; }
-.rw-app .patch-check-group { min-width: 0; padding: var(--sp-m); border: 1px solid var(--seam-soft); border-radius: var(--r-s); background: color-mix(in oklab, var(--well) 72%, transparent); }
-.rw-app .patch-check-group .ck-group-head { margin-block-end: 7px; }
-.rw-app .verification-list { display: flex; flex-direction: column; gap: var(--sp-s); }
 .rw-app .ck-mark { display: inline-flex; align-items: center; flex: none; }
 .rw-app .ck-mark svg { width: 13px; height: 13px; }
 .rw-app .ck-mark.ok { color: var(--verified); }
 .rw-app .ck-mark.bad { color: var(--fault); }
-/* Reserve a fourth cell for the match mark. */
-.rw-app .ck:not(.req):has(> .ck-mark) { grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto auto; }
+/* Reserve a fourth cell for the match mark, and take that cell plus its gap out
+   of the value's share so the hash still fits on one line. */
+.rw-app .ck:not(.req):has(> .ck-mark) {
+  grid-template-columns: minmax(var(--ck-label-w), max-content) minmax(0, 1fr) auto auto;
+  --ck-mark-reserve: 20px;
+}
 .rw-app .ck-group-head .ck-mark { margin-inline-start: var(--sp-s); vertical-align: -2px; }
 .rw-app .ck-group-head .ck-head-note { margin-inline-start: var(--sp-s); color: var(--ink-4); font-weight: 500; text-transform: none; letter-spacing: .02em; }
 /* Distinguish expected bundle values from computed readouts. */
@@ -104,12 +98,11 @@
 .rw-app .ck-more .chev-i { width: 12px; height: 12px; flex: none; transition: rotate .16s var(--ease); }
 .rw-app .ck-more[aria-expanded="true"] .chev-i { rotate: 90deg; }
 @media (prefers-reduced-motion: reduce) { .rw-app .ck-more .chev-i { transition: none; } }
-
-/* Pair short checks; give MD5 and SHA-1 full width. */
-.rw-app .ck-fields-paired { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-s) var(--sp-m); margin-block-start: 3px; }
-.rw-app .ck-fields-paired .verification-row:nth-child(n + 3) { grid-column: 1 / -1; }
-@container cks-inner (max-width: 420px) { .rw-app .ck-fields-paired { grid-template-columns: 1fr; } }
 .rw-app .patch-meta-inline { display: flex; flex-direction: column; gap: var(--sp-s); margin-block-start: 2px; }
+/* Editing replaces the description and spans the card width. Kept beside the base
+   rule: from file-cards.css this layer would win on order, not specificity. */
+.rw-app .patch-desc-line.is-editing .patch-meta-inline { min-width: 0; margin-block-start: 0; width: 100%; }
+.rw-app .patch-meta-inline .input { width: 100%; box-sizing: border-box; }
 .rw-app .patch-meta-cols { display: flex; gap: var(--sp-s); }
 .rw-app .patch-meta-cols .patch-meta-field { flex: 1 1 0; min-width: 0; }
 /* Patch actions menu */
@@ -130,7 +123,7 @@
 .rw-app .patch-menu-item {
   appearance: none; display: flex; align-items: center; gap: var(--sp-s);
   width: 100%; padding: 6px 9px; border: 0; border-radius: 5px; background: none;
-  color: var(--ink-2); font: inherit; font-size: .82rem; font-weight: 500;
+  color: var(--ink-2); font: inherit; font-size: var(--dropdown-fs, .82rem); font-weight: 500;
   text-align: start; cursor: pointer; transition: color .15s, background .15s;
 }
 @media (hover: hover) {
@@ -147,11 +140,46 @@
 .rw-app .patch-menu-item.is-danger:active { color: var(--fault); }
 /* Match editable check rows to computed rows. */
 .rw-app .patch-checks-body .verification-row {
-  grid-template-columns: minmax(47px, max-content) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(var(--ck-label-w, 38px), max-content) minmax(0, 1fr) auto;
   align-items: center; gap: var(--sp-xs) var(--sp-s);
-  min-height: 26px; padding: 3px 9px; margin-inline: 0; width: 100%;
-  border-block: 1px solid var(--seam-soft);
+  /* Published so the resting value cell can cancel it and cover the row edge to edge,
+     the way a read-only row's button does. */
+  --vrow-pad-y: 3px;
+  min-height: 26px; padding: var(--vrow-pad-y) 9px; margin-inline: 0; width: 100%;
+  border-block: 1px solid var(--ck-seam);
 }
+/* A row at rest shows its value in a bare button, so it holds text exactly the way
+   a read-only row does and keeps that row's reserve. Editing swaps in the field,
+   whose own chrome eats into the value the way a mark's cell does: 8px of padding
+   and 2px of border, less the 4px the negative inline margin below hands back, plus
+   2px because a text field also reserves room for the caret past the last glyph -
+   without it the final hex digit of a SHA-1 scrolls out of view. */
+.rw-app .patch-checks-body .verification-row.is-editing { --ck-mark-reserve: 8px; }
+/* Here the mark shares the tail cell with the remove button instead of taking a
+   column of its own, so it widens the tail rather than the grid. */
+.rw-app .patch-checks-body .verification-row:has(.ck-mark) { --ck-mark-reserve: 17px; }
+.rw-app .patch-checks-body .verification-row.is-editing:has(.ck-mark) { --ck-mark-reserve: 25px; }
+/* The resting value cell: a button that carries no button, so the row reads as one
+   line of checksum text with a tap target over it. */
+.rw-app .patch-checks-body .verification-row .ck-open {
+  appearance: none; display: flex; align-items: center; min-width: 0; width: 100%;
+  /* Fill the row rather than set a floor of its own: the row already clears the WCAG
+     2.5.8 target minimum, and a min-height here would stack on the row's padding and
+     make every resting row taller than the read-only one it mirrors. Cancelling that
+     padding hands the target the row's full height, so it matches a read-only row's
+     and adjacent targets tile instead of leaving 2px gutters. */
+  align-self: stretch; min-height: 0; margin-block: calc(-1 * (var(--vrow-pad-y) + 1px));
+  margin-inline: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit;
+  text-align: start; cursor: pointer; border-radius: 5px;
+}
+.rw-app .patch-checks-body .verification-row .ck-open:focus-visible {
+  outline: 2px solid var(--thread); outline-offset: 1px;
+}
+.rw-app .patch-checks-body .verification-row .ck-open .ck-v {
+  margin: 0; min-width: 0; color: var(--weft); white-space: nowrap; overflow: hidden;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.rw-app .patch-checks-body .verification-row.bad .ck-open .ck-v { color: var(--fault); }
 .rw-app .patch-checks-body .verification-row + .verification-row { border-block-start-color: transparent; }
 .rw-app .patch-checks-body .verification-row .ofld-l {
   font-size: .74rem; font-weight: 400; color: var(--ink-4); letter-spacing: .02em;
@@ -164,9 +192,15 @@
   margin-inline: -4px 0; width: calc(100% + 4px);
   background: transparent; border: 1px solid transparent; border-radius: 5px;
   font-family: var(--mono); font-stretch: revert; letter-spacing: .03em;
-  font-size: clamp(.46rem, calc((100cqi - 85px) / 25.2), .97rem);
   color: var(--weft); text-transform: uppercase;
   transition: border-color .08s, background-color .08s;
+}
+/* Resting text and the field resolve one size from the same row metrics, so the row
+   keeps its height across the swap. The glyphs still change width - the resting value
+   rides Archivo's width axis like a read-only row while the field uses the true
+   monospace stack - and on iOS the field also jumps to the 16px floor. */
+.rw-app .patch-checks-body .verification-row :is(.ck-open .ck-v, .popt-input) {
+  font-size: clamp(.46rem, calc((var(--ck-v-span, 100cqi) - var(--ck-fit-reserve, 96px) - var(--ck-mark-reserve, 0px)) / var(--ck-v-divisor, 26)), .97rem);
 }
 .rw-app .patch-checks-body .verification-row .popt-input::placeholder { text-transform: none; }
 @media (hover: hover) {
@@ -204,6 +238,9 @@
 .rw-app .patch-checks-body .verification-row .ck-mark.bad { color: var(--fault); }
 .rw-app .ck-add {
   display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+  /* Its tallest child is a 12px glyph, so the label alone would sit under the
+     WCAG 2.5.8 floor once the select stops being held at 16px. */
+  min-height: 24px; box-sizing: border-box;
   /* Align the bordered control with row text, not the full-bleed frame. */
   margin-block-start: 7px; margin-inline-start: 9px; padding: 4px 10px 4px 8px;
   border: 1px dashed var(--seam-strong); border-radius: var(--r-s);
@@ -215,7 +252,7 @@
 .rw-app .ck-add-select {
   appearance: none; width: auto; min-width: 0; margin: 0; padding: 0; border: 0; background: none;
   color: inherit; cursor: pointer;
-  font-family: var(--font); font-size: .66rem; font-weight: 700;
+  font-family: var(--font); font-size: var(--dropdown-fs, .66rem); font-weight: 700;
   letter-spacing: .07em; text-transform: uppercase;
 }
 .rw-app .ck-add:focus-within {
@@ -234,7 +271,7 @@
 }
 .rw-app .ck-basis-select {
   margin-inline-start: var(--sp-s);
-  font-size: .66rem; font-weight: 600; letter-spacing: .02em; text-transform: none;
+  font-size: var(--dropdown-fs, .66rem); font-weight: 600; letter-spacing: .02em; text-transform: none;
   color: var(--ink-2);
 }
 .rw-app .ckrows .patch-off-note { margin-block-start: 7px; margin-inline: 9px; }
@@ -247,9 +284,6 @@
 }
 .rw-app .bundle-rom-expectation .card .card-name { color: var(--ink-2); }
 .rw-app .bundle-rom-expectation .card .card-meta { color: var(--thread-text); }
-/* Keep boxed verification rows inset. */
-.rw-app .verification-list .ck { margin-inline: 0; width: 100%; }
-.rw-app .verification-list .ck + .ck { margin-block-start: 0; }
 .rw-app .verification-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: var(--sp-xs); min-width: 0; }
 .rw-app .verification-row .ofld-l { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; line-height: 1.05; text-transform: lowercase; }
 /* Use fixed-width glyphs so a 40-character SHA-1 fits predictably. */
@@ -258,13 +292,11 @@
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: .68rem; font-stretch: 100%; letter-spacing: -.02em;
 }
-.rw-app .built-in { display: block; margin: 2px 0 0; color: var(--verified); font-size: .5rem; letter-spacing: .03em; white-space: nowrap; text-transform: uppercase; }
 .rw-app .popt-input[readonly] { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 32%, var(--seam)); background: color-mix(in oklab, var(--verified) 7%, var(--well)); cursor: text; }
-/* Stack based on drawer width, not viewport width. */
-@container cks-inner (max-width: 730px) { .rw-app .verification-pair { grid-template-columns: 1fr; } }
 .rw-app .ofld { display: flex; flex-direction: column; gap: var(--sp-xs); min-width: 0; }
 .rw-app .ofld-l { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
-.rw-app .ofld .input, .rw-app .ofld .select { height: 32px; font-size: .82rem; }
+.rw-app .ofld .input { height: 32px; font-size: .82rem; }
+.rw-app .ofld .select { height: 32px; font-size: var(--dropdown-fs, .82rem); }
 .rw-app .optschecks { display: flex; flex-direction: column; gap: var(--sp-s); }
 .rw-app .optschecks .popt {
   flex-direction: row-reverse; justify-content: space-between;

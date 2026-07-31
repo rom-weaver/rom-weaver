@@ -156,6 +156,7 @@ const getManagedOpfsFileHandle = async (
 const removeManagedOpfsPath = async (
   filePath: string,
   navigatorObject?: Pick<Navigator, "storage"> | null,
+  options: { ignoreErrors?: boolean } = {},
 ): Promise<void> => {
   const directory = await getManagedOpfsDirectory(navigatorObject);
   if (!directory) return;
@@ -169,8 +170,8 @@ const removeManagedOpfsPath = async (
   try {
     for (const part of parts) parentDirectory = await parentDirectory.getDirectoryHandle(part, { create: false });
     await parentDirectory.removeEntry(fileName, { recursive: true });
-  } catch {
-    /* ignore cleanup errors */
+  } catch (error) {
+    if (options.ignoreErrors === false && !isNotFoundError(error)) throw error;
   }
 };
 

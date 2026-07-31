@@ -1,0 +1,510 @@
+// @vitest-environment happy-dom
+import { fireEvent, render, screen } from "@testing-library/react";
+import { DOC_ROUTES } from "virtual:rom-weaver-docs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createDocRoute } from "../../src/webapp/docs-content.mjs";
+import { DocsPage } from "../../src/webapp/docs-page.tsx";
+import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
+
+const BUNDLE_GUIDE_ANCHORS = [
+  "what-does-a-bundle-do",
+  "practice-with-the-guided-bundle-tour",
+  "choose-what-to-include",
+  "build-the-patch-recipe",
+  "turn-on-bundle-output-and-download-it",
+  "test-the-finished-download",
+  "publish-a-useful-release",
+  "open-a-hosted-bundle-in-weave",
+];
+
+const routeFor = (slug: string) => {
+  const route = DOC_ROUTES.find((entry) => entry.slug === slug);
+  if (!route) throw new Error(`no docs route for ${slug}`);
+  return route;
+};
+
+const setSeoMetadata = (title: string, description: string, canonicalUrl: string) => {
+  document.title = title;
+  document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute("content", description);
+  document.querySelector<HTMLMetaElement>('meta[property="og:type"]')?.setAttribute("content", "website");
+  document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute("href", canonicalUrl);
+};
+
+describe("DocsPage", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    document.head.innerHTML = `
+      <meta name="description" content="">
+      <meta property="og:title" content="">
+      <meta property="og:description" content="">
+      <meta property="og:type" content="website">
+      <meta property="og:url" content="">
+      <meta name="twitter:title" content="">
+      <meta name="twitter:description" content="">
+      <link rel="canonical" href="">
+    `;
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("restores docs metadata when its kept-alive panel becomes active again", () => {
+    const { rerender } = render(<DocsPage active slug="docs" />);
+    const docsTitle = document.title;
+    const docsDescription = document.querySelector('meta[name="description"]')?.getAttribute("content");
+    expect(docsTitle).toMatch(new RegExp(`^${routeFor("docs").title} \\| rom-weaver`));
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://rom-weaver.com/docs");
+
+    rerender(<DocsPage active={false} slug="docs" />);
+    setSeoMetadata(
+      "rom-weaver — Create ROM patches online",
+      "Create ROM patches locally in your browser.",
+      "https://rom-weaver.com/create",
+    );
+    rerender(<DocsPage active slug="docs" />);
+
+    expect(document.title).toBe(docsTitle);
+    expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toBe(docsDescription);
+    expect(document.querySelector('meta[property="og:type"]')?.getAttribute("content")).toBe("article");
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://rom-weaver.com/docs");
+  });
+
+  it("opens guided samples inside the running webapp", () => {
+    const onGuideIntent = vi.fn();
+    const onStartGuide = vi.fn(() => true);
+    render(<DocsPage active onGuideIntent={onGuideIntent} onStartGuide={onStartGuide} slug="docs" />);
+
+    const guidedApply = screen.getByRole("link", { name: "Guided Apply" });
+    fireEvent.focus(guidedApply);
+    fireEvent.click(guidedApply);
+
+    expect(onGuideIntent).toHaveBeenCalledWith("apply");
+    expect(onStartGuide).toHaveBeenCalledWith("apply");
+    expect(guidedApply.getAttribute("href")).toBe("/apply?guide=apply");
+  });
+
+  it("builds the section rail from the guide's own headings and drops the generated outline", () => {
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    const rail = screen.getByRole("navigation", { name: "On this page" });
+    const railLinks = [...rail.querySelectorAll("a")];
+    expect(railLinks.length).toBeGreaterThan(0);
+    for (const link of railLinks) {
+      const id = link.getAttribute("href")?.replace("/docs/apply-rom-patches#", "") ?? "";
+      expect(document.querySelector(`h2[id="${id}"]`)).toBeTruthy();
+    }
+    // doctoc's in-file table of contents is for GitHub; the rail replaces it here.
+    expect(screen.queryByRole("heading", { name: "Table of contents" })).toBeNull();
+  });
+
+  it("marks the final section current when the document reaches its scroll limit", async () => {
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(1_000);
+    vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(1_600);
+    render(<DocsPage active slug="docs/create-rom-patches" />);
+
+    const links = [...screen.getByRole("navigation", { name: "On this page" }).querySelectorAll("a")];
+    await vi.waitFor(() => expect(links.at(-1)?.getAttribute("aria-current")).toBe("true"));
+  });
+
+  it("rewrites guide links to routes, including ones carrying an anchor", () => {
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    const article = document.querySelector(".docs-article");
+    const unrewritten = [...(article?.querySelectorAll("a[href]") ?? [])]
+      .map((link) => link.getAttribute("href") ?? "")
+      .filter((href) => !/^https?:/.test(href) && href.includes(".md"));
+    expect(unrewritten).toEqual([]);
+  });
+
+  it("keeps links between published guide sections pointed at real anchors", () => {
+    const routes = new Map(DOC_ROUTES.map((route) => [`/${route.slug}`, route]));
+    for (const route of DOC_ROUTES) {
+      const source = document.createElement("template");
+      source.innerHTML = route.html;
+      for (const link of source.content.querySelectorAll<HTMLAnchorElement>("a[href*='#']")) {
+        const targetUrl = new URL(link.getAttribute("href") ?? "", SITE_ORIGIN);
+        const targetRoute = routes.get(targetUrl.pathname);
+        if (!(targetRoute && targetUrl.hash)) continue;
+
+        const target = document.createElement("template");
+        target.innerHTML = targetRoute.html;
+        const ids = [...target.content.querySelectorAll<HTMLElement>("[id]")].map((element) => element.id);
+        expect(ids, `${route.slug} links to missing ${targetUrl.pathname}${targetUrl.hash}`).toContain(
+          decodeURIComponent(targetUrl.hash.slice(1)),
+        );
+      }
+    }
+  });
+
+  // Guides name the production origin so the Markdown reads on GitHub. A page
+  // served from beta, nightly, or a PR preview must keep the reader on that
+  // deployment, so every in-app link has to come out root-relative.
+  it.each(DOC_ROUTES.map((route) => route.slug))("links within the deployment serving %s", (slug) => {
+    render(<DocsPage active slug={slug} />);
+
+    const article = document.querySelector(".docs-article");
+    const offsite = [...(article?.querySelectorAll("a[href]") ?? [])]
+      .map((link) => link.getAttribute("href") ?? "")
+      .filter((href) => URL.canParse(href) && new URL(href).origin === SITE_ORIGIN);
+    expect(offsite).toEqual([]);
+  });
+
+  it("renders headings, links, and code through parser hooks", () => {
+    const route = createDocRoute(
+      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## A &amp; \`B\`
+
+[Formats](patch-formats.md#ips) and [this section](#a-and-b).
+
+## A &amp; \`B\`
+
+\`\`\`sh
+echo hi
+\`\`\`
+`,
+    );
+
+    expect(route.sections).toEqual([
+      { id: "a-and-b", label: "A and B" },
+      { id: "a-and-b-1", label: "A and B" },
+    ]);
+    expect(route.html).toContain('href="/docs/patch-formats#ips"');
+    expect(route.html).toContain('href="/docs/fixture#a-and-b"');
+    expect(route.html).toContain('<pre tabindex="0"><code class="language-sh">');
+    expect(route.html).toContain(
+      '<h2 id="a-and-b"><span aria-hidden="true" class="docs-section-index">01</span><span class="docs-section-title">A &amp; <code>B</code></span>',
+    );
+    expect(route.html).toContain(
+      '<h2 id="a-and-b-1"><span aria-hidden="true" class="docs-section-index">02</span><span class="docs-section-title">A &amp; <code>B</code></span>',
+    );
+  });
+
+  it("drops raw HTML from headings before rendering them", () => {
+    const route = createDocRoute(
+      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## **Safe <script>alert(1)</script>**
+`,
+    );
+
+    expect(route.sections).toEqual([{ id: "safe-alert1", label: "Safe alert(1)" }]);
+    expect(route.html).toContain("<strong>Safe alert(1)</strong>");
+    expect(route.html).not.toContain("<script>");
+  });
+
+  // Text inside a raw block is handed back verbatim on the assumption that the
+  // tags around it survive. They do not in a heading, so it has to be escaped.
+  it("escapes heading text that a dropped raw block would pass through", () => {
+    const route = createDocRoute(
+      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## <script>1 & 2 "3"</script>
+`,
+    );
+
+    expect(route.sections).toEqual([{ id: "1-2-3", label: '1 & 2 "3"' }]);
+    expect(route.html).toContain('<span class="docs-section-title">1 &amp; 2 &quot;3&quot;</span>');
+  });
+
+  // Section ids are the anchor URLs the published guides link to and that
+  // readers bookmark, so a change to how headings are parsed must not move them.
+  it.each(DOC_ROUTES.map((route) => route.slug))("derives usable section anchors for %s", (slug) => {
+    const { sections } = routeFor(slug);
+    const ids = sections.map((section) => section.id);
+
+    expect(ids.filter((id) => !/^[\p{Letter}\p{Number}][\p{Letter}\p{Number}-]*$/u.test(id))).toEqual([]);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(sections.filter((section) => !section.label.trim())).toEqual([]);
+  });
+
+  it("keeps the bundle guide's published anchors stable", () => {
+    expect(routeFor("docs/create-bundles").sections.map((section) => section.id)).toEqual(BUNDLE_GUIDE_ANCHORS);
+  });
+
+  it("publishes the browser bundle guide as one numbered topic", () => {
+    render(<DocsPage active slug="docs/create-bundles" />);
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Create and share a patch bundle in the browser" }),
+    ).toBeTruthy();
+    expect(document.querySelectorAll(".docs-article > h2 .docs-section-index")).toHaveLength(
+      routeFor("docs/create-bundles").sections.length,
+    );
+    expect(document.querySelectorAll(".docs-article details.docs-disclosure")).toHaveLength(0);
+  });
+
+  it.each([
+    ["docs/apply-rom-patches", 4],
+    ["docs/create-rom-patches", 4],
+    ["docs/create-bundles", 2],
+  ])("reserves responsive screenshot space and keeps WebP fallbacks on %s", (slug, expectedPictures) => {
+    render(<DocsPage active slug={slug} />);
+
+    const pictures = [...document.querySelectorAll<HTMLPictureElement>("picture[data-docs-screenshot-theme]")];
+    expect(pictures).toHaveLength(expectedPictures);
+    for (const picture of pictures) {
+      const image = picture.querySelector("img");
+      const sources = [...picture.querySelectorAll("source")];
+      expect(image?.getAttribute("src")).toMatch(/\.webp$/);
+      expect(image?.getAttribute("loading")).toBeNull();
+      expect(image?.getAttribute("decoding")).toBeNull();
+      expect(Number(image?.getAttribute("width"))).toBeGreaterThan(0);
+      expect(Number(image?.getAttribute("height"))).toBeGreaterThan(0);
+      expect(sources.map((source) => source.getAttribute("type"))).toContain("image/avif");
+      expect(sources.map((source) => source.getAttribute("type"))).toContain("image/webp");
+      for (const source of sources) {
+        expect(Number(source.getAttribute("width"))).toBeGreaterThan(0);
+        expect(Number(source.getAttribute("height"))).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("resolves hosted documents, repository-only documents, and published images from their source file", () => {
+    const route = createDocRoute(
+      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## Resources
+
+[Install](../hosting/cli.md#install)
+[Maintainer notes](../development/mobile-safari-verification.md)
+![Sample](../../packages/rom-weaver-webapp/design/first-sample-modified-world.webp)
+`,
+    );
+
+    expect(route.html).toContain('href="/docs/cli#install"');
+    expect(route.html).toContain(
+      'href="https://github.com/rom-weaver/rom-weaver/blob/main/docs/development/mobile-safari-verification.md"',
+    );
+    expect(route.html).toContain('src="/docs/screenshots/first-sample-modified-world.webp"');
+  });
+
+  it.each([
+    ["docs/notices", "Notices"],
+    ["docs/privacy", "Privacy"],
+  ])("renders the %s page in the shared docs route", (slug, title) => {
+    render(<DocsPage active slug={slug} />);
+
+    expect(screen.getByRole("heading", { level: 1, name: title })).toBeTruthy();
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe(
+      `https://rom-weaver.com/${slug}`,
+    );
+  });
+
+  it("shelves every route and keeps disclosure choices between pages", async () => {
+    const { unmount } = render(<DocsPage active slug="docs/cli" />);
+
+    const nav = document.querySelector(".docs-rails .guide-nav");
+    expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual([
+      "Browser usage",
+      "Install & hosting",
+      "Development",
+      "Legal",
+    ]);
+    // Every published route reaches the nav, so a new guide can never be
+    // stranded off the shelves.
+    expect(nav?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+    expect(nav?.querySelector('a[aria-current="page"]')?.textContent).toBe("CLI usage");
+    const shelves = [...(nav?.querySelectorAll<HTMLDetailsElement>(".guide-shelf") ?? [])];
+    expect(shelves.map((shelf) => shelf.open)).toEqual([true, false, false, false]);
+    fireEvent.click(shelves[2]?.querySelector("summary") as HTMLElement);
+    expect(shelves[2]?.open).toBe(true);
+
+    fireEvent.click(document.querySelector(".trail-crumb") as HTMLElement);
+    const mobileShelves = [
+      ...(document.querySelector(".rw-modal.guide-sheet")?.querySelectorAll<HTMLDetailsElement>(".guide-shelf") ?? []),
+    ];
+    expect(mobileShelves.map((shelf) => shelf.open)).toEqual([true, false, true, false]);
+
+    unmount();
+    render(<DocsPage active slug="docs/privacy" />);
+    await vi.waitFor(() =>
+      expect(
+        [...document.querySelectorAll<HTMLDetailsElement>(".docs-rails .guide-shelf")].map((shelf) => shelf.open),
+      ).toEqual([true, false, true, false]),
+    );
+  });
+
+  it("gives each trail crumb the list its own label promised", () => {
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    const sections = routeFor("docs/apply-rom-patches").sections;
+    // One warp tick per section: the gauge is the shape of the document.
+    expect(document.querySelectorAll(".warp-gauge i")).toHaveLength(sections.length);
+
+    // The section crumb opens this guide's outline, and nothing else.
+    fireEvent.click(screen.getByRole("button", { name: /Open this guide's outline/ }));
+    const outlineSheet = document.querySelector(".rw-modal.guide-sheet");
+    expect(outlineSheet?.querySelectorAll(".warp-rail-list a")).toHaveLength(sections.length);
+    expect(outlineSheet?.querySelector(".guide-nav-list")).toBeNull();
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    // `Docs` opens every guide, and nothing else - tapping it and landing on this
+    // guide's outline would break the promise the label made.
+    fireEvent.click(screen.getByRole("button", { name: "Docs" }));
+    const pagesSheet = document.querySelector(".rw-modal.guide-sheet");
+    expect(pagesSheet?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+    expect(pagesSheet?.querySelector(".warp-rail-list")).toBeNull();
+  });
+
+  it("does not add a second stop after a question in the mobile outline label", () => {
+    render(<DocsPage active slug="docs/fix-checksum-errors" />);
+
+    const label = document.querySelector(".trail-crumb.is-section")?.getAttribute("aria-label");
+    expect(label).toContain("? Open this guide's outline.");
+    expect(label).not.toContain("?.");
+  });
+
+  it("sends the reader back to the top of a guide from the end of it", () => {
+    const scrollTo = vi.fn();
+    vi.stubGlobal("scrollTo", scrollTo);
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to top" }));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+    vi.unstubAllGlobals();
+  });
+
+  it("pitches the guided samples on the hub only", () => {
+    // Every guide closing on the same three buttons made the offer read as
+    // furniture, and every guide already ends on a link its own author chose.
+    const { unmount } = render(<DocsPage active slug="docs" />);
+    expect(document.querySelector(".docs-cta")).toBeTruthy();
+
+    unmount();
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+    expect(document.querySelector(".docs-cta")).toBeNull();
+  });
+
+  it("lists browser, CLI, installation, and self-hosting paths, and previews the FAQ", () => {
+    render(<DocsPage active slug="docs" />);
+
+    const index = document.querySelector(".docs-index");
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain("Browser usage");
+    expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("CLI usage");
+    expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("Install");
+    expect(index?.querySelector('a[href="/docs/self-hosting"]')?.textContent).toContain("Self-hosting");
+    expect(screen.getByRole("link", { name: "Read the full FAQ" }).getAttribute("href")).toBe("/docs/faq");
+    expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();
+  });
+
+  it.each(["docs", "docs/apply-rom-patches"])("ends %s with nothing but the way back up", (slug) => {
+    // Every guide's own last paragraph already links onward, in prose, to whatever
+    // follows from what was just read. A generated previous/next pair underneath
+    // that repeated it - and on the first guide it repeated the very link the
+    // paragraph above had just made.
+    render(<DocsPage active slug={slug} />);
+
+    const onward = document.querySelector(".docs-onward");
+    expect(onward?.children).toHaveLength(1);
+    expect(onward?.querySelector(".docs-to-top")).toBeTruthy();
+  });
+
+  it("tracks the reading position as the reader scrolls", () => {
+    // happy-dom lays nothing out, so the geometry the hook reads is supplied
+    // here: headings every 500px down a 5000px article.
+    const SPACING = 500;
+    let scrollTop = 0;
+    const sections = routeFor("docs/apply-rom-patches").sections;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollTop);
+    // Stubbed by id, which is how the hook finds them.
+    const layOutHeadings = () => {
+      sections.forEach((section, index) => {
+        const heading = document.getElementById(section.id);
+        if (heading)
+          heading.getBoundingClientRect = () => ({ bottom: 0, top: (index + 1) * SPACING - scrollTop }) as DOMRect;
+      });
+      const article = document.querySelector(".docs-article");
+      if (article) article.getBoundingClientRect = () => ({ bottom: 5000 - scrollTop, top: 0 }) as DOMRect;
+    };
+    vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(5400);
+    window.innerHeight = 800;
+    // The hook reads inside an animation frame; run them inline so a scroll is
+    // observable in the same tick. The handle must be 0: the callback runs
+    // before the hook stores it, so a truthy one would latch its coalescing
+    // guard and swallow every later scroll.
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 0;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+    layOutHeadings();
+
+    const readAt = (scrollY: number) => {
+      scrollTop = scrollY;
+      layOutHeadings();
+      // Resize re-measures before reading; scroll alone reuses the cached
+      // geometry, which was taken before these rects existed.
+      fireEvent(window, new Event("resize"));
+      return {
+        index: document.querySelector(".trail-index")?.textContent,
+        label: document.querySelector(".trail-label")?.textContent,
+        weft: (document.querySelector(".warp-gauge-weft") as HTMLElement | null)?.style.width,
+      };
+    };
+
+    // Reading line is 108px, so the second heading (1000px) becomes current
+    // once the page has scrolled just past 892.
+    expect(readAt(0).index).toBe("01");
+    expect(readAt(950).index).toBe("02");
+    expect(readAt(950).label).toBe(sections[1]?.label);
+    // 2000 puts the fourth heading exactly on the line and leaves the fifth
+    // 500px below it.
+    expect(readAt(2000).index).toBe("04");
+    // The last section stays reachable at the scroll limit even though its
+    // heading never crosses the reading line.
+    const atLimit = readAt(4600);
+    expect(atLimit.index).toBe(String(sections.length).padStart(2, "0"));
+    expect(atLimit.weft).toBe("100%");
+  });
+
+  it("indexes every other page on the hub, and no page on a guide", () => {
+    const { unmount } = render(<DocsPage active slug="docs" />);
+
+    const index = document.querySelector(".docs-index");
+    const shelves = [...(index?.querySelectorAll<HTMLDetailsElement>(".docs-index-shelf") ?? [])];
+    expect(shelves.map((shelf) => shelf.querySelector(".docs-index-title")?.textContent)).toEqual([
+      "Browser usage",
+      "Install & hosting",
+      "Development",
+      "Legal",
+    ]);
+    expect(shelves.map((shelf) => shelf.open)).toEqual([true, false, false, false]);
+    fireEvent.click(shelves[1]?.querySelector("summary") as HTMLElement);
+    expect(shelves[1]?.open).toBe(true);
+    // Everything but the hub itself, so the landing page never links to itself.
+    expect(index?.querySelectorAll("a")).toHaveLength(DOC_ROUTES.length - 1);
+    // Every card carries its own page's opening sentence, matched by the page it
+    // links to rather than by position - the index order is not this test's point,
+    // and asserting on "the first card" let a page ship someone else's blurb.
+    for (const card of index?.querySelectorAll("a") ?? []) {
+      const slug = card.getAttribute("href")?.slice(1) ?? "";
+      expect(card.querySelector(".docs-index-blurb")?.textContent).toBe(routeFor(slug).description);
+    }
+
+    unmount();
+    render(<DocsPage active slug="docs/cli" />);
+    expect(document.querySelector(".docs-index")).toBeNull();
+  });
+
+  it("gives the index and the guide it points at their own descriptions", () => {
+    // Both pages opened on the same sentence at first, which would have shipped
+    // one meta description on two routes.
+    const descriptions = DOC_ROUTES.map((route) => route.description);
+    expect(new Set(descriptions).size).toBe(descriptions.length);
+  });
+});

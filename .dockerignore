@@ -10,15 +10,28 @@ prototype
 third_party
 *.log
 
-# Not build inputs. These change often (docs, CI and browser-test commits), and
-# anything left here invalidates the `COPY . .` layer and with it the whole
-# wasm+cargo build. Root *.md stays: several are read at build time (README as
-# the workspace `readme`, CHANGELOG by the webapp version script's fallbacks).
+# Not build inputs. These change often (CI, most docs, and browser-test
+# commits), and anything left here invalidates the `COPY . .` layer and with it
+# the whole wasm+cargo build. Published Markdown is an exception: Vite renders
+# it into the webapp. Root *.md stays: several are read at build time
+# (README as the workspace `readme`, CHANGELOG by the webapp version script's
+# fallbacks).
 #
 # This is the only ignore file either image gets. Both builds use the repo root
 # as context, and BuildKit reads `<context>/.dockerignore` or a sibling
 # `<dockerfile>.dockerignore` - never a `.dockerignore` that merely lives beside
 # the image's other sources.
 .github
-docs
+# The webapp build reads every published guide, so these are build inputs. Kept
+# per shelf rather than per file: a new guide is published by adding it to its
+# folder, and listing files here would be a second place to forget.
+docs/*
+!docs/usage
+!docs/usage/**
+!docs/hosting
+!docs/hosting/**
+!docs/development
+!docs/development/**
+!docs/legal
+!docs/legal/**
 packages/rom-weaver-webapp/tests

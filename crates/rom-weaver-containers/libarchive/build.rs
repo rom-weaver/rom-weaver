@@ -36,7 +36,7 @@ const LZMA_SDK_THREADED_SOURCES: &[&str] = &["LzFindMt.c", "MtCoder.c", "MtDec.c
 // arm64 is GNU-as syntax and clang assembles it directly. x86-64 is MASM syntax
 // and needs a MASM-compatible assembler at build time; `lzma_sdk_x86_asm_object`
 // probes for one and the build silently falls back to the C loop when there is
-// none. See docs/vendor-code.md for the per-platform matrix.
+// none. See docs/development/vendor-code.md for the per-platform matrix.
 const VENDORED_LZMA_SDK_ASM: &str = "lzma-sdk/vendor/Asm";
 const LZMA_SDK_ARM64_ASM_SOURCES: &[&str] = &["arm64/LzmaDecOpt.S"];
 const LZMA_SDK_X86_ASM_SOURCE: &str = "x86/LzmaDecOpt.asm";
@@ -328,7 +328,7 @@ fn lzma_sdk_x86_asm_object(asm_dir: &Path, out_dir: &Path) -> Option<PathBuf> {
             println!(
                 "cargo:warning=lzma-sdk: no MASM-compatible assembler emits this target's \
 object format, so 7z decode uses the portable C loop (slower than 7zz). See \
-docs/vendor-code.md."
+docs/development/vendor-code.md."
             );
             return None;
         }

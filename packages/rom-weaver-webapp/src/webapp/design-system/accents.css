@@ -59,6 +59,34 @@
 :root[data-accent="plum"][data-theme="dark"] { --thread-text: #e58ac0; }
 :root[data-accent="plum"][data-theme="light"] { --thread-text: #a3266f; }
 
+/* ── accent switch dissolve ──
+   Registering the surface dyes as <color> lets them interpolate; the
+   transition sits on :root so every var(--thread) consumer crossfades in one
+   pass instead of snapping. The text tokens (--thread-text, --thread-ink) are
+   deliberately left out: lerping text colour drags it through muddy mid-hues,
+   so text snaps to the new dye instead. The `accent-anim` class is applied by
+   accent.ts only around a real accent change (never on boot - index.html
+   resolves data-accent before first paint) so theme flips and initial load
+   stay instant. Initial values are the madder baseline from tokens.css. */
+@property --thread { syntax: "<color>"; inherits: true; initial-value: #d9690f; }
+@property --thread-hi { syntax: "<color>"; inherits: true; initial-value: #fccb90; }
+
+:root.accent-anim {
+  transition:
+    --thread .45s var(--ease),
+    --thread-hi .45s var(--ease);
+}
+
+/* The mark is an <img> whose src swaps to the new dye in one frame; a brief
+   fade-up masks the hard swap so it reads as part of the same dissolve. */
+:root.accent-anim .brand-mark { animation: accent-redye .45s var(--ease); }
+@keyframes accent-redye { from { opacity: .3; } }
+
+@media (prefers-reduced-motion: reduce) {
+  :root.accent-anim { transition: none; }
+  :root.accent-anim .brand-mark { animation: none; }
+}
+
 /* ── channel badge ──
    Names the build (nightly / beta / pr-123 / dev). Production has no badge. */
 .rw-app .channel-badge {

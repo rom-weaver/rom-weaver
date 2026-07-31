@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,6 +9,17 @@ import {
   createFirstSampleAssets,
   writeFirstSampleAssets,
 } from "../packages/rom-weaver-webapp/scripts/first-sample-assets.mjs";
+
+// The guides and the CLI guide walk readers through weaving `first-weave.zip`
+// and print this digest as the proof their install works. It is only a
+// screenshot of whatever the generator happens to emit, so without this test a
+// change to the sample ROMs silently publishes a wrong value on three pages.
+const DOCUMENTED_WEAVE_SHA256 = "e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e";
+const DOCS_PUBLISHING_THE_DIGEST = [
+  "docs/hosting/cli.md",
+  "docs/usage/get-started.md",
+  "docs/usage/apply-rom-patches.md",
+];
 
 const readZip = (archive) => {
   const entries = new Map();
@@ -86,4 +98,20 @@ test("generated first-create and first-weave archives contain a runnable NES pat
     fs.readFileSync(path.join(outputDirectory, "modified-world.nes")),
     assets.modifiedRom,
   );
+});
+
+test("the sample digest the guides publish still matches the generated sample", () => {
+  const assets = createFirstSampleAssets();
+  // What `rom-weaver weave --input first-weave.zip --no-compress` writes: the
+  // bundle's two IPS patches applied in order, which the round-trip test above
+  // pins to `wovenRom`.
+  const digest = createHash("sha256").update(assets.wovenRom).digest("hex");
+
+  assert.equal(digest, DOCUMENTED_WEAVE_SHA256);
+
+  const repositoryRoot = path.resolve(import.meta.dirname, "..");
+  for (const file of DOCS_PUBLISHING_THE_DIGEST) {
+    const markdown = fs.readFileSync(path.join(repositoryRoot, file), "utf8");
+    assert.ok(markdown.includes(digest), `${file} no longer publishes ${digest}`);
+  }
 });

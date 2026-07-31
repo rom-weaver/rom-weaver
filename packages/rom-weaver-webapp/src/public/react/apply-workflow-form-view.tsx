@@ -20,7 +20,12 @@ import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
 import { OutputField } from "./components/ds/output-card.tsx";
-import { SampleTutorial, SampleTutorialStart, type SampleTutorialStep } from "./components/ds/sample-tutorial.tsx";
+import {
+  SampleTutorial,
+  SampleTutorialStart,
+  type SampleTutorialStep,
+  useGuidedSampleStart,
+} from "./components/ds/sample-tutorial.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
@@ -141,13 +146,15 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
 
 const ApplyDropAfter = ({
   downloadHref,
-  onLoadSample,
+  onLoadApplySample,
+  onLoadBundleSample,
   pendingDrops,
   sampleError,
   sampleLoading,
   workflowEmpty,
 }: {
-  onLoadSample: () => void;
+  onLoadApplySample: () => void;
+  onLoadBundleSample: () => void;
   downloadHref: string;
   pendingDrops: PendingDrop[];
   sampleError: string;
@@ -169,12 +176,14 @@ const ApplyDropAfter = ({
   return (
     <SampleTutorialStart
       downloadHref={downloadHref}
-      downloadLabel="Download the bundle"
+      downloadLabel="Download a test bundle"
       downloadName={FIRST_WEAVE_ASSET}
       error={sampleError}
       label="Start guided Apply"
       loading={sampleLoading}
-      onStart={onLoadSample}
+      onStart={onLoadApplySample}
+      onSecondaryStart={onLoadBundleSample}
+      secondaryLabel="Create a sharable bundle"
     />
   );
 };
@@ -192,17 +201,17 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [
-      ["reorder", "Reorder"],
+      ["reorder", "Change patch order"],
       ["toggle", "Toggle On / Off"],
       ["header", "Header options"],
       ["checks", "Checks"],
-      ["menu", "Menu: edit · replace · remove"],
+      ["menu", "Menu: edit metadata · replace · remove"],
     ],
-    body: "Both IPS patches run in order: HELLO → MODIFIED, then WORLD → ROM. Use the numbered handles to reorder, the On/Off toggles to skip a patch, scissors for header handling, Checks for checksums, and the 3-dot menu to edit, replace, or remove.",
+    body: "Both IPS patches run in order: HELLO → MODIFIED, then WORLD → ROM. Use the numbered handles to change the order, the On/Off toggles to skip a patch, scissors for header handling, Checks for checksums, and the 3-dot menu to edit patch metadata, replace a file, or remove it.",
     openDrawers: true,
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
-    title: "Build the two-patch stack",
+    title: "Build the patch stack",
   },
   {
     actions: [
@@ -225,6 +234,50 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     placement: "top",
     target: "#rom-weaver-row-output-file-name",
     title: "Apply both patches",
+  },
+];
+
+const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+  {
+    actions: [
+      ["checks", "Checks"],
+      ["remove", "Remove"],
+    ],
+    body: "A bundle is a recipe, so it starts with the ROM the patches expect. The sample uses a tiny legal practice ROM.",
+    openDrawers: true,
+    target: "#rom-weaver-row-file-rom",
+    title: "Check the starting ROM",
+  },
+  {
+    actions: [
+      ["reorder", "Change patch order"],
+      ["toggle", "Required or optional"],
+      ["menu", "Patch details"],
+    ],
+    body: "The bundle keeps these patches in this order. Use Patch details to edit each patch's label, version, author, and description, then choose whether a player must apply it or may skip it.",
+    openMenu: true,
+    target: "#rom-weaver-row-patch-stack",
+    title: "Describe the patch recipe",
+  },
+  {
+    actions: [
+      ["options", "Options"],
+      ["package", "Bundle + patches (.zip)"],
+    ],
+    body: "Output Options now has Bundle + patches (.zip) selected. This shares the patches and recipe without putting a copyrighted ROM in the download.",
+    openDrawers: true,
+    placement: "top",
+    target: "#rom-weaver-row-output-file-name",
+    title: "Choose a safe bundle",
+  },
+  {
+    actions: [["package", "Create ZIP Bundle"]],
+    body: "Press Create ZIP Bundle. After rom-weaver checks the recipe, the same button becomes Download ZIP Bundle.",
+    cta: "#rom-weaver-button-export-bundle",
+    openDrawers: true,
+    placement: "top",
+    target: "#rom-weaver-row-output-file-name",
+    title: "Build and download",
   },
 ];
 
@@ -1340,7 +1393,7 @@ function ApplyWorkflowFormView({
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
-  const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
+  const [sampleTutorial, setSampleTutorial] = useState<"apply" | "bundle" | null>(null);
   const loadFirstWeave = async () => {
     setSampleLoading(true);
     setSampleError("");
@@ -1350,12 +1403,29 @@ function ApplyWorkflowFormView({
       const blob = await response.blob();
       handleUnifiedDrop([new File([blob], "first-weave.zip", { type: "application/zip" })]);
     } catch {
-      setSampleTutorialActive(false);
+      setSampleTutorial(null);
       setSampleError("Could not load the sample. Try again.");
     } finally {
       setSampleLoading(false);
     }
   };
+  useGuidedSampleStart(
+    "apply",
+    () => {
+      setSampleTutorial("apply");
+      void loadFirstWeave();
+    },
+    () => setSampleTutorial(null),
+  );
+  useGuidedSampleStart(
+    "bundle",
+    () => {
+      bundleTools?.setBundlePackage("zip:patches");
+      setSampleTutorial("bundle");
+      void loadFirstWeave();
+    },
+    () => setSampleTutorial(null),
+  );
   // Start the hero morph at the gesture, not after a large input finishes enough
   // staging to publish its first row. This is presentation-only; Rust ingestion
   // continues on its existing schedule behind the transition.
@@ -1433,8 +1503,13 @@ function ApplyWorkflowFormView({
         afterDropZone={
           <ApplyDropAfter
             downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
-            onLoadSample={() => {
-              setSampleTutorialActive(true);
+            onLoadApplySample={() => {
+              setSampleTutorial("apply");
+              void loadFirstWeave();
+            }}
+            onLoadBundleSample={() => {
+              bundleTools?.setBundlePackage("zip:patches");
+              setSampleTutorial("bundle");
               void loadFirstWeave();
             }}
             pendingDrops={pendingDrops}
@@ -1625,12 +1700,12 @@ function ApplyWorkflowFormView({
         </>
       )}
 
-      {sampleTutorialActive ? (
+      {sampleTutorial ? (
         <SampleTutorial
           loadingBody="RomWeaver is unpacking one tiny ROM and two patches, then checking what each file is."
-          onClose={() => setSampleTutorialActive(false)}
+          onClose={() => setSampleTutorial(null)}
           ready={sampleTutorialReady}
-          steps={APPLY_SAMPLE_TUTORIAL_STEPS}
+          steps={sampleTutorial === "bundle" ? BUNDLE_SAMPLE_TUTORIAL_STEPS : APPLY_SAMPLE_TUTORIAL_STEPS}
         />
       ) : null}
       <SharedArchiveDialog controller={controllers.dialog} />

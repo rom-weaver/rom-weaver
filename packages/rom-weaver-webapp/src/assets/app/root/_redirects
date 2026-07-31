@@ -3,4 +3,26 @@
 # www is a separate origin, so serving the app there would give it its own
 # OPFS store and service worker - a user landing on www would see different
 # saved state than on the apex. Redirect instead of serving.
-https://www.rom-weaver.com/* https://rom-weaver.com/:splat 301
+#
+# That redirect is not here, and cannot be: a `_redirects` source matches a path,
+# never a hostname, and Cloudflare lists domain-level redirects as unsupported.
+# An `https://www.rom-weaver.com/* https://rom-weaver.com/:splat 301` line lived
+# here from v0.7.2 through v0.9.0 and never once fired - Pages skipped it as
+# invalid and www served the app directly, on its own origin, the whole time.
+#
+# It is a zone-level Single Redirect instead (dashboard: rom-weaver.com -> Rules
+# -> Redirect Rules, "www to apex"), matching on `http.host`, which is what this
+# file cannot do. The www DNS record stays, and stays proxied, or the name would
+# not resolve for that rule to catch.
+#
+# Path-level redirects belong here. A hostname one does not - it will be dropped
+# silently.
+
+# The patch workflow moved from /weave to /apply. Keep the old clean, trailing-
+# slash, and explicit static-host forms as permanent redirects. Cloudflare
+# Pages carries the incoming query string to the destination, so preloaded
+# bundles such as /weave?bundle=... keep working.
+/weave /apply 301
+/weave/ /apply 301
+/weave.html /apply 301
+/weave/index.html /apply 301

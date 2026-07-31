@@ -3,12 +3,18 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
+import { sidecarContentType } from "./functions/assets/content-types.js";
+import { criticalAssetLinkHeaders } from "./scripts/critical-asset-hints.mjs";
+import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
+import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
+import { readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
@@ -18,6 +24,37 @@ const repoRoot = path.resolve(rootDir, "../..");
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
+const docsScreenshotCaptures = [
+  "apply-output-desktop-dark",
+  "apply-output-desktop-light",
+  "apply-output-mobile-dark",
+  "apply-output-mobile-light",
+  "apply-patches-desktop-dark",
+  "apply-patches-desktop-light",
+  "apply-patches-mobile-dark",
+  "apply-patches-mobile-light",
+  "bundle-output-desktop-dark",
+  "bundle-output-desktop-light",
+  "bundle-output-mobile-dark",
+  "bundle-output-mobile-light",
+  "create-inputs-desktop-dark",
+  "create-inputs-desktop-light",
+  "create-inputs-mobile-dark",
+  "create-inputs-mobile-light",
+  "create-output-desktop-dark",
+  "create-output-desktop-light",
+  "create-output-mobile-dark",
+  "create-output-mobile-light",
+];
+const docsScreenshotNames = [
+  ...docsScreenshotCaptures.flatMap((name) => [`${name}.avif`, `${name}.webp`]),
+  "first-sample-hello-world.webp",
+  "first-sample-modified-world.webp",
+  "first-sample-modified-rom.webp",
+];
+const docsScreenshotSources = Object.fromEntries(
+  docsScreenshotNames.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),
+);
 
 // A manifest's icons are read at install time, so an installed PWA's icon can
 // only follow the build channel - unlike the in-app mark, which follows the
@@ -38,7 +75,10 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/llms.txt": path.join(rootAssetDir, "llms.txt"),
   "/logo.svg": channelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
+  "/social-preview.avif": path.join(rootDir, "design", "social-preview.avif"),
   "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
+  "/social-preview.webp": path.join(rootDir, "design", "social-preview.webp"),
+  ...docsScreenshotSources,
 });
 const generatedSampleAssetPaths = new Set([
   "/first-create.zip",
@@ -100,6 +140,7 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   if (requestPath.endsWith(".html")) res.setHeader("Content-Type", "text/html; charset=utf-8");
   else if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
   else if (requestPath.endsWith(".txt")) res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  else if (requestPath.endsWith(".avif")) res.setHeader("Content-Type", "image/avif");
   else if (requestPath.endsWith(".png")) res.setHeader("Content-Type", "image/png");
   else if (requestPath.endsWith(".zip")) res.setHeader("Content-Type", "application/zip");
   else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");
@@ -262,19 +303,23 @@ const injectLdJson = (html, route, includeWebsite = false) =>
 // The Trim and Tools tabs are still beta - they navigate in production but must
 // not be indexed, and they inherit the Weave page's markup, so strip the shared
 // index directive to noindex and point their canonical at themselves (rather
-// than leaking a /weave canonical that would fold them into the patcher page).
+// than leaking a /apply canonical that would fold them into the patcher page).
 const makeBetaRouteNoindex = (html, slug) =>
   html
     .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
     .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1https://rom-weaver.com/${slug}$2`);
 
 const createNotFoundHtml = (html, channel, channelLabel) => {
-  const title = `Page not found — ${SITE_NAME}${channel === "prod" ? "" : ` ${channelLabel}`}`;
+  const title = `Page not found | ${SITE_NAME}${channel === "prod" ? "" : ` ${channelLabel}`}`;
   const description = "The requested rom-weaver page could not be found.";
   let notFoundHtml = html
     .replace("<html ", '<html data-page="not-found" ')
     .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
     .replace(/(<meta\s+name="robots"\s+content=")[^"]*(")/, "$1noindex$2")
+    .replace(
+      'aria-selected="true" class="mode" data-mode="patcher"',
+      'aria-selected="false" class="mode" data-mode="patcher"',
+    )
     .replace(/\s*<link\s+rel="canonical"\s+href="[^"]*"\s*\/>/, "");
   for (const [attribute, name, content] of [
     ["name", "description", description],
@@ -291,8 +336,9 @@ const createNotFoundHtml = (html, channel, channelLabel) => {
 
 const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://rom-weaver.com/weave</loc></url>
+  <url><loc>https://rom-weaver.com/apply</loc></url>
   <url><loc>https://rom-weaver.com/create</loc></url>
+${DOC_ROUTES.map(({ slug }) => `  <url><loc>https://rom-weaver.com/${slug}</loc></url>`).join("\n")}
 </urlset>
 `;
 
@@ -355,10 +401,10 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       if (!indexHtml.includes(patcherRoot))
         throw new Error("rom-weaver-static-assets: prerendered patcher shell not found in dist/index.html");
       // dist/index.html is served at the apex (the patcher); give it the same
-      // structured data the /weave route gets.
-      const weaveHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher, true);
-      fs.writeFileSync(path.join(distDir, "index.html"), weaveHtml);
-      fs.writeFileSync(path.join(distDir, "weave.html"), weaveHtml);
+      // structured data the /apply route gets.
+      const applyHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher, true);
+      fs.writeFileSync(path.join(distDir, "index.html"), applyHtml);
+      fs.writeFileSync(path.join(distDir, "apply.html"), applyHtml);
       fs.writeFileSync(
         path.join(distDir, "404.html"),
         createNotFoundHtml(
@@ -376,8 +422,23 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         WORKFLOW_SEO_ROUTES.creator,
       );
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
+      for (const route of DOC_ROUTES) {
+        const docsShell = prerenderedShells.get(route.slug);
+        if (!docsShell) throw new Error(`rom-weaver-static-assets: no prerendered shell for ${route.slug}`);
+        const routeShellHtml = withRoutePreloadLinks(
+          indexHtml.replace(patcherRoot, PRERENDER_ROOT(docsShell)),
+          routePreloadLinks.get("docs"),
+        );
+        const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
+        const extensionlessPath = path.join(distDir, `${route.slug}.html`);
+        const directoryIndexPath = path.join(distDir, route.slug, "index.html");
+        fs.mkdirSync(path.dirname(extensionlessPath), { recursive: true });
+        fs.mkdirSync(path.dirname(directoryIndexPath), { recursive: true });
+        fs.writeFileSync(extensionlessPath, docsHtml);
+        fs.writeFileSync(directoryIndexPath, docsHtml);
+      }
       for (const [slug, html] of [
-        ["weave", weaveHtml],
+        ["apply", applyHtml],
         ["create", createHtml],
         ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
         ["tools", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
@@ -403,6 +464,14 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
   };
 };
 
+// See scripts/critical-asset-hints.mjs for why these are emitted and why both use
+// `rel=preload`. They ride in the `/*` block rather than an enumerated route list: every
+// document in the build - the prerendered workflow routes, 404.html, every docs slug, and
+// any route added later - loads the same two assets, and a list would silently stop
+// covering new ones. The hint also lands on subresource responses, which ignore it.
+const readCriticalAssetLinks = (distDir) =>
+  criticalAssetLinkHeaders(fs.readFileSync(path.join(distDir, "index.html"), "utf8"));
+
 // Cloudflare Pages serves dist/_headers on every response, so deployed pages are cross-origin
 // isolated from the first network load instead of round-tripping through the service worker's
 // COEP-injection reload. Hosts without header control still use the service-worker fallback.
@@ -412,14 +481,19 @@ const writeCloudflareHeadersAsset = (channel) => {
   return {
     apply: "build",
     closeBundle() {
-      const headers =
-        channel === "prod"
-          ? crossOriginIsolationHeaders
-          : { ...crossOriginIsolationHeaders, "X-Robots-Tag": "noindex, nofollow" };
-      const headerLines = Object.entries(headers)
-        .map(([name, value]) => `  ${name}: ${value}`)
+      const headers = {
+        ...crossOriginIsolationHeaders,
+        "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
+        ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
+      };
+      const distDir = path.resolve(rootDir, outDir);
+      const outputPath = path.join(distDir, "_headers");
+      const headerLines = [
+        ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
+        ...readCriticalAssetLinks(distDir),
+      ]
+        .map((line) => `  ${line}`)
         .join("\n");
-      const outputPath = path.join(path.resolve(rootDir, outDir), "_headers");
       // The attribution files are named `LICENSE-APACHE`, `COPYING`, `NOTICE`
       // and so on. With no extension Cloudflare types them as a binary
       // download, which both skips its on-the-fly compression (2.1 MB of text
@@ -470,9 +544,22 @@ const writeBrotliSidecars = () => {
       }
       if (fs.existsSync(sourceSidecar)) fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
       else brotliCompressFile({ inputPath: emittedWasm, outputPath: `${emittedWasm}.br`, quality: 11 });
+      // The Pages Function reads the type from SIDECAR_CONTENT_TYPES instead of probing
+      // the static asset, so a staged sidecar whose extension is missing there would
+      // silently fall back to Pages' own compression. Fail the build instead.
+      const assertSidecarTypeIsKnown = (assetUrl) => {
+        if (sidecarContentType(assetUrl)) return;
+        throw new Error(
+          `${assetUrl} has a brotli sidecar but no entry in SIDECAR_CONTENT_TYPES (functions/assets/content-types.js); add its content type there`,
+        );
+      };
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
+      assertSidecarTypeIsKnown(sidecarUrls[0]);
       for (const name of fs.readdirSync(assetsDir)) {
-        if (name.endsWith(".wasm") || name.endsWith(".br")) continue;
+        // `.map` sidecars are devtools-only: nothing on a normal page load
+        // requests them, so a q11 pass and a _routes.json include each would
+        // buy nothing and eat the include budget.
+        if (name.endsWith(".wasm") || name.endsWith(".br") || name.endsWith(".map")) continue;
         const assetPath = path.join(assetsDir, name);
         const { compressedSize, sourceSize } = brotliCompressFile({
           inputPath: assetPath,
@@ -483,6 +570,7 @@ const writeBrotliSidecars = () => {
           fs.rmSync(`${assetPath}.br`);
           continue;
         }
+        assertSidecarTypeIsKnown(`/assets/${name}`);
         sidecarUrls.push(`/assets/${name}`);
       }
       if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {
@@ -506,7 +594,7 @@ const writeBrotliSidecars = () => {
 // than the stale precached copy the running (old) bundle shipped with.
 const CHANGELOG_ASSET_URL = "/changelog.json";
 
-const serveChangelogAsset = () => {
+const serveChangelogAsset = (releaseVersion) => {
   const middleware = (req, res, next) => {
     if ((req.url ? req.url.split("?")[0] : "") !== CHANGELOG_ASSET_URL) {
       next();
@@ -515,7 +603,7 @@ const serveChangelogAsset = () => {
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-    res.end(JSON.stringify(getChangelog()));
+    res.end(JSON.stringify(getChangelog(50, releaseVersion)));
   };
   return {
     apply: "serve",
@@ -529,13 +617,13 @@ const serveChangelogAsset = () => {
   };
 };
 
-const writeChangelogAsset = () => {
+const writeChangelogAsset = (releaseVersion) => {
   let outDir = "dist";
   return {
     apply: "build",
     closeBundle() {
       const outputPath = path.join(path.resolve(rootDir, outDir), "changelog.json");
-      fs.writeFileSync(outputPath, JSON.stringify(getChangelog()));
+      fs.writeFileSync(outputPath, JSON.stringify(getChangelog(50, releaseVersion)));
     },
     configResolved(config) {
       outDir = config.build.outDir;
@@ -551,20 +639,17 @@ const writeChangelogAsset = () => {
 // to drift. The client hydrates the shell in place.
 const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
 
-// Which prerendered variant a dev request gets, mirroring readWorkflowViewFromPath
-// in webapp-controller.ts: the last path segment picks the workflow. Only the
-// creator has a shell of its own (the build emits create.html and
-// create/index.html from it); trim and tools inherit the patcher markup, exactly
-// as writeWebappStaticAssets emits them.
-const devPrerenderView = (url) => {
-  const segments = String(url || "")
-    .split(/[?#]/)[0]
-    .toLowerCase()
-    .split("/")
-    .filter(Boolean);
+// Which prerendered variant a dev request gets, mirroring the app router.
+const devPrerenderRoute = (url) => {
+  const pathname = String(url || "").split(/[?#]/)[0];
+  const segments = pathname.toLowerCase().split("/").filter(Boolean);
   if (segments.at(-1) === "index.html") segments.pop();
   const slug = segments.at(-1) || "";
-  return slug === "create" || slug === "create.html" ? "creator" : "patcher";
+  if (segments.includes("docs")) return { docsSlug: readDocsSlugFromPathname(pathname), view: "docs" };
+  return {
+    docsSlug: "docs",
+    view: slug === "create" || slug === "create.html" ? "creator" : "patcher",
+  };
 };
 
 const prerenderWebappShell = (prerenderedShells) => ({
@@ -585,31 +670,46 @@ const prerenderWebappShell = (prerenderedShells) => ({
       // production locally. Build renders the creator variant too, which
       // writeWebappStaticAssets emits as a second static entry point.
       if (ctx.server) {
-        const view = devPrerenderView(ctx.originalUrl ?? ctx.path);
-        const shell = await prerender.renderLandingShellWithServer(ctx.server, view);
+        const route = devPrerenderRoute(ctx.originalUrl ?? ctx.path);
+        const shell = await prerender.renderLandingShellWithServer(ctx.server, route.view, false, route.docsSlug);
+        const routeHtml = route.view === "docs" ? html.replace("<head>", '<head>\n    <base href="/" />') : html;
         // Production ships the bundled CSS as a render-blocking <link>, so its
         // prerendered shell paints styled. Dev serves CSS as HMR'd JS modules
         // that only apply after the bundle runs, which would flash the shell
         // unstyled. Inject the same stylesheets render-blocking (Vite serves
-        // ?direct as real text/css) - order mirrors vite-entry.ts's imports.
+        // ?direct as real text/css). index.css pulls in style.css and declares
+        // the layer order; the deferred and docs sheets load lazily in
+        // production but are linked here so every dev shell paints complete -
+        // cascade layers make the double application harmless.
         // These links are outside the module graph, so a CSS edit only reaches
         // them on a full reload; until then the HMR'd <style> (appended after
         // them, so it wins) carries the change and a *deleted* rule lingers.
         return {
-          html: html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(shell)),
-          tags: ["/src/webapp/style.css", "/src/webapp/design-system/index.css"].map((href) => ({
+          html: routeHtml.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(shell)),
+          tags: [
+            "/src/webapp/design-system/index.css",
+            "/src/webapp/design-system/deferred.css",
+            "/src/webapp/design-system/docs-route.css",
+          ].map((href) => ({
             attrs: { href: `${href}?direct`, rel: "stylesheet" },
             injectTo: "head",
             tag: "link",
           })),
         };
       }
-      const patcherShell = await prerender.renderLandingShell("patcher");
-      const creatorShell = await prerender.renderLandingShell("creator");
-      const notFoundShell = await prerender.renderLandingShell("patcher", true);
-      prerenderedShells.set("patcher", patcherShell);
-      prerenderedShells.set("creator", creatorShell);
-      prerenderedShells.set("notFound", notFoundShell);
+      // One SSR server renders every shell the build needs; spinning one up per
+      // shell would cost more than the rendering does.
+      const patcherShell = await prerender.withPrerenderServer(async (server) => {
+        const render = (view, notFound, docsSlug) =>
+          prerender.renderLandingShellWithServer(server, view, notFound, docsSlug);
+        prerenderedShells.set("patcher", await render("patcher"));
+        prerenderedShells.set("creator", await render("creator"));
+        prerenderedShells.set("notFound", await render("patcher", true));
+        for (const route of DOC_ROUTES) {
+          prerenderedShells.set(route.slug, await render("docs", false, route.slug));
+        }
+        return prerenderedShells.get("patcher");
+      });
       return html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(patcherShell));
     },
     order: "post",
@@ -631,6 +731,7 @@ const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
 
 const WORKFLOW_ROUTE_MODULES = {
   creator: "src/public/react/create-patch-form.tsx",
+  docs: "src/webapp/docs-page.tsx",
   patcher: "src/public/react/apply-patch-form.tsx",
   tools: "src/webapp/components/tools-form.tsx",
   trim: "src/public/react/trim-form.tsx",
@@ -660,6 +761,105 @@ const collectStaticImportClosure = (bundle, entryFileNames) => {
 const renderRoutePreloadLinks = (fileNames) =>
   fileNames.map((fileName) => `  <link rel="modulepreload" crossorigin href="./${fileName}" />`).join("\n");
 
+// CSS carried by a route's chunks (docs.css rides the docs chunk) is render-critical on
+// that route's prerendered document: without a render-blocking link the shell paints
+// unstyled until the chunk loads. Emitted before the modulepreloads. When the chunk later
+// lazy-loads on an in-app navigation, cascade layers make the runtime-injected duplicate
+// link harmless.
+const renderRouteStylesheetLinks = (fileNames) =>
+  fileNames.map((fileName) => `  <link rel="stylesheet" crossorigin href="./${fileName}" />`).join("\n");
+
+const collectChunkCss = (bundle, chunkFileNames) => {
+  const css = new Set();
+  for (const fileName of chunkFileNames) {
+    for (const cssFileName of bundle[fileName]?.viteMetadata?.importedCss ?? []) css.add(cssFileName);
+  }
+  return css;
+};
+
+// `?worker&url` makes Vite bundle each worker entry in its own isolated rolldown
+// build, so two workers that share a runtime each ship a private copy of it -
+// the runner and WASI thread workers overlapped by ~85 kB raw. Intercepting the
+// import at build time and emitting the worker as an extra entry chunk of the
+// *main* graph instead puts both workers under one code-splitting pass, so the
+// shared runtime is hoisted into a chunk both of them import. Build-only: dev
+// keeps Vite's own `?worker&url` handling, and the import form stays the rule
+// (see "Worker URLs" in docs/development/ARCHITECTURE.md).
+const WORKER_URL_IMPORT_PATTERN = /[?&]worker(?:&|$)/;
+const URL_IMPORT_PATTERN = /[?&]url(?:&|$)/;
+
+// Filled by the plugin below with the absolute path of every emitted worker
+// entry, so the chunk grouping can tell worker-only modules from app modules.
+const workerEntryFiles = new Set();
+/** Memoized isWorkerOnlyModule answers; the module graph is rebuilt per build, so it resets there. */
+const workerOnlyModules = new Map();
+
+const shareWorkerRuntimeChunks = () => {
+  const chunkRefs = new Map();
+  return {
+    apply: "build",
+    buildStart() {
+      chunkRefs.clear();
+      workerEntryFiles.clear();
+      workerOnlyModules.clear();
+    },
+    enforce: "pre",
+    load(id) {
+      if (!(WORKER_URL_IMPORT_PATTERN.test(id) && URL_IMPORT_PATTERN.test(id))) return null;
+      const workerFile = id.split("?")[0];
+      let ref = chunkRefs.get(workerFile);
+      if (!ref) {
+        workerEntryFiles.add(workerFile);
+        ref = this.emitFile({
+          id: workerFile,
+          name: path.basename(workerFile, path.extname(workerFile)),
+          preserveSignature: false,
+          type: "chunk",
+        });
+        chunkRefs.set(workerFile, ref);
+      }
+      return `export default import.meta.ROLLUP_FILE_URL_${ref};`;
+    },
+    name: "rom-weaver-share-worker-runtime-chunks",
+  };
+};
+
+// True when every import path that reaches this module starts at a worker entry.
+// Grouping by path instead would sweep up the wasm modules the document entry
+// also uses (the OPFS proxy client, the command builders), which would drag the
+// whole worker runtime onto the first-paint critical path.
+const isWorkerOnlyModule = (moduleId, ctx) => {
+  const cached = workerOnlyModules.get(moduleId);
+  if (cached !== undefined) return cached;
+  const visited = new Set([moduleId]);
+  const pending = [moduleId];
+  let workerOnly = true;
+  while (pending.length > 0 && workerOnly) {
+    const id = pending.pop();
+    // Only the bare path is the worker entry; the `?worker&url` module of the same file is the
+    // URL stub the app imports, and its own importers decide where it belongs.
+    if (workerEntryFiles.has(id)) continue;
+    const info = ctx.getModuleInfo(id);
+    const importers = info ? [...info.importers, ...info.dynamicImporters] : [];
+    if (importers.length === 0) {
+      workerOnly = false;
+      break;
+    }
+    for (const importer of importers) {
+      if (visited.has(importer)) continue;
+      visited.add(importer);
+      pending.push(importer);
+    }
+  }
+  workerOnlyModules.set(moduleId, workerOnly);
+  return workerOnly;
+};
+
+/** Captures the worker-only runtime into one `wasm-runtime` chunk; everything else falls through
+ * to the `shared` group below it. `includeDependenciesRecursively` has to stay off, or the group
+ * also swallows the app-facing wasm modules its members depend on. */
+const nameWorkerRuntimeGroup = (moduleId, ctx) => (isWorkerOnlyModule(moduleId, ctx) ? "wasm-runtime" : null);
+
 const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
   apply: "build",
   name: "rom-weaver-preload-workflow-route-chunks",
@@ -670,6 +870,7 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
       const entryFileName = html.match(/<script[^>]*\ssrc="\.\/([^"]+\.js)"/)?.[1];
       if (!entryFileName) throw new Error("rom-weaver-preload-workflow-route-chunks: entry script not found");
       const alreadyLoaded = collectStaticImportClosure(bundle, [entryFileName]);
+      const entryCss = collectChunkCss(bundle, alreadyLoaded);
       for (const [view, moduleSuffix] of Object.entries(WORKFLOW_ROUTE_MODULES)) {
         const routeChunk = findChunkForModule(bundle, moduleSuffix);
         if (!routeChunk)
@@ -677,7 +878,11 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
         const routeFiles = [...collectStaticImportClosure(bundle, [routeChunk])]
           .filter((fileName) => !alreadyLoaded.has(fileName))
           .sort();
-        routePreloadLinks.set(view, renderRoutePreloadLinks(routeFiles));
+        const routeCss = [...collectChunkCss(bundle, routeFiles)].filter((fileName) => !entryCss.has(fileName)).sort();
+        const links = [renderRouteStylesheetLinks(routeCss), renderRoutePreloadLinks(routeFiles)]
+          .filter(Boolean)
+          .join("\n");
+        routePreloadLinks.set(view, links);
       }
       return html.replace(
         "</head>",
@@ -694,40 +899,14 @@ const withRoutePreloadLinks = (html, links) =>
     `${ROUTE_PRELOAD_MARKER_START}\n${links}\n  ${ROUTE_PRELOAD_MARKER_END}`,
   );
 
-// Primary (latin) Archivo woff2 - but not the latin-ext subset, which is only
-// fetched on demand via unicode-range and is wasteful to preload eagerly.
-const PRIMARY_FONT_PATTERN = /^assets\/archivo-var-latin-(?!ext-)[\w-]+\.woff2$/;
-
-// Preload the primary UI font from the document head so its download starts
-// alongside the HTML instead of waiting for the stylesheet to parse and discover
-// the @font-face. Build-only: the file name is content-hashed, so the hashed
-// name is read out of the emitted bundle at generate time.
-const preloadPrimaryFont = () => ({
-  apply: "build",
-  name: "rom-weaver-preload-primary-font",
-  transformIndexHtml: {
-    handler(_html, ctx) {
-      const fileName = ctx.bundle && Object.keys(ctx.bundle).find((key) => PRIMARY_FONT_PATTERN.test(key));
-      if (!fileName) return [];
-      return [
-        {
-          attrs: { as: "font", crossorigin: "", href: `./${fileName}`, rel: "preload", type: "font/woff2" },
-          injectTo: "head-prepend",
-          tag: "link",
-        },
-      ];
-    },
-    order: "post",
-  },
-});
-
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
   const buildInfo = getBuildInfo();
   const devServiceWorkerEnabled = process.env.VITE_SW_DEV === "1";
   const serviceWorkerEnabled = command === "build" || devServiceWorkerEnabled;
   const appVersion =
     process.env.ROM_WEAVER_APP_VERSION || buildInfo.version || process.env.npm_package_version || "0.1.0";
   const commitHash = process.env.ROM_WEAVER_COMMIT_HASH || buildInfo.commitHash || "unknown";
+  const commitsSinceVersion = buildInfo.commitsSinceVersion ?? null;
   const dirtyHash = process.env.ROM_WEAVER_DIRTY_HASH ?? buildInfo.dirtyHash ?? "";
   const gitBranch = process.env.ROM_WEAVER_GIT_BRANCH ?? buildInfo.gitBranch ?? "";
   const versionIsTagged = (buildInfo.isVersionTag ?? false) && !dirtyHash;
@@ -735,6 +914,7 @@ export default defineConfig(({ command }) => {
   // an unset channel means a local build or dev server, never production.
   const appChannel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
   const appChannelLabel = process.env.ROM_WEAVER_CHANNEL_LABEL || appChannel;
+  const releaseVersion = appChannel === "prod" || appChannel === "beta" || appChannel === "nightly" ? appVersion : "";
   const serviceWorkerDefines = {
     __SERVICE_WORKER_ENABLED__: JSON.stringify(serviceWorkerEnabled),
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: JSON.stringify(command === "build" ? 60000 : 5000),
@@ -761,15 +941,28 @@ export default defineConfig(({ command }) => {
           // everything two or more chunks reach restores the compression
           // context; the size floor keeps a future split from re-stranding it.
           advancedChunks: {
-            groups: [{ minShareCount: 2, name: "shared", priority: 0, test: /./ }],
+            groups: [
+              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerRuntimeGroup, priority: 1 },
+              { minShareCount: 2, name: "shared", priority: 0, test: /./ },
+            ],
             minSize: SHARED_CHUNK_MIN_SIZE,
           },
         },
       },
+      // External `.map` sidecars, never inline: a stack trace from a released
+      // bundle is otherwise unreadable, and the maps cost nothing to a user who
+      // never opens devtools. They are excluded from the service-worker
+      // precache, the brotli sidecars and the Docker compression pass, so the
+      // only bytes a normal visit pays for are the `sourceMappingURL` comments.
+      sourcemap: true,
       target: "es2022",
     },
     clearScreen: false,
     css: {
+      // Dev-only: build-time CSS sourcemaps do not exist in (rolldown-)vite - build.sourcemap
+      // only covers JS (vitejs/vite#2830) - but dev serves compiled CSS, and this maps it
+      // back to the design-system source files in devtools.
+      devSourcemap: true,
       transformer: "lightningcss",
     },
     define: {
@@ -777,6 +970,7 @@ export default defineConfig(({ command }) => {
       __APP_CHANNEL_LABEL__: JSON.stringify(appChannelLabel),
       __APP_VERSION__: JSON.stringify(appVersion),
       __COMMIT_HASH__: JSON.stringify(commitHash),
+      __COMMITS_SINCE_VERSION__: JSON.stringify(commitsSinceVersion),
       __DIRTY_HASH__: JSON.stringify(dirtyHash),
       __GIT_BRANCH__: JSON.stringify(gitBranch),
       __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
@@ -793,19 +987,20 @@ export default defineConfig(({ command }) => {
         "react",
         "react-dom",
         "react-dom/client",
-        "valibot",
       ],
     },
     plugins: [
+      docsVirtualModule(),
+      shareWorkerRuntimeChunks(),
       serveRootStaticAssets(appChannel, appChannelLabel),
-      serveChangelogAsset(),
+      serveChangelogAsset(releaseVersion),
       deferDevHotUpdates(),
       stampChannelIdentity(appChannel, appChannelLabel, serviceWorkerEnabled),
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
       prerenderWebappShell(prerenderedShells),
       preloadWorkflowRouteChunks(routePreloadLinks),
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),
-      writeChangelogAsset(),
+      writeChangelogAsset(releaseVersion),
       writeCloudflareHeadersAsset(appChannel),
       writeBrotliSidecars(),
       VitePWA({
@@ -818,7 +1013,15 @@ export default defineConfig(({ command }) => {
         injectManifest: {
           globIgnores: ["**/*.map"],
           globPatterns: [
+            // Every route ships its own prerendered document, so precache them all:
+            // offline, a route the user has not visited yet has nothing in the runtime
+            // cache, and without its own shell it falls back to the patcher one and
+            // hydrates through a mismatch. Only the directory-index copy is listed -
+            // the `<slug>.html` twin is the same bytes, and the service worker looks
+            // routes up by the index form (see matchRouteDocument).
             "index.html",
+            "**/index.html",
+            "404.html",
             "manifest.json",
             "logo.svg",
             "first-create.zip",
@@ -846,7 +1049,17 @@ export default defineConfig(({ command }) => {
         srcDir: "src/webapp",
         strategies: "injectManifest",
       }),
-      preloadPrimaryFont(),
+      ...(mode === "analyze"
+        ? [
+            visualizer({
+              brotliSize: true,
+              filename: path.resolve(rootDir, "dist", "bundle-analysis.html"),
+              gzipSize: true,
+              projectRoot: repoRoot,
+              title: "rom-weaver bundle analysis",
+            }),
+          ]
+        : []),
     ],
     preview: {
       headers: securityHeaders,

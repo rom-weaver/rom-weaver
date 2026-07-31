@@ -51,7 +51,6 @@
 .rw-app .handle:active:not(:disabled) { color: var(--thread-text); border-color: var(--thread); background: color-mix(in oklab, var(--thread) 12%, var(--well)); }
 .rw-app .handle:disabled { cursor: default; opacity: .4; }
 .rw-app .nmline { display: flex; align-items: center; gap: var(--sp-s); flex-wrap: wrap; width: 100%; min-width: 0; }
-.rw-app .nm-file { flex-basis: 100%; color: var(--ink-4); font-size: .7rem; overflow-wrap: anywhere; }
 .rw-app .nm {
   font-weight: 650; line-height: 1.3; min-width: 0; max-width: 100%;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -67,11 +66,6 @@
 .rw-app .patch-desc { margin: 0; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
 /* Editing replaces the description and spans the card width. */
 .rw-app .patch-desc-line.is-editing { min-width: 0; clear: both; width: 100%; }
-.rw-app .patch-desc-line.is-editing .patch-meta-inline { min-width: 0; margin-block-start: 0; width: 100%; }
-.rw-app .patch-meta-inline .input { width: 100%; box-sizing: border-box; }
-.rw-app .patch-warn { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .76rem; color: var(--care); }
-.rw-app .patch-warn svg { width: 13px; height: 13px; flex: none; }
-:root[data-theme="light"] .patch-warn { color: #7a5300; }
 .rw-app .tag {
   font-size: .66rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
   color: var(--ink-2); padding: 2px 6px; border: 1px solid var(--seam-strong); border-radius: 4px; white-space: nowrap;
@@ -114,6 +108,7 @@
 .rw-app .meta-target-static { color: inherit; }
 .rw-app .meta-target-select {
   appearance: none; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
+  font-size: var(--dropdown-fs, inherit);
   padding: 0 13px 0 1px; margin: 0; line-height: 1.35;
   /* Meet the WCAG 2.5.8 target floor without enlarging the text line. */
   min-height: 24px;
@@ -124,7 +119,7 @@
 .rw-app .meta-fmt { font-size: calc(var(--badge-fs) * 0.92); font-stretch: 86%; letter-spacing: .04em; text-transform: uppercase; color: var(--thread-text); }
 .rw-app .card-meta .meta-fmt::before { content: "·"; margin-inline-end: 7px; color: var(--ink-4); }
 .rw-app .card-meta :is(.fsize, .meta-fmt) + .target-grp::before { content: "·"; color: var(--ink-4); }
-.rw-app .cks > .cks-head .rb, .rw-app .fsize, .rw-app .ckgrp .tsz, .rw-app .meta-fmt {
+.rw-app .cks > .cks-head .rb, .rw-app .fsize, .rw-app .meta-fmt {
   display: inline-flex; align-items: center;
 }
 .rw-app .meta-ic { gap: 4px; }
@@ -140,14 +135,12 @@
 .rw-app .card.is-disabled .patch-desc { color: var(--ink-4); margin-block-start: 6px; }
 .rw-app .card.is-disabled .fsize { color: var(--ink-3); }
 .rw-app .card.is-disabled .meta-fmt { color: var(--ink-3); border-color: var(--seam); }
-.rw-app .card.is-disabled .cks > .cks-head .rb { color: var(--ink-3); }
 .rw-app .card.is-disabled .handle { color: var(--ink-4); }
 @media (prefers-reduced-motion: reduce) { .rw-app .patch-body, .rw-app .card { transition: none; } }
 .rw-app .patch-off-note { display: flex; align-items: center; gap: var(--sp-s); margin: 0; font-size: .8rem; color: var(--care); }
 .rw-app .patch-off-note svg { width: 15px; height: 15px; flex: none; }
 /* Use a darker amber in light mode to preserve 4.5:1 contrast. */
-:root[data-theme="light"] .patch-off-note, :root[data-theme="light"] .checkrow.warn { color: #7a5300; }
-.rw-app .patch-off-note.is-ok, :root[data-theme="light"] .patch-off-note.is-ok { color: var(--verified); }
+:root[data-theme="light"] .patch-off-note { color: #7a5300; }
 
 .rw-app .verdict { display: inline-flex; align-items: center; gap: var(--sp-xs); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
 .rw-app .verdict.ok {

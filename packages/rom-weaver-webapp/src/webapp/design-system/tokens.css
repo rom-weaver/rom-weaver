@@ -24,6 +24,10 @@
   --sp-l:   clamp(11px, 2.25px + 1.5625vw, 16px); /* card-list / block gaps (13/14/16) */
   --sp-xl:  clamp(16px, 2px + 2.5vw, 24px);     /* section-scale (18/20/24px) */
   --ease: cubic-bezier(.2, .85, .3, 1);
+  /* Progress tween: short and linear so per-frame ticks smooth out without the
+     bar trailing the readout. Restarted every tick, so the duration is also the
+     worst-case lag - keep it under ~2 frames' worth of perceptible delay. */
+  --prog-tween: 110ms linear;
   /* Shared dropdown chevron. */
   --chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23889' stroke-width='2.4'><path d='m6 9 6 6 6-6'/></svg>");
 }

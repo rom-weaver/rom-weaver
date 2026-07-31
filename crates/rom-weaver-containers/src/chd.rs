@@ -109,8 +109,15 @@ struct ExtractedFileChecksum {
     values: BTreeMap<String, String>,
 }
 
-fn create_extract_checksum(context: &OperationContext) -> Result<Option<StreamingChecksum>> {
-    StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
+fn create_extract_checksum(
+    context: &OperationContext,
+    allow_parallelism: bool,
+) -> Result<Option<StreamingChecksum>> {
+    if allow_parallelism {
+        StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
+    } else {
+        StreamingChecksum::new(context.extract_checksum_algorithms())
+    }
 }
 
 fn build_extract_checksum_emitted_file_detail(

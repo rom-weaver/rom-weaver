@@ -36,10 +36,16 @@ jobs:
     outputs:
       rust: ${{ steps.classify.outputs.rust }}
       webapp: ${{ steps.classify.outputs.webapp }}
+      wasm_runtime: ${{ steps.classify.outputs.wasm_runtime }}
       security: ${{ steps.classify.outputs.security }}
       docker_matrix: ${{ steps.docker-matrix.outputs.matrix }}
+      docker_prebuilt: ${{ steps.classify.outputs.docker_prebuilt }}
       repo_lint: ${{ steps.classify.outputs.repo_lint }}
       full: ${{ steps.classify.outputs.full }}
+      # "Cover this ref the way a push to main is covered" - true for every
+      # event but an ordinary pull request. The release pull request is the
+      # exception among pull requests; scripts/ci/release-pr.mjs owns the rule.
+      full_matrix: ${{ steps.classify.outputs.full_matrix }}
       cli_platforms: ${{ steps.cli-platforms.outputs.matrix }}
     steps:
       - name: Checkout
@@ -55,6 +61,7 @@ jobs:
         id: cli-platforms
         env:
           EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
         run: node scripts/ci/cli-platform-matrix.mjs
 
       - name: Classify changed paths
@@ -63,6 +70,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
+          # Empty for anything that is not a pull request. It is what tells the
+          # release pull request apart from a review one, which is the only case
+          # where a pull request is not narrowed.
+          HEAD_REF: ${{ github.head_ref }}
         run: node scripts/ci/classify-workflow.mjs
 
       # The image table lives here rather than in the `docker` job below because
@@ -70,11 +81,18 @@ jobs:
       # leg has to be absent from the matrix rather than started and skipped -
       # that is the whole saving. `[]` means neither image is selected; the job
       # guards on it, since an empty matrix is a hard error.
+      #
+      # The `_arm64` flags select each image's second architecture separately: a
+      # pull request that changed only compile inputs builds amd64 alone, since
+      # the arm64 leg is another full release compile that cannot fail for a
+      # reason amd64 did not. Editing an image definition still builds both.
       - name: Plan the Docker image matrix
         id: docker-matrix
         env:
           CLI_SELECTED: ${{ steps.classify.outputs.docker_cli }}
+          CLI_ARM64: ${{ steps.classify.outputs.docker_cli_arm64 }}
           WEBAPP_SELECTED: ${{ steps.classify.outputs.docker_webapp }}
+          WEBAPP_ARM64: ${{ steps.classify.outputs.docker_webapp_arm64 }}
         run: node scripts/ci/docker-matrix.mjs
 
   # Static analysis of the repository's own plumbing - workflows, Node.js
@@ -122,11 +140,11 @@ jobs:
   # above reads the Dockerfile; it does not run it.
   #
   # This job builds the images from source, and each leg is gated on its actual
-  # inputs rather than running for unrelated changes. The CLI leg includes its
-  # Cargo workspace sources, so the `Plumbing` aggregate always exercises the
-  # image when the binary changes. The webapp's source build remains
-  # image-plumbing only because its release path is exercised by the prebuilt
-  # smoke below.
+  # inputs rather than running for unrelated changes. CLI source changes select
+  # it after merge for the nightly image; pull requests select it only when the
+  # image, Cargo manifests, or toolchain plumbing changed. The webapp's source
+  # build remains image-plumbing only because its release path is exercised by
+  # the prebuilt smoke below.
   #
   # `DIST=prebuilt` is not the way to lift the cost here: it skips the whole
   # builder stage - rustup, the WASI SDK pins, binaryen - which is precisely the
@@ -283,13 +301,19 @@ jobs:
   #
   # This is the only place the webapp `nightly` image can come from: it wraps
   # the `webapp-dist` artifact that `deploy` ships to nightly.rom-weaver.com,
-  # so the image and the site are the same bundle.
+  # so the image and the site are the same bundle. That is why main runs it for
+  # the whole webapp stack while a pull request needs an image-side reason: the
+  # job runs no builder stage, so on a pull request nothing about it can fail
+  # for a bundle reason, but on main every new bundle owes nightly an image.
   docker-prebuilt:
     name: Docker build (webapp, prebuilt, ${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
+    # The matrix below only ever holds amd64 and arm64, so this reads as a pair
+    # rather than a default: any third value would silently land on the arm
+    # runner.
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 20
-    needs: webapp-static
-    if: github.ref_type != 'tag'
+    needs: [changes, webapp-static]
+    if: github.ref_type != 'tag' && needs.changes.outputs.docker_prebuilt == 'true'
     permissions:
       contents: read
       # Only exercised on the main push below; a fork pull request receives a
@@ -297,17 +321,11 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
-      # The bundle is architecture-independent, but the image is not: the
-      # compression stage runs Node.js and the runtime is an Alpine base, so
-      # each architecture still needs its own build. They are short - it is a
-      # COPY and a compression pass - which is why this list is inline rather
-      # than planned in `changes`.
+      # One architecture proves the release COPY path on a pull request. Main -
+      # and the release pull request, which is main's tree - still builds both
+      # architectures for the nightly manifest.
       matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+        arch: ${{ needs.changes.outputs.full_matrix == 'true' && fromJSON('["amd64", "arm64"]') || fromJSON('["amd64"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -394,7 +412,7 @@ jobs:
     timeout-minutes: 60
     needs: changes
     # Skipped whole rather than started with every step gated off. Everything
-    # downstream of it - the four webapp jobs, `docker-prebuilt`, `deploy` -
+    # downstream of it - the webapp jobs, `docker-prebuilt`, and `deploy` -
     # carries the same selection, so none of them is left waiting on an
     # artifact that was never going to be built. The `Plumbing` aggregate below
     # is the required check.
@@ -411,14 +429,15 @@ jobs:
         with:
           variant: prod
 
-      # Skipped entirely on a hit - the toolchain exists only to compile.
+      # A hit needs only Node/Rust to regenerate the cheap attribution files;
+      # the full toolchain exists only to compile on a miss.
       - uses: ./.github/actions/setup-build-env
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
         with:
-          tools: node rust binaryen
-          apt-packages: cmake ninja-build pkg-config clang libclang-dev
-          rust-targets: wasm32-wasip1-threads
-          wasi-sdk: "true"
+          tools: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'node rust' || 'node rust binaryen' }}
+          apt-packages: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && '' || 'cmake ninja-build pkg-config clang libclang-dev' }}
+          cargo-cache: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
+          rust-targets: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && '' || 'wasm32-wasip1-threads' }}
+          wasi-sdk: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
           webapp-deps: "true"
 
       # Never set RUSTFLAGS here: Cargo replaces configured target flags instead
@@ -428,8 +447,10 @@ jobs:
         if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: mise run build-wasm-prod
 
+      - name: Generate webapp attribution
+        run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
+
       # Validate completeness and the 4 GiB memory ceiling on both cache paths.
-      # Use runner Node because toolchain setup is skipped on hits.
       - name: Verify wasm artifact
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
@@ -441,8 +462,8 @@ jobs:
           name: wasm-prod
           if-no-files-found: error
           compression-level: 0
-          # Exactly what the cache step above covers, so the uploaded artifact
-          # can never drift from the restored one.
+          # Upload the complete bundle, including the freshly generated
+          # attribution files that are intentionally outside the cache.
           path: ${{ steps.wasm-cache.outputs.path }}
 
   # One stable name for the repository plumbing - lint, the WASM module, the
@@ -462,10 +483,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Three calls rather than one: unlike `rust` and `webapp`, these jobs do
-      # not share a selection flag, and the script's contract is one flag per
-      # group. Every group is evaluated before exiting so one skip-mismatch
-      # does not hide the others.
+      # One call per selection flag rather than one for the job: unlike `rust`
+      # and `webapp`, these jobs do not share a flag, and the script's contract
+      # is one flag per group. The prebuilt smoke has a flag of its own because
+      # a pull request skips it for a webapp change that touched no image file,
+      # which the webapp flag would report as a missing job. Every group is
+      # evaluated before exiting so one skip-mismatch does not hide the others.
       - name: Verify plumbing jobs
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
@@ -475,6 +498,7 @@ jobs:
           DOCKER_RESULT: ${{ needs.docker.result }}
           WEBAPP_SELECTED: ${{ needs.changes.outputs.webapp }}
           WASM_RESULT: ${{ needs.wasm.result }}
+          DOCKER_PREBUILT_SELECTED: ${{ needs.changes.outputs.docker_prebuilt }}
           DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
         run: node scripts/ci/assert-job-groups.mjs
 
@@ -564,13 +588,12 @@ jobs:
   # .github/actions/build-cli-platform) so CI cannot cover a different set of
   # targets, or build them differently, than the one that ships.
   #
-  # Pull requests build only the entries marked `"pr": true` - one representative
-  # leg per OS family plus linux-arm64-musl, whose artifact cli-linux-arm64
-  # consumes - because nine legs put ~7.5 minutes of Windows and macOS compile on
-  # the critical path of every Rust pull request. Pushes to main, manual
-  # dispatches, and the release fan-out all build the full nine, and every main
-  # commit is a release candidate, so full coverage still lands before anything
-  # ships. scripts/ci/cli-platform-matrix.mjs owns the split.
+  # Pull requests build only the linux-x64-gnu entry marked `"pr": true` - all
+  # but the release pull request, which is the commit that ships.
+  # Pushes to main, manual dispatches, and the release fan-out build all nine,
+  # so repeated macOS, Windows, and cross-target release compiles stay off the
+  # review path without reducing what is proven before anything ships.
+  # scripts/ci/cli-platform-matrix.mjs owns the split.
   cli-platforms:
     name: CLI target (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
@@ -624,7 +647,9 @@ jobs:
     name: CLI target runtime (aarch64-unknown-linux-musl)
     runs-on: ubuntu-24.04-arm
     needs: [changes, cli-platforms]
-    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    if: >-
+      github.ref_type != 'tag' && needs.changes.outputs.full_matrix == 'true'
+      && needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v7
 
@@ -695,7 +720,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 90
     needs: changes
-    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    if: >-
+      github.ref_type != 'tag' && needs.changes.outputs.full_matrix == 'true'
+      && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
       # Same trade as rust-host above: test backtraces keep file:line while
@@ -727,7 +754,9 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 90
     needs: changes
-    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    if: >-
+      github.ref_type != 'tag' && needs.changes.outputs.full_matrix == 'true'
+      && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
       # The mise legs get this from .config/mise.toml's [env]; this leg bypasses mise.
@@ -836,15 +865,24 @@ jobs:
           '${{ needs.changes.outputs.rust }}'
           'rust-host=${{ needs.rust-host.result }}'
           'cli-platforms=${{ needs.cli-platforms.result }}'
+
+      # Same `!cancelled()` as the job above, for the same reason: this has to
+      # report even when the step before it failed, but a cancelled run is not a
+      # red Rust check.
+      - name: Verify full native jobs
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_matrix == 'true' }}'
           'cli-linux-arm64=${{ needs.cli-linux-arm64.result }}'
           'rust-macos=${{ needs.rust-macos.result }}'
           'rust-windows=${{ needs.rust-windows.result }}'
 
   # The webapp work consumes the prebuilt wasm module and compiles no Rust of
-  # its own. It is split into four jobs so the slow parallel browser suite is
-  # never serialized behind lint or the other suites, and the node-only work
-  # skips the Playwright install entirely; the `webapp` aggregate below gives
-  # branch protection one stable name for all of it.
+  # its own. Independent suites run in separate jobs so they do not serialize,
+  # and the node-only work skips the Playwright install entirely. The `webapp`
+  # aggregate below gives branch protection one stable name for all of it.
   webapp-static:
     name: Webapp (static)
     runs-on: ubuntu-24.04
@@ -1016,10 +1054,42 @@ jobs:
           BROWSER_TEST_SHARD: ${{ matrix.shard }}/2
         run: npm --prefix packages/rom-weaver-webapp run test:browser
 
-  # Everything else that needs Playwright chromium: the wasm-layer browser
-  # suite, the Chromium E2E pass, and the icon check.
-  webapp-wasm-e2e:
-    name: Webapp (WASM + E2E)
+  # The direct WASM/browser contract. UI-only changes cannot affect this layer,
+  # so the classifier skips the whole runner for them; Rust, runtime, worker,
+  # storage, dependency, fixture, and CI inputs select it conservatively.
+  webapp-wasm-browser:
+    name: Webapp (WASM browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [changes, wasm]
+    if: >-
+      github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+      && needs.changes.outputs.wasm_runtime == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node
+          cargo-cache: "false"
+          webapp-deps: "true"
+          playwright: "true"
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
+
+      - name: Browser tests (wasm)
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm
+
+  # Chromium journeys, accessibility states, and the channel-icon drift check.
+  # This stays selected for every webapp change: it has caught regressions in
+  # rendered documentation as well as application code.
+  webapp-e2e:
+    name: Webapp (E2E)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: [changes, wasm]
@@ -1047,9 +1117,6 @@ jobs:
       # chromium this job already installs.
       - name: Channel icons up to date
         run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
-
-      - name: Browser tests (wasm)
-        run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm
 
       - name: Webapp E2E
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
@@ -1090,14 +1157,14 @@ jobs:
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit
 
   # Same shape as the `rust` aggregate above: one stable check name (`Webapp`)
-  # for branch protection while the four webapp jobs run in parallel. Must
+  # for branch protection while the webapp jobs run in parallel. Must
   # fail rather than skip when a dependency fails (a skipped check counts as
   # passing), and `!cancelled()` keeps a superseded run from reporting red.
   webapp:
     name: Webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, webapp-static, webapp-browser, webapp-wasm-e2e, webapp-webkit-e2e]
+    needs: [changes, webapp-static, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
@@ -1110,8 +1177,17 @@ jobs:
           '${{ needs.changes.outputs.webapp }}'
           'webapp-static=${{ needs.webapp-static.result }}'
           'webapp-browser=${{ needs.webapp-browser.result }}'
-          'webapp-wasm-e2e=${{ needs.webapp-wasm-e2e.result }}'
+          'webapp-e2e=${{ needs.webapp-e2e.result }}'
           'webapp-webkit-e2e=${{ needs.webapp-webkit-e2e.result }}'
+
+      # Reports even when the step above failed, but never on a cancelled run.
+      - name: Verify WASM runtime jobs
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.wasm_runtime }}'
+          'webapp-wasm-browser=${{ needs.webapp-wasm-browser.result }}'
 
   # Decide which channels this ref publishes to. Channels are ordered
   # prod -> beta -> nightly, and a deploy refreshes its own channel plus every
@@ -1213,8 +1289,8 @@ jobs:
   # Preview fast path. `deploy` below has to wait for the `wasm` job because it
   # takes the module from that job's artifact - a runner start, checkout,
   # verify and upload/download that a preview does not have to sit through when
-  # the module is already cached. On a hit (every pull request that leaves
-  # Cargo.lock and crates/ alone) this restores it directly and the preview URL
+  # the module is already cached. On a hit (every pull request that leaves the
+  # module inputs unchanged) this restores it directly and the preview URL
   # lands ~13s sooner.
   #
   # On a miss it deploys nothing and `deploy` publishes the preview as before.
@@ -1236,13 +1312,11 @@ jobs:
     permissions:
       contents: read
       statuses: write
+      deployments: write
     if: needs.deploy-plan.outputs.preview_branch != ''
-    # A cache miss still opens a deployment record with no URL. The fallback in
-    # `deploy` runs later and supersedes it, so the PR ends up pointing at the
-    # deployment that actually happened either way.
-    environment:
-      name: rom-weaver-preview.pages.dev
-      url: ${{ steps.pages.outputs.url }}
+    # Do not attach an Actions environment here. GitHub creates its deployment
+    # record when the job starts, including on a cache miss; the fallback below
+    # is the only job that should register the preview environment in that case.
     outputs:
       # False on a cache miss (the deploy step never ran) and equally false if
       # wrangler failed, so `deploy` picks the preview back up in both cases.
@@ -1253,16 +1327,6 @@ jobs:
           fetch-depth: 60
           fetch-tags: true
 
-      - name: Mark preview deployment pending
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          DEPLOYMENT_CHANNEL: preview
-          DEPLOYMENT_STATE: pending
-          STATUS_CONTEXT: Webapp Deploy / preview
-        run: node scripts/ci/deployment-status.mjs
-
       - name: Restore built wasm module
         id: wasm-cache
         uses: ./.github/actions/wasm-cache
@@ -1271,12 +1335,17 @@ jobs:
           # Read-only: this job never builds the module, so it must not claim
           # the key ahead of the `wasm` job that does.
           save: "false"
-          path: |
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.br
-            packages/rom-weaver-webapp/src/wasm/rom-weaver-app.wasm.prod.sha256
-            packages/rom-weaver-webapp/src/wasm/NOTICE
-            packages/rom-weaver-webapp/src/wasm/third_party
+
+      - name: Mark preview deployment pending
+        if: steps.wasm-cache.outputs.cache-hit == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DEPLOYMENT_CHANNEL: preview
+          DEPLOYMENT_STATE: pending
+          STATUS_CONTEXT: Webapp Deploy / preview
+        run: node scripts/ci/deployment-status.mjs
 
       - name: Build and deploy preview
         id: pages
@@ -1287,6 +1356,7 @@ jobs:
           label: ${{ needs.deploy-plan.outputs.preview_branch }}
           project: rom-weaver-preview
           branch: ${{ needs.deploy-plan.outputs.preview_branch }}
+          generate-attribution: "true"
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
@@ -1296,8 +1366,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          DEPLOYMENT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           DEPLOYMENT_CHANNEL: preview
           DEPLOYMENT_URL: ${{ steps.pages.outputs.url }}
+          DEPLOYMENT_RECORD: "true"
+          DEPLOYMENT_ENVIRONMENT: rom-weaver-preview.pages.dev
           STATUS_CONTEXT: Webapp Deploy / preview
         run: node scripts/ci/deployment-status.mjs
 

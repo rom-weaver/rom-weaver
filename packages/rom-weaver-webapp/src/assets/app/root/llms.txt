@@ -4,9 +4,28 @@
 
 ## Web app
 
-- [Apply ROM patches](https://rom-weaver.com/weave): Apply patches with format detection, checksum validation, and ordered patch chains.
+- [Apply ROM patches](https://rom-weaver.com/apply): Apply patches with format detection, checksum validation, and ordered patch chains.
 - [Create ROM patches](https://rom-weaver.com/create): Create patches with format-aware settings and distributable bundles.
+- [Documentation](https://rom-weaver.com/docs): Choose browser or CLI usage, find installation and self-hosting, start a guided sample, browse every guide, or read quick answers.
+- [Browser usage](https://rom-weaver.com/docs/get-started): Learn patching in the browser with included homebrew files.
+- [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the Weave webapp with loose patches, patch chains, archives, or bundles.
+- [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
+- [Create bundles guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only bundle in the Weave webapp.
+- [FAQ](https://rom-weaver.com/docs/faq): Privacy, ROM matching, formats, bundles, devices, offline use, and browser versus CLI.
+- [CLI usage](https://rom-weaver.com/docs/cli): Install rom-weaver and practice Apply, Create, and Bundle with the same test assets.
+- [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
+- [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
+
+## Documentation
+
+- [Documentation index](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md): Choose the guide for using, integrating, deploying, or developing rom-weaver.
+- [Browser guides](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/usage/README.md): Browser-first Apply, Create, Bundle, troubleshooting, and FAQ pages.
+- [CLI usage](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/cli.md): Installation, commands, supported formats, compression, checksums, trimming, and JSON output.
+- [Web app integration](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/webapp-integration.md): Preloaded URLs and same-origin OPFS integration.
+- [Self-hosting](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/self-hosting.md): Docker, static hosting, reverse proxies, subpaths, HTTPS, and browser isolation headers.
+- [Architecture](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/ARCHITECTURE.md): Crate graph, registries, browser workers, OPFS, and the Rust-TypeScript boundary.
+- [Release guide](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/.github/RELEASING.md): Release automation, publishing channels, and retry procedures.
 
 ## Project
 
-- [Source code and documentation](https://github.com/rom-weaver/rom-weaver): Installation, supported formats, documentation, and releases.
+- [Source code](https://github.com/rom-weaver/rom-weaver): Source, issues, pull requests, and releases.

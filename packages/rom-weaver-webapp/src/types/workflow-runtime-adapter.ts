@@ -581,7 +581,7 @@ type WorkflowRuntime = {
   /** Declare a simultaneous I/O drop (source sizes in bytes) so the scheduler plans the whole batch as
    * one unit even though each file is staged independently. Optional - runtimes without a batch planner
    * omit it and ops are admitted as they arrive. */
-  noteIoBatch?: (jobSizes: number[]) => void;
+  noteIoBatch?: (jobSizes: number[]) => void | Promise<void>;
   output: WorkflowRuntimeOutput;
   publicOutput: RuntimePublicOutputAdapter;
   patch: WorkflowRuntimePatch;

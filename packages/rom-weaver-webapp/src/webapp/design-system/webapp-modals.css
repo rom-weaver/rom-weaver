@@ -20,13 +20,12 @@
 .rw-modal .modal-head .dlg-x { align-self: flex-start; margin-inline-end: calc(-1 * var(--sp-2xs)); }
 .rw-modal .modal-head .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
 .rw-modal .modal-body { padding: var(--sp-l); overflow-y: auto; overscroll-behavior: contain; }
-.rw-modal.changelog-modal .rw-modal-card { width: min(520px, 100%); }
-.rw-modal.changelog-modal .changelog-version {
-  padding-block: 2px 9px;
-  overflow-wrap: anywhere;
-  font-size: .8rem;
-  text-align: start;
-}
+.rw-modal.changelog-modal .rw-modal-card { width: min(720px, 100%); }
+/* The version transition and full-changelog link ride in the title bar. They sit
+   on the title's baseline while they fit, and drop to their own right-aligned
+   row (the auto margin survives the wrap) once the head runs out of width. */
+.rw-modal.changelog-modal .modal-head { flex-wrap: wrap; align-items: baseline; row-gap: var(--sp-2xs); }
+.rw-modal.changelog-modal .changelog-head-meta { flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
 /* Viewport units avoid a cyclic width under inline-size containment. */
 .rw-modal.settings-modal .rw-modal-card {
   width: min(820px, calc(100vw - 32px));
@@ -34,9 +33,24 @@
   container: settings-card / inline-size;
 }
 .rw-modal.select-modal .rw-modal-card { width: 100%; }
+/* The guide sheet drops from the top edge instead of sitting centred - it belongs
+   to the trail that opens it, and the trail sticks to the top of the guide. The
+   rest of its styling is in docs.css with the guide; only the modal-frame
+   overrides are here, where they outrank the `.rw-modal-card` defaults above. */
+@media (max-width: 860px) {
+  .rw-modal.guide-sheet { place-items: start stretch; padding: 0; }
+  .rw-modal.guide-sheet .rw-modal-card {
+    width: 100%;
+    max-width: none;
+    max-height: 82dvh;
+    border-width: 0 0 1px;
+    border-radius: 0 0 var(--r-l) var(--r-l);
+  }
+  @starting-style {
+    .rw-modal.guide-sheet .rw-modal-card { transform: translateY(-100%); opacity: 1; }
+  }
+}
 .rw-modal.select-modal .modal-body { padding-block-start: var(--sp-s); }
-.rw-app .input.tarea { height: auto; min-height: 52px; resize: vertical; padding-block: 8px; line-height: 1.4; font-size: .82rem; font-family: inherit; }
-.rw-app .ofld .input.tarea { height: auto; }
 @container settings-card (min-width: 688px) {
   .rw-modal.settings-modal .modal-body { columns: 2; column-gap: var(--sp-m); }
   .rw-modal.settings-modal .modal-body .setcols { display: contents; }
@@ -48,7 +62,8 @@
   .rw-app .setgroup .setrow { grid-template-columns: minmax(0, 1fr); gap: var(--sp-xs); }
 }
 .rw-app .setrow .sctl { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: var(--sp-xs); }
-.rw-app .setrow .sctl .select, .rw-app .setrow .sctl .input { height: 34px; font-size: .85rem; }
+.rw-app .setrow .sctl .select { height: 34px; font-size: var(--dropdown-fs, .85rem); }
+.rw-app .setrow .sctl .input { height: 34px; font-size: .85rem; }
 .rw-app .setrow .slabel label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-app .setrow .slabel small { flex-basis: 100%; font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
 .rw-app .settings-placeholder-value { color: var(--ink-3); font-style: italic; font-weight: 450; }
@@ -76,33 +91,43 @@
 .rw-app .codec-combobox { position: relative; width: 100%; z-index: 1; }
 .rw-app .ofld:focus-within, .rw-app .setrow:focus-within { position: relative; z-index: 90; }
 .rw-app .codec-combobox::after { content: ""; position: absolute; inset-inline-end: 10px; top: 50%; width: 12px; height: 12px; pointer-events: none; transform: translateY(-50%); background: no-repeat center / 12px 12px var(--chevron); }
-.rw-app .codec-combobox .input { padding-inline-end: 30px; }
+.rw-app .codec-combobox .input { padding-inline-end: 30px; font-size: var(--dropdown-fs, .82rem); }
+.rw-app .setrow .sctl .codec-combobox .input { font-size: var(--dropdown-fs, .85rem); }
 .codec-combobox-list { box-sizing: border-box; position: fixed; z-index: 10000; left: 0; top: 0; overflow: auto; padding: 4px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--plate); box-shadow: var(--overlay-shadow); }
-.codec-combobox-option { min-height: 28px; display: flex; align-items: center; padding: 0 8px; border-radius: 4px; color: var(--ink); cursor: pointer; font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codec-combobox-option { min-height: 28px; display: flex; align-items: center; padding: 0 8px; border-radius: 4px; color: var(--ink); cursor: pointer; font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; font-size: var(--dropdown-fs, .8rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .codec-combobox-option.active { background: var(--plate-2); color: var(--thread-text); }
 
-/* Prevent iOS focus zoom without disabling pinch zoom. */
+/* Prevent iOS focus zoom without disabling pinch zoom.
+   Two dropdown families opt out, and both are defined by sizing themselves to the
+   line that holds them rather than to a field: `.meta-target-select` (the header,
+   N64 byte order, patch target and check-basis pickers - small text over a 24px tap
+   floor) and `.ck-add-select`. The floor blew each of them past the line it rides in,
+   and a <select> opens a native picker rather than a keyboard, so it never triggers
+   the zoom this floor exists to prevent.
+   The check *values* need the floor and get it - they are read-only text until
+   tapped, and the field that replaces them is mounted at 16px before focus lands
+   (see EditableCheckRow). A 40-character SHA-1 does not fit at 16px on any phone,
+   which is exactly why it is not a field at rest. */
 @supports (-webkit-touch-callout: none) {
   @media (pointer: coarse) {
     .rw-app .input, .rw-app .select,
     .rw-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
-    .rw-app textarea, .rw-app select { font-size: max(16px, 1em); }
+    .rw-app textarea,
+    .rw-app select:not(.meta-target-select):not(.ck-add-select) { font-size: max(16px, 1em); }
     /* Reassert the 16px floor against more specific field rules. */
     .rw-app .ofld .select,
     .rw-app .fname .select, .rw-app .fname .outname { font-size: max(16px, 1em); }
   }
 }
-/* Enlarge touch targets without changing visual layout. */
+/* Enlarge touch targets without changing visual layout.
+   The drawer copy buttons get the same treatment in drawers.css - it owns them, and
+   from here this layer would outrank the placement rules that live with them. */
 @media (pointer: coarse) {
-  .rw-app .ck .copy, .rw-app .cue-copy, .rw-app .info-btn { position: relative; }
-  .rw-app .ck .copy::before, .rw-app .cue-copy::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+  .rw-app .info-btn { position: relative; }
   /* Expand masthead targets vertically to avoid overlapping neighbors. */
   .rw-app .masthead-tools .tool { position: relative; }
   .rw-app .masthead-tools .tool::after { content: ""; position: absolute; inset-inline: 0; top: 50%; height: 44px; transform: translateY(-50%); }
 }
-
-/* Strip user-agent chrome from keyboard-copyable trace buttons. */
-.rw-app .tracelog .ln { appearance: none; display: flex; width: max-content; min-width: 100%; border-inline: 0; border-block-start: 0; background: transparent; color: inherit; font: inherit; text-align: start; padding-inline: 0; }
 
 .rw-app .notice.error { color: var(--ink); background: color-mix(in oklab, var(--fault) 9%, var(--plate-2)); border: 1px solid color-mix(in oklab, var(--fault) 40%, var(--seam)); }
 .rw-app .notice.error svg, .rw-app .notice.error b { color: var(--fault); }
@@ -112,8 +137,6 @@
 .rw-modal .confirm-card .c-title svg { width: 19px; height: 19px; color: var(--care); flex: none; }
 .rw-modal .confirm-card .c-body { margin: 10px 0 16px; font-size: .9rem; line-height: 1.55; color: var(--ink-2); }
 .rw-modal .confirm-card .c-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); }
-
-.rw-app button.ck { appearance: none; text-align: start; width: 100%; font: inherit; }
 
 .rw-app .pdesc { margin: 0 0 4px; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
 .rw-app .pdesc.bad { color: var(--fault); }
@@ -132,10 +155,15 @@
 
 /* Scale progress on the compositor; counter-scale its texture and shuttle. */
 .rw-app .meter:not(.indet) .fill { width: 100%; transform-origin: 0 50%; transform: scaleX(var(--scale, 0)); transition: transform .4s var(--ease); }
-.rw-app .meter.live:not(.indet) .fill { transition: none; }
+/* Live ticks arrive per frame, so the settle tween becomes pure lag - swap it
+   for the short linear one that smooths the steps and still lands on time. */
+.rw-app .meter.live:not(.indet) .fill { transition: transform var(--prog-tween); }
 .rw-app .meter:not(.indet) .fill::before {
   transform-origin: 100% 50%;
   transform: scaleX(calc(1 / max(var(--scale, 1), .001)));
+  /* Tween alongside the fill; snapping the counter-scale would fatten the
+     shuttle for the length of the fill's transition. */
+  transition: transform var(--prog-tween);
 }
 /* Isolate per-tick layout and paint invalidation. */
 .rw-app .card, .rw-app .prog-panel { contain: layout paint style; }

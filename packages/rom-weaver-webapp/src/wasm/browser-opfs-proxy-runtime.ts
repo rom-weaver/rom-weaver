@@ -9,7 +9,7 @@ import { createOpfsProxyChannel, type OpfsProxyChannelTransfer } from "./browser
 import { OpfsProxyClient } from "./browser-opfs-proxy-client.ts";
 import type { OpfsProxyMountBootstrap } from "./browser-opfs-proxy-server.ts";
 import type { RomWeaverBrowserSyncAccessMode, TraceLine } from "./browser-opfs-runtime-types.ts";
-// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/ARCHITECTURE.md.
+// `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/development/ARCHITECTURE.md.
 import DEFAULT_OPFS_PROXY_WORKER_URL from "./workers/browser-opfs-proxy-worker.ts?worker&url";
 
 const PROXY_READY_TIMEOUT_MS = 30_000;

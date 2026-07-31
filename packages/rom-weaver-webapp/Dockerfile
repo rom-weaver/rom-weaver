@@ -151,7 +151,8 @@ RUN set -eux; \
 
 # hadolint ignore=DL3006
 FROM wasm-${WASM} AS app
-RUN npm --prefix packages/rom-weaver-webapp run build
+RUN node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp \
+    && npm --prefix packages/rom-weaver-webapp run build
 
 FROM scratch AS dist-source
 COPY --from=app /app/packages/rom-weaver-webapp/dist /

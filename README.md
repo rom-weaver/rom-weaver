@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://rom-weaver.com/weave">Open the webapp</a>
+  <a href="https://rom-weaver.com/apply">Open the webapp</a>
   · <a href="docs/README.md">Docs index</a>
   · <a href="https://github.com/sponsors/brandonocasey">Sponsor on GitHub</a>
   · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
@@ -100,7 +100,7 @@ general speed claim.
 - **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS,
   GBA, and 3DS can be reverted, with an opt-in footer that restores the
   original file byte-for-byte.
-- **Share workflows.** Distributable [`rom-weaver-bundle.json`](docs/rom-weaver-bundle-v1.schema.json)
+- **Share workflows.** Distributable [`rom-weaver-bundle.json`](./docs/rom-weaver-bundle-v1.schema.json)
   bundles pin patch order, checksums, and output naming so others can replay
   the exact workflow.
 - **Local-first and private.** Everything runs on your machine. The webapp is
@@ -109,7 +109,7 @@ general speed claim.
   and the threaded WASM webapp, with line-delimited JSON output for scripting.
 
 The complete format, codec, and checksum compatibility tables are maintained
-in the [CLI guide](docs/cli.md#supported-formats).
+in the [CLI guide](./docs/hosting/cli.md#supported-formats).
 
 ## Notices
 
@@ -157,15 +157,19 @@ edits and corrections are welcome.
 
 ### Webapp
 
-Open the hosted webapp at **[rom-weaver.com/weave](https://rom-weaver.com/weave)**. You
+Open the hosted webapp at **[rom-weaver.com/apply](https://rom-weaver.com/apply)**. You
 do not need to install anything or create an account. Choose **Weave**, add a
 ROM and one or more patches, review the detected formats and checksums, then run
 the workflow and save the result. Use **Create** to generate a distributable
 patch from an original and a modified file. Your files are processed locally
 and never leave the device. Install it as a PWA from the browser menu to use it
 offline.
-New here? [Try the sample weave](https://rom-weaver.com/weave?bundle=first-weave.zip)
+New here? [Try the sample weave](https://rom-weaver.com/apply?bundle=first-weave.zip)
 with a tiny original homebrew NES ROM and two patches that change “HELLO WORLD” to “MODIFIED ROM.”
+For a guided explanation, use
+[guided Apply](https://rom-weaver.com/apply?guide=apply),
+[guided Create](https://rom-weaver.com/create?guide=create), or
+[guided Bundle](https://rom-weaver.com/apply?guide=bundle).
 
 <a name="self-host-the-webapp"></a>
 
@@ -175,7 +179,7 @@ with a tiny original homebrew NES ROM and two patches that change “HELLO WORLD
 The Docker source build serves the full webapp: it builds the WASM module, adds
 cross-origin isolation headers, supports client-side routes, and precompresses
 assets. The
-[self-hosting guide](docs/self-hosting.md) covers reverse proxies, subpath
+[self-hosting guide](./docs/hosting/self-hosting.md) covers reverse proxies, subpath
 routing, HTTPS certificates, service-worker scope, and the required COOP/COEP
 headers.
 
@@ -310,7 +314,7 @@ docker run --rm \
 Mount your ROM directory at `/work` and pass paths under it. `--user` matters:
 bind-mounted files keep their host ownership, so without it the container cannot
 read files it does not own and leaves anything it writes owned by an unknown uid.
-See [Run in Docker](docs/cli.md#run-in-docker).
+See [Run in Docker](./docs/hosting/cli.md#run-in-docker).
 
 </details>
 
@@ -332,14 +336,14 @@ toolchain.
 </details>
 
 Hitting `Permission denied`? See
-[File permissions](docs/cli.md#file-permissions).
+[File permissions](./docs/hosting/cli.md#file-permissions).
 
-The [development guide](docs/development.md) covers the full toolchain setup,
+The [development guide](./docs/development/development.md) covers the full toolchain setup,
 webapp builds, and tests.
 
 ## Screenshots
 
-[View every screenshot at full size.](docs/screenshots.md)
+[View every screenshot at full size.](./docs/development/screenshots.md)
 
 <table>
   <thead>
@@ -350,38 +354,38 @@ webapp builds, and tests.
   </thead>
   <tbody>
     <tr>
-      <td>Desktop: Apply patches (Weave)</td>
+      <td>Desktop: ordered patch stack</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-desktop-dark.png">
-          <img src="packages/rom-weaver-webapp/design/weave-desktop-light.png" alt="Filled Weave patch workflow on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/apply-patches-desktop-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/apply-patches-desktop-light.webp" alt="Focused Weave patch stack with two ordered sample patches on desktop">
         </picture>
       </td>
     </tr>
     <tr>
-      <td>Desktop: Create a patch</td>
+      <td>Desktop: create output</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-desktop-dark.png">
-          <img src="packages/rom-weaver-webapp/design/create-desktop-light.png" alt="Filled Create patch workflow on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-output-desktop-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/create-output-desktop-light.webp" alt="Focused Create output card with BPS selected on desktop">
         </picture>
       </td>
     </tr>
     <tr>
-      <td>Mobile: Apply patches (Weave)</td>
+      <td>Mobile: Original and Modified</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/weave-mobile-dark.png">
-          <img src="packages/rom-weaver-webapp/design/weave-mobile-light.png" alt="Filled Weave patch workflow on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-inputs-mobile-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/create-inputs-mobile-light.webp" alt="Focused Create Original and Modified cards on mobile" width="390">
         </picture>
       </td>
     </tr>
     <tr>
-      <td>Mobile: Create a patch</td>
+      <td>Mobile: bundle output options</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-mobile-dark.png">
-          <img src="packages/rom-weaver-webapp/design/create-mobile-light.png" alt="Filled Create patch workflow on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/bundle-output-mobile-dark.webp">
+          <img src="packages/rom-weaver-webapp/design/bundle-output-mobile-light.webp" alt="Focused patch-only bundle controls on mobile" width="390">
         </picture>
       </td>
     </tr>
@@ -390,8 +394,11 @@ webapp builds, and tests.
 
 ## Documentation
 
-The [documentation index](docs/README.md) routes to the CLI, deployment,
-integration, development, architecture, and format-reference guides.
+Start with the browser-first [documentation home](https://rom-weaver.com/docs)
+or the repository [documentation index](./docs/README.md). The web docs include
+a task and tool picker, guided samples, focused screenshots, and a
+[FAQ](./docs/usage/faq.md). CLI, deployment, integration, development,
+architecture, and format references each have their own guides.
 
 ## Contributing and support
 
@@ -414,7 +421,7 @@ support continued development through
 Copyright (C) Brandon Casey and rom-weaver contributors
 
 The public distribution is licensed under
-[AGPL-3.0-or-later](LICENSE). [Commercial licensing](COMMERCIAL_LICENSE.md) is
+[AGPL-3.0-or-later](LICENSE). [Commercial licensing](COMMERCIAL.md) is
 also available for first-party rom-weaver code. Bundled third-party components
 retain their own licenses. Release builds include a generated
 [combined attribution and license inventory](https://rom-weaver.com/NOTICE) and

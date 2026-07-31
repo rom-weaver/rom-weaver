@@ -8,6 +8,8 @@
 // sidecars for (see writeBrotliSidecars in vite.config.mjs); every other
 // request stays on Pages' unmetered static path and never invokes this.
 
+import { sidecarContentType } from "./content-types.js";
+
 const ACCEPTS_BR = /(^|[\s,])br($|[\s,;])/;
 
 // Missing assets are errors now that the build publishes a top-level 404.html;
@@ -17,13 +19,16 @@ const isSpaFallback = (response) => !response.ok || (response.headers.get("Conte
 export const onRequestGet = async ({ request, env, next }) => {
   if (!ACCEPTS_BR.test(request.headers.get("Accept-Encoding") ?? "")) return next();
   const url = new URL(request.url);
-  // The content type comes from the static asset itself (headers only, no
-  // body) rather than a hand-kept extension map, so any sidecar-backed file
-  // type the build stages is served with exactly the type Pages would use.
-  const asset = await env.ASSETS.fetch(new URL(url.pathname, url), { method: "HEAD" });
-  if (isSpaFallback(asset)) return next();
-  const contentType = asset.headers.get("Content-Type");
+  // The type comes from the build-verified table rather than a HEAD probe of the
+  // static asset. The probe was a second subrequest that had to resolve before the
+  // sidecar fetch could even start, which put a serialized round trip in front of
+  // the render-critical CSS and entry module. A missing entry is not an error: the
+  // request falls through to Pages' static path, which serves the asset correctly
+  // and only forfeits the quality-11 sidecar.
+  const contentType = sidecarContentType(url.pathname);
   if (!contentType) return next();
+  // A missing asset needs no separate check - its sidecar is missing too, and the
+  // fallback test below catches that.
   const sidecar = await env.ASSETS.fetch(new URL(`${url.pathname}.br`, url));
   if (isSpaFallback(sidecar)) return next();
   const headers = new Headers(sidecar.headers);

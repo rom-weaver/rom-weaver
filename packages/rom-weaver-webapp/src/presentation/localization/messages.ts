@@ -54,6 +54,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.language": msg({ id: "settings.language", message: "Language" }),
   "settings.levelOverride": msg({ id: "settings.levelOverride", message: "Level override" }),
   "settings.logLevel": msg({ id: "settings.logLevel", message: "Log level" }),
+  "settings.onboardingEnabled": msg({
+    id: "settings.onboardingEnabled",
+    message: 'Show the "New here?" quick-start tips',
+  }),
   "settings.requireInputChecksumMatch": msg({
     id: "settings.requireInputChecksumMatch",
     message: "Require input checksum match",
@@ -61,6 +65,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.rvzBlockSize": msg({ id: "settings.rvzBlockSize", message: "RVZ block size" }),
   "settings.rvzCodec": msg({ id: "settings.rvzCodec", message: "RVZ codec" }),
   "settings.sevenZipCodec": msg({ id: "settings.sevenZipCodec", message: "7z codec" }),
+  "settings.theme": msg({ id: "settings.theme", message: "Theme" }),
   "settings.threads": msg({ id: "settings.threads", message: "Threads" }),
   "settings.zipCodec": msg({ id: "settings.zipCodec", message: "ZIP codec" }),
   "ui.basis.auto": msg({ id: "ui.basis.auto", message: "auto" }),
@@ -89,7 +94,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.drop.staging": msg({ id: "ui.drop.staging", message: "Reading dropped files…" }),
   "ui.drop.tap": msg({ id: "ui.drop.tap", message: "Tap to choose files" }),
   "ui.env.threads": msg({ id: "ui.env.threads", message: "threads" }),
-  "ui.footer.donate": msg({ id: "ui.footer.donate", message: "Tip" }),
+  "ui.footer.donate": msg({ id: "ui.footer.donate", message: "Support" }),
+  "ui.masthead.slogan": msg({
+    id: "ui.masthead.slogan",
+    message: "A ROM & Patch toolkit",
+  }),
   "ui.hero.accent": msg({ id: "ui.hero.accent", message: "at native speed" }),
   "ui.hero.createThesis": msg({
     id: "ui.hero.createThesis",
@@ -164,6 +173,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.step.rom": msg({ id: "ui.step.rom", message: "ROM" }),
   "ui.theme.toDark": msg({ id: "ui.theme.toDark", message: "Switch to dark theme" }),
   "ui.theme.toLight": msg({ id: "ui.theme.toLight", message: "Switch to light theme" }),
+  "ui.theme.auto": msg({ id: "ui.theme.auto", message: "Auto" }),
+  "ui.theme.dark": msg({ id: "ui.theme.dark", message: "Dark" }),
+  "ui.theme.light": msg({ id: "ui.theme.light", message: "Light" }),
+  "ui.tools.accent": msg({ id: "ui.tools.accent", message: "Accent" }),
+  "ui.tools.language": msg({ id: "ui.tools.language", message: "Language" }),
   "ui.tools.log": msg({ id: "ui.tools.log", message: "Log" }),
   "ui.tools.theme": msg({ id: "ui.tools.theme", message: "Theme" }),
   "ui.update.later": msg({ id: "ui.update.later", message: "Later" }),

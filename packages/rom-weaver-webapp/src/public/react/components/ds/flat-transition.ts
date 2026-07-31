@@ -30,23 +30,63 @@ const prefersReducedMotion = () =>
 const isIosWebKit = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("-webkit-touch-callout", "none");
 
-/**
- * iOS WebKit's view transitions are unreliable: the old/new snapshots flash
- * content in and out of existence mid-transition, and infinite animations
- * inside named elements (the hero formats ticker) freeze during capture and
- * never resume. Every caller falls back to an instant update there.
- */
-const viewTransitionsUnavailable = (): boolean => {
+/** Engine-level check: no support, or the user asked for less motion. */
+const viewTransitionsUnsupported = (): boolean => {
   if (typeof document.startViewTransition !== "function") return true;
   if (prefersReducedMotion()) {
     logger.trace("view transition skipped: prefers-reduced-motion");
     return true;
   }
+  return false;
+};
+
+/**
+ * iOS WebKit's view transitions are unreliable: the old/new snapshots flash
+ * content in and out of existence mid-transition, and infinite animations
+ * inside named elements (the hero formats ticker) freeze during capture and
+ * never resume. Callers that name elements fall back to an instant update
+ * there; the theme wipe suppresses every name (see `html.vt-theme` in
+ * dialogs.css), so it uses `viewTransitionsUnsupported` and keeps the wipe.
+ */
+const viewTransitionsUnavailable = (): boolean => {
+  if (viewTransitionsUnsupported()) return true;
   if (isIosWebKit()) {
     logger.trace("view transition skipped: iOS WebKit");
     return true;
   }
   return false;
+};
+
+/**
+ * Refcounted `<html>` marker classes for in-flight transitions.
+ *
+ * Clicking again mid-transition starts a second run while the first is still
+ * settling; the first's `finished` then resolves (as a skip) and its plain
+ * `classList.remove` would strip the marker the live run depends on. The
+ * survivor loses its wipe/flattening CSS and degrades into the default
+ * per-element morph - the "theme switch lagged" symptom. Counting holders means
+ * only the last release actually removes the class.
+ */
+const classHolds = new Map<string, number>();
+
+const holdTransitionClasses = (classes: readonly string[]): (() => void) => {
+  const root = document.documentElement;
+  for (const name of classes) classHolds.set(name, (classHolds.get(name) ?? 0) + 1);
+  root.classList.add(...classes);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    for (const name of classes) {
+      const held = (classHolds.get(name) ?? 1) - 1;
+      if (held > 0) {
+        classHolds.set(name, held);
+        continue;
+      }
+      classHolds.delete(name);
+      root.classList.remove(name);
+    }
+  };
 };
 
 /**
@@ -58,20 +98,19 @@ const viewTransitionsUnavailable = (): boolean => {
  * out of sync with the root crossfade instead of riding it as one surface.
  */
 const runFlatViewTransition = (update: () => void, extraClass?: string) => {
-  const root = document.documentElement;
   const classes = extraClass ? ["vt-flat", "vt-quiet", extraClass] : ["vt-flat", "vt-quiet"];
   if (viewTransitionsUnavailable()) {
     update();
     lockEntryAnimations();
     return;
   }
-  root.classList.add(...classes);
+  const release = holdTransitionClasses(classes);
   const transition = document.startViewTransition(update);
   transition.ready.catch(() => undefined);
   const clear = () => {
     // lock first - removing vt-quiet would otherwise start the held animations
     lockEntryAnimations();
-    root.classList.remove(...classes);
+    release();
   };
   transition.finished.then(clear, clear);
 };
@@ -93,4 +132,4 @@ const useFlatTransitionFlag = (actual: boolean): boolean => {
   return displayed;
 };
 
-export { runFlatViewTransition, useFlatTransitionFlag, viewTransitionsUnavailable };
+export { holdTransitionClasses, runFlatViewTransition, useFlatTransitionFlag, viewTransitionsUnsupported };

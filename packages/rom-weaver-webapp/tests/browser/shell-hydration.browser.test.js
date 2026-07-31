@@ -1,32 +1,40 @@
-import { act, createElement } from "react";
+import { Fragment, act, createElement } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
-import { Masthead } from "../../src/webapp/components/shell.tsx";
+import { Masthead, SiteFooter } from "../../src/webapp/components/shell.tsx";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const tabs = [
   { href: "weave", icon: createElement("svg", { "aria-hidden": true }), id: "patcher", label: "Weave" },
   { href: "create", icon: createElement("svg", { "aria-hidden": true }), id: "creator", label: "Create" },
+  { href: "trim", icon: createElement("svg", { "aria-hidden": true }), id: "trim", label: "Trim" },
+  { href: "tools", icon: createElement("svg", { "aria-hidden": true }), id: "tools", label: "Tools" },
 ];
 
-const shell = (threads, serviceWorkerStatus) =>
+const shell = (threads, serviceWorkerStatus, betaToolsEnabled = false) =>
   createElement(
     RomWeaverSettingsProvider,
-    { settings: {} },
-    createElement(Masthead, {
-      currentTab: "patcher",
-      onOpenLog: () => undefined,
-      onOpenSettings: () => undefined,
-      onReset: () => undefined,
-      onSelectTab: () => undefined,
-      serviceWorkerStatus,
-      tabs,
-      threads,
-      version: "v1.2.3",
-    }),
+    { settings: { betaToolsEnabled } },
+    createElement(
+      Fragment,
+      null,
+      createElement(Masthead, {
+        currentTab: "patcher",
+        onOpenLog: () => undefined,
+        onOpenSettings: () => undefined,
+        onReset: () => undefined,
+        onSelectTab: () => undefined,
+        tabs,
+      }),
+      createElement(SiteFooter, {
+        serviceWorkerStatus,
+        threads,
+        version: "1.2.3",
+      }),
+    ),
   );
 
 let root;
@@ -62,6 +70,25 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
 
   expect(host.querySelector(".masthead-threads")).toBe(threads);
   expect(host.querySelector(".masthead-runtime")).toBe(runtime);
+  expect(recoverableErrors).toEqual([]);
+  expect(consoleError).not.toHaveBeenCalled();
+});
+
+test("hydrates the beta navigation in place when the persisted flag is enabled", async () => {
+  const host = document.createElement("div");
+  host.innerHTML = renderToString(shell(8, null));
+  document.body.append(host);
+  document.documentElement.dataset.betaToolsEnabled = "true";
+
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const recoverableErrors = [];
+  await act(async () => {
+    root = hydrateRoot(host, shell(8, "off", true), {
+      onRecoverableError: (error) => recoverableErrors.push(error),
+    });
+  });
+
+  expect(host.querySelectorAll("[data-beta-tool]").length).toBe(2);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });

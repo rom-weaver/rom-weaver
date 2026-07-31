@@ -11,7 +11,7 @@ import zlib from "node:zlib";
 // text with no `.br` sibling at all. Listing what is already compressed is both
 // shorter and self-maintaining - anything new is compressed by default, and
 // `writeIfSmaller` discards the result when brotli cannot beat the source.
-const PRECOMPRESSED_EXTENSIONS = new Set([
+const SKIP_COMPRESSION_EXTENSIONS = new Set([
   ".avif",
   ".br",
   ".gif",
@@ -21,6 +21,10 @@ const PRECOMPRESSED_EXTENSIONS = new Set([
   ".ico",
   ".jpeg",
   ".jpg",
+  // Not precompressed - just never fetched outside devtools. Source maps are
+  // the largest text in the bundle, so a q11 pass over them is the slowest part
+  // of the image build for bytes nobody downloads on a normal visit.
+  ".map",
   ".mp4",
   ".png",
   ".webm",
@@ -67,7 +71,7 @@ const compressDirectory = (directory) => {
       compressDirectory(filePath);
       continue;
     }
-    if (PRECOMPRESSED_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
+    if (SKIP_COMPRESSION_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
     compressFile(filePath);
   }
 };

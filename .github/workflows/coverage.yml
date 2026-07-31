@@ -43,6 +43,9 @@ jobs:
           webapp-deps: "true"
           playwright: "true"
 
+      - name: Generate webapp attribution
+        run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
+
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 

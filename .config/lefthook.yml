@@ -86,6 +86,11 @@ pre-commit:
     react-touch-styles:
       glob: "packages/rom-weaver-webapp/**/*.css"
       run: npm --prefix packages/rom-weaver-webapp run lint:touch-styles
+    # Across a cascade layer, order beats specificity outright, so an override can
+    # start losing to a plainer rule with nothing to show for it. CSS-only glob.
+    react-css-layers:
+      glob: "packages/rom-weaver-webapp/**/*.css"
+      run: npm --prefix packages/rom-weaver-webapp run lint:css-layers
     react-i18n:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run lint:i18n

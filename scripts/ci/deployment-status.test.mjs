@@ -28,7 +28,7 @@ function startApi() {
         body: body ? JSON.parse(body) : null,
       });
       response.writeHead(201, { "content-type": "application/json" });
-      response.end("{}");
+      response.end(request.url.endsWith("/deployments") ? '{"id":456}' : "{}");
     });
   });
   server.listen(0);
@@ -62,6 +62,9 @@ async function run(env = {}) {
 }
 
 const statusCall = (calls) => calls.find((call) => call.path === `/repos/${REPO}/statuses/${SHA}`);
+const deploymentCall = (calls) => calls.find((call) => call.path === `/repos/${REPO}/deployments`);
+const deploymentStatusCall = (calls) =>
+  calls.find((call) => call.path === `/repos/${REPO}/deployments/456/statuses`);
 
 test("success links the commit status to the exact deployment", async () => {
   const calls = await run({ DEPLOYMENT_URL: "https://abc.rom-weaver-preview.pages.dev" });
@@ -70,6 +73,31 @@ test("success links the commit status to the exact deployment", async () => {
     context: CONTEXT,
     description: "Webapp deployed to preview",
     target_url: "https://abc.rom-weaver-preview.pages.dev",
+  });
+});
+
+test("a cached deployment creates a GitHub deployment record", async () => {
+  const calls = await run({
+    DEPLOYMENT_URL: "https://abc.rom-weaver-preview.pages.dev",
+    DEPLOYMENT_REF: "feature/preview-record",
+    DEPLOYMENT_RECORD: "true",
+    DEPLOYMENT_ENVIRONMENT: "rom-weaver-preview.pages.dev",
+  });
+  assert.deepEqual(deploymentCall(calls).body, {
+    ref: "feature/preview-record",
+    task: "deploy",
+    auto_merge: false,
+    required_contexts: [],
+    environment: "rom-weaver-preview.pages.dev",
+    description: "Webapp deployed to preview",
+    transient_environment: true,
+    production_environment: false,
+  });
+  assert.deepEqual(deploymentStatusCall(calls).body, {
+    state: "success",
+    target_url: "https://abc.rom-weaver-preview.pages.dev",
+    environment_url: "https://abc.rom-weaver-preview.pages.dev",
+    description: "Webapp deployed to preview",
   });
 });
 

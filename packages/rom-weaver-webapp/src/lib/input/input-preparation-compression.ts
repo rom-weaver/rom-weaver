@@ -1,4 +1,3 @@
-import { createBrowserRuntime } from "../../platform/browser/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 
 type InputPreparationRuntime = Pick<WorkflowRuntime, "compression" | "ingest" | "name" | "workerIo">;
@@ -9,7 +8,10 @@ const DEFAULT_INPUT_PREPARATION_RUNTIME: Pick<WorkflowRuntime, "name"> = {
 let defaultBrowserRuntime: WorkflowRuntime | null = null;
 
 const resolveBrowserInputPreparationRuntime = async (): Promise<InputPreparationRuntime> => {
-  if (!defaultBrowserRuntime) defaultBrowserRuntime = createBrowserRuntime();
+  if (!defaultBrowserRuntime) {
+    const { createBrowserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
+    defaultBrowserRuntime = createBrowserRuntime();
+  }
   return defaultBrowserRuntime;
 };
 

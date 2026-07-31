@@ -26,6 +26,28 @@ log-level = "info"
 
 [advanced]
 
+# Keep the old workflow URL alive for the Docker distribution too. Query
+# strings are retained by static-web-server's redirect handling.
+[[advanced.redirects]]
+source = "/weave"
+destination = "/apply"
+kind = 301
+
+[[advanced.redirects]]
+source = "/weave/"
+destination = "/apply"
+kind = 301
+
+[[advanced.redirects]]
+source = "/weave.html"
+destination = "/apply"
+kind = 301
+
+[[advanced.redirects]]
+source = "/weave/index.html"
+destination = "/apply"
+kind = 301
+
 # Cross-origin isolation - required for SharedArrayBuffer (wasm threads).
 # Applied to every response so it survives a TLS-terminating reverse proxy.
 [[advanced.headers]]

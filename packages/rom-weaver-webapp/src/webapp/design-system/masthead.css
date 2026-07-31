@@ -8,11 +8,12 @@
 .rw-app .skip-link:focus-visible { transform: none; }
 
 .rw-app .masthead { display: flex; align-items: center; gap: var(--sp-l); padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px); flex-wrap: wrap; }
-.rw-app .brand { display: inline-flex; align-items: center; gap: var(--sp-m); flex: none; }
-.rw-app .brand-copy { display: flex; flex-direction: column; min-width: 0; }
+.rw-app .brand { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--sp-m); row-gap: 0; flex: none; }
+.rw-app .brand-mark-link { grid-column: 1; grid-row: 1 / span 2; display: flex; flex: none; align-self: center; border-radius: 8px; }
+.rw-app .brand-copy { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; min-width: 0; transform: translateY(-4px); }
 /* brand sizes ride one fluid scale: 30px @360 → ~40px @720 (the old phone
    values) → 44px cap on desktop; no discrete jumps */
-.rw-app .brand-mark { width: clamp(30px, 2.7vw + 20.6px, 44px); aspect-ratio: 1; height: auto; border-radius: 8px; }
+.rw-app .brand-mark { width: clamp(32px, 2.6vw + 21px, 46px); aspect-ratio: 1; height: auto; border-radius: 8px; }
 :root[data-theme="dark"] .brand-mark {
   filter:
     drop-shadow(0 1px 0 rgb(255 255 255 / .45))
@@ -20,11 +21,14 @@
     drop-shadow(1px 0 0 rgb(255 255 255 / .45))
     drop-shadow(-1px 0 0 rgb(255 255 255 / .45));
 }
-.rw-app .brand-word { margin: 0; font-size: clamp(1.12rem, .96rem + .72vw, 1.42rem); font-weight: 650; letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
+.rw-app .brand-word { margin: 0; font-size: clamp(1.22rem, 1.04rem + .85vw, 1.58rem); font-weight: 650; letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
 .rw-app .brand-word b { color: var(--thread-text); font-weight: 650; }
 .rw-app .brand-hy { color: var(--ink-4); font-weight: 400; }
 
-.rw-app .modes { margin-inline: auto; }
+.rw-app .masthead-control-rail {
+  display: contents;
+}
+.rw-app .modes { order: 3; flex: 0 0 auto; width: max-content; max-width: 100%; margin-inline: auto; }
 .rw-app .mode-rail { position: relative; display: inline-flex; gap: var(--sp-2xs); padding: 3px; border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--well); }
 .rw-app .mode-thumb {
   position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: var(--r-s);
@@ -35,6 +39,9 @@
   view-transition-name: vt-thumb;
 }
 html.vt-theme .mode-thumb { view-transition-name: none !important; }
+/* No workflow is selected while a guide is open, so the thumb has nothing to
+   sit under. Hidden rather than parked on a tab that is not current. */
+.rw-app .mode-rail:not(:has(.mode[aria-selected="true"])) .mode-thumb { opacity: 0; }
 /* the tab labels get their own groups so they PAINT ABOVE the sliding thumb
    during the mode-switch transition - without this the thumb's group renders
    over the root snapshot and the orange briefly covers the tab text */
@@ -42,6 +49,7 @@ html.vt-theme .mode-thumb { view-transition-name: none !important; }
 .rw-app .mode-rail .mode:nth-of-type(2) { view-transition-name: vt-tab-2; }
 .rw-app .mode-rail .mode:nth-of-type(3) { view-transition-name: vt-tab-3; }
 .rw-app .mode-rail .mode:nth-of-type(4) { view-transition-name: vt-tab-4; }
+.rw-app .mode-rail .mode:nth-of-type(5) { view-transition-name: vt-tab-5; }
 html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* where CSS anchors exist, the thumb pins itself to the selected tab -
    placement survives resize/font-swap with no JS measuring at all */
@@ -56,8 +64,9 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   font-size: .8rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
   color: var(--ink-2); text-decoration: none; transition: color .25s var(--ease);
 }
-.rw-app .mode svg { width: 1rem; height: 1rem; }
+.rw-app .mode svg { width: 17px; height: 17px; }
 .rw-app .mode[aria-selected="true"] { color: var(--thread-ink); }
+html:not([data-beta-tools-enabled="true"]) .rw-app .mode[data-beta-tool] { display: none; }
 @media (hover: hover) {
   .rw-app .mode:not([aria-selected="true"]):hover { color: var(--ink); }
 }
@@ -74,18 +83,26 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 .rw-app .tools-subnav-tab:active { background: color-mix(in oklab, var(--thread) 22%, var(--well)); }
 .rw-app .tools-subnav-tab svg { width: 15px; height: 15px; }
 
-.rw-app .masthead-tools { display: inline-flex; gap: var(--sp-2xs); }
+.rw-app .masthead-tools { order: 2; display: inline-flex; gap: var(--sp-2xs); margin-inline-start: auto; }
 .rw-app .masthead-version { display: flex; align-items: center; gap: var(--sp-xs); max-width: 100%; color: var(--ink-3); font-size: clamp(.68rem, .6rem + .36vw, .82rem); line-height: 1.25; white-space: nowrap; }
+.rw-app .masthead-slogan { grid-column: 2; grid-row: 2; justify-self: start; color: var(--ink-3); font-size: clamp(.66rem, .6rem + .25vw, .84rem); letter-spacing: .01em; line-height: 1.25; text-align: start; white-space: nowrap; transform: translateY(-4px); }
 .rw-app .masthead-threads { flex: none; }
 .rw-app .masthead-threads-short { display: none; }
-.rw-app .masthead-tools .masthead-donate { color: var(--thread-text); }
-@media (hover: hover) {
-  .rw-app .masthead-tools .masthead-donate:hover { color: var(--thread); }
-}
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   .rw-app .masthead-threads-full { display: none; }
   .rw-app .masthead-threads-short { display: inline; }
 }
+.rw-app .site-footer-links { display: inline-flex; align-items: center; gap: var(--sp-m); min-width: 0; }
+.rw-app .site-footer-link { display: inline-flex; align-items: center; gap: var(--sp-xs); color: var(--ink-2); font-size: .76rem; white-space: nowrap; }
+.rw-app .site-footer-link.support-link { color: var(--thread-text); }
+.rw-app .site-footer-link svg { width: 15px; height: 15px; }
+.rw-app .site-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-m); min-width: 0; padding-block: var(--sp-s); border-block-start: 1px solid var(--seam-soft); }
+.rw-app .site-footer-status { min-width: 0; }
+.rw-app .site-footer .masthead-version { min-width: 0; overflow: hidden; }
+@media (hover: hover) {
+  .rw-app .site-footer-link:hover { color: var(--thread-text); }
+}
+.rw-app .site-footer-link:active { color: var(--thread-text); }
 /* ghost tools at every width: the buttons drop their box chrome at rest -
    border/fill only appear on hover - so six controls stop reading as a
    second nav beside the mode rail */
@@ -99,12 +116,54 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 }
 .rw-app .tool:active { background: var(--plate-2); }
 .rw-app .tool svg { width: 17px; height: 17px; }
+/* the support link keeps the accent so it reads as an invitation, not a tool */
+.rw-app .masthead-donate { color: var(--thread-text); }
+@media (hover: hover) {
+  .rw-app .masthead-donate:hover { color: var(--thread); }
+}
+.rw-app .masthead-donate:active { color: var(--thread); }
+/* hairline between the external links (GitHub/Support) and the app tools */
+.rw-app .tools-sep { display: block; flex: none; align-self: center; width: 1px; height: 20px; margin-inline: 5px; background: var(--seam); }
 .rw-app .build-version-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* the tools are icon-only everywhere; the title/aria-label carries the name
-   (the spans stay in the DOM so the localized names remain available) */
+.rw-app .build-version-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: inherit;
+  text-decoration: underline dotted var(--ink-4);
+  text-underline-offset: 2px;
+}
+/* The tools are icon-only; the title/aria-label carries the name. */
 .rw-app .tool-text { display: none; }
-/* hairline between the app tools and the external links (GitHub/Donate) */
-.rw-app .tools-sep { display: block; flex: none; width: 1px; height: 20px; margin-inline: 5px; align-self: center; background: var(--seam); }
+/* ── accent quick picker ──
+   The tray is anchored rather than inline: unrolling six dots into the toolbar
+   reflows every tool to its right, and on a phone it wraps the whole row onto a
+   second line. Anchored, the click count is the same and nothing moves. */
+.rw-app .tool-anchor { position: relative; display: inline-flex; }
+.rw-app .accent-tray {
+  position: absolute; z-index: 30; inset-block-start: calc(100% + var(--sp-xs)); inset-inline-end: 0;
+  display: flex; gap: var(--sp-s); padding: var(--sp-s) var(--sp-m);
+  border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate);
+  box-shadow: var(--overlay-shadow); animation: drop-in .16s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .accent-tray { animation: none; }
+}
+
+/* the tool wears the live dye so the current lot is readable without opening */
+.rw-app .accent-tool { position: relative; }
+.rw-app .accent-tool-dot {
+  position: absolute; inset-block-end: 5px; inset-inline-end: 5px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--thread); box-shadow: 0 0 0 1.5px var(--chassis);
+}
+/* the swatches themselves are accents.css's .accent-chip - shared with the
+   settings picker, ring colour and all */
+@media (hover: hover) {
+  .rw-app .accent-tray .accent-chip:hover .accent-chip-dot { scale: 1.12; }
+}
+.rw-app .accent-tray .accent-chip:active .accent-chip-dot { scale: 1.12; }
+
 /* sun/moon cross-morph */
 .rw-app .tool .ico-sun, .rw-app .tool .ico-moon { grid-area: 1 / 1; transition: transform .4s var(--ease), opacity .3s; }
 :root[data-theme="dark"] .ico-sun { opacity: 0; transform: rotate(90deg) scale(.5); }
