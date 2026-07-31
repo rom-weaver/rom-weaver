@@ -233,7 +233,7 @@ const applyPlanValidationResult = <TSource>(
         ? "Patch validation passed"
         : status === "invalid"
           ? "Patch cannot be applied to this ROM"
-          : "Input state is only provable during apply"),
+          : "Input state is only provable while applying"),
     status,
   });
   prepared.entry.stage.state.chainVerdict = {
