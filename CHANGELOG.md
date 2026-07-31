@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.1](https://github.com/rom-weaver/rom-weaver/compare/v0.10.0...v0.10.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* **ci:** stop the release fan-out skipping past a skipped need ([#338](https://github.com/rom-weaver/rom-weaver/issues/338)) ([dc70afb](https://github.com/rom-weaver/rom-weaver/commit/dc70afb99a6c82a19341a442acff844cbc9a98ff))
+* **license:** let github detect agpl-3.0 ([#341](https://github.com/rom-weaver/rom-weaver/issues/341)) ([e6e6154](https://github.com/rom-weaver/rom-weaver/commit/e6e6154b4719d0d0686e0aa7eba3ac91d4a498d3))
+* **webapp:** keep the footer on the first phone screen ([#342](https://github.com/rom-weaver/rom-weaver/issues/342)) ([cbc14fc](https://github.com/rom-weaver/rom-weaver/commit/cbc14fc83ad530098e9cc03b05172e6ff36779ee))
+* **webapp:** restore the masthead donor links and retire the language picker ([#343](https://github.com/rom-weaver/rom-weaver/issues/343)) ([5080bfd](https://github.com/rom-weaver/rom-weaver/commit/5080bfdf8ec047d7e9898baf7920f42cee39c0d7))
+
+
+### Internal
+
+* **release:** run the full matrix on the release pull request ([#339](https://github.com/rom-weaver/rom-weaver/issues/339)) ([3d3a57d](https://github.com/rom-weaver/rom-weaver/commit/3d3a57df93b5e9c99ddbb630e5ce8b4f9f5a0c50))
+
 ## [0.10.0](https://github.com/rom-weaver/rom-weaver/compare/v0.9.0...v0.10.0) (2026-07-30)
 
 
