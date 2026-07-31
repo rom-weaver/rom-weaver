@@ -204,7 +204,6 @@
 }
 /* Pair patch cards on wide screens while keeping workflow stages linear. */
 @media (min-width: 1100px) {
-  .rw-app .app { max-width: 1220px; }
   .rw-app #panel-trim, .rw-app #panel-tools { width: 100%; max-width: 880px; margin-inline: auto; }
   .rw-app #rom-weaver-container > * { min-width: 0; }
   .rw-app #rom-weaver-container > #rom-weaver-row-patch-stack { border-block-start: 1px solid var(--seam-soft); }

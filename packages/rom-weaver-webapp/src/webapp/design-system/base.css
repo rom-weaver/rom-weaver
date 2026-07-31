@@ -134,7 +134,7 @@
 .dlg-body:focus, .dlg-body:focus-visible { outline: none; }
 
 .rw-app .app {
-  max-width: 880px; width: 100%; margin-inline: auto; flex: 1 0 auto;
+  max-width: 1220px; width: 100%; margin-inline: auto; flex: 1 0 auto;
   padding: 0 var(--gutter);
   display: flex; flex-direction: column;
 }

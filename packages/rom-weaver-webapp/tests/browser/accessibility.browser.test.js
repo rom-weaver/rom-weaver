@@ -415,8 +415,6 @@ const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
         createElement(Masthead, {
           ...mastheadProps,
           currentTab,
-          donateHref: "https://example.invalid/donate",
-          githubHref: "https://example.invalid/repo",
           onOpenLog: noop,
           onOpenSettings: noop,
           onReset: noop,
@@ -1135,7 +1133,49 @@ describe("webapp responsive navigation", () => {
     expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("485px");
   });
 
-  test("keeps navigation below the tools until the complete rail fits", async () => {
+  test("short phone layouts keep the brand clear of the navigation rail", async () => {
+    for (const viewport of [
+      { height: 67, width: 703 },
+      { height: 105, width: 527 },
+      { height: 135, width: 742 },
+    ]) {
+      await setViewport(viewport);
+      await renderPage(emptyApplyPage(), "dark");
+
+      const masthead = host.querySelector(".masthead");
+      const brand = host.querySelector(".brand");
+      const tools = host.querySelector(".masthead-tools");
+      const modes = host.querySelector(".modes");
+
+      expect(masthead.dataset.mastheadLayout).toBe("stacked");
+      expect(modes.getBoundingClientRect().top).toBeGreaterThanOrEqual(brand.getBoundingClientRect().bottom);
+      expect(brand.getBoundingClientRect().right).toBeLessThanOrEqual(tools.getBoundingClientRect().left);
+      expect(tools.getBoundingClientRect().right).toBeCloseTo(masthead.getBoundingClientRect().right, 0);
+    }
+  });
+
+  test("keeps the workflow gutter fluid without a narrow desktop cap", async () => {
+    let previousGutter = 0;
+    for (const width of [904, 1024, 1096, 1175]) {
+      await setViewport({ height: 900, width });
+      await renderPage(emptyApplyPage(), "dark");
+
+      const app = host.querySelector(".app");
+      const hero = host.querySelector(".drop.hero");
+      const appRect = app.getBoundingClientRect();
+      const heroRect = hero.getBoundingClientRect();
+      const gutter = heroRect.left - appRect.left;
+
+      // The scrollbar may consume a narrow strip, but the app should not fall
+      // back to the old 880px cap while the 1220px wide layout still fits.
+      expect(appRect.width).toBeGreaterThanOrEqual(width - 16);
+      expect(gutter).toBeGreaterThanOrEqual(previousGutter);
+      expect(gutter).toBeLessThanOrEqual(28);
+      previousGutter = gutter;
+    }
+  });
+
+  test("centers navigation whenever the measured rail fits", async () => {
     for (const viewport of [
       { height: 900, width: 360 },
       { height: 900, width: 1270 },
@@ -1176,13 +1216,16 @@ describe("webapp responsive navigation", () => {
         const rail = host.querySelector(".mode-rail");
         const firstRowBottom = Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom);
 
-        if (viewport.width > 720) expect(masthead.dataset.mastheadLayout).toBe("stacked");
-        if (viewport.width > 720) {
+        if (viewport.width > 720 && masthead.dataset.mastheadLayout === "stacked") {
           expect(Number.parseFloat(getComputedStyle(rail.querySelector(".mode")).paddingInlineStart)).toBeGreaterThan(
             15,
           );
+          expect(modes.getBoundingClientRect().top).toBeGreaterThanOrEqual(firstRowBottom);
         }
-        expect(modes.getBoundingClientRect().top).toBeGreaterThanOrEqual(firstRowBottom);
+        if (viewport.width > 720 && masthead.dataset.mastheadLayout === "wide") {
+          expect(Number.parseFloat(getComputedStyle(rail.querySelector(".mode")).paddingInlineStart)).toBeLessThan(15);
+          expect(modes.getBoundingClientRect().bottom).toBeLessThanOrEqual(firstRowBottom);
+        }
         const modesRect = rail.getBoundingClientRect();
         const mastheadRect = masthead.getBoundingClientRect();
         expect(
@@ -1194,6 +1237,7 @@ describe("webapp responsive navigation", () => {
 
   test("puts the complete navigation rail between the brand and tools when it fits", async () => {
     const cases = [
+      { tabs: PAGE_TABS, viewport: { height: 900, width: 1096 } },
       { tabs: PAGE_TABS, viewport: { height: 900, width: 1366 } },
       {
         tabs: [
@@ -1237,7 +1281,7 @@ describe("webapp responsive navigation", () => {
       expect(masthead.dataset.mastheadLayout).toBe("wide");
       expect(Number.parseFloat(getComputedStyle(modes.querySelector(".mode")).paddingInlineStart)).toBeLessThan(15);
       const utilityButton = tools.querySelector(".tool");
-      expect(utilityButton.getBoundingClientRect().width).toBeGreaterThan(36);
+      expect(utilityButton.getBoundingClientRect().width).toBeGreaterThanOrEqual(36);
       expect(Number.parseFloat(getComputedStyle(tools).gap)).toBeGreaterThan(4);
       expect(modesRect.top).toBeGreaterThanOrEqual(brand.getBoundingClientRect().top);
       expect(modesRect.bottom).toBeLessThanOrEqual(
@@ -1248,5 +1292,47 @@ describe("webapp responsive navigation", () => {
         Math.abs(modesRect.left + modesRect.width / 2 - (mastheadRect.left + mastheadRect.width / 2)),
       ).toBeLessThanOrEqual(1);
     }
+  });
+
+  test("moves beta navigation below the masthead when the full rail does not fit", async () => {
+    await setViewport({ height: 233, width: 2048 });
+    document.documentElement.dataset.betaToolsEnabled = "true";
+    await renderNode(
+      createElement(
+        RomWeaverSettingsProvider,
+        { settings: { betaToolsEnabled: true } },
+        createElement(
+          "div",
+          { className: "rw-app" },
+          createElement(
+            "div",
+            { className: "app", style: { maxWidth: "500px", width: "500px" } },
+            createElement(Masthead, {
+              currentTab: "patcher",
+              onOpenLog: noop,
+              onOpenSettings: noop,
+              onReset: noop,
+              onSelectTab: noop,
+              tabs: [
+                ...PAGE_TABS,
+                { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
+                { href: "tools", icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
+              ],
+            }),
+          ),
+        ),
+      ),
+      "light",
+    );
+
+    const masthead = host.querySelector(".masthead");
+    const brand = host.querySelector(".brand");
+    const tools = host.querySelector(".masthead-tools");
+    const modes = host.querySelector(".modes");
+
+    expect(masthead.dataset.mastheadLayout).toBe("stacked");
+    expect(modes.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom),
+    );
   });
 });

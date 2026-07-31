@@ -104,7 +104,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .mode[data-beta-tool] { displ
 }
 .rw-app .site-footer-link:active { color: var(--thread-text); }
 /* ghost tools at every width: the buttons drop their box chrome at rest -
-   border/fill only appear on hover - so six controls stop reading as a
+   border/fill only appear on hover - so five controls stop reading as a
    second nav beside the mode rail */
 .rw-app .tool {
   appearance: none; cursor: pointer; width: 36px; height: 36px; display: grid; place-items: center;
@@ -116,14 +116,6 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .mode[data-beta-tool] { displ
 }
 .rw-app .tool:active { background: var(--plate-2); }
 .rw-app .tool svg { width: 17px; height: 17px; }
-/* the support link keeps the accent so it reads as an invitation, not a tool */
-.rw-app .masthead-donate { color: var(--thread-text); }
-@media (hover: hover) {
-  .rw-app .masthead-donate:hover { color: var(--thread); }
-}
-.rw-app .masthead-donate:active { color: var(--thread); }
-/* hairline between the external links (GitHub/Support) and the app tools */
-.rw-app .tools-sep { display: block; flex: none; align-self: center; width: 1px; height: 20px; margin-inline: 5px; background: var(--seam); }
 .rw-app .build-version-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-app .build-version-link {
   display: inline-flex;

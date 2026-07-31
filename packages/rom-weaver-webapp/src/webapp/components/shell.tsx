@@ -38,7 +38,6 @@ type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
 const isBetaWorkflowTab = (tab: WorkflowTab) => tab.id === "trim" || tab.id === "tools";
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
-const WIDE_MASTHEAD_MIN_WIDTH = 1300;
 
 const measureIntrinsicModeRailWidth = (rail: HTMLElement) => {
   const buttons = [...rail.querySelectorAll<HTMLElement>(".mode")];
@@ -425,7 +424,6 @@ const Masthead = ({
   serviceWorkerStatus,
   confirmExternalNavigation,
   githubHref,
-  donateHref,
   settingsOpen,
   threads,
   version,
@@ -449,7 +447,6 @@ const Masthead = ({
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   githubHref?: string;
-  donateHref?: string;
   settingsOpen?: boolean;
   threads?: number;
   version?: string;
@@ -459,7 +456,7 @@ const Masthead = ({
   const localizer = useUiLocalizer();
   const betaToolsEnabled = settings.betaToolsEnabled !== false;
   const [accentOpen, setAccentOpen] = useState(false);
-  const [wideMasthead, setWideMasthead] = useState(false);
+  const [wideMasthead, setWideMasthead] = useState<boolean | null>(null);
   const mastheadRef = useRef<HTMLElement | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
@@ -494,8 +491,8 @@ const Masthead = ({
         measureIntrinsicModeRailWidth(modeRail) +
         tools.getBoundingClientRect().width +
         gap * 2;
-      const viewportWidth = typeof window === "undefined" ? masthead.clientWidth : window.innerWidth;
-      setWideMasthead(requiredWidth <= masthead.clientWidth && viewportWidth >= WIDE_MASTHEAD_MIN_WIDTH);
+      const phoneLayout = window.matchMedia("(max-width: 720px), (max-width: 860px) and (max-height: 520px)").matches;
+      setWideMasthead(!phoneLayout && requiredWidth <= masthead.clientWidth);
     };
 
     measure();
@@ -552,7 +549,11 @@ const Masthead = ({
       <a className="skip-link" href="#main-content">
         {localizer.message("ui.common.skipToMain")}
       </a>
-      <header className="masthead" data-masthead-layout={wideMasthead ? "wide" : "stacked"} ref={mastheadRef}>
+      <header
+        className="masthead"
+        data-masthead-layout={wideMasthead === null ? undefined : wideMasthead ? "wide" : "stacked"}
+        ref={mastheadRef}
+      >
         <span className="brand">
           <a aria-label="Home" className="brand-mark-link" href="/">
             <BrandMark />
@@ -653,33 +654,6 @@ const Masthead = ({
             tabs={tabs}
           />
           <div className="masthead-tools" ref={toolsRef}>
-            {githubHref ? (
-              <a
-                aria-label="GitHub"
-                className="tool masthead-link"
-                href={githubHref}
-                onClick={(event) => guardExternalClick(event, githubHref)}
-                rel="noreferrer"
-                target="_blank"
-                title="GitHub"
-              >
-                <Github aria-hidden="true" />
-              </a>
-            ) : null}
-            {donateHref ? (
-              <a
-                aria-label={localizer.message("ui.footer.donate")}
-                className="tool masthead-link masthead-donate"
-                href={donateHref}
-                onClick={(event) => guardExternalClick(event, donateHref)}
-                rel="noreferrer"
-                target="_blank"
-                title={localizer.message("ui.footer.donate")}
-              >
-                <Heart aria-hidden="true" />
-              </a>
-            ) : null}
-            {githubHref || donateHref ? <span aria-hidden="true" className="tools-sep" /> : null}
             <button
               aria-label={localizer.message("ui.settings.reset")}
               className="tool"

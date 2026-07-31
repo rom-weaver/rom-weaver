@@ -23,7 +23,6 @@ const TABS = [
 
 const mastheadProps = {
   currentTab: "patcher",
-  donateHref: "https://example.com/donate",
   githubHref: "https://example.com/repo",
   onOpenLog: () => undefined,
   onReset: () => undefined,
@@ -67,16 +66,13 @@ describe("Masthead", () => {
     expect(tabs[1]?.getAttribute("href")).toBe("create");
     fireEvent.click(tabs[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(5);
     // the accent picker sits in an anchor, so it is not a direct child
-    expect(container.querySelectorAll(".masthead-tools > .tool").length).toBe(6);
+    expect(container.querySelectorAll(".masthead-tools > .tool").length).toBe(4);
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     // language is a settings-only field; the masthead carries no picker for it
     expect(container.querySelector('[aria-label="Language"]')).toBeNull();
-    const mastheadGithub = getByRole("link", { name: "GitHub" });
-    expect(mastheadGithub.getAttribute("href")).toBe("https://example.com/repo");
-    expect(mastheadGithub.closest(".masthead-tools")).toBeTruthy();
-    expect(getByRole("link", { name: "Support" }).getAttribute("href")).toBe("https://example.com/donate");
+    expect(container.querySelector(".masthead-tools .masthead-link")).toBeNull();
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
     const reset = getByRole("button", { name: "Reset" });
     expect(container.querySelector(".masthead-version")).toBeNull();
