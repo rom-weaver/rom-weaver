@@ -4,7 +4,13 @@
 /* The prerendered boot shell (aria-busy until React mounts) must paint with its
    panel settled while its ambient loops keep moving. Hydration preserves those
    loops, then the first client layout fast-forwards entry animations. */
-#webapp-root[aria-busy="true"] .workflow-body { animation: none !important; }
+#webapp-root[aria-busy="true"] #panel-patcher .workflow-body {
+  animation: none !important;
+  /* The prerendered empty bench must not inherit the mobile card scroll reserve.
+     Keep this first-paint fallback independent of :has(), so older standalone
+     WebKit builds still paint the footer in the opening viewport. */
+  padding-block-end: 0 !important;
+}
 #webapp-root[aria-busy="true"] .tool { background: transparent; border-color: transparent; transition: none; }
 /* base scale - bumped up (text read a touch small) but still responsive so it
    eases down on narrow phones instead of a flat size */

@@ -317,6 +317,9 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
   mountWebappRoot();
   const workflowBody = await waitForState(() => document.querySelector(".workflow-body"));
   expect(workflowBody).not.toBeNull();
+  // The harness mounts the prerender shell with its boot flag still set; clear
+  // it before checking the settled, non-empty workflow's scroll reserve.
+  document.querySelector("#webapp-root")?.removeAttribute("aria-busy");
   expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("0px");
 
   document.querySelector(".step.is-input.is-empty").classList.remove("is-empty");

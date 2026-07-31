@@ -179,6 +179,10 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         if (testCase.replayClick) {
           const settings = page.getByRole("button", { name: "Settings" });
           await settings.waitFor({ state: "visible" });
+          // Standalone iOS paints with device insets before the app bundle can
+          // run. Apply representative values to exercise that same first shell
+          // geometry instead of only testing the browser-tab zero-inset case.
+          await page.addStyleTag({ content: ".rw-app { --safe-t: 59px; --safe-b: 34px; }" });
           const initialShell = await page.evaluate(() => {
             const root = document.getElementById("webapp-root");
             const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
@@ -188,7 +192,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
               footerInFirstViewport:
                 !!footer &&
                 footer.top < window.innerHeight &&
-                footer.bottom <= window.innerHeight &&
+                footer.bottom <= window.innerHeight - 34 &&
                 !!links &&
                 links.bottom <= window.innerHeight &&
                 !!status &&
