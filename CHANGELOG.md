@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.2](https://github.com/rom-weaver/rom-weaver/compare/v0.10.1...v0.10.2) (2026-07-31)
+
+
+### Performance Improvements
+
+* **webapp:** shrink the webfont and replay its preload in early hints ([#346](https://github.com/rom-weaver/rom-weaver/issues/346)) ([007b43e](https://github.com/rom-weaver/rom-weaver/commit/007b43e96a47b5cba9540babc3ad9883c75dfbbb))
+
+
+### Documentation
+
+* document libarchive formats ([#345](https://github.com/rom-weaver/rom-weaver/issues/345)) ([68454da](https://github.com/rom-weaver/rom-weaver/commit/68454daabc9fe863d30df23d9d2ef52566989dbe))
+
 ## [0.10.1](https://github.com/rom-weaver/rom-weaver/compare/v0.10.0...v0.10.1) (2026-07-31)
 
 
