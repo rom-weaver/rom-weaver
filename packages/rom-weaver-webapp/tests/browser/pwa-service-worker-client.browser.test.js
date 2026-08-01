@@ -68,8 +68,13 @@ const createHarness = ({
     getRegistrations: vi.fn(async () => []),
   };
   const navigatorLike = { serviceWorker };
-  const updateServiceWorker = vi.fn(async () => undefined);
   let registerOptions;
+  // Models virtual:pwa-register's prompt mode: the reloadPage argument is ignored, and once the
+  // incoming worker takes control the registrar reloads the page unless onNeedReload is supplied.
+  const updateServiceWorker = vi.fn(async () => {
+    if (registerOptions?.onNeedReload) registerOptions.onNeedReload();
+    else location.reload();
+  });
   const registerServiceWorker = (options) => {
     registerOptions = options;
     queueMicrotask(() => {
@@ -161,10 +166,11 @@ test("auto-applies an update silently without reloading when no work is in progr
   harness.client.initialize();
   await flushAsync();
   harness.triggerNeedRefresh();
+  await flushAsync();
 
   // Running version (app-under-test) is ahead of the outgoing controller (reports "test"), so the page
-  // already runs the incoming version: activate via skipWaiting (false), no reload.
-  expect(harness.updateServiceWorker).toHaveBeenCalledWith(false);
+  // already runs the incoming version: activate via skipWaiting, no reload.
+  expect(harness.updateServiceWorker).toHaveBeenCalledTimes(1);
   expect(harness.location.reload).not.toHaveBeenCalled();
   expect(harness.client.getState().updateReady).toBe(false);
 });
@@ -181,10 +187,30 @@ test("auto-applies with a reload when the page is still running the outgoing con
   harness.client.initialize();
   await flushAsync();
   harness.triggerNeedRefresh();
+  await flushAsync();
 
   // Running version matches the outgoing controller (both "test"), so the loaded code is stale and a
   // reload is needed to pick up the incoming worker's assets.
-  expect(harness.updateServiceWorker).toHaveBeenCalledWith(true);
+  expect(harness.updateServiceWorker).toHaveBeenCalledTimes(1);
+  expect(harness.location.reload).toHaveBeenCalledTimes(1);
+  expect(harness.client.getState().updateReady).toBe(false);
+});
+
+test("reloads when the user applies a deferred update from the prompt", async () => {
+  const controller = createController();
+  const harness = createHarness({
+    controller,
+    crossOriginIsolated: true,
+    shouldAutoApplyUpdate: () => false,
+  });
+
+  harness.client.initialize();
+  await flushAsync();
+  harness.triggerNeedRefresh();
+  expect(await harness.client.reloadPendingUpdate()).toBe(true);
+  await flushAsync();
+
+  expect(harness.location.reload).toHaveBeenCalledTimes(1);
   expect(harness.client.getState().updateReady).toBe(false);
 });
 
