@@ -468,7 +468,11 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     for (let step = 1; step <= 4; step += 1) {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Apply ${step}/4`);
-      await tutorial.getByRole("button", { name: step === 4 ? "Done" : "Continue" }).click();
+      if (step === 4) {
+        await page.locator("#rom-weaver-button-apply").click();
+      } else {
+        await tutorial.getByRole("button", { name: "Continue" }).click();
+      }
     }
     await tutorial.waitFor({ state: "hidden" });
 
@@ -490,8 +494,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         if (!download.suggestedFilename().endsWith(".zip")) {
           throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
         }
+      } else {
+        await tutorial.getByRole("button", { name: "Continue" }).click();
       }
-      await tutorial.getByRole("button", { name: step === 4 ? "Done" : "Continue" }).click();
     }
     await tutorial.waitFor({ state: "hidden" });
 
@@ -534,7 +539,11 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     for (let step = 1; step <= 4; step += 1) {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Create ${step}/4`);
-      await tutorial.getByRole("button", { name: step === 4 ? "Done" : "Continue" }).click();
+      if (step === 4) {
+        await page.locator("#patch-builder-button-create").click();
+      } else {
+        await tutorial.getByRole("button", { name: "Continue" }).click();
+      }
     }
     await tutorial.waitFor({ state: "hidden" });
 
