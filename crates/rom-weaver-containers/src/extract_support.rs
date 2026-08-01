@@ -339,7 +339,7 @@ impl ExtractHasher {
             return Ok(Self::None);
         }
         // `--checksum-rom` hashes only ROM-like outputs; sidecar/non-ROM entries get no checksum
-        // and no identity. Single-payload disc-image handlers use a different writer, so this gate
+        // and no identity. Single-payload codec handlers use a different writer, so this gate
         // only affects multi-entry archives. A `.cue`/`.gdi` disc sheet stays a ROM-filter
         // candidate but is a text index, not data, so only its referenced data tracks are hashed.
         if context.extract_checksum_rom_only() {

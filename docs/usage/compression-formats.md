@@ -8,7 +8,8 @@ your checksums.
 ## Table of contents
 
 - [Two kinds of compression](#two-kinds-of-compression)
-- [Compressed disc images: CHD, RVZ, Z3DS](#compressed-disc-images-chd-rvz-z3ds)
+- [Compressed disc images: CHD and RVZ](#compressed-disc-images-chd-and-rvz)
+- [3DS ROM compression: Z3DS](#3ds-rom-compression-z3ds)
 - [General archives: ZIP and 7z](#general-archives-zip-and-7z)
 - [Trim, compress, or both](#trim-compress-or-both)
 - [Compression changes your checksums](#compression-changes-your-checksums)
@@ -30,7 +31,7 @@ one disc. Emulators that support it read it directly, so the file stays small
 on disk and still boots. When your console has one of these formats, it is
 almost always the better choice.
 
-## Compressed disc images: CHD, RVZ, Z3DS
+## Compressed disc images: CHD and RVZ
 
 **CHD** is the MAME-family container and the standard answer for CD- and
 DVD-based consoles: PlayStation 1 and 2, Saturn, Sega CD, TurboGrafx-CD, and
@@ -48,12 +49,16 @@ disc's own padding, so it shrinks images far beyond what a general archive
 manages, and Dolphin plays it directly. rom-weaver's RVZ output matches
 dolphin-tool byte for byte.
 
-**Z3DS** is the zstd-compressed container for Nintendo 3DS images (`.z3ds`
-and friends), read by Azahar-family emulators.
-
 Formats rom-weaver can open but not create, like GCZ, WIA, WBFS, and CSO, are
 worth converting: extract them and recompress into the modern format for that
 console.
+
+## 3DS ROM compression: Z3DS
+
+**Z3DS** is a zstd-based, ROM-specific compression format for Nintendo 3DS
+payloads (`.3ds`, `.cci`, `.cxi`, `.cia`, and `.3dsx`). Its compressed forms
+(`.z3ds` and friends) are read by Azahar-family emulators; it is not a disc
+image format.
 
 ## General archives: ZIP and 7z
 
@@ -90,7 +95,7 @@ see [Fix a checksum error](fix-checksum-errors.md) when it still disagrees.
 
 - **CD/DVD console (PS1, PS2, Saturn, Sega CD, Dreamcast):** CHD.
 - **GameCube or Wii:** RVZ.
-- **Nintendo 3DS:** Z3DS.
+- **Nintendo 3DS ROMs:** Z3DS.
 - **Cartridge ROMs you play:** ZIP, or trimmed files where padding dominates.
 - **Cold storage:** 7z for the tightest general-purpose ratio.
 - **Already in GCZ, WIA, WBFS, or CSO:** convert to the modern format above.

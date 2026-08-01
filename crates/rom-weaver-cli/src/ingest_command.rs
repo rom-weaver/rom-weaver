@@ -343,8 +343,8 @@ impl CliApp {
             context.single_thread_execution(),
         );
 
-        // A container handler matching means the source is an archive or disc-image codec: classify
-        // its entries and extract. No handler means a bare file (cartridge ROM or loose patch) that
+        // A container handler matching means the source is an archive or single-payload codec:
+        // classify its entries and extract. No handler means a bare file (cartridge ROM or loose patch) that
         // is classified by name and checksummed in place / described directly.
         if let Some(handler) = self.containers.probe(source) {
             return self.ingest_container(
@@ -673,10 +673,10 @@ impl CliApp {
                 checksum_ms: None,
             };
             // Reuse the checksums the extract already streamed for this leaf instead of re-reading it.
-            // libarchive emits the full variant set (`checksum_variants`); the disc-image codecs
-            // (CHD/RVZ) emit only the raw `checksums`, so synthesize the single "raw" variant row the
-            // `checksum` command produces for a disc - no header transforms apply to disc data, so that
-            // row is byte-identical to a re-read.
+            // libarchive emits the full variant set (`checksum_variants`); the single-payload
+            // codecs (CHD/RVZ/Z3DS) emit only raw `checksums`, so synthesize the single "raw"
+            // variant row the `checksum` command produces - no header transforms apply to the
+            // decoded payload, so that row is byte-identical to a re-read.
             let inline_variants = map
                 .get("checksum_variants")
                 .and_then(Value::as_array)

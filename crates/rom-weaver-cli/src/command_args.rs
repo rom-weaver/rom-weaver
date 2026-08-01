@@ -40,9 +40,10 @@ Apply one or more patches to a ROM, in order.
 most of the examples use.
 
 Repeat --patch once per patch. They run left to right, each one on the result
-of the last. --input takes a plain ROM, an archive or disc image (the ROM
-inside is found for you), or a rom-weaver-bundle.json that already names the
-ROM, the patches, and the output.
+of the last. --input takes a plain ROM, an archive, or a single-payload
+compressed format (the ROM inside is found for you), or a
+rom-weaver-bundle.json that already names the ROM, the patches, and the
+output.
 
 The result is compressed by default, into whatever container the --output
 extension names. Pass --no-compress for a plain ROM file.
@@ -222,7 +223,7 @@ pub struct ExtractCommand {
             short = 'i',
             long = "input",
             value_name = "INPUT",
-            help = "Archive or disc image to unpack"
+            help = "Archive or single-payload compressed format to unpack"
         )
     )]
     pub input: PathBuf,

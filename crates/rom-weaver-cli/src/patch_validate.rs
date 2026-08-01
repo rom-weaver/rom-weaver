@@ -139,7 +139,7 @@ impl CliApp {
                 no_extract,
                 no_ignore,
                 kind_filter: input_kind_filter,
-                stop_on_disc_image_codec: false,
+                stop_on_single_payload_codec: false,
             },
         ) {
             Ok(resolved) => resolved,
@@ -165,7 +165,7 @@ impl CliApp {
                 no_extract,
                 no_ignore,
                 kind_filter: patch_kind_filter,
-                stop_on_disc_image_codec: false,
+                stop_on_single_payload_codec: false,
             },
             PatchResolveLabels {
                 command: "patch-validate",

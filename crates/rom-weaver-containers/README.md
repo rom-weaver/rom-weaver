@@ -25,8 +25,9 @@ The container registry and one handler per format, each implementing
 `rom-weaver-core`'s `ContainerHandler` trait.
 
 - **General archives.** ZIP, 7z, RAR, and the tar family.
-- **Disc and cartridge images.** CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS,
-  NFS, TGC, and XISO.
+- **Disc-image containers.** CHD, RVZ, CSO, PBP, GCZ, WIA, WBFS, NFS, TGC,
+  and XISO.
+- **ROM-specific compression.** Z3DS for Nintendo 3DS ROMs.
 - **Creation, not just reading.** ZIP, 7z, CHD, RVZ, and Z3DS can be written
   with codec-aware compression settings. Output is validated against the
   reference tools (`chdman`, `dolphin-tool`) so a rom-weaver-produced image is

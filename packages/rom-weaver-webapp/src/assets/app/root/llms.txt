@@ -12,7 +12,7 @@
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
 - [Create bundles guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only bundle in the Weave webapp.
 - [FAQ](https://rom-weaver.com/docs/faq): Privacy, ROM matching, formats, bundles, devices, offline use, and browser versus CLI.
-- [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick between CHD, RVZ, Z3DS, ZIP, and 7z, and learn when trimming beats compressing.
+- [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick format-specific compression such as CHD, RVZ, or Z3DS, plus ZIP and 7z, and learn when trimming beats compressing.
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
 - [CLI get started](https://rom-weaver.com/docs/cli-get-started): Practice Apply, Create, and Bundle in the terminal with the same test assets.
 - [CLI reference](https://rom-weaver.com/docs/cli): Every command, global flag, JSON output, exit codes, shell completions, and man pages.

@@ -35,7 +35,7 @@ struct AutoExtractResolutionOptions {
     no_ignore: bool,
     kind_filter: ArchiveEntryKindFilter,
     mode: AutoExtractMode,
-    stop_on_disc_image_codec: bool,
+    stop_on_single_payload_codec: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -43,10 +43,10 @@ pub(super) struct AutoExtractResolutionFlags {
     pub(super) no_extract: bool,
     pub(super) no_ignore: bool,
     pub(super) kind_filter: ArchiveEntryKindFilter,
-    /// Treat single-payload disc-image codecs (CHD/RVZ/Z3DS/CSO/…) as terminal
+    /// Treat single-payload codecs (CHD/RVZ/Z3DS/CSO/…) as terminal
     /// instead of decompressing them. Probe sets this so it reports the codec
     /// container itself; checksum/list keep extracting to reach the inner image.
-    pub(super) stop_on_disc_image_codec: bool,
+    pub(super) stop_on_single_payload_codec: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -74,7 +74,7 @@ impl CliApp {
                 no_ignore: flags.no_ignore,
                 kind_filter: flags.kind_filter,
                 mode: AutoExtractMode::Recursive,
-                stop_on_disc_image_codec: flags.stop_on_disc_image_codec,
+                stop_on_single_payload_codec: flags.stop_on_single_payload_codec,
             },
         )
     }
@@ -144,11 +144,11 @@ impl CliApp {
                 );
                 break;
             }
-            if options.stop_on_disc_image_codec && handler.is_single_payload_disc_image() {
+            if options.stop_on_single_payload_codec && handler.is_single_payload_codec_container() {
                 trace!(
                     current_source = %current_source.display(),
                     format = handler.descriptor().name,
-                    "auto-extract stopped: disc-image codec reported as terminal probe target"
+                    "auto-extract stopped: single-payload codec reported as terminal probe target"
                 );
                 break;
             }

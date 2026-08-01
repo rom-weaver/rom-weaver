@@ -103,9 +103,9 @@ Nothing is written; this only reads."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Unpack an archive or disc image",
+            about = "Unpack an archive or single-payload compressed format",
             long_about = "\
-Unpack an archive or disc image into a directory.
+Unpack an archive or single-payload compressed format into a directory.
 
 Archives found inside the input are unpacked too, up to eight levels deep. Pass
 --no-nested-extract to stop after the first layer.
@@ -149,15 +149,16 @@ unpacking, use `probe`."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Pack files into an archive or a compressed disc image",
+            about = "Pack files into an archive, disc image, or ROM-specific compressed format",
             long_about = "\
-Pack files into an archive or a compressed disc image.
+Pack files into an archive, disc image, or ROM-specific compressed format.
 
 The format comes from the --output extension, so `--output game.chd` writes a
 CHD. Formats that can be written: zip, 7z, chd, rvz, and z3ds.
 
-Repeat --input to put several files in one archive. Disc images take a single
-input instead: point --input at the .cue or .gdi and its tracks come along.
+Repeat --input to put several files in one archive. Single-payload formats take
+one input instead: point --input at the .cue or .gdi for a disc image, or at a
+single 3DS ROM for Z3DS.
 
   rom-weaver compress --input game.cue --output game.chd
 

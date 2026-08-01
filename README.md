@@ -42,7 +42,7 @@
 ## Why
 
 Every console generation brought its own compressed format, and each one came
-with its own tool. CHD for discs, RVZ for GameCube and Wii, Z3DS for 3DS, CSO
+with its own tool. CHD for discs, RVZ for GameCube and Wii, Z3DS for 3DS ROMs, CSO
 and PBP for PSP, plus the usual ZIP and 7z on top. Those tools are scattered
 across projects, most are command-line only, and plenty of them only ship
 builds for one or two platforms. If you are on a Mac, or on Windows without a
@@ -91,7 +91,7 @@ general speed claim.
   of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
 - **Inspect and extract containers.** ZIP, 7z, RAR, the tar family, CHD, RVZ,
   Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
-- **Create compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS with
+- **Create format-specific compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS with
   codec-aware compression settings, validated against reference tools such as
   chdman and dolphin-tool.
 - **Checksum and verify.** CRC32, MD5, SHA-1, SHA-256, BLAKE3, and friends,
