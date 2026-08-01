@@ -258,13 +258,27 @@ test("checksum override dispatch uses one-shot validation relax", async () => {
   checksumOverrideCheckbox.click();
 
   await expect
-    .poll(() => document.getElementById("rom-weaver-button-apply") instanceof HTMLButtonElement, { timeout: 30000 })
+    .poll(
+      () => {
+        const checkbox = document.getElementById("rom-weaver-checkbox-checksum-override");
+        return checkbox instanceof HTMLInputElement && checkbox.checked;
+      },
+      { timeout: 30000 },
+    )
     .toBe(true);
-  await expect.poll(() => applyButton.disabled, { timeout: 30000 }).toBe(false);
-  applyButton.click();
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
 
   await expect.poll(() => applyPatchesSpy.mock.calls.length, { timeout: 30000 }).toBe(1);
-  await expect.poll(() => checksumOverrideCheckbox.checked, { timeout: 30000 }).toBe(false);
+  await expect
+    .poll(
+      () => {
+        const checkbox = document.getElementById("rom-weaver-checkbox-checksum-override");
+        return checkbox instanceof HTMLInputElement && checkbox.checked;
+      },
+      { timeout: 30000 },
+    )
+    .toBe(false);
   const callInput = applyPatchesSpy.mock.calls[0]?.[0];
   expect(callInput?.options?.validation?.requireInputChecksumMatch).toBe(false);
 });
