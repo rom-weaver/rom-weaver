@@ -806,21 +806,23 @@ const DIALOGS = {
       title: "Reload and lose changes?",
     }),
   "update changelog": () => createElement(ChangelogDialog, { onClose: noop, onReload: noop, open: true }),
-  log: () => createElement(LogDialog, { onClose: noop, open: true }),
+  log: () => createElement(LogDialog, { onClose: noop, onLevelChange: noop, open: true }),
+  // Settings is the unified dialog's first tab now, not a Modal of its own.
   settings: () =>
-    createElement(
-      Modal,
-      { onClose: noop, open: true, title: "Settings", variant: "settings-modal" },
-      createElement(SettingsPanel, {
+    createElement(LogDialog, {
+      initialTab: "settings",
+      onClose: noop,
+      onLevelChange: noop,
+      onRestoreDefaults: noop,
+      onSaveSettings: noop,
+      open: true,
+      settingsPanel: createElement(SettingsPanel, {
         draftSettings: settingsDraft,
-        onClose: noop,
         onDraftChange: noop,
-        onRestoreDefaults: noop,
-        onSaveClose: noop,
         uiState: getSettingsUiState(settingsDraft),
         validation: validateSettingsDraft(settingsDraft),
       }),
-    ),
+    }),
 };
 
 const ModalHost = (node) =>

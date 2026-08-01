@@ -220,6 +220,11 @@ msgstr "Dunkel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.defaults"
+msgstr "Standardwerte"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.channel.dev"
 msgstr "Dev-Build"
 
@@ -582,6 +587,11 @@ msgstr "RVZ-Blockgröße"
 #: src/presentation/localization/messages.ts
 msgid "settings.rvzCodec"
 msgstr "RVZ-Codec"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.save"
+msgstr "Speichern"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

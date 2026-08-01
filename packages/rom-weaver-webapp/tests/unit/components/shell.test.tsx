@@ -116,6 +116,7 @@ describe("Masthead", () => {
     expect(threads.textContent).toBe("8T");
     expect(threads.getAttribute("aria-label")).toBe("8 threads");
     fireEvent.click(threads);
+    // no deep-link handler supplied, so the thread count still just opens settings
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
 
     const status = container.querySelector(".sub-status") as HTMLButtonElement;
@@ -129,6 +130,18 @@ describe("Masthead", () => {
     // an available update outranks every other runtime state
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="active" updateReady />));
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("update");
+  });
+
+  it("routes the thread count to the threads deep link when one is offered", () => {
+    const onOpenSettings = vi.fn();
+    const onOpenThreads = vi.fn();
+    const { container } = render(
+      withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} onOpenThreads={onOpenThreads} />),
+    );
+
+    fireEvent.click(container.querySelector(".masthead-threads") as HTMLButtonElement);
+    expect(onOpenThreads).toHaveBeenCalledTimes(1);
+    expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
   it("links pull request build tags to their pull request and channels to the changelog", () => {

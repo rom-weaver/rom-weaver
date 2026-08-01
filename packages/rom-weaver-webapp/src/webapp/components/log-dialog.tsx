@@ -1,5 +1,5 @@
-import { Check, Copy, Download, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Check, Copy, Download, RefreshCw, RotateCcw, Save, X } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { copyToClipboard } from "../../lib/clipboard.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
@@ -10,9 +10,9 @@ import type { BrowserOpfsEntry } from "../../workers/protocol/browser-opfs-worke
 import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
 import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "../build-version.ts";
 import { CHANNEL_BADGE } from "../build-channel.ts";
-import { GITHUB_URL } from "../project-links.ts";
+import { GITHUB_URL, LICENSE_URL, NOTICE_URL, PRIVACY_URL } from "../project-links.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
-import { readPwaState, resolveRuntimeState, RUNTIME_MESSAGES, RuntimeGlyph } from "./shell.tsx";
+import { prefersReducedMotion, readPwaState, resolveRuntimeState, RUNTIME_MESSAGES, RuntimeGlyph } from "./shell.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 
 /**
@@ -123,18 +123,26 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
   );
 };
 
-/** Status/logs tab set. The tabs ARE the dialog header - there is no title. */
-const DIALOG_TABS = ["status", "logs", "storage", "changelog"] as const;
+/**
+ * Every chrome-level surface the app owns, in one dialog: the tabs ARE the
+ * header, so there is no title. Settings leads because it is the tab people
+ * come here for; the rest are diagnostics.
+ */
+const DIALOG_TABS = ["settings", "status", "logs", "storage", "changelog"] as const;
 type LogDialogTab = (typeof DIALOG_TABS)[number];
 const TAB_MESSAGES: Record<
   LogDialogTab,
-  "ui.log.tabStatus" | "ui.log.tabLogs" | "ui.log.tabStorage" | "ui.log.tabChangelog"
+  "ui.settings.title" | "ui.log.tabStatus" | "ui.log.tabLogs" | "ui.log.tabStorage" | "ui.log.tabChangelog"
 > = {
   changelog: "ui.log.tabChangelog",
   logs: "ui.log.tabLogs",
+  settings: "ui.settings.title",
   status: "ui.log.tabStatus",
   storage: "ui.log.tabStorage",
 };
+
+/** How long to keep looking for a deep-linked field while its lazy panel loads. */
+const FOCUS_HINT_MAX_FRAMES = 90;
 
 const GITHUB_BASE = GITHUB_URL.replace(/\/$/, "");
 const PR_NUMBER = CHANNEL_BADGE.match(/^pr-(\d+)$/i)?.[1];
@@ -188,6 +196,75 @@ const StatusRows = ({ localizer }: { localizer: Localizer }) => {
   );
 };
 
+/**
+ * Licence, attribution and privacy - the part of the old settings About group
+ * the status rows above do not already state. Build facts are never repeated
+ * here; those are the `StatusRows` above.
+ */
+const AboutLines = () => (
+  <div className="status-about">
+    <div className="about-line">
+      © Brandon Casey. Free and open-source software under the{" "}
+      <a href={LICENSE_URL} rel="noreferrer" target="_blank">
+        GNU AGPL v3 (or later) license
+      </a>
+      .
+    </div>
+    <div className="about-line">
+      Built with open-source components (nod, libarchive, chd-rs, and others) used under their own licenses; see the{" "}
+      <a href={NOTICE_URL} rel="noreferrer" target="_blank">
+        notices and attribution
+      </a>
+      .
+    </div>
+    <div className="about-line">
+      Files are processed locally in your browser. Read the{" "}
+      <a href={PRIVACY_URL} rel="noreferrer" target="_blank">
+        privacy page
+      </a>{" "}
+      for storage and network details.
+    </div>
+  </div>
+);
+
+/** Which settings field a deep link asks for; `token` re-arms an unchanged field. */
+type SettingsFocusHint = { fieldId: string; token: number };
+
+/**
+ * Deep link into a settings field: scroll it into view, focus its control, and
+ * flash its row so the eye lands where the focus ring already is. The panel is
+ * lazy, so the element may not exist for a few frames after the tab opens.
+ */
+const useSettingsFieldFocus = (active: boolean, focusHint: SettingsFocusHint | null | undefined) => {
+  useEffect(() => {
+    if (!(active && focusHint)) return undefined;
+    let frame = 0;
+    let attempts = 0;
+    const reduced = prefersReducedMotion();
+    const settle = () => {
+      const field = document.getElementById(focusHint.fieldId);
+      if (!field) {
+        attempts += 1;
+        if (attempts > FOCUS_HINT_MAX_FRAMES) {
+          logger.debug("settings focus hint field never appeared", { fieldId: focusHint.fieldId });
+          return;
+        }
+        frame = requestAnimationFrame(settle);
+        return;
+      }
+      logger.trace("settings focus hint resolved", { fieldId: focusHint.fieldId });
+      field.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+      field.focus({ preventScroll: true });
+      if (reduced) return;
+      const row = field.closest(".setrow") || field;
+      row.classList.add("field-flash");
+      row.addEventListener("animationend", () => row.classList.remove("field-flash"), { once: true });
+    };
+    frame = requestAnimationFrame(settle);
+    return () => cancelAnimationFrame(frame);
+  }, [active, focusHint]);
+};
+
 const LogDialog = ({
   open,
   onClose,
@@ -196,7 +273,12 @@ const LogDialog = ({
   initialTab = "status",
   onOpenChangelog,
   onReload,
+  onRestoreDefaults,
+  onSaveSettings,
+  onTabChange,
   serviceWorkerStatus,
+  settingsFocusHint,
+  settingsPanel,
   updateReady = false,
 }: {
   open: boolean;
@@ -206,7 +288,13 @@ const LogDialog = ({
   initialTab?: LogDialogTab;
   onOpenChangelog?: () => void;
   onReload?: () => void;
+  onRestoreDefaults?: () => void;
+  onSaveSettings?: () => void;
+  onTabChange?: (tab: LogDialogTab) => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
+  settingsFocusHint?: SettingsFocusHint | null;
+  /** The lazy settings panel, mounted only while its tab is showing. */
+  settingsPanel?: ReactNode;
   updateReady?: boolean;
 }) => {
   const localizer = useUiLocalizer();
@@ -225,6 +313,14 @@ const LogDialog = ({
   useEffect(() => {
     if (open) setTab(initialTab);
   }, [initialTab, open]);
+  const selectTab = useCallback(
+    (next: LogDialogTab) => {
+      setTab(next);
+      onTabChange?.(next);
+    },
+    [onTabChange],
+  );
+  useSettingsFieldFocus(open && tab === "settings", settingsFocusHint);
   const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady);
   const [opfsEntries, setOpfsEntries] = useState<BrowserOpfsEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
@@ -341,7 +437,7 @@ const LogDialog = ({
               if (next < 0) return;
               event.preventDefault();
               const nextTab = DIALOG_TABS[next] as LogDialogTab;
-              setTab(nextTab);
+              selectTab(nextTab);
               tabsRef.current?.querySelector<HTMLButtonElement>(`[data-logtab="${nextTab}"]`)?.focus();
             }}
             ref={tabsRef}
@@ -355,7 +451,7 @@ const LogDialog = ({
                 data-logtab={entry}
                 id={`logtab-${entry}`}
                 key={entry}
-                onClick={() => setTab(entry)}
+                onClick={() => selectTab(entry)}
                 role="tab"
                 tabIndex={entry === tab ? 0 : -1}
                 type="button"
@@ -364,6 +460,32 @@ const LogDialog = ({
               </button>
             ))}
           </div>
+          {tab === "settings" && (onRestoreDefaults || onSaveSettings) ? (
+            <div className="dlg-actions log-actions settings-actions">
+              {onRestoreDefaults ? (
+                <button
+                  className="btn ghost"
+                  onClick={onRestoreDefaults}
+                  title={localizer.message("ui.settings.defaults")}
+                  type="button"
+                >
+                  <RotateCcw aria-hidden="true" />
+                  <span className="bl">{localizer.message("ui.settings.defaults")}</span>
+                </button>
+              ) : null}
+              {onSaveSettings ? (
+                <button
+                  className="btn primary"
+                  onClick={onSaveSettings}
+                  title={localizer.message("ui.settings.save")}
+                  type="button"
+                >
+                  <Save aria-hidden="true" />
+                  <span className="bl">{localizer.message("ui.settings.save")}</span>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {tab === "logs" || tab === "storage" ? (
             <div className="dlg-actions log-actions">
               <button
@@ -418,6 +540,16 @@ const LogDialog = ({
             <X aria-hidden="true" />
           </button>
         </header>
+        {tab === "settings" ? (
+          <div
+            aria-labelledby="logtab-settings"
+            className="dlg-body settings-body"
+            id="logpanel-settings"
+            role="tabpanel"
+          >
+            {settingsPanel}
+          </div>
+        ) : null}
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
             <div className="sw-summary">
@@ -433,6 +565,7 @@ const LogDialog = ({
               ) : null}
             </div>
             <StatusRows localizer={localizer} />
+            <AboutLines />
           </div>
         ) : null}
         {tab === "changelog" ? (
@@ -577,3 +710,4 @@ const LogDialog = ({
 };
 
 export { LogDialog };
+export type { LogDialogTab, SettingsFocusHint };

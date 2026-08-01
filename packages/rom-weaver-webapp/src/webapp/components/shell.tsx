@@ -535,6 +535,7 @@ const Masthead = ({
   onOpenStatus,
   onPreloadLog,
   onOpenSettings,
+  onOpenThreads,
   onPreloadSettings,
   tabsControlPanels = true,
   serviceWorkerStatus,
@@ -560,6 +561,8 @@ const Masthead = ({
   onOpenStatus: () => void;
   onPreloadLog?: () => void;
   onOpenSettings: () => void;
+  /** Deep link from the thread count into the Threads setting; falls back to plain Settings. */
+  onOpenThreads?: () => void;
   onPreloadSettings?: () => void;
   tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
@@ -659,7 +662,10 @@ const Masthead = ({
                     aria-label={`${threads} ${threadsLabel}`}
                     className="sub-link masthead-threads"
                     data-thread-label={threadsLabel}
-                    onClick={onOpenSettings}
+                    onClick={onOpenThreads ?? onOpenSettings}
+                    onFocus={onPreloadSettings}
+                    onPointerDown={onPreloadSettings}
+                    onPointerEnter={onPreloadSettings}
                     type="button"
                   >
                     <span className="masthead-threads-count">{threads}</span>
@@ -853,6 +859,7 @@ const WakeLockBanner = ({
 
 export {
   Masthead,
+  prefersReducedMotion,
   readPwaState,
   Reveal,
   RUNTIME_MESSAGES,

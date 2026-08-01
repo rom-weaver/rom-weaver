@@ -220,6 +220,11 @@ msgstr "Oscuro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.defaults"
+msgstr "Valores predeterminados"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.channel.dev"
 msgstr "Compilación de desarrollo"
 
@@ -582,6 +587,11 @@ msgstr "Tamaño de bloque RVZ"
 #: src/presentation/localization/messages.ts
 msgid "settings.rvzCodec"
 msgstr "Códec RVZ"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.save"
+msgstr "Guardar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

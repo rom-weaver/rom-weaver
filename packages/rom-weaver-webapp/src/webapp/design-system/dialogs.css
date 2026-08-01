@@ -100,6 +100,28 @@
 .rw-app .log-refresh .spin { animation: log-refresh-spin .8s linear infinite; }
 @keyframes log-refresh-spin { to { transform: rotate(360deg); } }
 
+/* Settings tab of the unified dialog. Viewport units avoid a cyclic width under
+   inline-size containment, and the named container is the same one the settings
+   rows already query. */
+.rw-app .log-dlg .settings-body { container: settings-card / inline-size; padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom)); }
+.rw-app .log-dlg .settings-actions { flex: 0 0 auto; }
+.rw-app .log-dlg .settings-actions .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
+@container settings-card (min-width: 688px) {
+  .rw-app .settings-panel { columns: 2; column-gap: var(--sp-m); }
+  .rw-app .settings-panel .setcols { display: contents; }
+  .rw-app .settings-panel .setcols .setgroup { margin-block-end: 11px; }
+  .rw-app .settings-panel .validation { column-span: all; }
+}
+/* Deep link landing cue: the focus ring says where, this says "here". */
+.rw-app .field-flash { animation: settings-field-flash .9s ease-out 1; border-radius: var(--r-s); }
+@keyframes settings-field-flash {
+  from { background: color-mix(in oklab, var(--thread) 26%, transparent); }
+  to { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .field-flash { animation: none; }
+}
+
 /* Archive candidate picker */
 .rw-app .picklist { display: flex; flex-direction: column; gap: var(--sp-xs); margin-block-start: var(--sp-s); }
 .rw-app .pick-row {
@@ -153,9 +175,12 @@
 .rw-app .setrow .input { height: 34px; font-size: .85rem; }
 .rw-app .setchecks { display: flex; flex-direction: column; gap: var(--sp-s); padding-block-start: 4px; }
 .rw-app .setchecks .popt { font-size: .82rem; }
-.rw-app .set-about .about-line { font-size: .78rem; color: var(--ink-3); }
-.rw-app .set-about .about-line + .about-line { margin-block-start: 5px; }
-.rw-app .set-about .about-line a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+/* About folded into the Status tab: licence, attribution, privacy - the build
+   facts above it are the status rows, never repeated here. */
+.rw-app .status-about { margin-block-start: var(--sp-l); padding-block-start: var(--sp-m); border-block-start: 1px solid var(--seam); }
+.rw-app .status-about .about-line { font-size: .78rem; color: var(--ink-3); }
+.rw-app .status-about .about-line + .about-line { margin-block-start: 5px; }
+.rw-app .status-about .about-line a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
 /* Avoid forcing a 300px track into narrower viewports. */
 .rw-app .setcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--sp-m); }
 .rw-app .setcols .setgroup { margin: 0; }

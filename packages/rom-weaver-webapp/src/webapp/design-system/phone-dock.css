@@ -138,29 +138,6 @@
     height: 24px;
   }
 
-  /* Settings is a task surface on phones, not a small desktop card. */
-  .rw-modal.settings-modal {
-    padding: 0;
-    place-items: stretch;
-  }
-
-  .rw-modal.settings-modal .rw-modal-card {
-    width: 100vw;
-    max-width: none;
-    height: 100dvh;
-    max-height: 100dvh;
-    border: 0;
-    border-radius: 0;
-  }
-
-  .rw-modal.settings-modal .modal-head {
-    padding-block-start: max(13px, env(safe-area-inset-top));
-  }
-
-  .rw-modal.settings-modal .modal-body {
-    padding-block-end: max(20px, env(safe-area-inset-bottom));
-  }
-
   .rw-modal.changelog-modal { padding: var(--sp-m); }
   .rw-modal.changelog-modal .rw-modal-card {
     width: 100%;

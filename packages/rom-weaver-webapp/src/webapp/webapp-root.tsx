@@ -1,4 +1,4 @@
-import { BookOpen, GitCompare, House, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
+import { BookOpen, GitCompare, House, RotateCcw, Scissors, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -9,7 +9,7 @@ import { perfNow, recordDrop } from "../lib/runtime/perf-latency.ts";
 import { getDefaultBrowserThreadCount } from "../platform/shared/compression-options.ts";
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
-import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
+import { ConfirmDialog } from "../public/react/components/ds/index.ts";
 import { type GuidedSample, notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
 import type { PageFileDrop } from "../public/react/public-types.ts";
 // Deliberately NOT the ../public/react/index.tsx barrel: that barrel re-exports
@@ -23,11 +23,12 @@ import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
+import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
-import { getSettingsUiState } from "./settings/settings-state.ts";
+import { getSettingsUiState, SETTINGS_FIELD_METADATA } from "./settings/settings-state.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
@@ -209,7 +210,12 @@ function WebappRoot({
     setActiveSelectionForm(state.currentView === "docs" ? undefined : state.currentView);
   }, [notFound, state.currentView]);
   const [logOpen, setLogOpen] = useState(false);
-  const [logTab, setLogTab] = useState<"status" | "logs">("status");
+  const [logTab, setLogTab] = useState<LogDialogTab>("status");
+  const [settingsFocusHint, setSettingsFocusHint] = useState<SettingsFocusHint | null>(null);
+  // The settings tab owns a draft, so closing it runs the controller's
+  // discard-confirmation flow first; the dialog itself only closes once that
+  // flow actually clears `settingsDialogOpen`.
+  const settingsCloseArmedRef = useRef(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
@@ -286,12 +292,50 @@ function WebappRoot({
   const preloadSettingsPanel = useCallback(() => {
     void loadSettingsPanel().catch(() => undefined);
   }, []);
-  const openSettings = useCallback(() => {
-    void loadSettingsPanel().then(
-      () => actions.onOpenSettings(),
-      () => actions.onOpenSettings(),
-    );
+  // The panel is lazy, but the dialog opens immediately: its tab rail is the
+  // header, so a still-loading panel shows a usable frame rather than a bare
+  // one. Hover/focus/idle preloads mean it is almost always already resident.
+  const openSettingsTab = useCallback(
+    (fieldId?: string) => {
+      preloadSettingsPanel();
+      settingsCloseArmedRef.current = false;
+      setSettingsFocusHint(fieldId ? { fieldId, token: Date.now() } : null);
+      setLogTab("settings");
+      setLogOpen(true);
+      actions.onOpenSettings();
+    },
+    [actions, preloadSettingsPanel],
+  );
+  const handleDialogTabChange = useCallback(
+    (tab: LogDialogTab) => {
+      setLogTab(tab);
+      // Reaching Settings from inside the dialog must stage a draft exactly the
+      // way the gear does, or the panel would edit a stale one.
+      if (tab === "settings") {
+        preloadSettingsPanel();
+        actions.onOpenSettings();
+      }
+    },
+    [actions, preloadSettingsPanel],
+  );
+  const closeDialog = useCallback(() => {
+    if (!state.settingsDialogOpen) {
+      setLogOpen(false);
+      return;
+    }
+    settingsCloseArmedRef.current = true;
+    actions.onCloseSettings();
+  }, [actions, state.settingsDialogOpen]);
+  const saveSettings = useCallback(() => {
+    settingsCloseArmedRef.current = true;
+    actions.onSaveClose();
   }, [actions]);
+  useEffect(() => {
+    if (state.settingsDialogOpen || !settingsCloseArmedRef.current) return;
+    settingsCloseArmedRef.current = false;
+    logger.trace("unified dialog closing after the settings draft settled");
+    setLogOpen(false);
+  }, [state.settingsDialogOpen]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
@@ -377,7 +421,7 @@ function WebappRoot({
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (state.settingsDialogOpen || confirmationDialog.open) return;
+      if (logOpen || state.settingsDialogOpen || confirmationDialog.open) return;
       const droppedAtMs = perfNow();
       // Read synchronously so dropped folders are captured before the transfer
       // clears; routing/classification is owned by the active tab's unified drop
@@ -408,7 +452,7 @@ function WebappRoot({
       document.removeEventListener("dragover", handlePageDragOver);
       document.removeEventListener("drop", handlePageDrop);
     };
-  }, [confirmationDialog.open, notFound, state.currentView, state.settingsDialogOpen]);
+  }, [confirmationDialog.open, logOpen, notFound, state.currentView, state.settingsDialogOpen]);
 
   const workflowPanel = (view: WebappView, form: React.ReactNode) =>
     isViewMounted(view) ? (
@@ -453,7 +497,8 @@ function WebappRoot({
               setLogOpen(true);
             }}
             onPreloadLog={preloadLogDialog}
-            onOpenSettings={openSettings}
+            onOpenSettings={() => openSettingsTab()}
+            onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
             onPreloadSettings={preloadSettingsPanel}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
             threads={resolveThreads(threads)}
@@ -468,7 +513,7 @@ function WebappRoot({
               }
               selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]));
             }}
-            settingsOpen={state.settingsDialogOpen}
+            settingsOpen={logOpen && logTab === "settings"}
             tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
             tabsControlPanels={!notFound}
           />
@@ -565,52 +610,30 @@ function WebappRoot({
             <LogDialog
               initialTab={logTab}
               level={state.settings.logLevel}
-              onClose={() => setLogOpen(false)}
+              onClose={closeDialog}
               onLevelChange={actions.onLogLevelChange}
               onOpenChangelog={() => setChangelogOpen(true)}
               onReload={actions.onReloadUpdate}
+              onRestoreDefaults={actions.onRestoreDefaults}
+              onSaveSettings={saveSettings}
+              onTabChange={handleDialogTabChange}
               open={logOpen}
               serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+              settingsFocusHint={settingsFocusHint}
+              settingsPanel={
+                <Suspense fallback={null}>
+                  <SettingsPanel
+                    draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
+                    onDraftChange={actions.onDraftChange}
+                    uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
+                    validation={state.validation}
+                  />
+                </Suspense>
+              }
               updateReady={pageUpdate.ready}
             />
           </Suspense>
         ) : null}
-        {/* Keep the frame inside the boundary so lazy loads never show a header-only modal. */}
-        <Suspense fallback={null}>
-          <Modal
-            headerActions={
-              <>
-                <button
-                  className="btn ghost"
-                  onClick={actions.onRestoreDefaults}
-                  title="Reset to defaults"
-                  type="button"
-                >
-                  <RotateCcw aria-hidden="true" />
-                  <span className="bl">Defaults</span>
-                </button>
-                <button className="btn primary" onClick={actions.onSaveClose} title="Save &amp; close" type="button">
-                  <Save aria-hidden="true" />
-                  <span className="bl">Save</span>
-                </button>
-              </>
-            }
-            onClose={actions.onCloseSettings}
-            open={state.settingsDialogOpen}
-            title="Settings"
-            variant="settings-modal"
-          >
-            <SettingsPanel
-              draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-              onClose={actions.onCloseSettings}
-              onDraftChange={actions.onDraftChange}
-              onRestoreDefaults={actions.onRestoreDefaults}
-              onSaveClose={actions.onSaveClose}
-              uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
-              validation={state.validation}
-            />
-          </Modal>
-        </Suspense>
         <ConfirmDialog
           body={confirmationDialog.message}
           cancelLabel={confirmationDialog.cancelLabel}

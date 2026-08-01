@@ -220,6 +220,11 @@ msgstr "Dark"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.defaults"
+msgstr "Defaults"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.channel.dev"
 msgstr "Dev build"
 
@@ -582,6 +587,11 @@ msgstr "RVZ block size"
 #: src/presentation/localization/messages.ts
 msgid "settings.rvzCodec"
 msgstr "RVZ codec"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.save"
+msgstr "Save"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
