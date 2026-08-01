@@ -470,7 +470,7 @@
   font-family: var(--mono); font-size: .9rem; font-weight: 850; letter-spacing: -.04em;
 }
 .rw-app .sample-tutorial-copy-area {
-  grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; overflow: auto;
+  grid-column: 2; grid-row: 1; align-self: stretch; min-width: 0; min-height: 0; overflow: auto;
 }
 .rw-app .sample-tutorial-live { min-width: 0; }
 .rw-app .sample-tutorial-kicker {

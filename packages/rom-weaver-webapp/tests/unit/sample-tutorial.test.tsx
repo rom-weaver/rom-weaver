@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SampleTutorial,
@@ -20,7 +20,7 @@ const STEPS: readonly SampleTutorialStep[] = [
   { body: "Review the second section.", openDrawers: true, target: "#tutorial-second", title: "Second section" },
 ];
 
-const TutorialSection = ({ id, label }: { id: string; label: string }) => {
+const TutorialSection = ({ children, id, label }: { children?: ReactNode; id: string; label: string }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [open, setOpen] = useState(false);
   return (
@@ -38,6 +38,7 @@ const TutorialSection = ({ id, label }: { id: string; label: string }) => {
       >
         Actions
       </button>
+      {children}
     </section>
   );
 };
@@ -360,6 +361,38 @@ describe("sample tutorial", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     rerender(workbench(false));
     expect(button.dataset.guideCta).toBeUndefined();
+  });
+
+  it("leaves an opened drawer open when the final action ends the guide", async () => {
+    const ctaSteps: readonly SampleTutorialStep[] = [
+      {
+        body: "Press it.",
+        cta: ".btn.run",
+        openDrawers: true,
+        target: "#tutorial-cta",
+        title: "Finish",
+      },
+    ];
+    const onClose = vi.fn();
+    const workbench = (guided: boolean) => (
+      <div className="rw-app">
+        <TutorialSection id="tutorial-cta" label="Output options">
+          <button className="btn run" type="button">
+            Apply
+          </button>
+        </TutorialSection>
+        {guided ? <SampleTutorial loadingBody="Loading." onClose={onClose} ready steps={ctaSteps} /> : null}
+      </div>
+    );
+    const { rerender } = render(workbench(false));
+    rerender(workbench(true));
+
+    const drawer = screen.getByRole("button", { name: "Output options" });
+    await waitFor(() => expect(drawer.getAttribute("aria-expanded")).toBe("true"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(onClose).toHaveBeenCalledOnce();
+    rerender(workbench(false));
+    expect(drawer.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("re-closes the drawers it opened when the guide ends", async () => {
