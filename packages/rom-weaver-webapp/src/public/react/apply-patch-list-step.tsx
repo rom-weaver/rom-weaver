@@ -34,15 +34,13 @@ import {
 import { ChecksumList, ChecksumRow, FIT_VALUE_MIN_CHARS } from "./components/ds/checksum-list.tsx";
 import { join } from "./components/ds/cx.ts";
 import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx";
-import { Notice } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { useListReorder } from "./components/ds/use-list-reorder.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
-import type { PatcherStackController, PatcherUiController } from "./patcher-form.ts";
+import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
-import type { NoticeState, PatcherUiState } from "./patcher-ui-state.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -66,19 +64,6 @@ const PATCH_OUTPUT_VERIFICATION_LABELS: Record<string, string> = {
   "out sha-1": "SHA-1",
   "out sha1": "SHA-1",
   "out size": "BYTES",
-};
-
-const SectionNotice = ({ onDismiss, state }: { onDismiss?: () => void; state: NoticeState }) => {
-  if (!state.visible) return null;
-  return (
-    <Notice
-      id="rom-weaver-patch-notice-message"
-      level={state.level === "warning" ? "warn" : "error"}
-      onDismiss={state.dismissible ? onDismiss : undefined}
-    >
-      {state.message}
-    </Notice>
-  );
 };
 
 /** Requirement rows this patch will actually verify, per side: embedded/declared
@@ -1186,7 +1171,6 @@ const PatchCard = ({
   chainChip,
   handleProps,
   index,
-  internalDescription,
   isChainInput,
   isChainOutput,
   isDisabled,
@@ -1212,8 +1196,6 @@ const PatchCard = ({
   chainChip?: { text: string; warn?: boolean } | null;
   handleProps: ReorderHandleProps;
   index: number;
-  /** Embedded description fallback (first patch only); edited metadata wins. */
-  internalDescription?: string;
   isChainInput: boolean;
   isChainOutput: boolean;
   isDisabled: boolean;
@@ -1234,7 +1216,7 @@ const PatchCard = ({
   // Pencil edit state: the name and description editors open/close together.
   const [metaEditing, setMetaEditing] = useState(false);
   const editing = metaEditing && !!onMetaChange;
-  const description = meta?.description || internalDescription || "";
+  const description = meta?.description || "";
   // Mirrors the ROM card: the resolved card structure (collapsed Extract +
   // Checks drawers) stays mounted through staging - a determinate bar on the
   // top edge + a "Reading…" status in the meta line carry progress - so the
@@ -1331,7 +1313,6 @@ const PatchCard = ({
         <ExtractName
           displayName={meta?.name}
           fileName={item.fileName}
-          fileSize={item.fileSize}
           // The first archive-path entry is the source archive itself (shown
           // in the Files drawer / picker); the rest is the folder path
           // within it, surfaced inline on the name.
@@ -1345,8 +1326,6 @@ const PatchCard = ({
                   .filter(Boolean)
                   .join(" › ") || undefined
           }
-          legacyFileClassName="rom-weaver-patch-stack-file"
-          parentCompressions={item.archivePathEntries}
         />
       }
       menu={
@@ -1411,17 +1390,14 @@ const ApplyPatchListStep = ({
   disabledFlags,
   emptyState,
   fault,
-  internalDescription,
   bundleMeta,
   onBundleMetaChange,
   onTogglePatch,
+  notice,
   overrideAvailable,
-  patchInput,
-  patchNotice,
   patches,
   patchStack,
   romActualsById,
-  ui,
   woven,
 }: {
   /** The run has optional/skipped patches: hint on the chain-output card that its
@@ -1430,25 +1406,21 @@ const ApplyPatchListStep = ({
   /** A loaded bundle's delivered patch names match the current patch list. */
   bundleSessionMatches?: boolean;
   disabledFlags?: readonly boolean[];
-  /** Fixture shown when no patches (and no embedded/optional patch choices) are present. */
+  /** Fixture shown when no patches are present. */
   emptyState?: ReactNode;
   fault?: boolean;
-  /** Embedded description fallback for the first patch; bundle metadata wins. */
-  internalDescription?: string;
   /** Per-index editable bundle metadata. */
   bundleMeta?: readonly (BundlePatchMeta | undefined)[];
   onBundleMetaChange?: (index: number, updates: Partial<BundlePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
+  notice?: ReactNode;
   /** The 0x04 "Apply anyway…" override toggle is on offer - fault hints name it. */
   overrideAvailable?: boolean;
-  patchInput: PatcherUiState["patchInput"];
   /** ROM id → its computed checks, for verifying user-entered input checks against
    * the real ROM (the chain-input patch's target). */
   romActualsById?: ReadonlyMap<string, RomCheckActuals>;
-  patchNotice: NoticeState;
   patches: PatchStackItemState[];
   patchStack: PatcherStackController;
-  ui: PatcherUiController;
   woven?: boolean;
 }) => {
   const total = patches.length;
@@ -1518,7 +1490,6 @@ const ApplyPatchListStep = ({
             chainChip={chainChipText(item, enabledIndexes, localizer)}
             handleProps={reorderList.handleProps(index)}
             index={index}
-            internalDescription={index === 0 ? internalDescription : undefined}
             isChainInput={index === chainInputIndex}
             isChainOutput={index === chainOutputIndex}
             isDisabled={!!disabledFlags?.[index]}
@@ -1568,47 +1539,8 @@ const ApplyPatchListStep = ({
           </p>
         );
       })()}
-      {total === 0 &&
-      emptyState &&
-      !patchInput.embeddedPatchLoadingVisible &&
-      !patchInput.embeddedPatchOptions.length &&
-      !patchInput.optionalPatches.length
-        ? emptyState
-        : null}
-      {patchInput.embeddedPatchLoadingVisible ? (
-        <p className="hintline">{patchInput.embeddedPatchLoadingMessage}</p>
-      ) : null}
-      {patchInput.embeddedPatchOptions.length ? (
-        <select
-          className="select"
-          disabled={patchInput.embeddedPatchDisabled}
-          id="rom-weaver-select-patch"
-          onChange={(event) => ui.selectEmbeddedPatch?.(event.currentTarget.value)}
-          value={patchInput.embeddedPatchValue}
-        >
-          {patchInput.embeddedPatchOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      ) : null}
-      {patchInput.optionalPatches.length ? (
-        <div className="optschecks ropts">
-          {patchInput.optionalPatches.map((option) => (
-            <label className="popt opt" key={option.id} title={option.description || undefined}>
-              <input
-                checked={option.checked}
-                disabled={option.disabled}
-                onChange={(event) => ui.setOptionalPatch?.(option.id, event.currentTarget.checked)}
-                type="checkbox"
-              />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </div>
-      ) : null}
-      <SectionNotice onDismiss={() => ui.dismissNotice?.("patchNotice")} state={patchNotice} />
+      {total === 0 ? emptyState : null}
+      {notice}
     </StepSection>
   );
 };

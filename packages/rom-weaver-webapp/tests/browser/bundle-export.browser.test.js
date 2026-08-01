@@ -121,8 +121,8 @@ test("export bundle bundles the session from main-page options with a checks-onl
   document.getElementById("rom-weaver-patch-replace-0")?.click();
   selectFileInput(document.getElementById("rom-weaver-patch-replace-input-0"), replacementFile);
   await expect
-    .poll(
-      () => document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file > strong")?.textContent,
+    .poll(() =>
+      document.querySelector("#rom-weaver-list-patch-stack .nmline[data-file-name]")?.getAttribute("data-file-name"),
     )
     .toBe("replacement.ips");
   await waitForApplyButtonEnabled();
@@ -226,8 +226,8 @@ test("export bundles the extracted patch leaf, not the archive it arrived in", a
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;
   });
   await expect
-    .poll(
-      () => document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file > strong")?.textContent,
+    .poll(() =>
+      document.querySelector("#rom-weaver-list-patch-stack .nmline[data-file-name]")?.getAttribute("data-file-name"),
     )
     .toBe("change.ips");
   exportButton.click();

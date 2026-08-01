@@ -3,7 +3,7 @@ import { expect, test, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { PatcherPrimaryAction } from "../../src/public/react/components/patcher-output-controls.tsx";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
-import { inertDialogController, useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
+import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
 import { createEmptyPatcherOutputState } from "../../src/public/react/patcher-presentation.ts";
 import {
   clearOpfsOutputDirectory,
@@ -269,7 +269,6 @@ test("apply output codec options refresh after per-job edits", async () => {
       });
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,

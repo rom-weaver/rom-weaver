@@ -40,11 +40,13 @@ const renderSession = (overrides: Partial<LocalApplyPatchFormSessionOptions> = {
 };
 
 describe("useLocalApplyPatchFormSession derived controllers", () => {
-  it("projects inputs and patches into the ui and stack controllers", () => {
+  it("projects only live UI fields and the patch stack", () => {
     const { result } = renderSession();
     const ui = result.current.localUiController.getState();
-    expect(ui.romInput.valid).toBe(true);
-    expect(ui.romInfo.fileName).toBe("rom.bin");
+    expect(ui.patchInput).toEqual({ loading: false });
+    expect(ui).not.toHaveProperty("romInput");
+    expect(ui).not.toHaveProperty("romInfo");
+    expect(ui).not.toHaveProperty("sectionTimings");
     expect(result.current.localStackController.getState().items).toHaveLength(2);
   });
 

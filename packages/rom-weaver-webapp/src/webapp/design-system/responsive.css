@@ -65,12 +65,9 @@
   .rw-app .workflow-file-list:not(:empty) + .drop { margin-top: 9px; }
   .rw-app .bundle-rom-expectation { margin-block-start: 9px; }
   .rw-app .updates { gap: var(--sp-s); }
-  /* Use edge-to-edge dialogs on phones. */
-  .rw-app .log-dlg, .rw-app .picker-dlg { max-width: 100vw; width: 100vw; }
-  /* Override user-agent dialog limits that clip full-screen sheets. */
-  .rw-app .log-dlg { height: 100dvh; max-height: 100dvh; margin: 0; }
+  /* Override user-agent dialog limits with an edge-to-edge sheet on phones. */
+  .rw-app .log-dlg { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; }
   .rw-app .log-dlg .dlg-frame { max-height: 100dvh; height: 100dvh; border: 0; border-radius: 0; }
-  .rw-app .picker-dlg .dlg-frame { border-radius: 0; border-inline: 0; }
   .rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
   .rw-app .log-actions { order: 0; flex-basis: auto; }
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }

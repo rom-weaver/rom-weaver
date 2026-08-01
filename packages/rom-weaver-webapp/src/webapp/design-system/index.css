@@ -13,7 +13,7 @@
    `drawers` and `readouts` are deferred.css; `docs` rides the docs route chunk; the rest
    is the render-critical entry sheet. The deferred pair is split by `controls` because
    drawers.css sits before notices/fields/buttons in cascade order and moving it would
-   change outcomes (drawers' `.popt` would start beating fields' `.optschecks .popt`).
+   change existing component overrides.
 
    Adding a file means adding it to the layer its neighbours are in - not a layer of its
    own. `npm run lint:css-layers` fails the build on any rule an earlier layer would now

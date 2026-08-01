@@ -297,20 +297,4 @@
 .rw-app .ofld-l { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .62rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
 .rw-app .ofld .input { height: 32px; font-size: .82rem; }
 .rw-app .ofld .select { height: 32px; font-size: var(--dropdown-fs, .82rem); }
-.rw-app .optschecks { display: flex; flex-direction: column; gap: var(--sp-s); }
-.rw-app .optschecks .popt {
-  flex-direction: row-reverse; justify-content: space-between;
-  gap: var(--sp-m); padding: var(--sp-s) var(--sp-m); border-radius: var(--r-s);
-  border: 1px solid var(--seam-soft); background: var(--well);
-  font-size: .8rem; color: var(--ink); cursor: pointer;
-  transition: border-color .15s, background .15s;
-}
-.rw-app .optschecks .popt > span { flex: 1 1 auto; min-width: 0; }
-@media (hover: hover) {
-  .rw-app .optschecks .popt:hover { border-color: var(--seam); background: var(--plate-2); }
-}
-.rw-app .optschecks .popt:active { border-color: var(--seam); background: var(--plate-2); }
-.rw-app .optschecks .popt:has(:focus-visible) { border-color: var(--thread); }
-.rw-app .optschecks .popt:has(:checked) { color: var(--ink); }
-.rw-app .optschecks .popt:has(:disabled) { cursor: default; opacity: .55; }
 .rw-app .btn.run, .rw-app .runprog { margin-block-start: 2px; }

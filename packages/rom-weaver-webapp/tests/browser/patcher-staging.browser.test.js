@@ -1,7 +1,7 @@
 import { createElement, useState } from "react";
 import { expect, test, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
-import { inertDialogController, useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
+import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
 import { createMockApplyResult, installPatcherTestHooks, mount, setFormControlValue } from "./patcher-test-shared.js";
 
 installPatcherTestHooks();
@@ -40,7 +40,6 @@ test("queued staging rows show waiting progress", async () => {
       });
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,
@@ -128,7 +127,6 @@ test("apply input staging errors render in the ROM section and can be dismissed"
       });
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,
@@ -178,7 +176,6 @@ test("apply patch staging errors render in the patch section and can be dismisse
       });
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,
@@ -262,7 +259,6 @@ test("adding a ROM input preserves active input progress", async () => {
     latestUiController = localUiController;
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,

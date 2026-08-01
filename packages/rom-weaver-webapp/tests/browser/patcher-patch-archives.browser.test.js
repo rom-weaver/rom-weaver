@@ -25,6 +25,11 @@ import {
 
 installPatcherTestHooks();
 
+const getPatchFilesDrawerNames = () =>
+  Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .extract-d .tree-name"))
+    .map((entry) => entry.textContent?.trim() || "")
+    .filter(Boolean);
+
 test("patch row shows extraction progress and extracted patch naming", async () => {
   mount(createElement(ApplyPatchForm));
 
@@ -38,11 +43,7 @@ test("patch row shows extraction progress and extracted patch naming", async () 
   await clickPatchCandidateSelectionOption("change.ips");
 
   const patchState = await waitForState(() => {
-    const patchFileName =
-      document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file")?.textContent || "";
-    const selectedPatchName =
-      document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file strong")?.textContent || "";
-    if (selectedPatchName.includes("change.ips") || patchFileName === "change.ips") return { kind: "ready" };
+    if (getPatchStackFileNames().includes("change.ips")) return { kind: "ready" };
     const errorText = getRuntimeErrorText();
     if (errorText) return { errorText, kind: "error" };
     return null;
@@ -50,29 +51,13 @@ test("patch row shows extraction progress and extracted patch naming", async () 
   expect(patchState).not.toBeNull();
   expect(patchState?.kind, patchState && "errorText" in patchState ? patchState.errorText : "").toBe("ready");
 
-  await expect
-    .poll(
-      () =>
-        document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file strong")?.textContent || "",
-      { timeout: 30000 },
-    )
-    .toContain("change.ips");
-
-  const archiveLabel =
-    document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-archive")?.textContent || "";
-  expect(archiveLabel).toContain("one-patch.7z");
-  expect(archiveLabel).toContain("change.ips");
-  expect(archiveLabel).toMatch(/\d+(?:\.\d)? (?:B|KB|MB|GB|TB)/);
-  expect(
-    document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-archive strong")?.textContent || "",
-  ).toContain("change.ips");
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toContain("change.ips");
 
   const filesDrawer = document.querySelector("#rom-weaver-list-patch-stack .extract-d");
   expect(filesDrawer?.querySelector(".lab")?.textContent || "").toBe("Files");
+  expect(filesDrawer?.querySelector(".rb:not(.time)")?.textContent || "").toMatch(/\d+(?:\.\d)? (?:B|KB|MB|GB|TB)/);
   filesDrawer?.querySelector(".cks-head")?.click();
-  await expect
-    .poll(() => Array.from(filesDrawer?.querySelectorAll(".tree-name") || []).map((entry) => entry.textContent?.trim()))
-    .toEqual(expect.arrayContaining(["one-patch.7z", "change.ips"]));
+  await expect.poll(() => getPatchFilesDrawerNames()).toEqual(expect.arrayContaining(["one-patch.7z", "change.ips"]));
 });
 
 test("deleting a selected patch archive requires selection again when re-added", async () => {
@@ -84,23 +69,13 @@ test("deleting a selected patch archive requires selection again when re-added",
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), patchArchive);
   await clickPatchCandidateSelectionOption("change.ips");
 
-  await expect
-    .poll(
-      () =>
-        document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file strong")?.textContent || "",
-      { timeout: 30000 },
-    )
-    .toContain("change.ips");
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toContain("change.ips");
 
   const removeButton = document.querySelector("#rom-weaver-list-patch-stack button[aria-label='Remove patch']");
   if (!(removeButton instanceof HTMLButtonElement)) throw new Error("Missing remove patch button");
   removeButton.click();
 
-  await expect
-    .poll(() => !document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file"), {
-      timeout: 30000,
-    })
-    .toBe(true);
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual([]);
 
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), patchArchive);
 
@@ -232,9 +207,7 @@ test("replacing a patch from an archive pre-selects the same-named patch in the 
   document.querySelector(".rw-modal.select-modal .selconfirm")?.click();
 
   await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips"]);
-  expect(
-    document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-archive")?.textContent || "",
-  ).toContain("multi-patch.zip");
+  expect(getPatchFilesDrawerNames()).toContain("multi-patch.zip");
   expect(getRuntimeErrorText()).toBeFalsy();
 });
 
@@ -289,13 +262,7 @@ test("adding an input after a staged patch does not reshow preparing patch progr
   );
   await clickPatchCandidateSelectionOption("change.ips");
 
-  await expect
-    .poll(
-      () =>
-        document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file strong")?.textContent || "",
-      { timeout: 30000 },
-    )
-    .toContain("change.ips");
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toContain("change.ips");
 
   progressEvents.length = 0;
 

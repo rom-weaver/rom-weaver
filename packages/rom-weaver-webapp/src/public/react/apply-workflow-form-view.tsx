@@ -37,16 +37,13 @@ import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } f
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { createCompressionTypeOptions } from "./output-view-model.ts";
 import type {
-  DialogController,
   NoticeController,
   PatcherOutputController,
   PatcherStackController,
   PatcherUiController,
   StartupState,
 } from "./patcher-form.ts";
-import { inertUiController } from "./patcher-form-session.ts";
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
-import { ArchiveDialog as SharedArchiveDialog } from "./patcher-react-shared.tsx";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
@@ -707,7 +704,6 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         fileEntries,
         fileName: romInput.info.fileName,
         fileSize: romBytes,
-        legacyFileClassName: "rom-weaver-input-stack-file",
         parentCompressions: romInput.archivePathEntries,
         timing: TIMING_LABEL(romInput.decompressionTimeMs),
       },
@@ -876,7 +872,6 @@ const renderDiscGroup = (
         fileName: discName,
         fileEntries,
         fileSize: totalFileBytes || totalBytes || undefined,
-        legacyFileClassName: "rom-weaver-input-stack-file",
         parentCompressions: groupRows.find((row) => row.archivePathEntries?.length)?.archivePathEntries,
       },
       meta:
@@ -1058,21 +1053,6 @@ const ApplyOutputAction = ({
         />
         <span>{uiState.checksumOverride.label}</span>
       </label>
-    ) : null}
-    {uiState.outputChecksumWarning.visible ? (
-      <div id="rom-weaver-row-output-checksum-warning">
-        <Notice level="warn">{uiState.outputChecksumWarning.message}</Notice>
-        <label className="checkrow warn">
-          <input
-            checked={uiState.outputChecksumWarning.checked}
-            disabled={uiState.outputChecksumWarning.disabled}
-            id="rom-weaver-checkbox-output-checksum-override"
-            onChange={(event) => uiController.setOutputChecksumOverride?.(event.currentTarget.checked)}
-            type="checkbox"
-          />
-          <span>{uiState.outputChecksumWarning.label}</span>
-        </label>
-      </div>
     ) : null}
     <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
       <p aria-live="polite" className="patch-off-note">
@@ -1276,7 +1256,6 @@ function ApplyWorkflowFormView({
     patchStack: PatcherStackController;
     ui: PatcherUiController;
     notice?: NoticeController;
-    dialog?: DialogController;
   };
   /** Bundle export controls live directly in the Output options drawer. */
   bundleExport?: BundleExportState;
@@ -1297,7 +1276,7 @@ function ApplyWorkflowFormView({
   pendingDrops?: PendingDrop[];
   startup?: StartupState;
 }) {
-  const uiController = controllers.ui || inertUiController;
+  const uiController = controllers.ui;
   const uiState = useSyncExternalStore(uiController.subscribe, uiController.getState, uiController.getState);
   const outputState = useSyncExternalStore(
     controllers.output.subscribe,
@@ -1635,11 +1614,6 @@ function ApplyWorkflowFormView({
                   onDismiss={dismissSectionNotice("inputNotice")}
                   state={uiState.inputNotice}
                 />
-                <SectionNotice
-                  id="rom-weaver-checksum-notice-message"
-                  onDismiss={dismissSectionNotice("checksumNotice")}
-                  state={uiState.checksumNotice}
-                />
               </>
             }
             num="0x02"
@@ -1654,7 +1628,6 @@ function ApplyWorkflowFormView({
             disabledFlags={disabledPatchFlags}
             emptyState={patchesNeedsInput}
             fault={applyFailed}
-            internalDescription={uiState.patchDetails.description}
             onBundleMetaChange={(index, updates) => {
               const id = patchIds[index];
               if (id) onBundleMetaChange?.(id, updates);
@@ -1662,22 +1635,18 @@ function ApplyWorkflowFormView({
             onTogglePatch={patchEnablement?.onToggle}
             overrideAvailable={uiState.checksumOverride.visible}
             patches={patches}
-            patchInput={uiState.patchInput}
-            patchNotice={uiState.patchNotice}
             patchStack={controllers.patchStack}
             romActualsById={romActualsById}
-            ui={uiController}
+            notice={
+              <SectionNotice
+                id="rom-weaver-patch-notice-message"
+                onDismiss={dismissSectionNotice("patchNotice")}
+                state={uiState.patchNotice}
+              />
+            }
             woven={wovenSteps}
           />
 
-          {uiState.patchDetails.requirementsValue ? (
-            <div className="descblk mono" id="rom-weaver-row-patch-requirements">
-              <div className="k">{uiState.patchDetails.requirementsLabel}</div>
-              <div className="v" id="rom-weaver-patch-requirements-value">
-                {uiState.patchDetails.requirementsValue}
-              </div>
-            </div>
-          ) : null}
           <WorkflowOutputStep
             action={renderOutputAction}
             compress={buildOutputCompressionPanel({
@@ -1741,7 +1710,6 @@ function ApplyWorkflowFormView({
           steps={sampleTutorial === "bundle" ? BUNDLE_SAMPLE_TUTORIAL_STEPS : APPLY_SAMPLE_TUTORIAL_STEPS}
         />
       ) : null}
-      <SharedArchiveDialog controller={controllers.dialog} />
     </section>
   );
 }

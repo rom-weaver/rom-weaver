@@ -24,7 +24,6 @@ export type {
   ExtractCommand,
   ExtractedFileEntry,
   ExtractStepDetails,
-  ListCommand,
   LogLevel,
   OutputEnforceableEntry,
   PatchApplyCommand,

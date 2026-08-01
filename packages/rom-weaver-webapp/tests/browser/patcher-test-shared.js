@@ -189,22 +189,19 @@ export const getCandidateSelectionCloseButton = () =>
   document.querySelector(".rw-modal.select-modal .modal-head button[aria-label='Close']");
 export const getInputStackRows = () => Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .file"));
 export const getPatchStackRows = () => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .file"));
-// One patch row = one `.rom-weaver-patch-stack-file` label; read its primary file name (the
-// direct-child <strong>). A nested patch also renders a second <strong> inside the archive-path
-// span, so match only direct children to avoid double-counting rows that have an extract section.
 export const getPatchStackFileNames = () =>
-  Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file > strong"))
-    .map((entry) => entry.textContent?.trim() || "")
+  Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .nmline[data-file-name]"))
+    .map((entry) => entry.getAttribute("data-file-name")?.trim() || "")
     .filter(Boolean);
 
 export const clickCandidateSelectionOption = async (label) => {
   const state = await waitForState(() => {
     const list = getCandidateSelectionList();
     if (list) return { kind: "dialog" };
-    const selectedLabel = document.querySelector(
-      "#rom-weaver-list-input-stack .rom-weaver-input-stack-file",
-    )?.textContent;
-    if (selectedLabel?.includes(label)) return { kind: "selected" };
+    const selectedLabel = document
+      .querySelector("#rom-weaver-list-input-stack .nmline[data-file-name]")
+      ?.getAttribute("data-file-name");
+    if (selectedLabel === label) return { kind: "selected" };
     const errorText = getSectionNoticeText();
     if (errorText) return { errorText, kind: "error" };
     return null;
@@ -246,11 +243,7 @@ export const selectPatchCandidates = async (labels) => {
     // A new upload can briefly leave the previous selected row visible while its replacement is
     // still being staged. Do not mistake that stale row for the new selection.
     if (hasStagingProgress()) return null;
-    const patchFileName =
-      document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file")?.textContent || "";
-    const selectedPatchName =
-      document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file strong")?.textContent || "";
-    if (selectedPatchName.includes(firstLabel) || patchFileName === firstLabel) return { kind: "selected" };
+    if (getPatchStackFileNames().includes(firstLabel)) return { kind: "selected" };
     const errorText = getSectionNoticeText();
     if (errorText) return { errorText, kind: "error" };
     return null;
@@ -276,10 +269,8 @@ export const selectPatchCandidates = async (labels) => {
 export const clickPatchCandidateSelectionOption = async (label) => selectPatchCandidates([label]);
 
 export const getInputStackFileName = () => {
-  const candidates = Array.from(
-    document.querySelectorAll("#rom-weaver-list-input-stack .rom-weaver-input-stack-file > strong"),
-  )
-    .map((entry) => entry.textContent?.trim() || "")
+  const candidates = Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .nmline[data-file-name]"))
+    .map((entry) => entry.getAttribute("data-file-name")?.trim() || "")
     .filter(Boolean);
   return (
     candidates.find((entry) => /^[^<>:"|?*\n\r]+?\.[a-z0-9]{2,5}$/i.test(entry)) ||
