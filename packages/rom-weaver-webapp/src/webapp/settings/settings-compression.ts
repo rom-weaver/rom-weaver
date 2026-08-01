@@ -2,7 +2,6 @@ import {
   getCompressionProfileFromIndex,
   getCompressionProfileIndex,
   getCompressionProfileLabel,
-  resolveCompressionLevels,
 } from "../../lib/compression/compression-settings.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import {
@@ -31,5 +30,4 @@ export {
   normalizeCompressionProfile,
   normalizeIntegerInRange,
   parseIntegerInRange,
-  resolveCompressionLevels,
 };

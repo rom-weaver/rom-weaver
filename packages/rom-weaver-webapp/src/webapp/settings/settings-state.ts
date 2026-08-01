@@ -19,7 +19,6 @@ export {
   SETTINGS_VALID_COMPRESSION_PROFILES,
 } from "./settings-metadata.ts";
 export {
-  buildSettingsForWebapp,
   getDefaultSettings,
   loadSettings,
   SETTINGS_STORAGE_VERSION,
