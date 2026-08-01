@@ -396,9 +396,11 @@ type BundleExportState = {
   format: string;
   progress: ProgressViewModel | null;
   ready: boolean;
+  romName: string;
   runExport: () => Promise<void>;
   setBundleRom: (value: boolean) => void;
   setFormat: (value: string) => void;
+  setRomName: (value: string) => void;
 };
 
 const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
@@ -578,6 +580,8 @@ type RomRowDeps = {
   /** The bundle's expected base-ROM checks - an "Expected" group with match
    * marks inside the staged ROM's Checks drawer (single-ROM sessions only). */
   expectedChecks?: ParsedBundleChecks;
+  /** Advisory expected logical ROM basename from bundle `rom.name`. */
+  expectedName?: string;
 };
 
 /**
@@ -690,6 +694,13 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         ...(variant.id === "raw" ? {} : { label: variant.label }),
       }))
     : [{ id: "raw", rows: baseChecksumRows }];
+  const expected =
+    deps.expectedChecks || deps.expectedName
+      ? {
+          ...deps.expectedChecks,
+          ...(deps.expectedName ? { name: deps.expectedName } : {}),
+        }
+      : undefined;
   return {
     card: {
       extract: {
@@ -723,7 +734,8 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
           checksumVariants: staging ? undefined : romInput.info.checksumVariants,
           // Also while staging: the bundle already declares these, so they reserve their own group
           // (and read) before the hashes land instead of appearing with them.
-          ...(deps.expectedChecks ? { expected: deps.expectedChecks } : {}),
+          ...(expected ? { expected } : {}),
+          fileName: romInput.info.fileName,
           lead: !staging && romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
           onToggle: () => ui.toggleRomInputChecksums?.(romInput.id),
           open: staging ? true : romInput.info.checksumsExpanded,
@@ -1198,6 +1210,21 @@ const BundleOutputFields = ({
           <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
         </select>
       </OutputField>
+      {bundleTools?.exportVisible && !bundleExport.bundleRom ? (
+        <OutputField label="Expected ROM name">
+          <input
+            aria-label="Expected ROM name"
+            autoComplete="off"
+            className="input"
+            disabled={bundleExport.busy}
+            id="rom-weaver-bundle-rom-name"
+            onChange={(event) => bundleExport.setRomName(event.currentTarget.value)}
+            spellCheck={false}
+            type="text"
+            value={bundleExport.romName}
+          />
+        </OutputField>
+      ) : null}
     </>
   );
 };
@@ -1350,6 +1377,7 @@ function ApplyWorkflowFormView({
     ui: uiController,
     verificationStates: romVerificationStates,
     ...(singleRom && expectedRomChecks ? { expectedChecks: expectedRomChecks } : {}),
+    ...(singleRom && bundleRomExpectation?.name ? { expectedName: bundleRomExpectation.name } : {}),
   };
   const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");

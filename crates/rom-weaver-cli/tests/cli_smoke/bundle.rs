@@ -1150,6 +1150,7 @@ fn bundle_create_no_bundle_rom_emits_checks_only_entry() {
         rom_entry["checks"]["checksums"]["crc32"],
         crc32_hex(BUNDLE_ROM_BYTES).as_str()
     );
+    assert_eq!(rom_entry["name"], "game.bin");
     assert!(result["rom_source"].is_null(), "no rom source to resolve");
 
     // The applying user supplies the ROM; the bundle is patches-only.
@@ -1203,6 +1204,137 @@ fn bundle_create_no_bundle_rom_emits_checks_only_entry() {
     assert!(
         label.contains("expected_size"),
         "expected rom size expectation in label: {label}"
+    );
+}
+
+#[test]
+fn bundle_apply_warns_but_succeeds_when_rom_name_differs() {
+    let temp = setup_temp_dir();
+    let rom = write_bundle_rom(&temp, "game.bin");
+    let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let bundle = temp.child("rom-weaver-bundle.json");
+
+    run_json_events(
+        &[
+            "bundle",
+            "create",
+            "--input",
+            rom.to_str().expect("path"),
+            "--no-bundle-rom",
+            "--rom-name",
+            "expected.bin",
+            "--patch",
+            main.to_str().expect("path"),
+            "--output",
+            bundle.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let patched = temp.child("patched.bin");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "--log-level",
+            "warn",
+            "patch",
+            "apply",
+            "--input",
+            rom.to_str().expect("path"),
+            "--bundle",
+            bundle.path().to_str().expect("path"),
+            "--output",
+            patched.path().to_str().expect("path"),
+            "--no-compress",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(
+        stderr.contains("bundle ROM name mismatch")
+            && stderr.contains("expected.bin")
+            && stderr.contains("game.bin"),
+        "expected advisory name warning, got: {stderr}"
+    );
+
+    run_json_events(
+        &[
+            "bundle",
+            "create",
+            "--input",
+            rom.to_str().expect("path"),
+            "--no-bundle-rom",
+            "--rom-name",
+            "GAME.BIN",
+            "--patch",
+            main.to_str().expect("path"),
+            "--output",
+            bundle.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let case_matched = temp.child("case-matched.bin");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "--log-level",
+            "warn",
+            "patch",
+            "apply",
+            "--input",
+            rom.to_str().expect("path"),
+            "--bundle",
+            bundle.path().to_str().expect("path"),
+            "--output",
+            case_matched.path().to_str().expect("path"),
+            "--no-compress",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(
+        !stderr.contains("bundle ROM name mismatch"),
+        "case-only difference must match: {stderr}"
+    );
+}
+
+#[test]
+fn bundle_create_empty_rom_name_suppresses_the_default() {
+    let temp = setup_temp_dir();
+    let rom = write_bundle_rom(&temp, "game.bin");
+    let patch = write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let bundle = temp.child("rom-weaver-bundle.json");
+
+    run_json_events(
+        &[
+            "bundle",
+            "create",
+            "--input",
+            rom.to_str().expect("path"),
+            "--no-bundle-rom",
+            "--rom-name",
+            "",
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            bundle.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let parsed: serde_json::Value =
+        serde_json::from_slice(&fs::read(bundle.path()).expect("bundle bytes"))
+            .expect("bundle json");
+    assert!(
+        parsed["rom"].get("name").is_none(),
+        "an explicitly cleared name must stay absent: {}",
+        parsed["rom"]
     );
 }
 

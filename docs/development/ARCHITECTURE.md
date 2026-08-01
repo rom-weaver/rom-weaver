@@ -323,7 +323,9 @@ also bundles the ROM and patches). The `rom` entry may instead be *sourceless*
 checks validate it - the default shape for distributable patch bundles; the
 apply error for a sourceless bundle input and the webapp's ROM step both
 surface the expected name/checksums/size so the user knows which ROM to
-supply. Schema and the single shared parser live in
+supply. When that logical ROM leaf's basename differs from `rom.name`, apply
+warns but continues; checksum and size requirements keep their existing strict
+behavior. Schema and the single shared parser live in
 `crates/rom-weaver-cli/src/bundle_schema.rs` / `bundle_parse.rs`; validation
 failures use stable `bundle.*` `ValidationCode`s. The canonical
 `rom-weaver-bundle.json` name is a fast path, including the direct-input

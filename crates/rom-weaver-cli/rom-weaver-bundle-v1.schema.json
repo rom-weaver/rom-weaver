@@ -61,7 +61,7 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "description": "Display / output-naming file name (defaults to the source's base name).",
+          "description": "Display / output-naming file name. When the applying user supplies the ROM separately, a different logical basename produces an advisory warning. Defaults to the source's base name.",
           "type": "string"
         },
         "url": {

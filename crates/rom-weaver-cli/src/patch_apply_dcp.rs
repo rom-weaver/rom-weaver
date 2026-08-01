@@ -9,6 +9,7 @@ use std::io::{BufReader, BufWriter};
 use crate::dcp::rebuild_track_to_writer;
 use crate::gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoTimestamp};
 
+use super::patch_apply::warn_on_rom_name_mismatch;
 use super::*;
 
 struct CompressDcpDiscInputs<'a> {
@@ -25,7 +26,11 @@ struct CompressDcpDiscInputs<'a> {
 impl CliApp {
     /// Run `patch apply` for a `.dcp` patch. Invoked from
     /// [`Self::run_patch_apply`] when the patch list is a single `.dcp`.
-    pub(super) fn run_dcp_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
+    pub(super) fn run_dcp_apply(
+        &self,
+        args: PatchApplyCommand,
+        expected_rom_name: Option<&str>,
+    ) -> AppRunOutcome {
         let context = self.context(args.threads);
         let single = context.single_thread_execution();
         let fail = |stage: &str, message: String| {
@@ -125,6 +130,7 @@ impl CliApp {
             }
             Err(error) => return self.finish("patch-apply", fail("prepare", error.to_string())),
         };
+        warn_on_rom_name_mismatch(expected_rom_name, &disc.target_file);
 
         let report = self.rebuild_and_emit_dcp(
             &args,

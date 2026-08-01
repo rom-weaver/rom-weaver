@@ -420,9 +420,11 @@ describe("apply workflow view - bundle controls", () => {
     format: "zip",
     progress: null,
     ready: true,
+    romName: "game.bin",
     runExport: async () => undefined,
     setBundleRom: () => undefined,
     setFormat: () => undefined,
+    setRomName: () => undefined,
   });
 
   const bundleTools = (setBundlePackage: (value: string) => void, exportVisible = true) => ({

@@ -1403,6 +1403,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const bundleExportReady =
     (!!stagedBundleSources?.rom && stagedBundleSources.patches.length > 0) ||
     (!!bundleSourcesRef.current?.rom && bundleSourcesRef.current.patches.length > 0);
+  const bundleExportRomName =
+    stagedBundleSources?.rom?.fileName ||
+    bundleSourcesRef.current?.rom?.fileName ||
+    (lastInputsRef.current.length === 1
+      ? getReactBinarySourceFileName(lastInputsRef.current[0] as BinarySource, "rom.bin")
+      : "");
   const bundleExport = useBundleExport({
     bundleMetaById,
     disabledPatchIds,
@@ -1431,6 +1437,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     getStackItems: () => resolvedStackController.getState().items,
     initialBundleRom: defaultBundleContents === "rom",
     initialFormat: defaultBundleFormat,
+    initialRomName: bundleExportRomName,
     ready: bundleExportReady,
     ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
   });

@@ -329,7 +329,8 @@ size?: number | null, };
 
 export type BundleRom = {
 /**
- * Display / output-naming file name (defaults to the source's base name).
+ * Display / output-naming file name. For a separately supplied ROM, this
+ * is also an advisory expected basename (defaults to the source basename).
  */
 name?: string,
 /**
