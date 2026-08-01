@@ -227,6 +227,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
+  const [bundleSourcesReady, setBundleSourcesReady] = useState(false);
+  const setBundleSources = useCallback((sources: ApplyWorkflowBundleSources | null) => {
+    bundleSourcesRef.current = sources;
+    setBundleSourcesReady(!!sources?.rom && sources.patches.length > 0);
+  }, []);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
     executionSettingsKey: "",
     inputs: [],
@@ -259,29 +264,35 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [traceSettings],
   );
 
-  const syncInputSelectionRefs = useCallback((inputs: BinarySource[]) => {
-    if (!sameBinarySourceLists(lastInputsRef.current, inputs)) {
-      if (lastInputsRef.current.length > 0 && inputs.length === 0) forceInputWorkflowRefreshRef.current = true;
-      lastInputsRef.current = inputs.slice();
-      bundleSourcesRef.current = null;
-    }
-  }, []);
+  const syncInputSelectionRefs = useCallback(
+    (inputs: BinarySource[]) => {
+      if (!sameBinarySourceLists(lastInputsRef.current, inputs)) {
+        if (lastInputsRef.current.length > 0 && inputs.length === 0) forceInputWorkflowRefreshRef.current = true;
+        lastInputsRef.current = inputs.slice();
+        setBundleSources(null);
+      }
+    },
+    [setBundleSources],
+  );
 
-  const syncPatchSelectionRefs = useCallback((patches: BinarySource[]) => {
-    const patchOrder = getBinarySourceListStableIds(patches).join("|");
-    const previousOrder = lastPatchOrderRef.current;
-    if (previousOrder !== patchOrder) {
-      // A pure append leaves the existing patches (and their staged OPFS copies + resolved
-      // selections) untouched, so prepareWorkflow's patchesAppended path can addPatch just the new
-      // tail. Forcing a full refresh there would clearPatches and re-stage everything - re-extracting
-      // unchanged inputs and racing their still-open OPFS handles, which is what made re-uploading the
-      // same archive to pick a second entry fail. Only a rearranged/shrunken prefix needs the refresh.
-      const isAppend = previousOrder !== "" && patchOrder.startsWith(`${previousOrder}|`);
-      if (!isAppend) forcePatchWorkflowRefreshRef.current = true;
-      lastPatchOrderRef.current = patchOrder;
-      bundleSourcesRef.current = null;
-    }
-  }, []);
+  const syncPatchSelectionRefs = useCallback(
+    (patches: BinarySource[]) => {
+      const patchOrder = getBinarySourceListStableIds(patches).join("|");
+      const previousOrder = lastPatchOrderRef.current;
+      if (previousOrder !== patchOrder) {
+        // A pure append leaves the existing patches (and their staged OPFS copies + resolved
+        // selections) untouched, so prepareWorkflow's patchesAppended path can addPatch just the new
+        // tail. Forcing a full refresh there would clearPatches and re-stage everything - re-extracting
+        // unchanged inputs and racing their still-open OPFS handles, which is what made re-uploading the
+        // same archive to pick a second entry fail. Only a rearranged/shrunken prefix needs the refresh.
+        const isAppend = previousOrder !== "" && patchOrder.startsWith(`${previousOrder}|`);
+        if (!isAppend) forcePatchWorkflowRefreshRef.current = true;
+        lastPatchOrderRef.current = patchOrder;
+        setBundleSources(null);
+      }
+    },
+    [setBundleSources],
+  );
 
   const syncSelectionRefs = useCallback(
     (snapshot: ApplyWorkflowSessionInput) => {
@@ -489,13 +500,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const resetWorkflow = useCallback(() => {
     const workflow = workflowHandle.reset();
     preparedWorkflowRef.current = null;
-    bundleSourcesRef.current = null;
+    setBundleSources(null);
     forceInputWorkflowRefreshRef.current = false;
     workflowSyncRef.current = { executionSettingsKey: "", inputs: [], patches: [], preparationSettingsKey: "" };
     workflowOutputOverridesKeyRef.current = "";
     prepareHandlersRef.current = null;
     void workflow?.dispose();
-  }, [workflowHandle]);
+  }, [setBundleSources, workflowHandle]);
 
   const getWorkflow = useCallback(
     () =>
@@ -778,7 +789,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
         const input = workflow.getInput();
         const patches = workflow.getPatches();
-        bundleSourcesRef.current = workflow.getBundleExportSources();
+        setBundleSources(workflow.getBundleExportSources());
         const checksums = input?.checksums || null;
         // Post-stage, the controller's output state is the authoritative resolved name + format
         // (it owns the auto-naming, including the disc-name special-casing, and the manual overrides
@@ -826,6 +837,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [
       getWorkflow,
       props.threads,
+      setBundleSources,
       setResolvedOutputNameForSnapshot,
       syncSelectionRefs,
       syncWorkflowOutputOverrides,
@@ -1122,7 +1134,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
         async ({ input: stagedInput, workflow }) => {
           preparedWorkflowRef.current = workflow;
-          bundleSourcesRef.current = workflow.getBundleExportSources();
+          setBundleSources(workflow.getBundleExportSources());
           const infos = toStagedInputInfos(stagedInput, input.inputs);
           if (!input.patches.length) {
             const implicitPatchSources = workflow.getPatchSources().filter(isReactBinarySource);
@@ -1152,7 +1164,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
       );
     },
-    [enqueueStageBatch],
+    [enqueueStageBatch, setBundleSources],
   );
 
   const stagePatches = useCallback(
@@ -1179,7 +1191,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
         async ({ input: stagedInput, patches, workflow }) => {
           preparedWorkflowRef.current = workflow;
-          bundleSourcesRef.current = workflow.getBundleExportSources();
+          setBundleSources(workflow.getBundleExportSources());
           const inputLabelById = new Map(
             toStagedInputInfos(stagedInput, input.inputs).map((entry) => [entry.id || "", entry.fileName || "Input"]),
           );
@@ -1215,7 +1227,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
       );
     },
-    [enqueueStageBatch],
+    [enqueueStageBatch, setBundleSources],
   );
 
   // The deep dry-run validation is deferred out of staging so the patch card can render its info +
@@ -1411,9 +1423,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // "Export bundle…" (output card secondary action): snapshots the current
   // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
   const stagedBundleSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources();
-  const bundleExportReady =
-    (!!stagedBundleSources?.rom && stagedBundleSources.patches.length > 0) ||
-    (!!bundleSourcesRef.current?.rom && bundleSourcesRef.current.patches.length > 0);
+  const bundleExportReady = bundleSourcesReady;
   const bundleExportRomName =
     stagedBundleSources?.rom?.fileName ||
     bundleSourcesRef.current?.rom?.fileName ||
