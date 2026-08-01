@@ -129,6 +129,10 @@ const createPwaServiceWorkerClient = ({
   let serviceWorkerRegistration: ServiceWorkerRegistrationLike | undefined;
   let updateIntervalId: number | null = null;
   let reloadForControlPending = false;
+  // Whether the incoming worker taking control should reload the page. See the onNeedReload handler:
+  // the registrar reloads unconditionally unless we supply that callback, so this flag is the only
+  // thing standing between a silent activation and a surprise reload.
+  let reloadOnIncomingControl = false;
 
   const setSessionStorageItem = (key: string, value: string) => {
     try {
@@ -158,15 +162,22 @@ const createPwaServiceWorkerClient = ({
   };
   const isCrossOriginIsolationKnown = () => typeof window?.crossOriginIsolated === "boolean";
   const isCrossOriginIsolated = () => window?.crossOriginIsolated === true;
+  const reloadPage = (message: string, reason: string) => {
+    if (!window?.location || typeof window.location.reload !== "function") {
+      logServiceWorkerClient("reload skipped; window.location.reload is unavailable", { reason });
+      return false;
+    }
+    logServiceWorkerClient(message, { reason });
+    window.location.reload();
+    return true;
+  };
   const reloadForCrossOriginIsolation = (reason: string) => {
     if (!window?.location || typeof window.location.reload !== "function") {
       logServiceWorkerClient("reload skipped; window.location.reload is unavailable", { reason });
       return false;
     }
-    logServiceWorkerClient("reloading page for service worker isolation", { reason });
     setSessionStorageItem(COI_RELOADED_BY_SELF_KEY, reason);
-    window.location.reload();
-    return true;
+    return reloadPage("reloading page for service worker isolation", reason);
   };
   const getRegistrationSnapshot = async () => {
     const serviceWorker = navigator?.serviceWorker;
@@ -481,8 +492,9 @@ const createPwaServiceWorkerClient = ({
     }
     logServiceWorkerClient("reloading with pending service worker update");
     clearUpdateReady();
+    reloadOnIncomingControl = true;
     onBeforeReload?.();
-    await updateServiceWorker(true);
+    await updateServiceWorker();
     return true;
   };
   const forceCacheAndReload = async (): Promise<boolean> => {
@@ -547,6 +559,15 @@ const createPwaServiceWorkerClient = ({
 
     updateServiceWorker = registerServiceWorker({
       immediate: true,
+      // Without this callback the registrar reloads the page itself the moment the incoming worker
+      // takes control, and the reloadPage argument to updateServiceWorker() is ignored outright -
+      // so a silent activation would still reload. Supplying it moves that decision here.
+      onNeedReload: () => {
+        const reload = reloadOnIncomingControl;
+        reloadOnIncomingControl = false;
+        logServiceWorkerClient("incoming service worker took control", { reload });
+        if (reload) reloadPage("reloading page to apply service worker update", "swupdate");
+      },
       onNeedRefresh: () => {
         logServiceWorkerClient("service worker update ready");
         const autoApplyReloads = Number.parseInt(getSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY), 10) || 0;
@@ -564,8 +585,9 @@ const createPwaServiceWorkerClient = ({
           });
           setSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY, String(autoApplyReloads + 1));
           clearUpdateReady();
+          reloadOnIncomingControl = reloadToApply;
           if (reloadToApply) onBeforeReload?.();
-          void updateServiceWorker(reloadToApply);
+          void updateServiceWorker();
           return;
         }
         if (autoApplyReloads >= AUTO_APPLY_RELOAD_BUDGET) {
