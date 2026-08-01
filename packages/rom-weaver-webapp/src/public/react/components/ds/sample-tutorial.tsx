@@ -143,8 +143,8 @@ const shiftRect = (rect: GuideRect, by: number): GuideRect => ({
 
 /**
  * The row's own ancestors are `overflow: clip`, so an outline drawn on the row
- * gets cut off. The ring is rendered in the guide's portal instead and simply
- * frames the row's box.
+ * gets cut off. The ring is rendered as part of the guide layer instead and
+ * simply frames the row's box.
  */
 const ringAroundTarget = (rect: GuideRect) => ({
   height: rect.height + GUIDE_RING_INSET * 2,

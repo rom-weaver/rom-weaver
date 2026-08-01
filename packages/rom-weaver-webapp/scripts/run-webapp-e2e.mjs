@@ -105,6 +105,12 @@ const clickAfterStableLayout = async (page, locator) => {
     throw new Error("guide control lost its clickable layout box during animation");
   await page.mouse.click(currentBox.x + currentBox.width / 2, currentBox.y + currentBox.height / 2);
 };
+const assertGuidedLayerCanEscapePanel = async (page) => {
+  await page.waitForFunction(() => {
+    const panel = document.querySelector(".sample-tutorial-scrim")?.closest(".panel");
+    return panel instanceof HTMLElement && getComputedStyle(panel).overflow === "visible";
+  });
+};
 const HYDRATION_SETTINGS = JSON.stringify({
   apply: { compression: { threads: 3 } },
   common: { betaToolsEnabled: true },
@@ -532,6 +538,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await guidedApply.click();
     const tutorial = page.locator(".sample-tutorial-dialog");
     await tutorial.waitFor({ state: "visible" });
+    await assertGuidedLayerCanEscapePanel(page);
     await scanLiveApp(page, "guided Apply loading (desktop, light)");
     for (let step = 1; step <= 4; step += 1) {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
@@ -549,6 +556,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await installAuditTools();
     await tutorial.waitFor({ state: "visible" });
+    await assertGuidedLayerCanEscapePanel(page);
     await scanLiveApp(page, "guided Bundle loading (desktop, light)");
     for (let step = 1; step <= 4; step += 1) {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
@@ -605,6 +613,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await guidedCreate.waitFor({ state: "visible" });
     await guidedCreate.click();
     await tutorial.waitFor({ state: "visible" });
+    await assertGuidedLayerCanEscapePanel(page);
     await scanLiveApp(page, "guided Create loading (desktop, light)");
     for (let step = 1; step <= 4; step += 1) {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });

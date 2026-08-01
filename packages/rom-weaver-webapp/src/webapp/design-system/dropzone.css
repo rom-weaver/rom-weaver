@@ -357,6 +357,10 @@
    dimmer never traps input: each live section remains available while its
    fixed guide card explains the controls as one calm chapter. */
 .rw-app .sample-tutorial-layer { display: contents; }
+/* The guide used to render through a portal outside the workflow panel. Direct
+   Preact keeps it inline, so release the panel clip while the fixed scrim and
+   card are mounted. */
+.rw-app .panel:has(.sample-tutorial-scrim) { overflow: visible; }
 .rw-app .sample-tutorial-scrim {
   position: fixed; inset: 0; z-index: 1000; pointer-events: none;
   background: color-mix(in oklab, var(--scrim) 78%, transparent);
@@ -375,8 +379,8 @@
   box-shadow: inset 4px 0 0 var(--thread);
 }
 /* Lift only - the row rides above the scrim so it stays crisp. Its frame is the
-   portal-rendered ring below, because the row's own ancestors are overflow:clip
-   and would shear an outline drawn here. */
+   guide-layer ring below, because the row's own ancestors are overflow:clip and
+   would shear an outline drawn here. */
 /* The row, plus any control that belongs to the step but sits outside it. */
 .rw-app .sample-tutorial-target,
 .rw-app .sample-tutorial-lift {
