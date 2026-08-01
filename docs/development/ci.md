@@ -47,6 +47,7 @@ publishing, and retry procedures - see the [release guide](../../.github/RELEASI
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
 | `pull-request.yml` | PR (open/reopen/sync/edit), PR comment | **Yes** | The required `CLA Signed` and `PR Title Lint` checks |
+| `dependabot-auto-merge.yml` | Dependabot PR open/reopen/sync | No | Arm native squash auto-merge for patch and minor updates after required checks pass |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool, with an exact cached CLI |
@@ -54,10 +55,12 @@ publishing, and retry procedures - see the [release guide](../../.github/RELEASI
 | `cache-cleanup.yml` | every 6 h, manual | No | Reap closed-PR and superseded Actions caches |
 | `cloudflare-preview-cleanup.yml` | every 6 h, manual | No | Reap stale Cloudflare Pages preview deployments |
 | `release.yml` | manual, release PR merge | n/a | Release Please, then the publish fan-out |
+| `release-retry.yml` | manual | n/a | Validate a failed/cancelled Release run and rerun its failed jobs and dependents |
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io (the `latest`/`beta` channels; `nightly` is pushed from `ci.yml`) |
 | `attestation-dry-run.yml` | manual | No | Prove the release attest steps and both installers' checks without cutting a release |
+| `attestation-dry-run-called.yml` | called by `attestation-dry-run.yml` | No | Prove that attestation permissions survive a reusable-workflow boundary |
 
 `pull-request.yml` holds the two gates a **contributor** rather than the code has
 to clear: the CLA signature (`CLA Check` job) and a Conventional Commits pull
@@ -842,7 +845,7 @@ build dependencies, `cross` for the musl targets, and - for Windows - the
 for the cross-arch legs.
 
 Non-cross Linux x86-64 legs also run `scripts/install-jwasm.sh` so the LZMA
-SDK's assembly decode loop is compiled in (see `docs/vendor-code.md`); a
+SDK's assembly decode loop is compiled in (see [vendor-code.md](vendor-code.md)); a
 missing assembler downgrades that binary to the portable C loop with a build
 warning, never a failure. The musl legs build through `cross`, whose container
 never runs that script, so they keep the C loop. Windows x86-64 needs no step -
@@ -1056,7 +1059,7 @@ spec would tag every platform package as a prerelease.
 | --- | --- |
 | `semver-check` | nothing - gates the publish on no accidental breaking API change |
 | `cargo-publish-dry-run` | nothing - gates npm and draft publication on crates.io accepting Cargo metadata |
-| `static-webapp` | `rom-weaver-webapp.tar.gz` + checksum on the GitHub release |
+| `static-webapp` | `rom-weaver-webapp.tar.gz` on the draft release + signed build provenance |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order |
 | `publish-containers` | `ghcr.io/rom-weaver/rom-weaver-cli` and `-webapp`, signed provenance |
 | `publish-release` | flips the draft release to published, creating the tag |
@@ -1371,10 +1374,11 @@ compile for the layer that runs the build.
 
 | Secret | Used by | For |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `ci.yml` deploy | Pages Direct Upload |
-| `RELEASE_PLEASE_TOKEN` | `release.yml` | Opening the release pull request |
-| `HOMEBREW_TAP_TOKEN` | `release.yml` | Pushing to the tap repository |
-| `SCOOP_BUCKET_TOKEN` | `release.yml` | Pushing to the Scoop bucket repository |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `ci.yml`, preview cleanup | Pages Direct Upload and preview deletion |
+| `CLOUDFLARE_ZONE_ID` (optional) | `ci.yml` | Maintaining the `/assets/*` zone Cache Rule; the API token also needs Cache Rules edit permission |
+| `RELEASE_PLEASE_TOKEN` | `release.yml` | Release pull request and release-metadata operations |
+| `PACKAGE_MANAGER_TOKEN` | `release.yml` | Pushing stable releases to the Homebrew tap and Scoop bucket repositories |
+| `NPM_BOOTSTRAP_TOKEN` (optional) | `npm-publish.yml` | First publication of a newly added npm package before trusted publishing can be configured |
 | `GITHUB_TOKEN` | everywhere | ghcr.io, releases, statuses, cache deletion |
 
 crates.io needs no stored secret - `rust-lang/crates-io-auth-action` mints a

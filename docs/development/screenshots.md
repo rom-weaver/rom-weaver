@@ -8,7 +8,7 @@ has desktop and mobile images in both light and dark themes.
 
 - [Apply patches](#apply-patches)
   - [Ordered patch stack](#ordered-patch-stack)
-  - [Weave output](#weave-output)
+  - [Apply output](#apply-output)
 - [Create a patch](#create-a-patch)
   - [Original and Modified](#original-and-modified)
   - [Patch output](#patch-output)
@@ -26,21 +26,21 @@ has desktop and mobile images in both light and dark themes.
   <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../../packages/rom-weaver-webapp/design/apply-patches-desktop-dark.avif">
   <source type="image/avif" srcset="../../packages/rom-weaver-webapp/design/apply-patches-desktop-light.avif">
   <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../../packages/rom-weaver-webapp/design/apply-patches-desktop-dark.webp">
-  <img src="../../packages/rom-weaver-webapp/design/apply-patches-desktop-light.webp" width="2242" height="1045" alt="Focused Weave patch stack with two ordered practice patches on desktop">
+  <img src="../../packages/rom-weaver-webapp/design/apply-patches-desktop-light.webp" width="2242" height="1045" alt="Focused Apply patch stack with two ordered practice patches on desktop">
 </picture>
 
-### Weave output
+### Apply output
 
 <picture>
   <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../../packages/rom-weaver-webapp/design/apply-output-desktop-dark.avif">
   <source type="image/avif" srcset="../../packages/rom-weaver-webapp/design/apply-output-desktop-light.avif">
   <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../../packages/rom-weaver-webapp/design/apply-output-desktop-dark.webp">
-  <img src="../../packages/rom-weaver-webapp/design/apply-output-desktop-light.webp" width="2242" height="560" alt="Focused Weave output card on desktop">
+  <img src="../../packages/rom-weaver-webapp/design/apply-output-desktop-light.webp" width="2242" height="560" alt="Focused Apply output card on desktop">
 </picture>
 
 Mobile versions:
 [patch stack](../../packages/rom-weaver-webapp/design/apply-patches-mobile-light.webp)
-and [Weave output](../../packages/rom-weaver-webapp/design/apply-output-mobile-light.webp).
+and [Apply output](../../packages/rom-weaver-webapp/design/apply-output-mobile-light.webp).
 The web guide selects these automatically on narrow screens and switches to
 their dark variants with the site theme.
 

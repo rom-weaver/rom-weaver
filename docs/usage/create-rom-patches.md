@@ -57,9 +57,9 @@ ship.
 Keep the Original clean. Do not use the result of an earlier patch unless you
 are deliberately making an update that requires that earlier release.
 
-Give both files clear names. If they are inside archives, extract them first.
-Creating a patch between two ZIP files records archive packaging differences,
-not just ROM differences.
+Give both files clear names. You may add supported archives: Create extracts
+the selected ROM entries before comparing them. Check the selected entries so
+you do not compare a readme, save file, or wrong disc track.
 
 Write down the region, revision, and header state now. The Create cards will
 show checksums you can copy into the release notes later.
@@ -67,8 +67,9 @@ show checksums you can copy into the release notes later.
 ## Add Original and Modified
 
 1. Open [Create](https://rom-weaver.com/create).
-2. Drop both files onto **0x01 Add files**, or tap the picker and select them.
-   The shorter filename usually becomes Original and the longer one Modified.
+2. Drop both files onto **0x01 Inputs**, or choose **Add files** and select
+   them. The shorter filename usually becomes Original and the longer one
+   Modified.
 3. Check the labels on **0x02 Original** and **0x03 Modified**.
 4. If they landed backwards, choose **Swap** between the two cards.
 5. Wait until reading and checksum work finishes.
@@ -98,10 +99,10 @@ tracks.
 
 ## Choose a patch format
 
-In **0x04 Patch**, give the download a useful filename and choose a format.
+In **0x04 Output**, give the download a useful filename and choose a format.
 
 BPS is a strong default for cartridge games. It stores checksums for the
-Original, Modified, and patch, so another patcher can reject the wrong
+Original, Modified, and patch, so a compatible patcher can reject the wrong
 starting file and verify the result.
 
 Use IPS when compatibility with very old patchers matters. IPS does not store
@@ -128,13 +129,13 @@ you selected.
     <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/create-output-mobile-light.avif" width="1170" height="666">
     <source type="image/avif" srcset="/docs/screenshots/create-output-desktop-light.avif" width="2242" height="568">
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/create-output-mobile-light.webp" width="1170" height="666">
-    <img src="/docs/screenshots/create-output-desktop-light.webp" width="2242" height="568" alt="Cropped Create output card with patch name, BPS format, options, and CREATE AND DOWNLOAD PATCH button in the light theme">
+    <img src="/docs/screenshots/create-output-desktop-light.webp" width="2242" height="568" alt="Cropped Create output card with patch name, BPS format, options, and CREATE &amp; DOWNLOAD PATCH button in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
     <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/create-output-mobile-dark.avif" width="1170" height="666">
     <source type="image/avif" srcset="/docs/screenshots/create-output-desktop-dark.avif" width="2242" height="568">
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/create-output-mobile-dark.webp" width="1170" height="666">
-    <img src="/docs/screenshots/create-output-desktop-dark.webp" width="2242" height="568" alt="Cropped Create output card with patch name, BPS format, options, and CREATE AND DOWNLOAD PATCH button in the dark theme">
+    <img src="/docs/screenshots/create-output-desktop-dark.webp" width="2242" height="568" alt="Cropped Create output card with patch name, BPS format, options, and CREATE &amp; DOWNLOAD PATCH button in the dark theme">
   </picture>
   <figcaption>The focused output card. Mobile readers get a mobile capture and dark mode gets a dark capture.</figcaption>
 </figure>
@@ -151,7 +152,7 @@ artifact another person will receive:
 2. Add a fresh copy of the documented Original.
 3. Add the patch you just downloaded.
 4. Confirm the card accepts the Original without a checksum warning.
-5. Choose **WEAVE & DOWNLOAD**.
+5. Choose **APPLY & DOWNLOAD**.
 6. Compare the result's checksum with the Modified checksum shown on Create.
 7. Launch the rebuilt result in the emulator or hardware you support.
 

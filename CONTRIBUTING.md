@@ -38,7 +38,8 @@ toolchains, builds, tests, generated files, and linked worktrees.
 
 Pull request titles must use Conventional Commits because the squash-merge title
 becomes the commit on `main` and the input to Release Please. Use
-`type(scope): summary`, for example `fix(webapp): handle empty patch archives`.
+`type: summary` or `type(scope): summary`, for example
+`fix(webapp): handle empty patch archives`.
 Branch commit messages are not linted. The `PR Title Lint` check comments with
 the exact problem when a title does not parse, and deletes that comment once you
 rename the pull request. The [commit conventions](./docs/development/commits.md) guide covers

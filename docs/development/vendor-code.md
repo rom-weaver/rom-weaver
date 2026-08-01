@@ -29,11 +29,10 @@ why, and the exact steps to go back to upstream.
 ## The publishing constraint
 
 `cargo publish` rewrites every path dependency into a registry dependency and
-then requires that crate to exist on crates.io. `rom-weaver-cli` is intended for
-publication so that `cargo install rom-weaver-cli` can work after the first
-release. Every internal path dependency in its graph must therefore also be
-published. There is no way to publish a crate while keeping one of its path
-dependencies private.
+then requires that crate to exist on crates.io. `rom-weaver-cli` is published
+so that `cargo install rom-weaver-cli` works. Every internal path dependency in
+its graph must therefore also be published. There is no way to publish a crate
+while keeping one of its path dependencies private.
 
 To see the current list:
 
@@ -133,7 +132,8 @@ and the SHA-256 of the published `.7z`). Refresh it with:
 
 ```bash
 node scripts/vendor-lzma-sdk.mjs           # re-fetch the pinned version
-node scripts/vendor-lzma-sdk.mjs 26.03     # move the pin
+new_version=26.02                           # replace with a verified release
+node scripts/vendor-lzma-sdk.mjs "$new_version"
 ```
 
 The script fetches `https://www.7-zip.org/a/lzma<ver>.7z`, extracts it with
@@ -298,10 +298,10 @@ publish rom-weaver.
 Its base is recorded in `crates/rom-weaver-containers/src/nod/NOD_VERSION`. Local
 patches are developed in the fork
 [brandonocasey/nod](https://github.com/brandonocasey/nod) on the `local-changes`
-branch, which is kept as upstream `main` plus whatever is currently out for
-review upstream ([#27](https://github.com/encounter/nod/pull/27) and
-[#28](https://github.com/encounter/nod/pull/28) today). Anything that lands
-upstream is dropped from `local-changes` rather than carried twice.
+branch, which is kept as upstream `main` plus the changes currently under
+upstream review. `NOD_VERSION` records the exact base, fork commit, and included
+pull requests; anything that lands upstream is dropped from `local-changes`
+rather than carried twice.
 
 Unlike `LIBARCHIVE_VERSION`, `NOD_VERSION` records a **base, not a mirror**, and
 it lists the exact categories the two trees differ by. There is no `vendor-nod`
@@ -331,8 +331,8 @@ done
 Anything that diff reports outside the categories in `NOD_VERSION` is a real
 divergence and should be either upstreamed or written down.
 
-When a nod release lands with the needed API and feature support, replace the copy
-with the registry crate:
+When a published nod version contains the needed API and feature support,
+replace the copy with the registry crate:
 
 1. Verify the release contains the required Rust disc reader/writer APIs and
    compression/threading features.

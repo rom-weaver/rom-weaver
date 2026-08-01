@@ -45,17 +45,19 @@ patch's expected input, fingerprinting an extracted ROM, or answering a plain
 
 ## Usage
 
-```toml
-[dependencies]
-rom-weaver-checksum = "0.6"
+```bash
+cargo add rom-weaver-checksum
 ```
+
+`cargo add` selects the current release. To follow the exact-pinning guidance
+below, change its generated requirement to `=X.Y.Z`.
 
 ## Related crates
 
 | Crate | Role |
 | --- | --- |
 | [`rom-weaver-core`](https://crates.io/crates/rom-weaver-core) | Registry traits, `RomWeaverError`, I/O and threading helpers. |
-| [`rom-weaver-containers`](https://crates.io/crates/rom-weaver-containers) | Archive and disc-image handlers. |
+| [`rom-weaver-containers`](https://crates.io/crates/rom-weaver-containers) | Archive, disc-image, and ROM-specific compression handlers. |
 | [`rom-weaver-patches`](https://crates.io/crates/rom-weaver-patches) | ROM patch format handlers. |
 | [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli) | The `rom-weaver` binary and the command library both frontends share. |
 

@@ -21,7 +21,7 @@ naming. The machine-readable schema is
 [`rom-weaver-bundle-v1.schema.json`](../rom-weaver-bundle-v1.schema.json); its `$id`
 resolves to the public GitHub copy at
 `https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json`.
-For an end-to-end release workflow in either the Weave webapp or terminal,
+For an end-to-end release workflow in either the Apply webapp or terminal,
 start with [Create and share a patch bundle](../usage/create-bundles.md).
 Print the current schema to stdout with `bundle schema`, then redirect it to a
 file or point an editor at it:
@@ -103,3 +103,10 @@ relative path, so there is nothing for those options to unpack.
 
 To actually run a bundle, use `rom-weaver weave --bundle <path-or-url>`, with
 `--with` and `--without` to change which optional patches run.
+
+When `weave` detects a bundle from its positional input, the canonical
+`rom-weaver-bundle.json` name is the fast path. It also content-probes valid
+plain `.json` files and root-level `.json` members inside archives. A
+stream-compressed positional bundle needs a canonical name such as
+`rom-weaver-bundle.json.gz`; pass a differently named one explicitly with
+`--bundle`.

@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/rom-weaver"><img alt="npm version" src="https://img.shields.io/npm/v/rom-weaver?logo=npm&amp;logoColor=white&amp;label=npm&amp;color=d9690f"></a>
   <a href="https://crates.io/crates/rom-weaver-cli"><img alt="crates.io version" src="https://img.shields.io/crates/v/rom-weaver-cli?logo=rust&amp;logoColor=white&amp;label=crates.io&amp;color=d9690f"></a>
-  <a href="https://github.com/users/brandonocasey/packages/container/package/rom-weaver-cli"><img alt="Container images on GitHub Container Registry" src="https://img.shields.io/badge/ghcr.io-rom--weaver-d9690f?logo=docker&amp;logoColor=white"></a>
+  <a href="https://github.com/orgs/rom-weaver/packages/container/package/rom-weaver-cli"><img alt="Container images on GitHub Container Registry" src="https://img.shields.io/badge/ghcr.io-rom--weaver-d9690f?logo=docker&amp;logoColor=white"></a>
   <a href="https://github.com/rom-weaver/homebrew-tap"><img alt="Homebrew tap" src="https://img.shields.io/badge/homebrew-rom--weaver%2Ftap-d9690f?logo=homebrew&amp;logoColor=white"></a>
 </p>
 
@@ -41,59 +41,52 @@
 
 ## Why
 
-Every console generation brought its own compressed format, and each one came
-with its own tool. CHD for discs, RVZ for GameCube and Wii, Z3DS for 3DS ROMs, CSO
-and PBP for PSP, plus the usual ZIP and 7z on top. Those tools are scattered
-across projects, most are command-line only, and plenty of them only ship
-builds for one or two platforms. If you are on a Mac, or on Windows without a
-compiler handy, half of them are out of reach. Anyone who has tried to shrink a
-disc collection knows the routine: track down five programs, learn five sets of
-flags, and hope each one still builds.
+Every console generation brought its own compressed format: CHD for discs, RVZ
+for GameCube and Wii, Z3DS for 3DS ROMs, CSO and PBP for PSP, plus the usual ZIP
+and 7z on top. Working across them can mean finding several separate programs,
+learning different flags, and checking which builds are available for your
+platform.
 
-Patching has the same problem from a different angle. Most patchers take one
-patch at a time, so a translation plus a bugfix plus an undub means running the
-tool three times and keeping the intermediate files straight yourself. And
-because almost no patcher reads compressed input, the real sequence is
-decompress, patch, recompress - every time you want to try a different patch or
-redo one you already applied. That is a lot of disk churn and waiting for what
-should be a single step.
+Patching adds another manual sequence. A translation, bugfix, and undub may
+need to run in a specific order, with intermediate files kept straight and a
+compressed input unpacked before the first patch and recompressed afterward.
+Repeating that setup whenever the patch combination changes adds disk churn and
+room for mistakes to what should be one workflow.
 
 The last piece is curation. Keeping a collection in order means storing ROMs
 compressed, keeping the patches next to them, and being able to prove months
 later that a patched file came from the ROM you think it did. rom-weaver
-handles all of it in one place: read and write every format above, chain as
-many patches as you want in a single pass without unpacking to disk first, and
-record the whole recipe - patch order, checksums, output names - in a bundle
-file you can hand to someone else. It runs the same on Linux, macOS, and
-Windows, and in the browser if you would rather not install anything.
+handles all of it in one place: read every format above; write CHD, RVZ, Z3DS,
+ZIP, and 7z; chain as many patches as you want in a single pass without manually
+unpacking first; and record the whole recipe - patch order, checksums, output
+names - in a bundle file you can hand to someone else. Native CLI builds are
+available for Linux, macOS, and Windows. The browser webapp handles patching
+and bundle workflows without an install.
 
 For the current measurements and trade-offs, see the [performance brief](#performance).
 
 ## Performance
 
-rom-weaver uses the same Rust engine in the CLI and threaded WASM webapp. In a
-representative 128 MiB GameCube ISO test, native RVZ compression completed in
-about 93 ms with four threads. The browser build completed the same operation
-in about 221 ms with one thread; four-thread RVZ creation is currently limited
-by a browser/OPFS threaded-I/O issue, so these numbers are not apples-to-apples.
-
-Production WASM runs `wasm-opt -O4`. In matched artifact measurements, that
-reduced the raw Wasm from 7.12 MB to 6.44 MB and the Brotli transfer size from
-1.73 MB to 1.71 MB. The full browser codec matrix remains the source of truth
-for runtime comparisons, so these figures are indicative rather than a
-general speed claim.
+rom-weaver uses the same Rust engine in the CLI and threaded WASM webapp, but
+browser worker, storage, and OPFS costs make cross-frontend timing comparisons
+misleading. The [performance guide](./docs/development/performance.md) records
+the machine, corpus, settings, reference-tool versions, and repeated runs for
+each published result, and includes the commands needed to reproduce them.
+Production WASM is optimized with `wasm-opt -O4`; the browser codec matrix is
+the runtime check for the shipped worker and storage path.
 
 ## Features
 
 - **Apply and create patches.** Twenty-one formats, including IPS, BPS, UPS,
   xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered
-  multi-patch chains, strict checksum validation, and cheat-code baking. Three
-  of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
+  multi-patch chains, checksum validation when the format or bundle supplies
+  expected values, and cheat-code baking. Three of them (DCP, BSP, and
+  HDiffPatch) can only be applied, not created.
 - **Inspect and extract containers.** ZIP, 7z, RAR, the tar family, CHD, RVZ,
   Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
 - **Create format-specific compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS with
-  codec-aware compression settings, validated against reference tools such as
-  chdman and dolphin-tool.
+  codec-aware compression settings. CHD and RVZ outputs are checked for
+  round-trip compatibility with chdman and dolphin-tool.
 - **Checksum and verify.** CRC32, MD5, SHA-1, SHA-256, BLAKE3, and friends,
   with copier-header detection, header repair, and header-aware checksum
   variants.
@@ -106,7 +99,8 @@ general speed claim.
 - **Local-first and private.** Everything runs on your machine. The webapp is
   an installable PWA that works offline and never uploads your files.
 - **One engine, two frontends.** The same Rust core powers the terminal CLI
-  and the threaded WASM webapp, with line-delimited JSON output for scripting.
+  and the threaded WASM webapp. CLI operation commands can emit line-delimited
+  JSON for scripting.
 
 The complete format, codec, and checksum compatibility tables are maintained
 in the [CLI guide](./docs/reference/formats.md).
@@ -117,28 +111,28 @@ in the [CLI guide](./docs/reference/formats.md).
 
 rom-weaver is beta software and follows Semantic Versioning, but until v1.0,
 breaking changes may still happen between minor releases. Patching,
-compressing, extracting, and bundling have all been tested extensively. That
-hands-on testing happens on macOS and Linux; Windows runs the same automated
-test suite in CI but has seen much less real-world use, so expect rougher
-edges there and please report anything Windows-specific. If you
+compressing, extracting, and bundling are covered by automated tests. Hands-on
+testing happens on macOS and Linux; Windows is covered by hosted CI but has seen
+much less real-world use, so expect rougher edges there and please report
+anything Windows-specific. If you
 rely on the APIs or CLI flags, expect things to be a bit tougher: those
 interfaces may still change as the project heads toward v1.0. Trim and Tools are
-currently untested but theoretically working, so they are disabled in the
-current webapp. The `rom-weaver-core`, `-checksum`, `-containers`, and
+still beta, so they are disabled by default in the webapp and can be enabled in
+Settings. The `rom-weaver-core`, `-checksum`, `-containers`, and
 `-patches` crates are published to crates.io only so `rom-weaver-cli` can use
 them. The CLI and the webapp are the supported interfaces; using those crates as
 libraries in another project is not supported.
 
-### First public release
+### First complete public release
 
-v0.7.2 is the first public version to install. The changelog and the git
+v0.7.2 was the first complete public release. The changelog and the git
 history go back further, but v0.6.0 through v0.7.1 failed partway through the
 release pipeline or were only partially published. v0.7.1 completed most of
 the pipeline, but it still missed the crates.io CLI package, shipped a broken
 unscoped npm launcher, and built the static webapp archive with mismatched
-release metadata. v0.7.2 is the first release intended to have all public
-install methods working together. Earlier version numbers describe development
-history or incomplete releases only.
+release metadata. Starting with v0.7.2, all public install methods were intended
+to work together. Install commands below resolve the current release unless you
+explicitly pin a version.
 
 ### LLM-assisted development
 
@@ -158,13 +152,13 @@ edits and corrections are welcome.
 ### Webapp
 
 Open the hosted webapp at **[rom-weaver.com/apply](https://rom-weaver.com/apply)**. You
-do not need to install anything or create an account. Choose **Weave**, add a
+do not need to install anything or create an account. Choose **Apply**, add a
 ROM and one or more patches, review the detected formats and checksums, then run
 the workflow and save the result. Use **Create** to generate a distributable
 patch from an original and a modified file. Your files are processed locally
 and never leave the device. Install it as a PWA from the browser menu to use it
 offline.
-New here? [Try the sample weave](https://rom-weaver.com/apply?bundle=first-weave.zip)
+New here? [Try the sample workflow](https://rom-weaver.com/apply?bundle=first-weave.zip)
 with a tiny original homebrew NES ROM and two patches that change “HELLO WORLD” to “MODIFIED ROM.”
 For a guided explanation, use
 [guided Apply](https://rom-weaver.com/apply?guide=apply),
@@ -202,7 +196,7 @@ Docker Run:
 ```bash
 docker run --detach --name rom-weaver-webapp \
   --publish 8080:8080 \
-  ghcr.io/brandonocasey/rom-weaver-webapp:latest
+  ghcr.io/rom-weaver/rom-weaver-webapp:latest
 ```
 
 Docker Compose, building from source:
@@ -224,9 +218,10 @@ set `HTTPS_PORT` instead.
 
 ### CLI
 
-Every method below installs the same prebuilt binary from the GitHub release.
-The release covers macOS arm64 and x86-64; Linux x86-64 GNU plus x86-64,
-arm64, and i686 musl; and Windows arm64, x86-64, and x86.
+Native release assets cover macOS arm64 and x86-64; Linux x86-64 GNU plus
+x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86. The package
+manager and installer options below select the matching asset unless their
+description says otherwise.
 
 <details>
 <summary>Homebrew (macOS arm64/Intel, Linux arm64/x86-64)</summary>
@@ -250,7 +245,8 @@ scoop install rom-weaver
 <details>
 <summary>Install script (macOS, Linux)</summary>
 
-Downloads the latest release to `~/.local/bin` and verifies its checksum.
+Downloads the latest release to `~/.local/bin` and checks its GitHub build
+attestation.
 Override with `ROM_WEAVER_INSTALL_DIR` or pin with `ROM_WEAVER_VERSION`.
 The script also installs manpages and shell completions for the current user.
 
@@ -298,8 +294,7 @@ npm install --save-dev @rom-weaver/cli
 <details>
 <summary>cargo-binstall</summary>
 
-Downloads the same release binary rather than compiling the workspace, so it is
-minutes faster than `cargo install`:
+Downloads the same release binary rather than compiling the workspace:
 
 ```bash
 cargo binstall rom-weaver-cli
@@ -331,13 +326,12 @@ Runs from the published Linux image without installing anything:
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   --volume "$PWD:/work" \
-  ghcr.io/brandonocasey/rom-weaver-cli:latest \
+  ghcr.io/rom-weaver/rom-weaver-cli:latest \
   probe --input /work/game.iso
 ```
 
-Mount your ROM directory at `/work` and pass paths under it. `--user` matters:
-bind-mounted files keep their host ownership, so without it the container cannot
-read files it does not own and leaves anything it writes owned by an unknown uid.
+Mount your ROM directory at `/work` and pass paths under it. On Linux and
+macOS, `--user` keeps files created in the bind mount owned by your host user.
 See [Run in Docker](./docs/cli/install.md#run-in-docker).
 
 </details>
@@ -382,7 +376,7 @@ webapp builds, and tests.
       <td>
         <picture>
           <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/apply-patches-desktop-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/apply-patches-desktop-light.webp" alt="Focused Weave patch stack with two ordered sample patches on desktop">
+          <img src="packages/rom-weaver-webapp/design/apply-patches-desktop-light.webp" alt="Focused Apply patch stack with two ordered sample patches on desktop">
         </picture>
       </td>
     </tr>
@@ -431,9 +425,9 @@ Bug reports and contributions are welcome. Read the
 before submitting a change. Because rom-weaver is dual-licensed, code and
 documentation changes need a one-time signature on the
 [Contributor License Agreement](CLA.md) - the `CLA Signed` check asks for
-it on your first pull request, it covers every repository in the
-[`rom-weaver` organization](https://github.com/rom-weaver), and you keep the
-copyright in your work. Report
+it on your first pull request, and one signature covers every repository in the
+[`rom-weaver` organization](https://github.com/rom-weaver) whose contribution
+process references the agreement. You keep the copyright in your work. Report
 suspected vulnerabilities through GitHub's private reporting form in the
 [security policy](.github/SECURITY.md). If rom-weaver has been useful to you, you can
 support continued development through

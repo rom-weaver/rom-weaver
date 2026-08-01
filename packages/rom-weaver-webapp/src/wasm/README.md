@@ -29,7 +29,8 @@ Use the native `rom-weaver` CLI directly for Node workflows.
 
 Import the TypeScript sources directly with relative paths, for example:
 
-- `src/wasm/index.ts` (main entry: format metadata, command helpers, OPFS API, types)
+- `src/wasm/index.ts` (main entry: format metadata, command helpers, and
+  type-only OPFS exports)
 - `src/wasm/generated/rom-weaver-format-metadata.ts`
 - `src/wasm/rom-weaver-browser-opfs-api.ts`
 - `src/wasm/workers/browser-worker-client.ts`
@@ -48,6 +49,7 @@ const runner = await createRomWeaverBrowserOpfs({
   opfsHandle: await navigator.storage.getDirectory(),
   workGuestPath: '/work',
 });
+const game = await fetch('/game.bin').then((response) => response.blob());
 
 const result = await runner.runJson(
   {
@@ -59,6 +61,7 @@ const result = await runner.runJson(
     },
   },
   {
+    virtualFiles: [{ path: '/work/game.bin', source: game }],
     onEvent(event) {
       console.log(event);
     },
@@ -74,7 +77,8 @@ Runtime behavior:
 - WASI sees a single mounted directory: `/work`.
 - The browser worker runtime requires `SharedArrayBuffer` plus `crossOriginIsolated` and loads `rom-weaver-app.wasm`.
 - `runner.threaded` and `runner.wasmUrl` report the loaded runtime.
-- Browser picker handles/files should be staged into OPFS before `run()`.
+- Pass browser picker `File` or `Blob` inputs through `virtualFiles`; paths
+  already produced in OPFS can be reused without copying.
 - Known typed-command output paths are created in OPFS before `_start()` because WASI Preview 1 filesystem calls are synchronous.
 - Dynamic files created during a run are flushed back to OPFS after `_start()` returns.
 - WASI argv0 is fixed to `rom-weaver`; constructor-level `program`, `argv0`, and `env` configuration is not supported.
@@ -115,6 +119,7 @@ await worker.init({
   opfsHandle: await navigator.storage.getDirectory(),
   workGuestPath: '/work',
 });
+const game = await fetch('/game.bin').then((response) => response.blob());
 
 const result = await worker.runJson({
   type: 'checksum',
@@ -123,6 +128,7 @@ const result = await worker.runJson({
     algo: ['crc32'],
   },
 }, {
+  virtualFiles: [{ path: '/work/game.bin', source: game }],
   onEvent(event) {
     console.log(event);
   },

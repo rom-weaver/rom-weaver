@@ -26,9 +26,9 @@ acceptable in project spaces or when representing the project elsewhere.
 
 ## Reporting and enforcement
 
-[Open an issue](https://github.com/rom-weaver/rom-weaver/issues/new/choose)
-to report conduct concerns. Include links, screenshots, or other context that
-can help review the report, but do not include personal or sensitive information.
+Email <brandonocasey@gmail.com> to report conduct concerns privately. Include
+links, screenshots, or other context that can help review the report. Do not
+put personal, sensitive, or private evidence in a public issue.
 
 Project maintainers may edit or remove contributions, comments, issues, or
 other participation that violates this code. Depending on severity and

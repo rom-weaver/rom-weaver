@@ -17,7 +17,7 @@ instead of uploading anything to a server.
 
 ## What happens to your files
 
-When you pick a file in Weave, Create, Trim, or Tools, it is read by code
+When you pick a file in Apply, Create, Trim, or Tools, it is read by code
 running inside your own browser. The patching engine runs there too, as
 WebAssembly in background workers. Nothing about that requires a server.
 
@@ -36,8 +36,8 @@ files too big to hold in memory:
 
 - **Local storage**: your preferences, such as theme and settings, plus
   update state and a short recent log.
-- **Session storage**: coordinates a reload while the service worker turns on
-  the browser security mode that WebAssembly threads need.
+- **Session storage**: coordinates service-worker and security-mode reloads,
+  update prompts, and the docs shelf state for the current tab.
 - **Cache storage**: the app's own files, so it loads fast and works offline.
 - **Origin Private File System**: temporary inputs, working files, and outputs
   that are too large for memory.

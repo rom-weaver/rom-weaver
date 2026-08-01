@@ -59,4 +59,5 @@ its flags are covered in
   [Pick a patch format](../usage/patch-formats.md).
 - Ship several patches with checksums and ordering as one file:
   [Bundles from the CLI](bundles.md).
-- Every `patch create` flag is in the [CLI reference](reference.md).
+- Run `rom-weaver patch create --help` for every flag; the
+  [CLI reference](reference.md) covers shared behavior.

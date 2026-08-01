@@ -8,9 +8,9 @@ List the checks you ran and any testing that remains. For a bug fix or anything
 platform-specific, add:
 
 - **Version and commit** you reproduced and verified against. `rom-weaver --version`
-  prints the version alone, so pair it with `git rev-parse --short HEAD` for a
-  source build. The webapp shows both beside the rom-weaver wordmark - hover it
-  for the full build string.
+  reports the release version but not the source commit, so pair it with
+  `git rev-parse --short HEAD` for a source build. The webapp shows both beside
+  the rom-weaver wordmark - hover it for the full build string.
 - **Platform**: your OS, plus the browser for webapp changes.
 - **Trace logs** for the failure and for the fix. `rom-weaver -vvv` writes them
   to stderr, and `--dep-trace` adds the bundled libraries. In the webapp, open

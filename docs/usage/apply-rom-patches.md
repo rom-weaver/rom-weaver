@@ -11,7 +11,7 @@ original stays untouched and the new file never leaves your device.
 - [Add the files](#add-the-files)
 - [Read the ROM and patch cards](#read-the-rom-and-patch-cards)
 - [Put several patches in order](#put-several-patches-in-order)
-- [Choose the output and weave](#choose-the-output-and-weave)
+- [Choose the output and apply](#choose-the-output-and-apply)
 - [Open a bundle](#open-a-bundle)
 - [If the ROM does not match](#if-the-rom-does-not-match)
 - [Use the result safely](#use-the-result-safely)
@@ -67,8 +67,8 @@ but a known-good copy makes updates and troubleshooting much easier.
 ## Add the files
 
 1. Open [Apply](https://rom-weaver.com/apply).
-2. Drag the ROM and patch onto **0x01 Add files**, or tap the large picker and
-   select them. You may add both at once.
+2. Drag the ROM and patch onto **0x01 Inputs**, or choose **Add files**. You may
+   add both at once.
 3. Wait while the temporary cards say **Reading** or **Checksumming**.
 4. If an archive contains several possible files, choose the entry the patch
    author named.
@@ -79,7 +79,7 @@ archives. Disc containers such as CHD and RVZ are unpacked to the form the
 patch expects.
 
 The page changes after the files are understood. **0x02 ROM** holds the game,
-**0x03 Patches** holds the patch stack, and **0x04 Weave** controls the new
+**0x03 Patches** holds the patch stack, and **0x04 Apply** controls the new
 file.
 
 ## Read the ROM and patch cards
@@ -102,13 +102,13 @@ only for formats and systems where they make sense.
     <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-light.avif" width="1170" height="2348">
     <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-light.avif" width="2242" height="1045">
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-light.webp" width="1170" height="2348">
-    <img src="/docs/screenshots/apply-patches-desktop-light.webp" width="2242" height="1045" alt="Cropped Weave patch stack with two ordered practice patches in the light theme">
+    <img src="/docs/screenshots/apply-patches-desktop-light.webp" width="2242" height="1045" alt="Cropped Apply patch stack with two ordered practice patches in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
     <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-dark.avif" width="1170" height="2348">
     <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-dark.avif" width="2242" height="1045">
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-dark.webp" width="1170" height="2348">
-    <img src="/docs/screenshots/apply-patches-desktop-dark.webp" width="2242" height="1045" alt="Cropped Weave patch stack with two ordered practice patches in the dark theme">
+    <img src="/docs/screenshots/apply-patches-desktop-dark.webp" width="2242" height="1045" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme">
   </picture>
   <figcaption>The focused patch stack. The site serves a mobile crop on small screens and matches the active theme.</figcaption>
 </figure>
@@ -128,16 +128,16 @@ a required base patch can make everything below it fail.
 After changing order or switches, read the checks again. A valid chain should
 show each patch matching the bytes produced by the step before it.
 
-## Choose the output and weave
+## Choose the output and apply
 
-In **0x04 Weave**:
+In **0x04 Apply**:
 
 1. Enter an output filename without an extension.
 2. Pick a plain file or a compressed output format. The format selector adds
    the extension.
 3. Open **Options** only if you need compression, output header, or bundle
    controls. The defaults are right for most patches.
-4. Choose **WEAVE & DOWNLOAD**.
+4. Choose **APPLY & DOWNLOAD**.
 5. Wait for the button to finish, then save the browser download.
 
 <figure class="docs-screenshot">
@@ -145,13 +145,13 @@ In **0x04 Weave**:
     <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-light.avif" width="1170" height="654">
     <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-light.avif" width="2242" height="560">
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-light.webp" width="1170" height="654">
-    <img src="/docs/screenshots/apply-output-desktop-light.webp" width="2242" height="560" alt="Cropped Weave output card with filename, format, options, and WEAVE AND DOWNLOAD button in the light theme">
+    <img src="/docs/screenshots/apply-output-desktop-light.webp" width="2242" height="560" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
     <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-dark.avif" width="1170" height="654">
     <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-dark.avif" width="2242" height="560">
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-dark.webp" width="1170" height="654">
-    <img src="/docs/screenshots/apply-output-desktop-dark.webp" width="2242" height="560" alt="Cropped Weave output card with filename, format, options, and WEAVE AND DOWNLOAD button in the dark theme">
+    <img src="/docs/screenshots/apply-output-desktop-dark.webp" width="2242" height="560" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the dark theme">
   </picture>
   <figcaption>The output card is shown at readable size instead of shrinking the entire page into one image.</figcaption>
 </figure>
@@ -166,12 +166,12 @@ A rom-weaver bundle is a saved patching recipe. It can include patch files,
 their order, optional choices, expected checksums, and output settings. A
 public bundle normally does not include the original game.
 
-Add the bundle archive to **0x01 Add files**. If it is patch-only, rom-weaver
+Add the bundle archive to **0x01 Inputs**. If it is patch-only, rom-weaver
 shows which ROM it expects. Add your matching ROM. Review optional patch
-switches, then use **WEAVE & DOWNLOAD** just as you would for loose files.
+switches, then use **APPLY & DOWNLOAD** just as you would for loose files.
 
 A release author can also give you a link that opens the bundle directly in
-Weave. The same local checks still happen before anything is written.
+Apply. The same local checks still happen before anything is written.
 
 Want to publish one? [Create and share a patch bundle](create-bundles.md) has a
 separate browser-only guide and its own guided sample.

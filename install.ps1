@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 # Windows counterpart to install.sh. Downloads the released rom-weaver binary,
-# verifies its published checksum, and drops it in a per-user directory.
+# verifies its GitHub build attestation, and drops it in a per-user directory.
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
