@@ -547,7 +547,7 @@ const OutputCompressionManager = (() => {
       if (selected === OUTPUT_COMPRESSION.NONE || selected === OUTPUT_COMPRESSION.AUTO) return fileName;
       // Z3DS picks its output extension from the source's payload subtype; every other container
       // uses the format name. The replace-vs-append decision (archives append a `.zip`/`.7z`
-      // wrapper; disc images and z3ds replace the extension) is the Rust-owned per-format strategy,
+      // wrapper; chd/rvz and z3ds replace the extension) is the Rust-owned per-format strategy,
       // applied by `applyCompressionOutputFileName` instead of being re-hardcoded here.
       const extension =
         selected === OUTPUT_COMPRESSION.Z3DS

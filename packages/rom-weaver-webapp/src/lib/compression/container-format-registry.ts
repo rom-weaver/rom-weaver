@@ -319,7 +319,7 @@ const getCompressionOutputExtension = (
 type ContainerOutputExtensionStrategy = GeneratedContainerDefaultOutput["outputExtensionStrategy"];
 
 // The Rust-owned per-format replace-vs-append rule (`append` for archive containers like 7z/zip,
-// `replace` for the disc images chd/rvz, `z3ds-subtype` which also replaces). Surfaced via typegen on
+// `replace` for chd/rvz, `z3ds-subtype` which also replaces). Surfaced via typegen on
 // each format's `defaultOutput`; this is the single read of it so the output filename builder doesn't
 // re-hardcode the decision.
 const getCompressionOutputExtensionStrategy = (

@@ -1,8 +1,8 @@
 # Supported formats
 
 The authoritative support matrix for everything rom-weaver reads and writes:
-every patch format it can apply and create, every container and compressed
-disc image it can probe, extract, and build, the codecs available at create
+every patch format it can apply and create, every container and format-specific
+compressed ROM or disc image it can probe, extract, and build, the codecs available at create
 time, and the checksum, trim, and header capabilities that surround them.
 
 <!-- START doctoc -->

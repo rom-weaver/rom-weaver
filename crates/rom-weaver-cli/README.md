@@ -32,7 +32,7 @@ orchestration code.
   of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
 - **Inspect and extract containers.** ZIP, 7z, RAR, tar, CHD, RVZ, Z3DS, CSO,
   PBP, GCZ, WIA, WBFS, and more, including nested archives.
-- **Create compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS, validated
+- **Create format-specific compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS, validated
   against reference tools such as `chdman` and `dolphin-tool`.
 - **Checksum and verify.** CRC-32, MD5, SHA-1, SHA-256, BLAKE3, and friends,
   with copier-header detection and header-aware checksum variants.
@@ -115,7 +115,7 @@ output, man pages, Docker usage, and file permissions.
 | --- | --- |
 | [`rom-weaver-core`](https://crates.io/crates/rom-weaver-core) | Registry traits, `RomWeaverError`, I/O and threading helpers. |
 | [`rom-weaver-checksum`](https://crates.io/crates/rom-weaver-checksum) | Checksum engines and the streaming variant engine. |
-| [`rom-weaver-containers`](https://crates.io/crates/rom-weaver-containers) | Archive and disc-image handlers. |
+| [`rom-weaver-containers`](https://crates.io/crates/rom-weaver-containers) | Archive, disc-image, and ROM-specific compression handlers. |
 | [`rom-weaver-patches`](https://crates.io/crates/rom-weaver-patches) | ROM patch format handlers. |
 
 ## Stability

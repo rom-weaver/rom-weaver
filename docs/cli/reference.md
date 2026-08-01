@@ -66,10 +66,10 @@ xz -dc game.iso.xz | rom-weaver probe --input - --json
 | Command | Purpose |
 | --- | --- |
 | `probe` | Identify a file: its format, its platform, and any header it carries. |
-| `extract` | Unpack an archive or disc image. |
+| `extract` | Unpack an archive or single-payload compressed format. |
 | `checksum` | Hash a file, a byte range, or a ROM inside an archive. |
 | `ingest` | Sort a file into ROMs and patches, unpacking and hashing as needed. |
-| `compress` | Pack files into an archive or a compressed disc image. |
+| `compress` | Pack files into an archive, disc image, or ROM-specific compressed format. |
 | `trim` | Cut the padding off a ROM, or put it back. |
 | `patch apply` | Apply one or more patches to a ROM, in order. |
 | `patch create` | Build a patch from an original ROM and a changed one. |
@@ -170,8 +170,8 @@ platform (`--probe`).
 ## Supported formats
 
 
-The full support matrix - every patch format, container and compressed disc
-image, create-time codec, checksum algorithm, trim target, and detected
+The full support matrix - every patch format, container and compressed ROM or
+disc image, create-time codec, checksum algorithm, trim target, and detected
 header - lives in [Supported formats](../reference/formats.md). For picking a
 format rather than looking one up, see the
 [archive formats](../usage/formats.md) and

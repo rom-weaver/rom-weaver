@@ -332,10 +332,12 @@ enum ContainerHandlerKind {
 }
 
 impl ContainerHandlerKind {
-    /// Disc/ROM image codec containers. Probe reports these directly instead of
-    /// decompressing to the inner payload. Generic archives (zip/7z/rar/tar) and
-    /// stream codecs (gz/bz2/xz/zst) are excluded so probe still drills into them.
-    fn is_single_payload_disc_image(self) -> bool {
+    /// Single-payload codec containers that probe reports directly instead of
+    /// decompressing to the inner payload. Stream codecs (gz/bz2/xz/zst) are
+    /// also single-payload codecs, but remain excluded so probe still drills
+    /// into their inner payloads; generic archives are excluded for the same
+    /// reason.
+    fn is_single_payload_codec_container(self) -> bool {
         matches!(
             self,
             Self::Cso
@@ -411,7 +413,7 @@ impl ContainerFormatRegistration {
             ContainerHandlerRegistration {
                 descriptor: self.descriptor,
                 capabilities,
-                is_single_payload_disc_image: self.handler.is_single_payload_disc_image(),
+                is_single_payload_codec_container: self.handler.is_single_payload_codec_container(),
                 create_support,
             },
         )

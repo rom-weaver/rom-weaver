@@ -238,7 +238,7 @@ impl CliApp {
         }
         if probe {
             // Fold the container/platform probe metadata into the extract result so the
-            // caller does not need a separate probe roundtrip. `is_single_payload_disc_image`
+            // caller does not need a separate probe roundtrip. `is_single_payload_codec_container`
             // gates the fail-on-unidentified rule to bare ROM/disc-image inputs (a single
             // decoded payload); multi-entry archives keep per-entry identity granularity and
             // are never failed here.
@@ -247,8 +247,8 @@ impl CliApp {
                 None,
                 self.probe_compress_recommendation(&source).as_ref(),
             );
-            report =
-                self.attach_extract_probe_identity(report, handler.is_single_payload_disc_image());
+            report = self
+                .attach_extract_probe_identity(report, handler.is_single_payload_codec_container());
         }
         self.finish("extract", report)
     }
@@ -375,7 +375,7 @@ impl CliApp {
     }
 
     /// Ensure a `--probe` extract carries the decoded payload's platform identity and,
-    /// for single-payload disc images, fails when nothing resolves. Identity already
+    /// for single-payload codec containers, fails when nothing resolves. Identity already
     /// streamed in by `--checksum` is reused as-is (no extra read); otherwise a single
     /// bounded-prefix read of the emitted output backfills it - the same detection the
     /// checksum/probe surfaces use. Multi-entry archives are left untouched (per-entry

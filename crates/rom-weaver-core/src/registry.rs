@@ -337,7 +337,7 @@ pub enum CreateSupport {
 pub struct ContainerHandlerRegistration {
     pub descriptor: &'static FormatDescriptor,
     pub capabilities: ContainerCapabilities,
-    pub is_single_payload_disc_image: bool,
+    pub is_single_payload_codec_container: bool,
     pub create_support: CreateSupport,
 }
 
@@ -430,10 +430,10 @@ pub trait ContainerHandlerOperations: Send + Sync {
 
 pub trait ContainerHandler: ContainerHandlerOperations {
     fn capabilities(&self) -> ContainerCapabilities;
-    /// True for disc/ROM image codec containers (CHD, RVZ, Z3DS, CSO, PBP, GCZ,
+    /// True for single-payload codec containers (CHD, RVZ, Z3DS, CSO, PBP, GCZ,
     /// WIA, WBFS, TGC, NFS, XISO). Probe treats these as terminal and reports
     /// their container info instead of decompressing to the inner payload.
-    fn is_single_payload_disc_image(&self) -> bool {
+    fn is_single_payload_codec_container(&self) -> bool {
         false
     }
 }
@@ -757,8 +757,8 @@ impl ContainerHandler for TracingContainerHandler {
         self.registration.capabilities.clone()
     }
 
-    fn is_single_payload_disc_image(&self) -> bool {
-        self.registration.is_single_payload_disc_image
+    fn is_single_payload_codec_container(&self) -> bool {
+        self.registration.is_single_payload_codec_container
     }
 }
 

@@ -60,7 +60,7 @@ impl CliApp {
                     no_extract: false,
                     no_ignore,
                     kind_filter,
-                    stop_on_disc_image_codec: true,
+                    stop_on_single_payload_codec: true,
                 },
             )
         } else {
