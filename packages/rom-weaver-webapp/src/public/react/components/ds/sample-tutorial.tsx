@@ -127,6 +127,12 @@ type GuideRect = { bottom: number; height: number; left: number; top: number; wi
 
 const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+const bindFinalCta = (cta: HTMLElement | null, final: boolean, onEnd: () => void) => {
+  if (!(cta && final)) return null;
+  cta.addEventListener("click", onEnd);
+  return () => cta.removeEventListener("click", onEnd);
+};
+
 /** The same row, seen from the viewport a pending reveal scroll is about to land on. */
 const shiftRect = (rect: GuideRect, by: number): GuideRect => ({
   bottom: rect.bottom - by,
@@ -383,6 +389,8 @@ const SampleTutorial = ({
     clearGuidedSampleQuery();
     onClose();
   };
+  const endGuideRef = useRef(endGuide);
+  endGuideRef.current = endGuide;
   // Resolved once: re-querying per render hands createPortal a different
   // container the moment .rw-app appears, which tears the whole overlay down
   // and rebuilds it - dropping focus and the live region instead of updating.
@@ -455,6 +463,7 @@ const SampleTutorial = ({
     let observer: MutationObserver | null = null;
     let openedMenu: HTMLButtonElement | null = null;
     let cta: HTMLElement | null = null;
+    let removeCtaEndListener: (() => void) | null = null;
     let lifted: HTMLElement | null = null;
     const openedDrawers: HTMLButtonElement[] = [];
     let frame = 0;
@@ -490,6 +499,7 @@ const SampleTutorial = ({
         // whenever its download state changes and would drop a class we added.
         cta = target.querySelector<HTMLElement>(step.cta);
         cta?.setAttribute("data-guide-cta", "true");
+        removeCtaEndListener = bindFinalCta(cta, stepIndex === steps.length - 1, () => endGuideRef.current());
       }
       return true;
     };
@@ -509,6 +519,7 @@ const SampleTutorial = ({
       for (const drawer of openedDrawers) {
         if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
       }
+      removeCtaEndListener?.();
       cta?.removeAttribute("data-guide-cta");
       lifted?.classList.remove("sample-tutorial-lift");
       target?.classList.remove("sample-tutorial-target");
@@ -518,7 +529,7 @@ const SampleTutorial = ({
         else target.removeAttribute("aria-describedby");
       }
     };
-  }, [bodyId, live, step]);
+  }, [bodyId, live, step, stepIndex, steps.length]);
 
   // Pins the ring and the card to the row in *document* coordinates, so the
   // page scrolls all three together on the compositor and this runs no code
@@ -687,6 +698,9 @@ const SampleTutorial = ({
         role="dialog"
         tabIndex={-1}
       >
+        <button aria-label="Exit tutorial" className="sample-tutorial-exit" onClick={endGuide} type="button">
+          <X aria-hidden="true" />
+        </button>
         <span aria-hidden="true" className="sample-tutorial-beacon">
           0x
         </span>
@@ -728,7 +742,11 @@ const SampleTutorial = ({
               ) : null}
             </div>
           </div>
-          {live ? <p className="sample-tutorial-end-hint">The End guide button also ends the tutorial.</p> : null}
+          {live ? (
+            <p className="sample-tutorial-end-hint">
+              The top-right X exits; the final action button also ends the tutorial.
+            </p>
+          ) : null}
         </div>
         <div className="sample-tutorial-actions">
           {live ? (
@@ -759,9 +777,6 @@ const SampleTutorial = ({
               {finalStep ? "Done" : "Continue"}
             </button>
           ) : null}
-          <button className="btn ghost slim" onClick={endGuide} type="button">
-            End guide
-          </button>
         </div>
       </div>
     </div>

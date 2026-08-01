@@ -139,7 +139,7 @@ it("removes the guide query when the tutorial ends", () => {
     </div>,
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "End guide" }));
+  fireEvent.click(screen.getByRole("button", { name: "Exit tutorial" }));
   expect(window.location.search).toBe("");
   expect(onClose).toHaveBeenCalledOnce();
 });
@@ -177,11 +177,11 @@ describe("sample tutorial", () => {
     const actions = screen.getByRole("list", { name: "Available actions" });
     expect(actions.textContent).toContain("Checks");
     expect(actions.querySelector("svg")).toBeTruthy();
-    expect(screen.getByText("The End guide button also ends the tutorial.")).toBeTruthy();
+    expect(screen.getByText("The top-right X exits; the final action button also ends the tutorial.")).toBeTruthy();
     const back = screen.getByRole("button", { name: "Back" }) as HTMLButtonElement;
     expect(back.disabled).toBe(false);
     expect(back.getAttribute("aria-disabled")).toBe("true");
-    expect(document.querySelector("[aria-live]")?.textContent).not.toContain("End guide button");
+    expect(document.querySelector("[aria-live]")?.textContent).not.toContain("top-right X");
     fireEvent.click(first);
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -340,6 +340,7 @@ describe("sample tutorial", () => {
     const ctaSteps: readonly SampleTutorialStep[] = [
       { body: "Press it.", cta: ".btn.run", target: "#tutorial-cta", title: "Finish" },
     ];
+    const onClose = vi.fn();
     const workbench = (guided: boolean) => (
       <div className="rw-app">
         <section id="tutorial-cta">
@@ -347,7 +348,7 @@ describe("sample tutorial", () => {
             Apply
           </button>
         </section>
-        {guided ? <SampleTutorial loadingBody="Loading." onClose={vi.fn()} ready steps={ctaSteps} /> : null}
+        {guided ? <SampleTutorial loadingBody="Loading." onClose={onClose} ready steps={ctaSteps} /> : null}
       </div>
     );
     const { rerender } = render(workbench(false));
@@ -355,6 +356,8 @@ describe("sample tutorial", () => {
 
     const button = screen.getByRole("button", { name: "Apply" });
     await waitFor(() => expect(button.dataset.guideCta).toBe("true"));
+    fireEvent.click(button);
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     rerender(workbench(false));
     expect(button.dataset.guideCta).toBeUndefined();
   });
