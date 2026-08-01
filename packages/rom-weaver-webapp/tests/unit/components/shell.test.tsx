@@ -135,7 +135,7 @@ describe("Masthead", () => {
     const { container, getByRole, rerender } = render(
       withSettings(<Masthead {...mastheadProps} channelBadge="pr-123" />),
     );
-    const badge = getByRole("link", { name: "Pull request preview — PR #123, v1.2.3" });
+    const badge = getByRole("link", { name: "Pull request preview, PR #123, v1.2.3" });
     expect(badge.classList.contains("channel-badge")).toBe(true);
     expect(badge.getAttribute("data-channel")).toBe("pr");
     expect(badge.getAttribute("href")).toBe("https://example.com/repo/pull/123");
@@ -145,7 +145,7 @@ describe("Masthead", () => {
     const channel = container.querySelector(".channel-badge") as HTMLButtonElement;
     expect(channel.tagName).toBe("BUTTON");
     expect(channel.getAttribute("data-channel")).toBe("nightly");
-    expect(channel.getAttribute("aria-label")).toBe("Nightly build — v1.2.3");
+    expect(channel.getAttribute("aria-label")).toBe("Nightly build, v1.2.3");
     expect(channel.querySelector(".tag-letter")?.textContent).toBe("N");
   });
 

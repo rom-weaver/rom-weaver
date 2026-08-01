@@ -469,7 +469,7 @@ const BuildTag = ({
   const prNumber = channelBadge?.match(/^pr-(\d+)$/i)?.[1];
   if (prNumber) {
     const prHref = githubBaseHref ? `${githubBaseHref}pull/${prNumber}` : undefined;
-    const prLabel = `${localizer.message("ui.channel.prPreview")} — PR #${prNumber}, ${versionText}`;
+    const prLabel = `${localizer.message("ui.channel.prPreview")}, PR #${prNumber}, ${versionText}`;
     return (
       <span className="build-tag">
         <a
@@ -499,7 +499,7 @@ const BuildTag = ({
       <span className="build-tag">
         <button
           aria-haspopup="dialog"
-          aria-label={`${name} — ${versionText}`}
+          aria-label={`${name}, ${versionText}`}
           className="channel-badge"
           data-channel={key}
           onClick={onOpenChangelog}
@@ -805,7 +805,7 @@ const UpdateBanner = ({ open, onReload }: { open: boolean; onReload: () => void 
         </g>
       </svg>
       <span>{localizer.message("ui.runtime.update")}</span>
-      {" — "}
+      {" · "}
       <b>{localizer.message("ui.update.reloadNow")}</b>
     </button>
   );
