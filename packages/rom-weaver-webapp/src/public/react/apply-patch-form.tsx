@@ -322,10 +322,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [localBundleSession, setLocalBundleSession] = useState<BundleApplySession | null>(null);
   const [bundleDismissed, setBundleDismissed] = useState(false);
   const bundleSessionKey = props.bundleSession?.key;
-  const previousBundleSessionKeyRef = useRef(bundleSessionKey);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The bundle session key intentionally triggers a dismissal reset.
   useEffect(() => {
-    if (previousBundleSessionKeyRef.current === bundleSessionKey) return;
-    previousBundleSessionKeyRef.current = bundleSessionKey;
     setBundleDismissed(false);
   }, [bundleSessionKey]);
   const activeBundleSession = bundleDismissed ? null : localBundleSession || props.bundleSession || null;
