@@ -553,13 +553,11 @@ instead would gate a required check on `deploy-preview-fast`, which is
 `continue-on-error: true` precisely so a Cloudflare outage cannot redden a
 build, and which is not ordered ahead of this job anyway.
 
-Applying `dist/_headers` is what puts the `Link:` preload hints in front of the
-audit, and the preview server replays them in a real `103` ahead of each HTML
-response the way the edge does - without that, Lighthouse would grade a
-discovery path for the render-critical CSS and entry module that production does
-not have. `scripts/pages-headers.mjs` parses the file; documents get the `103`,
-subresources do not, since a subresource ignores the hint and the extra
-informational response would only add to what the audit measures.
+Applying `dist/_headers` gives the preview server the same security, cache, and
+content-signal behavior as Pages. Builds intentionally disable deploy-sensitive
+`Link` hints, so the preview server does not emit a `103` whose cached hashed URLs
+could outlive a deployment. The HTML's own stylesheet, modulepreload, and font
+links remain the render-critical discovery path that production serves.
 
 `wrangler pages dev` is the closer emulator for everything else - it runs
 `_routes.json` and the sidecar Function for real - but it cannot serve this gate:
@@ -635,25 +633,13 @@ promptly. The `Content-Signal` header permits agent input on every channel,
 permits search use only on production, and declines AI training. Non-production
 channels add their `X-Robots-Tag` in the same file.
 
-Every response also carries `Link:` preload headers for the two
-render-critical subresources - the stylesheet and the entry module. Neither is
-discoverable until the document has been fetched and parsed, so Cloudflare
-replays them in a `103 Early Hints` response and both fetches start during
-server think time; browsers that ignore `103` still act on the header when the
-document response lands, which is earlier than the parser either way. They ride
-in the `/*` block rather than an enumerated route list, so every prerendered
-route, every docs slug, and any route added later is covered without upkeep;
-subresource responses carry the header too and ignore it. Both use `rel=preload`
-(`as=style` and `as=script`) rather than `rel=modulepreload` for the entry:
-Cloudflare only replays `preload` and `preconnect` in the `103`, so a
-`modulepreload` line still works on the document response but is dropped from
-the Early Hints, which is the half worth having. Chrome starts the entry fetch
-from the `as=script` hint and the module script reuses it, so nothing
-double-fetches. The hinted URLs are read back out of the built `index.html` by
-`packages/rom-weaver-webapp/scripts/critical-asset-hints.mjs`, which the build
-and `scripts/verify-seo-build.mjs` share so the emitted header and the check
-guarding it cannot drift; the verifier fails the build if either drifts from the
-URL the document actually requests.
+The generated `/*` block explicitly disables `Link` headers. Cloudflare caches
+HTTP 103 Early Hints separately from the document; deploy-specific hashed URLs
+in a wildcard `Link` header can therefore outlive the deployment that emitted
+them and preload dead CSS or JS files during rollout. The HTML already carries
+the exact hashed module, stylesheet, and font URLs, so it remains the single
+source of truth for resource discovery while the build verifier rejects any
+accidental reintroduction of deploy-sensitive `Link` hints.
 
 Pages has no precompressed-sibling convention and recompresses assets on the
 fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse

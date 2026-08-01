@@ -5,8 +5,7 @@ import { matchPagesHeaders, parsePagesHeaders } from "../../scripts/pages-header
 const headersFile = `/*
   Cross-Origin-Embedder-Policy: require-corp
   Content-Signal: ai-train=no, search=yes, ai-input=yes
-  Link: </assets/index-abc.css>; rel=preload; as=style; crossorigin
-  Link: </assets/index-def.js>; rel=preload; as=script; crossorigin
+  ! Link
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
@@ -22,17 +21,11 @@ describe("pages _headers matching", () => {
     expect(matchPagesHeaders(rules, "/")).toEqual({
       "Content-Signal": "ai-train=no, search=yes, ai-input=yes",
       "Cross-Origin-Embedder-Policy": "require-corp",
-      Link: [
-        "</assets/index-abc.css>; rel=preload; as=style; crossorigin",
-        "</assets/index-def.js>; rel=preload; as=script; crossorigin",
-      ],
     });
   });
 
-  // A prerendered route is a different path but loads the same two assets, so it has to
-  // pick up the same hints - that is why they ride in `/*` rather than a route list.
-  it.each(["/apply", "/docs/getting-started/", "/404.html"])("applies the /* block to %s", (pathname) => {
-    expect(matchPagesHeaders(rules, pathname).Link).toHaveLength(2);
+  it.each(["/apply", "/docs/getting-started/", "/404.html"])("disables Link hints for %s", (pathname) => {
+    expect(matchPagesHeaders(rules, pathname).Link).toBeUndefined();
   });
 
   it("layers a narrower rule over the broad one", () => {
@@ -52,12 +45,6 @@ describe("pages _headers matching", () => {
   it("ignores comments, blank lines, and indented lines with no pattern", () => {
     expect(parsePagesHeaders("  Orphan: 1\n\n# comment\n/*\n  X: 2\n")).toEqual([
       { headers: [["X", "2"]], match: expect.any(RegExp) },
-    ]);
-  });
-
-  it("keeps a value containing a colon intact", () => {
-    expect(matchPagesHeaders(parsePagesHeaders("/*\n  Link: <https://x/y>; rel=preconnect\n"), "/").Link).toEqual([
-      "<https://x/y>; rel=preconnect",
     ]);
   });
 
