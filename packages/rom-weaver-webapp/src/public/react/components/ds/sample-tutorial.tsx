@@ -714,7 +714,8 @@ const SampleTutorial = ({
         {/* The live region has to outlive the step copy: a region inserted
             together with its content is never announced, so only the copy
             inside it is keyed per step. */}
-        <div className="sample-tutorial-copy-area">
+        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the overflowing tutorial copy must be keyboard-scrollable. */}
+        <section aria-label="Tutorial instructions" className="sample-tutorial-copy-area" tabIndex={0}>
           <div aria-live="polite" className="sample-tutorial-live">
             <div className="sample-tutorial-copy" key={copyKey}>
               <span className="sample-tutorial-kicker mono">
@@ -754,7 +755,7 @@ const SampleTutorial = ({
               The top-right X exits; the final action button also ends the tutorial.
             </p>
           ) : null}
-        </div>
+        </section>
         <div className="sample-tutorial-actions">
           {live ? (
             <button
