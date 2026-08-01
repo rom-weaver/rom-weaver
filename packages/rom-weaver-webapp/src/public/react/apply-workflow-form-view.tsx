@@ -275,7 +275,7 @@ const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [["package", "Create ZIP Bundle"]],
-    body: "Press Create ZIP Bundle. After rom-weaver checks the recipe, the same button becomes Download ZIP Bundle.",
+    body: "Press Create ZIP Bundle to finish the tutorial. After rom-weaver checks the recipe, the same control becomes Download ZIP Bundle.",
     cta: "#rom-weaver-button-export-bundle",
     openDrawers: true,
     placement: "top",
