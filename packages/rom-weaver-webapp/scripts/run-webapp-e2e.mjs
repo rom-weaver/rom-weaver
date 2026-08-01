@@ -562,7 +562,17 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Bundle ${step}/4`);
       if (step === 4) {
-        await page.getByRole("button", { name: "Create ZIP Bundle", exact: true }).click();
+        const createButton = page.getByRole("button", { name: "Create ZIP Bundle", exact: true });
+        await createButton.waitFor({ state: "visible", timeout: 60_000 });
+        await page.waitForFunction(
+          () => {
+            const button = document.getElementById("rom-weaver-button-export-bundle");
+            return button instanceof HTMLButtonElement && !button.disabled;
+          },
+          undefined,
+          { timeout: 60_000 },
+        );
+        await createButton.click();
         const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
         await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
         const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });

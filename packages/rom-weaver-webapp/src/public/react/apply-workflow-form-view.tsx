@@ -1469,13 +1469,19 @@ function ApplyWorkflowFormView({
   // continues on its existing schedule behind the transition.
   const [dropStarted, setDropStarted] = useState(false);
   const workflowHasContent = romInputs.length > 0 || patches.length > 0 || pendingDrops.length > 0 || inputsStaging;
+  // The staged cards can settle one render before the bundle exporter receives
+  // its workflow source snapshot. Keep the guided Bundle card in its loading
+  // state until the actual export action is enabled, otherwise its final step
+  // can point at a disabled Create ZIP Bundle button.
+  const bundleTutorialReady = sampleTutorial !== "bundle" || (bundleExport?.ready === true && !outputState.disabled);
   const sampleTutorialReady =
     romInputs.length > 0 &&
     patches.length > 0 &&
     pendingDrops.length === 0 &&
     !inputsStaging &&
     romInputs.every((input) => !input.progress) &&
-    patches.every((patch) => !patch.progress);
+    patches.every((patch) => !patch.progress) &&
+    bundleTutorialReady;
   const formReady = pendingDrops.length === 0 && (romInputs.length > 0 || patches.length > 0 || inputsStaging);
   useEffect(() => {
     if (dropStarted && workflowHasContent) setDropStarted(false);
