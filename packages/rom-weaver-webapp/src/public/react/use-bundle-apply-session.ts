@@ -60,16 +60,16 @@ const useBundleApplySession = ({
   const appliedKeyRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const ownedBundleSessionRef = useRef<BundleApplySession | null>(bundleSession);
-  const ownedBundleSessionKeyRef = useRef(bundleSession?.key);
-  const bundleSessionKey = bundleSession?.key;
   useEffect(() => {
-    if (ownedBundleSessionKeyRef.current === bundleSessionKey) return;
+    // Content-derived keys intentionally identify equivalent bundles, but each load still owns a
+    // distinct set of extracted temporary files. Track the session object so a repeated drop of
+    // the same file releases the previous extraction and the new session owns its cleanup.
+    if (ownedBundleSessionRef.current === bundleSession) return;
     const previousSession = ownedBundleSessionRef.current;
-    ownedBundleSessionKeyRef.current = bundleSessionKey;
     if (!bundleSession) return;
     ownedBundleSessionRef.current = bundleSession;
     void previousSession?.cleanup?.();
-  }, [bundleSession, bundleSessionKey]);
+  }, [bundleSession]);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
