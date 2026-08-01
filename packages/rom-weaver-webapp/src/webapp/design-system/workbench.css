@@ -62,4 +62,7 @@
 
 /* Reset used to be an anonymous icon in the global toolbar; it belongs to the
    workflow it resets, so it rides that panel's head instead. */
-.rw-app .workflow-panel-head { display: flex; justify-content: flex-end; padding-block: var(--sp-xs); }
+/* zero-height rail: the reset action floats over the first step head's row
+   instead of spending a row of its own */
+.rw-app .workflow-panel-head { position: relative; z-index: 5; display: flex; justify-content: flex-end; height: 0; padding: 0; }
+.rw-app .workflow-panel-head .reset-btn { margin-block-start: var(--step-pt); }
