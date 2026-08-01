@@ -1,12 +1,9 @@
 //
-// GitHub REST plumbing shared by the pull request gates in
-// `.github/workflows/pull-request.yml`.
+// GitHub REST plumbing shared by the CLA gate and deployment-status scripts.
 //
-// Both gates talk to the same three surfaces - a pull request, a commit status,
-// and one marker comment - and both draw the same line between "the gate says
-// no" (a red commit status, a green job) and "the gate itself broke" (a red
-// job). Every unexpected response therefore throws instead of returning a falsy
-// value a caller could mistake for a verdict.
+// The CLA gate uses a pull request, a commit status, and one marker comment;
+// deployments only need statuses. Every unexpected response throws instead of
+// returning a falsy value a caller could mistake for a verdict.
 
 export function createGitHubApi({ token, apiUrl, name }) {
   const headers = {

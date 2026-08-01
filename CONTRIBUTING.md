@@ -40,10 +40,10 @@ Pull request titles must use Conventional Commits because the squash-merge title
 becomes the commit on `main` and the input to Release Please. Use
 `type: summary` or `type(scope): summary`, for example
 `fix(webapp): handle empty patch archives`.
-Branch commit messages are not linted. The `PR Title Lint` check comments with
-the exact problem when a title does not parse, and deletes that comment once you
-rename the pull request. The [commit conventions](./docs/development/commits.md) guide covers
-the allowed types, scopes, breaking changes, and release footers.
+Branch commit messages are not linted. When `PR Title Lint` fails, its workflow
+log names the exact commitlint rule to fix. The
+[commit conventions](./docs/development/commits.md) guide covers the allowed
+types, scopes, breaking changes, and release footers.
 
 Before submitting a pull request, run the smallest relevant checks and, when
 possible, the complete local gate:
