@@ -433,8 +433,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await scanVariants("codec combobox");
     await page.locator(".codec-combobox-option").first().click();
     await page.getByRole("button", { exact: true, name: "Save" }).click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
 
-    await page.getByRole("button", { name: "Log" }).click();
+    await page.getByRole("button", { name: "Log", exact: true }).click();
     const logDialog = page.locator("dialog.log-dlg");
     await logDialog.waitFor({ state: "visible" });
     await scanVariants("log dialog");
