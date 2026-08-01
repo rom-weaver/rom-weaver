@@ -364,27 +364,6 @@ const LogDialog = ({
               </button>
             ))}
           </div>
-          {tab === "logs" && hasPrevious ? (
-            <fieldset className="logview">
-              <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
-              <button
-                aria-pressed={view === "current"}
-                className="seg-btn"
-                onClick={() => setView("current")}
-                type="button"
-              >
-                {localizer.message("ui.log.viewCurrent")}
-              </button>
-              <button
-                aria-pressed={showingPrevious}
-                className="seg-btn"
-                onClick={() => setView("previous")}
-                type="button"
-              >
-                {localizer.message("ui.log.viewPrevious")}
-              </button>
-            </fieldset>
-          ) : null}
           {tab === "logs" || tab === "storage" ? (
             <div className="dlg-actions log-actions">
               <button
@@ -490,6 +469,27 @@ const LogDialog = ({
                 type="search"
                 value={filter}
               />
+              {tab === "logs" && hasPrevious ? (
+                <fieldset className="logview">
+                  <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
+                  <button
+                    aria-pressed={view === "current"}
+                    className="seg-btn"
+                    onClick={() => setView("current")}
+                    type="button"
+                  >
+                    {localizer.message("ui.log.viewCurrent")}
+                  </button>
+                  <button
+                    aria-pressed={showingPrevious}
+                    className="seg-btn"
+                    onClick={() => setView("previous")}
+                    type="button"
+                  >
+                    {localizer.message("ui.log.viewPrevious")}
+                  </button>
+                </fieldset>
+              ) : null}
               {showingOpfs ? (
                 <button
                   aria-label="Refresh OPFS"
