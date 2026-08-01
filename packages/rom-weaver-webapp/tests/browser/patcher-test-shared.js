@@ -263,16 +263,27 @@ export const selectPatchCandidates = async (labels) => {
   for (const label of labels)
     if (!rows.some((entry) => entry.textContent?.includes(label)))
       throw new Error(`Missing patch candidate selection option: ${label}`);
+  const findRow = (label) =>
+    Array.from(document.querySelectorAll(".rw-modal.select-modal .seltree .selcheck")).find((entry) =>
+      entry.textContent?.includes(label),
+    );
   for (const row of rows) {
     const checkbox = row.querySelector("input[type='checkbox']");
     const selected = labels.some((label) => row.textContent?.includes(label));
     if (checkbox && checkbox.checked !== selected) {
       checkbox.click();
-      await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+      const label = row.textContent || "";
+      const applied = await waitForState(() => {
+        const currentCheckbox = findRow(label)?.querySelector("input[type='checkbox']");
+        return currentCheckbox instanceof HTMLInputElement && currentCheckbox.checked === selected;
+      });
+      if (!applied) throw new Error(`Candidate selection did not apply for ${label}`);
     }
   }
-  await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
-  const confirm = document.querySelector(".rw-modal.select-modal .selconfirm");
+  const confirm = await waitForState(() => {
+    const button = document.querySelector(".rw-modal.select-modal .selconfirm");
+    return button instanceof HTMLButtonElement && !button.disabled ? button : null;
+  });
   if (!confirm) throw new Error("Missing patch candidate confirm button");
   confirm.click();
 };

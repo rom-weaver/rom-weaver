@@ -484,6 +484,8 @@ const Masthead = ({
     const tools = toolsRef.current;
     if (!(masthead && brand && modes && modeRail && tools)) return undefined;
 
+    let measureFrame = 0;
+    let measuredWide: boolean | null = null;
     const measure = () => {
       const gap = Number.parseFloat(getComputedStyle(masthead).columnGap) || 0;
       const requiredWidth =
@@ -492,17 +494,33 @@ const Masthead = ({
         tools.getBoundingClientRect().width +
         gap * 2;
       const phoneLayout = window.matchMedia("(max-width: 720px), (max-width: 860px) and (max-height: 520px)").matches;
-      setWideMasthead(!phoneLayout && requiredWidth <= masthead.clientWidth);
+      const nextWide = !phoneLayout && requiredWidth <= masthead.clientWidth;
+      if (nextWide === measuredWide) return;
+      measuredWide = nextWide;
+      setWideMasthead(nextWide);
+    };
+    const scheduleMeasure = () => {
+      if (measureFrame) return;
+      measureFrame = window.requestAnimationFrame(() => {
+        measureFrame = 0;
+        measure();
+      });
     };
 
     measure();
-    window.addEventListener("resize", measure);
-    if (typeof ResizeObserver === "undefined") return () => window.removeEventListener("resize", measure);
-    const observer = new ResizeObserver(measure);
+    window.addEventListener("resize", scheduleMeasure);
+    if (typeof ResizeObserver === "undefined") {
+      return () => {
+        window.cancelAnimationFrame(measureFrame);
+        window.removeEventListener("resize", scheduleMeasure);
+      };
+    }
+    const observer = new ResizeObserver(scheduleMeasure);
     for (const element of [masthead, brand, modes, modeRail, tools]) observer.observe(element);
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", measure);
+      window.cancelAnimationFrame(measureFrame);
+      window.removeEventListener("resize", scheduleMeasure);
     };
   }, []);
   // Pointer-down rather than click so a press that starts outside dismisses

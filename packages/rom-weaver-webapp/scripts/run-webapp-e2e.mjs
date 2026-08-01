@@ -37,13 +37,15 @@ const A11Y_ONLY = process.argv.includes("--a11y");
 const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
 const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
-const isNonFatalBrowserPageError = (error) =>
-  browserName === "webkit" && error.message === "ResizeObserver loop completed with undelivered notifications.";
-const recordPageError = (failures, error) => {
-  // WebKit reports this layout-delivery diagnostic as a pageerror while it is
-  // completing a responsive viewport scan. It is not an application exception
-  // and the same journey continues successfully; retain every other error.
-  if (!isNonFatalBrowserPageError(error)) failures.push(error.stack || error.message);
+const isNonFatalBrowserPageError = (error, guidedTourActive) =>
+  guidedTourActive &&
+  browserName === "webkit" &&
+  error.message === "ResizeObserver loop completed with undelivered notifications.";
+const recordPageError = (failures, error, guidedTourActive) => {
+  // WebKit can report this layout-delivery diagnostic while the guided tour is
+  // repositioning its fixed card. Retain every other error, including the same
+  // diagnostic outside the guided tour where it indicates an app regression.
+  if (!isNonFatalBrowserPageError(error, guidedTourActive)) failures.push(error.stack || error.message);
 };
 const clickAfterStableLayout = async (page, locator) => {
   await locator.waitFor({ state: "visible" });
@@ -409,7 +411,16 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   let page = await context.newPage();
   const cssCoverageEntries = [];
   const failures = [];
-  const watchPageErrors = () => page.on("pageerror", (error) => recordPageError(failures, error));
+  let guidedTourActive = false;
+  const watchPageErrors = () => page.on("pageerror", (error) => recordPageError(failures, error, guidedTourActive));
+  const runGuidedTour = async (callback) => {
+    guidedTourActive = true;
+    try {
+      return await callback();
+    } finally {
+      guidedTourActive = false;
+    }
+  };
   watchPageErrors();
   const setTheme = async (theme) => {
     if ((await page.locator("html").getAttribute("data-theme")) !== theme) {
@@ -530,54 +541,58 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    const onboardingChip = page.getByRole("button", { name: "New here?" });
-    await onboardingChip.waitFor({ state: "visible", timeout: 60_000 });
-    await onboardingChip.click();
-    const guidedApply = page.getByRole("link", { name: "Start guided Apply" });
-    await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
-    await guidedApply.click();
     const tutorial = page.locator(".sample-tutorial-dialog");
-    await tutorial.waitFor({ state: "visible" });
-    await assertGuidedLayerCanEscapePanel(page);
-    await scanLiveApp(page, "guided Apply loading (desktop, light)");
-    for (let step = 1; step <= 4; step += 1) {
-      await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Apply ${step}/4`);
-      if (step === 4) {
-        await page.locator("#rom-weaver-button-apply").click();
-      } else {
-        const continueButton = tutorial.getByRole("button", { name: "Continue" });
-        await clickAfterStableLayout(page, continueButton);
+    await runGuidedTour(async () => {
+      const onboardingChip = page.getByRole("button", { name: "New here?" });
+      await onboardingChip.waitFor({ state: "visible", timeout: 60_000 });
+      await onboardingChip.click();
+      const guidedApply = page.getByRole("link", { name: "Start guided Apply" });
+      await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
+      await guidedApply.click();
+      await tutorial.waitFor({ state: "visible" });
+      await assertGuidedLayerCanEscapePanel(page);
+      await scanLiveApp(page, "guided Apply loading (desktop, light)");
+      for (let step = 1; step <= 4; step += 1) {
+        await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
+        await scanVariants(`guided Apply ${step}/4`);
+        if (step === 4) {
+          await page.locator("#rom-weaver-button-apply").click();
+        } else {
+          const continueButton = tutorial.getByRole("button", { name: "Continue" });
+          await clickAfterStableLayout(page, continueButton);
+        }
       }
-    }
-    await tutorial.waitFor({ state: "hidden" });
+      await tutorial.waitFor({ state: "hidden" });
+    });
 
     await page.goto(new URL("weave?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await installAuditTools();
-    await tutorial.waitFor({ state: "visible" });
-    await assertGuidedLayerCanEscapePanel(page);
-    await scanLiveApp(page, "guided Bundle loading (desktop, light)");
-    for (let step = 1; step <= 4; step += 1) {
-      await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Bundle ${step}/4`);
-      if (step === 4) {
-        const createButton = page.getByRole("button", { name: "Create ZIP Bundle", exact: true });
-        await createButton.click();
-        const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
-        await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
-        const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });
-        await downloadButton.click();
-        const download = await downloadPromise;
-        if (!download.suggestedFilename().endsWith(".zip")) {
-          throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
+    await runGuidedTour(async () => {
+      await tutorial.waitFor({ state: "visible" });
+      await assertGuidedLayerCanEscapePanel(page);
+      await scanLiveApp(page, "guided Bundle loading (desktop, light)");
+      for (let step = 1; step <= 4; step += 1) {
+        await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
+        await scanVariants(`guided Bundle ${step}/4`);
+        if (step === 4) {
+          const createButton = page.getByRole("button", { name: "Create ZIP Bundle", exact: true });
+          await createButton.click();
+          const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
+          await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
+          const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });
+          await downloadButton.click();
+          const download = await downloadPromise;
+          if (!download.suggestedFilename().endsWith(".zip")) {
+            throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
+          }
+        } else {
+          const continueButton = tutorial.getByRole("button", { name: "Continue" });
+          await clickAfterStableLayout(page, continueButton);
         }
-      } else {
-        const continueButton = tutorial.getByRole("button", { name: "Continue" });
-        await clickAfterStableLayout(page, continueButton);
       }
-    }
-    await tutorial.waitFor({ state: "hidden" });
+      await tutorial.waitFor({ state: "hidden" });
+    });
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
@@ -607,25 +622,27 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
     await page.locator('[role="tab"][data-mode="creator"]').click();
-    const createOnboardingChip = page.getByRole("button", { name: "New here?" });
-    await createOnboardingChip.waitFor({ state: "visible" });
-    await createOnboardingChip.click();
-    const guidedCreate = page.getByRole("link", { name: "Start guided Create" });
-    await guidedCreate.waitFor({ state: "visible" });
-    await guidedCreate.click();
-    await tutorial.waitFor({ state: "visible" });
-    await assertGuidedLayerCanEscapePanel(page);
-    await scanLiveApp(page, "guided Create loading (desktop, light)");
-    for (let step = 1; step <= 4; step += 1) {
-      await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Create ${step}/4`);
-      if (step === 4) {
-        await page.locator("#patch-builder-button-create").click();
-      } else {
-        await tutorial.getByRole("button", { name: "Continue" }).click();
+    await runGuidedTour(async () => {
+      const createOnboardingChip = page.getByRole("button", { name: "New here?" });
+      await createOnboardingChip.waitFor({ state: "visible" });
+      await createOnboardingChip.click();
+      const guidedCreate = page.getByRole("link", { name: "Start guided Create" });
+      await guidedCreate.waitFor({ state: "visible" });
+      await guidedCreate.click();
+      await tutorial.waitFor({ state: "visible" });
+      await assertGuidedLayerCanEscapePanel(page);
+      await scanLiveApp(page, "guided Create loading (desktop, light)");
+      for (let step = 1; step <= 4; step += 1) {
+        await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
+        await scanVariants(`guided Create ${step}/4`);
+        if (step === 4) {
+          await page.locator("#patch-builder-button-create").click();
+        } else {
+          await tutorial.getByRole("button", { name: "Continue" }).click();
+        }
       }
-    }
-    await tutorial.waitFor({ state: "hidden" });
+      await tutorial.waitFor({ state: "hidden" });
+    });
 
     // Last, because each guide is its own served document: the audits above all
     // run against the app page and would have to re-enter it afterwards.

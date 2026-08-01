@@ -36,6 +36,16 @@ describe("SelectionCheckList", () => {
     expect(onSubmit).toHaveBeenCalledWith(["patch-a", "patch-b"]);
   });
 
+  it("keeps back-to-back checkbox toggles", () => {
+    const { getAllByRole } = render(<SelectionCheckList items={items} onSubmit={vi.fn()} submitLabel={submitLabel} />);
+    const checkboxes = getAllByRole("checkbox");
+
+    (checkboxes[0] as HTMLElement).click();
+    (checkboxes[1] as HTMLElement).click();
+
+    expect(countChecked(checkboxes)).toBe(2);
+  });
+
   it("keeps unchecked patches unchecked while the host re-renders with an equivalent list", () => {
     const onSubmit = vi.fn();
     const { getAllByRole, getByRole, rerender } = render(

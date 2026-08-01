@@ -176,7 +176,12 @@ test("export bundle bundles the session from main-page options with a checks-onl
   const patchEntry = result.bundle.patches[0];
   expect(patchEntry.id).toBeTruthy();
   expect(patchEntry.version).toBe("1.4.0");
-  expect(patchEntry.path).toBe("change.ips");
+  // The live apply session still owns the replacement source while export
+  // stages its named copy, so the browser VFS may add a collision suffix. The
+  // important contract is that replacement bytes keep the replacement name,
+  // rather than reverting to the original slot name.
+  expect(patchEntry.path).toMatch(/^replacement(?:-\d+)?\.ips$/);
+  expect(patchEntry.path).not.toBe("change.ips");
   expect(patchEntry.optional).toBe(true);
   expect(patchEntry.name).toBe("Core change");
   expect(patchEntry.author).toBe("Weaver");

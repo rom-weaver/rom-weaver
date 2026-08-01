@@ -94,10 +94,20 @@ const SelectionCheckList = ({
   if (selection.key !== candidateKey) setSelection({ ids: initialSelectedIds, key: candidateKey });
   const selectedIds = selection.key === candidateKey ? selection.ids : initialSelectedIds;
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
-  const setSelectedIds = (ids: string[]) => setSelection({ ids, key: candidateKey });
+  const setSelectedIds = (update: string[] | ((ids: string[]) => string[])) =>
+    setSelection((previous) => ({
+      ids: typeof update === "function" ? update(previous.ids) : update,
+      key: candidateKey,
+    }));
   const toggle = (id: string) =>
-    setSelectedIds(selectedIds.includes(id) ? selectedIds.filter((value) => value !== id) : [...selectedIds, id]);
-  const toggleAll = () => setSelectedIds(allSelected ? [] : selectableIds);
+    setSelectedIds((previous) =>
+      previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id],
+    );
+  const toggleAll = () =>
+    setSelectedIds((previous) => {
+      const allAreSelected = selectableIds.length > 0 && selectableIds.every((id) => previous.includes(id));
+      return allAreSelected ? [] : selectableIds;
+    });
   return (
     <div className="selcheckwrap">
       <div className="seltree picklist">

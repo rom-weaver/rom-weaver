@@ -3,12 +3,6 @@ import { isArchiveFileName } from "./file-classification.ts";
 import { getBinarySourceFileName, getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 
-const getFileExtension = (fileName: string) =>
-  fileName
-    .trim()
-    .match(/\.([^.]+)$/)?.[1]
-    ?.toLowerCase() || "";
-
 /**
  * Owns patch enablement, keyed by stable slot ids so replacements and reorders
  * retain state. Disabled patches remain visible but are removed from run inputs.
@@ -56,15 +50,18 @@ const useApplyPatchEnablement = () => {
     (nextPatches: BinarySource[]) => {
       const previousSlotIds = patchSlotIdsRef.current;
       const previousFileNames = patchSlotFileNamesRef.current;
+      const previousSourceIds = getBinarySourceListStableIds(currentPatchesRef.current);
+      const nextSourceIds = getBinarySourceListStableIds(nextPatches);
       const nextSlotIds = reconcileSlotIds(nextPatches);
       const nextFileNames = nextSlotIds.map((id, index) => {
         const previousIndex = previousSlotIds.indexOf(id);
         const nextFileName = getBinarySourceFileName(nextPatches[index], `Patch ${index + 1}`) || `Patch ${index + 1}`;
         const previousFileName = (previousIndex >= 0 ? previousFileNames[previousIndex] : "") || "";
-        // Preserve the slot's canonical export name for same-format replacements,
-        // but never ship a changed patch format under the old extension.
-        const sameFormat = getFileExtension(previousFileName) === getFileExtension(nextFileName);
-        return previousIndex >= 0 && sameFormat ? previousFileName || nextFileName : nextFileName;
+        // Preserve the canonical leaf name only when this is the same source
+        // being re-reported. A replacement with the same extension still gets
+        // its new name in the bundle.
+        const sameSource = previousIndex >= 0 && previousSourceIds[previousIndex] === nextSourceIds[index];
+        return sameSource ? previousFileName || nextFileName : nextFileName;
       });
       currentPatchesRef.current = nextPatches;
       patchSlotIdsRef.current = nextSlotIds;
