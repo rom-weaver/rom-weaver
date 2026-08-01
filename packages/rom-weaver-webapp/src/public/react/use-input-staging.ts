@@ -1,4 +1,4 @@
-import { type MutableRefObject, useMemo } from "react";
+import { useMemo } from "preact/hooks";
 import {
   createRomInputRow,
   getChecksumProgressInfoPatch,
@@ -21,6 +21,7 @@ import type { BinarySource } from "./patcher-form.ts";
 import { isWorkflowDisposedError, toError } from "./patcher-form-session-utils.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
+import type { MutableRefObject } from "./use-latest-ref.ts";
 import { createWaitingWorkflowProgress } from "./workflow-run-hooks.ts";
 import type { ProgressEvent } from "../../types/workflow-runtime-types.ts";
 

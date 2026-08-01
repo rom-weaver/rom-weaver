@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
+import { render } from "@testing-library/preact";
 import { expect, it } from "vitest";
 import { SourceInfoList } from "../../src/public/react/components/ds/source-info-list.tsx";
 

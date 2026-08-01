@@ -61,6 +61,7 @@ type BundleApplySessionEntry = BundlePlanEntry & { fileName: string };
 
 /** The plan after acquisition, as handed to the apply form. */
 type BundleApplySession = Omit<BundleApplySessionPlan, "entries" | "romAcquisition"> & {
+  cleanup?: () => Promise<void>;
   romFileName?: string;
   entries: BundleApplySessionEntry[];
 };

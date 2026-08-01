@@ -1,5 +1,5 @@
-import { createElement } from "react";
-import { renderToString } from "react-dom/server";
+import { createElement } from "preact";
+import { renderToString } from "preact-render-to-string";
 import { getPageUpdateState, createEmptyVitePageUpdateState } from "./page-update-state.ts";
 import { createServiceWorkerCacheState } from "./pwa/service-worker-cache-state.ts";
 import { createWebappRootController } from "./webapp-controller.ts";
@@ -11,7 +11,7 @@ import { preloadWorkflowRoute } from "./workflow-routes.tsx";
 /**
  * Build-time prerender of the landing shell: the exact markup the client's
  * first committed render produces (startup ready, requested public tab, no session),
- * rendered through react-dom/server so index.html can ship it inside
+ * rendered through preact-render-to-string so index.html can ship it inside
  * #webapp-root and the browser can paint the real shell before the bundle
  * executes. The client hydrates this markup in place; see renderWebappRoot in
  * webapp.ts.

@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement } from "preact";
 import { expect, test } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { DiscTracksPanel } from "../../src/public/react/components/ds/source-info-list.tsx";

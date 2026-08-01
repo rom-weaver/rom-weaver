@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
@@ -312,6 +312,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     filterEnabledPatchRun,
     getDisabledPatchIndexes,
     getPatchIds,
+    getPatchExportFileNames,
     seedPatchEnablement,
     syncPatchTracking,
     togglePatchEnabled,
@@ -1422,6 +1423,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const bundleExport = useBundleExport({
     bundleMetaById,
     disabledPatchIds,
+    getPatchExportFileNames,
     getPatchIds,
     getName: () => resolvedOutputController.getState().displayFileName,
     getOutputHeader: () => resolvedOutputController.getState().outputHeader,
@@ -1467,7 +1469,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       const [format = "", contents = ""] = value.split(":");
       setBundleExportFormat(format);
       setBundleExportRom(contents === "rom");
-      onBundlePackageChange?.(value);
+      // The guided Bundle start can call this from a child effect. Let the
+      // parent settings store publish after that effect returns so direct
+      // Preact does not re-enter the tree while its hook dispatcher is active.
+      if (onBundlePackageChange) globalThis.queueMicrotask(() => onBundlePackageChange(value));
     },
     [onBundlePackageChange, setBundleExportFormat, setBundleExportRom],
   );

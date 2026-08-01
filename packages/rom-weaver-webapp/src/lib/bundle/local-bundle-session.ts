@@ -206,6 +206,7 @@ async function loadLocalBundleSession(
     const romExpectation = romFile ? undefined : bundleRomExpectation(result.bundle);
     const session: BundleApplySession = {
       chainEndpointChecks: bundleChainEndpointChecks(result.bundle),
+      cleanup,
       entries,
       key: `local:${bundleFile.name}:${bundleFile.size}:${bundleFile.lastModified}`,
       ...(name ? { name } : {}),

@@ -1,4 +1,4 @@
-import { type SetStateAction, useMemo, useReducer } from "react";
+import { type StateUpdater, useMemo, useReducer } from "preact/hooks";
 import type { LocalPatcherSessionState, LocalPatcherSessionStatePatch } from "./apply-session-types.ts";
 import { resolveLocalStateUpdate } from "./patcher-form-session-utils.ts";
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
@@ -58,7 +58,7 @@ const localPatcherSessionStateReducer = (
 
 type LocalSessionDispatch = (patch: LocalPatcherSessionStatePatch) => void;
 type LocalSessionFieldSetter<K extends keyof LocalPatcherSessionState> = (
-  value: SetStateAction<LocalPatcherSessionState[K]>,
+  value: StateUpdater<LocalPatcherSessionState[K]>,
 ) => void;
 
 // Every session setter is "patch one field through resolveLocalStateUpdate"; build them from a

@@ -1,5 +1,6 @@
-import { Upload } from "lucide-react";
-import { type ReactNode, type Ref, useId, useLayoutEffect, useRef, useState } from "react";
+import { Upload } from "lucide-preact";
+import type { ComponentChildren, Ref } from "preact";
+import { useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
@@ -38,12 +39,12 @@ const StepSection = ({
   headerAction,
 }: {
   num: string;
-  title: ReactNode;
-  info?: ReactNode;
-  meta?: ReactNode;
+  title: ComponentChildren;
+  info?: ComponentChildren;
+  meta?: ComponentChildren;
   /** Right-aligned control that shares the header row (e.g. a mode toggle). */
-  headerExtra?: ReactNode;
-  children: ReactNode;
+  headerExtra?: ComponentChildren;
+  children: ComponentChildren;
   id?: string;
   className?: string;
   /** Optional mobile-sized action covering the section heading. */
@@ -78,7 +79,7 @@ const StepSection = ({
  * Clickable "i" info mark with a viewport-aware popover. Content is the
  * caller's - typically a `.info-list` bullet list.
  */
-const InfoPopover = ({ title = "More info", children }: { title?: string; children: ReactNode }) => (
+const InfoPopover = ({ title = "More info", children }: { title?: string; children: ComponentChildren }) => (
   <InfoToggle ariaLabel={title} portalPanel title={title}>
     {children}
   </InfoToggle>
@@ -109,13 +110,13 @@ const DropZone = ({
   inputRef,
 }: {
   /** Intro content rendered inside the hero drop surface. */
-  lead?: ReactNode;
-  label: ReactNode;
+  lead?: ComponentChildren;
+  label: ComponentChildren;
   /** Touch-device label shown instead of `label` on coarse pointers. */
-  labelCoarse?: ReactNode;
-  hint?: ReactNode;
+  labelCoarse?: ComponentChildren;
+  hint?: ComponentChildren;
   /** Touch-device hint (shown instead of `hint` on coarse pointers). */
-  hintCoarse?: ReactNode;
+  hintCoarse?: ComponentChildren;
   /** Format pills under the hero label (hero variant only). */
   formats?: readonly string[];
   big?: boolean;
@@ -125,7 +126,7 @@ const DropZone = ({
   accept?: string;
   disabled?: boolean;
   /** Label shown while a dropped folder is being read. */
-  reading?: ReactNode;
+  reading?: ComponentChildren;
   /** Fires as soon as the user supplies files, before any staging work begins. */
   onDropStart?: () => void;
   onFiles: (files: File[]) => void;
@@ -297,7 +298,7 @@ const DropZone = ({
  * Quiet directive shown by a secondary input section while empty: points the
  * user up to the 0x01 INPUTS hero instead of offering its own drop target.
  */
-const NeedsInput = ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
+const NeedsInput = ({ children, onClick }: { children: ComponentChildren; onClick?: () => void }) => (
   <button className="needs-input" onClick={onClick} type="button">
     <svg aria-hidden="true" viewBox="0 0 24 24">
       <path d="M12 20V5m-5.5 5.5L12 5l5.5 5.5" />

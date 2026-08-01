@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
+import { render } from "@testing-library/preact";
 import { describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { LogDialog } from "../../../src/webapp/components/log-dialog.tsx";

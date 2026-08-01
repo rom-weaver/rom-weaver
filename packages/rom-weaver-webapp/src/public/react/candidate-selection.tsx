@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "preact/hooks";
 import { createLogger } from "../../lib/logging.ts";
 import { stripOperationScopeChain } from "../../lib/runtime/run-output-paths.ts";
 import { getCandidateDisplayItems } from "../../presentation/formatting/candidates.ts";

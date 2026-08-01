@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InfoToggle } from "../../../src/presentation/react/info-toggle.tsx";
 

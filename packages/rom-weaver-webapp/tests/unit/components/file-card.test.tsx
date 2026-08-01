@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/preact";
 import { describe, expect, it, vi } from "vitest";
 import { FileCard, FileTargetPill, RemoveButton } from "../../../src/public/react/components/ds/file-card.tsx";
 

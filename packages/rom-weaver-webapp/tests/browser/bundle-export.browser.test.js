@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement } from "preact";
 import { expect, test, vi } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";

@@ -1,4 +1,4 @@
-import type { SetStateAction } from "react";
+import type { StateUpdater } from "preact/hooks";
 import { getFileNameExtension as getSharedFileNameExtension, hasFileNameExtension } from "../../lib/path-utils.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import { formatPercentFixed } from "../../presentation/workflow-presentation.ts";
@@ -18,7 +18,7 @@ const waitForNextUiPaint = () =>
     globalThis.setTimeout(() => resolve(), 0);
   });
 
-const resolveLocalStateUpdate = <T>(current: T, update: SetStateAction<T>): T =>
+const resolveLocalStateUpdate = <T>(current: T, update: StateUpdater<T>): T =>
   typeof update === "function" ? (update as (current: T) => T)(current) : update;
 
 const toError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));

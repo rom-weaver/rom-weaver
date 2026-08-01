@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
+import { render } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
 import { OutputCard } from "../../../src/public/react/components/ds/output-card.tsx";
 

@@ -1,5 +1,6 @@
-import { Check, ChevronRight, X } from "lucide-react";
-import { Fragment, type ReactNode, useState } from "react";
+import { Check, ChevronRight, X } from "lucide-preact";
+import { Fragment, type ComponentChildren } from "preact";
+import { useState } from "preact/hooks";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
@@ -195,7 +196,7 @@ const CollapsedVariantGroups = ({
   variants,
 }: {
   baseLabel?: string;
-  baseRows?: ReactNode;
+  baseRows?: ComponentChildren;
   bytes?: number;
   variants: ChecksumVariant[];
 }) => {
@@ -348,7 +349,7 @@ const getVariantBytes = (variant: ChecksumVariant, sourceBytes: number | undefin
 
 type ChecksumGroupData = {
   id: string;
-  label: ReactNode;
+  label: ComponentChildren;
   byteValue?: string;
   checksums?: SourceInfoChecksums | null;
   progress?: SourceInfoProgress | null;
@@ -432,14 +433,14 @@ const SourceInfoList = ({
   fileName?: string;
   /** Section heading; defaults to "Checks". Disc cards pass the track filename. */
   label?: string;
-  lead?: ReactNode;
+  lead?: ComponentChildren;
   onToggle?: (open: boolean) => void;
   open?: boolean;
   /** When set, the file is still staging: render shimmer placeholders for these
    * planned groups/rows (reserving the resolved height) instead of any value. */
   pending?: ChecksumPendingGroup[];
   progress?: SourceInfoProgress | null;
-  timing?: ReactNode;
+  timing?: ComponentChildren;
   /** Trim-padding probe; surfaces a "Trim" group only when padding is detected. */
   trim?: TrimFixDetails | null;
 }) => {
@@ -570,7 +571,7 @@ const DiscTracksPanel = ({
   tracks: DiscTrackPanelInfo[];
   open?: boolean;
   onToggle?: (open: boolean) => void;
-  timing?: ReactNode;
+  timing?: ComponentChildren;
 }) => {
   if (!tracks.length) return null;
   return (

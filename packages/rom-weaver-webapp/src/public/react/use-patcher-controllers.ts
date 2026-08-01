@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useMemo } from "react";
+import { type Dispatch, type StateUpdater, useMemo } from "preact/hooks";
 import { markPatchArchiveReplacement } from "../../lib/input/patch-archive-replacement.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createRomInputRow } from "./apply-session-inputs.ts";
@@ -37,8 +37,8 @@ interface InputUiControllerContext {
     emitSessionTrace: (message: string, details?: Record<string, unknown>) => void;
     invalidateCompletedOutputState: () => void;
     invalidatePatchStage: () => void;
-    setChecksumOverrideChecked: Dispatch<SetStateAction<boolean>>;
-    setFailurePlacement: Dispatch<SetStateAction<FailurePlacement>>;
+    setChecksumOverrideChecked: Dispatch<StateUpdater<boolean>>;
+    setFailurePlacement: Dispatch<StateUpdater<FailurePlacement>>;
     updateInputs: (nextInputs: BinarySource[]) => void;
     updatePatches: (nextPatches: BinarySource[]) => void;
     updateSettings: (nextSettings: ApplyPatchFormSettings) => void;

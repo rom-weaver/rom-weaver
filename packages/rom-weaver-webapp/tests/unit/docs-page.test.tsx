@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/preact";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";

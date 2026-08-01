@@ -1,5 +1,5 @@
-import { Archive } from "lucide-react";
-import type { ReactNode } from "react";
+import { Archive } from "lucide-preact";
+import type { ComponentChildren } from "preact";
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../../../storage/shared/timing.ts";
@@ -222,10 +222,10 @@ const ExtractName = ({
 }: Omit<ExtractPanelProps, "decompressionTimeMs" | "timing"> & {
   displayName?: string;
   /** Trailing controls on the name line (e.g. the pencil edit toggle). */
-  nameActions?: ReactNode;
+  nameActions?: ComponentChildren;
   /** An in-place editor rendered instead of the static name face (the sr-only
    * filename and legacy label stay for identity). */
-  nameEditor?: ReactNode;
+  nameEditor?: ComponentChildren;
 }) => (
   <>
     {legacyFileClassName ? (

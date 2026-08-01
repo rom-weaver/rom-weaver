@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from "react";
-import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
+import { useCallback, useRef, useState } from "preact/hooks";
+import { isArchiveFileName } from "./file-classification.ts";
+import { getBinarySourceFileName, getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 
 /**
@@ -15,6 +16,7 @@ const useApplyPatchEnablement = () => {
   disabledPatchIdsRef.current = disabledPatchIds;
   const currentPatchesRef = useRef<BinarySource[]>([]);
   const patchSlotIdsRef = useRef<string[]>([]);
+  const patchSlotFileNamesRef = useRef<string[]>([]);
   const nextSlotIdRef = useRef(0);
 
   const newSlotId = useCallback(() => {
@@ -46,9 +48,18 @@ const useApplyPatchEnablement = () => {
   // onPatchesChange handler before its own selection-sync/prop-forwarding, preserving call order.
   const syncPatchTracking = useCallback(
     (nextPatches: BinarySource[]) => {
+      const previousSlotIds = patchSlotIdsRef.current;
+      const previousFileNames = patchSlotFileNamesRef.current;
       const nextSlotIds = reconcileSlotIds(nextPatches);
+      const nextFileNames = nextSlotIds.map((id, index) => {
+        const previousIndex = previousSlotIds.indexOf(id);
+        return previousIndex >= 0
+          ? previousFileNames[previousIndex] || getBinarySourceFileName(nextPatches[index], `Patch ${index + 1}`)
+          : getBinarySourceFileName(nextPatches[index], `Patch ${index + 1}`);
+      });
       currentPatchesRef.current = nextPatches;
       patchSlotIdsRef.current = nextSlotIds;
+      patchSlotFileNamesRef.current = nextFileNames;
       // Drop stale toggles so a removed slot cannot disable a later replacement/addition.
       const ids = new Set(nextSlotIds);
       const retainKnownIds = (previous: ReadonlySet<string>): ReadonlySet<string> => {
@@ -98,6 +109,10 @@ const useApplyPatchEnablement = () => {
   }, []);
 
   const getPatchIds = useCallback(() => patchSlotIdsRef.current.slice(), []);
+  const getPatchExportFileNames = useCallback(
+    () => patchSlotFileNamesRef.current.map((fileName) => (isArchiveFileName(fileName) ? "" : fileName)),
+    [],
+  );
 
   /** Index-aligned disabled set for `patches` (reads the live toggle state, so it is safe to call
    * from stable callbacks): feeds the deep dry-run validation so toggled-off patches are skipped. */
@@ -117,6 +132,7 @@ const useApplyPatchEnablement = () => {
     filterEnabledPatchRun,
     getDisabledPatchIndexes,
     getPatchIds,
+    getPatchExportFileNames,
     seedPatchEnablement,
     syncPatchTracking,
     togglePatchEnabled,

@@ -12,8 +12,9 @@ import {
   TriangleAlert,
   UserRound,
   X,
-} from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+} from "lucide-preact";
+import type { ComponentChildren } from "preact";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { InfoToggle } from "../../presentation/react/info-toggle.tsx";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
@@ -220,7 +221,7 @@ const PatchMetaTextField = ({
       defaultValue={meta?.[field] || ""}
       id={`rom-weaver-patch-${field}-${index}`}
       key={`patch-${field}:${item.key ?? index}:${meta?.[field] || ""}`}
-      onBlur={(event) => onMetaChange({ [field]: event.currentTarget.value.trim() || undefined })}
+      onFocusOut={(event) => onMetaChange({ [field]: event.currentTarget.value.trim() || undefined })}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
@@ -229,7 +230,7 @@ const PatchMetaTextField = ({
         }
       }}
       placeholder={placeholder}
-      spellCheck={false}
+      spellcheck={false}
       type="text"
     />
   </div>
@@ -266,7 +267,7 @@ const PatchMetaFields = ({
         defaultValue={meta?.description || ""}
         id={`rom-weaver-patch-description-${index}`}
         key={`patch-description:${item.key ?? index}:${meta?.description || ""}`}
-        onBlur={(event) => onMetaChange({ description: event.currentTarget.value.trim() || undefined })}
+        onFocusOut={(event) => onMetaChange({ description: event.currentTarget.value.trim() || undefined })}
         onInput={(event) => autosizeTextarea(event.currentTarget)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
@@ -475,12 +476,25 @@ const EditableCheckRow = ({
      once. Separate from the `focusOnMount` latch above so opening a row by hand
      never re-arms the add-a-check handoff. */
   const openedByUser = useRef(false);
+  const committedInputRef = useRef<HTMLInputElement | null>(null);
   /* An empty row has no value to display, so it opens as a field either way. */
   const [editing, setEditing] = useState(!!focusOnMount || !value);
   /* A malformed value keeps its field no matter what: collapsing to text would hide
      both the `aria-invalid` state and the only means of correcting it. */
   const showField = editing || invalid;
   const label = CHECK_LABELS[field];
+  const commit = (event: FocusEvent) => {
+    const input = event.currentTarget as HTMLInputElement;
+    if (committedInputRef.current === input) return;
+    committedInputRef.current = input;
+    queueMicrotask(() => {
+      if (committedInputRef.current === input) committedInputRef.current = null;
+    });
+    const raw = input.value;
+    /* Keep an unfillable row open rather than collapsing to a blank button. */
+    if (raw) setEditing(false);
+    onCommit(raw);
+  };
   return (
     <div
       className={join(
@@ -506,12 +520,8 @@ const EditableCheckRow = ({
           className="input mono popt-input"
           defaultValue={value}
           id={id}
-          onBlur={(event) => {
-            const raw = event.currentTarget.value;
-            /* Keep an unfillable row open rather than collapsing to a blank button. */
-            if (raw) setEditing(false);
-            onCommit(raw);
-          }}
+          onBlur={commit}
+          onFocusOut={commit}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
@@ -529,7 +539,7 @@ const EditableCheckRow = ({
             handedOff.current = true;
             element.focus();
           }}
-          spellCheck={false}
+          spellcheck={false}
           title={invalid ? checkErrorMessage(field) : value || undefined}
           type="text"
         />
@@ -928,8 +938,8 @@ const PatchDragHandle = ({
         className="handle phandle phandle-input mono"
         max={total}
         min={1}
-        onBlur={commit}
-        onChange={(event) => setDraft(event.currentTarget.value)}
+        onFocusOut={commit}
+        onInput={(event) => setDraft(event.currentTarget.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
@@ -1431,7 +1441,7 @@ const ApplyPatchListStep = ({
   bundleSessionMatches?: boolean;
   disabledFlags?: readonly boolean[];
   /** Fixture shown when no patches (and no embedded/optional patch choices) are present. */
-  emptyState?: ReactNode;
+  emptyState?: ComponentChildren;
   fault?: boolean;
   /** Embedded description fallback for the first patch; bundle metadata wins. */
   internalDescription?: string;

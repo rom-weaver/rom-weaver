@@ -1,5 +1,5 @@
-import { createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createElement } from "preact";
+import { createRoot } from "./preact-root.js";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { getDefaultBrowserThreadCount, getDefaultThreadCount } from "../../src/platform/shared/compression-options.ts";

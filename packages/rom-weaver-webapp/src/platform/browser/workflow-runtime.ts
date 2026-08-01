@@ -26,6 +26,7 @@ import {
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 import { joinVfsPath } from "../../storage/vfs/path.ts";
 import { createVfsPathId } from "../../storage/vfs/path-id.ts";
+import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import {
   createRuntimeOutputFromBytes,
   createRuntimeOutputFromSource,
@@ -48,6 +49,25 @@ import { createBrowserDiscFormatsRuntime } from "./workflow-runtime-disc-formats
 import { browserVfs } from "./workflow-runtime-vfs-cleanup.ts";
 
 type BrowserBundleCreateInput = Parameters<NonNullable<NonNullable<WorkflowRuntime["bundle"]>["create"]>>[0];
+
+const getBundleVfsSource = (source: unknown) => {
+  if (isVfsFileRef(source)) return source;
+  if (typeof source === "object" && source !== null && "source" in source && isVfsFileRef(source.source))
+    return source.source;
+  return null;
+};
+
+const rehomeBundleSource = async (source: unknown, fileName: string) => {
+  const vfsSource = getBundleVfsSource(source);
+  if (vfsSource && getPathBaseName(vfsSource.path, "") !== fileName && vfsSource.vfs.getFile) {
+    const file = await vfsSource.vfs.getFile(vfsSource.path);
+    if (file) return new File([file], fileName, { type: vfsSource.mediaType || file.type });
+  }
+  const nestedSource = typeof source === "object" && source !== null && "source" in source ? source.source : undefined;
+  if (typeof Blob !== "undefined" && typeof File !== "undefined" && nestedSource instanceof Blob)
+    return new File([nestedSource], fileName, { type: nestedSource.type });
+  return source;
+};
 
 const stageBundleCreateInputs = async ({
   bundleRom,
@@ -83,7 +103,9 @@ const stageBundleCreateInputs = async ({
     : undefined;
   const patchPaths: string[] = [];
   for (const [index, patch] of patches.entries()) {
-    patchPaths.push(await stage(patch, `bundle-patch-${index + 1}`, patch.fileName || `patch-${index + 1}.bin`));
+    const fileName = patch.fileName || `patch-${index + 1}.bin`;
+    const source = await rehomeBundleSource(patch.source, fileName);
+    patchPaths.push(await stage({ fileName, source }, `bundle-patch-${index + 1}`, fileName));
   }
   return {
     bundleRomPath,

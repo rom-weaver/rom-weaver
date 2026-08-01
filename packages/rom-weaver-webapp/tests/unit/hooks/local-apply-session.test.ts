@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/preact";
 import { describe, expect, it, vi } from "vitest";
 import type { LocalApplyPatchFormSessionOptions } from "../../../src/public/react/apply-session-types.ts";
 import { getBinarySourceListStableIds } from "../../../src/public/react/input-session-helpers.ts";

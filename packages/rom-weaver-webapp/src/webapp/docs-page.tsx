@@ -1,7 +1,7 @@
 import "./design-system/docs-route.css";
-import { ArrowUpToLine } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import type { KeyboardEvent, MouseEvent } from "react";
+import { ArrowUpToLine } from "lucide-preact";
+import { useCallback, useEffect, useId, useMemo, useState } from "preact/hooks";
+import type { TargetedKeyboardEvent, TargetedMouseEvent } from "preact";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { GUIDED_SAMPLE_HREFS, type GuidedSample } from "../public/react/guided-sample-start.ts";
@@ -165,7 +165,7 @@ const DocsSearch = ({
     if (query === "") setOpen(false);
   }, [query]);
 
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = (event: TargetedKeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
       onQueryChange("");
@@ -426,7 +426,7 @@ const ArticleEnd = () => (
   </div>
 );
 
-const isPlainLeftClick = (event: MouseEvent<HTMLAnchorElement>) =>
+const isPlainLeftClick = (event: TargetedMouseEvent<HTMLAnchorElement>) =>
   event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
 const ignoreGuide = (_guide: GuidedSample) => undefined;
 

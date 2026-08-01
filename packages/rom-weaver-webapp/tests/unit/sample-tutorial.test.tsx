@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { type ReactNode, useState } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
+import { useState } from "preact/hooks";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SampleTutorial,
@@ -20,7 +21,7 @@ const STEPS: readonly SampleTutorialStep[] = [
   { body: "Review the second section.", openDrawers: true, target: "#tutorial-second", title: "Second section" },
 ];
 
-const TutorialSection = ({ children, id, label }: { children?: ReactNode; id: string; label: string }) => {
+const TutorialSection = ({ children, id, label }: { children?: ComponentChildren; id: string; label: string }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [open, setOpen] = useState(false);
   return (

@@ -1,5 +1,6 @@
-import { createElement, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { createElement } from "preact";
+import { useState } from "preact/hooks";
+import { createRoot } from "./preact-root.js";
 import { beforeEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { getCompressionCodecOptions, getCompressionCodecSuggestions } from "../../src/lib/compression/codec-fields.ts";
@@ -191,7 +192,7 @@ test("codec combobox replaces the active token in multi-codec lists", async () =
   expect(getInput()?.getAttribute("aria-invalid")).toBe("true");
 });
 
-test("codec combobox portals suggestions above nearby action controls", async () => {
+test("codec combobox positions suggestions above nearby action controls", async () => {
   mountedRoot?.unmount?.();
   mountedRoot = createRoot(rootElement);
   mountedRoot.render(createElement(ObstructedHarness));
@@ -199,7 +200,9 @@ test("codec combobox portals suggestions above nearby action controls", async ()
   const input = page.getByRole("combobox", { name: "ZIP codec" });
   await input.click();
 
-  await expect.poll(() => document.querySelector(".codec-combobox-list")?.parentElement === document.body).toBe(true);
+  await expect
+    .poll(() => document.querySelector(".codec-combobox-list")?.parentElement?.closest(".rw-app") !== null)
+    .toBe(true);
   await expect
     .poll(() => {
       const list = document.querySelector(".codec-combobox-list");

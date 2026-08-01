@@ -1,5 +1,5 @@
-import { Check, Copy, ListChecks, X } from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import { Check, Copy, ListChecks, X } from "lucide-preact";
+import { Fragment, type ComponentChildren } from "preact";
 import { join } from "./cx.ts";
 import { Drawer, DrawerMark, DrawerReadout } from "./drawer.tsx";
 import { useClipboardCopy } from "./use-clipboard-copy.ts";
@@ -21,7 +21,7 @@ const FIT_VALUE_MIN_CHARS = 16;
    carry ck-hash, which only pairs once the drawer is wide enough for a
    40-character value to stay legible at half width. Every other label keeps the
    full row. Derived from the label so real and pending rows agree. */
-const pairMarkerClass = (label: ReactNode): string | false => {
+const pairMarkerClass = (label: ComponentChildren): string | false => {
   if (label === "CRC32" || label === "BYTES") return "ck-half";
   if (label === "MD5" || label === "SHA-1") return "ck-hash";
   return false;
@@ -36,8 +36,8 @@ const ChecksumRow = ({
   bad,
   mark,
 }: {
-  label: ReactNode;
-  value: ReactNode;
+  label: ComponentChildren;
+  value: ComponentChildren;
   copyValue?: string;
   bad?: boolean;
   mark?: "bad" | "ok";
@@ -74,7 +74,7 @@ const ChecksumRow = ({
  * row holds the exact height/width the resolved value will occupy (no layout
  * shift when the hash lands). Non-interactive.
  */
-const PendingChecksumRow = ({ label, length }: { label: ReactNode; length: number }) => (
+const PendingChecksumRow = ({ label, length }: { label: ComponentChildren; length: number }) => (
   <div className={join("ck mono pending", pairMarkerClass(label))}>
     <span className="ck-k">{label}</span>
     <span className={join("ck-v", length >= FIT_VALUE_MIN_CHARS && "ck-fit")}>
@@ -101,20 +101,20 @@ const ChecksumList = ({
   bodyClassName,
   children,
 }: {
-  action?: ReactNode;
-  label: ReactNode;
-  timing?: ReactNode;
-  match?: { ok: boolean; label: ReactNode };
+  action?: ComponentChildren;
+  label: ComponentChildren;
+  timing?: ComponentChildren;
+  match?: { ok: boolean; label: ComponentChildren };
   /** A deferred verification is still running: show a subtle "Verifying…" readout in place of the
    * verdict chip (the card's verify-bar carries the motion; the body stays fully visible). */
   verifying?: boolean;
-  sublabel?: ReactNode;
+  sublabel?: ComponentChildren;
   defaultOpen?: boolean;
   open?: boolean;
   onToggle?: (open: boolean) => void;
-  lead?: ReactNode;
+  lead?: ComponentChildren;
   bodyClassName?: string;
-  children: ReactNode;
+  children: ComponentChildren;
 }) => (
   <Drawer
     action={action}
@@ -162,11 +162,11 @@ const ChecksumList = ({
  */
 type ChecksumPendingGroup = {
   id: string;
-  label?: ReactNode;
+  label?: ComponentChildren;
   /** A group whose values are already known while the file stages (a bundle's "Expected" checks
    * come from the bundle, not the hash), rendered as-is in place of shimmer rows. */
-  content?: ReactNode;
-  rows?: Array<{ id?: string; label: ReactNode; length: number }>;
+  content?: ComponentChildren;
+  rows?: Array<{ id?: string; label: ComponentChildren; length: number }>;
 };
 
 /**
@@ -185,7 +185,7 @@ const PendingChecks = ({
   onToggle,
 }: {
   groups: ChecksumPendingGroup[];
-  label?: ReactNode;
+  label?: ComponentChildren;
   groupClassName?: string;
   defaultOpen?: boolean;
   open?: boolean;

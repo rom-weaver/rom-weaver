@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { render, screen } from "@testing-library/react";
-import { type ReactNode } from "react";
+import { render, screen } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { APP_VERSION } from "../../../src/webapp/build-version.ts";
@@ -24,7 +24,7 @@ const noteOf = (version: string, entries: unknown[], title = "Features") => ({
   version,
 });
 
-const withSettings = (children: ReactNode) => (
+const withSettings = (children: ComponentChildren) => (
   <RomWeaverSettingsProvider settings={{}}>{children}</RomWeaverSettingsProvider>
 );
 

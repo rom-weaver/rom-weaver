@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentChildren } from "preact";
 import { stripCompressionCodecLevelOverrides } from "../../../../lib/compression/codec-fields.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { type CompressField, type CompressFieldInfo, OUTPUT_FORMAT_INFO } from "../../compress-options.ts";
@@ -127,7 +127,7 @@ const CompressPanelBody = ({
               className={field.mono ? "input mono" : "input"}
               disabled={disabled}
               name={field.key}
-              onChange={(event) => handleChange(field, event.currentTarget.value)}
+              onInput={(event) => handleChange(field, event.currentTarget.value)}
               placeholder={field.placeholder}
               value={field.value}
             />
@@ -142,7 +142,7 @@ type OutputCompressionPanelConfig = {
   disabled?: boolean;
   /** Extra non-compression controls appended after the compression fields (e.g. the
    * apply output's "ROM header" select). */
-  extraChildren?: ReactNode;
+  extraChildren?: ComponentChildren;
   fields?: CompressField[] | null;
   format?: string;
   formatId?: string;
@@ -154,9 +154,9 @@ type OutputCompressionPanelConfig = {
   onFormatChange?: (value: string) => void;
   /** Extra drawer-header readout chips for non-compression options (e.g. the apply
    * output's bundle package). */
-  readouts?: ReactNode;
-  summary?: ReactNode;
-  timing?: ReactNode;
+  readouts?: ComponentChildren;
+  summary?: ComponentChildren;
+  timing?: ComponentChildren;
 };
 
 type CompressionFormatLabelOptions = {

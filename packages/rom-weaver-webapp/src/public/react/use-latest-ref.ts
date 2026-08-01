@@ -1,4 +1,6 @@
-import { type MutableRefObject, useRef } from "react";
+import { useRef } from "preact/hooks";
+
+type MutableRefObject<T> = { current: T };
 
 // Keeps the latest value reachable from a stable ref, so callbacks can read fresh state without
 // re-subscribing to it as a dependency. Lets event-handler hooks return stable identities while still
@@ -9,4 +11,5 @@ const useLatestRef = <T>(value: T): MutableRefObject<T> => {
   return ref;
 };
 
+export type { MutableRefObject };
 export { useLatestRef };

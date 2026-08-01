@@ -1,5 +1,6 @@
-import { type MutableRefObject, useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "preact/hooks";
 import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
+import type { MutableRefObject } from "./use-latest-ref.ts";
 import type { BinarySource } from "./patcher-form.ts";
 
 type StageGenerationMachine = {

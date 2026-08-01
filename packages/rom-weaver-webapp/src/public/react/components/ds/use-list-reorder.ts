@@ -1,13 +1,5 @@
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import type { TargetedKeyboardEvent, TargetedMouseEvent, TargetedPointerEvent } from "preact";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { createLogger } from "../../../../lib/logging.ts";
 
 /** FLIP settle animation duration for rows gliding to their new slot after a commit. */
@@ -225,7 +217,7 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
     }
   };
 
-  const begin = (from: number) => (event: ReactPointerEvent<HTMLElement>) => {
+  const begin = (from: number) => (event: TargetedPointerEvent<HTMLElement>) => {
     if (disabled) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     const container = containerRef.current;
@@ -305,20 +297,20 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
     }
   };
 
-  const move = (event: ReactPointerEvent<HTMLElement>) => {
+  const move = (event: TargetedPointerEvent<HTMLElement>) => {
     updateDrag(event.clientX, event.clientY);
   };
 
-  const finish = (commit: boolean) => (event: ReactPointerEvent<HTMLElement>) => {
+  const finish = (commit: boolean) => (event: TargetedPointerEvent<HTMLElement>) => {
     finishDrag(commit, event.pointerId ?? -1);
   };
 
-  const beginMouse = (index: number) => (event: ReactMouseEvent<HTMLElement>) => {
+  const beginMouse = (index: number) => (event: TargetedMouseEvent<HTMLElement>) => {
     if (dragRef.current) return;
-    begin(index)(event as unknown as ReactPointerEvent<HTMLElement>);
+    begin(index)(event as unknown as TargetedPointerEvent<HTMLElement>);
   };
 
-  const moveMouse = (event: ReactMouseEvent<HTMLElement>) => {
+  const moveMouse = (event: TargetedMouseEvent<HTMLElement>) => {
     if (dragRef.current) updateDrag(event.clientX, event.clientY);
   };
 
@@ -326,7 +318,7 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
     if (dragRef.current) finishDrag(commit, -1);
   };
 
-  const handleKeyDown = (index: number) => (event: ReactKeyboardEvent<HTMLElement>) => {
+  const handleKeyDown = (index: number) => (event: TargetedKeyboardEvent<HTMLElement>) => {
     if (disabled) return;
     if (event.key === "ArrowUp" && index > 0) {
       event.preventDefault();
@@ -342,7 +334,7 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
   };
 
   const handleProps = (index: number) => ({
-    onClick: (event: ReactMouseEvent<HTMLElement>) => {
+    onClick: (event: TargetedMouseEvent<HTMLElement>) => {
       if (!suppressClickRef.current) return;
       suppressClickRef.current = false;
       event.preventDefault();

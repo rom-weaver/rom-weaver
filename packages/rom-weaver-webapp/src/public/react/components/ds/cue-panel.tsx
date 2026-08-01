@@ -1,4 +1,4 @@
-import { Check, Copy, Disc3 } from "lucide-react";
+import { Check, Copy, Disc3 } from "lucide-preact";
 import { join } from "./cx.ts";
 import { Drawer } from "./drawer.tsx";
 import { useClipboardCopy } from "./use-clipboard-copy.ts";

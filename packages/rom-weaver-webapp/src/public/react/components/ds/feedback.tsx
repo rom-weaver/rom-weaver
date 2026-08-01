@@ -1,5 +1,5 @@
-import { CircleX, TriangleAlert, X } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+import { CircleX, TriangleAlert, X } from "lucide-preact";
+import type { CSSProperties, ComponentChildren } from "preact";
 import { join } from "./cx.ts";
 
 /**
@@ -20,7 +20,7 @@ const Notice = ({
 }: {
   level: NoticeLevel;
   id?: string;
-  children: ReactNode;
+  children: ComponentChildren;
   className?: string;
   dismissLabel?: string;
   onDismiss?: () => void;
@@ -83,8 +83,8 @@ const InlineProgress = ({
   onCancel,
   cancelLabel = "Cancel operation",
 }: {
-  label: ReactNode;
-  value?: ReactNode;
+  label: ComponentChildren;
+  value?: ComponentChildren;
   percent?: number | null;
   indeterminate?: boolean;
   tight?: boolean;
@@ -211,8 +211,8 @@ const RunButton = ({
 }: {
   onClick?: () => void;
   disabled?: boolean;
-  icon?: ReactNode;
-  children?: ReactNode;
+  icon?: ComponentChildren;
+  children?: ComponentChildren;
   download?: DownloadMeta;
   /** Accessible label (e.g. the full output filename behind a format-only face). */
   ariaLabel?: string;

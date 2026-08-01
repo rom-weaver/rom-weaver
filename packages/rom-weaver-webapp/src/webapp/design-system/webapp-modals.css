@@ -1,4 +1,4 @@
-/* React modal framework */
+/* Webapp modal framework */
 /* Above the guided-sample layer (1000-1003): a real modal must never end up
    dimmed underneath the non-modal coach mark. */
 .rw-modal { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: var(--sp-l); }
@@ -165,8 +165,8 @@
      shuttle for the length of the fill's transition. */
   transition: transform var(--prog-tween);
 }
-/* Isolate per-tick layout and paint invalidation. */
-.rw-app .card, .rw-app .prog-panel { contain: layout paint style; }
+/* Keep style isolation without making cards containing blocks for fixed overlays. */
+.rw-app .card, .rw-app .prog-panel { contain: style; }
 
 /* Keep meter animation on the compositor during main-thread stalls. */
 .rw-app .meter.indet .fill { width: 32%; margin-inline-start: 0; animation: indet-slide 1.8s ease-in-out infinite; }

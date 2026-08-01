@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { loadLocalBundleSession } from "../../lib/bundle/local-bundle-session.ts";
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";

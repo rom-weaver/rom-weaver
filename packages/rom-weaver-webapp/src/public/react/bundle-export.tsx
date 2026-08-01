@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import {
   createProgressViewModel,
   createProgressViewModelFromEvent,
   type ProgressViewModel,
 } from "../../presentation/workflow-presentation.ts";
-import { createVfsFileRef } from "../../storage/vfs/source-ref.ts";
+import { createVfsFileRef, isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { ApplyWorkflowBundleSources } from "../../types/apply-workflow.ts";
 import type { BundleHeaderMode, ParsedBundleCreateResult } from "../../types/bundle.ts";
+import type { SourceRef } from "../../types/source.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
@@ -133,6 +134,8 @@ type UseBundleExportOptions = {
   getStackItems: () => PatchStackItemState[];
   /** Stable patch-slot ids; unlike source signatures these survive replacement. */
   getPatchIds: () => string[];
+  /** Authored leaf names for direct replacements; archive slots return an empty name until resolved. */
+  getPatchExportFileNames: () => string[];
   getName?: () => string;
   /** The output card's ROM header choice - a non-auto pick (only offered when the
    * staged ROM has a strippable header) exports as the bundle's `output.header`. */
@@ -165,22 +168,26 @@ const buildBundleExportRows = ({
   bundleMetaById,
   disabledPatchIds,
   getPatchIds,
+  getPatchExportFileNames,
   getStackItems,
   patches,
 }: {
   bundleMetaById: ReadonlyMap<string, BundlePatchMeta>;
   disabledPatchIds: ReadonlySet<string>;
   getPatchIds: () => string[];
+  getPatchExportFileNames: () => string[];
   getStackItems: () => PatchStackItemState[];
   patches: ApplyWorkflowBundleSources["patches"];
 }): BundleExportRow[] => {
   const items = getStackItems();
   const ids = getPatchIds();
+  const patchExportFileNames = getPatchExportFileNames();
   return patches.map((patch, index) => {
     const id = ids[index] || "";
     const meta = id ? bundleMetaById.get(id) : undefined;
     const item = items[index];
-    const fileName = item?.fileName?.trim() || patch.fileName || `patch-${index + 1}.bin`;
+    const authoredFileName = patchExportFileNames[index]?.trim();
+    const fileName = authoredFileName || item?.fileName?.trim() || patch.fileName || `patch-${index + 1}.bin`;
     const archiveFileName = item?.archiveFileName?.trim();
     const headerChoice = item?.headerChoice;
     const checks = Object.entries(meta?.inputChecks?.checksums || {})
@@ -216,9 +223,26 @@ const buildBundleExportRows = ({
 const buildBundlePatchInputs = (patches: ApplyWorkflowBundleSources["patches"], rows: BundleExportRow[]) =>
   patches.map((patch, index) => {
     const row = rows[index];
+    const fileName = row?.fileName || patch.fileName;
+    const source: SourceRef = isVfsFileRef(patch.source)
+      ? createVfsFileRef(patch.source.vfs, patch.source.path, { fileName, mediaType: patch.source.mediaType })
+      : typeof patch.source === "object" && patch.source !== null && "source" in patch.source
+        ? {
+            ...patch.source,
+            fileName,
+            ...(isVfsFileRef(patch.source.source)
+              ? {
+                  source: createVfsFileRef(patch.source.source.vfs, patch.source.source.path, {
+                    fileName,
+                    mediaType: patch.source.source.mediaType,
+                  }),
+                }
+              : {}),
+          }
+        : { fileName, source: patch.source };
     return {
-      fileName: patch.fileName,
-      source: patch.source,
+      fileName,
+      source,
       ...(row?.id ? { id: row.id } : {}),
       ...(row?.version?.trim() ? { version: row.version.trim() } : {}),
       ...(row?.author?.trim() ? { author: row.author.trim() } : {}),
@@ -303,6 +327,7 @@ const preparePackagedRom = async ({
 
 const useBundleExport = ({
   getSessionSources,
+  getPatchExportFileNames,
   getPatchIds,
   getStackItems,
   getName,
@@ -380,6 +405,7 @@ const useBundleExport = ({
     const exportRows = buildBundleExportRows({
       bundleMetaById,
       disabledPatchIds,
+      getPatchExportFileNames,
       getPatchIds: () => patchIds,
       getStackItems: () => items,
       patches,
@@ -471,6 +497,7 @@ const useBundleExport = ({
     getStackItems,
     getName,
     getOutputHeader,
+    getPatchExportFileNames,
     bundleMetaById,
     onComplete,
     downloadExport,

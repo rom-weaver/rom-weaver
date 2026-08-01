@@ -80,7 +80,7 @@ export default defineConfig({
     coverage: {
       ...coverageBase,
       include: ["src/wasm/**/*.{ts,tsx}"],
-      reportsDirectory: fileURLToPath(new URL("../../dist/coverage/react-wasm", import.meta.url)),
+      reportsDirectory: fileURLToPath(new URL("../../dist/coverage/preact-wasm", import.meta.url)),
     },
     include: ["tests/wasm/*.test.mjs"],
     isolate: true,

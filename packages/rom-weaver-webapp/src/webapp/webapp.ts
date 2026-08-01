@@ -1,13 +1,13 @@
 /* RomWeaver (complete webapp implementation) v20240809 - Marc Robledo 2016-2024 - http://www.marcrobledo.com/license */
 
-import { createElement, useLayoutEffect } from "react";
-import { flushSync } from "react-dom";
-import { createRoot, hydrateRoot, type Root } from "react-dom/client";
+import { createElement, hydrate, render } from "preact";
+import { useLayoutEffect } from "preact/hooks";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
 import { ONBOARDING_DISMISS_EVENT, requestGuidedSampleStart } from "../public/react/guided-sample-start.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
 import { resetBrowserTransientOpfs } from "../storage/browser/browser-opfs-cleanup.ts";
+import { setExternalStoreHydrating } from "../lib/use-external-store.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
@@ -216,8 +216,8 @@ applicationStatusReady = true;
 
 // The landing tab's workflow form is its own chunk. Start it at module
 // evaluation, then wait for it before hydration so React does not commit a
-// Suspense fallback over the prerendered form. A failed load resolves anyway -
-// the route's Suspense boundary owns the error.
+// Async route loading is held until the prerendered form's component is ready,
+// so the first direct Preact render never commits an empty fallback over it.
 const initialWorkflowRoute = isNotFoundPage
   ? Promise.resolve()
   : preloadWorkflowRoute(webappController.getState().currentView).catch(() => undefined);
@@ -228,7 +228,7 @@ void initialWorkflowRoute.then(() => {
 });
 
 let webappRootInitialized = false;
-let appRoot: Root | null = null;
+let appRoot: HTMLElement | null = null;
 let appRootHydrating = false;
 let renderQueuedWhileHydrating = false;
 // Whether index.html shipped the prerendered boot shell inside #webapp-root.
@@ -249,6 +249,7 @@ const WebappClientRoot = (props: WebappRootProps) => {
   useLayoutEffect(() => {
     const wasHydrating = appRootHydrating;
     appRootHydrating = false;
+    setExternalStoreHydrating(false);
     markWebappMounted();
     if (!(wasHydrating || renderQueuedWhileHydrating)) return;
     renderQueuedWhileHydrating = false;
@@ -340,7 +341,7 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
 const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs"]);
 
 // Hydration has to start from the view the *served document* was rendered as,
-// or React discards the whole shell - never from controller state, which may
+// or Preact discards the whole shell - never from controller state, which may
 // already have restored a persisted tab the document knows nothing about.
 const readHydrationView = (): WebappView =>
   PRERENDERED_VIEWS.has(servedDocumentView) ? servedDocumentView : "patcher";
@@ -365,7 +366,7 @@ const renderWebappRoot = (): undefined => {
       // Always drained, shell or not, so the inline capture listener stops here.
       captureShellClicks();
       shouldHydrate = hadPrerenderedShell;
-      if (!shouldHydrate) appRoot = createRoot(appRootElement);
+      if (!shouldHydrate) appRoot = appRootElement;
     }
   }
   const serviceWorkerCache = serviceWorkerClient.getState();
@@ -493,15 +494,15 @@ const renderWebappRoot = (): undefined => {
     key: pageResetKey,
   });
   if (shouldHydrate && appRootElement) {
+    setExternalStoreHydrating(true);
     appRootHydrating = true;
-    appRoot = hydrateRoot(appRootElement, webappRoot);
+    appRoot = appRootElement;
+    hydrate(webappRoot, appRootElement);
     return undefined;
   }
   const root = appRoot;
   if (!root) return undefined;
-  flushSync(() => {
-    root.render(webappRoot);
-  });
+  render(webappRoot, root);
   return undefined;
 };
 renderWebappRootIfReady = renderWebappRoot;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "preact/hooks";
 import type {
   DialogController,
   PatcherOutputController,

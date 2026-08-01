@@ -1,4 +1,5 @@
-import { createElement, useState } from "react";
+import { createElement } from "preact";
+import { useState } from "preact/hooks";
 import { expect, test, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";

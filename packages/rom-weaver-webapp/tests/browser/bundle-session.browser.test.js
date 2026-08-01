@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement } from "preact";
 import { expect, test, vi } from "vitest";
 import { loadLocalBundleSession } from "../../src/lib/bundle/local-bundle-session.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";

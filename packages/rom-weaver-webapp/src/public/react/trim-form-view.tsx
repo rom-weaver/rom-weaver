@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ComponentChildren } from "preact";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { ConfirmDialog } from "./components/ds/modal.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
@@ -18,7 +18,7 @@ type TrimPatchFormViewModel = {
   /** Trim confirmation dialog (driven open by the controller). */
   confirm: ComponentProps<typeof ConfirmDialog>;
   /** Active candidate-selection dialog (or nothing). */
-  dialog?: ReactNode;
+  dialog?: ComponentChildren;
   /** Unified ROM/archive drop zone (step 0x01). */
   dropZone: ComponentProps<typeof UnifiedDropZone>;
   /** Output step (0x03): filename, output format, compression, run action. */

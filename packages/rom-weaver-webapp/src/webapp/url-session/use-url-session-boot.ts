@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { RemoteFetchEntry, RemoteFetchErrorKind } from "../../lib/remote/remote-file-fetch.ts";

@@ -1,6 +1,8 @@
-import { Archive, Disc3, Download, ListChecks, Package, TriangleAlert } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Archive, Disc3, Download, ListChecks, Package, TriangleAlert } from "lucide-preact";
+import type { ComponentChildren } from "preact";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
+import { useExternalStore } from "../../lib/use-external-store.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
@@ -1172,7 +1174,7 @@ const BundleOutputFields = ({
 }: {
   bundleExport?: BundleExportState;
   bundleTools?: BundleToolsState;
-  outputHeaderField: ReactNode;
+  outputHeaderField: ComponentChildren;
 }) => {
   const exportTypeInfo = {
     items: [
@@ -1218,8 +1220,8 @@ const BundleOutputFields = ({
             className="input"
             disabled={bundleExport.busy}
             id="rom-weaver-bundle-rom-name"
-            onChange={(event) => bundleExport.setRomName(event.currentTarget.value)}
-            spellCheck={false}
+            onInput={(event) => bundleExport.setRomName(event.currentTarget.value)}
+            spellcheck={false}
             type="text"
             value={bundleExport.romName}
           />
@@ -1229,7 +1231,11 @@ const BundleOutputFields = ({
   );
 };
 
-const renderApplyTimingMeta = (applyDone: boolean, applyTiming?: string, compressTiming?: string): ReactNode => {
+const renderApplyTimingMeta = (
+  applyDone: boolean,
+  applyTiming?: string,
+  compressTiming?: string,
+): ComponentChildren => {
   if (applyDone) {
     return (
       <>
@@ -1298,19 +1304,19 @@ function ApplyWorkflowFormView({
   startup?: StartupState;
 }) {
   const uiController = controllers.ui || inertUiController;
-  const uiState = useSyncExternalStore(uiController.subscribe, uiController.getState, uiController.getState);
-  const outputState = useSyncExternalStore(
+  const uiState = useExternalStore(uiController.subscribe, uiController.getState, uiController.getState);
+  const outputState = useExternalStore(
     controllers.output.subscribe,
     controllers.output.getState,
     controllers.output.getState,
   );
-  const patchState = useSyncExternalStore(
+  const patchState = useExternalStore(
     controllers.patchStack.subscribe,
     controllers.patchStack.getState,
     controllers.patchStack.getState,
   );
   const noticeController = controllers.notice;
-  const errorNotice = useSyncExternalStore(
+  const errorNotice = useExternalStore(
     noticeController ? noticeController.subscribe : () => () => undefined,
     noticeController ? noticeController.getState : () => null,
     noticeController ? noticeController.getState : () => null,
@@ -1452,8 +1458,8 @@ function ApplyWorkflowFormView({
   useGuidedSampleStart(
     "bundle",
     () => {
-      bundleTools?.setBundlePackage("zip:patches");
       setSampleTutorial("bundle");
+      bundleTools?.setBundlePackage("zip:patches");
       void loadFirstWeave();
     },
     () => setSampleTutorial(null),
@@ -1540,8 +1546,8 @@ function ApplyWorkflowFormView({
               void loadFirstWeave();
             }}
             onLoadBundleSample={() => {
-              bundleTools?.setBundlePackage("zip:patches");
               setSampleTutorial("bundle");
+              bundleTools?.setBundlePackage("zip:patches");
               void loadFirstWeave();
             }}
             pendingDrops={pendingDrops}

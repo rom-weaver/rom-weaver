@@ -1,8 +1,9 @@
-import { type ComponentType, lazy } from "react";
+import type { ComponentType } from "preact";
 import { createLogger } from "../lib/logging.ts";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
 import type { ToolsFormProps } from "./components/tools-form.tsx";
+import { createAsyncComponent } from "./async-component.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
 
 /**
@@ -12,11 +13,10 @@ import type { WebappView } from "./webapp-state-types.ts";
  *
  * The catch is the prerendered landing shell (rom-weaver-prerender-shell): the
  * markup index.html paints already contains the landing tab's fully rendered
- * form, so a Suspense fallback on the first client render would blank the shell
+ * form, so an async fallback on the first client render would blank the shell
  * the browser just painted. `preloadWorkflowRoute` therefore resolves the
  * landing route BEFORE the first mount (and before renderToString on the build
- * side); a preloaded route renders its real component synchronously and never
- * suspends. Suspense only ever engages for a tab the visitor switches to.
+ * side); a preloaded route renders its real component synchronously.
  */
 
 const logger = createLogger("workflow-routes");
@@ -45,39 +45,13 @@ const createWorkflowRoute = <View extends WebappView>(
   view: View,
   load: () => Promise<{ default: WorkflowRouteComponent<View> }>,
 ): WorkflowRoute<View> => {
-  const LazyComponent = lazy(load);
-  let preloaded: WorkflowRouteComponent<View> | null = null;
-  let pending: Promise<unknown> | null = null;
-  // Frozen on first render: a preload that lands after the route already
-  // rendered through the lazy wrapper must not swap the element type, which
-  // would remount a live workflow and discard the visitor's staged work.
-  let rendered: WorkflowRouteComponent<View> | null = null;
-  const preload = () => {
-    pending ??= load().then(
-      (module) => {
-        preloaded = module.default;
-        logger.trace("Workflow route loaded", { view });
-        return module.default;
-      },
-      (error) => {
-        // Leave `pending` set to the rejected promise's replacement so a retry
-        // is possible; the lazy wrapper still owns the user-visible failure.
-        pending = null;
-        logger.warn("Workflow route failed to load", {
-          message: error instanceof Error ? error.message : String(error || ""),
-          view,
-        });
-        return null;
-      },
-    );
-    return pending;
-  };
-  const Component = (props: WorkflowRouteProps[View]) => {
-    rendered ??= preloaded ?? LazyComponent;
-    const Resolved = rendered;
-    return <Resolved {...props} />;
-  };
-  return { Component, preload };
+  const route = createAsyncComponent<WorkflowRouteProps[View]>(() =>
+    load().then((module) => {
+      logger.trace("Workflow route loaded", { view });
+      return module;
+    }),
+  );
+  return { Component: route.Component, preload: route.preload };
 };
 
 const CreatorRoute = createWorkflowRoute("creator", () =>

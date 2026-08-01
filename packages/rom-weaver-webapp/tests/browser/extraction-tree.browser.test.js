@@ -1,5 +1,5 @@
-import { createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createElement } from "preact";
+import { createRoot } from "./preact-root.js";
 import { afterEach, expect, test } from "vitest";
 import { ExtractDrawer, ExtractionTree } from "../../src/public/react/components/ds/extraction-tree.tsx";
 

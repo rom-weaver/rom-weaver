@@ -1,5 +1,5 @@
-import { Download, RotateCcw, Wrench } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Download, RotateCcw, Wrench } from "lucide-preact";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -233,7 +233,7 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
                   aria-label="Output filename"
                   className="input mono outname"
                   disabled={busy}
-                  onChange={(event) => {
+                  onInput={(event) => {
                     clearOutput();
                     setOutputName(event.currentTarget.value.replace(/[\r\n]/g, ""));
                   }}
@@ -242,7 +242,7 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
                   }}
                   placeholder="Restored ROM filename"
                   rows={1}
-                  spellCheck={false}
+                  spellcheck={false}
                   value={outputName}
                 />
               </div>

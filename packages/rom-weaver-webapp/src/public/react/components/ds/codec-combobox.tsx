@@ -1,14 +1,5 @@
-import {
-  type CSSProperties,
-  type KeyboardEvent,
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
+import type { CSSProperties, TargetedKeyboardEvent } from "preact";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "preact/hooks";
 import {
   type CompressionCodecOption,
   validateCompressionCodecValue,
@@ -303,7 +294,7 @@ const CodecCombobox = ({
     });
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (event: TargetedKeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {
       setOpen(false);
       return;
@@ -382,11 +373,6 @@ const CodecCombobox = ({
       ))}
     </div>
   ) : null;
-  const portalTarget =
-    typeof document === "undefined"
-      ? null
-      : (inputRef.current?.closest("dialog, main, [role=dialog], [role=region]") ?? document.body);
-
   return (
     <div className="codec-combobox">
       <input
@@ -402,7 +388,7 @@ const CodecCombobox = ({
         onBlur={() => {
           globalThis.setTimeout(() => setOpen(false), 100);
         }}
-        onChange={(event) => {
+        onInput={(event) => {
           onChange(event.currentTarget.value);
           setCursor(event.currentTarget.selectionStart ?? event.currentTarget.value.length);
           setFiltering(true);
@@ -430,11 +416,11 @@ const CodecCombobox = ({
         placeholder={placeholder}
         ref={inputRef}
         role="combobox"
-        spellCheck={false}
+        spellcheck={false}
         title={invalid ? validation.message : undefined}
         value={value}
       />
-      {portalTarget && dropdown ? createPortal(dropdown, portalTarget) : dropdown}
+      {dropdown}
     </div>
   );
 };

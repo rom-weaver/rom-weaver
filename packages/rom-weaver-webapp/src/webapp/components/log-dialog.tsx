@@ -1,7 +1,8 @@
-import { Check, Copy, Download, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Check, Copy, Download, RefreshCw, X } from "lucide-preact";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { copyToClipboard } from "../../lib/clipboard.ts";
 import { createLogger } from "../../lib/logging.ts";
+import { useExternalStore } from "../../lib/use-external-store.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { listBrowserOpfs } from "../../storage/browser/browser-opfs-cleanup.ts";
@@ -164,7 +165,7 @@ const LogDialog = ({
   }, [open, refreshOpfs, showingOpfs]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
-  const liveEntries = useSyncExternalStore(
+  const liveEntries = useExternalStore(
     open && !showingPrevious && !showingOpfs ? subscribeLogEntries : noopSubscribe,
     open && !showingPrevious && !showingOpfs ? getLogEntries : getEmptyEntries,
     getEmptyEntries,
@@ -319,7 +320,7 @@ const LogDialog = ({
           <input
             aria-label={localizer.message("ui.log.filterLabel")}
             className="input mono log-filter"
-            onChange={(event) => {
+            onInput={(event) => {
               setFilter(event.currentTarget.value);
               if (traceRef.current) traceRef.current.scrollTop = 0;
               setScrollTop(0);

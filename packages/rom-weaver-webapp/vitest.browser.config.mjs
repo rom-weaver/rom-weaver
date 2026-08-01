@@ -167,7 +167,7 @@ export default mergeConfig(baseConfig, {
       reporter: process.env.ROM_WEAVER_COVERAGE_SHARD === "1" ? ["lcov"] : coverageBase.reporter,
       reportsDirectory: process.env.ROM_WEAVER_COVERAGE_DIR
         ? resolve(process.env.ROM_WEAVER_COVERAGE_DIR)
-        : fileURLToPath(new URL("../../dist/coverage/react-browser", import.meta.url)),
+        : fileURLToPath(new URL("../../dist/coverage/preact-browser", import.meta.url)),
     },
     include: ["tests/browser/**/*.browser.test.js"],
   },

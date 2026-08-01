@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { flushSync } from "react-dom";
+import { options } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import { createLogger } from "../../../../lib/logging.ts";
 
 const logger = createLogger("flat-transition");
@@ -55,6 +55,17 @@ const viewTransitionsUnavailable = (): boolean => {
     return true;
   }
   return false;
+};
+
+/** Preact batches hook state through a microtask; view-transition callbacks need the DOM now. */
+const runSynchronousPreactUpdate = (update: () => void) => {
+  const previousDebounce = options.debounceRendering;
+  options.debounceRendering = (callback) => callback();
+  try {
+    update();
+  } finally {
+    options.debounceRendering = previousDebounce;
+  }
 };
 
 /**
@@ -126,7 +137,7 @@ const useFlatTransitionFlag = (actual: boolean): boolean => {
   useEffect(() => {
     if (displayed === actual) return;
     runFlatViewTransition(() => {
-      flushSync(() => setDisplayed(actual));
+      runSynchronousPreactUpdate(() => setDisplayed(actual));
     });
   }, [actual, displayed]);
   return displayed;

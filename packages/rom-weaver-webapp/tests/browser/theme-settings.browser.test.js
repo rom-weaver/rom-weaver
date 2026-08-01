@@ -1,5 +1,5 @@
-import { createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createElement } from "preact";
+import { createRoot } from "./preact-root.js";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { getDefaultSettings, getSettingsUiState } from "../../src/webapp/settings/settings-state.ts";

@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ComponentChildren } from "preact";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { SwapIcon } from "./components/ds/swap-icon.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
@@ -16,7 +16,7 @@ import { useUiLocalizer } from "./settings-context.tsx";
  */
 type CreatePatchFormViewModel = {
   /** Active candidate-selection dialog (or nothing). */
-  dialog?: ReactNode;
+  dialog?: ComponentChildren;
   /** Unified ROM/archive drop zone (step 0x01). */
   dropZone: ComponentProps<typeof UnifiedDropZone>;
   /** Modified source step (0x03). */

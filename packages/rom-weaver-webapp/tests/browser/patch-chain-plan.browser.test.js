@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement } from "preact";
 import { expect, test } from "vitest";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import {

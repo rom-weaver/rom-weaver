@@ -1,4 +1,6 @@
-const ApplyBandaidIcon = ({ className }: { className?: string }) => (
+import type { JSX } from "preact";
+
+const ApplyBandaidIcon = ({ className }: { className?: JSX.Signalish<string | undefined> }) => (
   <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
     <g stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
       <rect height="19" rx="4.5" transform="rotate(-45 2 8.364)" width="9" x="2" y="8.364" />

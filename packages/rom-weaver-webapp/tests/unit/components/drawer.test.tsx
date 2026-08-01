@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/preact";
 import { describe, expect, it, vi } from "vitest";
 import { Drawer, DrawerMark, DrawerReadout } from "../../../src/public/react/components/ds/drawer.tsx";
 

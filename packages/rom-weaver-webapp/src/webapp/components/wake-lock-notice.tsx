@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { createLogger } from "../../lib/logging.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { WakeLockBanner } from "./shell.tsx";

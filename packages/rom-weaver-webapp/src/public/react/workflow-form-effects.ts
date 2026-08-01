@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect } from "preact/hooks";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { PageFileDrop } from "./patcher-form.ts";
 import { useLatestRef } from "./use-latest-ref.ts";

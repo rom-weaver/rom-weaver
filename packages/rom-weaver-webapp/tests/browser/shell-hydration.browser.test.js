@@ -1,11 +1,9 @@
-import { Fragment, act, createElement } from "react";
-import { hydrateRoot } from "react-dom/client";
-import { renderToString } from "react-dom/server";
+import { Fragment, createElement, hydrate, render } from "preact";
+import { act } from "preact/test-utils";
+import { renderToString } from "preact-render-to-string";
 import { afterEach, expect, test, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { Masthead, SiteFooter } from "../../src/webapp/components/shell.tsx";
-
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const tabs = [
   { href: "apply", icon: createElement("svg", { "aria-hidden": true }), id: "patcher", label: "Apply" },
@@ -37,11 +35,11 @@ const shell = (threads, serviceWorkerStatus, betaToolsEnabled = false) =>
     ),
   );
 
-let root;
+let mountedHost;
 
 afterEach(async () => {
-  if (root) await act(() => root.unmount());
-  root = undefined;
+  if (mountedHost) await act(() => render(null, mountedHost));
+  mountedHost = undefined;
   document.body.replaceChildren();
   vi.restoreAllMocks();
 });
@@ -61,16 +59,13 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
   runtime.title = "Service-worker offline support is unavailable.";
 
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-  const recoverableErrors = [];
   await act(async () => {
-    root = hydrateRoot(host, shell(8, "off"), {
-      onRecoverableError: (error) => recoverableErrors.push(error),
-    });
+    hydrate(shell(8, "off"), host);
   });
+  mountedHost = host;
 
   expect(host.querySelector(".masthead-threads")).toBe(threads);
   expect(host.querySelector(".masthead-runtime")).toBe(runtime);
-  expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });
 
@@ -81,14 +76,11 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
   document.documentElement.dataset.betaToolsEnabled = "true";
 
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-  const recoverableErrors = [];
   await act(async () => {
-    root = hydrateRoot(host, shell(8, "off", true), {
-      onRecoverableError: (error) => recoverableErrors.push(error),
-    });
+    hydrate(shell(8, "off", true), host);
   });
+  mountedHost = host;
 
   expect(host.querySelectorAll("[data-beta-tool]").length).toBe(2);
-  expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });

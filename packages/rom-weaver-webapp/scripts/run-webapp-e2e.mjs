@@ -37,6 +37,63 @@ const A11Y_ONLY = process.argv.includes("--a11y");
 const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
 const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
+const isNonFatalBrowserPageError = (error) =>
+  browserName === "webkit" && error.message === "ResizeObserver loop completed with undelivered notifications.";
+const recordPageError = (failures, error) => {
+  // WebKit reports this layout-delivery diagnostic as a pageerror while it is
+  // completing a responsive viewport scan. It is not an application exception
+  // and the same journey continues successfully; retain every other error.
+  if (!isNonFatalBrowserPageError(error)) failures.push(error.stack || error.message);
+};
+const clickAfterStableLayout = async (page, locator) => {
+  await locator.waitFor({ state: "visible" });
+  try {
+    await locator.evaluate((element) => {
+      const stableFor = 80;
+      const tolerance = 1;
+      const deadline = performance.now() + 5000;
+      const snapshot = () => {
+        const rect = element.getBoundingClientRect();
+        return [rect.x, rect.y, rect.width, rect.height];
+      };
+      return new Promise((resolve, reject) => {
+        let previous = snapshot();
+        let stableSince = performance.now();
+        const check = () => {
+          const now = performance.now();
+          const next = snapshot();
+          if (next.every((value, index) => Math.abs(value - previous[index]) < tolerance)) {
+            if (now - stableSince >= stableFor) {
+              resolve();
+              return;
+            }
+          } else {
+            previous = next;
+            stableSince = now;
+          }
+          if (now >= deadline) {
+            reject(new Error("guide control did not reach a stable layout"));
+            return;
+          }
+          requestAnimationFrame(check);
+        };
+        requestAnimationFrame(check);
+      });
+    });
+  } catch (error) {
+    if (!(error instanceof Error && error.message.includes("stable layout"))) throw error;
+  }
+  await locator.evaluate((element) => element.scrollIntoView({ block: "nearest", inline: "nearest" }));
+  const box = await locator.boundingBox();
+  const viewport = page.viewportSize();
+  if (!box || box.width < 1 || box.height < 1) throw new Error("guide control has no clickable layout box");
+  if (viewport && (box.y < 0 || box.y + box.height > viewport.height))
+    throw new Error("guide control is outside the viewport after scrolling");
+  // Chromium can keep reporting fractional animation movement after the box is
+  // visible and usable. Click the current rendered center so the test still
+  // sends a real pointer event without disabling Playwright's checks globally.
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+};
 const HYDRATION_SETTINGS = JSON.stringify({
   apply: { compression: { threads: 3 } },
   common: { betaToolsEnabled: true },
@@ -335,7 +392,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   let page = await context.newPage();
   const cssCoverageEntries = [];
   const failures = [];
-  const watchPageErrors = () => page.on("pageerror", (error) => failures.push(error.stack || error.message));
+  const watchPageErrors = () => page.on("pageerror", (error) => recordPageError(failures, error));
   watchPageErrors();
   const setTheme = async (theme) => {
     if ((await page.locator("html").getAttribute("data-theme")) !== theme) {
@@ -471,7 +528,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       if (step === 4) {
         await page.locator("#rom-weaver-button-apply").click();
       } else {
-        await tutorial.getByRole("button", { name: "Continue" }).click();
+        const continueButton = tutorial.getByRole("button", { name: "Continue" });
+        await clickAfterStableLayout(page, continueButton);
       }
     }
     await tutorial.waitFor({ state: "hidden" });
@@ -495,7 +553,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
         }
       } else {
-        await tutorial.getByRole("button", { name: "Continue" }).click();
+        const continueButton = tutorial.getByRole("button", { name: "Continue" });
+        await clickAfterStableLayout(page, continueButton);
       }
     }
     await tutorial.waitFor({ state: "hidden" });

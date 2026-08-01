@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
 import { useLiveStoreController } from "../../../src/public/react/apply-session-controllers.ts";
 import { useStageGenerationMachine } from "../../../src/public/react/apply-session-staging-state-machine.ts";

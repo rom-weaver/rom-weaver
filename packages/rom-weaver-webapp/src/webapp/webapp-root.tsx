@@ -1,12 +1,15 @@
-import { BookOpen, GitCompare, House, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { BookOpen, GitCompare, House, RotateCcw, Save, Scissors, Wrench } from "lucide-preact";
+import type { ComponentChildren } from "preact";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
 import { createLogger } from "../lib/logging.ts";
+import { useExternalStore } from "../lib/use-external-store.ts";
 import { markDropReceived, markResultPaintedAfterFinish } from "../lib/perf/op-perf-marks.ts";
 import { perfNow, recordDrop } from "../lib/runtime/perf-latency.ts";
 import { getDefaultBrowserThreadCount } from "../platform/shared/compression-options.ts";
+import { createAsyncComponent } from "./async-component.tsx";
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
 import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
@@ -59,9 +62,9 @@ const getGuideView = (guide: GuidedSample): WebappView => (guide === "create" ? 
 // Keep the trace inspector out of the initial bundle, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
 const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog }));
-const LogDialog = lazy(loadLogDialog);
+const { Component: LogDialog, preload: preloadLogDialogModule } = createAsyncComponent(loadLogDialog);
 const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
-const SettingsPanel = lazy(loadSettingsPanel);
+const { Component: SettingsPanel, preload: preloadSettingsPanelModule } = createAsyncComponent(loadSettingsPanel);
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
 const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
   import("../platform/browser/browser-api.ts").then(({ preloadBrowserRuntime: preload }) => preload(options));
@@ -188,12 +191,12 @@ const DropVeil = () => {
  * tick makes the weave animations stutter during extraction.
  */
 const ActivityWakeLockNotice = () => {
-  const activity = useSyncExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
+  const activity = useExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
   return <ProcessingWakeLockNotice active={activity.state === "running"} />;
 };
 
 const ActivityFinishMarker = () => {
-  const activity = useSyncExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
+  const activity = useExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
   // The bench settles out of a run (running/staging → ready/done) on the commit batched with the result
   // render. Close the perceived-latency tail (romweaver:after-finish) on the paint that reveals the result;
   // skipping the in-progress states avoids firing on an intermediate step of a multi-step action (e.g. a ROM
@@ -274,8 +277,8 @@ function WebappRoot({
     let cancelled = false;
     const preloadDialogsWhenIdle = () => {
       if (cancelled) return;
-      void loadLogDialog().catch(() => undefined);
-      void loadSettingsPanel().catch(() => undefined);
+      void preloadLogDialogModule().catch(() => undefined);
+      void preloadSettingsPanelModule().catch(() => undefined);
     };
     const scheduleDialogPreload = () => {
       if (cancelled) return;
@@ -302,17 +305,29 @@ function WebappRoot({
     };
   }, [notFound, state.currentView, threads]);
   const preloadSettingsPanel = useCallback(() => {
-    void loadSettingsPanel().catch(() => undefined);
+    void preloadSettingsPanelModule().catch(() => undefined);
   }, []);
   const openSettings = useCallback(() => {
-    void loadSettingsPanel().then(
-      () => actions.onOpenSettings(),
-      () => actions.onOpenSettings(),
-    );
+    void preloadSettingsPanelModule()
+      .then(() => actions.onOpenSettings())
+      .catch((error) => {
+        logger.warn("Settings panel failed to load", {
+          message: error instanceof Error ? error.message : String(error || ""),
+        });
+      });
   }, [actions]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
   const preloadLogDialog = useCallback(() => {
-    void loadLogDialog().catch(() => undefined);
+    void preloadLogDialogModule().catch(() => undefined);
+  }, []);
+  const openLog = useCallback(() => {
+    void preloadLogDialogModule()
+      .then(() => setLogOpen(true))
+      .catch((error) => {
+        logger.warn("Log dialog failed to load", {
+          message: error instanceof Error ? error.message : String(error || ""),
+        });
+      });
   }, []);
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
@@ -428,7 +443,7 @@ function WebappRoot({
     };
   }, [confirmationDialog.open, notFound, state.currentView, state.settingsDialogOpen]);
 
-  const workflowPanel = (view: WebappView, form: React.ReactNode) =>
+  const workflowPanel = (view: WebappView, form: ComponentChildren) =>
     isViewMounted(view) ? (
       <section
         aria-labelledby={`tab-${view}`}
@@ -437,10 +452,7 @@ function WebappRoot({
         id={`panel-${view}`}
         role="tabpanel"
       >
-        <div className="workflow-body">
-          {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
-          <Suspense fallback={null}>{form}</Suspense>
-        </div>
+        <div className="workflow-body">{form}</div>
       </section>
     ) : null;
   return (
@@ -453,7 +465,7 @@ function WebappRoot({
             currentTab={notFound ? "" : state.currentView}
             githubHref={GITHUB_URL}
             onAccentChange={actions.onAccentChange}
-            onOpenLog={() => setLogOpen(true)}
+            onOpenLog={openLog}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={openSettings}
             onPreloadSettings={preloadSettingsPanel}
@@ -579,51 +591,41 @@ function WebappRoot({
         </div>
         <ActivityFinishMarker />
         {logOpen ? (
-          <Suspense fallback={null}>
-            <LogDialog
-              level={state.settings.logLevel}
-              onClose={() => setLogOpen(false)}
-              onLevelChange={actions.onLogLevelChange}
-              open={logOpen}
-            />
-          </Suspense>
+          <LogDialog
+            level={state.settings.logLevel}
+            onClose={() => setLogOpen(false)}
+            onLevelChange={actions.onLogLevelChange}
+            open={logOpen}
+          />
         ) : null}
-        {/* Keep the frame inside the boundary so lazy loads never show a header-only modal. */}
-        <Suspense fallback={null}>
-          <Modal
-            headerActions={
-              <>
-                <button
-                  className="btn ghost"
-                  onClick={actions.onRestoreDefaults}
-                  title="Reset to defaults"
-                  type="button"
-                >
-                  <RotateCcw aria-hidden="true" />
-                  <span className="bl">Defaults</span>
-                </button>
-                <button className="btn primary" onClick={actions.onSaveClose} title="Save &amp; close" type="button">
-                  <Save aria-hidden="true" />
-                  <span className="bl">Save</span>
-                </button>
-              </>
-            }
+        <Modal
+          headerActions={
+            <>
+              <button className="btn ghost" onClick={actions.onRestoreDefaults} title="Reset to defaults" type="button">
+                <RotateCcw aria-hidden="true" />
+                <span className="bl">Defaults</span>
+              </button>
+              <button className="btn primary" onClick={actions.onSaveClose} title="Save &amp; close" type="button">
+                <Save aria-hidden="true" />
+                <span className="bl">Save</span>
+              </button>
+            </>
+          }
+          onClose={actions.onCloseSettings}
+          open={state.settingsDialogOpen}
+          title="Settings"
+          variant="settings-modal"
+        >
+          <SettingsPanel
+            draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
             onClose={actions.onCloseSettings}
-            open={state.settingsDialogOpen}
-            title="Settings"
-            variant="settings-modal"
-          >
-            <SettingsPanel
-              draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-              onClose={actions.onCloseSettings}
-              onDraftChange={actions.onDraftChange}
-              onRestoreDefaults={actions.onRestoreDefaults}
-              onSaveClose={actions.onSaveClose}
-              uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
-              validation={state.validation}
-            />
-          </Modal>
-        </Suspense>
+            onDraftChange={actions.onDraftChange}
+            onRestoreDefaults={actions.onRestoreDefaults}
+            onSaveClose={actions.onSaveClose}
+            uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
+            validation={state.validation}
+          />
+        </Modal>
         <ConfirmDialog
           body={confirmationDialog.message}
           cancelLabel={confirmationDialog.cancelLabel}

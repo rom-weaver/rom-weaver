@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from "react";
 import { createLogger } from "../lib/logging.ts";
+import { useExternalStore } from "../lib/use-external-store.ts";
 
 /**
  * Accent dye lots. The accent is the second theme axis alongside dark/light:
@@ -101,7 +101,7 @@ const applyAccent = (value: unknown) => {
 };
 
 /** Subscribe a component to the active accent. */
-const useAccent = (): Accent => useSyncExternalStore(subscribe, getAccent, getAccent);
+const useAccent = (): Accent => useExternalStore(subscribe, getAccent, getAccent);
 
 export { ACCENTS, applyAccent, DEFAULT_ACCENT, useAccent };
 export type { Accent };

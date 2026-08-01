@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import react from "@vitejs/plugin-react";
+import preact from "@preact/preset-vite";
 import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
@@ -629,8 +629,8 @@ const writeChangelogAsset = (releaseVersion) => {
 
 // Ship the landing shell's real markup inside #webapp-root so the browser can
 // paint it as soon as the stylesheet arrives, instead of a blank page until the
-// bundle executes and React mounts. Rendered from the actual components via
-// react-dom/server (scripts/prerender.mjs), so there is no hand-copied markup
+// bundle executes and Preact mounts. Rendered from the actual components via
+// preact-render-to-string (scripts/prerender.mjs), so there is no hand-copied markup
 // to drift. The client hydrates the shell in place.
 const PRERENDER_MOUNT_POINT = '<div id="webapp-root" aria-busy="true"></div>';
 
@@ -972,17 +972,7 @@ export default defineConfig(({ command, mode }) => {
       ...serviceWorkerDefines,
     },
     optimizeDeps: {
-      include: [
-        "@bjorn3/browser_wasi_shim",
-        "lucide-react/dist/esm/icons/heart.mjs",
-        "lucide-react/dist/esm/icons/refresh-cw.mjs",
-        "lucide-react/dist/esm/icons/rotate-ccw.mjs",
-        "lucide-react/dist/esm/icons/save.mjs",
-        "lucide-react/dist/esm/icons/settings.mjs",
-        "react",
-        "react-dom",
-        "react-dom/client",
-      ],
+      include: ["@bjorn3/browser_wasi_shim", "lucide-preact", "preact", "preact/hooks"],
     },
     plugins: [
       docsVirtualModule(),
@@ -991,7 +981,10 @@ export default defineConfig(({ command, mode }) => {
       serveChangelogAsset(releaseVersion),
       deferDevHotUpdates(),
       stampChannelIdentity(appChannel, appChannelLabel, serviceWorkerEnabled),
-      react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
+      preact({
+        babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] },
+        reactAliasesEnabled: false,
+      }),
       prerenderWebappShell(prerenderedShells),
       preloadWorkflowRouteChunks(routePreloadLinks),
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),

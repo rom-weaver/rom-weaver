@@ -1,5 +1,5 @@
-import { Download, GitCompare } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Download, GitCompare } from "lucide-preact";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
 import { resolveAutomaticSelection } from "../../lib/input/selection.ts";
 import type {

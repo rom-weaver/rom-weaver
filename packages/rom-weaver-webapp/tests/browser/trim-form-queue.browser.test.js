@@ -1,5 +1,5 @@
-import { createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createElement } from "preact";
+import { createRoot } from "./preact-root.js";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { TrimPatchForm } from "../../src/public/react/trim-form.tsx";
 

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/preact";
 import { describe, expect, it, vi } from "vitest";
 import { UnifiedDropZone } from "../../../src/public/react/components/ds/unified-drop-zone.tsx";
 

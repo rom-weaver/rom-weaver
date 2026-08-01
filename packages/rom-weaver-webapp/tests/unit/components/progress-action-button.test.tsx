@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
+import { render } from "@testing-library/preact";
 import { describe, expect, it, vi } from "vitest";
 import { ProgressActionButton } from "../../../src/presentation/react/progress-action-button.tsx";
 import { createProgressViewModel } from "../../../src/presentation/workflow-presentation.ts";

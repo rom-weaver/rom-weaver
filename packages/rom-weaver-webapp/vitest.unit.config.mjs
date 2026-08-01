@@ -10,7 +10,7 @@ export default mergeConfig(baseConfig, {
   test: {
     coverage: {
       ...coverageBase,
-      reportsDirectory: fileURLToPath(new URL("../../dist/coverage/react-unit", import.meta.url)),
+      reportsDirectory: fileURLToPath(new URL("../../dist/coverage/preact-unit", import.meta.url)),
     },
     environment: "node",
     include: ["tests/unit/**/*.test.{ts,tsx}"],

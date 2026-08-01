@@ -1,21 +1,8 @@
-import { Info } from "lucide-react";
-import {
-  type CSSProperties,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
+import { Info } from "lucide-preact";
+import type { CSSProperties, ComponentChildren } from "preact";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 
 const cx = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
-
-/** Popovers portal into the styled app root so the design-system `.info-pop` rules apply. */
-const getInfoPortalTarget = (): Element =>
-  (typeof document === "undefined" ? null : document.querySelector(".rw-app")) ?? document.body;
 
 function InfoToggle({
   ariaLabel,
@@ -27,9 +14,9 @@ function InfoToggle({
   title,
 }: {
   ariaLabel: string;
-  children: ReactNode;
+  children: ComponentChildren;
   className?: string;
-  icon?: ReactNode;
+  icon?: ComponentChildren;
   panelClassName?: string;
   portalPanel?: boolean;
   title: string;
@@ -86,16 +73,13 @@ function InfoToggle({
       className={cx("info-pop", panelClassName)}
       id={panelId}
       ref={panelRef}
-      // Portaled out of the trigger: render fixed, above the modal stacking context (z-60/70).
+      // Fixed placement keeps the explicitly requested panel above its local stacking context.
       style={portalPanel ? { display: "block", position: "fixed", zIndex: 80, ...panelStyle } : { display: "block" }}
     >
       {children}
     </section>
   );
-  let renderedPanel: ReactNode = null;
-  if (open) {
-    renderedPanel = portalPanel && typeof document !== "undefined" ? createPortal(panel, getInfoPortalTarget()) : panel;
-  }
+  const renderedPanel: ComponentChildren = open ? panel : null;
 
   return (
     <span className={cx("info", className)}>

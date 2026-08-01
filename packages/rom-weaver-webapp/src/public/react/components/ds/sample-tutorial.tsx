@@ -11,10 +11,9 @@ import {
   ToggleRight,
   Upload,
   X,
-} from "lucide-react";
-import type { ComponentType, MouseEvent } from "react";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+} from "lucide-preact";
+import type { ComponentType, JSX, TargetedMouseEvent } from "preact";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { createLogger } from "../../../../lib/logging.ts";
 import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
 import {
@@ -29,7 +28,7 @@ import { SwapIcon } from "./swap-icon.tsx";
 
 const startLogger = createLogger("sample-tutorial");
 
-const isPlainLeftClick = (event: MouseEvent<HTMLAnchorElement>) =>
+const isPlainLeftClick = (event: TargetedMouseEvent<HTMLAnchorElement>) =>
   event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
 
 type SampleTutorialAction =
@@ -88,7 +87,7 @@ type SampleTutorialStep = {
   title: string;
 };
 
-const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: string }>> = {
+const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<Pick<JSX.SVGAttributes, "className">>> = {
   apply: ApplyBandaidIcon,
   archive: Archive,
   checks: ListChecks,
@@ -392,14 +391,6 @@ const SampleTutorial = ({
   const endGuideRef = useRef(endGuide);
   const endedByCtaRef = useRef(false);
   endGuideRef.current = endGuide;
-  // Resolved once: re-querying per render hands createPortal a different
-  // container the moment .rw-app appears, which tears the whole overlay down
-  // and rebuilds it - dropping focus and the live region instead of updating.
-  const portalTarget = useMemo(
-    () => (typeof document === "undefined" ? null : (document.querySelector(".rw-app") ?? document.body)),
-    [],
-  );
-
   // The guide is non-modal and lands last in the DOM, so nothing would reach it
   // without this - the button that opened it unmounts as soon as the sample
   // stages, dropping focus to <body>.
@@ -582,8 +573,8 @@ const SampleTutorial = ({
     }
     const prefer = step?.placement ?? "bottom";
     const desktop = window.matchMedia(GUIDE_ANCHOR_QUERY);
-    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     let settle = 0;
+    let resizeFrame = 0;
     let revealsLeft = GUIDE_REVEALS;
     let rowHeight = targetEl.getBoundingClientRect().height;
     // Only when moving between steps - see the glide rules in dropzone.css.
@@ -628,9 +619,24 @@ const SampleTutorial = ({
     // is headed - once placed they ride the page, so this is the only chance.
     const placeAndReveal = (glide: boolean) => {
       const top = scrollDeltaForPair(targetEl.getBoundingClientRect(), dialog, prefer);
-      const shift = Math.abs(top) > 1 ? top : 0;
+      // A guide can open at the document boundary, where the ideal pair
+      // position asks for a negative scroll that the browser cannot perform.
+      // Clamp before placing: otherwise the next ResizeObserver pass sees the
+      // unshifted row again and alternates the card between the two positions.
+      const minShift = -window.scrollY;
+      const documentHeight = document.documentElement.scrollHeight;
+      // Layout-free test DOMs report a zero scroll height; leave the upper
+      // bound open there so the placement logic remains observable.
+      const maxShift =
+        documentHeight > 0
+          ? Math.max(0, documentHeight - window.innerHeight - window.scrollY)
+          : Number.POSITIVE_INFINITY;
+      const shift = Math.min(Math.max(Math.abs(top) > 1 ? top : 0, minShift), maxShift);
       place(glide, shift);
-      if (shift) window.scrollBy({ behavior, top: shift });
+      // The ring supplies the visual handoff. Keep the page scroll atomic so
+      // responsive remeasurement cannot leave the next control moving under
+      // the guide while a browser smooth-scroll animation is still running.
+      if (shift) window.scrollBy({ behavior: "auto", top: shift });
     };
     const track = () => place(false);
     // A re-reveal that lands while the user is scrolling fights them for the
@@ -645,18 +651,23 @@ const SampleTutorial = ({
     // has stopped - otherwise the card ends up sitting over the row it explains.
     // Gated on the row's own height: the card reflowing, or mobile browser
     // chrome collapsing as the user scrolls, must not scroll the page out from
-    // under them.
+    // under them. Defer placement until after ResizeObserver delivery because
+    // changing the dialog's coordinates inside its own callback can trigger a
+    // WebKit loop diagnostic.
     const onResize = () => {
-      place(false);
-      const height = targetEl.getBoundingClientRect().height;
-      if (height === rowHeight) return;
-      rowHeight = height;
-      if (revealsLeft <= 0) return;
-      window.clearTimeout(settle);
-      settle = window.setTimeout(() => {
-        revealsLeft -= 1;
-        placeAndReveal(false);
-      }, GUIDE_SETTLE_MS);
+      window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(() => {
+        place(false);
+        const height = targetEl.getBoundingClientRect().height;
+        if (height === rowHeight) return;
+        rowHeight = height;
+        if (revealsLeft <= 0) return;
+        window.clearTimeout(settle);
+        settle = window.setTimeout(() => {
+          revealsLeft -= 1;
+          placeAndReveal(false);
+        }, GUIDE_SETTLE_MS);
+      });
     };
     const observer = new ResizeObserver(onResize);
     placeAndReveal(true);
@@ -670,6 +681,7 @@ const SampleTutorial = ({
     desktop.addEventListener("change", track);
     return () => {
       window.clearTimeout(settle);
+      window.cancelAnimationFrame(resizeFrame);
       observer.disconnect();
       window.removeEventListener("resize", track);
       window.removeEventListener("wheel", yieldToUser);
@@ -682,7 +694,7 @@ const SampleTutorial = ({
     };
   }, [step, targetEl]);
 
-  if (!(portalTarget && step)) return null;
+  if (!step) return null;
   const finalStep = live && stepIndex === steps.length - 1;
   const copyKey = live ? stepIndex : "loading";
   const layer = (
@@ -789,7 +801,7 @@ const SampleTutorial = ({
       </div>
     </div>
   );
-  return createPortal(layer, portalTarget);
+  return layer;
 };
 
 export { SampleTutorial, SampleTutorialStart, type SampleTutorialStep, useGuidedSampleStart };

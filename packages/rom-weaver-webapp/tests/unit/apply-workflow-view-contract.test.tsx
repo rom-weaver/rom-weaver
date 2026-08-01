@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { notifyGuidedSampleView, requestGuidedSampleStart } from "../../src/public/react/guided-sample-start.ts";

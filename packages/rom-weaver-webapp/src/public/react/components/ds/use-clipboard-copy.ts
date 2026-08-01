@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { copyToClipboard } from "../../../../lib/clipboard.ts";
 import { createLogger } from "../../../../lib/logging.ts";
 
@@ -13,14 +13,19 @@ const COPIED_RESET_MS = 1100;
 
 const useClipboardCopy = (text: string, resetMs = COPIED_RESET_MS) => {
   const [copied, setCopied] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const timeoutRef = useRef<number | undefined>(undefined);
 
-  useEffect(() => () => clearTimeout(timeoutRef.current), []);
+  useEffect(
+    () => () => {
+      if (timeoutRef.current !== undefined) window.clearTimeout(timeoutRef.current);
+    },
+    [],
+  );
 
   const markCopied = () => {
     setCopied(true);
-    clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => setCopied(false), resetMs);
+    if (timeoutRef.current !== undefined) window.clearTimeout(timeoutRef.current);
+    timeoutRef.current = window.setTimeout(() => setCopied(false), resetMs);
   };
 
   const copy = () => {

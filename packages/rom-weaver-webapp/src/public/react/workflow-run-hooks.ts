@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from "react";
+import { type Dispatch, type StateUpdater, useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { createProgressViewModelFromEvent } from "../../presentation/workflow-presentation.ts";
 import type { FileProgressProps } from "./components/ds/feedback.tsx";
@@ -142,7 +142,7 @@ const useDisposableWorkflowOutput = <TOutput>(): {
   completedOutput: TOutput | null;
   disposeActiveOutput: () => void;
   rememberOutputDispose: (cleanup: DisposableOutputCleanup | null | undefined) => void;
-  setCompletedOutput: Dispatch<SetStateAction<TOutput | null>>;
+  setCompletedOutput: Dispatch<StateUpdater<TOutput | null>>;
 } => {
   const [completedOutput, setCompletedOutput] = useState<TOutput | null>(null);
   const { disposeActiveCleanup: disposeActiveOutput, rememberActiveCleanup: rememberOutputDispose } =

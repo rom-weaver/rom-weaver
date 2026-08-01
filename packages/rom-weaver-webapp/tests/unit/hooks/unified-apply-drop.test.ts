@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/preact";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadLocalBundleSession } from "../../../src/lib/bundle/local-bundle-session.ts";

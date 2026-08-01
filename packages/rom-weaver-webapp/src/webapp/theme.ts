@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from "react";
 import { createLogger } from "../lib/logging.ts";
+import { useExternalStore } from "../lib/use-external-store.ts";
 
 /**
  * Theme store for the redesigned UI. Persists the user's explicit choice to
@@ -127,8 +127,8 @@ const useTheme = (): {
   setPreference: (preference: ThemePreference) => void;
   toggleTheme: () => void;
 } => {
-  const theme = useSyncExternalStore(subscribe, getTheme, getServerTheme);
-  const preference = useSyncExternalStore(subscribe, getPreference, getServerPreference);
+  const theme = useExternalStore(subscribe, getTheme, getServerTheme);
+  const preference = useExternalStore(subscribe, getPreference, getServerPreference);
   const toggleTheme = () => setPreference(theme === "dark" ? "light" : "dark");
   return { theme, preference, setPreference, toggleTheme };
 };

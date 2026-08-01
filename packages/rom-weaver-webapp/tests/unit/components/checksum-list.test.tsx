@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChecksumList, ChecksumRow } from "../../../src/public/react/components/ds/checksum-list.tsx";
 

@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement } from "preact";
 import { expect, test, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { PatcherPrimaryAction } from "../../src/public/react/components/patcher-output-controls.tsx";

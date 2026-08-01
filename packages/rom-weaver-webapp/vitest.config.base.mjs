@@ -31,7 +31,7 @@ export default defineConfig({
   },
   oxc: {
     jsx: {
-      importSource: "react",
+      importSource: "preact",
       runtime: "automatic",
     },
   },

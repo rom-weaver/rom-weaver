@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef } from "preact/hooks";
 import { createLogger } from "../../lib/logging.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
 import type { SelectionCandidate } from "../../types/selection.ts";

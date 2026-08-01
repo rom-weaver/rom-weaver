@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "preact/hooks";
 import { createLogger } from "../../lib/logging.ts";
 import { Modal } from "../../public/react/components/ds/index.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";

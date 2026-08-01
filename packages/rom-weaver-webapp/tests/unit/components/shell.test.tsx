@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { fireEvent, render } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { fireEvent, render } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import { describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { Masthead, Reveal, SiteFooter, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
@@ -11,7 +11,7 @@ import { Masthead, Reveal, SiteFooter, UpdateBanner } from "../../../src/webapp/
  * update banner mechanics.
  */
 
-const withSettings = (children: ReactNode) => (
+const withSettings = (children: ComponentChildren) => (
   <RomWeaverSettingsProvider settings={{}}>{children}</RomWeaverSettingsProvider>
 );
 

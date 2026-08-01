@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentChildren } from "preact";
 import { isCompressionCodecFieldKey } from "../lib/compression/codec-fields.ts";
 import { CodecCombobox } from "../public/react/components/ds/codec-combobox.tsx";
 import { CompressInfoContent } from "../public/react/components/ds/compress-panel.tsx";
@@ -311,7 +311,7 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
       id={field.id}
       max={inputType === "number" ? getSettingsFieldMax(fieldKey, draftSettings, uiState) : undefined}
       min={inputType === "number" ? getSettingsFieldMin(fieldKey, draftSettings, uiState) : undefined}
-      onChange={(event) => handleSettingsEvent(event.currentTarget, onDraftChange)}
+      onInput={(event) => handleSettingsEvent(event.currentTarget, onDraftChange)}
       placeholder={placeholder}
       step={inputType === "number" ? field.step : undefined}
       type={inputType}
@@ -456,7 +456,7 @@ const AboutSection = () => (
   </div>
 );
 
-function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: SettingsPanelProps): ReactNode {
+function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: SettingsPanelProps): ComponentChildren {
   const shared = { draftSettings, onDraftChange, uiState: uiState ?? getSettingsUiState(draftSettings), validation };
   const fullWidthSections = settingsPanelSections.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
   const gridSections = settingsPanelSections.filter((section) => FORMAT_GROUP_TITLES.has(section.title));

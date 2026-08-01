@@ -1,5 +1,6 @@
-import { X } from "lucide-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { X } from "lucide-preact";
+import type { ComponentChildren } from "preact";
+import { useEffect, useRef } from "preact/hooks";
 import type { createProgressViewModel } from "../workflow-presentation.ts";
 import { clampProgressPercent, normalizeProgressDisplayPercent } from "../workflow-presentation.ts";
 
@@ -18,7 +19,7 @@ type ProgressActionButtonProps = {
   progress: ProgressViewModel | null;
   id?: string;
   title?: string;
-  icon?: ReactNode;
+  icon?: ComponentChildren;
   loading?: boolean;
   onCancel?: () => void;
   cancelLabel?: string;

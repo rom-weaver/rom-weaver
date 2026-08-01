@@ -1,4 +1,5 @@
-import { type ReactNode, useRef } from "react";
+import type { ComponentChildren } from "preact";
+import { useRef } from "preact/hooks";
 import { createLogger } from "../../../../lib/logging.ts";
 import { markDropReceived } from "../../../../lib/perf/op-perf-marks.ts";
 import type { MessageId } from "../../../../presentation/localization/catalog.ts";
@@ -22,32 +23,32 @@ type SupportedFileGroup = {
 
 type UnifiedDropZoneProps = {
   /** Compact add-row label once files are staged. */
-  addLabel: ReactNode;
+  addLabel: ComponentChildren;
   /** Hero (empty-state) drop instruction; `heroLabelCoarse` is the touch variant. */
-  heroLabel: ReactNode;
-  heroLabelCoarse: ReactNode;
+  heroLabel: ComponentChildren;
+  heroLabelCoarse: ComponentChildren;
   big?: boolean;
   disabled?: boolean;
   accept?: string;
   id?: string;
   inputId?: string;
   /** Extra content for the step-header info popover (above the supported-file lists). */
-  info?: ReactNode;
+  info?: ComponentChildren;
   /** Full per-bucket extension support, listed in the hero ticker and info popover. */
   supported?: readonly SupportedFileGroup[];
   /** Per-workflow thesis lines for the empty-state lead (defaults to the apply copy). */
   lead?: { line1: MessageId; line2: MessageId };
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
-  title?: ReactNode;
+  title?: ComponentChildren;
   /** Right-aligned control sharing the 0x01 header row. */
-  headerExtra?: ReactNode;
+  headerExtra?: ComponentChildren;
   /** Fires at the drop gesture, before files enter routing or staging. */
   onDropStart?: () => void;
   onFiles: (files: File[]) => void;
   /** Extra content rendered inside the 0x01 step body, below the drop target (e.g. the
    * "identifying…" placeholders for dropped archives) so it shares the step's content width. */
-  afterDropZone?: ReactNode;
+  afterDropZone?: ComponentChildren;
 };
 
 const UnifiedDropZone = ({

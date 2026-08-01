@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentChildren } from "preact";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import { DiscSheetsPanel } from "./cue-panel.tsx";
 import {
@@ -21,12 +21,12 @@ type RomInputInfoPanelProps = {
   expected?: SourceInfoExpectedChecks;
   extractTiming?: ExtractTiming;
   fileName?: string;
-  lead?: ReactNode;
+  lead?: ComponentChildren;
   onToggle?: (open: boolean) => void;
   open?: boolean;
   pending?: ChecksumPendingGroup[];
   progress?: SourceInfoProgress | null;
-  timing?: ReactNode;
+  timing?: ComponentChildren;
   /** Trim-padding probe; surfaces a "Trim" group in Checks only when detected. */
   trim?: TrimFixDetails | null;
 };

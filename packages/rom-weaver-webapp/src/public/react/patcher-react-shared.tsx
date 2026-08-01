@@ -1,4 +1,5 @@
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef } from "preact/hooks";
+import { useExternalStore } from "../../lib/use-external-store.ts";
 import type { DialogController } from "./patcher-form.ts";
 import { createInitialDialogState } from "./patcher-ui-state.ts";
 
@@ -22,7 +23,7 @@ const createStaticStoreController = <State,>(state: State) => ({
 
 export function ArchiveDialog({ controller }: { controller?: DialogController }) {
   const activeController: DialogController = controller || createStaticStoreController(inertDialogState);
-  const state = useSyncExternalStore(activeController.subscribe, activeController.getState, activeController.getState);
+  const state = useExternalStore(activeController.subscribe, activeController.getState, activeController.getState);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   useEffect(() => {
     const dialog = dialogRef.current;

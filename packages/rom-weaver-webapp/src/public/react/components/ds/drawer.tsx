@@ -1,5 +1,6 @@
-import { ChevronRight } from "lucide-react";
-import { type ReactNode, useId, useState } from "react";
+import { ChevronRight } from "lucide-preact";
+import type { ComponentChildren } from "preact";
+import { useId, useState } from "preact/hooks";
 import { join } from "./cx.ts";
 
 /**
@@ -11,7 +12,7 @@ import { join } from "./cx.ts";
  */
 
 /** Recessed readout chip for a drawer header (counts, sizes, timings). */
-const DrawerReadout = ({ children, muted, time }: { children: ReactNode; muted?: boolean; time?: boolean }) => (
+const DrawerReadout = ({ children, muted, time }: { children: ComponentChildren; muted?: boolean; time?: boolean }) => (
   <span className={join("rb mono", muted && "muted", time && "time")}>{children}</span>
 );
 
@@ -25,7 +26,7 @@ const DrawerMark = ({
   ok: boolean;
   title?: string;
   className?: string;
-  children: ReactNode;
+  children: ComponentChildren;
 }) => (
   <span className={join("rb-mark", ok ? "ok" : "bad", className)} title={title}>
     {children}
@@ -45,19 +46,19 @@ const Drawer = ({
   children,
 }: {
   /** Independent trailing control, rendered beside rather than inside the drawer toggle. */
-  action?: ReactNode;
-  label: ReactNode;
+  action?: ComponentChildren;
+  label: ComponentChildren;
   /** Optional icon inside the label (e.g. the options "tune" glyph). */
-  labelIcon?: ReactNode;
+  labelIcon?: ComponentChildren;
   /** Right-edge readout chips / marks ({@link DrawerReadout}, {@link DrawerMark}). */
-  readouts?: ReactNode;
+  readouts?: ComponentChildren;
   defaultOpen?: boolean;
   open?: boolean;
   onToggle?: (open: boolean) => void;
   className?: string;
   /** Class of the wrapper inside the drawer body (`ckrows`, `trackrows`, `optsbody`, …). */
   bodyClassName?: string;
-  children: ReactNode;
+  children: ComponentChildren;
 }) => {
   const bodyId = useId();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);

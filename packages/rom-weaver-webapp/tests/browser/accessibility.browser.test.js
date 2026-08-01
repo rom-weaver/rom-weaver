@@ -4,8 +4,8 @@
  */
 
 import axeModule from "axe-core";
-import { createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createElement } from "preact";
+import { createRoot } from "./preact-root.js";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";

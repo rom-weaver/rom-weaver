@@ -1,4 +1,5 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext } from "preact";
+import { useContext, useMemo } from "preact/hooks";
 import { resolveCompressionLevels } from "../../lib/compression/compression-settings.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createBrowserLocalizer, type Localizer } from "../../presentation/localization/index.ts";

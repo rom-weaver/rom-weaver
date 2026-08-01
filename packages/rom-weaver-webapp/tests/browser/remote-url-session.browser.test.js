@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement } from "preact";
 import { expect, test, vi } from "vitest";
 import { fetchRemoteFiles, RemoteFetchError } from "../../src/lib/remote/remote-file-fetch.ts";
 import { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";

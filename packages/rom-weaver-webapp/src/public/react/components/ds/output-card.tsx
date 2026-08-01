@@ -1,5 +1,5 @@
-import { SlidersHorizontal, TriangleAlert } from "lucide-react";
-import type { ReactNode } from "react";
+import { SlidersHorizontal, TriangleAlert } from "lucide-preact";
+import type { ComponentChildren } from "preact";
 import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
 import { join } from "./cx.ts";
 import { Drawer, DrawerReadout } from "./drawer.tsx";
@@ -13,16 +13,16 @@ import { Drawer, DrawerReadout } from "./drawer.tsx";
 
 type FormatOption = { value: string; label: string };
 type OutputCompressPanel = {
-  summary?: ReactNode;
+  summary?: ComponentChildren;
   /** Extra readout chips for the drawer header, beside the format/summary chips. */
-  readouts?: ReactNode;
-  timing?: ReactNode;
-  children: ReactNode;
+  readouts?: ComponentChildren;
+  timing?: ComponentChildren;
+  children: ComponentChildren;
   format?: string;
   formatValue?: string;
   formatOptions?: FormatOption[];
   formatLabel?: string;
-  formatInfo?: ReactNode;
+  formatInfo?: ComponentChildren;
   formatId?: string;
   onFormatChange?: (value: string) => void;
 };
@@ -39,7 +39,7 @@ type OutputCardProps = {
   formatId?: string;
   compress?: OutputCompressPanel | null;
   disabled?: boolean;
-  action?: ReactNode;
+  action?: ComponentChildren;
 };
 
 /** One labeled control field inside the output options grid. */
@@ -49,10 +49,10 @@ const OutputField = ({
   className,
   children,
 }: {
-  label: ReactNode;
-  labelInfo?: ReactNode;
+  label: ComponentChildren;
+  labelInfo?: ComponentChildren;
   className?: string;
-  children: ReactNode;
+  children: ComponentChildren;
 }) => (
   <div className={join("ofld ofield", className)}>
     <span className="ofld-l ofld-lbl">
@@ -99,7 +99,7 @@ const OutputCard = ({
             className="input mono outname"
             disabled={disabled}
             id={fileNameId}
-            onChange={(event) => onFileNameChange(event.currentTarget.value)}
+            onInput={(event) => onFileNameChange(event.currentTarget.value)}
             onKeyDown={(event) => {
               // The output name is a textarea only so it can grow - a filename
               // must never contain a newline.
@@ -107,7 +107,7 @@ const OutputCard = ({
             }}
             placeholder={fileNamePlaceholder}
             rows={1}
-            spellCheck={false}
+            spellcheck={false}
             value={fileName}
           />
           <span className="sep" />

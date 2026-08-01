@@ -1,4 +1,5 @@
-import { type ReactNode, useState } from "react";
+import type { ComponentChildren } from "preact";
+import { useState } from "preact/hooks";
 import { join } from "./cx.ts";
 
 /**
@@ -9,9 +10,9 @@ import { join } from "./cx.ts";
 
 type SelectionItem = {
   id: string;
-  name: ReactNode;
-  sizeLabel?: ReactNode;
-  note?: ReactNode;
+  name: ComponentChildren;
+  sizeLabel?: ComponentChildren;
+  note?: ComponentChildren;
   /** Archive-nesting path of the entry (e.g. "B_disc1.zip"), rendered as a sub-line for context. */
   breadcrumb?: string;
   /** Full source archive the entry came from, rendered as a sub-heading under the name. */
@@ -108,7 +109,7 @@ const SelectionCheckList = ({
               <input
                 checked={selectedIds.includes(item.id)}
                 className="pick-input"
-                onChange={() => toggle(item.id)}
+                onClick={() => toggle(item.id)}
                 type="checkbox"
               />
               <SelectionRowBody item={item} />

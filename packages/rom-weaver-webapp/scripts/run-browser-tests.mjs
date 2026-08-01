@@ -24,7 +24,7 @@ const TEST_DIR = path.join(ROOT_DIR, "tests", "browser");
 const CONFIG_PATH = path.join(ROOT_DIR, "vitest.browser.config.mjs");
 const VITEST_BIN = path.join(ROOT_DIR, "node_modules", ".bin", "vitest");
 const TEST_FILE_SUFFIX = ".browser.test.js";
-const COVERAGE_ROOT = path.resolve(ROOT_DIR, "..", "..", "dist", "coverage", "react-browser");
+const COVERAGE_ROOT = path.resolve(ROOT_DIR, "..", "..", "dist", "coverage", "preact-browser");
 // Vitest's summary line ("  Tests  1 failed | 9 passed (10)"), not the
 // "⎯ Failed Tests 2 ⎯" section banner - hence the line-start + digit anchors.
 const TESTS_LINE_REGEX = /^\s*Tests\s+(\d.*?)\s*$/gm;

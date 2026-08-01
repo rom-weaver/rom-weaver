@@ -1,5 +1,6 @@
-import { createElement, useMemo } from "react";
-import { createRoot } from "react-dom/client";
+import { createElement } from "preact";
+import { useMemo } from "preact/hooks";
+import { createRoot } from "./preact-root.js";
 import { beforeEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { getDefaultBrowserThreadCount } from "../../src/platform/shared/compression-options.ts";
@@ -256,6 +257,9 @@ test("PWA side insets move footer content without shifting the shell", async () 
   page.viewport(393, height);
   mountWebappRoot();
   await expect.poll(() => document.querySelector(".site-footer")).toBeTruthy();
+  await expect
+    .poll(() => document.querySelector(".site-footer .masthead-runtime")?.textContent?.trim())
+    .toBe("· web · sw");
   const readLayout = () => {
     const masthead = document.querySelector(".masthead")?.getBoundingClientRect();
     const footer = document.querySelector(".site-footer")?.getBoundingClientRect();

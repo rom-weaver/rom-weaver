@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "preact/hooks";
 
 /**
  * How far into the document the reader is, and the shape of the document they

@@ -5,8 +5,8 @@
  * still run the wipe there - that exclusion is what left iOS with no animation.
  */
 
-import { createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createElement } from "preact";
+import { createRoot } from "./preact-root.js";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { Masthead } from "../../src/webapp/components/shell.tsx";

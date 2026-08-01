@@ -1,5 +1,5 @@
-import { Download, Scissors } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Download, Scissors } from "lucide-preact";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   getCompressionOutputExtension,
   isCompressionFormat,

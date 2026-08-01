@@ -39,17 +39,17 @@ runMain(() => {
       throw new Error("CLI_NOTICE is missing the in-source nod component");
     if (/\| react\s+\|/.test(notices.CLI_NOTICE))
       throw new Error("CLI_NOTICE unexpectedly contains webapp dependencies");
-    if (!/\| react\s+\|/.test(notices.WEBAPP_NOTICE))
-      throw new Error("WEBAPP_NOTICE is missing the webapp react dependency");
+    if (!/\| preact\s+\|/.test(notices.WEBAPP_NOTICE))
+      throw new Error("WEBAPP_NOTICE is missing the webapp preact dependency");
     if (/\| nod\s+\|/.test(notices.WEBAPP_NOTICE))
       throw new Error("WEBAPP_NOTICE unexpectedly contains CLI dependencies");
-    if (!/\| nod\s+\|/.test(notices.NOTICE) || !/\| react\s+\|/.test(notices.NOTICE))
+    if (!/\| nod\s+\|/.test(notices.NOTICE) || !/\| preact\s+\|/.test(notices.NOTICE))
       throw new Error("NOTICE is missing the combined dependency inventory");
     const licenseDirs = readdirSync(join(output, "third_party", "licenses"));
     if (!licenseDirs.some((name) => name.startsWith("source-nod-")))
       throw new Error("license bundle is missing the in-source nod license");
-    if (!licenseDirs.some((name) => name.startsWith("npm-react-")))
-      throw new Error("license bundle is missing the webapp react license");
+    if (!licenseDirs.some((name) => name.startsWith("npm-preact-")))
+      throw new Error("license bundle is missing the webapp preact license");
     if (existsSync(join(output, "THIRD_PARTY_LICENSES.md")))
       throw new Error("license bundle unexpectedly contains THIRD_PARTY_LICENSES.md");
     if (!existsSync(join(output, "third_party/licenses")))

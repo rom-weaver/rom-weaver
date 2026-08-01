@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentChildren } from "preact";
 import { type DownloadMeta, FileProgress, type FileProgressProps, RunButton } from "./feedback.tsx";
 import { StepSection } from "./layout.tsx";
 import { OutputCard, type OutputCardProps } from "./output-card.tsx";
@@ -6,19 +6,19 @@ import { OutputCard, type OutputCardProps } from "./output-card.tsx";
 type WorkflowOutputStepProps = OutputCardProps & {
   fault?: boolean;
   id?: string;
-  info?: ReactNode;
-  meta?: ReactNode;
-  notice?: ReactNode;
+  info?: ComponentChildren;
+  meta?: ComponentChildren;
+  notice?: ComponentChildren;
   num: string;
-  title: ReactNode;
+  title: ComponentChildren;
   woven?: boolean;
 };
 
 type OutputRunActionProps = {
-  children: ReactNode;
+  children: ComponentChildren;
   disabled?: boolean;
   download?: DownloadMeta;
-  icon?: ReactNode;
+  icon?: ComponentChildren;
   id?: string;
   onClick?: () => void;
   progress?: FileProgressProps | null;

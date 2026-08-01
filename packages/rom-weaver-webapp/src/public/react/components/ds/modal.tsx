@@ -1,6 +1,6 @@
-import { Check, TriangleAlert, X } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef } from "react";
-import { createPortal } from "react-dom";
+import { Check, TriangleAlert, X } from "lucide-preact";
+import type { ComponentChildren } from "preact";
+import { useEffect, useId, useRef } from "preact/hooks";
 import { join } from "./cx.ts";
 
 const FOCUSABLE_SELECTOR = [
@@ -25,16 +25,11 @@ const getFocusableElements = (root: HTMLElement): HTMLElement[] =>
 
 /**
  * Design-system modal primitives. A generic overlay (header + scrollable body)
- * and a confirmation dialog. Both portal into the `.rw-app` root (falling back to
- * <body>) so the design system's `.rw-app`-scoped control styles (.input/.select/
- * .btn/…) reach the modal content; `.rw-modal` is `position: fixed`, so stacking
- * and overflow are unaffected by where it sits in the tree. Shared by settings,
- * candidate selection, and every confirm flow.
+ * and a confirmation dialog. Both render under the `.rw-app` root so the design
+ * system's `.rw-app`-scoped control styles (.input/.select/.btn/…) reach the modal
+ * content; `.rw-modal` is `position: fixed`. Shared by settings, candidate
+ * selection, and every confirm flow.
  */
-
-/** The styled app root the design system scopes its rules under; modals portal here so controls inherit it. */
-const getModalPortalTarget = (): Element =>
-  (typeof document === "undefined" ? null : document.querySelector(".rw-app")) ?? document.body;
 
 const useEscapeKey = (active: boolean, onEscape: () => void) => {
   useEffect(() => {
@@ -60,7 +55,7 @@ const ModalShell = ({
   variant?: string;
   card?: string;
   labelledBy?: string;
-  children: ReactNode;
+  children: ComponentChildren;
 }) => {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   useEscapeKey(open && !!onBackdrop, () => onBackdrop?.());
@@ -115,7 +110,7 @@ const ModalShell = ({
     };
   }, [open]);
   if (!open || typeof document === "undefined") return null;
-  return createPortal(
+  return (
     <div
       aria-labelledby={labelledBy}
       aria-modal="true"
@@ -126,8 +121,7 @@ const ModalShell = ({
     >
       <button aria-label="Close" className="rw-modal-backdrop" onClick={onBackdrop} tabIndex={-1} type="button" />
       <div className={join("rw-modal-card", card)}>{children}</div>
-    </div>,
-    getModalPortalTarget(),
+    </div>
   );
 };
 
@@ -144,12 +138,12 @@ const Modal = ({
 }: {
   open: boolean;
   onClose: () => void;
-  title?: ReactNode;
-  subtitle?: ReactNode;
-  headerActions?: ReactNode;
+  title?: ComponentChildren;
+  subtitle?: ComponentChildren;
+  headerActions?: ComponentChildren;
   showCloseButton?: boolean;
   variant?: string;
-  children: ReactNode;
+  children: ComponentChildren;
 }) => {
   const titleId = useId();
   return (
@@ -188,8 +182,8 @@ const ConfirmDialog = ({
   onCancel,
 }: {
   open: boolean;
-  title: ReactNode;
-  body: ReactNode;
+  title: ComponentChildren;
+  body: ComponentChildren;
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;

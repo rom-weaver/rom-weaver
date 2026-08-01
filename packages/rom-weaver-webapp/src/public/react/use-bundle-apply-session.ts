@@ -1,9 +1,10 @@
-import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import type { BinarySource, PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
+import type { MutableRefObject } from "./use-latest-ref.ts";
 
 const logger = createLogger("bundle-apply-session");
 
@@ -57,6 +58,25 @@ const useBundleApplySession = ({
   seedPatchEnablement: (entries: Array<{ id: string; enabled: boolean }>) => void;
 }) => {
   const appliedKeyRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const ownedBundleSessionRef = useRef<BundleApplySession | null>(bundleSession);
+  const ownedBundleSessionKeyRef = useRef(bundleSession?.key);
+  const bundleSessionKey = bundleSession?.key;
+  useEffect(() => {
+    if (ownedBundleSessionKeyRef.current === bundleSessionKey) return;
+    const previousSession = ownedBundleSessionRef.current;
+    ownedBundleSessionKeyRef.current = bundleSessionKey;
+    if (!bundleSession) return;
+    ownedBundleSessionRef.current = bundleSession;
+    void previousSession?.cleanup?.();
+  }, [bundleSession, bundleSessionKey]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      void ownedBundleSessionRef.current?.cleanup?.();
+    };
+  }, []);
   // Latest delivered patch list: a locally-dropped bundle delivers its patches
   // in the same task that sets the session state, so the list-change callback
   // can fire with a stale null session. The session-arrival effect below
@@ -110,7 +130,7 @@ const useBundleApplySession = ({
       void (async () => {
         // Let the patch-list state commit so the option mutations snapshot the new list.
         await nextTask();
-        for (let attempt = 0; attempt < 100; attempt += 1) {
+        for (let attempt = 0; attempt < 100 && mountedRef.current; attempt += 1) {
           const items = controllersRef.current.patchStack?.getState().items || [];
           if (
             items.length === session.entries.length &&
@@ -124,6 +144,7 @@ const useBundleApplySession = ({
         // belongs only to the chain input; reactive sync owns the chain output
         // because it applies only while the full bundle chain remains intact.
         for (const [index, entry] of session.entries.entries()) {
+          if (!mountedRef.current) return;
           const inputChecks = index === 0 ? session.chainEndpointChecks.input?.checksums : undefined;
           const validateInputChecksum = inputChecks?.sha1 || inputChecks?.md5 || inputChecks?.crc32;
           await controllersRef.current.patchStack?.setPatchOption?.(index, {
@@ -139,6 +160,7 @@ const useBundleApplySession = ({
         // settings snapshot captured at ITS render, so consecutive same-tick calls would clobber one
         // another - yield a task between calls so each reads the committed result of the previous.
         const defaults = session.outputDefaults;
+        if (!mountedRef.current) return;
         if (defaults.name) {
           controllersRef.current.output?.setDisplayFileName(stripOutputNameExtension(defaults.name));
           await nextTask();

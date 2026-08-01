@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentChildren } from "preact";
 
 /**
  * Keep the resolved input-card structure mounted during staging so progress,
@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
  */
 
 /** Minimal shape of the converted workflow progress props the staging UI reads. */
-type StageProgress = { label?: ReactNode; percent?: number | null } | null | undefined;
+type StageProgress = { label?: ComponentChildren; percent?: number | null } | null | undefined;
 
 /**
  * Use the runtime's stage flag, not progress-label text, to distinguish

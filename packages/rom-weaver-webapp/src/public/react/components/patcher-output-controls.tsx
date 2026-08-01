@@ -1,5 +1,6 @@
-import { Download } from "lucide-react";
-import { useSyncExternalStore } from "react";
+import { Download } from "lucide-preact";
+import { useExternalStore } from "../../../lib/use-external-store.ts";
+
 import { RunButton } from "../components/ds/feedback.tsx";
 import type { PatcherOutputState } from "../patcher-presentation.ts";
 import { ApplyBandaidIcon } from "./apply-bandaid-icon.tsx";
@@ -26,7 +27,7 @@ function PatcherPrimaryAction({
   /** Total wall time for the finished run (download button right edge). */
   totalTime?: string;
 }) {
-  const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
+  const state = useExternalStore(controller.subscribe, controller.getState, controller.getState);
   if (state.pendingDownloadFileName && !state.applyButton.progress && !state.applyButton.loading) {
     // The button shows the output FORMAT (the loom dl-kind), not the filename -
     // the name already fills the output field above; the full name stays on
@@ -49,7 +50,7 @@ function PatcherPrimaryAction({
     return (
       <RunButton
         ariaLabel={`Download ${state.pendingDownloadFileName}`}
-        disabled={state.applyButton.disabled}
+        disabled={state.applyButton.disabled || state.applyButton.loading}
         download={{
           format: `Patched ${kind}`,
           size: sizeText,
@@ -57,7 +58,10 @@ function PatcherPrimaryAction({
         }}
         icon={<Download aria-hidden="true" />}
         id="rom-weaver-button-apply"
-        onClick={() => controller.runPrimaryAction()}
+        onClick={() => {
+          if (controller.getState().applyButton.loading) return;
+          controller.runPrimaryAction();
+        }}
       />
     );
   }
@@ -65,13 +69,16 @@ function PatcherPrimaryAction({
   return (
     <ProgressActionButton
       cancelLabel="Cancel applying"
-      disabled={state.applyButton.disabled || !!disableRun}
+      disabled={state.applyButton.disabled || state.applyButton.loading || !!disableRun}
       icon={<ApplyBandaidIcon className="apply-button-icon" />}
       id="rom-weaver-button-apply"
       label={state.applyButton.label}
       loading={state.applyButton.loading}
       onCancel={controller.cancelPrimaryAction}
-      onClick={() => controller.runPrimaryAction()}
+      onClick={() => {
+        if (controller.getState().applyButton.loading) return;
+        controller.runPrimaryAction();
+      }}
       progress={state.applyButton.progress}
       progressId="rom-weaver-progress-apply"
     />

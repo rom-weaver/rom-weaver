@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentChildren } from "preact";
 import type {
   ApplySettings,
   BrowserApplyResult,
@@ -29,7 +29,7 @@ type ApplyPatchFormProps = Omit<InternalApplyPatchFormProps, "controllers" | "on
 
 type RomWeaverSettingsProviderProps = {
   assetBaseUrl?: string;
-  children: ReactNode;
+  children: ComponentChildren;
   settings?: Partial<RomWeaverReactSettings>;
 };
 

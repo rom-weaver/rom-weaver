@@ -1,5 +1,5 @@
-import { ChevronDown, Crosshair, X } from "lucide-react";
-import type { CSSProperties, ReactNode, Ref } from "react";
+import { ChevronDown, Crosshair, X } from "lucide-preact";
+import type { CSSProperties, ComponentChildren, Ref } from "preact";
 import { join } from "./cx.ts";
 
 /**
@@ -20,7 +20,7 @@ const RemoveButton = ({ onClick, label }: { onClick: () => void; label: string }
 );
 
 /** "Apply patch into" target group shown on a patch's meta line. */
-const FileTargetPill = ({ label, bad, onClick }: { label: ReactNode; bad?: boolean; onClick?: () => void }) => (
+const FileTargetPill = ({ label, bad, onClick }: { label: ComponentChildren; bad?: boolean; onClick?: () => void }) => (
   <span className={join("target-grp", bad && "bad")}>
     <Crosshair aria-hidden="true" />
     {onClick ? (
@@ -67,19 +67,19 @@ const FileCard = ({
   removeLabel?: string;
   /** Optional inline source replacement action for patch cards. */
   /** Card actions menu button, rendered beside the drag handle / remove. */
-  menu?: ReactNode;
+  menu?: ComponentChildren;
   /** Mark this as a patch row (reorderable unit). */
   patch?: boolean;
   /** Drag handle button for reorderable rows, rendered in the action column. */
-  handle?: ReactNode;
+  handle?: ComponentChildren;
   rootRef?: Ref<HTMLDivElement>;
   className?: string;
   style?: CSSProperties;
-  name: ReactNode;
+  name: ComponentChildren;
   /** Optional description line rendered directly under the name, above the meta sub-line. */
-  description?: ReactNode;
+  description?: ComponentChildren;
   /** size · format sub-line under the name (`.card-meta` content). */
-  meta?: ReactNode;
+  meta?: ComponentChildren;
   /**
    * Progress bar on the card's top edge while staging: a determinate width
    * (0–100) when the percent is known, or `"indeterminate"` for an animated
@@ -93,7 +93,7 @@ const FileCard = ({
    * accent as the staging bar - it just marks a later phase of the same card.
    */
   verifyBar?: boolean;
-  children?: ReactNode;
+  children?: ComponentChildren;
 }) => {
   const actions = (
     <div className="card-actions">

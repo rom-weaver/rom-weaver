@@ -1,4 +1,4 @@
-import { type Dispatch, type MutableRefObject, type SetStateAction, useMemo } from "react";
+import { type Dispatch, type StateUpdater, useMemo } from "preact/hooks";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
@@ -22,6 +22,7 @@ import { getPublicOutputSize, toError, waitForNextUiPaint } from "./patcher-form
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
+import type { MutableRefObject } from "./use-latest-ref.ts";
 import { createIndeterminateWorkflowProgress } from "./workflow-run-hooks.ts";
 import { deriveWorkflowRunTiming } from "./workflow-run-lifecycle.ts";
 
@@ -106,8 +107,8 @@ interface ApplyRunLifecycle {
   rememberAbortController: (controller: AbortController | null) => void;
   rememberActiveOutputCleanup: (cleanup: (() => Promise<void> | void) | null | undefined) => void;
   resetCompletedOutputState: () => void;
-  setApplyQueued: Dispatch<SetStateAction<boolean>>;
-  setChecksumOverrideChecked: Dispatch<SetStateAction<boolean>>;
+  setApplyQueued: Dispatch<StateUpdater<boolean>>;
+  setChecksumOverrideChecked: Dispatch<StateUpdater<boolean>>;
   setPendingDownloadReadyFileName: (fileName: string) => void;
 }
 

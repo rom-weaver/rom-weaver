@@ -1,4 +1,4 @@
-import { createRoot } from "react-dom/client";
+import { createRoot } from "./preact-root.js";
 import { afterEach, beforeEach, expect } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser-virtual-files.ts";
@@ -266,8 +266,12 @@ export const selectPatchCandidates = async (labels) => {
   for (const row of rows) {
     const checkbox = row.querySelector("input[type='checkbox']");
     const selected = labels.some((label) => row.textContent?.includes(label));
-    if (checkbox && checkbox.checked !== selected) checkbox.click();
+    if (checkbox && checkbox.checked !== selected) {
+      checkbox.click();
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+    }
   }
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
   const confirm = document.querySelector(".rw-modal.select-modal .selconfirm");
   if (!confirm) throw new Error("Missing patch candidate confirm button");
   confirm.click();

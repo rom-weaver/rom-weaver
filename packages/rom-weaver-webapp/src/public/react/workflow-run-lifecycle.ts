@@ -1,7 +1,8 @@
-import { type MutableRefObject, useCallback } from "react";
+import { useCallback } from "preact/hooks";
 import { getErrorCode } from "../../presentation/errors.ts";
 import { isUserRequestedCancellation } from "./workflow-form-utils.ts";
 import type { WorkflowFormProgressState } from "./workflow-run-hooks.ts";
+import type { MutableRefObject } from "./use-latest-ref.ts";
 
 // Reported-vs-measured run timing, shared by the apply/create/trim runs. Each run reports its operation
 // and compression durations when it can; when it doesn't, the durations are measured from the run's

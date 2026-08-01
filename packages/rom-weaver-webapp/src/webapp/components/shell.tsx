@@ -1,7 +1,7 @@
-import { createLucideIcon, Heart, Moon, Palette, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-react";
-import type { IconNode } from "lucide-react";
-import type { ReactNode } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createLucideIcon, Heart, Moon, Palette, RotateCcw, ScrollText, Settings, SunMedium, X } from "lucide-preact";
+import type { IconNode } from "lucide-preact";
+import type { ComponentChildren, TargetedKeyboardEvent } from "preact";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -34,7 +34,7 @@ const readPwaState = () => {
   return displayModeMatches || iosStandalone;
 };
 
-type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
+type WorkflowTab = { href: string; id: string; label: string; icon: ComponentChildren };
 const isBetaWorkflowTab = (tab: WorkflowTab) => tab.id === "trim" || tab.id === "tools";
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
@@ -125,7 +125,7 @@ const ModeRail = ({
   const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
 
-  const handleKeyDown = (event: React.KeyboardEvent) => {
+  const handleKeyDown = (event: TargetedKeyboardEvent<HTMLElement>) => {
     const order = interactiveTabs.map((tab) => tab.id);
     const currentIndex = focusIndex;
     let next = -1;
@@ -772,7 +772,7 @@ const SiteFooter = ({ donateHref, githubHref, legalHref, privacyHref, ...buildSt
 };
 
 /** CSS-only slide reveal wrapper (banners). JS only flips hidden + is-open. */
-const Reveal = ({ open, children }: { open: boolean; children: ReactNode }) => (
+const Reveal = ({ open, children }: { open: boolean; children: ComponentChildren }) => (
   <div className={join("reveal", open && "is-open")} hidden={!open}>
     {children}
   </div>
@@ -830,7 +830,7 @@ const WakeLockBanner = ({
   onDismiss,
 }: {
   open: boolean;
-  children: ReactNode;
+  children: ComponentChildren;
   onDismiss?: () => void;
 }) => {
   const localizer = useUiLocalizer();

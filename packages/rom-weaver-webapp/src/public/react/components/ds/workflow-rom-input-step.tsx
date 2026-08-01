@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ComponentChildren } from "preact";
 import { ExtractDrawer, ExtractName, type ExtractPanelProps } from "./extraction-tree.tsx";
 import { FileProgress } from "./feedback.tsx";
 import { FileCard } from "./file-card.tsx";
@@ -7,7 +7,7 @@ import { RomInputPanels } from "./rom-input-panels.tsx";
 
 type WorkflowRomInputStepItem = {
   card?: Omit<ComponentProps<typeof FileCard>, "children" | "name"> & {
-    children?: ReactNode;
+    children?: ComponentChildren;
     extract: ExtractPanelProps;
     panels?: ComponentProps<typeof RomInputPanels>;
   };
@@ -16,13 +16,13 @@ type WorkflowRomInputStepItem = {
 };
 
 type WorkflowRomInputStepProps = Omit<ComponentProps<typeof StepSection>, "children"> & {
-  afterItems?: ReactNode;
+  afterItems?: ComponentChildren;
   dropZone?: ComponentProps<typeof DropZone> | null;
   /** Fixture shown in place of the (empty) card list when no ROM is loaded. */
-  emptyState?: ReactNode;
+  emptyState?: ComponentChildren;
   items: WorkflowRomInputStepItem[];
   listId?: string;
-  notice?: ReactNode;
+  notice?: ComponentChildren;
 };
 
 const WorkflowRomInputStepRow = ({ item }: { item: WorkflowRomInputStepItem }) => {
