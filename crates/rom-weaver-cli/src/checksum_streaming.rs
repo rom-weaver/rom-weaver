@@ -231,56 +231,24 @@ impl CliApp {
             thread_execution.clone(),
         );
 
-        let algorithms = algo
-            .iter()
-            .map(|algorithm| algorithm.to_ascii_lowercase())
-            .collect::<Vec<_>>();
-        let checksum_algorithm_count = algorithms.len();
-        let values = with_regular_archive_file_entry_reader(
+        let source_label = format!(
+            "checksum source streamed from {tar_format} container entry `{candidate_name}`"
+        );
+        with_regular_archive_file_entry_reader(
             source,
             tar_format,
             candidate_index,
             candidate_name,
             |entry_reader| {
-                checksum_reader_values_with_progress(
+                self.checksum_stream_reader(
                     entry_reader,
-                    &algorithms,
+                    algo,
                     context,
-                    &mut |progress| {
-                        self.emit_running(
-                            OperationLabel {
-                                command: "checksum",
-                                family: OperationFamily::Checksum,
-                                format: Some(self.checksum.name()),
-                            },
-                            "checksum",
-                            format!(
-                                "computing {} checksum algorithm(s)",
-                                checksum_algorithm_count
-                            ),
-                            Some(progress.percent()),
-                            thread_execution.clone(),
-                        );
-                    },
+                    &thread_execution,
+                    &source_label,
                 )
             },
-        )?;
-
-        let mut label = Self::render_streamed_checksum_label(&algorithms, &values.values);
-        label.push_str(&format!(
-            "; checksum source streamed from {tar_format} container entry `{candidate_name}`"
-        ));
-        Ok(Self::attach_checksum_details(
-            OperationReport::succeeded(
-                OperationFamily::Checksum,
-                Some(self.checksum.name().to_string()),
-                "checksum",
-                label,
-                Some(100.0),
-                Some(values.execution),
-            ),
-            values.values,
-        ))
+        )
     }
 
     pub(super) fn select_tar_stream_checksum_candidate(
@@ -411,40 +379,47 @@ impl CliApp {
         );
 
         let filter = Self::libarchive_read_filter_for_stream_format(stream_format)?;
+        let source_label = format!("checksum source streamed from {stream_format} container");
+        with_raw_stream_reader(source, stream_format, filter, 64 * 1024, |stream_reader| {
+            self.checksum_stream_reader(
+                stream_reader,
+                algo,
+                context,
+                &thread_execution,
+                &source_label,
+            )
+        })
+    }
+
+    fn checksum_stream_reader<R: Read + ?Sized>(
+        &self,
+        reader: &mut R,
+        algo: &[String],
+        context: &OperationContext,
+        thread_execution: &Option<ThreadExecution>,
+        source_label: &str,
+    ) -> Result<OperationReport> {
         let algorithms = algo
             .iter()
             .map(|algorithm| algorithm.to_ascii_lowercase())
             .collect::<Vec<_>>();
         let checksum_algorithm_count = algorithms.len();
         let values =
-            with_raw_stream_reader(source, stream_format, filter, 64 * 1024, |stream_reader| {
-                checksum_reader_values_with_progress(
-                    stream_reader,
-                    &algorithms,
-                    context,
-                    &mut |progress| {
-                        self.emit_running(
-                            OperationLabel {
-                                command: "checksum",
-                                family: OperationFamily::Checksum,
-                                format: Some(self.checksum.name()),
-                            },
-                            "checksum",
-                            format!(
-                                "computing {} checksum algorithm(s)",
-                                checksum_algorithm_count
-                            ),
-                            Some(progress.percent()),
-                            thread_execution.clone(),
-                        );
+            checksum_reader_values_with_progress(reader, &algorithms, context, &mut |progress| {
+                self.emit_running(
+                    OperationLabel {
+                        command: "checksum",
+                        family: OperationFamily::Checksum,
+                        format: Some(self.checksum.name()),
                     },
-                )
+                    "checksum",
+                    format!("computing {checksum_algorithm_count} checksum algorithm(s)"),
+                    Some(progress.percent()),
+                    thread_execution.clone(),
+                );
             })?;
-
         let mut label = Self::render_streamed_checksum_label(&algorithms, &values.values);
-        label.push_str(&format!(
-            "; checksum source streamed from {stream_format} container"
-        ));
+        label.push_str(&format!("; {source_label}"));
         Ok(Self::attach_checksum_details(
             OperationReport::succeeded(
                 OperationFamily::Checksum,
