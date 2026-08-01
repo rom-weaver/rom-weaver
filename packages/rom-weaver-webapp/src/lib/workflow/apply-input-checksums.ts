@@ -1,6 +1,7 @@
 import type { WorkflowProgress } from "../../types/progress.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
 import { getPreparedAssetFileName } from "./apply-source-staging.ts";
 import type { InputSession, StagedSource } from "./apply-workflow-state.ts";
 import {
@@ -16,8 +17,6 @@ import {
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
   getPatchFilePrecomputedRomType,
-  getPrimaryInputAsset,
-  isChecksummableInputAsset,
 } from "./staged-source-checksums.ts";
 
 type InputChecksumAdapters<TSource> = {

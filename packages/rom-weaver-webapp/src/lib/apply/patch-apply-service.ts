@@ -1,8 +1,7 @@
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 import type { ParsedPatchDescriptor } from "../../types/ingest.ts";
-import type { ProgressEvent as SharedProgressEvent } from "../../types/runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
-import type { ApplyWorkflowOptions, PublicOutput } from "../../types/workflow-runtime-types.ts";
+import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike } from "../../workers/protocol/patch-engine.ts";
 import {
   getPatchFileCleanup,
@@ -14,7 +13,6 @@ import type { InputAsset } from "../input/input-assets.ts";
 import { isXdeltaPatchExtension } from "../patch-format-classification.ts";
 import { getExpectedPatchHeaderMagic } from "../patch-header-magic.ts";
 import { getFileNameExtension } from "../path-utils.ts";
-import { normalizeApplyProgressInput, reportProgress } from "../progress/progress-reporting.ts";
 
 type PatchSourceValidator = {
   validateSourceAsync?: (file: PatchFileInstance) => boolean | Promise<boolean>;
@@ -114,34 +112,6 @@ const createParsedPatchProxy = async (
   } as unknown as ParsedPatchWithProbeRequirements;
   if (probeRequirements) parsedPatch[PATCH_PROBE_REQUIREMENTS_KEY] = probeRequirements;
   return parsedPatch as ParsedPatchLike;
-};
-
-const normalizePatchOptions = (options?: ApplyWorkflowOptions) => {
-  return {
-    addHeader: !!options?.compatibility?.addHeader,
-    appendOutputSuffix: !!options?.output?.suffix,
-    fixChecksum: !!options?.compatibility?.fixChecksum,
-    onProgress: (
-      progress: SharedProgressEvent | string | number | boolean | null | undefined | object,
-      total?: string | number | null | undefined,
-    ) => {
-      const normalized = normalizeApplyProgressInput(progress, total);
-      reportProgress(options, {
-        details: normalized.details,
-        label: normalized.label,
-        percent: normalized.percent,
-        stage: "apply",
-      });
-    },
-    outputExtension: options?.output?.extension,
-    outputName: options?.output?.outputName,
-    removeHeader: !!options?.compatibility?.removeHeader,
-    requireValidation:
-      typeof options?.validation?.requireInputChecksumMatch === "boolean"
-        ? options.validation.requireInputChecksumMatch
-        : false,
-    threads: options?.workers?.threads,
-  };
 };
 
 const getPatchProbeRequirements = (patch: ParsedPatchLike | null | undefined): PatchProbeRequirements | undefined => {
@@ -306,7 +276,6 @@ const resolvePatchTargets = async (
 export {
   attachIngestPatchRequirements,
   getPatchProbeRequirements,
-  normalizePatchOptions,
   parsePatchForApply,
   patchProbeRequirementsFromDescriptor,
   resolvePatchTargets,

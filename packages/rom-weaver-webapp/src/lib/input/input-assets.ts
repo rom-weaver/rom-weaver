@@ -195,10 +195,18 @@ const attachInputPreparationMetrics = (
 const getInputPreparationMetrics = (assets: InputAsset[]): InputPreparationMetrics | undefined =>
   assets.find((asset) => asset.preparation)?.preparation;
 
+// Disc sheets are sidecars, not ROM data.
+const isChecksummableInputAsset = (asset: InputAsset) => asset.kind !== "cue" && asset.kind !== "gdi";
+
+const getPrimaryInputAsset = (assets: readonly InputAsset[]): InputAsset | undefined =>
+  assets.find((asset) => asset.patchable) || assets.find(isChecksummableInputAsset) || assets[0];
+
 export type { InputAsset, InputParentCompression, PreparedSidecarPatch };
 export {
   attachInputPreparationMetrics,
   getInputPreparationMetrics,
+  getPrimaryInputAsset,
+  isChecksummableInputAsset,
   makeCueAsset,
   makeGdiAsset,
   makeInputCandidateGroup,

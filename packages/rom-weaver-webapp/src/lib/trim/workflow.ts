@@ -1,13 +1,11 @@
 import { getPatchFileBytes } from "../../lib/input/binary-service.ts";
+import { getPrimaryInputAsset } from "../../lib/input/input-assets.ts";
+import { prepareInputAssets } from "../../lib/input/input-preparation-service.ts";
 import { getProgressEventPercent } from "../../presentation/workflow-presentation.ts";
-import {
-  getNamedSource,
-  getNamedSourceFileName,
-  getNamedSourceSize,
-} from "../../storage/shared/binary/source-file-utils.ts";
+import { getNamedSourceSize } from "../../storage/shared/binary/source-file-utils.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { SourceRef } from "../../types/source.ts";
-import type { CreateWorkflowDeps, PatchFileInstance } from "../../types/workflow-internal.ts";
+import type { PatchFileInstance } from "../../types/workflow-internal.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { TrimInput, TrimResult, TrimWorkflowOptions } from "../../types/workflow-runtime-types.ts";
 import {
@@ -15,11 +13,12 @@ import {
   isRomSpecificCompressionFormat,
 } from "../compression/container-format-registry.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
-import { createWorkflowDeps } from "../create/workflow.ts";
+import { toPublicOutput } from "../apply/patch-apply-service.ts";
 import { createSingleFileArchiveOutput, hasArchiveFileName } from "../output/archive-output-service.ts";
 import { createSingleFileRomSpecificOutput } from "../output/output-build-service.ts";
 import { getCompressionIntermediateFileName } from "../output/output-files.ts";
 import { requireOutputName } from "../output/output-name-validation.ts";
+import { reportProgress } from "../progress/progress-reporting.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import {
   getWorkflowSourceFileName,
@@ -30,7 +29,6 @@ import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
 
 const FILE_EXTENSION_REGEX = /\.([^./\\?#]+)(?:[?#].*)?$/;
 type TrimSourceInput = PatchFileInstance | SourceRef;
-type TrimWorkflowDeps = CreateWorkflowDeps;
 type OutputCompressionSource = Parameters<typeof OutputCompressionManager.resolveOutputCompression>[0];
 
 const getTrimLogLevel = (options: TrimWorkflowOptions | undefined) => options?.logging?.level;
@@ -82,19 +80,15 @@ const getTrimSourceSize = (source: TrimSourceInput) => {
   return getNamedSourceSize(source as SourceRef) ?? undefined;
 };
 
-const runTrimWorkflow = async (
-  input: TrimInput,
-  runtime: WorkflowRuntime,
-  deps: TrimWorkflowDeps,
-): Promise<TrimResult> => {
+const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Promise<TrimResult> => {
   const options = input.options || {};
   requireOutputName(options.output?.outputName);
 
   const prepareTrimSource = (source: SourceRef, selectedArchiveEntry?: string): Promise<TrimSourceInput> => {
-    if (!shouldPrepareWorkflowSource(source, options, selectedArchiveEntry, deps)) {
+    if (!shouldPrepareWorkflowSource(source, options, selectedArchiveEntry)) {
       traceWorkflowStage(options, "stage.skip", "source.prepare", "input", {
         reason: "direct source",
-        sourceName: getWorkflowSourceFileName(source, "input.bin", deps),
+        sourceName: getWorkflowSourceFileName(source, "input.bin"),
       });
       return Promise.resolve(source);
     }
@@ -103,14 +97,14 @@ const runTrimWorkflow = async (
       "source.prepare",
       "input",
       () =>
-        deps.prepareInputAssets(source, options, 0, runtime, selectedArchiveEntry).then((assets) => {
-          const selected = assets.find((asset) => asset.patchable) || assets[0];
+        prepareInputAssets(source, options, 0, runtime, selectedArchiveEntry).then((assets) => {
+          const selected = getPrimaryInputAsset(assets);
           if (!selected) throw new Error("Trim source did not contain a trimmable file");
           return selected.file;
         }),
       () => ({
         selectedArchiveEntry,
-        sourceName: getWorkflowSourceFileName(source, "input.bin", deps),
+        sourceName: getWorkflowSourceFileName(source, "input.bin"),
       }),
     );
   };
@@ -121,12 +115,12 @@ const runTrimWorkflow = async (
   ): Promise<TrimResult["output"]> => {
     if (compression === "none") {
       traceWorkflowStage(options, "stage.skip", "compress", "output", { reason: "output compression disabled" });
-      return deps.toPublicOutput(trimmedFile, runtime);
+      return toPublicOutput(trimmedFile, runtime);
     }
     if (isArchiveCompressionFormat(compression)) {
       return createSingleFileArchiveOutput({
         compression,
-        deps,
+        deps: { getPatchFileBytes, hasArchiveFileName },
         entryFile: trimmedFile,
         entryNameDetailKey: "trimEntryName",
         fallbackEntryName: trimmedFile.fileName || "trimmed.bin",
@@ -154,7 +148,7 @@ const runTrimWorkflow = async (
         }),
       );
       if (!compressedFile) throw new Error("Runtime disc compression create capability is unavailable");
-      return deps.toPublicOutput(compressedFile, runtime);
+      return toPublicOutput(compressedFile, runtime);
     }
     throw new Error(`Unsupported trim output compression: ${compression}`);
   };
@@ -164,10 +158,10 @@ const runTrimWorkflow = async (
 
   const source = await prepareTrimSource(input.source, input.selectedSourceEntryName);
   const inputSize = getTrimSourceSize(source);
-  const sourceFileName = getWorkflowSourceFileName(source, "trimmed.bin", deps);
+  const sourceFileName = getWorkflowSourceFileName(source, "trimmed.bin");
   const compression = getTrimOutputCompression(options, source);
   const requestedFileName =
-    String(getTrimOutputName(options) || "").trim() || getWorkflowSourceFileName(source, "trimmed.bin", deps);
+    String(getTrimOutputName(options) || "").trim() || getWorkflowSourceFileName(source, "trimmed.bin");
   const rawTrimFileName =
     compression === "none"
       ? requestedFileName
@@ -180,7 +174,7 @@ const runTrimWorkflow = async (
           },
         );
 
-  deps.reportProgress(options, {
+  reportProgress(options, {
     label: "Trimming...",
     percent: null,
     stage: "apply",
@@ -194,7 +188,7 @@ const runTrimWorkflow = async (
         logLevel: getTrimLogLevel(options),
         onLog: options.onLog,
         onProgress: (progress) =>
-          deps.reportProgress(options, {
+          reportProgress(options, {
             label: typeof progress.label === "string" && progress.label ? progress.label : "Trimming...",
             percent: getProgressEventPercent(progress),
             stage: "apply",
@@ -240,12 +234,4 @@ const runTrimWorkflow = async (
   };
 };
 
-const trimWorkflowDeps: TrimWorkflowDeps = {
-  ...(createWorkflowDeps as unknown as TrimWorkflowDeps),
-  getNamedSource,
-  getNamedSourceFileName,
-  getPatchFileBytes,
-  hasArchiveFileName,
-};
-
-export { runTrimWorkflow, trimWorkflowDeps };
+export { runTrimWorkflow };
