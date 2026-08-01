@@ -146,7 +146,6 @@ export {
   getGeneratedCompressionCodecFieldPresets,
   getGeneratedCompressionCodecLevelMax,
   getGeneratedCompressionCodecLevelMin,
-  getGeneratedCompressionCodecProfileKind,
   getGeneratedCompressionProfileLabel,
   getGeneratedCompressionProfileLevel,
   isGeneratedCompressionCodecFieldKey,

@@ -1,13 +1,6 @@
-import {
-  getFileNameExtension as getSharedFileNameExtension,
-  replaceFileNameExtension,
-  stripFileNameQuery,
-} from "../../../lib/path-utils.ts";
+import { getFileNameExtension as getSharedFileNameExtension, stripFileNameQuery } from "../../../lib/path-utils.ts";
 import { getBaseName, isRecord } from "./source-shared.ts";
 
-const LEADING_DOT_REGEX = /^\./;
-
-type SourceScalar = string | number | boolean | null | undefined;
 type SourceValue = RuntimeValue;
 
 type SourceFileNameOptions = {
@@ -133,12 +126,6 @@ const getSourceExtension = (
   return getSharedFileNameExtension(fileName, { stripQuery: false });
 };
 
-const replaceFileExtension = (fileName: string, extension: SourceScalar): string => {
-  const normalizedExtension = String(extension || "").replace(LEADING_DOT_REGEX, "");
-  if (!normalizedExtension) return fileName;
-  return replaceFileNameExtension(fileName, normalizedExtension);
-};
-
 export {
   getNamedSource,
   getNamedSourceFileName,
@@ -146,5 +133,4 @@ export {
   getNamedSourceSize,
   getSourceExtension,
   getSourceFileName,
-  replaceFileExtension,
 };

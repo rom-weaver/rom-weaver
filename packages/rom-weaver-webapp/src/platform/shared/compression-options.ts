@@ -244,6 +244,5 @@ export {
   normalizeCodecList,
   normalizeCodecListWithFallback,
   normalizeIntegerInRange,
-  normalizeThreadCount,
   parseIntegerInRange,
 };
