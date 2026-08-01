@@ -178,7 +178,10 @@ describe("sample tutorial", () => {
     expect(actions.textContent).toContain("Checks");
     expect(actions.querySelector("svg")).toBeTruthy();
     expect(screen.getByText("The End guide button also ends the tutorial.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(true);
+    const back = screen.getByRole("button", { name: "Back" }) as HTMLButtonElement;
+    expect(back.disabled).toBe(false);
+    expect(back.getAttribute("aria-disabled")).toBe("true");
+    expect(document.querySelector("[aria-live]")?.textContent).not.toContain("End guide button");
     fireEvent.click(first);
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -189,9 +192,12 @@ describe("sample tutorial", () => {
     expect(first.classList.contains("sample-tutorial-target")).toBe(false);
     expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    back.focus();
+    fireEvent.click(back);
     await waitFor(() => expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy());
-    expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(document.activeElement).toBe(back);
+    expect(back.disabled).toBe(false);
+    expect(back.getAttribute("aria-disabled")).toBe("true");
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());

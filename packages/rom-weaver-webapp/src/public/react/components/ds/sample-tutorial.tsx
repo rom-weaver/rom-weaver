@@ -693,46 +693,48 @@ const SampleTutorial = ({
         {/* The live region has to outlive the step copy: a region inserted
             together with its content is never announced, so only the copy
             inside it is keyed per step. */}
-        <div aria-live="polite" className="sample-tutorial-live">
-          <div className="sample-tutorial-copy" key={copyKey}>
-            <span className="sample-tutorial-kicker mono">
-              {live ? `Guided workbench · ${stepIndex + 1}/${steps.length}` : "Preparing workbench…"}
-            </span>
-            <h2 id={titleId}>{live ? step.title : "Loading the practice files"}</h2>
-            <p id={bodyId}>{live ? step.body : loadingBody}</p>
-            {live ? null : (
-              <div
-                aria-label="Loading practice files"
-                aria-valuetext="Preparing the guided workbench"
-                className="sample-tutorial-progress"
-                role="progressbar"
-              >
-                <span />
-              </div>
-            )}
-            {live && step.actions?.length ? (
-              <ul aria-label="Available actions" className="sample-tutorial-action-list">
-                {step.actions.map(([action, label]) => {
-                  const Icon = ACTION_ICONS[action];
-                  return (
-                    <li key={label}>
-                      <span aria-hidden="true" className="sample-tutorial-action-icon">
-                        <Icon />
-                      </span>
-                      {label}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
-            {live ? <p className="sample-tutorial-end-hint">The End guide button also ends the tutorial.</p> : null}
+        <div className="sample-tutorial-copy-area">
+          <div aria-live="polite" className="sample-tutorial-live">
+            <div className="sample-tutorial-copy" key={copyKey}>
+              <span className="sample-tutorial-kicker mono">
+                {live ? `Guided workbench · ${stepIndex + 1}/${steps.length}` : "Preparing workbench…"}
+              </span>
+              <h2 id={titleId}>{live ? step.title : "Loading the practice files"}</h2>
+              <p id={bodyId}>{live ? step.body : loadingBody}</p>
+              {live ? null : (
+                <div
+                  aria-label="Loading practice files"
+                  aria-valuetext="Preparing the guided workbench"
+                  className="sample-tutorial-progress"
+                  role="progressbar"
+                >
+                  <span />
+                </div>
+              )}
+              {live && step.actions?.length ? (
+                <ul aria-label="Available actions" className="sample-tutorial-action-list">
+                  {step.actions.map(([action, label]) => {
+                    const Icon = ACTION_ICONS[action];
+                    return (
+                      <li key={label}>
+                        <span aria-hidden="true" className="sample-tutorial-action-icon">
+                          <Icon />
+                        </span>
+                        {label}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </div>
           </div>
+          {live ? <p className="sample-tutorial-end-hint">The End guide button also ends the tutorial.</p> : null}
         </div>
         <div className="sample-tutorial-actions">
           {live ? (
             <button
+              aria-disabled={moving || stepIndex === 0 ? "true" : undefined}
               className="btn ghost slim"
-              disabled={moving || stepIndex === 0}
               onClick={() => {
                 if (moving || stepIndex === 0) return;
                 beginMove(() => setStepIndex((current) => current - 1));
