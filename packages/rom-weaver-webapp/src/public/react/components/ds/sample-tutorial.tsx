@@ -127,6 +127,12 @@ type GuideRect = { bottom: number; height: number; left: number; top: number; wi
 
 const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+const bindFinalCta = (cta: HTMLElement | null, final: boolean, onEnd: () => void) => {
+  if (!(cta && final)) return null;
+  cta.addEventListener("click", onEnd);
+  return () => cta.removeEventListener("click", onEnd);
+};
+
 /** The same row, seen from the viewport a pending reveal scroll is about to land on. */
 const shiftRect = (rect: GuideRect, by: number): GuideRect => ({
   bottom: rect.bottom - by,
@@ -383,6 +389,9 @@ const SampleTutorial = ({
     clearGuidedSampleQuery();
     onClose();
   };
+  const endGuideRef = useRef(endGuide);
+  const endedByCtaRef = useRef(false);
+  endGuideRef.current = endGuide;
   // Resolved once: re-querying per render hands createPortal a different
   // container the moment .rw-app appears, which tears the whole overlay down
   // and rebuilds it - dropping focus and the live region instead of updating.
@@ -455,6 +464,7 @@ const SampleTutorial = ({
     let observer: MutationObserver | null = null;
     let openedMenu: HTMLButtonElement | null = null;
     let cta: HTMLElement | null = null;
+    let removeCtaEndListener: (() => void) | null = null;
     let lifted: HTMLElement | null = null;
     const openedDrawers: HTMLButtonElement[] = [];
     let frame = 0;
@@ -490,6 +500,10 @@ const SampleTutorial = ({
         // whenever its download state changes and would drop a class we added.
         cta = target.querySelector<HTMLElement>(step.cta);
         cta?.setAttribute("data-guide-cta", "true");
+        removeCtaEndListener = bindFinalCta(cta, stepIndex === steps.length - 1, () => {
+          endedByCtaRef.current = true;
+          endGuideRef.current();
+        });
       }
       return true;
     };
@@ -505,10 +519,14 @@ const SampleTutorial = ({
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
       setTargetEl(null);
-      if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
-      for (const drawer of openedDrawers) {
-        if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
+      if (!endedByCtaRef.current) {
+        if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
+        for (const drawer of openedDrawers) {
+          if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
+        }
       }
+      endedByCtaRef.current = false;
+      removeCtaEndListener?.();
       cta?.removeAttribute("data-guide-cta");
       lifted?.classList.remove("sample-tutorial-lift");
       target?.classList.remove("sample-tutorial-target");
@@ -518,7 +536,7 @@ const SampleTutorial = ({
         else target.removeAttribute("aria-describedby");
       }
     };
-  }, [bodyId, live, step]);
+  }, [bodyId, live, step, stepIndex, steps.length]);
 
   // Pins the ring and the card to the row in *document* coordinates, so the
   // page scrolls all three together on the compositor and this runs no code
@@ -687,47 +705,71 @@ const SampleTutorial = ({
         role="dialog"
         tabIndex={-1}
       >
+        <button aria-label="Exit tutorial" className="sample-tutorial-exit" onClick={endGuide} type="button">
+          <X aria-hidden="true" />
+        </button>
         <span aria-hidden="true" className="sample-tutorial-beacon">
           0x
         </span>
         {/* The live region has to outlive the step copy: a region inserted
             together with its content is never announced, so only the copy
             inside it is keyed per step. */}
-        <div aria-live="polite" className="sample-tutorial-live">
-          <div className="sample-tutorial-copy" key={copyKey}>
-            <span className="sample-tutorial-kicker mono">
-              {live ? `Guided workbench · ${stepIndex + 1}/${steps.length}` : "Preparing workbench…"}
-            </span>
-            <h2 id={titleId}>{live ? step.title : "Loading the practice files"}</h2>
-            <p id={bodyId}>{live ? step.body : loadingBody}</p>
-            {live ? null : (
-              <div
-                aria-label="Loading practice files"
-                aria-valuetext="Preparing the guided workbench"
-                className="sample-tutorial-progress"
-                role="progressbar"
-              >
-                <span />
-              </div>
-            )}
-            {live && step.actions?.length ? (
-              <ul aria-label="Available actions" className="sample-tutorial-action-list">
-                {step.actions.map(([action, label]) => {
-                  const Icon = ACTION_ICONS[action];
-                  return (
-                    <li key={label}>
-                      <span aria-hidden="true" className="sample-tutorial-action-icon">
-                        <Icon />
-                      </span>
-                      {label}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
+        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the overflowing tutorial copy must be keyboard-scrollable. */}
+        <section aria-label="Tutorial instructions" className="sample-tutorial-copy-area" tabIndex={0}>
+          <div aria-live="polite" className="sample-tutorial-live">
+            <div className="sample-tutorial-copy" key={copyKey}>
+              <span className="sample-tutorial-kicker mono">
+                {live ? `Guided workbench · ${stepIndex + 1}/${steps.length}` : "Preparing workbench…"}
+              </span>
+              <h2 id={titleId}>{live ? step.title : "Loading the practice files"}</h2>
+              <p id={bodyId}>{live ? step.body : loadingBody}</p>
+              {live ? null : (
+                <div
+                  aria-label="Loading practice files"
+                  aria-valuetext="Preparing the guided workbench"
+                  className="sample-tutorial-progress"
+                  role="progressbar"
+                >
+                  <span />
+                </div>
+              )}
+              {live && step.actions?.length ? (
+                <ul aria-label="Available actions" className="sample-tutorial-action-list">
+                  {step.actions.map(([action, label]) => {
+                    const Icon = ACTION_ICONS[action];
+                    return (
+                      <li key={label}>
+                        <span aria-hidden="true" className="sample-tutorial-action-icon">
+                          <Icon />
+                        </span>
+                        {label}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </div>
           </div>
-        </div>
+          {live ? (
+            <p className="sample-tutorial-end-hint">
+              The top-right X exits; the final action button also ends the tutorial.
+            </p>
+          ) : null}
+        </section>
         <div className="sample-tutorial-actions">
+          {live ? (
+            <button
+              aria-disabled={moving || stepIndex === 0 ? "true" : undefined}
+              className="btn ghost slim"
+              onClick={() => {
+                if (moving || stepIndex === 0) return;
+                beginMove(() => setStepIndex((current) => current - 1));
+              }}
+              type="button"
+            >
+              Back
+            </button>
+          ) : null}
           {live ? (
             <button
               className="btn primary slim"
@@ -743,9 +785,6 @@ const SampleTutorial = ({
               {finalStep ? "Done" : "Continue"}
             </button>
           ) : null}
-          <button className="btn ghost slim" onClick={endGuide} type="button">
-            End guide
-          </button>
         </div>
       </div>
     </div>
