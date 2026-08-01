@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "noEmit": true,
+    "skipLibCheck": false,
+    "strict": true,
+    "types": []
+  },
+  "files": ["src/wasm/generated/rom-weaver-rust-types.d.ts"]
+}

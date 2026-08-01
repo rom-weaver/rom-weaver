@@ -4,7 +4,7 @@
 //! carry several file variants). Per-block/window checks are NOT whole-file
 //! identifiers and never appear here.
 
-use rom_weaver_core::OperationReport;
+use rom_weaver_core::{OperationReport, PatchEndpointSelection};
 use serde::Serialize;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -50,11 +50,24 @@ impl PatchEndpointSide {
 pub(crate) struct PatchEndpointVariant {
     pub input: PatchEndpointSide,
     pub output: PatchEndpointSide,
+    /// Present when apply needs the exact reversible endpoint selected by the
+    /// verification planner.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution: Option<PatchEndpointSelection>,
 }
 
 impl PatchEndpointVariant {
     pub(crate) fn new(input: PatchEndpointSide, output: PatchEndpointSide) -> Self {
-        Self { input, output }
+        Self {
+            input,
+            output,
+            execution: None,
+        }
+    }
+
+    pub(crate) fn with_execution(mut self, execution: PatchEndpointSelection) -> Self {
+        self.execution = Some(execution);
+        self
     }
 }
 

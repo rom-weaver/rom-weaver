@@ -956,7 +956,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       // Disabled patches never reach the workflow; the bench keeps their cards.
       // Their index-aligned run options travel with the kept patches so the
       // filtered re-stage can replay them onto its fresh stages.
-      const filteredRun = filterEnabledPatchRun(rawInput.patches, rawInput.patchOptions);
+      const patchIds = getPatchIds();
+      const runOptions = rawInput.patches.map((_patch, index) => {
+        const basis = bundleMetaRef.current.get(patchIds[index] || "")?.basis;
+        return {
+          ...rawInput.patchOptions?.[index],
+          ...(basis ? { basis } : {}),
+        };
+      });
+      const filteredRun = filterEnabledPatchRun(rawInput.patches, runOptions);
       const input: ApplyWorkflowSessionInput = { ...rawInput, ...filteredRun };
       const runPreparedWorkflow = async ({
         input: stagedInput,
@@ -1043,6 +1051,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       syncWorkflowOutputOverrides,
       prepareWorkflow,
       filterEnabledPatchRun,
+      getPatchIds,
       workflowHandle,
     ],
   );
@@ -1314,6 +1323,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       input: ApplyWorkflowSessionInput,
       patchIndex: number,
       option: {
+        basis?: "base" | "previous";
         validateInputChecksum?: string;
         validateOutputChecksum?: string;
         header?: "keep" | "strip";

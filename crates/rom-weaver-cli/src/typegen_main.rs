@@ -21,8 +21,8 @@ use rom_weaver_containers::{
 };
 use rom_weaver_core::{
     CONTAINER_FILTER_FILE_EXTENSIONS, OperationFamily, OperationStatus,
-    PATCH_FILTER_FILE_EXTENSIONS, ProgressEvent, ROM_FILTER_FILE_EXTENSIONS, RomWeaverErrorKind,
-    ThreadBudget, ThreadExecution, ThreadMode,
+    PATCH_FILTER_FILE_EXTENSIONS, PatchApplyDirection, PatchEndpointSelection, ProgressEvent,
+    ROM_FILTER_FILE_EXTENSIONS, RomWeaverErrorKind, ThreadBudget, ThreadExecution, ThreadMode,
 };
 use rom_weaver_patches::PatchRegistry;
 use serde_json::{Map, Value, json};
@@ -187,6 +187,8 @@ fn render_types() -> String {
         export_decl::<PatchBasisSource>(&config),
         export_decl::<PatchInputMatch>(&config),
         export_decl::<PatchInputVerdict>(&config),
+        export_decl::<PatchApplyDirection>(&config),
+        export_decl::<PatchEndpointSelection>(&config),
         export_decl::<PatchPlanVerdict>(&config),
         export_decl::<OutputEnforceableEntry>(&config),
         export_decl::<PatchValidationPlan>(&config),

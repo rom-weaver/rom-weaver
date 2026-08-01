@@ -50,6 +50,7 @@ type PatcherStackController = StoreController<PatchStackState> & {
   setPatchOption?: (
     index: number,
     option: {
+      basis?: "base" | "previous";
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
       header?: "keep" | "strip";

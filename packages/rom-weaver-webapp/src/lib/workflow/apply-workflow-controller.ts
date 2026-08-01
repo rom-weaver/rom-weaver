@@ -718,6 +718,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   async setPatchOption(
     index: number,
     option: {
+      basis?: "base" | "previous";
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
       header?: "keep" | "strip";
@@ -728,6 +729,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       const stage = this.patches[index];
       if (!stage) throw new RomWeaverError("INVALID_INPUT", `Patch ${index + 1} was not found`);
       let verificationChanged = false;
+      if ("basis" in option) {
+        verificationChanged ||= stage.state.basisChoice !== option.basis;
+        stage.state.basisChoice = option.basis;
+      }
       if ("validateInputChecksum" in option) {
         const value = option.validateInputChecksum?.trim() || undefined;
         verificationChanged ||= stage.state.validateInputChecksum !== value;
@@ -1511,6 +1516,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       parsedPatches: this.patches.map((patch) => patch.parsedPatch).filter(Boolean) as ParsedPatchLike[],
       patches: this.patches.map((patch) => patch.source) as never,
       patchOptions: this.patches.map((patch) => ({
+        basis: patch.state.basisChoice,
         // User drawer choice wins; otherwise only a checksum-proven auto decision acts.
         // Ambiguous (undecided) defaults to keep, matching RomPatcher.js.
         header:

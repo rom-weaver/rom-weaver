@@ -178,6 +178,9 @@ impl CliApp {
                 // every earlier bundle patch is selected too.
                 let is_chain_prefix = *index == position;
                 step_verifications.push(patch_plan::PatchStepVerification {
+                    execution: None,
+                    base_variant: None,
+                    base_representation: None,
                     basis: entry.basis,
                     basis_source: entry.basis.map(|_| PatchBasisSource::Declared),
                     declared_input: entry

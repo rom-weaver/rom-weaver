@@ -237,6 +237,8 @@ type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "outpu
   outputHeader?: PatchApplyCommand["output_header"];
   outputExtension?: string | null | undefined;
   outputName?: string | null | undefined;
+  /** One declared input basis per patch in chain order. */
+  patchBasis?: PatchApplyCommand["patch_basis"];
   removeHeader?: boolean;
   requireInputChecksumMatch?: boolean;
   validateWithChecksums?: PatchApplyCommand["expect_in"];

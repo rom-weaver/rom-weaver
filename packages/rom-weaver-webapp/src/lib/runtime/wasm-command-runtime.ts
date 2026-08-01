@@ -503,6 +503,11 @@ const getPatchApplyCommandOptions = (input: RuntimePatchApplyWorkerInput) => {
       (input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true,
     n64ByteOrders: getPatchApplyN64ByteOrders(options).map((mode) => normalizeN64ByteOrder(mode) || "auto"),
     outputHeader: getPatchApplyOutputHeader(options, removeHeader, addHeader),
+    patchBasis: Array.isArray(options?.patchBasis)
+      ? (options.patchBasis as PatchBasisMode[])
+      : Array.isArray(options?.patch_basis)
+        ? (options.patch_basis as PatchBasisMode[])
+        : [],
     repairChecksum: Boolean((input.options as { fixChecksum?: unknown } | undefined)?.fixChecksum),
     requestedThreadArg: toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads),
     validateWithChecksums: normalizePatchValidationChecksumEntries(
@@ -573,6 +578,7 @@ const getPatchApplyExecution = (input: RuntimePatchApplyWorkerInput, outputPath:
     ignore_checksum_validation: commandOptions.ignoreChecksumValidation,
     input: input.romFilePath,
     output_header: commandOptions.outputHeader,
+    ...(commandOptions.patchBasis.length ? { patch_basis: commandOptions.patchBasis } : {}),
     ...(commandOptions.n64ByteOrders.length ? { n64_byte_order: commandOptions.n64ByteOrders } : {}),
     no_compress: true,
     output: outputPath,

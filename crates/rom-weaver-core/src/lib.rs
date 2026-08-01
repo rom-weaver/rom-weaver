@@ -31,7 +31,8 @@ pub use concurrency::{
     resolve_memory_ceiling, working_set_estimate,
 };
 pub use context::{
-    OperationContext, PatchCheckScopes, PatchChecksumValidation, PatchPolicy, XdeltaSecondaryMode,
+    OperationContext, PatchApplyDirection, PatchCheckScopes, PatchChecksumValidation,
+    PatchEndpointSelection, PatchInputN64ByteOrder, PatchPolicy, XdeltaSecondaryMode,
 };
 pub use disc_sheet::{
     DiscSheetKind, DiscSheetRefs, detect_disc_sheet, enumerate_disc_sheet_refs,

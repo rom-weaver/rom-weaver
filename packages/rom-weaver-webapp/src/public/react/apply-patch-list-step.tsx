@@ -790,10 +790,11 @@ const PatchChecksDrawer = ({
                   id={`rom-weaver-patch-basis-${index}`}
                   onChange={(event) => {
                     const next = event.currentTarget.value;
+                    const basis = next === "base" || next === "previous" ? next : undefined;
                     // Auto clears the pin - checksum inference decides again. The basis
                     // feeds the chain plan, so re-resolve the verdicts either way.
-                    onMetaChange({ basis: next === "base" || next === "previous" ? next : undefined });
-                    void setOption?.(index, { revalidate: true });
+                    onMetaChange({ basis });
+                    void setOption?.(index, { basis, revalidate: true });
                   }}
                   title="Which ROM this patch's input checks describe: the base ROM (verified once up front) or the previous patch's output."
                   value={meta?.basis || ""}

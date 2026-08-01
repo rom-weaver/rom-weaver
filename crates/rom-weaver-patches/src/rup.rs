@@ -1,5 +1,6 @@
 use std::{
     cmp::min,
+    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::{self, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
@@ -11,11 +12,12 @@ use md5::{Digest, Md5};
 use rayon::prelude::*;
 #[cfg(test)]
 use rom_weaver_checksum::md5_bytes;
-use rom_weaver_checksum::md5_file;
+use rom_weaver_checksum::{checksum_reader_values_with_progress, md5_file};
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, UnsupportedOp,
+    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyDirection,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchEndpointSelection, PatchHandler,
+    PatchInputN64ByteOrder, PatchValidateRequest, ProbeConfidence, Result, RomWeaverError,
+    SharedThreadPool, UnsupportedOp,
 };
 
 use crate::checksum_validation_suffix;
@@ -105,17 +107,57 @@ impl PatchHandler for RupPatchHandler {
             patch
                 .files
                 .iter()
-                .map(|file| {
-                    PatchEndpointVariant::new(
+                .enumerate()
+                .flat_map(|(variant, file)| {
+                    let source = || {
                         PatchEndpointSide::sized(file.source_file_size)
-                            .with_checksum("md5", format_md5_hex(file.source_md5)),
+                            .with_checksum("md5", format_md5_hex(file.source_md5))
+                    };
+                    let target = || {
                         PatchEndpointSide::sized(file.target_file_size)
-                            .with_checksum("md5", format_md5_hex(file.target_md5)),
-                    )
+                            .with_checksum("md5", format_md5_hex(file.target_md5))
+                    };
+                    let variant = variant as u32;
+                    [
+                        PatchEndpointVariant::new(source(), target()).with_execution(
+                            PatchEndpointSelection {
+                                variant,
+                                direction: PatchApplyDirection::Forward,
+                            },
+                        ),
+                        PatchEndpointVariant::new(target(), source()).with_execution(
+                            PatchEndpointSelection {
+                                variant,
+                                direction: PatchApplyDirection::Reverse,
+                            },
+                        ),
+                    ]
                 })
                 .collect(),
         );
         Ok(report)
+    }
+
+    fn resolve_endpoint_selections(
+        &self,
+        patch_path: &Path,
+        input_path: &Path,
+        context: &OperationContext,
+    ) -> Result<Vec<PatchEndpointSelection>> {
+        let patch = parse_rup_file(patch_path)?;
+        reject_named_rup_entries(&patch)?;
+        let selections = matching_files_for_input(&patch, input_path, context)?
+            .into_iter()
+            .map(|selected| PatchEndpointSelection {
+                variant: selected.variant,
+                direction: if selected.undo {
+                    PatchApplyDirection::Reverse
+                } else {
+                    PatchApplyDirection::Forward
+                },
+            })
+            .collect();
+        Ok(selections)
     }
 
     fn apply(
@@ -131,8 +173,13 @@ impl PatchHandler for RupPatchHandler {
         );
         let patch = parse_rup_file(patch_path)?;
         let scopes = context.patch_check_scopes();
-        let selected =
-            select_matching_file_for_input(&patch, &request.input, scopes.source, context)?;
+        let selected = select_matching_file_for_input(
+            &patch,
+            &request.input,
+            scopes.source,
+            context.patch_endpoint_selection(),
+            context,
+        )?;
         let file = selected.file;
         let undo = selected.undo;
         let normalized_input = selected.normalized_input;
@@ -235,7 +282,7 @@ impl PatchHandler for RupPatchHandler {
         )?;
 
         let checksum_suffix = checksum_validation_suffix(scopes.source && scopes.target);
-        Ok(crate::patch_success_report(
+        let mut report = crate::patch_success_report(
             self.descriptor,
             "apply",
             format!(
@@ -246,7 +293,17 @@ impl PatchHandler for RupPatchHandler {
                 checksum_suffix
             ),
             Some(execution),
-        ))
+        );
+        if normalized_input.canonical_n64_output {
+            report.details = Some(serde_json::json!({
+                "patch": {
+                    "output_representation": {
+                        "n64_byte_order": "big-endian"
+                    }
+                }
+            }));
+        }
+        Ok(report)
     }
 
     fn validate(
@@ -257,8 +314,13 @@ impl PatchHandler for RupPatchHandler {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let patch = parse_rup_file(patch_path)?;
         let scopes = context.patch_check_scopes();
-        let selected =
-            select_matching_file_for_input(&patch, &request.input, scopes.source, context)?;
+        let selected = select_matching_file_for_input(
+            &patch,
+            &request.input,
+            scopes.source,
+            context.patch_endpoint_selection(),
+            context,
+        )?;
         let output_size = if selected.undo {
             selected.file.source_file_size
         } else {
@@ -365,9 +427,68 @@ struct RupSelectedFile<'a> {
 }
 
 #[derive(Debug)]
+struct RupEndpointMatch<'a> {
+    variant: u32,
+    file: &'a RupFile,
+    undo: bool,
+    normalized_input: Option<RupNormalizedInput>,
+}
+
+#[derive(Debug)]
 struct RupNormalizedInput {
     path: PathBuf,
     reconstruction: RupOutputReconstruction,
+    temporary: bool,
+    canonical_n64_output: bool,
+}
+
+impl RupNormalizedInput {
+    fn temporary(path: PathBuf, reconstruction: RupOutputReconstruction) -> Self {
+        Self {
+            path,
+            reconstruction,
+            temporary: true,
+            canonical_n64_output: false,
+        }
+    }
+
+    fn n64_normalized(path: PathBuf) -> Self {
+        Self {
+            path,
+            reconstruction: RupOutputReconstruction::Identity,
+            temporary: true,
+            canonical_n64_output: true,
+        }
+    }
+
+    fn n64_big_endian(path: &Path) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            reconstruction: RupOutputReconstruction::Identity,
+            temporary: false,
+            canonical_n64_output: true,
+        }
+    }
+
+    fn replace_temporary_path(&mut self, path: PathBuf) -> Result<()> {
+        if self.temporary
+            && let Err(error) = fs::remove_file(&self.path)
+        {
+            let _ = fs::remove_file(&path);
+            return Err(error.into());
+        }
+        self.path = path;
+        self.temporary = true;
+        Ok(())
+    }
+}
+
+impl Drop for RupNormalizedInput {
+    fn drop(&mut self) {
+        if self.temporary {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -551,35 +672,58 @@ fn select_matching_file_for_input<'a>(
     patch: &'a ParsedRupPatch,
     input_path: &Path,
     validate_checksums: bool,
+    selection: Option<PatchEndpointSelection>,
     context: &OperationContext,
 ) -> Result<RupSelectedFile<'a>> {
-    if patch.files.iter().any(|file| !file.file_name.is_empty()) {
-        return Err(RomWeaverError::Unsupported(
-            UnsupportedOp::RupNamedFileEntries,
-        ));
+    reject_named_rup_entries(patch)?;
+
+    if let Some(selection) = selection {
+        context.cancel().check()?;
+        let file = patch.files.get(selection.variant as usize).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "RUP endpoint variant {} is not present in this patch",
+                selection.variant
+            ))
+        })?;
+        let normalized_input = normalize_rup_input(input_path, file, context)?;
+        let undo = selection.direction == PatchApplyDirection::Reverse;
+        if validate_checksums {
+            let actual = rup_input_md5_with_progress(&normalized_input.path, context)?;
+            let expected = format_md5_hex(if undo {
+                file.target_md5
+            } else {
+                file.source_md5
+            });
+            if actual != expected {
+                return Err(RomWeaverError::Validation(format!(
+                    "RUP selected {} endpoint checksum mismatch; expected {}, got {}",
+                    if undo { "reverse" } else { "forward" },
+                    expected,
+                    actual
+                )));
+            }
+        }
+        return Ok(RupSelectedFile {
+            file,
+            undo,
+            normalized_input,
+        });
     }
 
-    let mut matches = Vec::new();
-    for file in &patch.files {
-        let normalized_input = match normalize_rup_input(input_path, file, context) {
-            Ok(normalized_input) => normalized_input,
-            Err(RomWeaverError::Validation(_) | RomWeaverError::ValidationCode(_)) => {
-                continue;
-            }
-            Err(error) => return Err(error),
-        };
-        let input_md5 = md5_file(&normalized_input.path)?;
-        if file.source_md5 == input_md5 || file.target_md5 == input_md5 {
-            matches.push(RupSelectedFile {
-                file,
-                undo: file.target_md5 == input_md5,
-                normalized_input,
-            });
-        }
-    }
+    let mut matches = matching_files_for_input(patch, input_path, context)?;
 
     match matches.len() {
-        1 => Ok(matches.remove(0)),
+        1 => {
+            let matched = matches.remove(0);
+            context.cancel().check()?;
+            Ok(RupSelectedFile {
+                file: matched.file,
+                undo: matched.undo,
+                normalized_input: matched
+                    .normalized_input
+                    .expect("matching RUP endpoint retains its normalized input"),
+            })
+        }
         0 if !validate_checksums => match patch.files.as_slice() {
             [single] => Ok(RupSelectedFile {
                 file: single,
@@ -593,16 +737,89 @@ fn select_matching_file_for_input<'a>(
         0 => {
             // Only needed for this diagnostic - computed lazily so the common
             // (matching) path does not pay a redundant full-file MD5 pass.
-            let raw_input_md5 = md5_file(input_path)?;
+            let raw_input_md5 = rup_input_md5_with_progress(input_path, context)?;
             Err(RomWeaverError::Validation(format!(
                 "RUP input validation failed; no file entry matched input MD5 {}",
-                format_md5_hex(raw_input_md5)
+                raw_input_md5
             )))
         }
-        _ => Err(RomWeaverError::Validation(
-            "RUP input validation matched multiple file variants; patch-apply requires an unambiguous single-file variant".into(),
-        )),
+        _ => Err(ambiguous_rup_input_error()),
     }
+}
+
+fn reject_named_rup_entries(patch: &ParsedRupPatch) -> Result<()> {
+    if patch.files.iter().any(|file| !file.file_name.is_empty()) {
+        return Err(RomWeaverError::Unsupported(
+            UnsupportedOp::RupNamedFileEntries,
+        ));
+    }
+    Ok(())
+}
+
+fn matching_files_for_input<'a>(
+    patch: &'a ParsedRupPatch,
+    input_path: &Path,
+    context: &OperationContext,
+) -> Result<Vec<RupEndpointMatch<'a>>> {
+    let mut matches = Vec::new();
+    let mut normalized_by_rom_type = HashMap::<u8, Option<(RupNormalizedInput, String)>>::new();
+    for (variant, file) in patch.files.iter().enumerate() {
+        context.cancel().check()?;
+        let normalized = match normalized_by_rom_type.entry(file.rom_type) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let normalized = match normalize_rup_input(input_path, file, context) {
+                    Ok(normalized_input) => {
+                        let input_md5 =
+                            rup_input_md5_with_progress(&normalized_input.path, context)?;
+                        Some((normalized_input, input_md5))
+                    }
+                    Err(RomWeaverError::Validation(_) | RomWeaverError::ValidationCode(_)) => None,
+                    Err(error) => return Err(error),
+                };
+                entry.insert(normalized)
+            }
+        };
+        let Some((_, input_md5)) = normalized.as_ref() else {
+            continue;
+        };
+        let source_matches = format_md5_hex(file.source_md5) == input_md5.as_str();
+        let target_matches = format_md5_hex(file.target_md5) == input_md5.as_str();
+        if source_matches || target_matches {
+            matches.push(RupEndpointMatch {
+                variant: variant as u32,
+                file,
+                undo: target_matches,
+                normalized_input: None,
+            });
+        }
+    }
+    if let [matched] = matches.as_mut_slice() {
+        matched.normalized_input = normalized_by_rom_type
+            .remove(&matched.file.rom_type)
+            .flatten()
+            .map(|(input, _)| input);
+    }
+    Ok(matches)
+}
+
+fn rup_input_md5_with_progress(path: &Path, context: &OperationContext) -> Result<String> {
+    let mut input = BufReader::new(File::open(path)?);
+    Ok(checksum_reader_values_with_progress(
+        &mut input,
+        &["md5".to_string()],
+        context,
+        &mut |_| {},
+    )?
+    .values
+    .remove("md5")
+    .expect("md5 was requested"))
+}
+
+fn ambiguous_rup_input_error() -> RomWeaverError {
+    RomWeaverError::Validation(
+        "RUP input validation matched multiple file variants; patch-apply requires an unambiguous single-file variant".into(),
+    )
 }
 
 fn normalize_rup_input(
@@ -627,6 +844,8 @@ fn identity_normalized_input(input_path: &Path) -> RupNormalizedInput {
     RupNormalizedInput {
         path: input_path.to_path_buf(),
         reconstruction: RupOutputReconstruction::Identity,
+        temporary: false,
+        canonical_n64_output: false,
     }
 }
 
@@ -655,10 +874,10 @@ fn normalize_nes_input(
     }
     if prefix.len() >= 4 && &prefix[..4] == b"UNIF" {
         let path = extract_unif_payload_to_temp(input_path, context)?;
-        return Ok(RupNormalizedInput {
+        return Ok(RupNormalizedInput::temporary(
             path,
-            reconstruction: RupOutputReconstruction::Unif,
-        });
+            RupOutputReconstruction::Unif,
+        ));
     }
     Ok(identity_normalized_input(input_path))
 }
@@ -679,13 +898,13 @@ fn normalize_snes_input(
         None
     };
 
-    let (payload_path, reconstruction) = if strip_header {
+    let mut normalized_input = if strip_header {
         if file_len < COPIER_HEADER_SIZE {
             return Err(RomWeaverError::Validation(
                 "RUP SNES header normalization requires at least 0x200 bytes".into(),
             ));
         }
-        (
+        RupNormalizedInput::temporary(
             copy_range_to_temp(
                 input_path,
                 COPIER_HEADER_SIZE,
@@ -698,38 +917,42 @@ fn normalize_snes_input(
                 .unwrap_or(RupOutputReconstruction::Identity),
         )
     } else {
-        (input_path.to_path_buf(), RupOutputReconstruction::Identity)
+        identity_normalized_input(input_path)
     };
 
-    if snes_payload_needs_deinterleave(&payload_path)? {
-        let path = write_snes_deinterleaved_to_temp(&payload_path, context)?;
-        return Ok(RupNormalizedInput {
-            path,
-            reconstruction,
-        });
+    if snes_payload_needs_deinterleave(&normalized_input.path, context)? {
+        let path = write_snes_deinterleaved_to_temp(&normalized_input.path, context)?;
+        normalized_input.replace_temporary_path(path)?;
     }
 
-    Ok(RupNormalizedInput {
-        path: payload_path,
-        reconstruction,
-    })
+    Ok(normalized_input)
 }
 
 fn normalize_n64_input(
     input_path: &Path,
     context: &OperationContext,
 ) -> Result<RupNormalizedInput> {
-    if read_bytes_at(input_path, 0, 4)?
-        .as_deref()
-        .is_some_and(|bytes| bytes == [0x37, 0x80, 0x40, 0x12])
-    {
-        let path = write_n64_byte_swapped_to_temp(input_path, context)?;
-        return Ok(RupNormalizedInput {
-            path,
-            reconstruction: RupOutputReconstruction::Identity,
-        });
+    let order = match context.patch_input_n64_byte_order() {
+        Some(order) => Some(order),
+        None => match read_bytes_at(input_path, 0, 4)?.as_deref() {
+            Some([0x80, 0x37, 0x12, 0x40]) => Some(PatchInputN64ByteOrder::BigEndian),
+            Some([0x40, 0x12, 0x37, 0x80]) => Some(PatchInputN64ByteOrder::LittleEndian),
+            Some([0x37, 0x80, 0x40, 0x12]) => Some(PatchInputN64ByteOrder::ByteSwapped),
+            _ => None,
+        },
+    };
+    match order {
+        Some(PatchInputN64ByteOrder::BigEndian) => {
+            Ok(RupNormalizedInput::n64_big_endian(input_path))
+        }
+        Some(
+            order @ (PatchInputN64ByteOrder::LittleEndian | PatchInputN64ByteOrder::ByteSwapped),
+        ) => {
+            let path = write_n64_big_endian_to_temp(input_path, context, order)?;
+            Ok(RupNormalizedInput::n64_normalized(path))
+        }
+        None => Ok(identity_normalized_input(input_path)),
     }
-    Ok(identity_normalized_input(input_path))
 }
 
 fn normalize_game_boy_input(
@@ -828,10 +1051,10 @@ fn normalize_smd_input(
             context,
             purpose,
         )?;
-        return Ok(RupNormalizedInput {
+        return Ok(RupNormalizedInput::temporary(
             path,
-            reconstruction: RupOutputReconstruction::Identity,
-        });
+            RupOutputReconstruction::Identity,
+        ));
     }
     Ok(identity_normalized_input(input_path))
 }
@@ -861,12 +1084,12 @@ fn strip_header_to_normalized_input(
         context,
         purpose,
     )?;
-    Ok(RupNormalizedInput {
+    Ok(RupNormalizedInput::temporary(
         path,
-        reconstruction: header
+        header
             .map(RupOutputReconstruction::PrefixHeader)
             .unwrap_or(RupOutputReconstruction::Identity),
-    })
+    ))
 }
 
 fn finalize_rup_output(
@@ -900,15 +1123,20 @@ fn finalize_rup_output(
 }
 
 fn extract_unif_payload_to_temp(input_path: &Path, context: &OperationContext) -> Result<PathBuf> {
-    let output_path = temp_path(context, "rup-unif-payload", Some("bin"))?;
-    let mut input = File::open(input_path)?;
-    let mut output = File::create(&output_path)?;
-    copy_unif_payload_chunks(&mut input, &mut output)?;
-    output.flush()?;
-    Ok(output_path)
+    write_normalization_temp(context, "rup-unif-payload", |output_path| {
+        let mut input = File::open(input_path)?;
+        let mut output = File::create(output_path)?;
+        copy_unif_payload_chunks(&mut input, &mut output, context)?;
+        output.flush()?;
+        Ok(())
+    })
 }
 
-fn copy_unif_payload_chunks(input: &mut File, output: &mut File) -> Result<()> {
+fn copy_unif_payload_chunks(
+    input: &mut File,
+    output: &mut File,
+    context: &OperationContext,
+) -> Result<()> {
     let file_len = input.metadata()?.len();
     if file_len < 0x20 {
         return Err(RomWeaverError::Validation(
@@ -919,6 +1147,7 @@ fn copy_unif_payload_chunks(input: &mut File, output: &mut File) -> Result<()> {
     let mut cursor = 0x20u64;
     input.seek(SeekFrom::Start(cursor))?;
     while cursor < file_len {
+        context.cancel().check()?;
         let Some((chunk_id, chunk_len, data_offset)) =
             read_unif_chunk_header(input, cursor, file_len)?
         else {
@@ -927,7 +1156,7 @@ fn copy_unif_payload_chunks(input: &mut File, output: &mut File) -> Result<()> {
         if is_unif_payload_chunk(&chunk_id) {
             input.seek(SeekFrom::Start(data_offset))?;
             let mut limited = Read::by_ref(input).take(chunk_len);
-            io::copy(&mut limited, output)?;
+            copy_cancellable(&mut limited, output, context)?;
         }
         cursor = data_offset
             .checked_add(chunk_len)
@@ -1006,9 +1235,8 @@ fn is_unif_payload_chunk(chunk_id: &[u8; 4]) -> bool {
         && (chunk_id[3].is_ascii_digit() || (b'A'..=b'F').contains(&chunk_id[3]))
 }
 
-fn snes_payload_needs_deinterleave(input_path: &Path) -> Result<bool> {
-    let mut payload = Vec::new();
-    File::open(input_path)?.read_to_end(&mut payload)?;
+fn snes_payload_needs_deinterleave(input_path: &Path, context: &OperationContext) -> Result<bool> {
+    let payload = read_file_cancellable(input_path, context)?;
     if payload.len() <= 0x7fde {
         return Ok(false);
     }
@@ -1043,12 +1271,15 @@ fn write_snes_deinterleaved_to_temp(
     input_path: &Path,
     context: &OperationContext,
 ) -> Result<PathBuf> {
-    let mut payload = Vec::new();
-    File::open(input_path)?.read_to_end(&mut payload)?;
-    let deinterleaved = deinterleave_snes_payload(&payload);
-    let output_path = temp_path(context, "rup-snes-deinterleaved", Some("bin"))?;
-    fs::write(&output_path, deinterleaved)?;
-    Ok(output_path)
+    write_normalization_temp(context, "rup-snes-deinterleaved", |output_path| {
+        let payload = read_file_cancellable(input_path, context)?;
+        let deinterleaved = deinterleave_snes_payload(&payload);
+        let mut source = deinterleaved.as_slice();
+        let mut output = File::create(output_path)?;
+        copy_cancellable(&mut source, &mut output, context)?;
+        output.flush()?;
+        Ok(())
+    })
 }
 
 fn deinterleave_snes_payload(payload: &[u8]) -> Vec<u8> {
@@ -1074,35 +1305,42 @@ fn deinterleave_snes_payload(payload: &[u8]) -> Vec<u8> {
     output
 }
 
-fn write_n64_byte_swapped_to_temp(
+fn write_n64_big_endian_to_temp(
     input_path: &Path,
     context: &OperationContext,
+    order: PatchInputN64ByteOrder,
 ) -> Result<PathBuf> {
-    let output_path = temp_path(context, "rup-n64-native", Some("bin"))?;
-    let mut input = BufReader::new(File::open(input_path)?);
-    let mut output = File::create(&output_path)?;
-    let mut buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
-    let mut pending = None;
-    loop {
-        let read = input.read(&mut buffer)?;
-        if read == 0 {
-            break;
+    write_normalization_temp(context, "rup-n64-native", |output_path| {
+        let unit = match order {
+            PatchInputN64ByteOrder::LittleEndian => 4,
+            PatchInputN64ByteOrder::ByteSwapped => 2,
+            PatchInputN64ByteOrder::BigEndian => 1,
+        };
+        let input_len = fs::metadata(input_path)?.len();
+        if !input_len.is_multiple_of(unit) {
+            return Err(RomWeaverError::Validation(format!(
+                "RUP N64 normalization requires a byte length divisible by {unit}"
+            )));
         }
-        for byte in &buffer[..read] {
-            if let Some(previous) = pending.take() {
-                output.write_all(&[*byte, previous])?;
-            } else {
-                pending = Some(*byte);
+        let mut input = BufReader::new(File::open(input_path)?);
+        let mut output = File::create(output_path)?;
+        let mut buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
+        let mut remaining = input_len;
+        while remaining > 0 {
+            context.cancel().check()?;
+            let read = usize::try_from(remaining.min(buffer.len() as u64)).map_err(|_| {
+                RomWeaverError::Validation("RUP N64 read length exceeded usize".into())
+            })?;
+            input.read_exact(&mut buffer[..read])?;
+            for bytes in buffer[..read].chunks_exact_mut(unit as usize) {
+                bytes.reverse();
             }
+            output.write_all(&buffer[..read])?;
+            remaining -= read as u64;
         }
-    }
-    if pending.is_some() {
-        return Err(RomWeaverError::Validation(
-            "RUP N64 byte-swap input had odd byte length".into(),
-        ));
-    }
-    output.flush()?;
-    Ok(output_path)
+        output.flush()?;
+        Ok(())
+    })
 }
 
 fn write_smd_deinterleaved_to_temp(
@@ -1112,26 +1350,30 @@ fn write_smd_deinterleaved_to_temp(
     context: &OperationContext,
     purpose: &str,
 ) -> Result<PathBuf> {
-    let output_path = temp_path(context, purpose, Some("bin"))?;
-    let mut input = BufReader::new(File::open(input_path)?);
-    let mut output = File::create(&output_path)?;
-    input.seek(SeekFrom::Start(payload_offset))?;
-    let mut block = vec![0u8; SMD_BLOCK_SIZE];
-    let mut remaining = payload_len;
-    while remaining >= SMD_BLOCK_SIZE as u64 {
-        input.read_exact(&mut block)?;
-        let deinterleaved = deinterleave_smd_block(&block);
-        output.write_all(&deinterleaved)?;
-        remaining -= SMD_BLOCK_SIZE as u64;
-    }
-    if remaining > 0 {
-        let tail_len = usize_from_u64(remaining, "RUP SMD tail length")?;
-        let mut tail = vec![0u8; tail_len];
-        input.read_exact(&mut tail)?;
-        output.write_all(&tail)?;
-    }
-    output.flush()?;
-    Ok(output_path)
+    write_normalization_temp(context, purpose, |output_path| {
+        let mut input = BufReader::new(File::open(input_path)?);
+        let mut output = File::create(output_path)?;
+        input.seek(SeekFrom::Start(payload_offset))?;
+        let mut block = vec![0u8; SMD_BLOCK_SIZE];
+        let mut remaining = payload_len;
+        while remaining >= SMD_BLOCK_SIZE as u64 {
+            context.cancel().check()?;
+            input.read_exact(&mut block)?;
+            let deinterleaved = deinterleave_smd_block(&block);
+            output.write_all(&deinterleaved)?;
+            remaining -= SMD_BLOCK_SIZE as u64;
+        }
+        if remaining > 0 {
+            context.cancel().check()?;
+            let tail_len = usize_from_u64(remaining, "RUP SMD tail length")?;
+            let mut tail = vec![0u8; tail_len];
+            input.read_exact(&mut tail)?;
+            output.write_all(&tail)?;
+        }
+        context.cancel().check()?;
+        output.flush()?;
+        Ok(())
+    })
 }
 
 fn deinterleave_smd_block(block: &[u8]) -> Vec<u8> {
@@ -1151,14 +1393,39 @@ fn copy_range_to_temp(
     context: &OperationContext,
     purpose: &str,
 ) -> Result<PathBuf> {
-    let output_path = temp_path(context, purpose, Some("bin"))?;
+    write_normalization_temp(context, purpose, |output_path| {
+        let mut input = File::open(input_path)?;
+        input.seek(SeekFrom::Start(offset))?;
+        let mut output = File::create(output_path)?;
+        let mut limited = input.take(len);
+        copy_cancellable(&mut limited, &mut output, context)?;
+        output.flush()?;
+        Ok(())
+    })
+}
+
+fn read_file_cancellable(input_path: &Path, context: &OperationContext) -> Result<Vec<u8>> {
     let mut input = File::open(input_path)?;
-    input.seek(SeekFrom::Start(offset))?;
-    let mut output = File::create(&output_path)?;
-    let mut limited = input.take(len);
-    io::copy(&mut limited, &mut output)?;
-    output.flush()?;
-    Ok(output_path)
+    let mut output = Vec::new();
+    copy_cancellable(&mut input, &mut output, context)?;
+    Ok(output)
+}
+
+fn copy_cancellable(
+    input: &mut impl Read,
+    output: &mut impl Write,
+    context: &OperationContext,
+) -> Result<()> {
+    let mut buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
+    loop {
+        context.cancel().check()?;
+        let read = input.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        output.write_all(&buffer[..read])?;
+    }
+    Ok(())
 }
 
 fn copy_exact_bytes(input: &mut File, output: &mut File, len: u64, label: &str) -> Result<()> {
@@ -1179,6 +1446,19 @@ fn temp_path(
 ) -> Result<PathBuf> {
     let path = context.temp_paths().next_path(purpose, extension);
     ensure_parent_dir(&path)?;
+    Ok(path)
+}
+
+fn write_normalization_temp(
+    context: &OperationContext,
+    purpose: &str,
+    write: impl FnOnce(&Path) -> Result<()>,
+) -> Result<PathBuf> {
+    let path = temp_path(context, purpose, Some("bin"))?;
+    if let Err(error) = write(&path) {
+        let _ = fs::remove_file(&path);
+        return Err(error);
+    }
     Ok(path)
 }
 

@@ -288,6 +288,25 @@ fn write_offset_ips(temp: &TempDir, name: &str, offset: u32, value: u8) -> PathB
     patch.path().to_path_buf()
 }
 
+fn create_patch_file(original: &Path, modified: &Path, format: &str, output: &Path) {
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.to_str().expect("path"),
+            "--modified",
+            modified.to_str().expect("path"),
+            "--format",
+            format,
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+}
+
 fn patched_rom_bytes(edits: &[(usize, u8)]) -> Vec<u8> {
     let mut bytes = BUNDLE_ROM_BYTES.to_vec();
     for (offset, value) in edits {
@@ -724,6 +743,13 @@ fn crc32_hex(bytes: &[u8]) -> String {
     let mut crc = flate2::Crc::new();
     crc.update(bytes);
     format!("{:08x}", crc.sum())
+}
+
+fn md5_hex(bytes: &[u8]) -> String {
+    rom_weaver_checksum::md5_bytes(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 #[test]
@@ -1384,6 +1410,129 @@ fn bundle_apply_enforces_mid_chain_declared_input_checks() {
 }
 
 #[test]
+fn bundle_input_checks_block_conflicting_embedded_base_inference() {
+    let temp = setup_temp_dir();
+    let rom = write_bundle_rom(&temp, "game.bin");
+    let mid = temp.child("mid.bin");
+    let mut mid_bytes = BUNDLE_ROM_BYTES.to_vec();
+    mid_bytes[0] = 0xAA;
+    fs::write(mid.path(), &mid_bytes).expect("mid fixture");
+    let target = temp.child("target.bin");
+    let mut target_bytes = BUNDLE_ROM_BYTES.to_vec();
+    target_bytes[1] = 0xBB;
+    fs::write(target.path(), target_bytes).expect("target fixture");
+    let first_patch = temp.child("first.bps");
+    let second_patch = temp.child("second.bps");
+    for (modified, patch) in [(&mid, &first_patch), (&target, &second_patch)] {
+        command_stdout(
+            &[
+                "patch",
+                "create",
+                "--original",
+                rom.to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--format",
+                "bps",
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--json",
+            ],
+            0,
+        );
+    }
+
+    fs::write(
+        temp.child("rom-weaver-bundle.json").path(),
+        format!(
+            r#"{{
+                "version": 1,
+                "rom": {{ "path": "game.bin" }},
+                "patches": [
+                    {{ "path": "first.bps" }},
+                    {{ "path": "second.bps", "inputChecks": {{ "checksums": {{ "crc32": "{}" }} }} }}
+                ],
+                "output": {{ "name": "out.bin" }}
+            }}"#,
+            crc32_hex(&mid_bytes)
+        ),
+    )
+    .expect("bundle fixture");
+
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--output",
+            temp.child("out.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["status"], "failed");
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("Input checksum invalid"),
+        "unexpected failure: {terminal}"
+    );
+
+    // When the unbased declaration agrees with the embedded base endpoint,
+    // Base inference is valid but must not stand down the declaration's
+    // intermediate-state gate.
+    fs::write(
+        temp.child("rom-weaver-bundle.json").path(),
+        format!(
+            r#"{{
+                "version": 1,
+                "rom": {{ "path": "game.bin" }},
+                "patches": [
+                    {{ "path": "first.bps" }},
+                    {{ "path": "second.bps", "inputChecks": {{ "checksums": {{ "crc32": "{}" }} }} }}
+                ],
+                "output": {{ "name": "out.bin" }}
+            }}"#,
+            crc32_hex(BUNDLE_ROM_BYTES)
+        ),
+    )
+    .expect("bundle fixture");
+    let inferred_base = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--output",
+            temp.child("inferred-base-out.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    let terminal = inferred_base.last().expect("terminal event");
+    assert_eq!(terminal["status"], "failed");
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch.chain.input_mismatch"),
+        "unexpected inferred-base failure: {terminal}"
+    );
+}
+
+#[test]
 fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
     let temp = setup_temp_dir();
     write_bundle_rom(&temp, "game.bin");
@@ -1396,7 +1545,7 @@ fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
     // default previous basis, that check runs against the intermediate and
     // fails; declared as base it verifies against the ROM once and the chain
     // succeeds with the step's state checks stood down.
-    let write_bundle = |basis_field: &str| {
+    let write_bundle = |basis_field: &str, input_crc: &str| {
         fs::write(
             temp.child("rom-weaver-bundle.json").path(),
             format!(
@@ -1405,7 +1554,7 @@ fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
                     "rom": {{ "path": "game.bin" }},
                     "patches": [
                         {{ "path": "main.ips" }},
-                        {{ "path": "extra.ips"{basis_field}, "inputChecks": {{ "checksums": {{ "crc32": "{rom_crc}" }} }} }}
+                        {{ "path": "extra.ips"{basis_field}, "inputChecks": {{ "checksums": {{ "crc32": "{input_crc}" }} }} }}
                     ],
                     "output": {{ "name": "out.bin" }}
                 }}"#
@@ -1414,7 +1563,7 @@ fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
         .expect("bundle fixture");
     };
 
-    write_bundle("");
+    write_bundle("", &rom_crc);
     let events = run_json_events(
         &[
             "patch-apply",
@@ -1437,7 +1586,7 @@ fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
             .contains("patch.chain.input_mismatch")
     );
 
-    write_bundle(r#", "basis": "base""#);
+    write_bundle(r#", "basis": "base""#, &rom_crc);
     let events = run_json_events(
         &[
             "patch-apply",
@@ -1458,6 +1607,204 @@ fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
         fs::read(out.path()).expect("output"),
         patched_rom_bytes(&[(0, 0xAA), (1, 0xBB)])
     );
+
+    // A declared base check remains mandatory even when it is the only
+    // whole-file evidence for this checksumless patch.
+    write_bundle(r#", "basis": "base""#, "00000000");
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--output",
+            out.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    assert!(
+        events.last().expect("terminal")["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch.base.input_mismatch")
+    );
+}
+
+#[test]
+fn bundle_declared_base_conflict_is_rejected_and_cli_auto_clears_the_declaration() {
+    let temp = setup_temp_dir();
+    let rom = write_bundle_rom(&temp, "game.bin");
+    let mid = temp.child("mid.bin");
+    let mut mid_bytes = BUNDLE_ROM_BYTES.to_vec();
+    mid_bytes[4] = 0xAA;
+    fs::write(mid.path(), &mid_bytes).expect("mid fixture");
+    let target = temp.child("target.bin");
+    let mut target_bytes = mid_bytes.clone();
+    target_bytes[12] = 0xBB;
+    fs::write(target.path(), &target_bytes).expect("target fixture");
+    let first_patch = temp.child("first.bps");
+    let second_patch = temp.child("second.bps");
+    create_patch_file(rom.as_path(), mid.path(), "bps", first_patch.path());
+    create_patch_file(mid.path(), target.path(), "bps", second_patch.path());
+    let bundle = temp.child("rom-weaver-bundle.json");
+
+    // A bundle declaration may add evidence, but it cannot turn a patch whose
+    // embedded source is the intermediate into a Base-authored patch.
+    fs::write(
+        bundle.path(),
+        format!(
+            r#"{{
+                "version": 1,
+                "rom": {{ "path": "game.bin" }},
+                "patches": [
+                    {{ "path": "first.bps" }},
+                    {{
+                        "path": "second.bps",
+                        "basis": "base",
+                        "inputChecks": {{ "checksums": {{ "crc32": "{}" }} }}
+                    }}
+                ],
+                "output": {{ "name": "out.bin" }}
+            }}"#,
+            crc32_hex(BUNDLE_ROM_BYTES)
+        ),
+    )
+    .expect("bundle fixture");
+    let conflict = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            bundle.path().to_str().expect("path"),
+            "--output",
+            temp.child("conflict.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    let terminal = conflict.last().expect("terminal");
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch.base.input_mismatch"),
+        "unexpected conflict: {terminal}"
+    );
+
+    // With only the stale basis declaration left, an explicit Auto clears the
+    // bundle pin and lets the embedded endpoints recover the real chain.
+    fs::write(
+        bundle.path(),
+        r#"{
+            "version": 1,
+            "rom": { "path": "game.bin" },
+            "patches": [
+                { "path": "first.bps" },
+                { "path": "second.bps", "basis": "base" }
+            ],
+            "output": { "name": "out.bin" }
+        }"#,
+    )
+    .expect("bundle fixture");
+    let stale = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            bundle.path().to_str().expect("path"),
+            "--output",
+            temp.child("stale.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    assert!(
+        stale.last().expect("terminal")["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch.base.input_mismatch")
+    );
+
+    let output = temp.child("auto.bin");
+    let automatic = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            bundle.path().to_str().expect("path"),
+            "--patch-basis",
+            "auto",
+            "--patch-basis",
+            "auto",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(automatic.last().expect("terminal")["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), target_bytes);
+}
+
+#[test]
+fn bundle_ignore_mode_does_not_use_stale_output_checks_to_select_rup_direction() {
+    let temp = setup_temp_dir();
+    write_bundle_rom(&temp, "game.bin");
+    write_offset_ips(&temp, "first.ips", 4, 0xAA);
+    let mid = temp.child("mid.bin");
+    let mid_bytes = patched_rom_bytes(&[(4, 0xAA)]);
+    fs::write(mid.path(), &mid_bytes).expect("mid fixture");
+    let target = temp.child("target.bin");
+    let mut target_bytes = mid_bytes[..12].to_vec();
+    target_bytes[8] = 0xBB;
+    fs::write(target.path(), &target_bytes).expect("target fixture");
+    let second_patch = temp.child("second.rup");
+    create_patch_file(mid.path(), target.path(), "rup", second_patch.path());
+    let bundle = temp.child("rom-weaver-bundle.json");
+    fs::write(
+        bundle.path(),
+        format!(
+            r#"{{
+                "version": 1,
+                "rom": {{ "path": "game.bin" }},
+                "patches": [
+                    {{
+                        "path": "first.ips",
+                        "outputChecks": {{
+                            "checksums": {{ "md5": "{}" }},
+                            "size": {}
+                        }}
+                    }},
+                    {{ "path": "second.rup" }}
+                ],
+                "output": {{ "name": "out.bin" }}
+            }}"#,
+            md5_hex(&target_bytes),
+            target_bytes.len()
+        ),
+    )
+    .expect("bundle fixture");
+
+    let output = temp.child("out.bin");
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            bundle.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), target_bytes);
 }
 
 #[test]
