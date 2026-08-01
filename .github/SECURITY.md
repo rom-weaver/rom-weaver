@@ -10,9 +10,8 @@
 
 ## Supported versions
 
-Security fixes are made on the default branch. No GitHub Release has been
-published yet. After releases begin, fixes will be included in the next
-release, and only the latest release will be supported.
+Security fixes are made on the default branch and included in the next
+release. Only the latest published release is supported.
 
 ## Report a vulnerability
 

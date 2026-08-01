@@ -22,12 +22,12 @@ Choose the guide that matches what you are trying to do.
   rom-weaver can open and which formats it can create.
 - [Compression formats](./usage/compression-formats.md): pick between CHD, RVZ,
   Z3DS, ZIP, and 7z, and when trimming beats compressing.
-- [Apply patches](./usage/apply-rom-patches.md): the complete Weave workflow,
+- [Apply patches](./usage/apply-rom-patches.md): the complete Apply workflow,
   with focused screenshots for desktop, mobile, light, and dark themes.
 - [Create patches](./usage/create-rom-patches.md): compare Original and
   Modified, download a patch, then test that downloaded patch.
 - [Create bundles](./usage/create-bundles.md): package and verify a repeatable,
-  patch-only release in the Weave webapp.
+  patch-only release in the browser's Apply workflow.
 - [FAQ](./usage/faq.md): privacy, matching ROMs, patch formats, bundles,
   offline use, devices, and choosing between browser and CLI.
 - [Install the CLI](./cli/install.md): package managers, verified install

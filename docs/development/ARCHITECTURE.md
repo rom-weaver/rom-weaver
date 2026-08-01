@@ -305,7 +305,7 @@ require reproducing DiscUtils' exact ISO9660 layout and is deferred.
 
 ## rom-weaver-bundle.json bundles
 
-An `rom-weaver-bundle.json` bundle is a distributable patching-workflow definition: ordered
+A `rom-weaver-bundle.json` bundle is a distributable patching-workflow definition: ordered
 `patches` (each with a stable `id`, author-controlled `version`, editable `name`/`description`, an `optional` flag
 (absent/false = applied by default), a free-form maturity `label`, and a
 per-patch `header` mode), an optional `rom` entry, and
@@ -325,10 +325,16 @@ apply error for a sourceless bundle input and the webapp's ROM step both
 surface the expected name/checksums/size so the user knows which ROM to
 supply. Schema and the single shared parser live in
 `crates/rom-weaver-cli/src/bundle_schema.rs` / `bundle_parse.rs`; validation
-failures use stable `bundle.*` `ValidationCode`s. Bundle detection is
-filename-based: exactly `rom-weaver-bundle.json`, `rom-weaver-bundle.json.<gz|bz2|xz|zst>`, or a root-level
-`rom-weaver-bundle.json` archive member. Never name one `manifest.json` - the webapp service
-worker runtime-caches that name.
+failures use stable `bundle.*` `ValidationCode`s. The canonical
+`rom-weaver-bundle.json` name is a fast path, including the direct-input
+`.gz`/`.bz2`/`.xz`/`.zst` forms. A plain, nonempty `*.json` input can also be
+auto-detected by validating its contents. Inside an archive, the canonical
+root-level member wins; without one, root-level `*.json` members are
+content-probed in archive order and the first schema-valid bundle wins.
+Compressed alternate names are accepted through an explicit `--bundle` path
+but are not auto-detected. When hosting a bundle alongside the webapp, do not
+put it at the app's own `manifest.json` URL: the service worker runtime-caches
+that URL.
 
 - **Commands.** `bundle parse` loads any accepted packaging, resolves
   entries (extracting referenced archive members into `--output`,
@@ -356,9 +362,10 @@ entry checks-only. Create re-parses before writing, so it can never emit
   byte-identical bundle after an apply, and `patch apply --tui` drives an
   interactive (dialoguer) authoring wizard over the `--patch` args.
 - **Bundle-driven apply.** `patch apply` routes through
-  `bundle_apply.rs` when it sees `--bundle <path-or-url>`, an
-  `rom-weaver-bundle.json[.codec]` input, or an archive with a root `rom-weaver-bundle.json` and no
-  explicit `--patch`. The resolver merges the bundle into a plain command;
+  `bundle_apply.rs` when it sees `--bundle <path-or-url>` or a canonical
+  `rom-weaver-bundle.json[.codec]` input. With no explicit `--patch`, it also
+  content-probes plain `*.json` inputs and root-level JSON members in archives
+  as described above. The resolver merges the bundle into a plain command;
   precedence is decided by field shape (explicit CLI value > bundle >
   built-in default). Non-optional patches seed the selection
   (`--with`/`--without` override; an interactive session prompts over every
@@ -467,12 +474,12 @@ The React webapp's presentation layer uses the "loom workbench" design
 language (charcoal chassis, cartridge-orange thread accent, cream hash
 readouts, sage verification).
 
-- **Stylesheet.** One hand-written semantic sheet,
-  `packages/rom-weaver-webapp/src/webapp/design-system.css`: design tokens on
-  `:root[data-theme="dark"|"light"]` (`--thread`, `--plate`, `--seam`,
-  `--ink-*`, ...), component rules scoped under `.rw-app`, webapp-only
-  adaptations (React modal framework, codec combobox, platform ergonomics) at
-  the end of the file. No utility classes, no CSS-in-JS, no Tailwind.
+- **Stylesheets.** Hand-written semantic CSS is split by component under
+  `packages/rom-weaver-webapp/src/webapp/design-system/`. `index.css` declares
+  the cascade-layer order and imports the render-critical sheets;
+  `deferred.css` and `docs-route.css` arrive later in their predeclared layers.
+  Tokens live in `tokens.css`, component rules are scoped under `.rw-app`, and
+  there are no utility classes, CSS-in-JS, or Tailwind.
 - **Shell.** `packages/rom-weaver-webapp/src/webapp/components/shell.tsx`
   (masthead, mode rail with the
   sliding thumb, reveal banners, selvage status strip),
@@ -523,10 +530,13 @@ unused-byte budget in
 `packages/rom-weaver-webapp/performance-budgets.json`; WebKit runs the same
 accessibility states without Chromium-only CSS coverage.
 
-CI (`.github/workflows/ci.yml`) runs fmt, clippy `-D warnings`,
-typegen drift check, wasm-target checks, the full Rust test suite, the wasm
-build, and both packages' lint/type/test/build. `.config/lefthook.yml` mirrors the same
-checks pre-commit, scoped by changed paths.
+CI (`.github/workflows/ci.yml`) runs fmt, clippy `-D warnings`, typegen drift
+checks, wasm-target checks, the Rust test suite, the WASM build, and the
+repository/webapp lint, test, and build gates. Jobs are selected by change
+classification; main and release paths run the full matrix.
+`.config/lefthook.yml` selects workspace-wide formatting, static-analysis,
+typegen, dependency-policy, and WASM checks from staged paths. It does not
+replace the full CI test and build suite.
 
 ## Other docs
 

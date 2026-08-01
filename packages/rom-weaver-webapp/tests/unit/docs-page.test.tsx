@@ -14,7 +14,7 @@ const BUNDLE_GUIDE_ANCHORS = [
   "turn-on-bundle-output-and-download-it",
   "test-the-finished-download",
   "publish-a-useful-release",
-  "open-a-hosted-bundle-in-weave",
+  "open-a-hosted-bundle-in-apply",
 ];
 
 const routeFor = (slug: string) => {

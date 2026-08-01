@@ -2,8 +2,8 @@
 
 Every way to install the rom-weaver command-line tool: package managers,
 verified install scripts, npm, Docker, and building from source. Each method
-installs the same binary; pick the one that fits your machine and move on to
-your [first weave](get-started.md#first-weave).
+installs the same `rom-weaver` CLI; pick the one that fits your machine and
+move on to your [first weave](get-started.md#first-weave).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -231,7 +231,7 @@ npm install --save-dev @rom-weaver/cli
 
 ### cargo-binstall
 
-Fetches the released binary instead of compiling the workspace, which
+Fetches the released binary instead of compiling from source, which
 `cargo install rom-weaver-cli` would otherwise do.
 
 ```bash

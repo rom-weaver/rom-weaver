@@ -40,9 +40,11 @@ npm --prefix packages/rom-weaver-webapp run lint    # oxfmt + oxlint + biome + t
 npm --prefix packages/rom-weaver-webapp run test:browser:wasm  # wasm-layer browser tests
 ```
 
-Pre-commit hooks (lefthook) run oxfmt/clippy/typegen/oxlint/biome/tsc scoped to changed
-paths; CI runs all of it unconditionally plus the full test suites. `docs/development/ci.md`
-maps every workflow, the shared actions, caching, and the release fan-out.
+Pre-commit hooks (lefthook) select formatting, static analysis, type generation,
+dependency-policy, and WASM checks from the changed paths; each selected check
+still runs over its full owning workspace. CI adds tests and builds according to
+its change classification. `docs/development/ci.md` maps every workflow, the
+shared actions, caching, and the release fan-out.
 
 ## Hard rules
 
@@ -94,9 +96,10 @@ Releases are release-please driven; the global `npm version` / `changelog:all`
 instructions do **not** apply here.
 
 - **Never hand-edit a version.** `release-please-config.json` owns every bump:
-  root + webapp + alias + 4 platform `package.json`s and their locks, the
-  `optionalDependencies` pins, `workspace.package.version`, ~43 path-dependency
-  pins across `crates/*`, `vendor/*`, and `Cargo.lock`.
+  the root/webapp package files and locks, the alias and all 9 platform
+  `package.json`s, the `optionalDependencies` pins,
+  `workspace.package.version`, and the path-dependency pins across `crates/*`,
+  `vendor/*`, and `Cargo.lock`.
 - **Flow:** merge conventional commits to `main` (nothing happens - there is no
   `push` trigger) → when you want a release, **run the `Release` workflow
   manually** from the Actions tab, which opens/refreshes the

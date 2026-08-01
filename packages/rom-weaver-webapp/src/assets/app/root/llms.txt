@@ -8,9 +8,9 @@
 - [Create ROM patches](https://rom-weaver.com/create): Create patches with format-aware settings and distributable bundles.
 - [Documentation](https://rom-weaver.com/docs): Choose browser or CLI usage, find installation and self-hosting, start a guided sample, browse every guide, or read quick answers.
 - [Browser usage](https://rom-weaver.com/docs/get-started): Learn patching in the browser with included homebrew files.
-- [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the Weave webapp with loose patches, patch chains, archives, or bundles.
+- [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the browser's Apply workflow with loose patches, patch chains, archives, or bundles.
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
-- [Create bundles guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only bundle in the Weave webapp.
+- [Create bundles guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only bundle in the browser's Apply workflow.
 - [FAQ](https://rom-weaver.com/docs/faq): Privacy, ROM matching, formats, bundles, devices, offline use, and browser versus CLI.
 - [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick format-specific compression such as CHD, RVZ, or Z3DS, plus ZIP and 7z, and learn when trimming beats compressing.
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.

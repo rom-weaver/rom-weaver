@@ -4,7 +4,7 @@
 </h1>
 
 <p align="center">
-  Archive and disc-image handlers for <a href="https://github.com/rom-weaver/rom-weaver">rom-weaver</a>: probe, list, extract, and create.
+  Archive, disc-image, and ROM-specific compression handlers for <a href="https://github.com/rom-weaver/rom-weaver">rom-weaver</a>: probe, list, extract, and create.
 </p>
 
 <p align="center">
@@ -29,9 +29,8 @@ The container registry and one handler per format, each implementing
   and XISO.
 - **ROM-specific compression.** Z3DS for Nintendo 3DS ROMs.
 - **Creation, not just reading.** ZIP, 7z, CHD, RVZ, and Z3DS can be written
-  with codec-aware compression settings. Output is validated against the
-  reference tools (`chdman`, `dolphin-tool`) so a rom-weaver-produced image is
-  interchangeable with theirs.
+  with codec-aware compression settings. CHD and RVZ output is validated
+  against `chdman` and `dolphin-tool`, respectively.
 - **Bounded memory.** Extract and create run as producer/consumer pipelines
   over bounded channels, so a 60 GiB image does not become a 60 GiB
   allocation.
@@ -40,10 +39,12 @@ The container registry and one handler per format, each implementing
 
 ## Usage
 
-```toml
-[dependencies]
-rom-weaver-containers = "0.6"
+```bash
+cargo add rom-weaver-containers
 ```
+
+`cargo add` selects the current release. To follow the exact-pinning guidance
+below, change its generated requirement to `=X.Y.Z`.
 
 This crate links native C libraries: a vendored libarchive plus zlib, bzip2,
 LZMA, zstd, and LZ4. Building it needs **CMake**, **Clang**, and a working

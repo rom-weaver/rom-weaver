@@ -53,11 +53,12 @@ target/release/rom-weaver patch apply \
 
 ## Test the webapp
 
-Start the HTTPS development server from the webapp package:
+Build the webapp, then start its HTTPS preview server from the webapp package:
 
 ```bash
 cd packages/rom-weaver-webapp
-node scripts/dev-server.mjs dev --port 5191
+npm run build
+node scripts/dev-server.mjs preview --port 5191
 ```
 
 In another shell, from the same package directory, run:

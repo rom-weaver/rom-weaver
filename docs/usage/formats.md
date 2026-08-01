@@ -25,10 +25,11 @@ rom-weaver extract --input patches.7z --output extracted-patches
 rom-weaver compress --input extracted-patches --output patches.zip
 ```
 
-Those two commands convert the 7z archive to ZIP: first extract it to a
-directory, then compress that directory. `compress` does not unpack an archive
-input by itself. If you pass `patches.7z` directly, the new archive contains
-the `patches.7z` file.
+Those two commands move the 7z contents into a ZIP: first extract them to a
+directory, then compress that directory. The new ZIP includes
+`extracted-patches/` as its top-level directory because `compress` archives the
+paths you supply. It does not unpack an archive input by itself; if you pass
+`patches.7z` directly, the new archive contains the `patches.7z` file.
 
 ## Formats you can open
 

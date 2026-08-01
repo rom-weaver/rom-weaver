@@ -18,7 +18,7 @@ and the command-line tool.
   - [Why does the expected filename not match?](#why-does-the-expected-filename-not-match)
   - [Why does the checksum not match?](#why-does-the-checksum-not-match)
   - [Does patch order matter?](#does-patch-order-matter)
-  - [Why is WEAVE & DOWNLOAD disabled?](#why-is-weave--download-disabled)
+  - [Why is APPLY & DOWNLOAD disabled?](#why-is-apply--download-disabled)
 - [Creating patches](#creating-patches)
   - [What are Original and Modified?](#what-are-original-and-modified)
   - [How do I know the patch really works?](#how-do-i-know-the-patch-really-works)
@@ -92,10 +92,10 @@ when compatibility matters. See [Pick a patch format](patch-formats.md).
 
 ### Can I drop a ZIP or 7z file without extracting it?
 
-Yes. Weave can inspect supported archives and nested archives. It asks you to
-choose when several entries could be the ROM or patch. Create is different:
-extract your Original and Modified files before making a patch so archive
-packaging does not become part of the comparison.
+Yes. Apply and Create can inspect supported archives and nested archives. They
+ask you to choose when several entries could be the ROM or patch. Create
+extracts the selected Original and Modified ROM entries before comparing them,
+so the archive wrappers do not become part of the patch.
 
 See the [Formats guide](formats.md) for supported archive inputs and the ZIP
 and 7z output options.
@@ -124,7 +124,7 @@ Yes. Patch 2 receives patch 1's result. Drag the numbered handles into the
 order the author documented. If you loaded a bundle, its saved recipe supplies
 the order.
 
-### Why is WEAVE & DOWNLOAD disabled?
+### Why is APPLY & DOWNLOAD disabled?
 
 Wait for every file to finish reading and checksumming. Then check that there
 is one usable ROM, at least one enabled patch, no unresolved archive choice,
@@ -144,7 +144,7 @@ the order without making you select both files again.
 
 ### How do I know the patch really works?
 
-Test the downloaded patch, not just your Modified file. Open a fresh Weave
+Test the downloaded patch, not just your Modified file. Open a fresh Apply
 page, add a fresh copy of Original and the downloaded patch, create the result,
 and compare that result's checksum with Modified. Then launch the rebuilt file.
 
@@ -169,7 +169,7 @@ expected ROM, ordered patches, required or optional choices, checksums,
 metadata, and output defaults. An archive can include the patch files beside
 that index.
 
-Users drop the bundle into Weave, add their matching ROM if needed, review the
+Users drop the bundle into Apply, add their matching ROM if needed, review the
 choices, and run it.
 
 ### Does a bundle contain the original ROM?

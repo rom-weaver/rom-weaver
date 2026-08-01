@@ -15,7 +15,7 @@ feed the normal input pipeline; they do not create a separate apply mode.
 ## URL sessions
 
 Use `?bundle=<url>` to load a bundle, or combine `?rom=<url>` with one or more
-`?patch=<url>` values:
+`patch=<url>` parameters (repeat them with `&patch=`):
 
 ```text
 https://rom-weaver.com/apply?bundle=https://example.com/release.zip

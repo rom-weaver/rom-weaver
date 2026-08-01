@@ -111,7 +111,9 @@ for instance, is an error rather than a synonym for `deflate`.
 Every command accepts these global flags, listed under `Global options` in its
 help:
 
-- `--json` prints one JSON object per line instead of human-readable output.
+- `--json` prints operation reports as one JSON object per line instead of
+  human-readable output. Asset generators such as `bundle schema` and
+  `completions` keep their native schema or script output.
 - `--progress` and `--no-progress` override the automatic choice, which is to
   show progress on a terminal and hide it when output is piped.
 - `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs
@@ -126,9 +128,9 @@ help:
   default. `--color` keeps color even when piped, though the live progress bar
   stays terminal-only.
 
-Most commands also accept `-j`/`--threads auto|N`. `auto` uses every core; a
-number caps it, and a format may still use fewer when its implementation has a
-lower ceiling.
+Most commands also accept `-j`/`--threads auto|N`. `auto` uses the available
+core count as its ceiling; a number sets a lower ceiling, and format or memory
+limits may still use fewer.
 
 List-valued flags (`--algo`, `--checksum`, `--filter`, `--codec`, `--expect-in`,
 `--expect-out`, `--assume-in`, and the compression codec flags) can be repeated
@@ -180,9 +182,11 @@ format rather than looking one up, see the
 ## JSON output
 
 
-Pass `--json` to emit one JSON object per line, including progress, status,
-warnings, selected inputs, and emitted-file metadata where relevant. JSON mode
-disables interactive selection, making it the stable interface for scripts:
+Pass `--json` to make operation commands emit one JSON object per line,
+including progress, status, warnings, selected inputs, and emitted-file
+metadata where relevant. JSON mode disables interactive selection, making it
+the stable interface for scripts. Commands that generate an asset, such as
+`bundle schema` and `completions`, still write that asset in its native format.
 
 ```bash
 rom-weaver --json probe --input game.sfc | jq

@@ -38,7 +38,7 @@ look unrelated.
 
 ## Which messages are strict?
 
-The Weave cards separate clues from proof.
+The Apply cards separate clues from proof.
 
 An expected filename mismatch is advisory. Authors often write a useful name
 into a bundle, but users may legally dump or rename the same bytes under

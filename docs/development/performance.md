@@ -3,8 +3,9 @@
 How rom-weaver is benchmarked, what the numbers currently are, and how to
 reproduce them.
 
-Every format is measured against the tool that defines it, in both directions:
-compress and extract. Output size is recorded next to every timing.
+The benchmark suites below measure CHD, RVZ, 7z, and zip against their
+reference tools in both directions: compress and extract. Output size is
+recorded next to every timing.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -49,10 +50,10 @@ output relative to the reference's, so negative means smaller.
 | Harness | What it measures | Command |
 | --- | --- | --- |
 | `scripts/bench-disc-tools.mjs` | rom-weaver vs the reference tool for CHD, RVZ, 7z, and zip, compress and extract, timed by [hyperfine](https://github.com/sharkdp/hyperfine) | `mise run bench-chd`, `bench-rvz`, `bench-7z`, `bench-zip` |
-| `scripts/bench-command-paths.py` | Elapsed time, peak RSS, and throughput across every CLI command path | `python3 scripts/bench-command-paths.py` |
+| `scripts/bench-command-paths.py` | Elapsed time, peak RSS, and throughput for compress, extract, checksum, patch create, and patch apply | `python3 scripts/bench-command-paths.py` |
 | `scripts/bench-checksum-threading.py` | Checksum scaling from one thread to many | `python3 scripts/bench-checksum-threading.py` |
 | `scripts/bench-solid-extract.py` | Redundant decode when extracting a solid archive in parallel, as user CPU relative to one thread | `python3 scripts/bench-solid-extract.py` |
-| `packages/rom-weaver-webapp/tests/wasm/*.bench.mjs` | Browser WASM worker-client and checksum threading | `npm --prefix packages/rom-weaver-webapp run test:browser:wasm` |
+| `packages/rom-weaver-webapp/tests/wasm/*.bench.mjs` | Browser WASM worker-client and checksum threading | `npm --prefix packages/rom-weaver-webapp run test:browser:wasm:bench` |
 
 `scripts/parity-check.mjs` is the correctness counterpart: it checks that
 rom-weaver's CHD output round-trips through chdman and its RVZ output through
