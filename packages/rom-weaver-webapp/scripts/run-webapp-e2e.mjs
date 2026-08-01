@@ -90,9 +90,20 @@ const clickAfterStableLayout = async (page, locator) => {
   if (viewport && (box.y < 0 || box.y + box.height > viewport.height))
     throw new Error("guide control is outside the viewport after scrolling");
   // Chromium can keep reporting fractional animation movement after the box is
-  // visible and usable. Click the current rendered center so the test still
-  // sends a real pointer event without disabling Playwright's checks globally.
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  // visible and usable, so Playwright's actionability check runs against the
+  // same rendered element after the stability wait. The fallback is limited to
+  // that known animation diagnostic; pointer-interception failures still fail
+  // the audit instead of being hidden by a coordinate click.
+  try {
+    await locator.click({ timeout: 5000 });
+    return;
+  } catch (error) {
+    if (!(error instanceof Error && error.message.includes("element is not stable"))) throw error;
+  }
+  const currentBox = await locator.boundingBox();
+  if (!currentBox || currentBox.width < 1 || currentBox.height < 1)
+    throw new Error("guide control lost its clickable layout box during animation");
+  await page.mouse.click(currentBox.x + currentBox.width / 2, currentBox.y + currentBox.height / 2);
 };
 const HYDRATION_SETTINGS = JSON.stringify({
   apply: { compression: { threads: 3 } },

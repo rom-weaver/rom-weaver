@@ -309,12 +309,12 @@ function WebappRoot({
   }, []);
   const openSettings = useCallback(() => {
     void preloadSettingsPanelModule()
-      .then(() => actions.onOpenSettings())
       .catch((error) => {
         logger.warn("Settings panel failed to load", {
           message: error instanceof Error ? error.message : String(error || ""),
         });
-      });
+      })
+      .finally(() => actions.onOpenSettings());
   }, [actions]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
   const preloadLogDialog = useCallback(() => {
@@ -322,12 +322,12 @@ function WebappRoot({
   }, []);
   const openLog = useCallback(() => {
     void preloadLogDialogModule()
-      .then(() => setLogOpen(true))
       .catch((error) => {
         logger.warn("Log dialog failed to load", {
           message: error instanceof Error ? error.message : String(error || ""),
         });
-      });
+      })
+      .finally(() => setLogOpen(true));
   }, []);
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
