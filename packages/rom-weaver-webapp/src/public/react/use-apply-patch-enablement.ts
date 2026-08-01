@@ -3,6 +3,12 @@ import { isArchiveFileName } from "./file-classification.ts";
 import { getBinarySourceFileName, getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 
+const getFileExtension = (fileName: string) =>
+  fileName
+    .trim()
+    .match(/\.([^.]+)$/)?.[1]
+    ?.toLowerCase() || "";
+
 /**
  * Owns patch enablement, keyed by stable slot ids so replacements and reorders
  * retain state. Disabled patches remain visible but are removed from run inputs.
@@ -53,9 +59,12 @@ const useApplyPatchEnablement = () => {
       const nextSlotIds = reconcileSlotIds(nextPatches);
       const nextFileNames = nextSlotIds.map((id, index) => {
         const previousIndex = previousSlotIds.indexOf(id);
-        return previousIndex >= 0
-          ? previousFileNames[previousIndex] || getBinarySourceFileName(nextPatches[index], `Patch ${index + 1}`)
-          : getBinarySourceFileName(nextPatches[index], `Patch ${index + 1}`);
+        const nextFileName = getBinarySourceFileName(nextPatches[index], `Patch ${index + 1}`) || `Patch ${index + 1}`;
+        const previousFileName = (previousIndex >= 0 ? previousFileNames[previousIndex] : "") || "";
+        // Preserve the authored slot name for same-format replacements, but never
+        // ship a changed patch format under the old extension.
+        const sameFormat = getFileExtension(previousFileName) === getFileExtension(nextFileName);
+        return previousIndex >= 0 && sameFormat ? previousFileName || nextFileName : nextFileName;
       });
       currentPatchesRef.current = nextPatches;
       patchSlotIdsRef.current = nextSlotIds;

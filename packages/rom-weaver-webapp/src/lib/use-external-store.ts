@@ -13,9 +13,8 @@ const useExternalStore = <Snapshot>(
   getSnapshot: () => Snapshot,
   getServerSnapshot: () => Snapshot = getSnapshot,
 ): Snapshot => {
-  const [snapshot, setSnapshot] = useState(() =>
-    useServerSnapshotForInitialRender ? getServerSnapshot() : getSnapshot(),
-  );
+  const useServerSnapshot = useServerSnapshotForInitialRender;
+  const [snapshot, setSnapshot] = useState(() => (useServerSnapshot ? getServerSnapshot() : getSnapshot()));
   useLayoutEffect(() => {
     const update = () => {
       const next = getSnapshot();
@@ -24,7 +23,12 @@ const useExternalStore = <Snapshot>(
     update();
     return subscribe(update);
   }, [getSnapshot, subscribe]);
-  return snapshot;
+  // A parent render can observe a store's current value before the store's
+  // listener effect gets a chance to schedule setSnapshot. Return the live
+  // value for client renders so consumers never paint that stale pass; the
+  // state above remains the subscription's render trigger and hydration still
+  // starts from the server snapshot.
+  return useServerSnapshot ? snapshot : getSnapshot();
 };
 
 export { setExternalStoreHydrating, useExternalStore };

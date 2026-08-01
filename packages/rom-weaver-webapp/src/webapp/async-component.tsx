@@ -3,6 +3,7 @@ import type { ComponentChildren, ComponentType, RenderableProps } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
 type AsyncComponentLoader<Props> = () => Promise<{ default: ComponentType<Props> }>;
+const MAX_LOAD_RETRIES = 3;
 
 function createAsyncComponent<Props>(load: AsyncComponentLoader<Props>) {
   let loaded: ComponentType<Props> | null = null;
@@ -26,9 +27,10 @@ function createAsyncComponent<Props>(load: AsyncComponentLoader<Props>) {
   const Component = (props: Props): ComponentChildren => {
     const [resolved, setResolved] = useState<ComponentType<Props> | null>(() => loaded);
     const [retryGeneration, setRetryGeneration] = useState(0);
+    const [loadError, setLoadError] = useState<unknown>(null);
     // biome-ignore lint/correctness/useExhaustiveDependencies: retryGeneration deliberately retriggers after a failed lazy import.
     useEffect(() => {
-      if (resolved) return undefined;
+      if (resolved || loadError) return undefined;
       let active = true;
       let retryTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
       const receive = (component: ComponentType<Props>) => {
@@ -39,6 +41,10 @@ function createAsyncComponent<Props>(load: AsyncComponentLoader<Props>) {
         .then(receive)
         .catch(() => {
           if (active) {
+            if (retryGeneration >= MAX_LOAD_RETRIES) {
+              setLoadError(new Error("The application panel could not be loaded."));
+              return;
+            }
             retryTimer = globalThis.setTimeout(() => setRetryGeneration((generation) => generation + 1), 1000);
           }
         });
@@ -47,7 +53,14 @@ function createAsyncComponent<Props>(load: AsyncComponentLoader<Props>) {
         subscribers.delete(receive);
         if (retryTimer !== undefined) globalThis.clearTimeout(retryTimer);
       };
-    }, [resolved, retryGeneration]);
+    }, [loadError, resolved, retryGeneration]);
+    if (loadError) {
+      return createElement(
+        "div",
+        { "aria-live": "polite", className: "rw-load-error", role: "alert" },
+        "This panel could not be loaded. Reload the page to try again.",
+      );
+    }
     if (!resolved) return null;
     const Resolved = resolved;
     return createElement(Resolved, props as RenderableProps<Props>);

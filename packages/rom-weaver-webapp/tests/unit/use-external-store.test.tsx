@@ -27,6 +27,25 @@ describe("useExternalStore", () => {
     expect(container.textContent).toBe("stored");
   });
 
+  it("reads a current client snapshot during a parent render", () => {
+    let current = "before";
+    const Reader = ({ tick }: { tick: number }) => {
+      const value = useExternalStore(
+        () => () => undefined,
+        () => current,
+        () => "server",
+      );
+      return createElement("output", { "data-tick": tick }, value);
+    };
+
+    setExternalStoreHydrating(false);
+    const view = render(createElement(Reader, { tick: 0 }));
+    current = "after";
+    view.rerender(createElement(Reader, { tick: 1 }));
+
+    expect(view.container.textContent).toBe("after");
+  });
+
   it("starts hydration from the server snapshot and reconciles before paint", () => {
     let current = "stored";
     const seen: string[] = [];
