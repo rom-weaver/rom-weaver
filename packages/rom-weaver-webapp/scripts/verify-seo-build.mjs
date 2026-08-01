@@ -3,6 +3,13 @@ import path from "node:path";
 import process from "node:process";
 import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
+import {
+  DOCS_SCREENSHOT_CASES,
+  DOCS_SCREENSHOT_FORMATS,
+  DOCS_SCREENSHOT_NAMES,
+  DOCS_SCREENSHOT_THEMES,
+  DOCS_SCREENSHOT_VIEWPORTS,
+} from "./docs-screenshot-manifest.mjs";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const distDir = path.join(packageDir, "dist");
@@ -23,34 +30,6 @@ const countVisibleWords = (source) =>
     .replace(/<[^>]+>/g, " ")
     .trim()
     .split(/\s+/).length;
-const docsScreenshotCaptures = [
-  "apply-output-desktop-dark",
-  "apply-output-desktop-light",
-  "apply-output-mobile-dark",
-  "apply-output-mobile-light",
-  "apply-patches-desktop-dark",
-  "apply-patches-desktop-light",
-  "apply-patches-mobile-dark",
-  "apply-patches-mobile-light",
-  "bundle-output-desktop-dark",
-  "bundle-output-desktop-light",
-  "bundle-output-mobile-dark",
-  "bundle-output-mobile-light",
-  "create-inputs-desktop-dark",
-  "create-inputs-desktop-light",
-  "create-inputs-mobile-dark",
-  "create-inputs-mobile-light",
-  "create-output-desktop-dark",
-  "create-output-desktop-light",
-  "create-output-mobile-dark",
-  "create-output-mobile-light",
-];
-const docsScreenshotNames = [
-  ...docsScreenshotCaptures.flatMap((name) => [`${name}.avif`, `${name}.webp`]),
-  "first-sample-hello-world.webp",
-  "first-sample-modified-world.webp",
-  "first-sample-modified-rom.webp",
-];
 
 const applyHtml = read("index.html");
 const notFoundHtml = read("404.html");
@@ -183,25 +162,20 @@ assertIncludes(
 assertIncludes(applyHtml, 'data-mode="docs"', "apply guides tab");
 assertIncludes(createHtml, 'data-mode="docs"', "create guides tab");
 
-for (const name of docsScreenshotNames) {
+for (const name of DOCS_SCREENSHOT_NAMES) {
   const screenshotPath = path.join(distDir, "docs", "screenshots", name);
   if (!fs.statSync(screenshotPath).isFile()) throw new Error(`docs screenshot is missing: ${name}`);
 }
-for (const [slug, captures] of [
-  ["docs/apply-rom-patches", ["apply-patches", "apply-output"]],
-  ["docs/create-rom-patches", ["create-inputs", "create-output"]],
-  ["docs/create-bundles", ["bundle-output"]],
-]) {
-  const docsHtml = read(`${slug}.html`);
-  for (const capture of captures) {
-    for (const viewport of ["desktop", "mobile"]) {
-      for (const theme of ["dark", "light"]) {
-        for (const extension of ["avif", "webp"])
-          assertIncludes(
-            docsHtml,
-            `/docs/screenshots/${capture}-${viewport}-${theme}.${extension}`,
-            `${slug} ${capture} ${viewport} ${theme} ${extension} screenshot`,
-          );
+for (const { docsRoute, name } of DOCS_SCREENSHOT_CASES) {
+  const docsHtml = read(`${docsRoute}.html`);
+  for (const { name: viewport } of DOCS_SCREENSHOT_VIEWPORTS) {
+    for (const theme of DOCS_SCREENSHOT_THEMES) {
+      for (const { extension } of DOCS_SCREENSHOT_FORMATS) {
+        assertIncludes(
+          docsHtml,
+          `/docs/screenshots/${name}-${viewport}-${theme}.${extension}`,
+          `${docsRoute} ${name} ${viewport} ${theme} ${extension} screenshot`,
+        );
       }
     }
   }

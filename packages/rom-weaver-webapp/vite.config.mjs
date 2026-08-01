@@ -10,6 +10,7 @@ import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
+import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
@@ -23,36 +24,8 @@ const repoRoot = path.resolve(rootDir, "../..");
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
-const docsScreenshotCaptures = [
-  "apply-output-desktop-dark",
-  "apply-output-desktop-light",
-  "apply-output-mobile-dark",
-  "apply-output-mobile-light",
-  "apply-patches-desktop-dark",
-  "apply-patches-desktop-light",
-  "apply-patches-mobile-dark",
-  "apply-patches-mobile-light",
-  "bundle-output-desktop-dark",
-  "bundle-output-desktop-light",
-  "bundle-output-mobile-dark",
-  "bundle-output-mobile-light",
-  "create-inputs-desktop-dark",
-  "create-inputs-desktop-light",
-  "create-inputs-mobile-dark",
-  "create-inputs-mobile-light",
-  "create-output-desktop-dark",
-  "create-output-desktop-light",
-  "create-output-mobile-dark",
-  "create-output-mobile-light",
-];
-const docsScreenshotNames = [
-  ...docsScreenshotCaptures.flatMap((name) => [`${name}.avif`, `${name}.webp`]),
-  "first-sample-hello-world.webp",
-  "first-sample-modified-world.webp",
-  "first-sample-modified-rom.webp",
-];
 const docsScreenshotSources = Object.fromEntries(
-  docsScreenshotNames.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),
+  DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),
 );
 
 // A manifest's icons are read at install time, so an installed PWA's icon can
