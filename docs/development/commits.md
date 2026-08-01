@@ -94,9 +94,8 @@ merging that pull request starts the publish fan-out.
 
 ## Checking a title before you push
 
-`PR Title Lint` comments on the pull request with the exact rule that
-failed and the list of valid types, and deletes that comment once you rename the
-pull request. To check a message locally:
+`PR Title Lint` reports the failing commitlint rule in the Title Check log. To
+check a message locally:
 
 ```bash
 echo "fix(webapp): handle empty patch archives" | npx commitlint --config .config/commitlint.config.mjs

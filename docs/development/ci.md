@@ -66,22 +66,20 @@ publishing, and retry procedures - see the [release guide](../../.github/RELEASI
 to clear: the CLA signature (`CLA Check` job) and a Conventional Commits pull
 request title (`Title Check` job), under the `PR Gates` workflow. They share a file because they share every
 constraint - each posts a commit status against the pull request head instead of
-relying on its own check run, each keeps exactly one marker comment on the
-thread, each has to work for a pull request from a fork, and each is required by
-the `main protection` ruleset. Both run on `pull_request_target`, which is what
-supplies a write token on a fork's pull request; nothing from the head is
-checked out or executed, and the scripts, the allowlist and the commitlint
-config all come from the base commit.
+relying on its own check run, each has to work for a pull request from a fork,
+and each is required by the `main protection` ruleset. Both run on
+`pull_request_target`, which is what supplies a write token on a fork's pull
+request; nothing from the head is checked out or executed, and the scripts, the
+allowlist and the commitlint config all come from the base commit.
 
 | Script | Test | Posts |
 | --- | --- | --- |
 | `scripts/ci/cla-gate.mjs` | `cla-gate.test.mjs` | `CLA Signed` |
-| `scripts/ci/pr-title-gate.mjs` | `pr-title-gate.test.mjs` | `PR Title Lint` |
-| `scripts/ci/github-api.mjs` | (exercised by both) | - |
-| `scripts/ci/commitlint-report.mjs` | (exercised by the title gate's step) | - |
+| `scripts/ci/github-api.mjs` | (exercised by the CLA gate) | - |
 
-Both tests drive the script against a stub GitHub API served over real HTTP, so
-the JSON, base64 and status handling runs rather than a mock of it.
+The title job runs commitlint and posts `PR Title Lint` directly with `gh api`.
+The CLA test drives its script against a stub GitHub API served over real HTTP,
+so the JSON, base64 and status handling runs rather than a mock of it.
 
 The CLA gate checks every contributor to a pull request against
 [CLA version 2.0](../../CLA.md), whose grant covers every repository in the
@@ -178,50 +176,14 @@ and squash merges take `PR_TITLE` as the subject, so the title is the only text
 that reaches `main` and the only text Release Please reads. Branch commits are
 squashed away, so they are not linted.
 
-commitlint runs in the workflow step and hands the gate script a verdict plus a
-file. That split is deliberate: routing an attacker-controlled title through
-`GITHUB_OUTPUT` would let a crafted heredoc delimiter forge step outputs, and it
-keeps the half worth testing free of a commitlint install.
-
-The file is JSON, not commitlint's own paragraph. `scripts/ci/commitlint-report.mjs`
-is a commitlint formatter (`--format`, passed by path so nothing has to be
-installed) that writes the report out structurally - a `name`, `level` and
-`message` per problem - and returns the plain text that lands in the log. The
-gate branches on rule names, which is what lets the comment say something
-specific instead of restating the format under every kind of failure:
-
-| Rules | What the comment adds |
-| --- | --- |
-| `type-empty` | That the title has no `type:` prefix, and that this is also why `subject-empty` fired on a title that plainly has a subject. |
-| `type-case`, `type-enum` | Names the type it rejected, and lists the allowed ones. |
-| `header-max-length` | How many characters have to go, and no example of a shape the title already has. |
-
-**The gate never proposes a replacement title.** commitlint hands it a rule name
-and a message; it never hands over a corrected title, so any rename would be one
-the gate invented - and the type is the part it cannot possibly know. Squash
-merges make the title the commit subject and Release Please reads the type for
-the changelog section and the version bump, so a guessed `fix:` on a feature is
-not a cosmetic miss: it is a wrong bump and a wrong changelog entry, landed
-silently. A rejected title costs a rename and says so out loud. Naming the rule
-that broke and the types that are allowed is the whole job.
-
-Valid types are read from `.config/commitlint.config.mjs` - the same file that
-rejected the title - so the advice cannot drift from the rule. A failure that
-carries no lint result at all is commitlint breaking rather than a bad title, so
-the gate throws instead of posting. Editing the title reruns the gate; passing
-**deletes** the comment, so a green pull request carries no gate chatter. The
-title is quoted in a block quote as an inline code span, opened with a backtick
-run longer than any inside it - inside a span GitHub neither links nor notifies
-an `@mention`, and a shorter run cannot close it. A fence would protect the same
-amount but carries a copy button and a horizontal scrollbar, which is the wrong
-trade for a string you have to read whole and are about to retype. The CLA
-gate's fence around the signing phrase is the opposite case, and keeps its
-fence: there the copy button is the point.
-
-Every sentence in either comment is one unbroken line. GitHub renders a single
-newline inside a comment as a hard break, so prose wrapped to a column shows the
-reader a line break mid-sentence - the source and the render disagree, and only
-the render matters.
+commitlint runs directly in the workflow step, reading the title from an
+environment variable through standard input. The step posts the required
+`PR Title Lint` status with `gh api`; it does not route the contributor-controlled
+title through `GITHUB_OUTPUT` or interpolate it into shell source. A rejected
+title leaves commitlint's exact rule in the Title Check log and a short failure
+annotation on the run. Editing the title reruns the job. Valid types still come
+only from `.config/commitlint.config.mjs`, so local hooks and the pull request
+gate enforce the same rules.
 
 Nothing publishes on a push, and nothing reacts to one either. `release.yml` has
 no `push` trigger: the release pull request is created and refreshed only by a
