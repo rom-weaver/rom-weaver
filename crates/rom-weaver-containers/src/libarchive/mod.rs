@@ -67,9 +67,7 @@ pub use entries::{
     visit_selected_regular_archive_entries, with_regular_archive_file_entry_reader,
 };
 pub use read::{ReadArchive, ReadFilter, with_raw_stream_reader};
-pub use write::{
-    EntryFileType, EntrySpec, WriteArchive, WriteFilter, WriteFormat, ZeroWriteBehavior,
-};
+pub use write::{EntryFileType, EntrySpec, WriteArchive, WriteFilter, WriteFormat};
 
 #[cfg(test)]
 mod tests {
@@ -142,11 +140,7 @@ mod tests {
             },
             "zip fixture start file failed",
         )?;
-        archive.write_data_all(
-            file_payload,
-            "zip fixture write file failed",
-            ZeroWriteBehavior::Error,
-        )?;
+        archive.write_data_all(file_payload, "zip fixture write file failed")?;
         archive.finish_entry("zip fixture finish file failed")?;
 
         let top_payload = [1_u8, 2_u8, 3_u8];
@@ -159,11 +153,7 @@ mod tests {
             },
             "zip fixture start top file failed",
         )?;
-        archive.write_data_all(
-            &top_payload,
-            "zip fixture write top file failed",
-            ZeroWriteBehavior::Error,
-        )?;
+        archive.write_data_all(&top_payload, "zip fixture write top file failed")?;
         archive.finish_entry("zip fixture finish top file failed")?;
 
         archive.close("zip fixture close failed", "zip fixture release failed")

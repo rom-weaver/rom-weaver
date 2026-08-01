@@ -161,20 +161,6 @@ const WRITE_ALWAYS_DROP_ENTRIES: &[&str] = &[
     "archive_write_set_format_iso9660.c",
 ];
 
-const WRITE_CORE_DROP_ENTRIES: &[&str] = &[
-    "archive_write.c",
-    "archive_write_add_filter_none.c",
-    "archive_write_open_fd.c",
-    "archive_write_open_filename.c",
-    "archive_write_private.h",
-    "archive_write_set_format_7zip.c",
-    "archive_write_set_format_private.h",
-    "archive_write_set_format_wasm_shim.c",
-    "archive_write_set_format_zip.c",
-    "archive_write_set_options.c",
-    "archive_write_set_passphrase.c",
-];
-
 const WRITE_EXTRA_DROP_ENTRIES: &[&str] = &[
     "archive_write_add_filter_b64encode.c",
     "archive_write_add_filter_by_name.c",
@@ -587,17 +573,8 @@ fn is_wasm32_target() -> bool {
         .unwrap_or(false)
 }
 
-fn feature_enabled(name: &str) -> bool {
-    let key = name.replace('-', "_").to_ascii_uppercase();
-    env::var(format!("CARGO_FEATURE_{key}")).is_ok()
-}
-
-fn write_archives_enabled() -> bool {
-    true
-}
-
 fn write_extra_enabled() -> bool {
-    feature_enabled("libarchive-write-extra")
+    env::var("CARGO_FEATURE_LIBARCHIVE_WRITE_EXTRA").is_ok()
 }
 
 fn is_wasm_threads_target() -> bool {
@@ -676,12 +653,9 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
     // staged copy; the vendored tree stays a verbatim snapshot of the fork.
     copy_dir_recursive(libarchive_dir, &staged).expect("failed to stage libarchive source tree");
     drop_test_subdirectories(&staged).expect("failed to drop libarchive test subdirectories");
-    let write_archives = write_archives_enabled();
     let write_extra = write_extra_enabled();
-    if write_archives {
-        add_wasm_archive_write_format_shim(manifest_dir, &staged.join("libarchive"))
-            .expect("failed to add libarchive format shim");
-    }
+    add_wasm_archive_write_format_shim(manifest_dir, &staged.join("libarchive"))
+        .expect("failed to add libarchive format shim");
     if wasm_target {
         patch_archive_util_tempdir_for_wasm(
             manifest_dir,
@@ -689,7 +663,7 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
         )
         .expect("failed to patch libarchive temporary directory fallback for wasm");
     }
-    if wasm_target && write_archives {
+    if wasm_target {
         patch_archive_write_set_format_7zip_for_wasm(
             &staged.join("libarchive/archive_write_set_format_7zip.c"),
         )
@@ -699,7 +673,6 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
         manifest_dir,
         &staged.join("libarchive/CMakeLists.txt"),
         wasm_target,
-        write_archives,
         write_extra,
     )
     .expect("failed to patch libarchive CMakeLists.txt");
@@ -850,7 +823,6 @@ fn patch_cmakelists(
     manifest_dir: &Path,
     cmakelists_path: &Path,
     wasm_target: bool,
-    write_archives: bool,
     write_extra: bool,
 ) -> std::io::Result<()> {
     let mut drop_entries = HashSet::new();
@@ -869,13 +841,6 @@ fn patch_cmakelists(
             .iter()
             .map(|entry| (*entry).to_owned()),
     );
-    if !write_archives {
-        drop_entries.extend(
-            WRITE_CORE_DROP_ENTRIES
-                .iter()
-                .map(|entry| (*entry).to_owned()),
-        );
-    }
     if !write_extra {
         drop_entries.extend(
             WRITE_EXTRA_DROP_ENTRIES
@@ -893,7 +858,7 @@ fn patch_cmakelists(
             continue;
         }
         lines.push(line);
-        if write_archives && !shim_inserted && trimmed == "archive_write_set_format_private.h" {
+        if !shim_inserted && trimmed == "archive_write_set_format_private.h" {
             lines.push("  archive_write_set_format_wasm_shim.c");
             shim_inserted = true;
         }
@@ -1092,15 +1057,12 @@ fn generate_bindings(libarchive_dir: &Path, target_sysroot: Option<&Path>) {
         ]);
 
     if wasm_target {
-        let write_archives = write_archives_enabled();
         let write_extra = write_extra_enabled();
         for function in WASM_BINDGEN_READ_FUNCTIONS {
             bindgen_builder = bindgen_builder.allowlist_function(function);
         }
-        if write_archives {
-            for function in WASM_BINDGEN_WRITE_FUNCTIONS {
-                bindgen_builder = bindgen_builder.allowlist_function(function);
-            }
+        for function in WASM_BINDGEN_WRITE_FUNCTIONS {
+            bindgen_builder = bindgen_builder.allowlist_function(function);
         }
         if write_extra {
             for function in WASM_BINDGEN_WRITE_EXTRA_FUNCTIONS {
