@@ -9,7 +9,6 @@ import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
-import { criticalAssetLinkHeaders } from "./scripts/critical-asset-hints.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
@@ -467,14 +466,6 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
   };
 };
 
-// See scripts/critical-asset-hints.mjs for why these are emitted and why both use
-// `rel=preload`. They ride in the `/*` block rather than an enumerated route list: every
-// document in the build - the prerendered workflow routes, 404.html, every docs slug, and
-// any route added later - loads the same two assets, and a list would silently stop
-// covering new ones. The hint also lands on subresource responses, which ignore it.
-const readCriticalAssetLinks = (distDir) =>
-  criticalAssetLinkHeaders(fs.readFileSync(path.join(distDir, "index.html"), "utf8"));
-
 // Cloudflare Pages serves dist/_headers on every response, so deployed pages are cross-origin
 // isolated from the first network load instead of round-tripping through the service worker's
 // COEP-injection reload. Hosts without header control still use the service-worker fallback.
@@ -495,11 +486,8 @@ const writeCloudflareHeadersAsset = (channel) => {
       };
       const distDir = path.resolve(rootDir, outDir);
       const outputPath = path.join(distDir, "_headers");
-      const headerLines = [
-        ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
-        ...readCriticalAssetLinks(distDir),
-      ]
-        .map((line) => `  ${line}`)
+      const headerLines = Object.entries(headers)
+        .map(([name, value]) => `  ${name}: ${value}`)
         .join("\n");
       // The attribution files are named `LICENSE-APACHE`, `COPYING`, `NOTICE`
       // and so on. With no extension Cloudflare types them as a binary
@@ -509,7 +497,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {
