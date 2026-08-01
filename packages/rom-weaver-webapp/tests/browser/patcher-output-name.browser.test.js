@@ -2,7 +2,7 @@ import { createElement, useState } from "react";
 import { expect, test, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
-import { inertDialogController, useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
+import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
 import {
   clickApplyButton,
   createMockApplyResult,
@@ -116,7 +116,6 @@ test("removing an input refreshes generated output name", async () => {
       });
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,
@@ -128,7 +127,7 @@ test("removing an input refreshes generated output name", async () => {
   mount(createElement(Harness));
 
   await expect
-    .poll(() => document.querySelectorAll("#rom-weaver-list-input-stack .rom-weaver-input-stack-file").length, {
+    .poll(() => document.querySelectorAll("#rom-weaver-list-input-stack .nmline[data-file-name]").length, {
       timeout: 30000,
     })
     .toBe(2);

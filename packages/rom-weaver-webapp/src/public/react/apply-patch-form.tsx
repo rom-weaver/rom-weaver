@@ -41,8 +41,8 @@ import { useCandidateSelection } from "./candidate-selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
-import { inertDialogController, useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
-import type { ApplyPatchFormProps, CandidateSelectionPrompt, InternalApplyPatchFormProps } from "./public-types.ts";
+import { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
+import type { ApplyPatchFormProps, CandidateSelectionPrompt } from "./public-types.ts";
 import { useApplySettings, useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
 import { type BundleSessionControllers, useBundleApplySession } from "./use-bundle-apply-session.ts";
@@ -204,8 +204,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const providerSettings = useApplySettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
-  const internalProps = props as InternalApplyPatchFormProps;
-  const { startup, controllers } = internalProps;
+  const { startup } = props;
   const handleSelectionCancelledRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
     onCancelSelection: (request) => handleSelectionCancelledRef.current(request),
@@ -1402,9 +1401,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       stagePatches,
       validatePatches,
     });
-  const resolvedUiController = controllers?.ui || localUiController;
-  const resolvedStackController = controllers?.patchStack || localStackController;
-  const resolvedOutputController = controllers?.output || localOutputController;
+  const resolvedUiController = localUiController;
+  const resolvedStackController = localStackController;
+  const resolvedOutputController = localOutputController;
   bundleControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
 
   // "Export bundle…" (output card secondary action): snapshots the current
@@ -1523,8 +1522,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         bundleMetaById={bundleMetaById}
         bundleSessionMatches={bundleSessionMatches}
         controllers={{
-          dialog: controllers?.dialog || inertDialogController,
-          notice: controllers?.notice || localNoticeController,
+          notice: localNoticeController,
           output: resolvedOutputController,
           patchStack: resolvedStackController,
           ui: resolvedUiController,

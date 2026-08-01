@@ -10,7 +10,7 @@ import type {
 import type { ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type {
   BinarySource,
-  ApplyPatchFormProps as InternalApplyPatchFormProps,
+  ApplyPatchFormProps as BaseApplyPatchFormProps,
   PageFileDrop,
   StartupState,
 } from "./patcher-form.ts";
@@ -23,7 +23,7 @@ type CandidateSelectionPrompt = CandidateSelectionRequest;
 type CandidateSelectionChoice = { id: string; ids?: string[] };
 type ApplyPatchFormSettings = ApplySettings;
 
-type ApplyPatchFormProps = Omit<InternalApplyPatchFormProps, "controllers" | "onApplyComplete"> & {
+type ApplyPatchFormProps = Omit<BaseApplyPatchFormProps, "onApplyComplete"> & {
   onApplyComplete?: (result: BrowserApplyResult) => void;
 };
 
@@ -87,7 +87,6 @@ export type {
   CreatePatchFormProps,
   CreatePatchFormSettings,
   CreateWorkflowSettings,
-  InternalApplyPatchFormProps,
   PageFileDrop,
   RomWeaverReactSettings,
   RomWeaverSettingsProviderProps,

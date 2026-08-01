@@ -74,11 +74,6 @@ textarea::placeholder{
 	opacity:.95;
 }
 
-#rom-weaver-dialog-zip::backdrop{
-	background-color:oklch(0.2 0.022 292 / .82);
-	backdrop-filter:blur(4px);
-}
-
 @media (prefers-reduced-motion:reduce){
 	*,
 	*::before,

@@ -1,7 +1,7 @@
 import { createElement, useState } from "react";
 import { expect, test, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
-import { inertDialogController, useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
+import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
 import { createMockApplyResult, installPatcherTestHooks, mount } from "./patcher-test-shared.js";
 
 installPatcherTestHooks();
@@ -34,7 +34,6 @@ test("apply can queue and start without a patch", async () => {
       });
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,
@@ -91,7 +90,6 @@ test("apply queued default format follows unambiguous special compression input"
       });
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,
@@ -161,7 +159,6 @@ test("apply waits for a patch added before queued start", async () => {
     latestUiController = localUiController;
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,
@@ -245,7 +242,6 @@ test("apply queued run cancels when staged patch validation fails", async () => 
       });
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,

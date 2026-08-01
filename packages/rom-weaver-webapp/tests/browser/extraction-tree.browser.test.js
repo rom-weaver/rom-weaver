@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { ExtractDrawer, ExtractionTree } from "../../src/public/react/components/ds/extraction-tree.tsx";
+import { ExtractDrawer } from "../../src/public/react/components/ds/extraction-tree.tsx";
 
 let mountedRoot = null;
 
@@ -29,13 +29,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("extraction tree omits ratio for CUE sidecar outputs", async () => {
+test("files drawer omits ratio for CUE sidecar outputs", async () => {
   mount(
-    createElement(ExtractionTree, {
-      levels: [
-        { name: "game.chd", sizeBytes: 1000, sizeLabel: "1.0 KB" },
-        { name: "game.cue", sizeBytes: 100, sizeLabel: "100 B" },
-      ],
+    createElement(ExtractDrawer, {
+      fileName: "game.cue",
+      fileSize: 100,
+      parentCompressions: [{ fileName: "game.chd", sourceSize: 1000 }],
     }),
   );
 
@@ -44,13 +43,12 @@ test("extraction tree omits ratio for CUE sidecar outputs", async () => {
     .toBe("1.0 KB \u2192 100 B");
 });
 
-test("extraction tree keeps ratio for ROM extraction outputs", async () => {
+test("files drawer keeps ratio for ROM extraction outputs", async () => {
   mount(
-    createElement(ExtractionTree, {
-      levels: [
-        { name: "roms.zip", sizeBytes: 1000, sizeLabel: "1.0 KB" },
-        { name: "game.bin", sizeBytes: 100, sizeLabel: "100 B" },
-      ],
+    createElement(ExtractDrawer, {
+      fileName: "game.bin",
+      fileSize: 100,
+      parentCompressions: [{ fileName: "roms.zip", sourceSize: 1000 }],
     }),
   );
 
@@ -59,10 +57,11 @@ test("extraction tree keeps ratio for ROM extraction outputs", async () => {
     .toBe("1.0 KB \u2192 100 B (1000%)");
 });
 
-test("extraction tree keeps extract metadata for prepared single-level inputs", async () => {
+test("files drawer keeps extract metadata for prepared single-level inputs", async () => {
   mount(
-    createElement(ExtractionTree, {
-      levels: [{ name: "game.iso", sizeBytes: 4096, sizeLabel: "4.1 KB" }],
+    createElement(ExtractDrawer, {
+      fileName: "game.iso",
+      fileSize: 4096,
       timing: "1.2 s",
     }),
   );
@@ -73,10 +72,11 @@ test("extraction tree keeps extract metadata for prepared single-level inputs", 
   expect(document.querySelector(".extract-d .tree-name")?.textContent || "").toBe("game.iso");
 });
 
-test("extraction tree keeps a Files drawer for raw single-file inputs", async () => {
+test("files drawer stays available for raw single-file inputs", async () => {
   mount(
-    createElement(ExtractionTree, {
-      levels: [{ name: "game.bin", sizeBytes: 4096, sizeLabel: "4.1 KB" }],
+    createElement(ExtractDrawer, {
+      fileName: "game.bin",
+      fileSize: 4096,
     }),
   );
 

@@ -1,5 +1,4 @@
 import type { CompressionFormat } from "../../types/settings.ts";
-import { createInertState } from "./apply-session-controllers.ts";
 import { isCompressedInputFileName } from "./apply-session-inputs.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { buildCompressPanel } from "./compress-options.ts";
@@ -8,19 +7,20 @@ import type { OutputOption } from "./output-view-model.ts";
 import type { ApplyPatchFormSettings, BinarySource, StackPatchItem } from "./patcher-form.ts";
 import { formatDownloadCompressionRatio } from "./patcher-form-session-utils.ts";
 import type { createOutputSizeSummary } from "./patcher-presentation.ts";
-import type { InputProgress, NoticeState, RomInputRowState } from "./patcher-ui-state.ts";
+import {
+  createEmptyPatcherUiState,
+  type InputProgress,
+  type NoticeState,
+  type RomInputRowState,
+} from "./patcher-ui-state.ts";
 import { createWaitingWorkflowProgress } from "./workflow-run-hooks.ts";
 
-type SectionTimings = { checksum: string; input: string; output: string; patch: string };
 type OutputSizeSummary = ReturnType<typeof createOutputSizeSummary>;
 
 interface UiViewStateInput {
-  activePatches: BinarySource[];
-  activeSettings: ApplyPatchFormSettings;
   busy: boolean;
   checksumOverrideChecked: boolean;
   disabled: boolean;
-  effectiveInputs: BinarySource[];
   effectiveOutputNoticeMessage: string;
   hasStrictInputChecksumMismatch: boolean;
   inputNoticeMessage: string;
@@ -30,19 +30,14 @@ interface UiViewStateInput {
   patchProgress: InputProgress | null;
   patchProgressByKey: Record<string, InputProgress>;
   patchStaging: boolean;
-  primaryRomInput: RomInputRowState | null;
   romInputs: RomInputRowState[];
-  sectionTimings: SectionTimings;
 }
 
 // Pure projection of the apply session into the ROM-input / notice / checksum UI store state.
 const buildUiViewState = ({
-  activePatches,
-  activeSettings,
   busy,
   checksumOverrideChecked,
   disabled,
-  effectiveInputs,
   effectiveOutputNoticeMessage,
   hasStrictInputChecksumMismatch,
   inputNoticeMessage,
@@ -52,67 +47,41 @@ const buildUiViewState = ({
   patchProgress,
   patchProgressByKey,
   patchStaging,
-  primaryRomInput,
   romInputs,
-  sectionTimings,
-}: UiViewStateInput) => ({
-  ...createInertState(),
-  checksumOverride: {
-    checked: checksumOverrideChecked,
-    disabled: disabled || busy || inputStaging || patchStaging,
-    label: createInertState().checksumOverride.label,
-    visible: hasStrictInputChecksumMismatch,
-  },
-  inputNotice: {
-    dismissible: true,
-    level: "error" as const,
-    message: inputNoticeMessage,
-    visible: !!inputNoticeMessage,
-  },
-  outputNotice: {
-    dismissible: !!outputRuntimeNoticeMessage,
-    level: "error" as const,
-    message: effectiveOutputNoticeMessage,
-    visible: !!effectiveOutputNoticeMessage,
-  },
-  patchInput: {
-    ...createInertState().patchInput,
-    disabled: disabled || busy || patchStaging,
-    loading: patchStaging || !!patchProgress || Object.keys(patchProgressByKey).length > 0,
-    progress: null,
-    valid: activePatches.length > 0,
-  },
-  patchNotice: {
-    dismissible: true,
-    level: "error" as const,
-    message: patchNoticeMessage,
-    visible: !!patchNoticeMessage,
-  },
-  romInfo: {
-    ...createInertState().romInfo,
-    alterHeaderChecked: activeSettings.compatibility?.fixChecksum === true,
-    alterHeaderDisabled: disabled || busy || inputStaging,
-    alterHeaderLabel: "Fix internal checksum",
-    alterHeaderVisible: true,
-    archiveName: primaryRomInput?.info.archiveName ?? (effectiveInputs.length ? "-" : ""),
-    crc32: primaryRomInput?.info.crc32 || "",
-    fileName:
-      primaryRomInput?.info.fileName ||
-      effectiveInputs.map((input, index) => getBinarySourceFileName(input, `Input ${index + 1}`)).join(", "),
-    md5: primaryRomInput?.info.md5 || "",
-    sha1: primaryRomInput?.info.sha1 || "",
-    validationPhase: primaryRomInput?.info.validationPhase || "idle",
-  },
-  romInput: {
-    disabled: disabled || busy || inputStaging,
-    invalid: false,
-    loading: inputStaging || romInputs.some((entry) => !!entry.progress),
-    progress: primaryRomInput?.progress || null,
-    valid: effectiveInputs.length > 0,
-  },
-  romInputs,
-  sectionTimings,
-});
+}: UiViewStateInput) => {
+  const emptyState = createEmptyPatcherUiState();
+  return {
+    ...emptyState,
+    checksumOverride: {
+      checked: checksumOverrideChecked,
+      disabled: disabled || busy || inputStaging || patchStaging,
+      label: emptyState.checksumOverride.label,
+      visible: hasStrictInputChecksumMismatch,
+    },
+    inputNotice: {
+      dismissible: true,
+      level: "error" as const,
+      message: inputNoticeMessage,
+      visible: !!inputNoticeMessage,
+    },
+    outputNotice: {
+      dismissible: !!outputRuntimeNoticeMessage,
+      level: "error" as const,
+      message: effectiveOutputNoticeMessage,
+      visible: !!effectiveOutputNoticeMessage,
+    },
+    patchInput: {
+      loading: patchStaging || !!patchProgress || Object.keys(patchProgressByKey).length > 0,
+    },
+    patchNotice: {
+      dismissible: true,
+      level: "error" as const,
+      message: patchNoticeMessage,
+      visible: !!patchNoticeMessage,
+    },
+    romInputs,
+  };
+};
 
 interface StackViewStateInput {
   activePatches: BinarySource[];
