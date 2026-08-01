@@ -9,8 +9,9 @@ import type { CreatePatchInput, CreateWorkflowOptions, ProgressEvent } from "../
 import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { CREATE_ARCHIVE_COMPRESSION_FORMATS } from "../compression/container-format-registry.ts";
 import { getCreatePatchFormatsForSizes, normalizeCreatePatchFormat } from "../create/patch-format-limits.ts";
-import { createWorkflowDeps, runCreateWorkflow } from "../create/workflow.ts";
+import { runCreateWorkflow } from "../create/workflow.ts";
 import { RomWeaverError, withAbortSignal } from "../errors.ts";
+import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
 import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
@@ -25,8 +26,6 @@ import {
   getInputAssetChecksums,
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
-  getPrimaryInputAsset,
-  isChecksummableInputAsset,
   type StandardWorkflowChecksums,
 } from "./staged-source-checksums.ts";
 
@@ -210,7 +209,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
       const outputName = this.outputName.trim();
       if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
       const result = await withAbortSignal(
-        runCreateWorkflow(this.createPatchInput(), this.runtime, createWorkflowDeps as never),
+        runCreateWorkflow(this.createPatchInput(), this.runtime),
         this.abortController.signal,
       );
       const output = wrapPublicOutput<TDestination>(result.output, this.runtime, 0);
@@ -360,9 +359,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
   }
 
   private getPreparedPatchSource(stage: StagedSource<TSource>): unknown | undefined {
-    return (
-      (stage.preparedInputAssets || []).find((asset) => asset.patchable)?.file || stage.preparedInputAssets?.[0]?.file
-    );
+    return getPrimaryInputAsset(stage.preparedInputAssets || [])?.file;
   }
 
   private async releaseRoleSession(role: SourceRole) {

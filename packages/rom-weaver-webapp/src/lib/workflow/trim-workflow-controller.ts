@@ -12,9 +12,10 @@ import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { CreateWorkflowOptions, ProgressEvent, TrimInput } from "../../types/workflow-runtime-types.ts";
 import { getCompressionOutputExtension, isCompressionFormat } from "../compression/container-format-registry.ts";
 import { RomWeaverError, withAbortSignal } from "../errors.ts";
+import { getPrimaryInputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
-import { runTrimWorkflow, trimWorkflowDeps } from "../trim/workflow.ts";
+import { runTrimWorkflow } from "../trim/workflow.ts";
 import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
 import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
 import type { SharedRomStagedSource, StagedRomSourceController } from "./staged-rom-source.ts";
@@ -196,7 +197,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       const outputName = this.outputName.trim();
       if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
       const result = await withAbortSignal(
-        runTrimWorkflow(this.createTrimInput(stage), this.runtime, trimWorkflowDeps),
+        runTrimWorkflow(this.createTrimInput(stage), this.runtime),
         this.abortController.signal,
       );
       const output = wrapPublicOutput<TDestination>(result.output, this.runtime, 0);
@@ -257,9 +258,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   }
 
   private getPreparedTrimSource(stage: StagedSource<TSource>): unknown | undefined {
-    return (
-      (stage.preparedInputAssets || []).find((asset) => asset.patchable)?.file || stage.preparedInputAssets?.[0]?.file
-    );
+    return getPrimaryInputAsset(stage.preparedInputAssets || [])?.file;
   }
 
   private getOutputCompression() {

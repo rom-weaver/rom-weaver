@@ -1,4 +1,4 @@
-import { getInputPreparationMetrics, type InputAsset } from "../../lib/input/input-assets.ts";
+import { getInputPreparationMetrics, getPrimaryInputAsset, type InputAsset } from "../../lib/input/input-assets.ts";
 import { getInputSourceFileName } from "../../lib/input/input-classification.ts";
 import {
   getBinarySourceSize,
@@ -18,20 +18,15 @@ import { reportProgress } from "../../lib/progress/progress-reporting.ts";
 import { getNamedSourcePath } from "../../storage/shared/binary/source-file-utils.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { SourceRef } from "../../types/source.ts";
-import type { PatchApplySummary, PatchFileInstance, PatchWorkflowDeps } from "../../types/workflow-internal.ts";
+import type { PatchApplySummary, PatchFileInstance } from "../../types/workflow-internal.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowResult, PatchInput } from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike } from "../../workers/protocol/patch-engine.ts";
-import { createPatchFile, getPatchFileExternalSource } from "../input/binary-service.ts";
+import { type createPatchFile, getPatchFileExternalSource } from "../input/binary-service.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
-import {
-  normalizePatchOptions,
-  parsePatchForApply,
-  resolvePatchTargets,
-  toPublicOutput,
-} from "./patch-apply-service.ts";
+import { parsePatchForApply, resolvePatchTargets, toPublicOutput } from "./patch-apply-service.ts";
 
 type PublicOutputWithApplySummary = ApplyWorkflowResult["output"] & {
   _applySummary?: PatchApplySummary;
@@ -159,7 +154,7 @@ const createWorkerApplyOptions = (options: PatchInput["options"], outputName?: s
   threads: getApplyThreads(options),
 });
 
-const prepareApplyInputAssets = async (input: PatchInput, runtime: WorkflowRuntime, deps: PatchWorkflowDeps) => {
+const prepareApplyInputAssets = async (input: PatchInput, runtime: WorkflowRuntime) => {
   const options = input.options || {};
   const inputSources = Array.isArray(input.inputs) ? input.inputs : [input.inputs];
   if (!inputSources.length) throw new Error("No input file provided");
@@ -183,13 +178,13 @@ const prepareApplyInputAssets = async (input: PatchInput, runtime: WorkflowRunti
     "input",
     async () => {
       const directAssets =
-        inputSources.length > 1 ? await deps.prepareMultipleDirectInputAssets(inputSources, options) : null;
+        inputSources.length > 1 ? await prepareMultipleDirectInputAssets(inputSources, options) : null;
       inputAssets.push(...(directAssets || []));
       if (directAssets) return;
       for (const [index, inputSource] of inputSources.entries()) {
         if (!inputSource) throw new Error(`Input ${index + 1} was not provided`);
         inputAssets.push(
-          ...(await deps.prepareInputAssets(inputSource, options, index, runtime, input.selectedInputEntryName)),
+          ...(await prepareInputAssets(inputSource, options, index, runtime, input.selectedInputEntryName)),
         );
       }
     },
@@ -203,7 +198,7 @@ const prepareApplyInputAssets = async (input: PatchInput, runtime: WorkflowRunti
   return { inputAssets, inputSources };
 };
 
-const prepareExplicitPatchFiles = async (input: PatchInput, runtime: WorkflowRuntime, deps: PatchWorkflowDeps) => {
+const prepareExplicitPatchFiles = async (input: PatchInput, runtime: WorkflowRuntime) => {
   const options = input.options || {};
   const patchSources =
     input.patches === undefined ? [] : Array.isArray(input.patches) ? input.patches : [input.patches];
@@ -237,7 +232,7 @@ const prepareExplicitPatchFiles = async (input: PatchInput, runtime: WorkflowRun
       const preparedPatchFiles = await Promise.all(
         patchSources.map(async (patchSource, index) => {
           if (!patchSource) throw new Error(`Patch ${index + 1} was not provided`);
-          const patchFile = await deps.prepareInput(
+          const patchFile = await prepareInput(
             patchSource,
             "patch",
             options,
@@ -269,7 +264,6 @@ const discoverImplicitPatches = async (
   patchFiles: PatchFileInstance[],
   options: PatchInput["options"],
   runtime: WorkflowRuntime,
-  deps: PatchWorkflowDeps,
 ) => {
   const listSiblingFiles = runtime.sidecars.list;
   await traceWorkflowStageBlock(
@@ -306,7 +300,7 @@ const discoverImplicitPatches = async (
           })),
         );
         for (const sidecarPatch of sidecarPatches) {
-          const patchFile = await deps.prepareInput(sidecarPatch.entry.source as SourceRef, "patch", options, runtime);
+          const patchFile = await prepareInput(sidecarPatch.entry.source as SourceRef, "patch", options, runtime);
           applySidecarPatchOutputLabel(patchFile, sidecarPatch.outputLabel);
           patchFiles.push(patchFile);
         }
@@ -333,7 +327,6 @@ const prepareApplyPatches = async ({
   options,
   patchFiles,
   runtime,
-  deps,
 }: {
   input: PatchInput;
   inputAssets: InputAsset[];
@@ -341,7 +334,6 @@ const prepareApplyPatches = async ({
   options: NonNullable<PatchInput["options"]>;
   patchFiles: PatchFileInstance[];
   runtime: WorkflowRuntime;
-  deps: PatchWorkflowDeps;
 }) => {
   const shouldDiscoverImplicitPatches =
     input.patches === undefined && input.preparedPatchFiles === undefined && input.parsedPatches === undefined;
@@ -355,7 +347,7 @@ const prepareApplyPatches = async ({
       reason: "patch files already prepared",
     });
   } else if (shouldDiscoverImplicitPatches) {
-    await discoverImplicitPatches(inputAssets, inputSources, patchFiles, options, runtime, deps);
+    await discoverImplicitPatches(inputAssets, inputSources, patchFiles, options, runtime);
   } else {
     traceWorkflowStage(options, "stage.skip", "patch.autodiscover", "patch", {
       patchCount: 0,
@@ -380,7 +372,7 @@ const prepareApplyPatches = async ({
           () =>
             Promise.all(
               patchFiles.map(async (patchFile) => {
-                const patch = await deps.parsePatchForApply(patchFile, runtime);
+                const patch = await parsePatchForApply(patchFile, runtime);
                 if (!patch) throw new Error(`Invalid patch file: ${patchFile.fileName}`);
                 return patch;
               }),
@@ -464,7 +456,6 @@ const applyPatchesToAsset = async ({
   applyPatchInRuntime,
   asset,
   assetPatches,
-  deps,
   options,
   patchOptions,
   patchFiles,
@@ -474,7 +465,6 @@ const applyPatchesToAsset = async ({
   applyPatchInRuntime: ApplyPatchWorker;
   asset: InputAsset;
   assetPatches: ParsedPatchLike[];
-  deps: PatchWorkflowDeps;
   options: ApplyPatchOptions;
   patchOptions: PatchInput["patchOptions"];
   patchFiles: PatchFileInstance[];
@@ -492,7 +482,7 @@ const applyPatchesToAsset = async ({
     logLevel: getApplyLogLevel(options),
     onLog: options.onLog,
     onProgress: (progress) =>
-      deps.reportProgress(options, {
+      reportProgress(options, {
         label: applyLabel,
         percent: typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
         stage: "apply",
@@ -518,7 +508,6 @@ const applyPatchesToAsset = async ({
 const applyPreparedPatches = async ({
   assetCount,
   assets,
-  deps,
   inputAssets,
   options,
   patchOptions,
@@ -529,7 +518,6 @@ const applyPreparedPatches = async ({
 }: {
   assetCount: number;
   assets: InputAsset[];
-  deps: PatchWorkflowDeps;
   inputAssets: InputAsset[];
   options: ApplyPatchOptions;
   patchOptions: PatchInput["patchOptions"];
@@ -553,13 +541,13 @@ const applyPreparedPatches = async ({
     });
     return { applyTimeMs, hasApplyTimeMs, patchedById, targets };
   }
-  deps.reportProgress(options, { label: "Applying patch...", percent: null, stage: "apply" });
+  reportProgress(options, { label: "Applying patch...", percent: null, stage: "apply" });
   targets.push(
     ...(await traceWorkflowStageBlock(
       options,
       "patch.target.resolve",
       "patch",
-      () => deps.resolvePatchTargets(inputAssets, patches, patchTargets),
+      () => resolvePatchTargets(inputAssets, patches, patchTargets),
       () => ({
         inputCount: inputAssets.length,
         patchCount: patches.length,
@@ -583,7 +571,6 @@ const applyPreparedPatches = async ({
           applyPatchInRuntime,
           asset,
           assetPatches,
-          deps,
           options,
           patchOptions,
           patchFiles,
@@ -611,27 +598,16 @@ const applyPreparedPatches = async ({
   return { applyTimeMs, hasApplyTimeMs, patchedById, targets };
 };
 
-const runApplyWorkflow = async (
-  input: PatchInput,
-  runtime: WorkflowRuntime,
-  deps: PatchWorkflowDeps,
-): Promise<ApplyWorkflowResult> => {
+const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Promise<ApplyWorkflowResult> => {
   const options = input.options || {};
   requireOutputName(options.output?.outputName);
-  const { inputAssets, inputSources } = await prepareApplyInputAssets(input, runtime, deps);
-  const { patchFiles: preparedPatchFiles, patchSources } = await prepareExplicitPatchFiles(input, runtime, deps);
-  const inputCompressedSize = inputSources.reduce(
-    (total, source) => total + (deps.getBinarySourceSize(source) || 0),
-    0,
-  );
-  const patchCompressedSize = patchSources.reduce(
-    (total, source) => total + (deps.getBinarySourceSize(source) || 0),
-    0,
-  );
+  const { inputAssets, inputSources } = await prepareApplyInputAssets(input, runtime);
+  const { patchFiles: preparedPatchFiles, patchSources } = await prepareExplicitPatchFiles(input, runtime);
+  const inputCompressedSize = inputSources.reduce((total, source) => total + (getBinarySourceSize(source) || 0), 0);
+  const patchCompressedSize = patchSources.reduce((total, source) => total + (getBinarySourceSize(source) || 0), 0);
 
   const patchFiles = preparedPatchFiles;
   const { patches } = await prepareApplyPatches({
-    deps,
     input,
     inputAssets,
     inputSources,
@@ -647,7 +623,6 @@ const runApplyWorkflow = async (
   const { applyTimeMs, hasApplyTimeMs, patchedById, targets } = await applyPreparedPatches({
     assetCount: inputAssets.length,
     assets: inputAssets,
-    deps,
     inputAssets,
     options,
     patchOptions: input.patchOptions,
@@ -665,13 +640,13 @@ const runApplyWorkflow = async (
     options,
     "output.materialization",
     "output",
-    () => deps.buildSessionOutputFiles(inputAssets, patchedById, options, runtime),
+    () => buildSessionOutputFiles(inputAssets, patchedById, options, runtime),
     () => ({
       inputCount: inputAssets.length,
       patchedCount: patchedById.size,
     }),
   );
-  const outputs = await Promise.all(outputFiles.map((file) => deps.toPublicOutput(file, runtime)));
+  const outputs = await Promise.all(outputFiles.map((file) => toPublicOutput(file, runtime)));
   traceWorkflowStage(options, "stage.finish", "result", "output", {
     inputCount: inputAssets.length,
     outputCount: outputs.length,
@@ -679,7 +654,7 @@ const runApplyWorkflow = async (
     patchedCount: patchedById.size,
     rawOutputSize,
   });
-  const primaryInput = targets[0] || inputAssets.find((asset) => asset.patchable) || inputAssets[0];
+  const primaryInput = targets[0] || getPrimaryInputAsset(inputAssets);
   if (!primaryInput) throw new Error("No input file provided");
 
   return {
@@ -717,18 +692,4 @@ const runApplyWorkflow = async (
   };
 };
 
-const patchWorkflowDeps = {
-  buildSessionOutputFiles,
-  createPatchFile,
-  getBinarySourceSize,
-  normalizePatchOptions,
-  parsePatchForApply,
-  prepareInput,
-  prepareInputAssets,
-  prepareMultipleDirectInputAssets,
-  reportProgress,
-  resolvePatchTargets,
-  toPublicOutput,
-};
-
-export { patchWorkflowDeps, runApplyWorkflow };
+export { runApplyWorkflow };

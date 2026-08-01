@@ -13,12 +13,17 @@ import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { PatchValidationPlan } from "../../wasm/index.ts";
 import type { ApplyWorkflowOptions, PatchInput, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
-import { getPatchProbeRequirements } from "../apply/patch-apply-service.ts";
-import { patchWorkflowDeps, runApplyWorkflow } from "../apply/workflow.ts";
+import { getPatchProbeRequirements, parsePatchForApply } from "../apply/patch-apply-service.ts";
+import { runApplyWorkflow } from "../apply/workflow.ts";
 import { isCompressionFormat } from "../compression/container-format-registry.ts";
 import { RomWeaverError, toRomWeaverError, withAbortSignal } from "../errors.ts";
 import { getPatchFileBlob, getPatchFileBytes, getPatchFileExternalSource } from "../input/binary-service.ts";
-import type { InputAsset, InputParentCompression, PreparedSidecarPatch } from "../input/input-assets.ts";
+import {
+  getPrimaryInputAsset,
+  type InputAsset,
+  type InputParentCompression,
+  type PreparedSidecarPatch,
+} from "../input/input-assets.ts";
 import { getPatchArchiveReplacement } from "../input/patch-archive-replacement.ts";
 import {
   getPatchLeafFileForSelection,
@@ -78,7 +83,7 @@ import {
 } from "./base-workflow-controller.ts";
 import { cloneCandidate, cloneValue, getSourceFileName, getSourceSize, isRecord } from "./controller-utils.ts";
 import type { StagedRomSourceController } from "./staged-rom-source.ts";
-import { cloneChecksumRomProbe, getPrimaryInputAsset } from "./staged-source-checksums.ts";
+import { cloneChecksumRomProbe } from "./staged-source-checksums.ts";
 
 /** Side-channel chain attached to a fanned-out leaf patch File so a re-stage (which sees only the
  * raw patch, not its parent archive) can still render the archive-nesting "extract section". */
@@ -783,7 +788,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         runApplyWorkflow(
           this.createPatchInput((progress) => this.emitApplyWorkerProgress(progress)),
           this.runtime,
-          patchWorkflowDeps as never,
         ),
         this.abortController.signal,
       );
@@ -1204,7 +1208,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       stage.state.patchValidation = undefined;
       return;
     }
-    const parsed = await patchWorkflowDeps.parsePatchForApply(patchFile, this.runtime);
+    const parsed = await parsePatchForApply(patchFile, this.runtime);
     if (!parsed)
       throw new RomWeaverError("INVALID_INPUT", `Invalid patch file: ${patchFile.fileName || stage.state.fileName}`);
     stage.parsedPatch = parsed;

@@ -1,11 +1,15 @@
 import type { ApplyWorkflowParentCompression } from "../../types/apply-workflow.ts";
-import { getInputPreparationMetrics, type InputParentCompression } from "../input/input-assets.ts";
+import {
+  getInputPreparationMetrics,
+  getPrimaryInputAsset,
+  type InputParentCompression,
+} from "../input/input-assets.ts";
 import type { prepareInputFile } from "../input/input-preparation-service.ts";
 import { getBaseFileName } from "../input/path-utils.ts";
 import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
 import { getPreparedAssetFileName } from "./apply-source-staging.ts";
 import type { StagedSource } from "./apply-workflow-state.ts";
-import { getInputAssetChecksums, getPrimaryInputAsset } from "./staged-source-checksums.ts";
+import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 
 const normalizeParentCompressions = (
   parentCompressions: InputParentCompression[] | undefined,
