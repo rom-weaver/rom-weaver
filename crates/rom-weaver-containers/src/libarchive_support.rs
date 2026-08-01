@@ -18,7 +18,7 @@ use crate::libarchive::{
     EntryFileType, EntrySpec, ReadArchive, ReadFilter as LibarchiveReadFilter,
     RegularArchiveProbeFormat as LibarchiveProbeFormat, SelectedRegularArchiveEntry, WriteArchive,
     WriteFilter as LibarchiveCreateFilter, WriteFormat as LibarchiveCreateFormat,
-    ZeroWriteBehavior, list_regular_archive_entries,
+    list_regular_archive_entries,
     probe_regular_archive as probe_regular_archive_with_libarchive_impl,
     probe_regular_archive_format, visit_selected_regular_archive_entries,
 };
@@ -234,7 +234,6 @@ where
             archive.write_data_all(
                 &buffer[..read],
                 &format!("{format_name} create failed while writing payload"),
-                ZeroWriteBehavior::Error,
             )?;
             logical_bytes = logical_bytes.saturating_add(read as u64);
             if !progress_on_source_read {

@@ -61,10 +61,6 @@ pub struct EntrySpec<'a> {
     pub size: u64,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum ZeroWriteBehavior {
-    Error,
-}
 pub struct WriteArchive {
     ptr: Option<NonNull<archive>>,
     codec_progress_callback_data: Option<Box<CodecProgressCallbackData>>,
@@ -316,13 +312,7 @@ impl WriteArchive {
         self.check_status(status, context)
     }
 
-    pub fn write_data_all(
-        &mut self,
-        payload: &[u8],
-        context: &str,
-        // Retained for API/test compatibility; a zero-length write is always an error now.
-        _zero_write_behavior: ZeroWriteBehavior,
-    ) -> Result<()> {
+    pub fn write_data_all(&mut self, payload: &[u8], context: &str) -> Result<()> {
         let mut offset = 0usize;
         while offset < payload.len() {
             let written = unsafe {
