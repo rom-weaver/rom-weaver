@@ -66,8 +66,8 @@ benchmarks per source it recognises, one compress and one extract, then hands bo
 commands to [hyperfine](https://github.com/sharkdp/hyperfine), which runs a
 warmup pass followed by the measured runs.
 
-Each run is preceded by a `--prepare` step that deletes the previous output, so
-every run starts from the same clean slate: `rom-weaver extract` stops rather
+Each run is preceded by a `--prepare` step that deletes the previous output.
+Every run starts from the same clean slate: `rom-weaver extract` stops rather
 than overwrite files already in the output directory, and a reference tool that
 skipped a write because the target existed would be timed as instant.
 
@@ -145,16 +145,16 @@ sizes, so the size columns are exact even though they and the time columns come
 from different runs. #213 touches only GameCube junk detection, so no other suite
 was affected.
 
-The **7z tables** were re-measured in full a second time, on the change that
-moves native LZMA2 writes and eligible LZMA1/LZMA2 reads onto 7-Zip's own LZMA
-SDK - the same coders `7zz` runs. Filter chains, LZMA1 writes, and WebAssembly
-writes stay on liblzma. Both tables changed enough that nothing from the earlier
-sittings survives in them. The first re-measure covered the seeded parallel
+The **7z tables** were re-measured in full a second time as part of the change
+that moves native LZMA2 writes and eligible LZMA1/LZMA2 reads onto 7-Zip's own
+LZMA SDK - the same coders `7zz` runs. Filter chains, LZMA1 writes, and
+WebAssembly writes stay on liblzma. Both tables changed enough that no earlier
+result survives in them. The first re-measure covered the seeded parallel
 blocks, 7-Zip's per-level dictionary sizes, and the single-member extract
-pipeline, which together bought output smaller than 7zz's at the cost of
-compress time; the SDK swap gives that fraction of a percent of size back and
-takes the time. The extract rows move with the pipeline and the decoder, the
-compress rows with the encoder.
+pipeline. Together, those changes produced output smaller than 7zz's but
+increased compression time. The SDK swap gives that fraction of a percent of
+size back but also takes time. The extract rows move with the pipeline and the
+decoder. The compress rows move with the encoder.
 
 Time change is rom-weaver's elapsed time minus the reference tool's, in seconds
 and as a percentage of the reference, so negative means rom-weaver finished

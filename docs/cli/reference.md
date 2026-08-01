@@ -138,7 +138,7 @@ or comma-separated: `--algo crc32,sha1` and `--algo crc32 --algo sha1` do the
 same thing.
 
 rom-weaver only asks interactive questions when stdin and stderr are both
-terminals and `--json` is off. Otherwise it decides on its own or fails.
+terminals and `--json` is off. Otherwise, it decides on its own or fails.
 
 ## Reaching inside archives
 

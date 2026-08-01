@@ -42,8 +42,8 @@ patcher happily applies your changes to the wrong game and hands back a broken
 file that looks fine until it is not.
 
 That difference decides most of your choice. For cartridge-sized files, size
-and speed usually matter less than whether users can find out they made a
-mistake. Disc-sized files make patch size and tool support more important.
+and speed usually matter less than whether users can detect a mistake. Disc-sized
+files make patch size and tool support more important.
 
 No format records everything, though. None of them know which region you meant
 or which revision, so write the region, the revision, the header state, the
@@ -63,7 +63,7 @@ the separate [CLI patch creation guide](../cli/create.md).
 ## IPS and IPS32
 
 IPS is one of the oldest and most widely supported patch formats. It is a plain
-list of "at this offset, write these bytes". Nothing else. In particular, it
+list of "at this offset, write these bytes." Nothing else. In particular, it
 stores no checksum of the original, so an IPS patcher cannot tell a correct
 starting file from a wrong one.
 

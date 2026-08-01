@@ -67,8 +67,8 @@ limit.
 A spawned WASI thread can spawn threads of its own. Those nested spawns never
 draw from the runner's bounded pool: a parent blocks in `Atomics.wait` on its
 children, so queueing a child behind a pool slot that a blocked parent holds
-deadlocks the run. `browser-wasi-nested-thread-workers.ts` therefore gives every
-worker realm its own unbounded free list of thread workers.
+deadlocks the run. As a result, `browser-wasi-nested-thread-workers.ts` gives
+every worker realm its own unbounded free list of thread workers.
 
 The free list is deadlock-safe by construction:
 
@@ -82,7 +82,7 @@ The free list is deadlock-safe by construction:
 The list is realm-scoped, not spawner-scoped: the many-entries extract fan-out
 runs one short-lived parent thread per archive entry, and a per-parent list would
 still pay a fresh worker (a full WASM instantiation plus an OPFS mount rebuild)
-per entry. It is keyed by the identity of the command payload - module, memory,
+per entry. The list is keyed by the identity of the command payload - module, memory,
 thread-ID counter, runtime, stream routing - and drained when that key changes,
 when the realm's command loop exits, and on shutdown, so a parked worker is never
 handed a stale run.

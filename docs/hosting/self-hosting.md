@@ -277,7 +277,7 @@ registration, and scope resolve to the same directory.
 The service worker precaches the build, checks for updates, and can serve
 same-origin navigation and manifest requests from its cache. It can also add
 the cross-origin isolation headers to responses inside its scope when the host
-cannot configure them. It cannot alter the very first document response before
+cannot configure them. It cannot alter the first document response before
 it controls the page, so server or proxy headers remain the preferred setup.
 
 On first install, the worker claims the app and the client may reload once to
