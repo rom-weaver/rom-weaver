@@ -406,7 +406,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await page.getByRole("button", { exact: true, name: "Save" }).click();
       }
       for (const tab of ["patcher", "creator", "trim", "tools"]) {
-        await page.locator(`[role="tab"][data-mode="${tab}"]`).click();
+        await page.locator(`[role="tab"][data-mode="${tab}"]:visible`).first().click();
         await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
         for (const theme of ["light", "dark"]) {
           await setTheme(theme);
@@ -417,7 +417,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    await page.locator('[role="tab"][data-mode="patcher"]').click();
+    await page.locator('[role="tab"][data-mode="patcher"]:visible').first().click();
 
     const infoButton = page.locator(".info-btn").first();
     await infoButton.click();
@@ -524,7 +524,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    await page.locator('[role="tab"][data-mode="creator"]').click();
+    await page.locator('[role="tab"][data-mode="creator"]:visible').first().click();
     const createOnboardingChip = page.getByRole("button", { name: "New here?" });
     await createOnboardingChip.waitFor({ state: "visible" });
     await createOnboardingChip.click();
