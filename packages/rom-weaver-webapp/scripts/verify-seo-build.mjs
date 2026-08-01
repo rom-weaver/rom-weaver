@@ -150,13 +150,12 @@ assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create desc
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
 assertIncludes(applyHtml, 'aria-selected="true" class="mode" data-mode="patcher"', "apply prerendered workflow");
 assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator"', "create prerendered workflow");
-assertIncludes(applyHtml, 'class="build-version-label"', "preloaded build version");
-assertIncludes(applyHtml, 'class="masthead-threads-full"', "preloaded full thread label");
-assertIncludes(applyHtml, 'class="masthead-threads-short"', "preloaded compact thread label");
-assertIncludes(applyHtml, 'class="masthead-runtime"', "preloaded runtime status slot");
+assertIncludes(applyHtml, 'class="build-tag"', "preloaded build tag");
+assertIncludes(applyHtml, 'class="masthead-threads-count"', "preloaded thread count");
+assertIncludes(applyHtml, 'class="sub-status"', "preloaded runtime status control");
 assertIncludes(applyHtml, 'data-service-worker-enabled="true"', "service-worker build marker");
 const runtimeResolver =
-  '<span class="masthead-runtime">· web · sw</span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
+  '<span class="shell-identity" hidden=""></span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
 for (const route of [
   "index.html",
   "apply.html",

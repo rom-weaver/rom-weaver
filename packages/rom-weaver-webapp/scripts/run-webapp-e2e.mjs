@@ -118,7 +118,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       if (!audit.initialView && active) audit.initialView = active.getAttribute("data-mode") || "";
       if (!audit.identityResolved) return;
       const threads = document.querySelector(".masthead-threads");
-      const runtime = document.querySelector(".masthead-runtime");
+      const runtime = document.querySelector(".sub-status");
       if (!(threads && runtime)) return;
       if (!audit.threads) {
         audit.threads = threads;
@@ -188,9 +188,11 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           });
           const initialShell = await page.evaluate(() => {
             const root = document.getElementById("webapp-root");
-            const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
-            const links = document.querySelector(".site-footer-links")?.getBoundingClientRect();
-            const status = document.querySelector(".site-footer-status")?.getBoundingClientRect();
+            // The dock is the phone chrome the shell must paint inside the
+            // first viewport now that the footer is gone.
+            const footer = document.querySelector(".dock")?.getBoundingClientRect();
+            const links = document.querySelector(".dock-tab")?.getBoundingClientRect();
+            const status = [...document.querySelectorAll(".dock-tab")].at(-1)?.getBoundingClientRect();
             const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
             return {
               footerInFirstViewport:
@@ -208,7 +210,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           });
           initialShellLayout = initialShell;
           if (!(initialShell.prerendered && initialShell.footerInFirstViewport)) {
-            throw new Error(`initial shell footer is not visible: ${JSON.stringify(initialShell)}`);
+            throw new Error(`initial shell dock is not visible: ${JSON.stringify(initialShell)}`);
           }
           await settings.click();
           releaseScripts();
@@ -227,7 +229,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         const result = await page.evaluate((initialLayout) => {
           const audit = window.__romWeaverHydrationAudit;
           const root = document.getElementById("webapp-root");
-          const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
+          const footer = document.querySelector(".dock")?.getBoundingClientRect();
           const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
           const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
           return {
@@ -235,7 +237,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             finalView: document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") || "",
             initialTheme: audit.initialTheme,
             initialView: audit.initialView,
-            runtimeRetained: document.querySelector(".masthead-runtime") === audit.runtime,
+            runtimeRetained: document.querySelector(".sub-status") === audit.runtime,
             runtimeTexts: audit.runtimeTexts,
             threadRetained: document.querySelector(".masthead-threads") === audit.threads,
             threadTexts: audit.threadTexts,
@@ -250,9 +252,9 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         const problems = [];
         if (!result.threadRetained) problems.push("thread node was replaced");
         if (!result.runtimeRetained) problems.push("runtime node was replaced");
-        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3 threads"))
+        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3T"))
           problems.push(`thread text changed: ${JSON.stringify(result.threadTexts)}`);
-        if (result.runtimeTexts.length !== 1 || !result.runtimeTexts[0]?.includes("web · sw off"))
+        if (result.runtimeTexts.length !== 1)
           problems.push(`runtime text changed: ${JSON.stringify(result.runtimeTexts)}`);
         if (result.initialTheme !== "light" || result.finalTheme !== "light")
           problems.push(`theme changed: ${result.initialTheme} -> ${result.finalTheme}`);

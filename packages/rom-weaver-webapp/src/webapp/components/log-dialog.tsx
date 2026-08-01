@@ -8,6 +8,12 @@ import { listBrowserOpfs } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
 import type { BrowserOpfsEntry } from "../../workers/protocol/browser-opfs-worker-client.ts";
 import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
+import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "../build-version.ts";
+import { CHANNEL_BADGE } from "../build-channel.ts";
+import { GITHUB_URL } from "../project-links.ts";
+import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
+import { readPwaState, resolveRuntimeState, RUNTIME_MESSAGES, RuntimeGlyph } from "./shell.tsx";
+import type { Localizer } from "../../presentation/localization/index.ts";
 
 /**
  * The masthead Log dialog: a native <dialog> trace inspector over the
@@ -117,16 +123,91 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
   );
 };
 
+/** Status/logs tab set. The tabs ARE the dialog header - there is no title. */
+const DIALOG_TABS = ["status", "logs", "storage", "changelog"] as const;
+type LogDialogTab = (typeof DIALOG_TABS)[number];
+const TAB_MESSAGES: Record<
+  LogDialogTab,
+  "ui.log.tabStatus" | "ui.log.tabLogs" | "ui.log.tabStorage" | "ui.log.tabChangelog"
+> = {
+  changelog: "ui.log.tabChangelog",
+  logs: "ui.log.tabLogs",
+  status: "ui.log.tabStatus",
+  storage: "ui.log.tabStorage",
+};
+
+const GITHUB_BASE = GITHUB_URL.replace(/\/$/, "");
+const PR_NUMBER = CHANNEL_BADGE.match(/^pr-(\d+)$/i)?.[1];
+
+/** Build facts, plainly listed: what is running, from where, and in what host. */
+const StatusRows = ({ localizer }: { localizer: Localizer }) => {
+  const distance =
+    typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
+  const rows: Array<[string, React.ReactNode]> = [
+    [localizer.message("ui.status.version"), `v${APP_VERSION}${distance}${DIRTY_HASH ? "*" : ""}`],
+    [
+      localizer.message("ui.status.commit"),
+      COMMIT_HASH ? (
+        <a href={`${GITHUB_BASE}/commit/${COMMIT_HASH}`} key="commit" rel="noreferrer" target="_blank">
+          <code>{`${COMMIT_HASH.slice(0, 8)}${DIRTY_HASH ? "*" : ""}`}</code>
+        </a>
+      ) : (
+        "—"
+      ),
+    ],
+    [localizer.message("ui.status.branch"), <code key="branch">{GIT_BRANCH || "—"}</code>],
+  ];
+  if (PR_NUMBER) {
+    rows.push([
+      localizer.message("ui.status.pullRequest"),
+      <a href={`${GITHUB_BASE}/pull/${PR_NUMBER}`} key="pr" rel="noreferrer" target="_blank">
+        {`#${PR_NUMBER}`}
+      </a>,
+    ]);
+  } else if (CHANNEL_BADGE) {
+    rows.push([
+      localizer.message("ui.status.channel"),
+      <span className="channel-badge" data-channel={CHANNEL_BADGE.toLowerCase()} key="channel">
+        {CHANNEL_BADGE}
+      </span>,
+    ]);
+  }
+  rows.push([
+    localizer.message("ui.status.environment"),
+    localizer.message(readPwaState() ? "ui.status.envPwa" : "ui.status.envWeb"),
+  ]);
+  return (
+    <dl className="status-rows">
+      {rows.map(([label, value]) => (
+        <div className="status-row" key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+};
+
 const LogDialog = ({
   open,
   onClose,
   level,
   onLevelChange,
+  initialTab = "status",
+  onOpenChangelog,
+  onReload,
+  serviceWorkerStatus,
+  updateReady = false,
 }: {
   open: boolean;
   onClose: () => void;
   level?: string;
   onLevelChange: (level: string) => void;
+  initialTab?: LogDialogTab;
+  onOpenChangelog?: () => void;
+  onReload?: () => void;
+  serviceWorkerStatus?: ServiceWorkerStatus | null;
+  updateReady?: boolean;
 }) => {
   const localizer = useUiLocalizer();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -137,7 +218,14 @@ const LogDialog = ({
   const [viewportHeight, setViewportHeight] = useState(0);
   const [copiedAll, setCopiedAll] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
-  const [view, setView] = useState<"current" | "previous" | "opfs">("current");
+  const [view, setView] = useState<"current" | "previous">("current");
+  const [tab, setTab] = useState<LogDialogTab>(initialTab);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
+  // Each open lands on the tab the control that opened it names.
+  useEffect(() => {
+    if (open) setTab(initialTab);
+  }, [initialTab, open]);
+  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady);
   const [opfsEntries, setOpfsEntries] = useState<BrowserOpfsEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
   const [opfsError, setOpfsError] = useState<string | null>(null);
@@ -146,7 +234,7 @@ const LogDialog = ({
   const previousEntries = useMemo(() => getLastSessionEntries(), []);
   const hasPrevious = previousEntries.length > 0;
   const showingPrevious = view === "previous" && hasPrevious;
-  const showingOpfs = view === "opfs";
+  const showingOpfs = tab === "storage";
   const refreshOpfs = useCallback(async () => {
     setOpfsLoading(true);
     setOpfsError(null);
@@ -165,8 +253,8 @@ const LogDialog = ({
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
   const liveEntries = useSyncExternalStore(
-    open && !showingPrevious && !showingOpfs ? subscribeLogEntries : noopSubscribe,
-    open && !showingPrevious && !showingOpfs ? getLogEntries : getEmptyEntries,
+    open && tab === "logs" && !showingPrevious ? subscribeLogEntries : noopSubscribe,
+    open && tab === "logs" && !showingPrevious ? getLogEntries : getEmptyEntries,
     getEmptyEntries,
   );
   const entries = showingPrevious ? previousEntries : liveEntries;
@@ -220,7 +308,7 @@ const LogDialog = ({
 
   return (
     <dialog
-      aria-labelledby="log-title"
+      aria-label={localizer.message("ui.log.tabStatus")}
       className="dlg log-dlg"
       onCancel={(event) => {
         event.preventDefault();
@@ -236,20 +324,57 @@ const LogDialog = ({
     >
       <div className="dlg-frame">
         <header className="dlg-head">
-          <h2 className="dlg-title" id="log-title">
-            {localizer.message("ui.log.viewLabel")}
-          </h2>
-          <fieldset className="logview">
-            <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
-            <button
-              aria-pressed={view === "current"}
-              className="seg-btn"
-              onClick={() => setView("current")}
-              type="button"
-            >
-              {localizer.message("ui.log.viewCurrent")}
-            </button>
-            {hasPrevious ? (
+          {/* the weft sub-rail IS the header: no title competing with it, and the
+              close button parks at the rail's end */}
+          <div
+            aria-label={localizer.message("ui.log.tabStatus")}
+            aria-orientation="horizontal"
+            className="subrail dialog-subrail"
+            onKeyDown={(event) => {
+              const index = DIALOG_TABS.indexOf(tab);
+              let next = -1;
+              if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % DIALOG_TABS.length;
+              if (event.key === "ArrowLeft" || event.key === "ArrowUp")
+                next = (index + DIALOG_TABS.length - 1) % DIALOG_TABS.length;
+              if (event.key === "Home") next = 0;
+              if (event.key === "End") next = DIALOG_TABS.length - 1;
+              if (next < 0) return;
+              event.preventDefault();
+              const nextTab = DIALOG_TABS[next] as LogDialogTab;
+              setTab(nextTab);
+              tabsRef.current?.querySelector<HTMLButtonElement>(`[data-logtab="${nextTab}"]`)?.focus();
+            }}
+            ref={tabsRef}
+            role="tablist"
+          >
+            {DIALOG_TABS.map((entry) => (
+              <button
+                aria-controls={`logpanel-${entry}`}
+                aria-selected={entry === tab}
+                className="subtab"
+                data-logtab={entry}
+                id={`logtab-${entry}`}
+                key={entry}
+                onClick={() => setTab(entry)}
+                role="tab"
+                tabIndex={entry === tab ? 0 : -1}
+                type="button"
+              >
+                {localizer.message(TAB_MESSAGES[entry])}
+              </button>
+            ))}
+          </div>
+          {tab === "logs" && hasPrevious ? (
+            <fieldset className="logview">
+              <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
+              <button
+                aria-pressed={view === "current"}
+                className="seg-btn"
+                onClick={() => setView("current")}
+                type="button"
+              >
+                {localizer.message("ui.log.viewCurrent")}
+              </button>
               <button
                 aria-pressed={showingPrevious}
                 className="seg-btn"
@@ -258,53 +383,52 @@ const LogDialog = ({
               >
                 {localizer.message("ui.log.viewPrevious")}
               </button>
-            ) : null}
-            <button aria-pressed={showingOpfs} className="seg-btn" onClick={() => setView("opfs")} type="button">
-              OPFS
-            </button>
-          </fieldset>
-          <div className="dlg-actions log-actions">
-            <button
-              aria-label={localizer.message("ui.common.copy")}
-              className={`btn slim ghost log-icon-btn${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}
-              onClick={() => {
-                copyToClipboard(exportText)
-                  .then(() => {
-                    setCopyFailed(false);
-                    setCopiedAll(true);
-                    window.setTimeout(() => setCopiedAll(false), 1300);
-                  })
-                  .catch((error) => {
-                    logger.warn("Log copy failed", { message: String(error) });
-                    setCopiedAll(false);
-                    setCopyFailed(true);
-                    window.setTimeout(() => setCopyFailed(false), 1600);
-                  });
-              }}
-              title={localizer.message("ui.common.copy")}
-              type="button"
-            >
-              {copiedAll ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            </button>
-            <button
-              aria-label={localizer.message("ui.result.download")}
-              className="btn slim ghost log-icon-btn"
-              onClick={() => {
-                void triggerBrowserDownload(
-                  exportText,
-                  showingOpfs
-                    ? "rom-weaver-opfs.txt"
-                    : showingPrevious
-                      ? "rom-weaver-previous-log.txt"
-                      : "rom-weaver-log.txt",
-                );
-              }}
-              title={localizer.message("ui.result.download")}
-              type="button"
-            >
-              <Download aria-hidden="true" />
-            </button>
-          </div>
+            </fieldset>
+          ) : null}
+          {tab === "logs" || tab === "storage" ? (
+            <div className="dlg-actions log-actions">
+              <button
+                aria-label={localizer.message("ui.common.copy")}
+                className={`btn slim ghost log-icon-btn${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}
+                onClick={() => {
+                  copyToClipboard(exportText)
+                    .then(() => {
+                      setCopyFailed(false);
+                      setCopiedAll(true);
+                      window.setTimeout(() => setCopiedAll(false), 1300);
+                    })
+                    .catch((error) => {
+                      logger.warn("Log copy failed", { message: String(error) });
+                      setCopiedAll(false);
+                      setCopyFailed(true);
+                      window.setTimeout(() => setCopyFailed(false), 1600);
+                    });
+                }}
+                title={localizer.message("ui.common.copy")}
+                type="button"
+              >
+                {copiedAll ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+              </button>
+              <button
+                aria-label={localizer.message("ui.result.download")}
+                className="btn slim ghost log-icon-btn"
+                onClick={() => {
+                  void triggerBrowserDownload(
+                    exportText,
+                    showingOpfs
+                      ? "rom-weaver-opfs.txt"
+                      : showingPrevious
+                        ? "rom-weaver-previous-log.txt"
+                        : "rom-weaver-log.txt",
+                  );
+                }}
+                title={localizer.message("ui.result.download")}
+                type="button"
+              >
+                <Download aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
           <button
             aria-label={localizer.message("ui.common.close")}
             className="dlg-x"
@@ -315,93 +439,138 @@ const LogDialog = ({
             <X aria-hidden="true" />
           </button>
         </header>
-        <div className="log-filter-bar">
-          <input
-            aria-label={localizer.message("ui.log.filterLabel")}
-            className="input mono log-filter"
-            onChange={(event) => {
-              setFilter(event.currentTarget.value);
-              if (traceRef.current) traceRef.current.scrollTop = 0;
-              setScrollTop(0);
-            }}
-            placeholder={localizer.message("ui.log.filter")}
-            type="search"
-            value={filter}
-          />
-          {showingOpfs ? (
-            <button
-              aria-label="Refresh OPFS"
-              className="btn slim ghost log-refresh"
-              disabled={opfsLoading}
-              onClick={() => void refreshOpfs()}
-              title="Refresh OPFS"
-              type="button"
-            >
-              <RefreshCw aria-hidden="true" className={opfsLoading ? "spin" : undefined} />
-            </button>
-          ) : (
-            <label className="loglevel">
-              <span className="sr-only">{localizer.message("settings.logLevel")}</span>
-              <select
-                className="select mono"
-                onChange={(event) => onLevelChange(event.currentTarget.value)}
-                value={currentLevel}
-              >
-                {LOG_LEVELS.map((value) => (
-                  <option key={value} value={value}>
-                    {`level: ${value}`}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-        <div className="dlg-body log-body">
-          {showingOpfs ? (
-            <div aria-live="polite" className="opfs-inspector mono">
-              <div className="opfs-summary">
-                {opfsLoading ? "Loading OPFS…" : `${visibleOpfs.length.toLocaleString()} paths`}
-              </div>
-              {opfsError ? (
-                <div className="tracelog-empty">{opfsError}</div>
-              ) : visibleOpfs.length === 0 ? (
-                <div className="tracelog-empty">{filter.trim() ? "No matching paths" : "OPFS is empty"}</div>
-              ) : (
-                <ul className="opfs-list">
-                  {visibleOpfs.map((entry) => (
-                    <li className="opfs-row" key={`${entry.kind}:${entry.path}`}>
-                      <span className="opfs-kind">{entry.kind}</span>
-                      <span className="opfs-path">{entry.path}</span>
-                      <span className="opfs-size">{formatOpfsSize(entry.size)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+        {tab === "status" ? (
+          <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
+            <div className="sw-summary">
+              <span className="sw-chip" data-sw={runtimeState} role="status">
+                <RuntimeGlyph state={runtimeState} />
+                {localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
+              </span>
+              <p className="panel-note">{localizer.message(RUNTIME_MESSAGES[runtimeState].description)}</p>
+              {runtimeState === "update" && onReload ? (
+                <button className="btn primary" onClick={onReload} type="button">
+                  {localizer.message("ui.update.reloadNow")}
+                </button>
+              ) : null}
             </div>
-          ) : (
-            <div
-              aria-atomic="false"
-              aria-live="polite"
-              className="tracelog mono"
-              onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-              ref={traceRef}
-            >
-              {visible.length === 0 ? (
-                <div className="tracelog-empty">
-                  {filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-"}
-                </div>
+            <StatusRows localizer={localizer} />
+          </div>
+        ) : null}
+        {tab === "changelog" ? (
+          <div
+            aria-labelledby="logtab-changelog"
+            className="dlg-body status-panel"
+            id="logpanel-changelog"
+            role="tabpanel"
+          >
+            <p className="panel-note">
+              <a href={`${GITHUB_BASE}/releases`} rel="noreferrer" target="_blank">
+                {localizer.message("ui.log.tabChangelog")} ↗
+              </a>
+            </p>
+            {onOpenChangelog ? (
+              <button className="btn ghost" onClick={onOpenChangelog} type="button">
+                {localizer.message("ui.update.whatsNew")}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {tab === "logs" || tab === "storage" ? (
+          <>
+            <div className="log-filter-bar">
+              <input
+                aria-label={localizer.message("ui.log.filterLabel")}
+                className="input mono log-filter"
+                onChange={(event) => {
+                  setFilter(event.currentTarget.value);
+                  if (traceRef.current) traceRef.current.scrollTop = 0;
+                  setScrollTop(0);
+                }}
+                placeholder={localizer.message("ui.log.filter")}
+                type="search"
+                value={filter}
+              />
+              {showingOpfs ? (
+                <button
+                  aria-label="Refresh OPFS"
+                  className="btn slim ghost log-refresh"
+                  disabled={opfsLoading}
+                  onClick={() => void refreshOpfs()}
+                  title="Refresh OPFS"
+                  type="button"
+                >
+                  <RefreshCw aria-hidden="true" className={opfsLoading ? "spin" : undefined} />
+                </button>
               ) : (
-                <div className="tracelog-virtual-content" style={{ height: totalHeight }}>
-                  <div className="tracelog-virtual-window" style={{ top: virtualStart * TRACE_ROW_HEIGHT }}>
-                    {rendered.map((entry) => (
-                      <TraceLine entry={entry} key={entry.id} />
+                <label className="loglevel">
+                  <span className="sr-only">{localizer.message("settings.logLevel")}</span>
+                  <select
+                    className="select mono"
+                    onChange={(event) => onLevelChange(event.currentTarget.value)}
+                    value={currentLevel}
+                  >
+                    {LOG_LEVELS.map((value) => (
+                      <option key={value} value={value}>
+                        {`level: ${value}`}
+                      </option>
                     ))}
+                  </select>
+                </label>
+              )}
+            </div>
+            <div
+              aria-labelledby={showingOpfs ? "logtab-storage" : "logtab-logs"}
+              className="dlg-body log-body"
+              id={showingOpfs ? "logpanel-storage" : "logpanel-logs"}
+              role="tabpanel"
+            >
+              {showingOpfs ? (
+                <div aria-live="polite" className="opfs-inspector mono">
+                  <div className="opfs-summary">
+                    {opfsLoading ? "Loading OPFS…" : `${visibleOpfs.length.toLocaleString()} paths`}
                   </div>
+                  {opfsError ? (
+                    <div className="tracelog-empty">{opfsError}</div>
+                  ) : visibleOpfs.length === 0 ? (
+                    <div className="tracelog-empty">{filter.trim() ? "No matching paths" : "OPFS is empty"}</div>
+                  ) : (
+                    <ul className="opfs-list">
+                      {visibleOpfs.map((entry) => (
+                        <li className="opfs-row" key={`${entry.kind}:${entry.path}`}>
+                          <span className="opfs-kind">{entry.kind}</span>
+                          <span className="opfs-path">{entry.path}</span>
+                          <span className="opfs-size">{formatOpfsSize(entry.size)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <div
+                  aria-atomic="false"
+                  aria-live="polite"
+                  className="tracelog mono"
+                  onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+                  ref={traceRef}
+                >
+                  {visible.length === 0 ? (
+                    <div className="tracelog-empty">
+                      {filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-"}
+                    </div>
+                  ) : (
+                    <div className="tracelog-virtual-content" style={{ height: totalHeight }}>
+                      <div className="tracelog-virtual-window" style={{ top: virtualStart * TRACE_ROW_HEIGHT }}>
+                        {rendered.map((entry) => (
+                          <TraceLine entry={entry} key={entry.id} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
+          </>
+        ) : null}
       </div>
     </dialog>
   );

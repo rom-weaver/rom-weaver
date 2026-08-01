@@ -55,6 +55,11 @@ msgstr "Códec 7z"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.updateDesc"
+msgstr "Se descargó una nueva versión en segundo plano. Recarga para cambiar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.masthead.slogan"
 msgstr "Kit de herramientas ROM y parches"
 
@@ -85,8 +90,18 @@ msgstr "se aplica después del parche {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.apply"
+msgstr "Aplicar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
 msgstr "Aplica parches a cualquier ROM, comprimida o sin comprimir,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.PATCH_APPLY_FAILED"
+msgstr "No se pudo aplicar el parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -120,8 +135,28 @@ msgstr "ROM base"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.channel.beta"
+msgstr "Compilación beta"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.rvzBlockSize"
 msgstr "Tamaño de bloque"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.branch"
+msgstr "Rama"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.envWeb"
+msgstr "Pestaña del navegador"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingDesc"
+msgstr "Guardando la aplicación en caché para que funcione sin conexión…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -135,6 +170,16 @@ msgstr "Códecs CD"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.tabChangelog"
+msgstr "Cambios"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.channel"
+msgstr "Canal"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.CHECKSUM_MISMATCH"
 msgstr "La validación de la suma de comprobación falló."
 
@@ -142,6 +187,11 @@ msgstr "La validación de la suma de comprobación falló."
 #: src/presentation/localization/messages.ts
 msgid "ui.common.close"
 msgstr "Cerrar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.commit"
+msgstr "Commit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -170,8 +220,18 @@ msgstr "Oscuro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.channel.dev"
+msgstr "Compilación de desarrollo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.dismiss"
 msgstr "Descartar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.docs"
+msgstr "Documentación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -205,6 +265,11 @@ msgstr "Activar herramientas beta (Recortar y Herramientas)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.environment"
+msgstr "Entorno"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.differentRom"
 msgstr "esperaba una ROM distinta"
 
@@ -232,6 +297,16 @@ msgstr "Corregir orden"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Corregir cabecera ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.envPwa"
+msgstr "Aplicación instalada (PWA)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installing"
+msgstr "Instalando la copia sin conexión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -290,6 +365,11 @@ msgstr "Nivel de registro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.tabLogs"
+msgstr "Registros"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.matchesRom"
 msgstr "coincide con tu ROM"
 
@@ -310,6 +390,11 @@ msgstr "Se encontraron varios archivos coincidentes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.channel.nightly"
+msgstr "Compilación nocturna"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.NO_COMPATIBLE_PATCH"
 msgstr "No se encontró un parche compatible."
 
@@ -327,6 +412,16 @@ msgstr "No se encontró ningún archivo seleccionable."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Actual"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.ready"
+msgstr "Lista sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.disabled"
+msgstr "Soporte sin conexión desactivado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -385,8 +480,23 @@ msgstr "Parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.channel.preview"
+msgstr "Compilación de vista previa"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "salida anterior"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.pullRequest"
+msgstr "Pull request"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.channel.prPreview"
+msgstr "Vista previa del pull request"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -450,6 +560,16 @@ msgstr "rom-weaver terminó en {t}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.home"
+msgstr "Inicio de rom-weaver"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.readyDesc"
+msgstr "rom-weaver está en la caché de este navegador y funciona totalmente sin conexión."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.rvzCodec"
 msgstr "RVZ"
 
@@ -487,6 +607,16 @@ msgstr "Mostrar los consejos de inicio rápido («New here?»)"
 #: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Saltar al contenido principal"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.tabStatus"
+msgstr "Estado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.tabStorage"
+msgstr "Almacenamiento"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -560,6 +690,11 @@ msgstr "El tipo de fuente seleccionado no es compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.disabledDesc"
+msgstr "El service worker está desactivado, así que rom-weaver necesita la red en cada visita. El parcheo sigue ejecutándose por completo en este dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.theme"
 msgstr "Tema"
 
@@ -590,6 +725,11 @@ msgstr "Convierte una ROM original y su versión modificada, comprimidas o sin c
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.update"
+msgstr "Actualización disponible"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Actualización lista"
 
@@ -605,13 +745,13 @@ msgstr "se verifica durante la aplicación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.step.apply"
-msgstr "Aplicar"
+msgid "ui.status.version"
+msgstr "Versión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "error.PATCH_APPLY_FAILED"
-msgstr "No se pudo aplicar el parche."
+msgid "ui.tools.github"
+msgstr "Ver el código en GitHub"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -622,6 +762,11 @@ msgstr "Novedades"
 #: src/presentation/localization/messages.ts
 msgid "error.WORKER_FAILED"
 msgstr "La ejecución del worker falló."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.primary"
+msgstr "Flujo de trabajo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

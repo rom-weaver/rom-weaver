@@ -74,6 +74,9 @@
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --pwa-footer-reserve: 0px;
+  /* the only piece of dock geometry the rest of the page consumes; masthead.css
+     raises it below the dock threshold */
+  --dock-h: 0px;
   /* the empty 0x01 hero fills the first screen at every width: 100svh minus
      the chrome around it (masthead + banner slack + step head + the ghost-next
      line + margins) */

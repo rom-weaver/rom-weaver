@@ -21,12 +21,12 @@ import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
-import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH } from "./build-version.ts";
+import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import { ChangelogDialog } from "./components/changelog-dialog.tsx";
-import { Masthead, SiteFooter, UpdateBanner } from "./components/shell.tsx";
+import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
-import { DONATE_URL, GITHUB_URL, NOTICE_URL, PRIVACY_URL } from "./project-links.ts";
+import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
 import { getSettingsUiState } from "./settings/settings-state.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
@@ -94,35 +94,6 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute("href", canonicalUrl);
 };
 
-// Dismissing the update banner is remembered per running build: the same
-// pending update never re-prompts on reload, while an actual update changes
-// APP_BUILD_VERSION and re-arms the banner for the next one.
-const UPDATE_DISMISSED_STORAGE_KEY = "rom-weaver-update-dismissed-build";
-
-const readUpdateDismissed = () => {
-  if (typeof localStorage === "undefined") return false;
-  try {
-    return localStorage.getItem(UPDATE_DISMISSED_STORAGE_KEY) === APP_BUILD_VERSION;
-  } catch (error) {
-    logger.trace("Unable to read update banner dismissal", {
-      message: error instanceof Error ? error.message : String(error || ""),
-    });
-    return false;
-  }
-};
-
-const writeUpdateDismissed = () => {
-  if (typeof localStorage === "undefined") return;
-  try {
-    localStorage.setItem(UPDATE_DISMISSED_STORAGE_KEY, APP_BUILD_VERSION);
-    logger.debug("Update banner dismissed", { build: APP_BUILD_VERSION });
-  } catch (error) {
-    logger.trace("Unable to persist update banner dismissal", {
-      message: error instanceof Error ? error.message : String(error || ""),
-    });
-  }
-};
-
 type WebappRootPageDrop = {
   drop: PageFileDrop;
   view: WebappRootProps["state"]["currentView"];
@@ -166,6 +137,17 @@ const useEntryAnimationLock = () => {
 /* Mode switches crossfade flat - shared with the forms' empty-bench
    transition so all layout swaps use one mechanism. */
 const selectViewWithTransition = (select: () => void) => runFlatViewTransition(select, "vt-mode");
+
+/** Reset is a labelled, contextual workflow action now, not a global icon. */
+const ResetButton = ({ onReset }: { onReset: () => void }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <button className="reset-btn" onClick={onReset} type="button">
+      <RotateCcw aria-hidden="true" />
+      <span>{localizer.message("ui.settings.reset")}</span>
+    </button>
+  );
+};
 
 const DropVeil = () => {
   const localizer = useUiLocalizer();
@@ -226,8 +208,8 @@ function WebappRoot({
     if (notFound) return;
     setActiveSelectionForm(state.currentView === "docs" ? undefined : state.currentView);
   }, [notFound, state.currentView]);
-  const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
   const [logOpen, setLogOpen] = useState(false);
+  const [logTab, setLogTab] = useState<"status" | "logs">("status");
   const [changelogOpen, setChangelogOpen] = useState(false);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
@@ -437,6 +419,11 @@ function WebappRoot({
         id={`panel-${view}`}
         role="tabpanel"
       >
+        {view === "docs" ? null : (
+          <div className="workflow-panel-head">
+            <ResetButton onReset={actions.onReset} />
+          </div>
+        )}
         <div className="workflow-body">
           {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
           <Suspense fallback={null}>{form}</Suspense>
@@ -453,11 +440,26 @@ function WebappRoot({
             currentTab={notFound ? "" : state.currentView}
             githubHref={GITHUB_URL}
             onAccentChange={actions.onAccentChange}
-            onOpenLog={() => setLogOpen(true)}
+            commitsSinceVersion={COMMITS_SINCE_VERSION}
+            dirty={Boolean(DIRTY_HASH)}
+            donateHref={DONATE_URL}
+            onOpenChangelog={() => setChangelogOpen(true)}
+            onOpenLog={() => {
+              setLogTab("logs");
+              setLogOpen(true);
+            }}
+            onOpenStatus={() => {
+              setLogTab("status");
+              setLogOpen(true);
+            }}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={openSettings}
             onPreloadSettings={preloadSettingsPanel}
-            onReset={actions.onReset}
+            serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+            threads={resolveThreads(threads)}
+            updateReady={pageUpdate.ready}
+            version={APP_VERSION}
+            versionTitle={`v${APP_BUILD_VERSION}`}
             onSelectTab={(id) => {
               if (notFound) {
                 const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href;
@@ -470,16 +472,7 @@ function WebappRoot({
             tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
             tabsControlPanels={!notFound}
           />
-          <UpdateBanner
-            onDismiss={() => {
-              setUpdateDismissed(true);
-              writeUpdateDismissed();
-            }}
-            onReload={actions.onReloadUpdate}
-            onShowChangelog={() => setChangelogOpen(true)}
-            open={pageUpdate.ready && !updateDismissed}
-            title={pageUpdate.title}
-          />
+          <UpdateBanner onReload={actions.onReloadUpdate} open={pageUpdate.ready} />
           <ChangelogDialog
             onClose={() => setChangelogOpen(false)}
             onReload={actions.onReloadUpdate}
@@ -562,29 +555,23 @@ function WebappRoot({
               </>
             )}
           </main>
-          <SiteFooter
-            commitHash={COMMIT_HASH}
-            commitsSinceVersion={COMMITS_SINCE_VERSION}
-            confirmExternalNavigation={actions.onConfirmExternalNavigation}
-            donateHref={DONATE_URL}
-            dirty={Boolean(DIRTY_HASH)}
-            githubHref={GITHUB_URL}
-            legalHref={NOTICE_URL}
-            privacyHref={PRIVACY_URL}
-            serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
-            threads={resolveThreads(threads)}
-            version={APP_VERSION}
-            versionTitle={`v${APP_BUILD_VERSION}`}
-          />
+          {/* the dock is fixed, so the column reserves its height through the one
+              variable masthead.css raises below the dock threshold */}
+          <div aria-hidden="true" className="dock-pad" />
         </div>
         <ActivityFinishMarker />
         {logOpen ? (
           <Suspense fallback={null}>
             <LogDialog
+              initialTab={logTab}
               level={state.settings.logLevel}
               onClose={() => setLogOpen(false)}
               onLevelChange={actions.onLogLevelChange}
+              onOpenChangelog={() => setChangelogOpen(true)}
+              onReload={actions.onReloadUpdate}
               open={logOpen}
+              serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+              updateReady={pageUpdate.ready}
             />
           </Suspense>
         ) : null}

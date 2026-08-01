@@ -38,6 +38,10 @@ const EXEMPT = new Map([
   ["input[type=checkbox].styled:hover:not(:disabled)", "toggle - the :checked flip is the feedback"],
   ["input[type=checkbox].styled:hover:checked:not(:disabled)", "toggle - the :checked flip is the feedback"],
   ['.rw-app input[type="checkbox"]:hover', "toggle - the :checked flip is the feedback"],
+  [
+    ".rw-app .tool:hover .tip",
+    "pointer-only tooltip; touch gets the label from the button's own aria-label, and a press twin would flash a tip under the finger",
+  ],
 ]);
 
 const cssFiles = (dir) =>

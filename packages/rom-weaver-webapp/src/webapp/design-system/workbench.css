@@ -59,3 +59,7 @@
 .rw-app .step-meta .rb.time { color: var(--thread-text); }
 /* Balance the seam between adjacent headings. */
 .rw-app .step-body { padding: clamp(4px, 1vw, 6px) var(--pad) var(--step-pb); }
+
+/* Reset used to be an anonymous icon in the global toolbar; it belongs to the
+   workflow it resets, so it rides that panel's head instead. */
+.rw-app .workflow-panel-head { display: flex; justify-content: flex-end; padding-block: var(--sp-xs); }
