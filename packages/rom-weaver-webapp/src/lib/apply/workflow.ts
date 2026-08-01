@@ -449,6 +449,9 @@ const getPatchN64ByteOrders = (patchIndices: number[], patchOptions: PatchInput[
     return position === 0 ? patchOption?.resolvedN64ByteOrder || ("keep" as const) : ("auto" as const);
   });
 
+const getPatchBases = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) =>
+  patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.basis || ("auto" as const));
+
 const canReuseWorkerOutputPath = (output: PublicOutputWithApplySummary) =>
   !!(
     output &&
@@ -502,6 +505,7 @@ const applyPatchesToAsset = async ({
       headerModes: getPatchHeaderModes(patchIndices, patchOptions),
       n64ByteOrders: getPatchN64ByteOrders(patchIndices, patchOptions),
       outputHeader: options.output?.header || ("auto" as const),
+      patchBasis: getPatchBases(patchIndices, patchOptions),
     },
     patches: selectedPatches,
     signal: options.signal,

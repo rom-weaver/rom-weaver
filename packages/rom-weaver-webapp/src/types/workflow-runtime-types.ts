@@ -78,6 +78,8 @@ type ApplyWorkflowOptions = ApplySettings &
 
 /** Per-patch options the user can set in the patch "Options" panel, aligned by patch index. */
 type PatchApplyUserOptions = {
+  /** Which state this patch's embedded input checks describe. */
+  basis?: "base" | "previous";
   /** Raw hex checksum to validate the target input before apply (algorithm auto-detected by length). */
   validateInputChecksum?: string;
   /** Raw hex checksum to validate the patched output after apply (algorithm auto-detected by length). */

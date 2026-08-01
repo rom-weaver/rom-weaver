@@ -280,7 +280,17 @@ export type PatchInputMatch = { "kind": "base", variant: string, } | { "kind": "
 
 export type PatchInputVerdict = "passed" | "failed" | "chain_deferred" | "unknown";
 
-export type PatchPlanVerdict = { index: number, patch: string, format?: string, basis: PatchInputBasis, basis_source: PatchBasisSource, matched: PatchInputMatch, input_verdict: PatchInputVerdict, message: string,
+export type PatchApplyDirection = "forward" | "reverse";
+
+export type PatchEndpointSelection = { variant: number, direction: PatchApplyDirection, };
+
+export type PatchPlanVerdict = { index: number, patch: string, format?: string, basis: PatchInputBasis, basis_source: PatchBasisSource, matched: PatchInputMatch, input_verdict: PatchInputVerdict,
+/**
+ * Exact reversible endpoint selected from embedded patch metadata. Apply
+ * uses it when a base-authored mid-chain patch cannot infer direction
+ * from the running intermediate.
+ */
+execution?: PatchEndpointSelection, message: string,
 /**
  * Set when this patch's input matches a patch it does not directly
  * follow - the order diagnosis behind `suggested_order`.

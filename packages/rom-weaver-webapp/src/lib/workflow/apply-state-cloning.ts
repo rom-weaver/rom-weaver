@@ -91,6 +91,7 @@ const clonePatchState = (
   state: InternalSourceState,
   parentCompressions: ApplyWorkflowParentCompression[],
 ): ApplyWorkflowPatchState => ({
+  basisChoice: state.basisChoice,
   candidates: state.candidates.map(cloneCandidate),
   checksumPreflight: clonePatchChecksumPreflight(state.checksumPreflight),
   checksumTimeMs: state.checksumTimeMs,

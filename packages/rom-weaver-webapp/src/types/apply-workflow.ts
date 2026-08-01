@@ -138,6 +138,8 @@ type ApplyWorkflowPatchState = {
     /** Set when this patch expects a patch it does not directly follow (0-based position). */
     expectedPredecessor?: number;
   };
+  /** User override for which state this patch's embedded input checks describe. */
+  basisChoice?: "base" | "previous";
   /** User-pasted checksum (raw hex) to validate the patch target input before apply. */
   validateInputChecksum?: string;
   /** User-pasted checksum (raw hex) to validate the patched output after apply. */

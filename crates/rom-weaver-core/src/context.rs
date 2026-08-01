@@ -11,12 +11,43 @@ use crate::{
     CancellationToken, ProgressEvent, ProgressSink, Result, RomWeaverError, SharedThreadPool,
     TempPathAllocator, ThreadBudget, ThreadCapability, ThreadExecution,
 };
+use serde::{Deserialize, Serialize};
 use tracing::trace;
+#[cfg(feature = "typescript-types")]
+use ts_rs::TS;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PatchChecksumValidation {
     Strict,
     Ignore,
+}
+
+/// Planner-proven physical N64 byte order for the input passed to one patch
+/// handler. Unlike file-magic detection, this remains valid when an earlier
+/// chain step edits the ROM header.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PatchInputN64ByteOrder {
+    BigEndian,
+    LittleEndian,
+    ByteSwapped,
+}
+
+/// Exact embedded endpoint a reversible patch should use. Most handlers infer
+/// this from the bytes they receive; a base-authored mid-chain step cannot do
+/// that because it intentionally receives the running intermediate instead.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PatchApplyDirection {
+    Forward,
+    Reverse,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct PatchEndpointSelection {
+    pub variant: u32,
+    pub direction: PatchApplyDirection,
 }
 
 /// Which of a patch's own embedded checks one chain step enforces. Strict enables
@@ -101,6 +132,12 @@ pub struct PatchPolicy {
     /// `patch_checksum_validation`; the apply chain sets it for base-basis
     /// mid-chain steps (integrity on, source/target off).
     pub patch_check_scopes: Option<PatchCheckScopes>,
+    /// Planner-selected endpoint for a reversible patch. `None` preserves the
+    /// handler's normal checksum-driven direction inference.
+    pub patch_endpoint_selection: Option<PatchEndpointSelection>,
+    /// Planner-proven physical N64 order for this step's input. Patch handlers
+    /// that normalize typed N64 inputs may use it instead of mutable ROM magic.
+    pub patch_input_n64_byte_order: Option<PatchInputN64ByteOrder>,
     /// Secondary-compression mode for xdelta/vcdiff patch create.
     pub xdelta_secondary_mode: XdeltaSecondaryMode,
     /// Per-operation override for the patch-apply in-memory size cap (bytes). `None` uses the
@@ -116,6 +153,8 @@ impl Default for PatchPolicy {
             extract_checksum_rom_only: false,
             patch_checksum_validation: PatchChecksumValidation::Strict,
             patch_check_scopes: None,
+            patch_endpoint_selection: None,
+            patch_input_n64_byte_order: None,
             xdelta_secondary_mode: XdeltaSecondaryMode::default(),
             patch_apply_in_memory_limit: None,
         }
@@ -293,6 +332,24 @@ impl OperationContext {
 
     pub fn with_patch_check_scopes(mut self, scopes: PatchCheckScopes) -> Self {
         self.patch_policy.patch_check_scopes = Some(scopes);
+        self
+    }
+
+    pub fn patch_endpoint_selection(&self) -> Option<PatchEndpointSelection> {
+        self.patch_policy.patch_endpoint_selection
+    }
+
+    pub fn with_patch_endpoint_selection(mut self, selection: PatchEndpointSelection) -> Self {
+        self.patch_policy.patch_endpoint_selection = Some(selection);
+        self
+    }
+
+    pub fn patch_input_n64_byte_order(&self) -> Option<PatchInputN64ByteOrder> {
+        self.patch_policy.patch_input_n64_byte_order
+    }
+
+    pub fn with_patch_input_n64_byte_order(mut self, order: PatchInputN64ByteOrder) -> Self {
+        self.patch_policy.patch_input_n64_byte_order = Some(order);
         self
     }
 

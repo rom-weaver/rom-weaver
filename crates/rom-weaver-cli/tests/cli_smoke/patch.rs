@@ -2778,14 +2778,6 @@ fn patch_apply_auto_header_strips_when_patch_targets_headerless_bytes() {
 
 #[test]
 fn patch_apply_auto_n64_byte_order_matches_patch_and_restores_input_order() {
-    fn byte_swap(words: &[u8]) -> Vec<u8> {
-        let mut swapped = words.to_vec();
-        for pair in swapped.chunks_exact_mut(2) {
-            pair.swap(0, 1);
-        }
-        swapped
-    }
-
     let temp = setup_temp_dir();
     let z64 = [
         0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
@@ -2795,7 +2787,7 @@ fn patch_apply_auto_n64_byte_order_matches_patch_and_restores_input_order() {
     modified_z64[12..].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
     fs::write(temp.child("original.z64").path(), z64).expect("fixture");
     fs::write(temp.child("modified.z64").path(), modified_z64).expect("fixture");
-    fs::write(temp.child("input.v64").path(), byte_swap(&z64)).expect("fixture");
+    fs::write(temp.child("input.v64").path(), byte_swap_pairs(&z64)).expect("fixture");
     command_stdout(
         &[
             "patch",
@@ -2846,7 +2838,7 @@ fn patch_apply_auto_n64_byte_order_matches_patch_and_restores_input_order() {
     assert_eq!(auto_json["status"], "succeeded");
     assert_eq!(
         fs::read(temp.child("output.v64").path()).expect("output"),
-        byte_swap(&modified_z64)
+        byte_swap_pairs(&modified_z64)
     );
 
     let keep = command_stdout(
@@ -2867,6 +2859,231 @@ fn patch_apply_auto_n64_byte_order_matches_patch_and_restores_input_order() {
         1,
     );
     assert_eq!(parse_single_json_line(&keep)["status"], "failed");
+}
+
+#[test]
+fn patch_apply_multi_patch_n64_inference_uses_converted_base() {
+    let temp = setup_temp_dir();
+    let base_z64 = vec![
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let input = temp.child("base.v64");
+    fs::write(input.path(), byte_swap_pairs(&base_z64)).expect("fixture");
+
+    let mut first_target = base_z64.clone();
+    first_target[8] ^= 0x31;
+    let first_target_path = temp.child("first-target.z64");
+    fs::write(first_target_path.path(), &first_target).expect("fixture");
+    let first_patch = temp.child("first.bps");
+    let base_z64_path = temp.child("base.z64");
+    fs::write(base_z64_path.path(), &base_z64).expect("fixture");
+    create_bps_patch(
+        base_z64_path.path(),
+        first_target_path.path(),
+        first_patch.path(),
+    );
+
+    let mut second_target = base_z64.clone();
+    second_target[12] ^= 0x62;
+    let second_target_path = temp.child("second-target.z64");
+    fs::write(second_target_path.path(), &second_target).expect("fixture");
+    let second_patch = temp.child("second.bps");
+    create_bps_patch(
+        base_z64_path.path(),
+        second_target_path.path(),
+        second_patch.path(),
+    );
+
+    let output = temp.child("output.v64");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "BPS", "succeeded");
+    let mut expected = base_z64;
+    expected[8] ^= 0x31;
+    expected[12] ^= 0x62;
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        byte_swap_pairs(&expected)
+    );
+}
+
+#[test]
+fn patch_validate_and_apply_later_base_step_match_third_n64_order() {
+    let temp = setup_temp_dir();
+    let base_z64 = vec![
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let input = temp.child("base.z64");
+    fs::write(input.path(), &base_z64).expect("fixture");
+
+    let first_base = temp.child("base.v64");
+    fs::write(first_base.path(), byte_swap_pairs(&base_z64)).expect("fixture");
+    let mut first_target_z64 = base_z64.clone();
+    first_target_z64[8] ^= 0x31;
+    let first_target = temp.child("first-target.v64");
+    fs::write(first_target.path(), byte_swap_pairs(&first_target_z64)).expect("fixture");
+    let first_patch = temp.child("first.bps");
+    create_bps_patch(first_base.path(), first_target.path(), first_patch.path());
+
+    let second_base = temp.child("base.n64");
+    fs::write(second_base.path(), reverse_n64_words(&base_z64)).expect("fixture");
+    let mut second_target_z64 = base_z64.clone();
+    second_target_z64[12] ^= 0x62;
+    let second_target = temp.child("second-target.n64");
+    fs::write(second_target.path(), reverse_n64_words(&second_target_z64)).expect("fixture");
+    let second_patch = temp.child("second.bps");
+    create_bps_patch(
+        second_base.path(),
+        second_target.path(),
+        second_patch.path(),
+    );
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+    let per_patch = plan["details"]["patch_validation"]["per_patch"]
+        .as_array()
+        .expect("per_patch array");
+    assert_eq!(per_patch[0]["input_verdict"], "passed", "plan: {plan}");
+    assert_eq!(per_patch[0]["matched"]["variant"], "raw", "plan: {plan}");
+    assert_eq!(per_patch[1]["input_verdict"], "passed", "plan: {plan}");
+    assert_eq!(
+        per_patch[1]["matched"]["variant"], "n64-little-endian",
+        "plan: {plan}"
+    );
+
+    let output = temp.child("output.z64");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "BPS", "succeeded");
+
+    let mut expected = base_z64;
+    expected[8] ^= 0x31;
+    expected[12] ^= 0x62;
+    assert_eq!(fs::read(output.path()).expect("output"), expected);
+
+    let ignored_output = temp.child("output-ignore.z64");
+    let ignored = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--output",
+            ignored_output.path().to_str().expect("path"),
+            "--no-compress",
+            "--ignore-checksum-validation",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&ignored, "patch-apply", "BPS", "succeeded");
+    assert_eq!(
+        fs::read(ignored_output.path()).expect("ignore output"),
+        fs::read(output.path()).expect("strict output"),
+        "ignore mode must preserve strict mode's inferred N64 representation"
+    );
+}
+
+#[test]
+fn patch_apply_base_step_restores_original_n64_order_after_magic_changes() {
+    let temp = setup_temp_dir();
+    let base_z64 = vec![
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let input = temp.child("base.z64");
+    fs::write(input.path(), &base_z64).expect("fixture");
+
+    let base_v64 = byte_swap_pairs(&base_z64);
+    let first_base = temp.child("base.v64");
+    fs::write(first_base.path(), &base_v64).expect("fixture");
+    let mut first_target_v64 = base_v64;
+    first_target_v64[0] ^= 0x55; // Break the magic that later auto-detection relied on.
+    let first_target = temp.child("first-target.v64");
+    fs::write(first_target.path(), &first_target_v64).expect("fixture");
+    let first_patch = temp.child("first.bps");
+    create_bps_patch(first_base.path(), first_target.path(), first_patch.path());
+
+    let mut second_target_z64 = base_z64.clone();
+    second_target_z64[12] ^= 0x62;
+    let second_target = temp.child("second-target.z64");
+    fs::write(second_target.path(), &second_target_z64).expect("fixture");
+    let second_patch = temp.child("second.bps");
+    create_bps_patch(input.path(), second_target.path(), second_patch.path());
+
+    let output = temp.child("output.z64");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "BPS", "succeeded");
+
+    let mut expected = base_z64;
+    expected[1] ^= 0x55;
+    expected[12] ^= 0x62;
+    assert_eq!(fs::read(output.path()).expect("output"), expected);
 }
 
 #[test]
@@ -3275,6 +3492,86 @@ fn create_bps_patch(
         ],
         0,
     );
+}
+
+fn create_rup_patch(
+    original: &std::path::Path,
+    modified: &std::path::Path,
+    output: &std::path::Path,
+) {
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.to_str().expect("path"),
+            "--modified",
+            modified.to_str().expect("path"),
+            "--format",
+            "rup",
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+}
+
+fn set_single_rup_rom_type(patch: &std::path::Path, rom_type: u8) {
+    let mut bytes = fs::read(patch).expect("RUP patch");
+    assert_eq!(&bytes[..6], b"NINJA2");
+    assert_eq!(bytes[0x800], 0x01, "RUP open-file command");
+    assert_eq!(bytes[0x801], 0x00, "empty RUP file name");
+    bytes[0x802] = rom_type;
+    fs::write(patch, bytes).expect("typed RUP patch");
+}
+
+fn byte_swap_pairs(bytes: &[u8]) -> Vec<u8> {
+    let mut swapped = bytes.to_vec();
+    for pair in swapped.chunks_exact_mut(2) {
+        pair.swap(0, 1);
+    }
+    swapped
+}
+
+fn reverse_n64_words(bytes: &[u8]) -> Vec<u8> {
+    let mut reversed = bytes.to_vec();
+    for word in reversed.chunks_exact_mut(4) {
+        word.reverse();
+    }
+    reversed
+}
+
+fn deinterleave_snes_payload(payload: &[u8]) -> Vec<u8> {
+    const BANK_SIZE: usize = 32 * 1024;
+    let bank_count = payload.len() / BANK_SIZE;
+    let mut output = vec![0u8; payload.len()];
+    for index in 0..(bank_count / 2) {
+        let high_source = (index + (bank_count / 2)) * BANK_SIZE;
+        let low_source = index * BANK_SIZE;
+        let even_dest = (index * 2) * BANK_SIZE;
+        let odd_dest = ((index * 2) + 1) * BANK_SIZE;
+        output[even_dest..even_dest + BANK_SIZE]
+            .copy_from_slice(&payload[high_source..high_source + BANK_SIZE]);
+        output[odd_dest..odd_dest + BANK_SIZE]
+            .copy_from_slice(&payload[low_source..low_source + BANK_SIZE]);
+    }
+    output
+}
+
+fn unif_fixture(prg: &[u8], chr: &[u8]) -> Vec<u8> {
+    fn push_chunk(bytes: &mut Vec<u8>, id: &[u8; 4], data: &[u8]) {
+        bytes.extend_from_slice(id);
+        bytes.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(data);
+    }
+
+    let mut bytes = b"UNIF".to_vec();
+    bytes.resize(0x20, 0);
+    push_chunk(&mut bytes, b"NAME", b"keep");
+    push_chunk(&mut bytes, b"PRG0", prg);
+    push_chunk(&mut bytes, b"CHR0", chr);
+    bytes
 }
 
 /// IPS carries no source checksum, so a patch built this way gives the planner
@@ -5829,6 +6126,89 @@ fn patch_validate_independent_reports_mixed_without_aborting() {
 }
 
 #[test]
+fn patch_validate_plan_reports_endpoint_resolution_failure_without_aborting() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let good_target = temp.child("good-target.bin");
+    let named_target = temp.child("named-target.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+    fs::write(good_target.path(), b"hello new world").expect("fixture");
+    fs::write(named_target.path(), b"hello RUP world").expect("fixture");
+
+    let good_patch = temp.child("good.bps");
+    create_bps_patch(input.path(), good_target.path(), good_patch.path());
+    let named_patch = temp.child("named.rup");
+    create_rup_patch(input.path(), named_target.path(), named_patch.path());
+    let mut named_bytes = fs::read(named_patch.path()).expect("RUP patch");
+    assert_eq!(named_bytes[0x800], 0x01, "RUP open-file command");
+    assert_eq!(named_bytes[0x801], 0x00, "empty RUP file name");
+    let name = b"nested.bin";
+    named_bytes.splice(
+        0x801..0x802,
+        [1, name.len() as u8]
+            .into_iter()
+            .chain(name.iter().copied()),
+    );
+    fs::write(named_patch.path(), named_bytes).expect("named RUP patch");
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            good_patch.path().to_str().expect("path"),
+            "--patch",
+            named_patch.path().to_str().expect("path"),
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+
+    let validation = &plan["details"]["patch_validation"];
+    assert_eq!(validation["status"], "mixed");
+    assert_eq!(validation["passed_count"], 1);
+    assert_eq!(validation["failed_count"], 1);
+    let per_patch = validation["per_patch"].as_array().expect("per_patch array");
+    assert_eq!(per_patch[0]["input_verdict"], "passed");
+    assert_eq!(per_patch[1]["input_verdict"], "failed");
+    assert!(
+        per_patch[1]["message"]
+            .as_str()
+            .expect("failure message")
+            .contains("named file entries")
+    );
+
+    let apply_output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            good_patch.path().to_str().expect("path"),
+            "--patch",
+            named_patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        2,
+    );
+    let apply = parse_single_json_line(&apply_output);
+    assert_patch_envelope(&apply, "patch-apply", "RUP", "unsupported");
+    assert!(
+        apply["label"]
+            .as_str()
+            .expect("label")
+            .contains("named file entries")
+    );
+}
+
+#[test]
 fn patch_validate_plan_resolves_same_base_patches() {
     let temp = setup_temp_dir();
     let input = temp.child("input.bin");
@@ -6061,25 +6441,66 @@ fn patch_validate_plan_suggests_reorder_for_out_of_order_chain() {
     );
 }
 
-#[test]
-fn patch_apply_same_base_bps_chain_succeeds_in_strict_mode() {
+fn run_same_base_chain_contract(format: &str, extension: &str, expected_format: &str) {
     let temp = setup_temp_dir();
     let input = temp.child("input.bin");
-    fs::write(input.path(), b"hello old world").expect("fixture");
+    fs::write(input.path(), b"0123456789abcdef").expect("fixture");
 
-    // Two BPS patches authored against the SAME base stacked in one strict
-    // chain: the second's embedded source CRC matches the base, so its basis
-    // resolves to base and its base-relative embedded checks skip for the
-    // mid-chain step (they used to hard-fail against the intermediate).
-    fs::write(temp.child("mod-a.bin").path(), b"hello new world").expect("fixture");
-    fs::write(temp.child("mod-b.bin").path(), b"hello cool world").expect("fixture");
-    let patch_a = temp.child("update-a.bps");
-    let patch_b = temp.child("update-b.bps");
-    create_bps_patch(input.path(), temp.child("mod-a.bin").path(), patch_a.path());
-    create_bps_patch(input.path(), temp.child("mod-b.bin").path(), patch_b.path());
+    fs::write(temp.child("mod-a.bin").path(), b"0123AA6789abcdef").expect("fixture");
+    fs::write(temp.child("mod-b.bin").path(), b"0123456789abZZef").expect("fixture");
+    let patch_a = temp.child(format!("update-a.{extension}"));
+    let patch_b = temp.child(format!("update-b.{extension}"));
+    for (modified, patch) in [
+        (temp.child("mod-a.bin"), &patch_a),
+        (temp.child("mod-b.bin"), &patch_b),
+    ] {
+        command_stdout(
+            &[
+                "patch",
+                "create",
+                "--original",
+                input.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--format",
+                format,
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--json",
+            ],
+            0,
+        );
+    }
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch_a.path().to_str().expect("path"),
+            "--patch",
+            patch_b.path().to_str().expect("path"),
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&plan, "patch-validate", expected_format, "succeeded");
+    let planned = plan["details"]["patch_validation"]["per_patch"]
+        .as_array()
+        .expect("per_patch array");
+    assert_eq!(planned.len(), 2);
+    for entry in planned {
+        assert_eq!(entry["basis"], "base");
+        assert_eq!(entry["matched"]["kind"], "base");
+        assert_eq!(entry["matched"]["variant"], "raw");
+    }
+    assert_eq!(planned[1]["basis_source"], "inferred_base");
 
     let strict_output = temp.child("output-strict.bin");
-    let output = command_stdout(
+    let strict = run_single_json_event(
         &[
             "patch",
             "apply",
@@ -6096,13 +6517,10 @@ fn patch_apply_same_base_bps_chain_succeeds_in_strict_mode() {
         ],
         0,
     );
-    let json = parse_single_json_line(&output);
-    assert_eq!(json["status"], "succeeded");
+    assert_patch_envelope(&strict, "patch-apply", expected_format, "succeeded");
 
-    // Byte parity: the strict run produces exactly what the checks-ignored
-    // run always produced.
     let ignore_output = temp.child("output-ignore.bin");
-    command_stdout(
+    let ignored = run_single_json_event(
         &[
             "patch",
             "apply",
@@ -6120,9 +6538,1054 @@ fn patch_apply_same_base_bps_chain_succeeds_in_strict_mode() {
         ],
         0,
     );
+    assert_patch_envelope(&ignored, "patch-apply", expected_format, "succeeded");
+    let expected = b"0123AA6789abZZef";
     assert_eq!(
         fs::read(strict_output.path()).expect("strict output"),
-        fs::read(ignore_output.path()).expect("ignore output")
+        expected
+    );
+    assert_eq!(
+        fs::read(ignore_output.path()).expect("ignore output"),
+        expected
+    );
+}
+
+#[test]
+fn patch_apply_same_base_bps_chain_succeeds_in_strict_mode() {
+    run_same_base_chain_contract("bps", "bps", "BPS");
+}
+
+#[test]
+fn patch_apply_same_base_solid_chain_uses_plan_basis() {
+    run_same_base_chain_contract("solid", "solid", "SOLID");
+}
+
+#[test]
+fn patch_apply_same_base_rup_chain_uses_plan_basis() {
+    run_same_base_chain_contract("rup", "rup", "RUP");
+}
+
+#[test]
+fn patch_validate_plan_hashes_headerless_md5_and_sha1_variants() {
+    let temp = setup_temp_dir();
+    let payload = temp.child("base.sfc");
+    let mut payload_bytes = vec![0u8; 32 * 1024];
+    for (index, byte) in payload_bytes.iter_mut().enumerate() {
+        *byte = ((index * 17 + 3) & 0xff) as u8;
+    }
+    fs::write(payload.path(), &payload_bytes).expect("fixture");
+
+    let input = temp.child("base.smc");
+    let mut headered = vec![0x5au8; 0x200];
+    headered.extend_from_slice(&payload_bytes);
+    fs::write(input.path(), &headered).expect("fixture");
+    let mut first_modified = headered.clone();
+    first_modified[0x200 + 11] ^= 0x44;
+    let first_modified_path = temp.child("first-modified.smc");
+    fs::write(first_modified_path.path(), first_modified).expect("fixture");
+    let first_patch = temp.child("first.bps");
+    create_bps_patch(input.path(), first_modified_path.path(), first_patch.path());
+
+    let mut second_modified = payload_bytes.clone();
+    second_modified[29] ^= 0x91;
+    let second_modified_path = temp.child("second-modified.sfc");
+    fs::write(second_modified_path.path(), second_modified).expect("fixture");
+
+    for algorithm in ["md5", "sha1"] {
+        let digest = checksum_value(payload.path(), algorithm);
+        let second_patch = temp.child(format!("second [{algorithm}:{digest}].ips"));
+        create_ips_patch(
+            payload.path(),
+            second_modified_path.path(),
+            second_patch.path(),
+        );
+        let plan = run_single_json_event(
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--patch",
+                first_patch.path().to_str().expect("path"),
+                "--patch",
+                second_patch.path().to_str().expect("path"),
+                "--plan",
+                "--json",
+            ],
+            0,
+        );
+        let second = &plan["details"]["patch_validation"]["per_patch"][1];
+        assert_eq!(second["basis"], "base", "{algorithm} plan: {plan}");
+        assert_eq!(
+            second["input_verdict"], "passed",
+            "{algorithm} plan: {plan}"
+        );
+        assert_eq!(
+            second["matched"]["kind"], "base",
+            "{algorithm} plan: {plan}"
+        );
+        assert_eq!(
+            second["matched"]["variant"], "headerless",
+            "{algorithm} plan: {plan}"
+        );
+    }
+}
+
+#[test]
+fn patch_validate_plan_accepts_declared_headerless_size() {
+    let temp = setup_temp_dir();
+    let payload_bytes = vec![0x3cu8; 32 * 1024];
+    let payload = temp.child("base.sfc");
+    fs::write(payload.path(), &payload_bytes).expect("fixture");
+
+    let input = temp.child("base.smc");
+    let mut headered = vec![0x5au8; 0x200];
+    headered.extend_from_slice(&payload_bytes);
+    fs::write(input.path(), headered).expect("fixture");
+
+    let mut modified_bytes = payload_bytes;
+    modified_bytes[29] ^= 0x91;
+    let modified = temp.child("modified.sfc");
+    fs::write(modified.path(), modified_bytes).expect("fixture");
+    let patch = temp.child("headerless [size:32768].ips");
+    create_ips_patch(payload.path(), modified.path(), patch.path());
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--patch-basis",
+            "base",
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+    let verdict = &plan["details"]["patch_validation"]["per_patch"][0];
+    assert_eq!(verdict["basis"], "base");
+    assert_eq!(verdict["input_verdict"], "passed");
+    assert_eq!(verdict["matched"]["variant"], "headerless");
+}
+
+#[test]
+fn patch_apply_mixed_header_chain_enforces_inferred_headerless_base() {
+    let temp = setup_temp_dir();
+    let payload = temp.child("base.sfc");
+    let mut payload_bytes = vec![0u8; 32 * 1024];
+    for (index, byte) in payload_bytes.iter_mut().enumerate() {
+        *byte = ((index * 13 + 7) & 0xff) as u8;
+    }
+    fs::write(payload.path(), &payload_bytes).expect("fixture");
+
+    let input = temp.child("base.nes");
+    let headered = with_nes_header(&payload_bytes);
+    fs::write(input.path(), &headered).expect("fixture");
+
+    let mut first_modified = headered.clone();
+    first_modified[0x10 + 41] ^= 0x31;
+    let first_modified_path = temp.child("first-modified.nes");
+    fs::write(first_modified_path.path(), &first_modified).expect("fixture");
+    let first_patch = temp.child("first.bps");
+    create_bps_patch(input.path(), first_modified_path.path(), first_patch.path());
+
+    let mut second_modified = payload_bytes.clone();
+    second_modified[97] ^= 0x62;
+    let second_modified_path = temp.child("second-modified.sfc");
+    fs::write(second_modified_path.path(), &second_modified).expect("fixture");
+    let second_patch = temp.child("second.solid");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            payload.path().to_str().expect("path"),
+            "--modified",
+            second_modified_path.path().to_str().expect("path"),
+            "--format",
+            "solid",
+            "--output",
+            second_patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+    let per_patch = plan["details"]["patch_validation"]["per_patch"]
+        .as_array()
+        .expect("per_patch array");
+    assert_eq!(per_patch[0]["input_verdict"], "passed", "plan: {plan}");
+    assert_eq!(per_patch[0]["matched"]["variant"], "raw", "plan: {plan}");
+    assert_eq!(per_patch[1]["input_verdict"], "passed", "plan: {plan}");
+    assert_eq!(
+        per_patch[1]["matched"]["variant"], "headerless",
+        "plan: {plan}"
+    );
+
+    let output = temp.child("output.bin");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--patch-header",
+            "keep",
+            "--patch-header",
+            "auto",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "SOLID", "succeeded");
+    let mut expected = payload_bytes;
+    expected[41] ^= 0x31;
+    expected[97] ^= 0x62;
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        with_nes_header(&expected)
+    );
+
+    let ignored_output = temp.child("output-ignore.bin");
+    let ignored = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--patch-header",
+            "keep",
+            "--patch-header",
+            "auto",
+            "--output",
+            ignored_output.path().to_str().expect("path"),
+            "--no-compress",
+            "--ignore-checksum-validation",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&ignored, "patch-apply", "SOLID", "succeeded");
+    assert_eq!(
+        fs::read(ignored_output.path()).expect("ignore output"),
+        fs::read(output.path()).expect("strict output"),
+        "ignore mode must preserve strict mode's inferred header representation"
+    );
+
+    let rejected = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--patch-header",
+            "keep",
+            "--patch-header",
+            "keep",
+            "--output",
+            temp.child("rejected.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    assert!(
+        rejected["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch.base.header_mode_mismatch"),
+        "unexpected failure: {rejected}"
+    );
+}
+
+#[test]
+fn patch_validate_plan_disables_declared_output_after_preflight_failure() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("malformed.ips");
+    fs::write(input.path(), b"original input").expect("fixture");
+    fs::write(patch.path(), b"PATCH").expect("fixture");
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--patch-output-check",
+            "crc32=00000000",
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+    let validation = &plan["details"]["patch_validation"];
+    assert_eq!(validation["per_patch"][0]["input_verdict"], "failed");
+    let declared = validation["output_verification"]
+        .as_array()
+        .expect("output_verification array")
+        .iter()
+        .find(|entry| entry["source"] == "declared output checks")
+        .expect("declared output entry");
+    assert_eq!(declared["enforceable"], false, "plan: {plan}");
+    assert_eq!(
+        declared["standdown_reason"],
+        "an upstream patch is out of order or failed its input checks"
+    );
+}
+
+#[test]
+fn patch_apply_base_step_restores_original_headered_representation() {
+    let temp = setup_temp_dir();
+    let mut payload_bytes = vec![0u8; 32 * 1024];
+    for (index, byte) in payload_bytes.iter_mut().enumerate() {
+        *byte = ((index * 19 + 5) & 0xff) as u8;
+    }
+    let payload = temp.child("base.sfc");
+    fs::write(payload.path(), &payload_bytes).expect("fixture");
+
+    let headered_base = with_nes_header(&payload_bytes);
+    let input = temp.child("base.nes");
+    fs::write(input.path(), &headered_base).expect("fixture");
+
+    let mut first_target_bytes = payload_bytes.clone();
+    first_target_bytes[41] ^= 0x31;
+    let first_target = temp.child("first-target.sfc");
+    fs::write(first_target.path(), &first_target_bytes).expect("fixture");
+    let first_patch = temp.child("first.bps");
+    create_bps_patch(payload.path(), first_target.path(), first_patch.path());
+
+    let mut second_target_bytes = headered_base;
+    second_target_bytes[0x10 + 97] ^= 0x62;
+    let second_target = temp.child("second-target.nes");
+    fs::write(second_target.path(), &second_target_bytes).expect("fixture");
+    let second_patch = temp.child("second.bps");
+    create_bps_patch(input.path(), second_target.path(), second_patch.path());
+
+    let output = temp.child("output.nes");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "BPS", "succeeded");
+
+    let mut expected = payload_bytes;
+    expected[41] ^= 0x31;
+    expected[97] ^= 0x62;
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        with_nes_header(&expected)
+    );
+}
+
+#[test]
+fn patch_apply_declared_rup_reverse_base_step_honors_planned_direction() {
+    let temp = setup_temp_dir();
+    let base = temp.child("base.bin");
+    let base_bytes = b"0123456789abcdefghij".to_vec();
+    fs::write(base.path(), &base_bytes).expect("fixture");
+
+    let mut first_modified = base_bytes.clone();
+    first_modified[2] = b'X';
+    let first_modified_path = temp.child("first-modified.bin");
+    fs::write(first_modified_path.path(), &first_modified).expect("fixture");
+    let first_patch = temp.child("first.bps");
+    create_bps_patch(base.path(), first_modified_path.path(), first_patch.path());
+
+    let mut reverse_target = base_bytes[..12].to_vec();
+    reverse_target[8] = b'Y';
+    let reverse_target_path = temp.child("reverse-target.bin");
+    fs::write(reverse_target_path.path(), &reverse_target).expect("fixture");
+    let reverse_patch = temp.child("reverse.rup");
+    // The patch is authored short -> base. Applying it to base is therefore
+    // RUP undo/reverse, including the shrinking overflow direction.
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            reverse_target_path.path().to_str().expect("path"),
+            "--modified",
+            base.path().to_str().expect("path"),
+            "--format",
+            "rup",
+            "--output",
+            reverse_patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            base.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            reverse_patch.path().to_str().expect("path"),
+            "--patch-basis",
+            "base",
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+    let second = &plan["details"]["patch_validation"]["per_patch"][1];
+    assert_eq!(second["basis"], "base");
+    assert_eq!(second["basis_source"], "declared");
+    assert_eq!(second["execution"]["variant"], 0);
+    assert_eq!(second["execution"]["direction"], "reverse");
+
+    let single_output = temp.child("single-ignore.bin");
+    let single = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            base.path().to_str().expect("path"),
+            "--patch",
+            reverse_patch.path().to_str().expect("path"),
+            "--patch-basis",
+            "base",
+            "--output",
+            single_output.path().to_str().expect("path"),
+            "--no-compress",
+            "--ignore-checksum-validation",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&single, "patch-apply", "RUP", "succeeded");
+    assert_eq!(
+        fs::read(single_output.path()).expect("single output"),
+        reverse_target
+    );
+
+    let output = temp.child("output.bin");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            base.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            reverse_patch.path().to_str().expect("path"),
+            "--patch-basis",
+            "base",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "RUP", "succeeded");
+    reverse_target[2] = b'X';
+    assert_eq!(fs::read(output.path()).expect("output"), reverse_target);
+
+    let ignored_output = temp.child("output-ignore.bin");
+    let ignored = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            base.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            reverse_patch.path().to_str().expect("path"),
+            "--patch-basis",
+            "base",
+            "--output",
+            ignored_output.path().to_str().expect("path"),
+            "--no-compress",
+            "--ignore-checksum-validation",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&ignored, "patch-apply", "RUP", "succeeded");
+    assert_eq!(
+        fs::read(ignored_output.path()).expect("ignored output"),
+        reverse_target
+    );
+}
+
+#[test]
+fn patch_apply_rup_revert_step_defaults_to_previous() {
+    let temp = setup_temp_dir();
+    let base = temp.child("base.bin");
+    let base_bytes = b"0123456789abcdefghij".to_vec();
+    fs::write(base.path(), &base_bytes).expect("fixture");
+
+    let mut intermediate_bytes = base_bytes.clone();
+    intermediate_bytes[2] = b'X';
+    let intermediate = temp.child("intermediate.bin");
+    fs::write(intermediate.path(), &intermediate_bytes).expect("fixture");
+    let first_patch = temp.child("forward.bps");
+    create_bps_patch(base.path(), intermediate.path(), first_patch.path());
+
+    // The base is this RUP's target, so endpoint discovery sees a reverse hit.
+    // Without an explicit Base declaration that is not evidence that the patch
+    // should consume the original base: this ordinary revert consumes Previous.
+    let revert_patch = temp.child("revert.rup");
+    create_rup_patch(intermediate.path(), base.path(), revert_patch.path());
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            base.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            revert_patch.path().to_str().expect("path"),
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+    let second = &plan["details"]["patch_validation"]["per_patch"][1];
+    assert_eq!(second["basis"], "previous", "plan: {plan}");
+    assert_eq!(second["basis_source"], "default", "plan: {plan}");
+
+    let output = temp.child("output.bin");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            base.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            revert_patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "RUP", "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), base_bytes);
+}
+
+#[test]
+fn patch_apply_typed_rup_base_step_uses_handler_normalized_n64_identity() {
+    let temp = setup_temp_dir();
+    let base_native = vec![
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let base_v64 = byte_swap_pairs(&base_native);
+    let input = temp.child("base.v64");
+    fs::write(input.path(), &base_v64).expect("fixture");
+
+    let mut first_modified_v64 = base_v64.clone();
+    first_modified_v64[0] ^= 0x31; // Break the magic before the typed RUP step.
+    let first_modified = temp.child("first-modified.v64");
+    fs::write(first_modified.path(), &first_modified_v64).expect("fixture");
+    let first_patch = temp.child("first.bps");
+    create_bps_patch(input.path(), first_modified.path(), first_patch.path());
+
+    let native_base = temp.child("base.z64");
+    fs::write(native_base.path(), &base_native).expect("fixture");
+    let mut rup_target_native = base_native.clone();
+    rup_target_native[10] ^= 0x62;
+    let rup_target = temp.child("rup-target.z64");
+    fs::write(rup_target.path(), &rup_target_native).expect("fixture");
+    let typed_rup = temp.child("typed.rup");
+    create_rup_patch(native_base.path(), rup_target.path(), typed_rup.path());
+    set_single_rup_rom_type(typed_rup.path(), 4); // MultiPatch ROM type: N64.
+
+    let output = temp.child("output.v64");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            typed_rup.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "RUP", "succeeded");
+
+    let mut expected = base_native;
+    expected[1] ^= 0x31;
+    expected[10] ^= 0x62;
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        byte_swap_pairs(&expected)
+    );
+}
+
+#[test]
+fn patch_apply_single_typed_rup_restores_original_n64_order() {
+    let temp = setup_temp_dir();
+    let base_native = vec![
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let input = temp.child("base.v64");
+    fs::write(input.path(), byte_swap_pairs(&base_native)).expect("fixture");
+
+    let native_base = temp.child("base.z64");
+    fs::write(native_base.path(), &base_native).expect("fixture");
+    let mut target_native = base_native;
+    target_native[10] ^= 0x62;
+    let target = temp.child("target.z64");
+    fs::write(target.path(), &target_native).expect("fixture");
+    let patch = temp.child("typed.rup");
+    create_rup_patch(native_base.path(), target.path(), patch.path());
+    set_single_rup_rom_type(patch.path(), 4);
+
+    let output = temp.child("output.v64");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "RUP", "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        byte_swap_pairs(&target_native)
+    );
+}
+
+#[test]
+fn patch_apply_single_typed_rup_restores_original_little_endian_n64_order() {
+    let temp = setup_temp_dir();
+    let base_native = vec![
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let input = temp.child("base.n64");
+    fs::write(input.path(), reverse_n64_words(&base_native)).expect("fixture");
+
+    let native_base = temp.child("base.z64");
+    fs::write(native_base.path(), &base_native).expect("fixture");
+    let mut target_native = base_native;
+    target_native[10] ^= 0x62;
+    let target = temp.child("target.z64");
+    fs::write(target.path(), &target_native).expect("fixture");
+    let patch = temp.child("typed.rup");
+    create_rup_patch(native_base.path(), target.path(), patch.path());
+    set_single_rup_rom_type(patch.path(), 4);
+
+    let output = temp.child("output.n64");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "RUP", "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        reverse_n64_words(&target_native)
+    );
+}
+
+#[test]
+fn patch_apply_first_typed_rup_uses_prepared_n64_order_hint() {
+    let temp = setup_temp_dir();
+    let base_native = vec![
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let input = temp.child("base.v64");
+    fs::write(input.path(), byte_swap_pairs(&base_native)).expect("fixture");
+
+    let native_base = temp.child("base.z64");
+    fs::write(native_base.path(), &base_native).expect("fixture");
+    let mut rup_target_native = base_native.clone();
+    rup_target_native[10] ^= 0x62;
+    let rup_target = temp.child("rup-target.z64");
+    fs::write(rup_target.path(), &rup_target_native).expect("fixture");
+    let typed_rup = temp.child("typed.rup");
+    create_rup_patch(native_base.path(), rup_target.path(), typed_rup.path());
+    set_single_rup_rom_type(typed_rup.path(), 4);
+
+    let mut final_native = rup_target_native;
+    final_native[14] ^= 0x45;
+    let final_path = temp.child("final.z64");
+    fs::write(final_path.path(), &final_native).expect("fixture");
+    let second_patch = temp.child("second.bps");
+    create_bps_patch(rup_target.path(), final_path.path(), second_patch.path());
+
+    let output = temp.child("output.v64");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            typed_rup.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "BPS", "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        byte_swap_pairs(&final_native)
+    );
+}
+
+#[test]
+fn patch_apply_selected_snes_rup_base_step_uses_normalized_forward_endpoint() {
+    let temp = setup_temp_dir();
+    let mut interleaved_base = vec![0u8; 0x10000];
+    for (index, byte) in interleaved_base.iter_mut().enumerate() {
+        *byte = ((index * 7) & 0xff) as u8;
+    }
+    interleaved_base[0x7fd5] = 1;
+    interleaved_base[0x7fdc..0x7fde].copy_from_slice(&0x1357u16.to_le_bytes());
+    interleaved_base[0x7fde..0x7fe0].copy_from_slice(&0xeca8u16.to_le_bytes());
+    let input = temp.child("base.smc");
+    fs::write(input.path(), &interleaved_base).expect("fixture");
+
+    let mut first_target = interleaved_base.clone();
+    first_target[0x20] ^= 0x45;
+    let first_target_path = temp.child("first-target.smc");
+    fs::write(first_target_path.path(), &first_target).expect("fixture");
+    let first_patch = temp.child("first.bps");
+    create_bps_patch(input.path(), first_target_path.path(), first_patch.path());
+
+    let native_base = deinterleave_snes_payload(&interleaved_base);
+    let native_base_path = temp.child("base.sfc");
+    fs::write(native_base_path.path(), &native_base).expect("fixture");
+    let mut rup_target = native_base.clone();
+    rup_target[0x100] ^= 0x33;
+    let rup_target_path = temp.child("rup-target.sfc");
+    fs::write(rup_target_path.path(), &rup_target).expect("fixture");
+    let rup_patch = temp.child("typed-snes.rup");
+    create_rup_patch(
+        native_base_path.path(),
+        rup_target_path.path(),
+        rup_patch.path(),
+    );
+    set_single_rup_rom_type(rup_patch.path(), 3);
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            rup_patch.path().to_str().expect("path"),
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+    let second = &plan["details"]["patch_validation"]["per_patch"][1];
+    assert_eq!(second["basis"], "base");
+    assert_eq!(second["execution"]["variant"], 0);
+    assert_eq!(second["execution"]["direction"], "forward");
+
+    let output = temp.child("output.sfc");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            rup_patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "RUP", "succeeded");
+    let mut expected = deinterleave_snes_payload(&first_target);
+    expected[0x100] ^= 0x33;
+    assert_eq!(fs::read(output.path()).expect("output"), expected);
+}
+
+#[test]
+fn patch_apply_declared_unif_rup_base_step_uses_normalized_reverse_endpoint() {
+    let temp = setup_temp_dir();
+    let base = unif_fixture(b"PRG1", b"CHR1");
+    let input = temp.child("base.unif");
+    fs::write(input.path(), &base).expect("fixture");
+
+    let mut first_target = base.clone();
+    first_target[0x28] = b'K';
+    let first_target_path = temp.child("first-target.unif");
+    fs::write(first_target_path.path(), &first_target).expect("fixture");
+    let first_patch = temp.child("first.bps");
+    create_bps_patch(input.path(), first_target_path.path(), first_patch.path());
+
+    let rup_original = temp.child("rup-original.bin");
+    let rup_modified = temp.child("rup-modified.bin");
+    fs::write(rup_original.path(), b"PRG2CHR2").expect("fixture");
+    fs::write(rup_modified.path(), b"PRG1CHR1").expect("fixture");
+    let rup_patch = temp.child("typed-unif.rup");
+    create_rup_patch(rup_original.path(), rup_modified.path(), rup_patch.path());
+    set_single_rup_rom_type(rup_patch.path(), 1);
+
+    let plan = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            rup_patch.path().to_str().expect("path"),
+            "--patch-basis",
+            "base",
+            "--plan",
+            "--json",
+        ],
+        0,
+    );
+    let second = &plan["details"]["patch_validation"]["per_patch"][1];
+    assert_eq!(second["basis"], "base");
+    assert_eq!(second["basis_source"], "declared");
+    assert_eq!(second["execution"]["variant"], 0);
+    assert_eq!(second["execution"]["direction"], "reverse");
+
+    let output = temp.child("output.unif");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            rup_patch.path().to_str().expect("path"),
+            "--patch-basis",
+            "base",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "RUP", "succeeded");
+    let mut expected = unif_fixture(b"PRG2", b"CHR2");
+    expected[0x28] = b'K';
+    assert_eq!(fs::read(output.path()).expect("output"), expected);
+}
+
+#[test]
+fn patch_apply_multi_variant_rup_chain_keeps_ambiguous_input_fail_closed() {
+    let temp = setup_temp_dir();
+    let base = temp.child("base.bin");
+    let target_a = temp.child("target-a.bin");
+    let target_b = temp.child("target-b.bin");
+    fs::write(base.path(), b"same-source").expect("fixture");
+    fs::write(target_a.path(), b"target-one!").expect("fixture");
+    fs::write(target_b.path(), b"target-two!").expect("fixture");
+
+    let variant_a = temp.child("variant-a.rup");
+    let variant_b = temp.child("variant-b.rup");
+    for (target, patch) in [(&target_a, &variant_a), (&target_b, &variant_b)] {
+        command_stdout(
+            &[
+                "patch",
+                "create",
+                "--original",
+                base.path().to_str().expect("path"),
+                "--modified",
+                target.path().to_str().expect("path"),
+                "--format",
+                "rup",
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--json",
+            ],
+            0,
+        );
+    }
+
+    let mut ambiguous_bytes = fs::read(variant_a.path()).expect("variant A");
+    let variant_b_bytes = fs::read(variant_b.path()).expect("variant B");
+    assert_eq!(ambiguous_bytes.pop(), Some(0x00), "RUP end command");
+    assert_eq!(variant_b_bytes[0x800], 0x01, "RUP open-file command");
+    ambiguous_bytes.extend_from_slice(&variant_b_bytes[0x800..variant_b_bytes.len() - 1]);
+    ambiguous_bytes.push(0x00);
+    let ambiguous = temp.child("ambiguous.rup");
+    fs::write(ambiguous.path(), ambiguous_bytes).expect("multi-variant RUP");
+
+    // If the planner silently chooses variant 0, this BPS patch makes the
+    // whole chain succeed. Correct behavior fails before either patch runs.
+    let final_path = temp.child("final.bin");
+    fs::write(final_path.path(), b"target-final").expect("fixture");
+    let followup = temp.child("followup.bps");
+    create_bps_patch(target_a.path(), final_path.path(), followup.path());
+
+    let failed = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            base.path().to_str().expect("path"),
+            "--patch",
+            ambiguous.path().to_str().expect("path"),
+            "--patch",
+            followup.path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(failed["command"], "patch-apply");
+    assert_eq!(failed["status"], "failed");
+    assert!(
+        failed["label"]
+            .as_str()
+            .expect("label")
+            .contains("multiple reversible endpoints"),
+        "unexpected failure: {failed}"
+    );
+}
+
+#[test]
+fn patch_apply_ignores_later_filename_checksum_for_basis_inference() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"0123456789abcdef").expect("fixture");
+
+    let first_modified = temp.child("first-modified.bin");
+    fs::write(first_modified.path(), b"0123AA6789abcdef").expect("fixture");
+    let second_modified = temp.child("second-modified.bin");
+    fs::write(second_modified.path(), b"0123456789abZZef").expect("fixture");
+    let first_patch = temp.child("first.bps");
+    create_bps_patch(input.path(), first_modified.path(), first_patch.path());
+
+    // This later filename describes patch 1's output. It must not override the
+    // BPS file's embedded source checksum, which correctly describes the base.
+    let misleading_crc = checksum_value(first_modified.path(), "crc32");
+    let second_patch = temp.child(format!("second [crc32:{misleading_crc}].bps"));
+    create_bps_patch(input.path(), second_modified.path(), second_patch.path());
+
+    let output = temp.child("output.bin");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_patch_envelope(&applied, "patch-apply", "BPS", "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        b"0123AA6789abZZef"
     );
 }
 
@@ -6169,6 +7632,57 @@ fn patch_apply_declared_basis_previous_overrides_base_inference() {
             .expect("label")
             .contains("Input checksum invalid")
     );
+}
+
+#[test]
+fn patch_apply_declared_previous_skips_irrelevant_base_endpoint_resolution() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"seed").expect("fixture");
+
+    // The first patch turns a non-SNES base into a valid SNES-sized
+    // intermediate. The typed RUP must consume that intermediate; base endpoint
+    // discovery is irrelevant for an explicitly previous step.
+    let mut intermediate_bytes = vec![0u8; 0x10000];
+    for (index, byte) in intermediate_bytes.iter_mut().enumerate() {
+        *byte = ((index * 11 + 3) & 0xff) as u8;
+    }
+    let intermediate = temp.child("intermediate.sfc");
+    fs::write(intermediate.path(), &intermediate_bytes).expect("fixture");
+    let first_patch = temp.child("expand.bps");
+    create_bps_patch(input.path(), intermediate.path(), first_patch.path());
+
+    let mut target_bytes = intermediate_bytes.clone();
+    target_bytes[0x321] ^= 0x5a;
+    let target = temp.child("target.sfc");
+    fs::write(target.path(), &target_bytes).expect("fixture");
+    let second_patch = temp.child("typed-snes.rup");
+    create_rup_patch(intermediate.path(), target.path(), second_patch.path());
+    set_single_rup_rom_type(second_patch.path(), 3);
+
+    let output = temp.child("output.sfc");
+    let applied = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--patch-basis",
+            "previous",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+
+    assert_patch_envelope(&applied, "patch-apply", "RUP", "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), target_bytes);
 }
 
 #[test]

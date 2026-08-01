@@ -8,8 +8,8 @@ use serde_json::Value;
 
 use crate::{
     ArchiveEntryKindFilter, FormatOperationKind, OperationContext, OperationFamily,
-    OperationStatus, Result, RomWeaverError, SelectionMatcher, ThreadCapability, ThreadExecution,
-    UnsupportedOp,
+    OperationStatus, PatchEndpointSelection, Result, RomWeaverError, SelectionMatcher,
+    ThreadCapability, ThreadExecution, UnsupportedOp,
 };
 use tracing::trace;
 
@@ -463,6 +463,23 @@ pub trait PatchHandler: Send + Sync {
     ) -> Result<OperationReport> {
         self.parse(patch_path, context)
     }
+    /// Resolve every reversible endpoint that accepts `input_path` after any
+    /// format-specific normalization. Most formats need no override: the
+    /// planner matches their embedded endpoint checks against generic base
+    /// checksum variants. Formats such as RUP normalize console-specific input
+    /// representations before hashing and implement this hook for the cases
+    /// generic matching cannot see. Returning multiple selections preserves an
+    /// ambiguous match until the planner knows whether this patch consumes the
+    /// base or the previous step's output.
+    fn resolve_endpoint_selections(
+        &self,
+        patch_path: &Path,
+        input_path: &Path,
+        context: &OperationContext,
+    ) -> Result<Vec<PatchEndpointSelection>> {
+        let _ = (patch_path, input_path, context);
+        Ok(Vec::new())
+    }
     fn apply(
         &self,
         request: &PatchApplyRequest,
@@ -800,6 +817,16 @@ impl PatchHandler for TracingPatchHandler {
         let result = self.inner.parse(patch_path, context);
         trace_operation_result("parse", descriptor, &result);
         result
+    }
+
+    fn resolve_endpoint_selections(
+        &self,
+        patch_path: &Path,
+        input_path: &Path,
+        context: &OperationContext,
+    ) -> Result<Vec<PatchEndpointSelection>> {
+        self.inner
+            .resolve_endpoint_selections(patch_path, input_path, context)
     }
 
     fn apply(

@@ -42,6 +42,8 @@ type InternalSourceState = {
   checksumPreflight?: InternalPatchChecksumPreflight;
   patchValidation?: InternalPatchValidation;
   chainVerdict?: InternalChainVerdict;
+  /** User override for which state this patch's embedded input checks describe. */
+  basisChoice?: ApplyWorkflowPatchState["basisChoice"];
   /** User-pasted checksum (raw hex) to validate the patch target input before apply. */
   validateInputChecksum?: string;
   /** User-pasted checksum (raw hex) to validate the patched output after apply. */

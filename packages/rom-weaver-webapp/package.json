@@ -68,7 +68,7 @@
     "lint:knip": "knip --no-progress",
     "lint:css-layers": "node scripts/check-css-layers.mjs",
     "lint:touch-styles": "node scripts/check-touch-styles.mjs",
-    "lint:types": "tsc -p tsconfig.json --noEmit",
+    "lint:types": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.generated-types.json",
     "prepare:dist": "node ./scripts/sync-dist.mjs",
     "preview": "node scripts/ensure-preview-build.mjs && node scripts/dev-server.mjs preview",
     "samples:generate": "node scripts/first-sample-assets.mjs",

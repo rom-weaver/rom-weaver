@@ -27,6 +27,7 @@ import { formatChecksumTiming } from "./workflow-form-utils.ts";
  * re-stage: a filtered run (disabled patches stripped) rebuilds the workflow
  * stages from scratch, so the run replays these onto the fresh stages. */
 type ApplyPatchRunOptions = {
+  basis?: "base" | "previous";
   header?: "keep" | "strip";
   n64ByteOrder?: "keep" | "big-endian" | "little-endian" | "byte-swapped";
   ppfUndo?: boolean;
@@ -224,6 +225,7 @@ const toPatchStageInfo = (
   const validation = getPatchValidationDetails(patch);
   return {
     archiveName,
+    basisChoice: patch.basisChoice,
     chainVerdict: patch.chainVerdict,
     checksumPreflightMismatch: validation.checksumMismatch,
     checksumTiming: validation.checksumTiming,

@@ -250,6 +250,7 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
       setPatchOption: async (
         index: number,
         option: {
+          basis?: "base" | "previous";
           validateInputChecksum?: string;
           validateOutputChecksum?: string;
           header?: "keep" | "strip";

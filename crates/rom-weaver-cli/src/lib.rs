@@ -42,13 +42,13 @@ use rom_weaver_core::{
     ContainerExtractRequest, ContainerHandler, ContainerListEntry, ContainerProbeRequest,
     CreateInputOverride, CreateInputSource, DiscSheetKind, OperationContext, OperationFamily,
     OperationReport, OperationStatus, PatchApplyRequest, PatchCheckScopes, PatchChecksumValidation,
-    PatchCreateFormatOptions, PatchCreateRequest, PatchValidateRequest, ProgressEvent,
-    ProgressSink, PromptCandidate, Result, RomWeaverError, Selection, SelectionList,
-    SelectionMatcher, SelectionPrompter, SolidPatchMetadata, ThreadBudget, ThreadCapability,
-    ThreadExecution, UnsupportedOp, ValidationCodeError, XdeltaSecondaryMode, detect_disc_sheet,
-    emit_variant_plan, enumerate_disc_sheet_refs, env_u64, is_patch_filter_candidate_name,
-    is_rom_filter_candidate_name, normalize_archive_name, operation_report_details,
-    should_ignore_common_container_file, sibling_gdi_path,
+    PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection, PatchInputN64ByteOrder,
+    PatchValidateRequest, ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError,
+    Selection, SelectionList, SelectionMatcher, SelectionPrompter, SolidPatchMetadata,
+    ThreadBudget, ThreadCapability, ThreadExecution, UnsupportedOp, ValidationCodeError,
+    XdeltaSecondaryMode, detect_disc_sheet, emit_variant_plan, enumerate_disc_sheet_refs, env_u64,
+    is_patch_filter_candidate_name, is_rom_filter_candidate_name, normalize_archive_name,
+    operation_report_details, should_ignore_common_container_file, sibling_gdi_path,
 };
 // The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
 // test in `tests.rs` can exercise it through `CliApp`.

@@ -2,12 +2,15 @@ import { createElement } from "react";
 import { expect, test } from "vitest";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import {
+  clickApplyButton,
   installPatcherTestHooks,
   loadFixtureFile,
   mount,
   RAW_ROM,
   selectFileInput,
   setFormControlValue,
+  waitForApplyButtonEnabled,
+  waitForApplyOutcome,
 } from "./patcher-test-shared.js";
 
 installPatcherTestHooks();
@@ -111,6 +114,29 @@ test("the basis select names the inferred basis and a pin re-plans the chain", a
   // Back to auto: inference decides again and the chip recovers.
   setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("matches your ROM");
+}, 180000);
+
+test("a Previous basis pin reaches Apply execution", async () => {
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: { validation: { requireInputChecksumMatch: true } },
+    }),
+  );
+  await dropFixtures([RAW_ROM, CHAIN_A, SAME_BASE_D]);
+  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("matches your ROM");
+
+  // The sibling patch is base-authored. Pinning it to Previous must reach the
+  // real apply command, which then checks it against patch 1's intermediate
+  // and rejects that checksum. If execution drops the pin, inference chooses
+  // base and the same run incorrectly succeeds.
+  setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "previous");
+  await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("verified during apply");
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+
+  const outcome = await waitForApplyOutcome();
+  expect(outcome?.kind).toBe("error");
+  expect(outcome && "errorText" in outcome ? outcome.errorText : "").toMatch(/checksum/i);
 }, 180000);
 
 test("an out-of-order chain names its predecessor and Fix order repairs it", async () => {
