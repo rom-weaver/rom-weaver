@@ -19,7 +19,7 @@ your checksums.
 
 ## Two kinds of compression
 
-There are two different things people mean by "compressing a ROM", and they
+There are two different things people mean by "compressing a ROM," and they
 behave differently.
 
 A general archive such as ZIP or 7z wraps any file. To play the game, the

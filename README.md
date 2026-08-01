@@ -56,10 +56,11 @@ room for mistakes to what should be one workflow.
 The last piece is curation. Keeping a collection in order means storing ROMs
 compressed, keeping the patches next to them, and being able to prove months
 later that a patched file came from the ROM you think it did. rom-weaver
-handles all of it in one place: read every format above; write CHD, RVZ, Z3DS,
-ZIP, and 7z; chain as many patches as you want in a single pass without manually
-unpacking first; and record the whole recipe - patch order, checksums, output
-names - in a bundle file you can hand to someone else. Native CLI builds are
+handles all of it in one place. It reads every format above. It writes CHD, RVZ,
+Z3DS, ZIP, and 7z archives. It chains as many patches as you want in a single pass
+without manually unpacking first, and records the whole recipe - patch order,
+checksums, and output names - in a bundle file you can hand to someone else.
+Native CLI builds are
 available for Linux, macOS, and Windows. The browser webapp handles patching
 and bundle workflows without an install.
 
@@ -424,8 +425,8 @@ Bug reports and contributions are welcome. Read the
 [contribution guide](CONTRIBUTING.md) and [code of conduct](.github/CODE_OF_CONDUCT.md)
 before submitting a change. Because rom-weaver is dual-licensed, code and
 documentation changes need a one-time signature on the
-[Contributor License Agreement](CLA.md) - the `CLA Signed` check asks for
-it on your first pull request, and one signature covers every repository in the
+[Contributor License Agreement](CLA.md). The `CLA Signed` check asks for
+it on your first pull request. One signature covers every repository in the
 [`rom-weaver` organization](https://github.com/rom-weaver) whose contribution
 process references the agreement. You keep the copyright in your work. Report
 suspected vulnerabilities through GitHub's private reporting form in the
@@ -436,7 +437,7 @@ support continued development through
 
 ## License
 
-Copyright (C) Brandon Casey and rom-weaver contributors
+Copyright © Brandon Casey and rom-weaver contributors
 
 The public distribution is licensed under
 [AGPL-3.0-or-later](LICENSE). [Commercial licensing](COMMERCIAL.md) is

@@ -717,7 +717,7 @@ trust).
 
 The channels form a stability ladder - `prod` above `beta` above `nightly` -
 and a ref deploys to the channel it enters at **plus every less-stable channel
-below it**. Otherwise a quiet stretch on `main` would leave beta and nightly
+below it**. Otherwise, a quiet stretch on `main` would leave beta and nightly
 serving code older than production, which makes them useless for reproducing a
 release-day bug.
 
@@ -1217,8 +1217,8 @@ gates on it. Both write a manifest whose download URL is
 downloadable - pushing them earlier put a live formula in the tap and a live
 manifest in the bucket whose URLs 404 until the draft was published.
 
-The ordering costs the property that a tap failure holds the draft, and that is
-the better half of the trade. These two are the only publishes in the fan-out
+The ordering means that a tap failure no longer holds the draft, but that is an
+acceptable trade. These two are the only publishes in the fan-out
 that are trivially retryable: a git push to a repository we own, with no
 registry state to reconcile. Rerunning the job fixes it. Everything that *is*
 irreversible - npm, the container registry, the release itself - still gates
@@ -1421,7 +1421,7 @@ npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 npm --prefix packages/rom-weaver-webapp run build
 ```
 
-`actionlint` is shellcheck-aware and also lints inline workflow `run:` scripts;
+`actionlint` is shellcheck-aware and lints inline workflow `run:` scripts;
 the separate `shellcheck` task covers the tracked shell files, and `npm test`
 covers the Node.js tooling. `docker` is
 conditional on image-plumbing changes and is most directly reproduced with the

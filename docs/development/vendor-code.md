@@ -391,7 +391,7 @@ turn it off, and the inlined copy simply deletes it. The content here is
 therefore 0.8.3 plus the outcome of that commit, which is why `XDVDFS_VERSION`
 records the sha alongside the release.
 
-But no release has been cut since 0.8.3 (2024-11-13). This was still true as of
+However, no release has been cut since 0.8.3 (2024-11-13). This was still true as of
 2026-07-25, with crates.io's `write` feature still listing `wax`. A `git`
 dependency is not an option because crates.io rejects any crate that has one.
 Keeping it as a vendored workspace member would have meant publishing

@@ -76,6 +76,6 @@ yourself.
 
 ## License
 
-Copyright (C) Brandon Casey. Licensed under
+Copyright © Brandon Casey. Licensed under
 [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
 Bundled third-party components retain their own licenses.
