@@ -725,9 +725,23 @@ const SampleTutorial = ({
                 })}
               </ul>
             ) : null}
+            {live ? <p className="sample-tutorial-end-hint">The End guide button also ends the tutorial.</p> : null}
           </div>
         </div>
         <div className="sample-tutorial-actions">
+          {live ? (
+            <button
+              className="btn ghost slim"
+              disabled={moving || stepIndex === 0}
+              onClick={() => {
+                if (moving || stepIndex === 0) return;
+                beginMove(() => setStepIndex((current) => current - 1));
+              }}
+              type="button"
+            >
+              Back
+            </button>
+          ) : null}
           {live ? (
             <button
               className="btn primary slim"

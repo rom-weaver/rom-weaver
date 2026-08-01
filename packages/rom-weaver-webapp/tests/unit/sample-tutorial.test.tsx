@@ -177,6 +177,8 @@ describe("sample tutorial", () => {
     const actions = screen.getByRole("list", { name: "Available actions" });
     expect(actions.textContent).toContain("Checks");
     expect(actions.querySelector("svg")).toBeTruthy();
+    expect(screen.getByText("The End guide button also ends the tutorial.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(first);
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -185,7 +187,14 @@ describe("sample tutorial", () => {
     await waitFor(() => expect(second.classList.contains("sample-tutorial-target")).toBe(true));
     expect(screen.getByRole("button", { name: "Second drawer" }).getAttribute("aria-expanded")).toBe("true");
     expect(first.classList.contains("sample-tutorial-target")).toBe(false);
+    expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(false);
 
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy());
+    expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onClose).toHaveBeenCalledOnce();
   });

@@ -463,6 +463,9 @@
 .rw-app .sample-tutorial-copy p {
   margin: 0; color: var(--ink-2); font-size: .86rem; line-height: 1.5;
 }
+.rw-app .sample-tutorial-copy .sample-tutorial-end-hint {
+  margin-block-start: var(--sp-s); color: var(--ink-3); font-size: .74rem;
+}
 .rw-app .sample-tutorial-progress {
   height: 7px; margin-block-start: var(--sp-m); overflow: hidden;
   border: 1px solid color-mix(in oklab, var(--thread) 55%, var(--seam-strong)); border-radius: 999px;
