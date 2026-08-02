@@ -824,7 +824,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # Same version as the .config/mise.toml pin; this leg cannot use mise.
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-nextest@0.9.140
 
