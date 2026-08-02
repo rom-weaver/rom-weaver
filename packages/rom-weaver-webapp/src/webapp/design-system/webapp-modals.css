@@ -2,6 +2,14 @@
 /* Above the guided-sample layer (1000-1003): a real modal must never end up
    dimmed underneath the non-modal coach mark. */
 .rw-modal { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: var(--sp-l); }
+/* The page behind a modal must not scroll: a wheel or a swipe that misses the
+   card would otherwise move the document under it, and the reader comes back to
+   somewhere they never chose. Declarative rather than a JS lock so nesting is
+   free - the last modal to close is the one that unlocks. The log dialog needs
+   none of this; it is a native `<dialog>` and `showModal()` locks for it.
+   `overflow: hidden` on the root keeps the scroll offset, so closing lands the
+   reader exactly where they left. */
+html:has(.rw-modal) { overflow: hidden; }
 .rw-modal-backdrop { position: absolute; inset: 0; border: 0; background: var(--scrim); backdrop-filter: blur(3px); }
 .rw-modal-card {
   /* Viewport cap contains long unbroken filenames. */
