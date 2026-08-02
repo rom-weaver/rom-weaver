@@ -78,19 +78,13 @@ tracks.
 
 In **0x04 Output**, give the download a useful filename and choose a format.
 
-BPS is a strong default for cartridge games. It stores checksums for the
-Original, Modified, and patch, so a compatible patcher can reject the wrong
-starting file and verify the result.
+BPS is a strong default unless your community expects otherwise;
+[Choosing a patch format](../explanation/patch-formats.md) compares the
+choices and their trade-offs. If you do publish IPS, put the Original's
+checksum prominently in the release notes - the format cannot carry it.
 
-Use IPS when compatibility with very old patchers matters. IPS does not store
-the Original checksum, so put that checksum prominently in the release notes.
-
-Large files and disc projects often use xdelta, VCDIFF, or PPF. A community's
-existing tool support can matter more than a theoretical best choice.
-
-[Choosing a patch format](../explanation/patch-formats.md) compares the main
-choices. The format list in Create only offers formats rom-weaver can make for the files
-you selected.
+The format list in Create only offers formats rom-weaver can make for the
+files you selected.
 
 ## Create and download the patch
 

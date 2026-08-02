@@ -46,7 +46,9 @@ but a known-good copy makes updates and troubleshooting much easier.
 4. If an archive contains several possible files, choose the entry the patch
    author named.
 
-You can add [supported archives](work-with-archives.md), including ZIP, 7z, RAR, and tar,
+You can add
+[supported archives](../reference/formats.md#container-and-compression-formats),
+including ZIP, 7z, RAR, and tar,
 without extracting them first. rom-weaver looks inside, including inside nested
 archives. Disc containers such as CHD and RVZ are unpacked to the form the
 patch expects.

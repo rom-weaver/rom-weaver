@@ -1,23 +1,26 @@
 # Apply patches from the CLI
 
-Apply one patch or an ordered chain in the terminal, control headers, byte
-order, and checksum verification, and validate patches without writing
-anything. New to the CLI? Start with
-[your first weave](../tutorials/cli-first-weave.md).
+Apply one patch or an ordered chain in the terminal, handle headers and byte
+order, verify checksums, and validate patches without writing anything. New to
+the CLI? Start with [your first weave](../tutorials/cli-first-weave.md). Each
+recipe uses only the flags its task needs; the
+[patching flags](../reference/cli.md#patching) are catalogued in the reference.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Apply one or more patches](#apply-one-or-more-patches)
-- [Patch apply behavior](#patch-apply-behavior)
-- [Patch validation](#patch-validation)
+- [Verify the ROM before and after](#verify-the-rom-before-and-after)
+- [Apply a patch made for a headerless ROM](#apply-a-patch-made-for-a-headerless-rom)
+- [Apply an N64 patch regardless of byte order](#apply-an-n64-patch-regardless-of-byte-order)
+- [Check patches without writing anything](#check-patches-without-writing-anything)
 - [Where next](#where-next)
 
 <!-- END doctoc -->
 
 ## Apply one or more patches
 
-Apply one patch, or several in order:
+Apply one patch, or several in order, each on the result of the last:
 
 ```bash
 rom-weaver weave \
@@ -39,71 +42,76 @@ The result is compressed by default, into whatever the `--output` extension
 names. Pass `--no-compress` for a plain ROM, or set `--compress-format`,
 `--compress-codec`, and `--compress-level` yourself.
 
-## Patch apply behavior
+Formats that carry their own checksums are verified strictly, so a wrong
+starting ROM stops before anything is written - see
+[Fix a checksum error](fix-checksum-errors.md) when that happens.
 
+## Verify the ROM before and after
 
-Repeat `--patch` to run several patches in order, each on the result of the
-last. Leave `--patch` out entirely and rom-weaver looks for RetroArch-style
-patches sitting next to the ROM inside the input archive. A
-`rom-weaver-bundle.json` can supply the ROM, the patch order, the checks, and
-the output name instead.
+When a patch page publishes the expected checksums, pin them so the run fails
+loudly instead of producing a broken ROM:
 
-Checking the result:
+```bash
+rom-weaver weave \
+  --input original.sfc \
+  --patch translation.bps \
+  --output translated.sfc \
+  --expect-in crc32=ABCD1234 \
+  --expect-out sha1=0123456789abcdef0123456789abcdef01234567
+```
 
-- Formats that carry their own checksums are verified strictly.
-  `--ignore-checksum-validation` applies the patch anyway, which can produce a
-  broken ROM.
-- `--expect-in ALGO=HEX` stops unless the ROM about to be patched matches.
-- `--expect-out ALGO=HEX` fails unless the finished ROM matches.
-- `--assume-in ALGO=HEX` takes a checksum on trust rather than reading the ROM
-  to compute it. It is a speed option for scripts and verifies nothing.
+`--expect-in` stops before patching unless the input matches; `--expect-out`
+fails the run unless the finished ROM matches.
 
-Headers and byte order:
+## Apply a patch made for a headerless ROM
 
-- `--patch-header auto|keep|strip` decides whether each patch applies to the
-  ROM with or without its copier header. Auto works it out per patch from the
-  patch's own source checksum.
-- `--output-header auto|keep|strip` decides whether the finished ROM keeps its
-  header. Auto keeps the ones emulators need and drops the ones they do not.
-- `--repair-checksum` repairs supported internal checksums and compatibility
-  header fields after patching.
-- `--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped` puts an
-  N64 ROM in the interleaving a patch expects. Auto matches the patch's source
-  CRC32, and the output is written back in the order the input arrived in.
+Headers are worked out automatically: `--patch-header auto` matches each patch
+to the headered or headerless form of your ROM using the patch's own source
+checksum, and `--output-header auto` keeps the header only when emulators need
+it. Override them when a patch author tells you to, and repair internal
+checksums the patch left stale:
 
-Extras:
+```bash
+rom-weaver weave \
+  --input game.smc \
+  --patch hack.ips \
+  --output patched.sfc \
+  --patch-header strip \
+  --output-header strip \
+  --repair-checksum
+```
 
-- `--code` bakes Game Genie or GameShark/Pro Action Replay codes into the ROM,
-  as if they were a patch.
-- `--emit-bundle PATH` also writes a `rom-weaver-bundle.json` recording the run:
-  the ROM's checksums, the patches in order, and the result. It runs the same
-  code as `bundle create`, so the file is byte-identical to the equivalent
-  `bundle create` call. It carries no per-patch names or authors; for those use
-  `bundle create`, `bundle create --from`, or `--tui`.
-- `--tui` asks for each patch's name, version, author, and optional state plus
-  an output name, then applies and writes the bundle. It needs a terminal, and
-  for now it needs explicit `--patch` files; re-opening a bundle is not
-  supported yet.
+## Apply an N64 patch regardless of byte order
 
-DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM
-data track and reassemble the whole disc, so they cannot be chained with
-another patch or combined with the header and checksum options.
+N64 ROMs circulate in three interleavings, and a patch only applies to the one
+it was made against. The default `--n64-byte-order auto` matches your ROM to
+the patch's source CRC32 and writes the output back in the order the input
+arrived in, so usually there is nothing to do. Force a specific order only
+when auto has nothing to match against:
 
-## Patch validation
+```bash
+rom-weaver weave \
+  --input game.n64 \
+  --patch fix.bps \
+  --output fixed.z64 \
+  --n64-byte-order big-endian
+```
 
+## Check patches without writing anything
 
-`patch validate` runs the same checks as `patch apply` but writes nothing: it
-parses each patch and verifies every checksum the format carries.
+`patch validate` parses each patch and verifies every checksum the format
+carries, without producing a ROM:
 
-`--expect-in` adds a check on the ROM itself, and accepts a checksum
-(`ALGO=HEX`), an exact size (`size=N`), or a minimum size (`min-size=N`).
-`--strip-header` and `--n64-byte-order` put the ROM in the form the patches
-expect before checking; N64 byte order defaults to matching the patch's source
-CRC32.
+```bash
+rom-weaver patch validate \
+  --input original.sfc \
+  --patch base.ips \
+  --patch fixes.ups
+```
 
-Patches are checked as a chain by default, each against the output of the one
-before it. `--independent` checks each one against the original ROM instead and
-reports a verdict per patch, rather than stopping at the first failure.
+Patches are checked as a chain by default. Pass `--independent` to check each
+one against the original ROM and get a verdict per patch, and
+`--expect-in ALGO=HEX` to check the ROM itself at the same time.
 
 ## Where next
 
@@ -111,6 +119,7 @@ reports a verdict per patch, rather than stopping at the first failure.
   [Fix a checksum error](fix-checksum-errors.md).
 - Record a finished run as a shareable recipe with
   [Bundles from the CLI](cli-bundles.md).
-- Run `rom-weaver patch apply --help` or `rom-weaver patch validate --help`
-  for every flag; the [CLI reference](../reference/cli.md) covers their shared
-  behavior.
+- Bake cheat codes into a ROM (`--code`), write a bundle alongside the patched
+  ROM (`--emit-bundle`, `--tui`), or patch straight from a
+  `rom-weaver-bundle.json`: the [patching flags](../reference/cli.md#patching)
+  cover every option, and `rom-weaver patch apply --help` is authoritative.

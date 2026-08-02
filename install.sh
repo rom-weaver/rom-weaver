@@ -125,7 +125,7 @@ else
   # workflow run ever produced - one uploaded by a stolen token or by hand.
   # Verifying the Sigstore signature instead would need `gh` or `cosign`, and
   # neither belongs in a curl-to-shell installer's dependency list; the manual
-  # command is in docs/how-to/install-cli.md for anyone who wants it.
+  # command is in docs/how-to/verify-downloads.md for anyone who wants it.
   #
   # This leaves curl and grep as the only tools involved.
   #

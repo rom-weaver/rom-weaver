@@ -56,9 +56,9 @@ itself. A patcher can therefore reject the wrong starting file, and confirm
 the result came out right.
 
 That makes it a strong default for cartridge games when your audience has a
-BPS-compatible patcher. rom-weaver applies and creates BPS. In the webapp,
-choose BPS in the **0x04 Output** format selector. For a scripted release, use
-the separate [CLI patch creation guide](../how-to/cli-create.md).
+BPS-compatible patcher. rom-weaver applies and creates BPS; to publish one,
+see the [browser](../how-to/create-rom-patches.md) or
+[CLI](../how-to/cli-create.md) create guide.
 
 ## IPS and IPS32
 

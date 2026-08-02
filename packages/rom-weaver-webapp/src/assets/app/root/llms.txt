@@ -18,8 +18,9 @@
 - [Browser and CLI](https://rom-weaver.com/docs/browser-and-cli): One engine, two front ends, and how to choose.
 - [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick format-specific compression such as CHD, RVZ, or Z3DS, plus ZIP and 7z, and learn when trimming beats compressing.
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
+- [Verify a download](https://rom-weaver.com/docs/verify-downloads): Check that a release archive, npm package, or container image carries the release workflow's build provenance.
 - [Your first weave in the terminal](https://rom-weaver.com/docs/cli-get-started): Tutorial covering Apply, Create, and Bundle in the terminal with the same test assets.
-- [CLI reference](https://rom-weaver.com/docs/cli): Every command, global flag, JSON output, exit codes, shell completions, and man pages.
+- [CLI reference](https://rom-weaver.com/docs/cli): Every command, global flag, patching flag, JSON output, exit codes, and man pages.
 - [Supported formats](https://rom-weaver.com/docs/supported-formats): The full patch, container, codec, checksum, trim, and header support tables.
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
 - [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.

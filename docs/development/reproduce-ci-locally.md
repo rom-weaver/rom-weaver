@@ -49,7 +49,12 @@ npm --prefix packages/rom-weaver-webapp run test:browser:wasm
 npm --prefix packages/rom-weaver-webapp run test:browser
 npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 npm --prefix packages/rom-weaver-webapp run build
+npm --prefix packages/rom-weaver-webapp run test:performance     # performance gates
 ```
+
+The performance gates need the production WASM artifact and the webapp build
+first (`mise run build-wasm-prod`, then `run build` above). The audit picks a
+free port unless `PORT` is set.
 
 `actionlint` is shellcheck-aware and lints inline workflow `run:` scripts; the
 separate `shellcheck` task covers the tracked shell files, and `npm test`

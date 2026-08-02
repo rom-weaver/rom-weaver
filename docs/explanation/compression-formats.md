@@ -36,11 +36,8 @@ converting a collection.
 **CHD** is a purpose-built container for media images. The official
 [chdman documentation](https://docs.mamedev.org/tools/chdman.html) covers raw,
 hard-disk, CD, and DVD images. rom-weaver creates CHD from
-`.cue`/`.gdi`/`.iso` inputs:
-
-```bash
-rom-weaver compress --input disc.cue --output disc.chd
-```
+`.cue`/`.gdi`/`.iso` inputs; the command is in
+[Extract, convert, and compress archives](../how-to/work-with-archives.md#compress-a-rom-or-disc-image-instead).
 
 **RVZ** is Dolphin's format for GameCube and Wii discs. It understands disc
 padding, and [Dolphin](https://dolphin-emu.org/docs/faq/) plays it directly.
