@@ -117,17 +117,20 @@
    the status glyph - so only one of the three read as something you could press.
    The pill is the one that already worked, so the other two join it.
 
+   All three carry `.sub-chip`, so the rules below name one class rather than
+   three selectors six times over - the CSS budget notices the difference.
+
    The box stays 24px for the target-size floor; the pill is drawn inside it by
    `::before`, inset so it sits at ink height. Painting the pill on the box
    itself is what made the build tag stand taller than the wordmark above it -
    and shrinking the box to fix that put every control under the floor, which
    axe measures on the element, not on a halo over it. */
-.rw-app .sub-link, .rw-app .sub-status, .rw-app .brand-sub-row .channel-badge {
+.rw-app .sub-chip {
   position: relative; isolation: isolate;
   min-inline-size: 24px; block-size: 24px; padding: 0 6px;
   background: transparent; border: 0;
 }
-.rw-app .sub-link::before, .rw-app .sub-status::before, .rw-app .brand-sub-row .channel-badge::before {
+.rw-app .sub-chip::before {
   content: ""; position: absolute; z-index: -1;
   /* 18px of pill centred in the 24px box - one height for all three, whose
      contents (a 12px glyph, two type sizes) would otherwise each settle
@@ -141,26 +144,17 @@
 /* touch: a far more generous invisible halo on top, with no layout shift -
    there is no cursor to aim with */
 @media (pointer: coarse) {
-  .rw-app .sub-link::after, .rw-app .sub-status::after,
-  .rw-app .brand-sub-row .channel-badge::after { position: absolute; inset: -10px -4px; content: ""; }
+  .rw-app .sub-chip::after { position: absolute; inset: -10px -4px; content: ""; }
 }
 @media (hover: hover) {
-  .rw-app .sub-link:hover::before, .rw-app .sub-status:hover::before,
-  .rw-app .brand-sub-row .channel-badge:hover::before {
-    background: color-mix(in oklab, currentColor 18%, transparent);
-  }
+  .rw-app .sub-chip:hover::before { background: color-mix(in oklab, currentColor 18%, transparent); }
+  /* the badge's own fill is for the copy in the status rows, which still paints
+     its pill on the box; here it would put a second, box-height pill behind the
+     drawn one */
+  .rw-app .sub-chip:hover { background: transparent; }
 }
-.rw-app .sub-link:active::before, .rw-app .sub-status:active::before,
-.rw-app .brand-sub-row .channel-badge:active::before {
-  background: color-mix(in oklab, currentColor 22%, transparent);
-}
-/* the badge's own fills are for the copy in the status rows, which still paints
-   its pill on the box; on the sub-line they would put a second, box-height pill
-   behind the ::before one */
-@media (hover: hover) {
-  .rw-app .brand-sub-row .channel-badge:hover { background: transparent; }
-}
-.rw-app .brand-sub-row .channel-badge:active { background: transparent; }
+.rw-app .sub-chip:active::before { background: color-mix(in oklab, currentColor 22%, transparent); }
+.rw-app .sub-chip:active { background: transparent; }
 /* when a channel badge is present the status yields to glyph-only at every
    width - the badge is the rarer, louder signal, and together they cannot fit
    inside the 1220px app column in long locales */

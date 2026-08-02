@@ -112,7 +112,6 @@
   .rw-app .rel-summary:hover { background: color-mix(in oklab, var(--ink) 5%, transparent); }
 }
 .rw-app .rel-summary:active { background: color-mix(in oklab, var(--ink) 5%, transparent); }
-.rw-app .rel-summary:focus-visible { outline: 2px solid var(--thread-text); outline-offset: -2px; }
 .rw-app .rel-body { padding: 0 var(--sp-m) var(--sp-m); border-block-start: 1px solid var(--seam-soft); padding-block-start: var(--sp-s); }
 .rw-app .rel-link { display: inline-block; margin-block-start: var(--sp-m); font-size: .8rem; color: var(--thread-text); }
 /* banner dismiss (update + wake-lock) - sized to --ctrl-h so it reads as a

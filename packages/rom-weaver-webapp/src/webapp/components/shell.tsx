@@ -474,7 +474,7 @@ const BuildTag = ({
       <span className="build-tag">
         <a
           aria-label={prLabel}
-          className="channel-badge"
+          className="sub-chip channel-badge"
           data-channel="pr"
           href={prHref ?? "#"}
           onClick={(event) => (prHref ? guardFooterExternalClick(event, prHref, confirmExternalNavigation) : undefined)}
@@ -500,7 +500,7 @@ const BuildTag = ({
         <button
           aria-haspopup="dialog"
           aria-label={`${name}, ${versionText}`}
-          className="channel-badge"
+          className="sub-chip channel-badge"
           data-channel={key}
           onClick={onOpenChangelog}
           type="button"
@@ -514,7 +514,13 @@ const BuildTag = ({
   }
   return (
     <span className="build-tag">
-      <button aria-haspopup="dialog" className="sub-link" onClick={onOpenChangelog} title={versionTitle} type="button">
+      <button
+        aria-haspopup="dialog"
+        className="sub-chip sub-link"
+        onClick={onOpenChangelog}
+        title={versionTitle}
+        type="button"
+      >
         {versionText}
       </button>
     </span>
@@ -657,7 +663,7 @@ const Masthead = ({
                   <button
                     aria-haspopup="dialog"
                     aria-label={`${threads} ${threadsLabel}`}
-                    className="sub-link masthead-threads"
+                    className="sub-chip sub-link masthead-threads"
                     data-thread-label={threadsLabel}
                     onClick={onOpenThreads ?? onOpenSettings}
                     onFocus={onPreloadSettings}
@@ -674,7 +680,7 @@ const Masthead = ({
                 <button
                   aria-haspopup="dialog"
                   aria-label={runtimeLabel}
-                  className="sub-status"
+                  className="sub-chip sub-status"
                   data-sw={runtimeState}
                   onClick={onOpenStatus}
                   type="button"
