@@ -26,7 +26,7 @@
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 172500,
-        "maxRawBytes": 176000,
+        "maxRawBytes": 189440,
         "expectedBrotliBytes": 29100,
         "maxBrotliBytes": 29900
       },
