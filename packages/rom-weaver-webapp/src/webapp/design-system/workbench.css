@@ -90,11 +90,13 @@
   font: inherit; font-size: .74rem; font-weight: 650; letter-spacing: .02em; color: var(--ink-3);
   white-space: nowrap; appearance: none; cursor: pointer; background: transparent; border: 0;
   transition: color .18s;
+  /* With no box to see, the target-size floor costs nothing to meet on the box
+     itself - and axe measures the element, not a halo drawn over it. */
+  min-block-size: 24px;
 }
 .rw-app .reset-btn svg { flex: none; width: 13px; height: 13px; }
-/* the ink is well under the target-size floor without a box to carry it, so the
-   floor rides an invisible halo instead - the same trick the brand sub-line uses */
-.rw-app .reset-btn::after { position: absolute; inset: -6px -8px; content: ""; }
+/* the halo is on top of that floor, for the finger rather than the audit */
+.rw-app .reset-btn::after { position: absolute; inset: -4px -8px; content: ""; }
 @media (hover: hover) {
   .rw-app .reset-btn:hover { color: var(--fault); }
 }

@@ -117,37 +117,50 @@
    the status glyph - so only one of the three read as something you could press.
    The pill is the one that already worked, so the other two join it.
 
-   Each keeps its ink height and takes the 24px target-size floor as an invisible
-   halo. Spending the floor on the box instead would inflate every pill to
-   two-thirds again its ink and stand the sub-line taller than the wordmark
-   above it. */
+   The box stays 24px for the target-size floor; the pill is drawn inside it by
+   `::before`, inset so it sits at ink height. Painting the pill on the box
+   itself is what made the build tag stand taller than the wordmark above it -
+   and shrinking the box to fix that put every control under the floor, which
+   axe measures on the element, not on a halo over it. */
 .rw-app .sub-link, .rw-app .sub-status, .rw-app .brand-sub-row .channel-badge {
-  position: relative; min-inline-size: 24px; padding: 0 6px;
-  /* one height for all three, or the row reads as three sizes of chip: their
-     contents differ (12px glyph, two type sizes) and each would otherwise
-     settle somewhere between 14 and 18px. Clears the tallest of those. */
-  block-size: 18px;
+  position: relative; isolation: isolate;
+  min-inline-size: 24px; block-size: 24px; padding: 0 6px;
+  background: transparent; border: 0;
+}
+.rw-app .sub-link::before, .rw-app .sub-status::before, .rw-app .brand-sub-row .channel-badge::before {
+  content: ""; position: absolute; z-index: -1;
+  /* 18px of pill centred in the 24px box - one height for all three, whose
+     contents (a 12px glyph, two type sizes) would otherwise each settle
+     somewhere different */
+  inset: 3px 0;
   background: color-mix(in oklab, currentColor 10%, transparent);
   border: 1px solid color-mix(in oklab, currentColor 45%, transparent);
   border-radius: 999px;
-}
-.rw-app .sub-link::after, .rw-app .sub-status::after, .rw-app .brand-sub-row .channel-badge::after {
-  position: absolute; inset: -5px 0; content: "";
+  transition: background .18s;
 }
 /* touch: a far more generous invisible halo on top, with no layout shift -
    there is no cursor to aim with */
 @media (pointer: coarse) {
   .rw-app .sub-link::after, .rw-app .sub-status::after,
-  .rw-app .brand-sub-row .channel-badge::after { inset: -12px -4px; }
+  .rw-app .brand-sub-row .channel-badge::after { position: absolute; inset: -10px -4px; content: ""; }
 }
 @media (hover: hover) {
-  .rw-app .sub-link:hover, .rw-app .sub-status:hover {
+  .rw-app .sub-link:hover::before, .rw-app .sub-status:hover::before,
+  .rw-app .brand-sub-row .channel-badge:hover::before {
     background: color-mix(in oklab, currentColor 18%, transparent);
   }
 }
-.rw-app .sub-link:active, .rw-app .sub-status:active {
+.rw-app .sub-link:active::before, .rw-app .sub-status:active::before,
+.rw-app .brand-sub-row .channel-badge:active::before {
   background: color-mix(in oklab, currentColor 22%, transparent);
 }
+/* the badge's own fills are for the copy in the status rows, which still paints
+   its pill on the box; on the sub-line they would put a second, box-height pill
+   behind the ::before one */
+@media (hover: hover) {
+  .rw-app .brand-sub-row .channel-badge:hover { background: transparent; }
+}
+.rw-app .brand-sub-row .channel-badge:active { background: transparent; }
 /* when a channel badge is present the status yields to glyph-only at every
    width - the badge is the rarer, louder signal, and together they cannot fit
    inside the 1220px app column in long locales */
