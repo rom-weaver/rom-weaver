@@ -127,7 +127,9 @@ Background that makes the rest make sense.
 - [Commit conventions](development/commits.md): pull request title format,
   types and scopes, breaking changes, and release footers.
 - [Continuous integration](development/ci.md): every workflow, the required
-  gate, deploy channels, caching, secrets, and reproducing CI locally.
+  gate, deploy channels, caching, and secrets.
+- [Reproduce a CI failure locally](development/reproduce-ci-locally.md): the
+  commands behind each job, and how to match one.
 - [Performance](development/performance.md): benchmark harnesses and recorded
   results against chdman, dolphin-tool, 7zz, and Info-ZIP.
 - [Browser concurrency](development/browser-concurrency.md): shared memory,
