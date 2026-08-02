@@ -213,6 +213,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.status.environment": msg({ id: "ui.status.environment", message: "Environment" }),
   "ui.status.envPwa": msg({ id: "ui.status.envPwa", message: "Installed app (PWA)" }),
   "ui.status.envWeb": msg({ id: "ui.status.envWeb", message: "Browser tab" }),
+  "ui.status.offline": msg({ id: "ui.status.offline", message: "Offline" }),
   "ui.status.pullRequest": msg({ id: "ui.status.pullRequest", message: "Pull request" }),
   "ui.status.version": msg({ id: "ui.status.version", message: "Version" }),
   "ui.theme.toLight": msg({ id: "ui.theme.toLight", message: "Switch to light theme" }),

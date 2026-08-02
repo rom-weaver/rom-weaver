@@ -420,6 +420,11 @@ msgstr "Actual"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.offline"
+msgstr "Sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.ready"
 msgstr "Lista sin conexión"
 

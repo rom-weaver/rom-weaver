@@ -14,6 +14,7 @@ import { GITHUB_URL, LICENSE_URL, NOTICE_URL, PRIVACY_URL } from "../project-lin
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
 import { prefersReducedMotion, readPwaState, resolveRuntimeState, RUNTIME_MESSAGES, RuntimeGlyph } from "./shell.tsx";
+import type { RuntimeState } from "./shell.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 
 /**
@@ -148,11 +149,23 @@ const FOCUS_HINT_MAX_FRAMES = 90;
 const GITHUB_BASE = GITHUB_URL.replace(/\/$/, "");
 const PR_NUMBER = CHANNEL_BADGE.match(/^pr-(\d+)$/i)?.[1];
 
-/** Build facts, plainly listed: what is running, from where, and in what host. */
-const StatusRows = ({ localizer }: { localizer: Localizer }) => {
+/**
+ * Build facts, plainly listed: what is running, from where, and in what host.
+ * The offline state is one of those facts, so it is the first row rather than a
+ * card above them - the badge is its value, the same way the commit hash is the
+ * commit row's.
+ */
+const StatusRows = ({ localizer, runtimeState }: { localizer: Localizer; runtimeState: RuntimeState }) => {
   const distance =
     typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
   const rows: Array<[string, React.ReactNode]> = [
+    [
+      localizer.message("ui.status.offline"),
+      <span className="sw-chip" data-sw={runtimeState} key="sw" role="status">
+        <RuntimeGlyph state={runtimeState} />
+        {localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
+      </span>,
+    ],
     [localizer.message("ui.status.version"), `v${APP_VERSION}${distance}${DIRTY_HASH ? "*" : ""}`],
     [
       localizer.message("ui.status.commit"),
@@ -524,11 +537,8 @@ const LogDialog = ({
         ) : null}
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
+            <StatusRows localizer={localizer} runtimeState={runtimeState} />
             <div className="sw-summary">
-              <span className="sw-chip" data-sw={runtimeState} role="status">
-                <RuntimeGlyph state={runtimeState} />
-                {localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
-              </span>
               <p className="panel-note">{localizer.message(RUNTIME_MESSAGES[runtimeState].description)}</p>
               {runtimeState === "update" && onReload ? (
                 <button className="btn primary" onClick={onReload} type="button">
@@ -536,7 +546,6 @@ const LogDialog = ({
                 </button>
               ) : null}
             </div>
-            <StatusRows localizer={localizer} />
             <AboutLines />
           </div>
         ) : null}

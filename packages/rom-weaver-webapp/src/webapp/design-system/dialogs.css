@@ -331,10 +331,11 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 
 /* ── status tab ── */
 .rw-app .status-panel { display: block; flex: 1 1 auto; min-height: 0; }
+/* what the offline row's badge means, in a sentence - the badge itself is the
+   first status row, so this carries only the explanation and the one action */
 .rw-app .sw-summary {
   display: flex; flex-direction: column; gap: var(--sp-s); align-items: flex-start;
-  padding: var(--sp-m); margin-block-end: var(--sp-l);
-  background: var(--well); border: 1px solid var(--seam-soft); border-radius: var(--r-m);
+  margin-block-start: var(--sp-m);
 }
 .rw-app .sw-summary .panel-note { margin: 0; font-size: .82rem; color: var(--ink-3); }
 .rw-app .sw-chip {

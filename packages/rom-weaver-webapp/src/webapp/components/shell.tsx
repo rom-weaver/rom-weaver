@@ -857,6 +857,7 @@ const WakeLockBanner = ({
   );
 };
 
+export type { RuntimeState };
 export {
   Masthead,
   prefersReducedMotion,
