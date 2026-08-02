@@ -677,7 +677,10 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
     flex: none;
     gap: 5px;
     align-items: center;
-    height: 36px;
+    /* the search beside it is a plain `.input`, which takes the shared control
+       height - a hardcoded 36px left the button a head shorter than the field
+       it shares a row with. Same token, so they track each other. */
+    height: var(--ctl);
     padding-inline: 10px;
     border: 1px solid var(--seam);
     border-radius: var(--r-s);

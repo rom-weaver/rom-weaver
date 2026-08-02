@@ -359,8 +359,16 @@ const LogDialog = ({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    else if (!open && dialog.open) dialog.close();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      // showModal() hands focus to the first tabbable descendant, which is the
+      // selected tab, and the browser paints a focus ring on it even when the
+      // dialog was opened by a tap. That read as a stray accent line beside the
+      // tab on every open. Parking focus on the dialog itself keeps it inside
+      // the modal - screen readers still announce it, Tab still walks into the
+      // rail - without lighting up a control nobody has reached yet.
+      dialog.focus({ preventScroll: true });
+    } else if (!open && dialog.open) dialog.close();
   }, [open]);
 
   const visible = useMemo(() => {
@@ -407,6 +415,9 @@ const LogDialog = ({
     <dialog
       aria-label={localizer.message("ui.log.tabStatus")}
       className="dlg log-dlg"
+      /* focusable only on purpose: the open effect parks focus here so no
+         control wears a ring before the user reaches it */
+      tabIndex={-1}
       onCancel={(event) => {
         event.preventDefault();
         onClose();

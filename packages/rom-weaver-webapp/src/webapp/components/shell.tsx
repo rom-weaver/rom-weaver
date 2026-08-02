@@ -654,9 +654,6 @@ const Masthead = ({
               ) : null}
               {threads ? (
                 <span className="sub-item">
-                  <span aria-hidden="true" className="sub-dot">
-                    ·
-                  </span>
                   <button
                     aria-haspopup="dialog"
                     aria-label={`${threads} ${threadsLabel}`}
@@ -674,9 +671,6 @@ const Masthead = ({
                 </span>
               ) : null}
               <span className="sub-item">
-                <span aria-hidden="true" className="sub-dot">
-                  ·
-                </span>
                 <button
                   aria-haspopup="dialog"
                   aria-label={runtimeLabel}
