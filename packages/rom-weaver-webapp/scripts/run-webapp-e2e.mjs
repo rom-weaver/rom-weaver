@@ -313,7 +313,30 @@ const scanLiveApp = async (page, label) => {
     return results.violations.map((violation) => ({
       help: violation.help,
       id: violation.id,
-      nodes: violation.nodes.map((node) => node.target.join(" ")),
+      nodes: violation.nodes.map((node) => {
+        const target = node.target.join(" ");
+        const element = document.querySelector(target);
+        const rect = element?.getBoundingClientRect();
+        // Geometry rules (target size, contrast) are unreadable from a selector
+        // alone: what fails is where the box ended up and what is sitting on top
+        // of it, and neither survives into the CI log otherwise.
+        const covering = rect ? document.elementFromPoint(rect.left + rect.width / 2, rect.bottom - 1) : null;
+        return {
+          covering:
+            covering && covering !== element
+              ? `${covering.tagName.toLowerCase()}${covering.className ? `.${String(covering.className).trim().split(/\s+/).join(".")}` : ""}`
+              : null,
+          rect: rect && {
+            bottom: Math.round(rect.bottom),
+            height: Math.round(rect.height),
+            top: Math.round(rect.top),
+            width: Math.round(rect.width),
+          },
+          reason: node.failureSummary,
+          target,
+          viewport: { height: window.innerHeight, width: window.innerWidth },
+        };
+      }),
     }));
   }, A11Y_TAGS);
   if (violations.length) throw new Error(`${label} accessibility violations:\n${JSON.stringify(violations, null, 2)}`);
