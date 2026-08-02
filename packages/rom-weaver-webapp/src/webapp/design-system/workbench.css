@@ -61,12 +61,21 @@
 .rw-app .step-body { padding: clamp(4px, 1vw, 6px) var(--pad) var(--step-pb); }
 
 /* Reset used to be an anonymous icon in the global toolbar; it belongs to the
-   workflow it resets, so it rides that panel's head instead. */
-/* A row of its own, aligned to the step column. Floating it over the first step
-   head at zero height put it in the same band as `0x01` without sharing that
-   row's baseline, so it read as something dropped on the panel rather than a
-   control belonging to it. */
+   workflow it resets, so it rides that panel's head instead. It reads as part of
+   the first step's heading row: right edge on the step column, centred on the
+   `0x01` line. It resets the whole panel rather than that one step, so it stays
+   a sibling of the body and is placed over the row instead of being threaded
+   through every form's first step. */
+.rw-app .panel.workflow { position: relative; }
 .rw-app .workflow-panel-head {
-  position: relative; z-index: 5; display: flex; justify-content: flex-end;
-  padding: var(--step-pt) var(--pad) 0;
+  position: absolute; z-index: 5; display: flex;
+  /* the step column runs edge to edge inside a workflow panel (webapp-modals.css
+     zeroes the head's gutter), so the button's right edge is the panel's */
+  inset-block-start: calc(var(--step-lead, 0px) + var(--tools-rail-h, 0px) + var(--step-pt));
+  inset-inline-end: 0;
 }
+/* Tools puts its command rail above the first step, so `0x01` starts one rail
+   lower. The rail is a fixed box: 34px tab + 10px padding either side + 1px seam
+   (masthead.css `.tools-subnav`); phone-dock.css restates both of these for the
+   phone rail and the margin the steps grow there. */
+.rw-app .panel.workflow:has(.tools-subnav) { --tools-rail-h: 55px; }

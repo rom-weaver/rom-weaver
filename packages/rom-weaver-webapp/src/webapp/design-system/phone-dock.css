@@ -59,6 +59,9 @@
 
   /* the tools sub-picker becomes a full-width segmented control */
   .rw-app .tools-subnav { padding: var(--sp-s) var(--sp-m); }
+  /* taller tab, tighter padding, same 1px seam - reset rides `0x01`, so it has
+     to skip the rail's phone height (workbench.css `.workflow-panel-head`) */
+  .rw-app .panel.workflow:has(.tools-subnav) { --tools-rail-h: calc(44px + 2 * var(--sp-s) + 1px); }
   .rw-app .tools-subnav-rail { width: 100%; }
   .rw-app .tools-subnav-tab {
     flex: 1 1 0;
@@ -82,6 +85,8 @@
     margin: 8px 0;
     overflow: visible;
   }
+  /* the margin above pushes `0x01` down; reset rides that row, so it follows */
+  .rw-app .panel.workflow { --step-lead: 8px; }
   /* The last stage keeps the scroll room webapp-modals.css gives it - this layer
      is later, so a blanket `padding-block-end: 0` here would erase it. */
   .rw-app .panel.workflow .step:not(:last-child) { padding-block-end: 0; }
