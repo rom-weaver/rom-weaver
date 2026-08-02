@@ -226,13 +226,11 @@ mise run deny-advisories  # advisories only
 mise run machete          # unused Rust dependencies
 ```
 
-The two halves are split because CI treats them differently. Licenses and
-sources gate the build - they change only when we add a dependency, so a
-violation is fixable in the same commit. Advisories run in the separate,
-non-gating `security` job alongside `npm audit`: a CVE is published against a
-transitive dependency with no commit of ours, and a red check on every open
-pull request would block unrelated work. Findings show up as job annotations
-and a run summary, and are still expected to get fixed.
+The two halves are split because CI treats them differently: licenses and
+sources gate the build, while advisories run in the deliberately non-gating
+[`security` job](ci.md#jobs) alongside `npm audit`. Findings
+show up as job annotations and a run summary, and are still expected to get
+fixed.
 
 New crates must resolve to an already-allowed license. When one does not,
 prefer a per-crate entry in `exceptions` over widening the global `allow`

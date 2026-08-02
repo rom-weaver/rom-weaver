@@ -50,8 +50,8 @@ Never publish an untested patch. Apply it back onto a clean copy of the
 original and checksum the result, as the
 [practice walkthrough](../tutorials/cli-first-weave.md#practice-patch-creation-and-bundles)
 shows end to end, or run `patch validate` for a check that writes nothing;
-its flags are covered in
-[Apply patches from the CLI](cli-apply.md#patch-validation).
+its flags are covered in the
+[CLI reference](../reference/cli.md#validation).
 
 ## Where next
 

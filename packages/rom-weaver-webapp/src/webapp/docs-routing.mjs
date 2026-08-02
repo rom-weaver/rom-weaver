@@ -37,11 +37,21 @@ const DOC_SOURCES = Object.freeze([
     label: "Fix checksum errors",
     slug: "docs/fix-checksum-errors",
   }),
-  Object.freeze({ file: "how-to/work-with-archives.md", label: "Work with archives", slug: "docs/formats" }),
   Object.freeze({ file: "how-to/install-cli.md", label: "Install the CLI", slug: "docs/install" }),
+  Object.freeze({
+    file: "how-to/verify-downloads.md",
+    label: "Verify a download",
+    slug: "docs/verify-downloads",
+  }),
   Object.freeze({ file: "how-to/cli-apply.md", label: "Apply patches (CLI)", slug: "docs/cli-apply" }),
   Object.freeze({ file: "how-to/cli-create.md", label: "Create patches (CLI)", slug: "docs/cli-create" }),
   Object.freeze({ file: "how-to/cli-bundles.md", label: "Bundles (CLI)", slug: "docs/cli-bundles" }),
+  Object.freeze({ file: "how-to/work-with-archives.md", label: "Work with archives", slug: "docs/formats" }),
+  Object.freeze({
+    file: "how-to/fix-permission-errors.md",
+    label: "Fix permission errors",
+    slug: "docs/fix-permission-errors",
+  }),
   Object.freeze({ file: "reference/cli.md", label: "CLI reference", slug: "docs/cli" }),
   Object.freeze({
     file: "reference/formats.md",
@@ -62,6 +72,11 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({ file: "explanation/bundles.md", label: "What a bundle is", slug: "docs/bundles" }),
   Object.freeze({ file: "explanation/browser-and-cli.md", label: "Browser and CLI", slug: "docs/browser-and-cli" }),
+  Object.freeze({
+    file: "explanation/release-provenance.md",
+    label: "Release provenance",
+    slug: "docs/release-provenance",
+  }),
   Object.freeze({ file: "hosting/self-hosting.md", label: "Self-hosting", slug: "docs/self-hosting" }),
   Object.freeze({
     file: "hosting/webapp-integration.md",

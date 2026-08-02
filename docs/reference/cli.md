@@ -1,64 +1,30 @@
 # CLI reference
 
-Every rom-weaver command and global flag, the archive-selection options, JSON
-output, exit codes, file permissions, shell completions, and man pages.
+Every rom-weaver command and global flag, the archive-selection options, the
+patching flags, JSON output, exit codes, file permissions, and man pages.
 Installation is covered in [Install the CLI](../how-to/install-cli.md), and the
 tutorial is [Your first weave in the terminal](../tutorials/cli-first-weave.md).
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Everyday commands](#everyday-commands)
 - [Commands](#commands)
   - [Alternate names](#alternate-names)
 - [Reaching inside archives](#reaching-inside-archives)
+- [Patching](#patching)
+  - [Inputs](#inputs)
+  - [Bundle detection](#bundle-detection)
+  - [Checksum flags](#checksum-flags)
+  - [Header and byte-order flags](#header-and-byte-order-flags)
+  - [Extras](#extras)
+  - [Validation](#validation)
 - [Supported formats](#supported-formats)
 - [JSON output](#json-output)
   - [Exit codes](#exit-codes)
 - [File permissions](#file-permissions)
-- [Shell completions](#shell-completions)
 - [Man pages](#man-pages)
 
 <!-- END doctoc -->
-
-## Everyday commands
-
-Find out what a file is. Archives are opened for you unless you pass
-`--no-extract`:
-
-```bash
-rom-weaver probe --input unknown-file.bin
-rom-weaver probe --input archive.zip --select '*.sfc'
-```
-
-Unpack an archive, and hash a ROM:
-
-```bash
-rom-weaver extract --input collection.7z --output extracted
-rom-weaver checksum --input game.gba --algo sha256
-```
-
-Shrink a disc image, or trim a ROM in place and put it back later:
-
-```bash
-rom-weaver compress --input disc.cue --output disc.chd
-rom-weaver trim --input game.nds --in-place --revert-marker
-rom-weaver trim --input game.nds --in-place --revert
-```
-
-Nearly every command takes `-i`/`--input` and `-o`/`--output`; `patch create`
-is the exception, taking `--original` and `--modified` instead. The other short
-flags are `-j` threads, `-f` format, `-s` select, `-a` algorithm, `-e`
-extension, `-n` dry run, `-v` verbose, and `-q` quiet. Run
-`rom-weaver <command> --help` for the full list.
-
-`probe` and `checksum` accept `-` as the `--input` value to read from stdin, so
-they fit into a pipeline:
-
-```bash
-curl -sL https://example.com/game.gba | rom-weaver checksum --input - --algo sha256
-xz -dc game.iso.xz | rom-weaver probe --input - --json
-```
 
 ## Commands
 
@@ -83,6 +49,20 @@ xz -dc game.iso.xz | rom-weaver probe --input - --json
 `-h` prints a one-line summary of each option; `--help` prints the full
 explanation, including the extra detail on flags like `--patch-header`.
 
+Nearly every command takes `-i`/`--input` and `-o`/`--output`; `patch create`
+is the exception, taking `--original` and `--modified` instead. The other short
+flags are `-j` threads, `-f` format, `-s` select, `-a` algorithm, `-e`
+extension, `-n` dry run, `-v` verbose, and `-q` quiet. Run
+`rom-weaver <command> --help` for the full list.
+
+`probe` and `checksum` accept `-` as the `--input` value to read from stdin, so
+they fit into a pipeline:
+
+```bash
+curl -sL https://example.com/game.gba | rom-weaver checksum --input - --algo sha256
+xz -dc game.iso.xz | rom-weaver probe --input - --json
+```
+
 ### Alternate names
 
 Some commands and flags answer to more than one name. They are the same code
@@ -94,9 +74,6 @@ either way, so pick whichever reads better:
 | `rom-weaver patch apply` | `rom-weaver weave`, `rom-weaver patch weave` |
 | `trim --revert` | `trim --untrim`, `trim --restore` |
 | `trim --revert-marker` | `trim --reversible` |
-
-This guide uses `weave` for patching, since it is the shortest way to spell the
-command people reach for most.
 
 Format names have alternates too, accepted anywhere `--format` is: `7zip` for
 `7z`, `3ds` for `z3ds`, `xdelta3` for `xdelta`, `bsdiff` for `bdf`, and more.
@@ -169,6 +146,84 @@ given. While extracting it can hash what it writes (`--checksum ALGO`, or
 `--checksum-rom ALGO` for the ROMs only) and report each file's format and
 platform (`--probe`).
 
+## Patching
+
+The flags shared by `patch apply` (also spelled `weave`) and `patch validate`.
+The task-shaped recipes live in [Apply patches from the CLI](../how-to/cli-apply.md).
+
+### Inputs
+
+Repeat `--patch` to run several patches in order, each on the result of the
+last. Leave `--patch` out entirely and rom-weaver looks for RetroArch-style
+patches sitting next to the ROM inside the input archive. A
+`rom-weaver-bundle.json` can supply the ROM, the patch order, the checks, and
+the output name instead.
+
+DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM
+data track and reassemble the whole disc, so they cannot be chained with
+another patch or combined with the header and checksum options.
+
+### Bundle detection
+
+When `patch apply` detects a bundle from its positional input, the canonical
+`rom-weaver-bundle.json` name is the fast path. It also content-probes valid
+plain `.json` files and root-level `.json` members inside archives. A
+stream-compressed positional bundle needs a canonical name such as
+`rom-weaver-bundle.json.gz`; pass a differently named one explicitly with
+`--bundle`.
+
+### Checksum flags
+
+- Formats that carry their own checksums are verified strictly.
+  `--ignore-checksum-validation` applies the patch anyway, which can produce a
+  broken ROM.
+- `--expect-in ALGO=HEX` stops unless the ROM about to be patched matches.
+- `--expect-out ALGO=HEX` fails unless the finished ROM matches.
+- `--assume-in ALGO=HEX` takes a checksum on trust rather than reading the ROM
+  to compute it. It is a speed option for scripts and verifies nothing.
+
+### Header and byte-order flags
+
+- `--patch-header auto|keep|strip` decides whether each patch applies to the
+  ROM with or without its copier header. Auto works it out per patch from the
+  patch's own source checksum.
+- `--output-header auto|keep|strip` decides whether the finished ROM keeps its
+  header. Auto keeps the ones emulators need and drops the ones they do not.
+- `--repair-checksum` repairs supported internal checksums and compatibility
+  header fields after patching.
+- `--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped` puts an
+  N64 ROM in the interleaving a patch expects. Auto matches the patch's source
+  CRC32, and the output is written back in the order the input arrived in.
+
+### Extras
+
+- `--code` bakes Game Genie or GameShark/Pro Action Replay codes into the ROM,
+  as if they were a patch.
+- `--emit-bundle PATH` also writes a `rom-weaver-bundle.json` recording the run:
+  the ROM's checksums, the patches in order, and the result. It runs the same
+  code as `bundle create`, so the file is byte-identical to the equivalent
+  `bundle create` call. It carries no per-patch names or authors; for those use
+  `bundle create`, `bundle create --from`, or `--tui`.
+- `--tui` asks for each patch's name, version, author, and optional state plus
+  an output name, then applies and writes the bundle. It needs a terminal, and
+  for now it needs explicit `--patch` files; re-opening a bundle is not
+  supported yet.
+
+### Validation
+
+`patch validate` runs the same checks as `patch apply` but writes nothing: it
+parses each patch and verifies every checksum the format carries.
+
+- `--expect-in` adds a check on the ROM itself, and accepts a checksum
+  (`ALGO=HEX`), an exact size (`size=N`), or a minimum size (`min-size=N`).
+- `--strip-header` and `--n64-byte-order` put the ROM in the form the patches
+  expect before checking; N64 byte order defaults to matching the patch's
+  source CRC32.
+- Patches are checked as a chain by default, each against the output of the
+  one before it. `--independent` checks each one against the original ROM
+  instead and reports a verdict per patch, rather than stopping at the first
+  failure.
+
 ## Supported formats
 
 
@@ -219,43 +274,13 @@ error: i/o error: cannot open `/roms/game.iso`: Permission denied (os error 13)
 Read that as three facts: what was refused, who owns it, and who asked. Only a
 genuinely missing path is reported as `input path does not exist`. A file that
 exists but cannot be reached, including one behind a directory you cannot
-traverse, is always reported as a denial rather than as a typo.
-
-Common fixes:
-
-- **Reading someone else's files.** `sudo chown` them, add yourself to the
-  owning group, or copy them somewhere you own.
-- **Writing to a read-only location.** Point `--output` at a directory you own.
-  rom-weaver creates missing output directories but never changes permissions
-  on an existing one.
-- **Output files owned by the wrong user.** New files inherit your identity and
-  umask; rom-weaver does not copy the source file's mode.
-- **Inside a container.** The message adds a container hint, because the usual
-  cause is a uid mismatch against a bind mount. Re-run with
-  `--user "$(id -u):$(id -g)"` as shown in
-  [Run in Docker](../how-to/install-cli.md#run-in-docker).
+traverse, is always reported as a denial rather than as a typo. The fixes for
+each case are in
+[Fix a permission error](../how-to/fix-permission-errors.md).
 
 Permission failures exit `1`. Under `--json` they arrive as a terminal event
 with `"status": "failed"`, carrying `"stage": "validate"` when the preflight
 caught them.
-
-## Shell completions
-
-
-Print a completion script and save it where your shell looks for one, then
-start a new shell:
-
-```bash
-rom-weaver completions bash > /etc/bash_completion.d/rom-weaver
-rom-weaver completions zsh  > ~/.zfunc/_rom-weaver
-rom-weaver completions fish > ~/.config/fish/completions/rom-weaver.fish
-```
-
-`bash`, `zsh`, `fish`, `powershell`, and `elvish` are supported.
-
-The Homebrew and script installers already place these files. npm packages
-ship them under `docs/completions`; for the other install methods, redirect the
-command to the path your shell uses.
 
 ## Man pages
 

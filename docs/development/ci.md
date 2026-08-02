@@ -38,7 +38,6 @@ what it caches. To run these checks yourself, see
 - [Actions cache budget](#actions-cache-budget)
   - [Why the Docker build cache is not in this budget](#why-the-docker-build-cache-is-not-in-this-budget)
 - [Secrets](#secrets)
-- [Reproducing CI locally](#reproducing-ci-locally)
 - [Gotchas](#gotchas)
 
 <!-- END doctoc -->
@@ -543,11 +542,8 @@ of those runs, published to the `lighthouse-pr-<number>` branch of the
 the same terms as the preview itself. Fork pull requests stop at the artifact
 link, because their read-only token can neither deploy nor publish a status.
 
-Reproduce a CI run with a production WASM artifact, a rebuild, then the gates:
-`mise run build-wasm-prod`,
-`npm --prefix packages/rom-weaver-webapp run build`, and
-`npm --prefix packages/rom-weaver-webapp run test:performance`. The audit picks
-a free port unless `PORT` is set.
+To reproduce a run, see
+[Reproduce a CI failure locally](reproduce-ci-locally.md#match-a-specific-job).
 
 ### Tag runs
 
@@ -1265,7 +1261,7 @@ asset list. That is why adding them does not interact with
 and the step is safe on a rerun and after the release is published.
 
 The consumer side is a single query against the digest - see
-[Verifying a download](../how-to/install-cli.md#verifying-a-download), where both install scripts'
+[Verify a download](../how-to/verify-downloads.md), where both install scripts'
 check and the `gh attestation verify` route for a file downloaded by hand are
 written out.
 
@@ -1354,11 +1350,6 @@ stored npm secret.
 Permissions are declared per workflow and widened per job rather than granted
 workflow-wide; `cache-cleanup.yml` starts from `permissions: {}` and takes only
 `actions: write` and `pull-requests: read`.
-
-## Reproducing CI locally
-
-Moved to [Reproduce a CI failure locally](reproduce-ci-locally.md), which is
-a procedure rather than a description of the pipeline.
 
 ## Gotchas
 

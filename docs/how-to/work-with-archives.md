@@ -1,14 +1,16 @@
 # Extract, convert, and compress archives
 
-Open a ZIP, 7z, RAR, tar, or single compressed file, get what you need out of
-it, and repackage it as ZIP or 7z. Everything runs locally in the browser or
-through the CLI; files are not uploaded.
+Open a ZIP, 7z, RAR, tar, or single compressed file from the terminal, get
+what you need out of it, and repackage it as ZIP or 7z. To patch a ROM that is
+inside an archive, no extraction is needed in either front end: add the
+archive as the input and rom-weaver looks inside, as covered in
+[Apply a ROM patch](apply-rom-patches.md) and
+[Apply patches from the CLI](cli-apply.md).
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Patch a file that is inside an archive](#patch-a-file-that-is-inside-an-archive)
-- [Extract an archive from the CLI](#extract-an-archive-from-the-cli)
+- [Extract an archive](#extract-an-archive)
 - [Convert one archive format to another](#convert-one-archive-format-to-another)
 - [Create a ZIP or 7z](#create-a-zip-or-7z)
 - [Compress a ROM or disc image instead](#compress-a-rom-or-disc-image-instead)
@@ -16,19 +18,7 @@ through the CLI; files are not uploaded.
 
 <!-- END doctoc -->
 
-## Patch a file that is inside an archive
-
-You do not have to extract it first.
-
-1. Open [Apply](https://rom-weaver.com/apply).
-2. Add the archive alongside your patch.
-3. When rom-weaver asks, choose the entry the patch author named.
-
-rom-weaver looks inside nested archives too, and unpacks disc containers such
-as CHD and RVZ to the form the patch expects. The rest of the run is the normal
-[Apply a ROM patch](apply-rom-patches.md) workflow.
-
-## Extract an archive from the CLI
+## Extract an archive
 
 ```sh
 rom-weaver extract --input patches.7z --output extracted-patches
@@ -70,8 +60,14 @@ use a different container.
 
 An archive is not the same thing as a compressed disc image. If your goal is a
 smaller file your emulator still boots directly, you probably want CHD, RVZ,
-Z3DS, or a trim rather than a ZIP. See
-[Choosing a compression format](../explanation/compression-formats.md).
+Z3DS, or a trim rather than a ZIP:
+
+```sh
+rom-weaver compress --input disc.cue --output disc.chd
+```
+
+See [Choosing a compression format](../explanation/compression-formats.md) for
+which container fits which platform and when trimming beats compressing.
 
 ## Look up what is supported
 

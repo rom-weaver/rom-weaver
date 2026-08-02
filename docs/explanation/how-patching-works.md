@@ -10,10 +10,10 @@ procedure - it is the background that makes the procedures make sense.
 - [A patch is not a game](#a-patch-is-not-a-game)
 - [Why the exact starting file matters](#why-the-exact-starting-file-matters)
 - [What a checksum proves, and what a filename does not](#what-a-checksum-proves-and-what-a-filename-does-not)
+- [Why forcing past a mismatch is risky](#why-forcing-past-a-mismatch-is-risky)
 - [Why patch order matters](#why-patch-order-matters)
 - [Compression changes the bytes](#compression-changes-the-bytes)
 - [Words used in the interface](#words-used-in-the-interface)
-- [Working with a real game](#working-with-a-real-game)
 - [Related](#related)
 
 <!-- END doctoc -->
@@ -65,6 +65,17 @@ switch patch formats and not to enable an override.
 [Fix a checksum error](../how-to/fix-checksum-errors.md) works through the
 usual causes.
 
+## Why forcing past a mismatch is risky
+
+A checksum override skips the safety check. It does not repair the file.
+
+The patch may still create a result that boots and fails much later. Code can
+jump to the wrong data, text can overwrite another table, or a save can become
+corrupt hours into play. A successful output is not proof of a correct result.
+
+Overrides exist for authors doing controlled research and recovery. For normal
+use, the matching original is the fix.
+
 ## Why patch order matters
 
 When several patches build on one another, patch 2 does not read your original
@@ -103,17 +114,6 @@ container is for.
 
 You do not need to memorize this. The cards in the webapp surface each of these
 where it matters.
-
-## Working with a real game
-
-Read the author's notes before you start. Find the expected region, revision,
-header state, patch order, and checksum, and keep the notes open while you
-work.
-
-Keep a clean original somewhere safe: an update or a different patch will want
-it again. Save patched results under new names. Only use and share files you
-are allowed to have - a public patch release normally contains a patch or a
-patch-only bundle, never the copyrighted ROM.
 
 ## Related
 

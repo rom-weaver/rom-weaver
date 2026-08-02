@@ -54,14 +54,16 @@ Recipes for a real job you already have in front of you.
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch bundle](how-to/create-bundles.md)
 - [Fix a checksum error](how-to/fix-checksum-errors.md)
-- [Extract, convert, and compress archives](how-to/work-with-archives.md)
 
 ### From the terminal
 
 - [Install the CLI](how-to/install-cli.md)
+- [Verify a download](how-to/verify-downloads.md)
 - [Apply patches from the CLI](how-to/cli-apply.md)
 - [Create patches from the CLI](how-to/cli-create.md)
 - [Bundles from the CLI](how-to/cli-bundles.md)
+- [Extract, convert, and compress archives](how-to/work-with-archives.md)
+- [Fix a permission error](how-to/fix-permission-errors.md)
 
 ### Deploying and integrating
 
@@ -81,8 +83,8 @@ Facts to look up. No advice, no steps.
 
 - [Supported formats](reference/formats.md): the full patch, container, codec,
   checksum, trim, and header support tables.
-- [CLI reference](reference/cli.md): every command, global flag, JSON output,
-  exit code, permission, and completion.
+- [CLI reference](reference/cli.md): every command, global flag, patching
+  flag, JSON output, exit code, and permission check.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one
   page per visible command from Clap.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v1.schema.json): the
@@ -106,6 +108,8 @@ Background that makes the rest make sense.
 - [What a bundle is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front
   ends, and how to pick.
+- [Release provenance](explanation/release-provenance.md): what download
+  verification proves and why the checks are shaped the way they are.
 
 ## Quick answers
 

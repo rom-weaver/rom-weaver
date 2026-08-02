@@ -15,19 +15,15 @@ there and find the difference before creating an output.
 - [Nintendo 64 byte order](#nintendo-64-byte-order)
 - [Wrong patch order](#wrong-patch-order)
 - [Already modified files](#already-modified-files)
-- [Why is forcing risky?](#why-is-forcing-risky)
 
 <!-- END doctoc -->
 
 ## What does the warning mean?
 
-A checksum is a fingerprint calculated from every byte in a file. Change one
-byte and the fingerprint changes. Rename the file and the checksum stays the
-same because the filename is not part of its contents.
-
-When a checksum does not match, your file differs from the expected file by at
-least one byte. The message does not tell you why. It tells you that continuing
+Your file differs from the expected file by at least one byte, so continuing
 would use a different starting point from the one the patch author tested.
+[What a checksum proves](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not)
+covers why the fingerprint, not the filename, is the verdict.
 
 BPS and UPS can carry expected checksums inside the patch. Other formats, such
 as IPS, may not know what Original they need. In those cases, compare the
@@ -155,20 +151,13 @@ check its fingerprint.
 Do not use the output from an older release unless the new patch explicitly
 says it is incremental.
 
-## Why is forcing risky?
-
-A checksum override skips the safety check. It does not repair the file.
-
-The patch may still create a download that boots and fails much later. Code can
-jump to the wrong data, text can overwrite another table, or a save can become
-corrupt hours into play. A successful download is not proof of a correct
-result.
-
-Overrides exist for authors doing controlled research and recovery. For normal
-use, find the matching Original instead.
+Do not reach for the checksum override to get past a mismatch - it skips the
+check without repairing the file, and the result can fail hours into play.
+[Why forcing past a mismatch is risky](../explanation/how-patching-works.md#why-forcing-past-a-mismatch-is-risky)
+explains what an override is actually for.
 
 Once the checks match, return to
 [Apply a ROM patch](apply-rom-patches.md). If you need terminal diagnostics,
-the [CLI patch validation reference](cli-apply.md#patch-validation) keeps
-those commands in one place. The [FAQ](../faq.md) covers related filename,
-privacy, and format questions.
+see
+[Check patches without writing anything](cli-apply.md#check-patches-without-writing-anything).
+The [FAQ](../faq.md) covers related filename, privacy, and format questions.

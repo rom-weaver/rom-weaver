@@ -39,7 +39,9 @@ trying to find out.
   given. When publishing, see
   [Choosing a patch format](explanation/patch-formats.md).
 - **Can I drop a ZIP or 7z without extracting it?** Yes, including nested
-  archives - [Work with archives](how-to/work-with-archives.md).
+  archives - [Apply a ROM patch](how-to/apply-rom-patches.md) covers it in the
+  browser, and [Work with archives](how-to/work-with-archives.md) has the
+  terminal recipes.
 - **Why does the expected filename not match?** A name is advisory; bytes are
   not. See
   [what a checksum proves](explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not).
