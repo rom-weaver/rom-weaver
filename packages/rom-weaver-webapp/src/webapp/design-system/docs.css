@@ -628,9 +628,36 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 }
 
 /* --- the end of the guide ---
-   Phone-only: the desktop sidebar is sticky, so the top of the document is never
-   more than a glance away there. */
-.rw-app .docs-onward { display: none; }
+   The pair of steps runs at every width; the way back up is phone-only, because
+   the desktop sidebar is sticky and the top of the document is never more than a
+   glance away there. The empty gap holds the far step's place on the first and
+   last page, so a lone Next never slides over to where Previous belongs. */
+.rw-app .docs-onward {
+  display: flex; gap: var(--sp-m); align-items: stretch; justify-content: space-between;
+  max-width: var(--measure); margin-block-start: var(--sp-xl);
+  padding-block-start: var(--sp-l); border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .docs-step-gap { flex: 1 1 0; }
+.rw-app .docs-to-top { display: none; }
+.rw-app .docs-step {
+  flex: 1 1 0; display: inline-flex; gap: var(--sp-s); align-items: center; min-width: 0; min-height: 44px;
+  padding: var(--sp-s) var(--sp-m); border: 1px solid var(--seam); border-radius: var(--r-m);
+  background: var(--well); color: var(--ink-2); text-decoration: none;
+  transition: border-color .18s, background .18s, color .18s;
+}
+.rw-app .docs-step:last-child { justify-content: flex-end; text-align: end; }
+.rw-app .docs-step svg { flex: none; width: 16px; height: 16px; color: var(--weft); }
+.rw-app .docs-step-copy { display: grid; min-width: 0; gap: 1px; }
+.rw-app .docs-step-copy small {
+  font-size: .62rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-4);
+}
+.rw-app .docs-step-copy b {
+  font-size: .84rem; font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (hover: hover) {
+  .rw-app .docs-step:hover { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
+}
+.rw-app .docs-step:active { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
 
 /* --- the trail ---
    Desktop keeps the sidebar and never shows this. */
@@ -740,14 +767,13 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   }
 
   /* --- the way back up ---
-     Just this. Onward links are the last paragraph of every guide already, written
-     by hand and pointing at whatever follows from what you just read. */
-  .rw-app .docs-onward {
-    display: flex;
-    justify-content: center;
-    margin-block-start: var(--sp-l);
-  }
+     Phone-only, and on its own row under the two steps: three controls abreast
+     leaves each step too narrow to read the page it names. */
+  .rw-app .docs-onward { flex-wrap: wrap; }
   .rw-app .docs-to-top {
+    order: 1;
+    flex: 1 0 100%;
+    justify-content: center;
     display: inline-flex;
     align-items: center;
     gap: var(--sp-s);

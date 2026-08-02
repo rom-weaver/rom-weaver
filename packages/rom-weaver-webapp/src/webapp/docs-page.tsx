@@ -1,5 +1,5 @@
 import "./design-system/docs-route.css";
-import { ArrowUpToLine, ListTree } from "lucide-react";
+import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
@@ -456,27 +456,53 @@ const TrailHead = ({
   );
 };
 
-/**
- * The way back up, at the end of the guide.
- *
- * Deliberately the only thing here. Onward links are already the last paragraph
- * of every guide, hand-written and pointing at whatever actually follows from
- * what you just read - "Ready to make your own? See Create a patch." An
- * auto-generated previous/next pair sat one screen under that saying the same
- * thing worse: shelf-adjacent is not the same as logically next, and on the
- * first guide it duplicated a link the prose had just made.
- */
-const ArticleEnd = () => (
-  <div className="docs-onward">
-    {/* A button, not an `#top` anchor: the guide routes are paths, and a hash here
-        would leave a destination in the address bar that is not one. `scrollTo`
-        still picks up the page's own `scroll-behavior`. */}
-    <button className="docs-to-top" onClick={() => window.scrollTo({ top: 0 })} type="button">
-      <ArrowUpToLine aria-hidden="true" />
-      Back to top
-    </button>
-  </div>
+/** Reading order is route order, which is the order the shelves themselves list. */
+const docsNeighbour = (slug: string, step: -1 | 1) => {
+  const index = DOC_ROUTES.findIndex((entry) => entry.slug === slug);
+  return index < 0 ? undefined : DOC_ROUTES[index + step];
+};
+
+/** One end-of-guide step: the direction it goes, and the page it lands on. */
+const OnwardLink = ({ direction, route }: { direction: "next" | "previous"; route: DocRoute }) => (
+  <a
+    aria-label={`${direction === "next" ? "Next" : "Previous"}: ${route.title}`}
+    className="docs-step"
+    href={`/${route.slug}`}
+  >
+    {direction === "previous" ? <ChevronLeft aria-hidden="true" /> : null}
+    <span className="docs-step-copy">
+      <small>{direction === "next" ? "Next" : "Previous"}</small>
+      <b>{route.label}</b>
+    </span>
+    {direction === "next" ? <ChevronRight aria-hidden="true" /> : null}
+  </a>
 );
+
+/**
+ * The end of the guide: the way on, the way back, and (on phones, where the
+ * sidebar is not there to glance at) the way back up.
+ *
+ * Reading order is route order, so the pair is the shelf's own sequence. A guide
+ * that closes on a hand-written onward link still keeps it - that link says why
+ * to go somewhere, and these two say where you are in the sequence.
+ */
+const ArticleEnd = ({ slug }: { slug: string }) => {
+  const previous = docsNeighbour(slug, -1);
+  const next = docsNeighbour(slug, 1);
+  return (
+    <nav aria-label="Guide pages" className="docs-onward">
+      {previous ? <OnwardLink direction="previous" route={previous} /> : <span className="docs-step-gap" />}
+      {/* A button, not an `#top` anchor: the guide routes are paths, and a hash here
+          would leave a destination in the address bar that is not one. `scrollTo`
+          still picks up the page's own `scroll-behavior`. */}
+      <button className="docs-to-top" onClick={() => window.scrollTo({ top: 0 })} type="button">
+        <ArrowUpToLine aria-hidden="true" />
+        Back to top
+      </button>
+      {next ? <OnwardLink direction="next" route={next} /> : <span className="docs-step-gap" />}
+    </nav>
+  );
+};
 
 const isPlainLeftClick = (event: MouseEvent<HTMLAnchorElement>) =>
   event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
@@ -706,9 +732,9 @@ const DocsPage = ({
           ) : null}
           {hub ? <DocsFaqPreview /> : null}
           {hub ? <DocsIndex currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} /> : null}
+          <ArticleEnd slug={route.slug} />
         </section>
       </div>
-      <ArticleEnd />
     </div>
   );
 };
