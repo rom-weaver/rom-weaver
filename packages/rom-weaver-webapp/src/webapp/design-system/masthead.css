@@ -63,9 +63,10 @@
 /* The row is as tall as its ink, not as tall as its targets: the chips keep the
    24px box the target-size floor needs (see the chip block below) and overflow
    this row symmetrically, so a preview build wearing three badges is no taller
-   in the masthead than a production build wearing none. */
+   in the masthead than a production build wearing none. The height matches the
+   pill the chips paint, so nothing visible ever leaves the row. */
 .rw-app .brand-sub-row {
-  display: flex; column-gap: var(--sp-xs); align-items: center; block-size: 13px;
+  display: flex; column-gap: var(--sp-xs); align-items: center; block-size: 16px;
   font-size: clamp(.64rem, .58rem + .25vw, .76rem); font-variant-numeric: tabular-nums; line-height: 1.2;
   color: var(--ink-4); white-space: nowrap;
 }
@@ -113,7 +114,8 @@
   appearance: none; cursor: pointer;
 }
 .rw-app .sub-status svg { flex: none; width: 12px; height: 12px; }
-.rw-app .sub-status[data-sw="ready"] { color: var(--verified); }
+.rw-app .sub-status[data-sw="active"] { color: var(--verified); }
+.rw-app .sub-status[data-sw="ready"] { color: color-mix(in oklab, var(--verified) 72%, var(--ink-3)); }
 .rw-app .sub-status[data-sw="update"] { color: var(--care); }
 .rw-app .sub-status[data-sw="installing"] { color: var(--ink-3); }
 .rw-app .sub-status[data-sw="installing"] svg { animation: sw-spin 1.1s linear infinite; }
@@ -140,10 +142,12 @@
 }
 .rw-app .sub-chip::before {
   content: ""; position: absolute; z-index: -1;
-  /* 18px of pill centred in the 24px box - one height for all three, whose
-     contents (a 12px glyph, two type sizes) would otherwise each settle
-     somewhere different */
-  inset: 3px 0;
+  /* One pill height for all three, whose contents (a 12px glyph, two type sizes)
+     would otherwise each settle somewhere different - and exactly the height of
+     the row it sits in, so the only part of the chip that overflows the row is
+     the part with nothing painted on it. A taller pill hung below the masthead's
+     bottom edge and came back sliced. */
+  inset: 4px 0;
   background: color-mix(in oklab, currentColor 10%, transparent);
   border: 1px solid color-mix(in oklab, currentColor 45%, transparent);
   border-radius: 999px;
@@ -174,7 +178,9 @@
 }
 @media (max-width: 719px) {
   .rw-app .build-tag .tag-extra { display: none; }
-  .rw-app .sub-status svg { width: 16px; height: 16px; }
+  /* the glyph is the whole control here, so it takes what the pill's interior
+     has to give and no more */
+  .rw-app .sub-status svg { width: 13px; height: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .rw-app .sub-status svg { animation: none; }
