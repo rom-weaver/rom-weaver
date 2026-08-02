@@ -590,6 +590,61 @@ const LogDialog = ({
         {tab === "logs" || tab === "storage" ? (
           <>
             <div className="log-filter-bar">
+              {/* The controls take the row; the filter gets the next one to
+                  itself. Sharing one row meant the filter and the view toggle
+                  fought for the same width, and on a phone both lost - the
+                  toggle ellipsed its labels while the filter shrank to a slot
+                  too narrow to read what you had typed. */}
+              <div className="log-controls">
+                {tab === "logs" && hasPrevious ? (
+                  <fieldset className="logview">
+                    <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
+                    <button
+                      aria-pressed={view === "current"}
+                      className="seg-btn"
+                      onClick={() => setView("current")}
+                      type="button"
+                    >
+                      {localizer.message("ui.log.viewCurrent")}
+                    </button>
+                    <button
+                      aria-pressed={showingPrevious}
+                      className="seg-btn"
+                      onClick={() => setView("previous")}
+                      type="button"
+                    >
+                      {localizer.message("ui.log.viewPrevious")}
+                    </button>
+                  </fieldset>
+                ) : null}
+                {showingOpfs ? (
+                  <button
+                    aria-label="Refresh OPFS"
+                    className="btn slim ghost log-refresh"
+                    disabled={opfsLoading}
+                    onClick={() => void refreshOpfs()}
+                    title="Refresh OPFS"
+                    type="button"
+                  >
+                    <RefreshCw aria-hidden="true" className={opfsLoading ? "spin" : undefined} />
+                  </button>
+                ) : (
+                  <label className="loglevel">
+                    <span className="sr-only">{localizer.message("settings.logLevel")}</span>
+                    <select
+                      className="select mono"
+                      onChange={(event) => onLevelChange(event.currentTarget.value)}
+                      value={currentLevel}
+                    >
+                      {LOG_LEVELS.map((value) => (
+                        <option key={value} value={value}>
+                          {`level: ${value}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
               <input
                 aria-label={localizer.message("ui.log.filterLabel")}
                 className="input mono log-filter"
@@ -602,54 +657,6 @@ const LogDialog = ({
                 type="search"
                 value={filter}
               />
-              {tab === "logs" && hasPrevious ? (
-                <fieldset className="logview">
-                  <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
-                  <button
-                    aria-pressed={view === "current"}
-                    className="seg-btn"
-                    onClick={() => setView("current")}
-                    type="button"
-                  >
-                    {localizer.message("ui.log.viewCurrent")}
-                  </button>
-                  <button
-                    aria-pressed={showingPrevious}
-                    className="seg-btn"
-                    onClick={() => setView("previous")}
-                    type="button"
-                  >
-                    {localizer.message("ui.log.viewPrevious")}
-                  </button>
-                </fieldset>
-              ) : null}
-              {showingOpfs ? (
-                <button
-                  aria-label="Refresh OPFS"
-                  className="btn slim ghost log-refresh"
-                  disabled={opfsLoading}
-                  onClick={() => void refreshOpfs()}
-                  title="Refresh OPFS"
-                  type="button"
-                >
-                  <RefreshCw aria-hidden="true" className={opfsLoading ? "spin" : undefined} />
-                </button>
-              ) : (
-                <label className="loglevel">
-                  <span className="sr-only">{localizer.message("settings.logLevel")}</span>
-                  <select
-                    className="select mono"
-                    onChange={(event) => onLevelChange(event.currentTarget.value)}
-                    value={currentLevel}
-                  >
-                    {LOG_LEVELS.map((value) => (
-                      <option key={value} value={value}>
-                        {`level: ${value}`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
             </div>
             <div
               aria-labelledby={showingOpfs ? "logtab-storage" : "logtab-logs"}

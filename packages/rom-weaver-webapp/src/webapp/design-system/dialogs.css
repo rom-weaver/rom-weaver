@@ -82,11 +82,21 @@
   .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
 }
 .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:active { color: var(--thread-ink); }
+/* Two rows: the controls own the first, the filter owns the second. On one row
+   the filter and the view toggle competed for the same width and a phone left
+   both unusable - ellipsed toggle labels above a filter too narrow to read. */
 .rw-app .log-filter-bar {
-  display: flex; align-items: center; gap: var(--sp-s); padding: var(--sp-s) var(--sp-l);
-  border-block-end: 1px solid var(--seam-soft); flex: none;
+  display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-s);
+  padding: var(--sp-s) var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none;
 }
-.rw-app .log-filter-bar .log-filter { flex: 1 1 auto; min-inline-size: 0; height: 30px; width: auto; font-size: .76rem; padding-block: 0; }
+.rw-app .log-filter-bar .log-controls { display: flex; align-items: center; gap: var(--sp-s); min-inline-size: 0; }
+/* the level picker (or the storage refresh) parks at the far end, so the row
+   reads left-to-right as "which log" then "how much of it". Named rather than
+   positional: the view toggle is conditional, and a `:last-child` rule would
+   move the picker to the middle of the row on the tabs that lack it. */
+.rw-app .log-filter-bar .log-controls > .loglevel,
+.rw-app .log-filter-bar .log-controls > .log-refresh { margin-inline-start: auto; }
+.rw-app .log-filter-bar .log-filter { inline-size: 100%; height: 30px; font-size: .76rem; padding-block: 0; }
 .rw-app .log-filter-bar .loglevel { display: flex; flex: 0 0 auto; }
 .rw-app .log-filter-bar .loglevel .select { width: max-content; height: 30px; font-size: var(--dropdown-fs, .76rem); padding-block: 0; }
 .rw-app .log-body { padding: 0; flex: 1 1 auto; display: flex; min-height: 0; }
