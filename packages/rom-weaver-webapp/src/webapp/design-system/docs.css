@@ -648,8 +648,10 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 .rw-app .docs-step:last-child { justify-content: flex-end; text-align: end; }
 .rw-app .docs-step svg { flex: none; width: 16px; height: 16px; color: var(--weft); }
 .rw-app .docs-step-copy { display: grid; min-width: 0; gap: 1px; }
+/* --ink-4 is a hair under 4.5:1 on the light plate at this size, and the
+   direction label is the one word that has to be legible before the page name */
 .rw-app .docs-step-copy small {
-  font-size: .62rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-4);
+  font-size: .62rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
 }
 .rw-app .docs-step-copy b {
   font-size: .84rem; font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
