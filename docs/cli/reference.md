@@ -6,9 +6,13 @@
 It now lives at [docs/reference/cli.md](../reference/cli.md), alongside the
 [supported formats](../reference/formats.md) tables.
 
-This stub stays because released binaries print the old path in their help
-text, and their crates.io READMEs link to it. Both are immutable, so the link
-has to keep working for anyone still running those versions.
+This stub stays because binaries released before v0.12 print the old path in
+their help text, and their crates.io READMEs link to it. Both are immutable,
+and GitHub serves repo files with no redirect mechanism, so the file itself has
+to keep answering for anyone still running those versions.
+
+Newer builds print `https://rom-weaver.com/docs/cli` instead, which a line in
+the webapp's `_redirects` can move.
 
 | Looking for | Now at |
 | --- | --- |
