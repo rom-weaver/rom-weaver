@@ -30,10 +30,10 @@ test("documentation changes skip compiled stacks", () =>
     full: "false",
   }));
 test("usage guide changes build the webapp", () =>
-  assert.equal(classify("docs/usage/apply-rom-patches.md").webapp, "true"));
+  assert.equal(classify("docs/how-to/apply-rom-patches.md").webapp, "true"));
 test("every published guide builds the webapp, whatever folder it sits in", () => {
   for (const path of [
-    "docs/cli/reference.md",
+    "docs/reference/cli.md",
     "docs/legal/privacy.md",
     "docs/development/ARCHITECTURE.md",
   ]) {

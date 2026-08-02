@@ -95,9 +95,8 @@ for (const url of [
   "https://rom-weaver.com/docs/architecture",
   "https://github.com/rom-weaver/rom-weaver",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md",
-  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/usage/README.md",
-  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/cli/reference.md",
-  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/cli/install.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/cli.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/install-cli.md",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/formats.md",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/webapp-integration.md",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/self-hosting.md",
@@ -220,7 +219,7 @@ for (const route of DOC_ROUTES) {
     assertIncludes(docsHtml, 'href="/create?guide=create"', `${route.slug} guided Create link`);
     assertIncludes(docsHtml, 'href="/apply?guide=bundle"', `${route.slug} guided Bundle link`);
     assertIncludes(docsHtml, 'href="/docs/faq"', `${route.slug} FAQ link`);
-    assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} browser usage link`);
+    assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} tutorial link`);
     assertIncludes(docsHtml, 'href="/docs/cli"', `${route.slug} CLI usage link`);
     assertIncludes(docsHtml, 'href="/docs/self-hosting"', `${route.slug} self-hosting link`);
   }
@@ -243,8 +242,13 @@ for (const route of DOC_ROUTES) {
   // the page metadata below may name the production origin.
   const crossChannel = route.html.match(/href="https:\/\/rom-weaver\.com[^"]*"/g);
   if (crossChannel) throw new Error(`${route.slug} links to production: ${crossChannel.join(", ")}`);
-  const guide = route.source.startsWith("docs/usage/");
-  const minimumWords = guide ? (route.slug === "docs" || legalPage ? 250 : 500) : 150;
+  const guide = ["docs/tutorials/", "docs/how-to/", "docs/explanation/"].some((folder) =>
+    route.source.startsWith(folder),
+  );
+  // The hub is an index of links, not a guide, but it still has to say enough
+  // to stand on its own as the published documentation landing page.
+  let minimumWords = guide ? 500 : 150;
+  if (route.slug === "docs") minimumWords = 250;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {
     throw new Error(`${route.slug} has ${wordCount} visible words; expected at least ${minimumWords}`);

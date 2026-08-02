@@ -1,8 +1,10 @@
 # Continuous integration
 
 Every workflow in `.github/workflows`, what triggers it, what it gates, and
-what it caches. For the release *decision* - versions, tags, trusted
-publishing, and retry procedures - see the [release guide](../../.github/RELEASING.md).
+what it caches. To run these checks yourself, see
+[Reproduce a CI failure locally](reproduce-ci-locally.md). For the release
+*decision* - versions, tags, trusted publishing, and retry procedures - see the
+[release guide](../../.github/RELEASING.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -1263,7 +1265,7 @@ asset list. That is why adding them does not interact with
 and the step is safe on a rerun and after the release is published.
 
 The consumer side is a single query against the digest - see
-[Verifying a download](../cli/install.md#verifying-a-download), where both install scripts'
+[Verifying a download](../how-to/install-cli.md#verifying-a-download), where both install scripts'
 check and the `gh attestation verify` route for a file downloaded by hand are
 written out.
 
@@ -1355,42 +1357,8 @@ workflow-wide; `cache-cleanup.yml` starts from `permissions: {}` and takes only
 
 ## Reproducing CI locally
 
-The pre-commit hooks select lint checks from the staged paths. CI reuses those
-tasks over the whole tree, then adds tests, builds, publishability checks, and
-the macOS/Windows Rust legs. `mise run ci` is the broad local gate; use the
-individual commands below when narrowing a failure or matching a specific job.
-
-```bash
-mise run ci                                                  # broad local gate
-
-mise run actionlint ::: docs-lint ::: shellcheck ::: hadolint # repo-lint
-node --test scripts/ci/classify-changes.test.mjs             # change boundaries
-node --test scripts/ci/docker-matrix.test.mjs                # image/arch leg planning
-node --test scripts/ci/wasm-runtime-coverage.test.mjs        # wasm_runtime vs. the suite
-mise run fmt ::: clippy ::: typegen-check ::: whitespace ::: thread-guards
-mise run test-rust ::: licenses-check ::: deny-policy ::: machete # rust-host
-cargo publish --workspace --locked --dry-run --no-verify     # rust-host
-mise run wasm-check                                          # local threaded-target check
-mise run build-wasm-prod                                     # wasm
-npm test                                                     # repository tooling tests
-npm run docs:lint                                            # owned Markdown
-npm --prefix packages/rom-weaver-webapp run lint             # webapp lint fan-out
-npm --prefix packages/rom-weaver-webapp run icons:channels:check
-npm --prefix packages/rom-weaver-webapp run test:unit
-npm --prefix packages/rom-weaver-webapp run test:browser:wasm
-npm --prefix packages/rom-weaver-webapp run test:browser
-npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
-npm --prefix packages/rom-weaver-webapp run build
-```
-
-`actionlint` is shellcheck-aware and lints inline workflow `run:` scripts;
-the separate `shellcheck` task covers the tracked shell files, and `npm test`
-covers the Node.js tooling. `docker` is
-conditional on image-plumbing changes and is most directly reproduced with the
-source-build commands in the [self-hosting guide](../hosting/self-hosting.md);
-`docker-prebuilt` is `docker build --build-arg DIST=prebuilt .` with the bundle
-staged under `prebuilt/`; the CLI job uses `BINARY=prebuilt` when its packaging
-inputs change.
+Moved to [Reproduce a CI failure locally](reproduce-ci-locally.md), which is
+a procedure rather than a description of the pipeline.
 
 ## Gotchas
 

@@ -7,8 +7,6 @@ import { DocsPage } from "../../src/webapp/docs-page.tsx";
 import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
 
 const BUNDLE_GUIDE_ANCHORS = [
-  "what-does-a-bundle-do",
-  "practice-with-the-guided-bundle-tour",
   "choose-what-to-include",
   "build-the-patch-recipe",
   "turn-on-bundle-output-and-download-it",
@@ -155,14 +153,14 @@ describe("DocsPage", () => {
 
   it("renders headings, links, and code through parser hooks", () => {
     const route = createDocRoute(
-      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
 
 ## A &amp; \`B\`
 
-[Formats](patch-formats.md#ips) and [this section](#a-and-b).
+[Formats](../explanation/patch-formats.md#ips) and [this section](#a-and-b).
 
 ## A &amp; \`B\`
 
@@ -189,7 +187,7 @@ echo hi
 
   it("drops raw HTML from headings before rendering them", () => {
     const route = createDocRoute(
-      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
@@ -207,7 +205,7 @@ Fixture description.
   // tags around it survive. They do not in a heading, so it has to be escaped.
   it("escapes heading text that a dropped raw block would pass through", () => {
     const route = createDocRoute(
-      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
@@ -275,14 +273,14 @@ Fixture description.
 
   it("resolves hosted documents, repository-only documents, and published images from their source file", () => {
     const route = createDocRoute(
-      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
 
 ## Resources
 
-[Install](../cli/reference.md#install)
+[Install](../reference/cli.md#install)
 [Maintainer notes](../development/mobile-safari-verification.md)
 ![Sample](../../packages/rom-weaver-webapp/design/first-sample-modified-world.webp)
 `,
@@ -311,7 +309,7 @@ Fixture description.
     const { unmount } = render(<DocsPage active slug="docs/cli" />);
 
     const nav = document.querySelector(".docs-rails .guide-nav");
-    expect(defaultShelfTitle).toBe("Browser usage");
+    expect(defaultShelfTitle).toBe("Start here");
     expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual(
       shelfTitles,
     );
@@ -364,9 +362,9 @@ Fixture description.
 
     const index = document.querySelector(".docs-index");
     expect(screen.getAllByRole("combobox", { name: "Search documentation" })).toHaveLength(2);
-    expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain("Browser usage");
+    expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain("Your first patch");
     expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("CLI reference");
-    expect(index?.querySelector('a[href="/docs/install"]')?.textContent).toContain("Install");
+    expect(index?.querySelector('a[href="/docs/install"]')?.textContent).toContain("Install the CLI");
     expect(index?.querySelector('a[href="/docs/self-hosting"]')?.textContent).toContain("Self-hosting");
     expect(screen.getByRole("link", { name: "Read the full FAQ" }).getAttribute("href")).toBe("/docs/faq");
     expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();

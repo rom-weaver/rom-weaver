@@ -3,7 +3,7 @@
 Every way to install the rom-weaver command-line tool: package managers,
 verified install scripts, npm, Docker, and building from source. Each method
 installs the same `rom-weaver` CLI; pick the one that fits your machine and
-move on to your [first weave](get-started.md#first-weave).
+move on to your [first weave](../tutorials/cli-first-weave.md#first-weave).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -36,8 +36,8 @@ arm64, x86-64, and x86.
 Homebrew, the install scripts, and npm also carry the generated CLI manpages
 and shell completions. Scoop, cargo-binstall, mise, and `cargo install` install
 the executable only; use the
-[completion](reference.md#shell-completions) and
-[man page](reference.md#man-pages) commands for those methods.
+[completion](../reference/cli.md#shell-completions) and
+[man page](../reference/cli.md#man-pages) commands for those methods.
 
 ### Homebrew (macOS arm64/Intel, Linux arm64/x86-64)
 
@@ -314,5 +314,5 @@ For a development checkout, follow the [development guide](../development/develo
 and use `cargo run -p rom-weaver-cli --bin rom-weaver --` in place of
 `rom-weaver`.
 
-Installed? Run your [first weave](get-started.md#first-weave), then continue
-with the task guides or the [CLI reference](reference.md).
+Installed? Run your [first weave](../tutorials/cli-first-weave.md#first-weave), then continue
+with the task guides or the [CLI reference](../reference/cli.md).

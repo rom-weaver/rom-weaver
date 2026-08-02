@@ -18,6 +18,13 @@
 # Path-level redirects belong here. A hostname one does not - it will be dropped
 # silently.
 
+# Documentation links printed by the CLI, and shipped in crate READMEs, point at
+# `/docs/...` here rather than a GitHub blob path. GitHub serves repo files with
+# no redirect mechanism at all, so a docs file that moves strands every released
+# binary that names it - the reason `docs/cli/reference.md` has to stay behind as
+# a stub for versions built before this. A site URL moves with a line in this
+# file instead.
+
 # The patch workflow moved from /weave to /apply. Keep the old clean, trailing-
 # slash, and explicit static-host forms as permanent redirects. Cloudflare
 # Pages carries the incoming query string to the destination, so preloaded

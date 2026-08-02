@@ -333,7 +333,7 @@ docker run --rm \
 
 Mount your ROM directory at `/work` and pass paths under it. On Linux and
 macOS, `--user` keeps files created in the bind mount owned by your host user.
-See [Run in Docker](./docs/cli/install.md#run-in-docker).
+See [Run in Docker](./docs/how-to/install-cli.md#run-in-docker).
 
 </details>
 
@@ -355,7 +355,7 @@ toolchain.
 </details>
 
 Hitting `Permission denied`? See
-[File permissions](./docs/cli/reference.md#file-permissions).
+[File permissions](./docs/reference/cli.md#file-permissions).
 
 The [development guide](./docs/development/development.md) covers the full toolchain setup,
 webapp builds, and tests.
@@ -416,7 +416,7 @@ webapp builds, and tests.
 Start with the browser-first [documentation home](https://rom-weaver.com/docs)
 or the repository [documentation index](./docs/README.md). The web docs include
 a task and tool picker, guided samples, focused screenshots, and a
-[FAQ](./docs/usage/faq.md). CLI, deployment, integration, development,
+[FAQ](./docs/faq.md). CLI, deployment, integration, development,
 architecture, and format references each have their own guides.
 
 ## Contributing and support

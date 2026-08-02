@@ -19,7 +19,8 @@ type DocSearchResult = ReturnType<typeof searchDocs>[number];
 const DOC_SHELVES = groupDocRoutes(DOC_ROUTES);
 const DOC_SHELF_STATE_KEY = "rom-weaver-docs-shelves";
 type DocShelfState = Record<string, boolean>;
-const DEFAULT_DOC_SHELF = "Browser usage";
+/** The first shelf opens by default: the map and the quick answers. */
+const DEFAULT_DOC_SHELF = DOC_SHELVES[0]?.title ?? "";
 const DEFAULT_DOC_SHELF_STATE = Object.fromEntries(
   DOC_SHELVES.map((shelf) => [shelf.title, shelf.title === DEFAULT_DOC_SHELF]),
 ) as DocShelfState;

@@ -1,4 +1,4 @@
-# Pick a compression format
+# Choosing a compression format
 
 CHD, RVZ, Z3DS, 7z, ZIP. This guide explains which compressed format fits
 which console, when trimming beats compressing, and what compression does to
@@ -67,7 +67,7 @@ default when your emulator supports it. Depending on the data and settings, 7z
 can produce a smaller archive, but direct emulator support is less consistent,
 so it fits long-term storage more than a play library. rom-weaver creates both,
 and the
-[archive formats guide](formats.md) covers everyday extract and convert
+[archive formats guide](../how-to/work-with-archives.md) covers everyday extract and convert
 workflows.
 
 Avoid double-wrapping: a CHD inside a 7z usually gains little, and most setups
@@ -92,7 +92,7 @@ normal. `checksum` automatically unwraps many supported containers; use
 `--no-extract` when you mean to hash the wrapper bytes. `probe` identifies the
 container and reports its structure. If a patch guide expects a specific
 checksum, check the payload, and see
-[Fix a checksum error](fix-checksum-errors.md) when it still disagrees.
+[Fix a checksum error](../how-to/fix-checksum-errors.md) when it still disagrees.
 
 ## Which format should I choose?
 
@@ -109,4 +109,4 @@ checksum, check the payload, and see
 The [Supported formats](../reference/formats.md#container-and-compression-formats)
 reference is the authoritative table of every container, extension, and codec,
 including the `--codec` values each output accepts. Back to the
-[guide index](README.md).
+[guide index](../README.md).

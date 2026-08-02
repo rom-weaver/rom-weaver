@@ -24,12 +24,17 @@ third_party
 .github
 # The webapp build reads every published guide, so these are build inputs. Kept
 # per shelf rather than per file: a new guide is published by adding it to its
-# folder, and listing files here would be a second place to forget.
+# folder, and listing files here would be a second place to forget. The hub and
+# the FAQ sit at the top of `docs/`, so they are named individually.
 docs/*
-!docs/usage
-!docs/usage/**
-!docs/cli
-!docs/cli/**
+!docs/README.md
+!docs/faq.md
+!docs/tutorials
+!docs/tutorials/**
+!docs/how-to
+!docs/how-to/**
+!docs/explanation
+!docs/explanation/**
 !docs/hosting
 !docs/hosting/**
 !docs/reference

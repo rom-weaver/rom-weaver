@@ -2,7 +2,8 @@
 
 Apply one patch or an ordered chain in the terminal, control headers, byte
 order, and checksum verification, and validate patches without writing
-anything. New to the CLI? Start with [Get started](get-started.md).
+anything. New to the CLI? Start with
+[your first weave](../tutorials/cli-first-weave.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -107,9 +108,9 @@ reports a verdict per patch, rather than stopping at the first failure.
 ## Where next
 
 - A checksum mismatch is almost always a wrong starting file; see
-  [Fix a checksum error](../usage/fix-checksum-errors.md).
+  [Fix a checksum error](fix-checksum-errors.md).
 - Record a finished run as a shareable recipe with
-  [Bundles from the CLI](bundles.md).
+  [Bundles from the CLI](cli-bundles.md).
 - Run `rom-weaver patch apply --help` or `rom-weaver patch validate --help`
-  for every flag; the [CLI reference](reference.md) covers their shared
+  for every flag; the [CLI reference](../reference/cli.md) covers their shared
   behavior.

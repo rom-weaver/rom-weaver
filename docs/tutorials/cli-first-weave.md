@@ -1,17 +1,18 @@
-# Get started with the CLI
+# Your first weave in the terminal
 
 Run a complete patch job in the terminal with the same tiny homebrew ROMs the
 webapp uses, then practice creating a patch and packaging it as a shareable
 bundle. Nothing here needs a real ROM; every asset is downloadable and safe.
 
-Install first if you have not: [Install the CLI](install.md).
+Install first if you have not: [Install the CLI](../how-to/install-cli.md).
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [First weave](#first-weave)
 - [Practice patch creation and bundles](#practice-patch-creation-and-bundles)
-- [Where next](#where-next)
+- [What you learned](#what-you-learned)
+- [Next](#next)
 
 <!-- END doctoc -->
 
@@ -101,13 +102,21 @@ The result should have the same `f203a1…b45e` SHA-256. This sequence uses the
 same generated assets as the browser tours, so both interfaces start from
 identical bytes.
 
-## Where next
+## What you learned
 
-- [Apply patches from the CLI](apply.md): patch order, headers, byte order,
-  checksum checks, and validation.
-- [Create patches from the CLI](create.md): build and test a patch for
-  release.
-- [Bundles from the CLI](bundles.md): package patches into a repeatable,
-  verifiable recipe.
-- [CLI reference](reference.md): the command map, global behavior, and output
-  formats.
+You applied a patch chain, created and tested a patch of your own, and packaged
+it as a bundle - the three jobs the CLI exists for. A real release differs only
+in which files you point at.
+
+## Next
+
+- [Apply patches from the CLI](../how-to/cli-apply.md): patch order, headers,
+  byte order, checksum checks, and validation.
+- [Create patches from the CLI](../how-to/cli-create.md): build and test a
+  patch for release.
+- [Bundles from the CLI](../how-to/cli-bundles.md): package patches into a
+  repeatable, verifiable recipe.
+- [CLI reference](../reference/cli.md): the command map, global behavior, and
+  output formats.
+- [How patching works](../explanation/how-patching-works.md): what these
+  checksums actually prove.

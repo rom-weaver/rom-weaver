@@ -54,8 +54,8 @@ but not applied, and PDS is unsupported.
 
 ## Container and compression formats
 
-For a shorter guide focused on everyday archive files, see
-[Archive formats](../usage/formats.md).
+For everyday extract, convert, and compress steps, see
+[Extract, convert, and compress archives](../how-to/work-with-archives.md).
 
 | Format | Aliases | Extensions | Probe | Extract | Create |
 | --- | --- | --- | :---: | :---: | :---: |

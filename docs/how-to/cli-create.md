@@ -2,7 +2,7 @@
 
 Build a patch from an original ROM and a modified one, add SOLID metadata,
 and test the result before publishing it. New to the CLI? Start with
-[Get started](get-started.md).
+[your first weave](../tutorials/cli-first-weave.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -48,16 +48,16 @@ rom-weaver patch create \
 
 Never publish an untested patch. Apply it back onto a clean copy of the
 original and checksum the result, as the
-[practice walkthrough](get-started.md#practice-patch-creation-and-bundles)
+[practice walkthrough](../tutorials/cli-first-weave.md#practice-patch-creation-and-bundles)
 shows end to end, or run `patch validate` for a check that writes nothing;
 its flags are covered in
-[Apply patches from the CLI](apply.md#patch-validation).
+[Apply patches from the CLI](cli-apply.md#patch-validation).
 
 ## Where next
 
 - Unsure which format to publish in?
-  [Pick a patch format](../usage/patch-formats.md).
+  [Pick a patch format](../explanation/patch-formats.md).
 - Ship several patches with checksums and ordering as one file:
-  [Bundles from the CLI](bundles.md).
+  [Bundles from the CLI](cli-bundles.md).
 - Run `rom-weaver patch create --help` for every flag; the
-  [CLI reference](reference.md) covers shared behavior.
+  [CLI reference](../reference/cli.md) covers shared behavior.

@@ -10,15 +10,14 @@ import {
   writeFirstSampleAssets,
 } from "../packages/rom-weaver-webapp/scripts/first-sample-assets.mjs";
 
-// The guides and the CLI guide walk readers through weaving `first-weave.zip`
-// and print this digest as the proof their install works. It is only a
-// screenshot of whatever the generator happens to emit, so without this test a
-// change to the sample ROMs silently publishes a wrong value on three pages.
+// Both tutorials walk readers through weaving `first-weave.zip` and print this
+// digest as the proof their run worked. It is only a screenshot of whatever the
+// generator happens to emit, so without this test a change to the sample ROMs
+// silently publishes a wrong value on both pages.
 const DOCUMENTED_WEAVE_SHA256 = "e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e";
 const DOCS_PUBLISHING_THE_DIGEST = [
-  "docs/cli/get-started.md",
-  "docs/usage/get-started.md",
-  "docs/usage/apply-rom-patches.md",
+  "docs/tutorials/cli-first-weave.md",
+  "docs/tutorials/first-patch.md",
 ];
 
 const readZip = (archive) => {
