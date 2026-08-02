@@ -27,22 +27,27 @@
 .rw-modal.changelog-modal .modal-head { flex-wrap: wrap; align-items: baseline; row-gap: var(--sp-2xs); }
 .rw-modal.changelog-modal .changelog-head-meta { flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
 .rw-modal.select-modal .rw-modal-card { width: 100%; }
-/* The guide sheet drops from the top edge instead of sitting centred - it belongs
-   to the trail that opens it, and the trail sticks to the top of the guide. The
-   rest of its styling is in docs.css with the guide; only the modal-frame
-   overrides are here, where they outrank the `.rw-modal-card` defaults above. */
+/* The guide sheet rises from the bottom edge instead of sitting centred - it
+   belongs to the trail that opens it, and the trail holds the bottom of the
+   guide above the dock. The rest of its styling is in docs.css with the guide;
+   only the modal-frame overrides are here, where they outrank the
+   `.rw-modal-card` defaults above. */
 @media (max-width: 860px) {
-  .rw-modal.guide-sheet { place-items: start stretch; padding: 0; }
+  .rw-modal.guide-sheet { place-items: end stretch; padding: 0; }
   .rw-modal.guide-sheet .rw-modal-card {
     width: 100%;
     max-width: none;
     max-height: 82dvh;
-    border-width: 0 0 1px;
-    border-radius: 0 0 var(--r-l) var(--r-l);
+    /* stops on the dock, so switching mode stays one tap away */
+    margin-block-end: var(--dock-h, 0px);
+    border-width: 1px 0 0;
+    border-radius: var(--r-l) var(--r-l) 0 0;
   }
   @starting-style {
-    .rw-modal.guide-sheet .rw-modal-card { transform: translateY(-100%); opacity: 1; }
+    .rw-modal.guide-sheet .rw-modal-card { transform: translateY(100%); opacity: 1; }
   }
+  /* this guide's outline, then every guide */
+  .rw-modal.guide-sheet .modal-body { display: grid; gap: var(--sp-l); align-content: start; }
 }
 .rw-modal.select-modal .modal-body { padding-block-start: var(--sp-s); }
 /* Stack labels when the card, not the viewport, runs narrow. */

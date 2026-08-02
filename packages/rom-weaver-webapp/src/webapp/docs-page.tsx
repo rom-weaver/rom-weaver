@@ -1,9 +1,10 @@
 import "./design-system/docs-route.css";
-import { ArrowUpToLine } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { ArrowUpToLine, ListTree } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { CHANNEL_BADGE } from "./build-channel.ts";
+import { Modal } from "../public/react/components/ds/modal.tsx";
 import { GUIDED_SAMPLE_HREFS, type GuidedSample } from "../public/react/guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes } from "./docs-routing.mjs";
@@ -83,6 +84,23 @@ const findDocsRoute = (slug: string) => {
 };
 
 const sectionNumber = (index: number) => String(index + 1).padStart(2, "0");
+
+/**
+ * True once the reader has changed guide at least once.
+ *
+ * The article's entrance IS the page transition, and it must not play on the
+ * first render: that article is the prerendered document, and fading it in
+ * would push the largest paint back by the length of the animation.
+ */
+const useDocsPageTurned = (slug: string) => {
+  const renderedSlug = useRef(slug);
+  const turned = useRef(false);
+  if (renderedSlug.current !== slug) {
+    renderedSlug.current = slug;
+    turned.current = true;
+  }
+  return turned.current;
+};
 
 /** One outline entry: index, label, and the weft pick that marks the read one. */
 const OutlineLink = ({
@@ -353,45 +371,47 @@ const DocsFaqPreview = () => (
   </section>
 );
 
-/** Which list the tapped crumb promised; null while the sheet is shut. */
 /**
- * The trail: phone-width search and reading progress.
+ * The trail: phone-width navigation, search, and reading progress.
  *
- * It sticks to the top rather than holding the bottom of the screen. The
- * bottom is where the phone browser parks its own collapsing toolbar.
+ * It holds the bottom of the screen, immediately above the app's own dock, so
+ * the two ways out of a guide - another guide, another mode - sit under the
+ * same thumb. The desktop rails are the sidebar; here they are one sheet the
+ * Contents button opens.
  *
- * The gauge remains attached to the search surface so the reader can still see
- * where they are in a long guide without carrying another navigation label.
+ * The gauge rides the bar's top edge, which is the seam between the guide and
+ * the chrome, so the reader can see where they are in a long guide without
+ * carrying another navigation label.
  */
 const TrailHead = ({
+  activeIndex,
   fraction,
   onSearchSelect,
   onSearchQueryChange,
+  onShelfToggle,
+  openShelves,
   route,
   searchQuery,
   searchResults,
   weights,
 }: {
+  activeIndex: number;
   fraction: number;
   onSearchSelect: (result: DocSearchResult, query: string) => void;
   onSearchQueryChange: (query: string) => void;
+  onShelfToggle: (title: string, open: boolean) => void;
+  openShelves: DocShelfState;
   route: DocRoute;
   searchQuery: string;
   searchResults: readonly DocSearchResult[];
   weights: readonly number[];
 }) => {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
   const outlined = route.sections.length > 0;
 
   return (
     <div className="docs-trail">
-      <div className="docs-trail-search">
-        <DocsSearch
-          onQueryChange={onSearchQueryChange}
-          onSelect={onSearchSelect}
-          query={searchQuery}
-          results={searchResults}
-        />
-      </div>
       {outlined ? (
         <span aria-hidden="true" className="warp-gauge">
           {route.sections.map((section, index) => (
@@ -400,6 +420,37 @@ const TrailHead = ({
           <span className="warp-gauge-weft" style={{ width: `${fraction * 100}%` }} />
         </span>
       ) : null}
+      <div className="docs-trail-row">
+        <button
+          aria-expanded={sheetOpen}
+          className="docs-trail-menu"
+          onClick={() => setSheetOpen((open) => !open)}
+          type="button"
+        >
+          <ListTree aria-hidden="true" />
+          <span>Contents</span>
+        </button>
+        <div className="docs-trail-search">
+          <DocsSearch
+            onNavigate={closeSheet}
+            onQueryChange={onSearchQueryChange}
+            onSelect={onSearchSelect}
+            query={searchQuery}
+            results={searchResults}
+          />
+        </div>
+      </div>
+      {/* Both lists at once: the outline the reader is inside, then every guide.
+          Two separate sheets meant guessing which one a single button promised. */}
+      <Modal onClose={closeSheet} open={sheetOpen} title={route.title} variant="guide-sheet">
+        {outlined ? <SectionRail activeIndex={activeIndex} onNavigate={closeSheet} route={route} /> : null}
+        <DocsNav
+          currentSlug={route.slug}
+          onNavigate={closeSheet}
+          onShelfToggle={onShelfToggle}
+          openShelves={openShelves}
+        />
+      </Modal>
     </div>
   );
 };
@@ -508,6 +559,7 @@ const DocsPage = ({
   // One subscription for the page: the desktop rail and the phone trail read the
   // same position, and the hook measures the document on every scroll frame.
   const { activeIndex, fraction, weights } = useReadingProgress(route.sections, active);
+  const pageTurned = useDocsPageTurned(route.slug);
   const { onShelfToggle, openShelves } = useDocShelfState();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const [searchQuery, setSearchQuery] = useState("");
@@ -571,10 +623,13 @@ const DocsPage = ({
       {/* Keyed on the route so moving to another guide closes the sheet with it,
           rather than leaving it open over a guide it no longer describes. */}
       <TrailHead
+        activeIndex={activeIndex}
         fraction={fraction}
         key={route.slug}
         onSearchSelect={onSearchSelect}
         onSearchQueryChange={setSearchQuery}
+        onShelfToggle={onShelfToggle}
+        openShelves={openShelves}
         route={route}
         searchQuery={searchQuery}
         searchResults={searchResults}
@@ -586,9 +641,13 @@ const DocsPage = ({
           {route.sections.length > 0 ? <SectionRail activeIndex={activeIndex} route={route} /> : null}
         </div>
         <section className="docs-panel">
+          {/* Keyed on the route so a guide switch remounts the article and
+              replays its entrance - that animation IS the page transition. */}
           <article
             className="docs-article"
+            key={route.slug}
             data-markdown-source={route.source}
+            data-page-turn={pageTurned ? "true" : undefined}
             // Committed repository Markdown, rendered to HTML at build time by
             // the same parser that feeds the prerendered page.
             // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source

@@ -389,6 +389,31 @@ Fixture description.
     expect(document.querySelector(".guide-shelf")).toBeTruthy();
   });
 
+  it("plays the page turn only after the reader changes guide", () => {
+    // The first article is the prerendered document, so fading it in would push
+    // the largest paint back by the length of the animation.
+    const { rerender } = render(<DocsPage active slug="docs/cli" />);
+    expect(document.querySelector(".docs-article")?.getAttribute("data-page-turn")).toBeNull();
+
+    rerender(<DocsPage active slug="docs/faq" />);
+    expect(document.querySelector(".docs-article")?.getAttribute("data-page-turn")).toBe("true");
+  });
+
+  it("opens this guide's outline and every guide from the phone trail", () => {
+    render(<DocsPage active slug="docs/cli" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Contents" }));
+
+    const sheet = document.querySelector(".rw-modal.guide-sheet");
+    expect(sheet?.querySelector(".warp-rail")).toBeTruthy();
+    expect(sheet?.querySelectorAll(".guide-nav .guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+    expect(sheet?.querySelector('.guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
+
+    // Choosing a guide has to take the sheet with it - the reader asked to leave.
+    fireEvent.click(sheet?.querySelector(".guide-nav .guide-nav-list a") as HTMLElement);
+    expect(document.querySelector(".rw-modal.guide-sheet")).toBeNull();
+  });
+
   it("shares search state with the mobile search", () => {
     render(<DocsPage active slug="docs" />);
     const inputs = screen.getAllByRole("combobox", { name: "Search documentation" });
