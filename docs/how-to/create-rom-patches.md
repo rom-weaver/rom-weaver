@@ -6,8 +6,6 @@ contains the differences, not a copy of the game.
 <!-- START doctoc -->
 ## Table of contents
 
-- [What are Original and Modified?](#what-are-original-and-modified)
-- [Practice with the included sample](#practice-with-the-included-sample)
 - [Prepare a clean release pair](#prepare-a-clean-release-pair)
 - [Add Original and Modified](#add-original-and-modified)
 - [Choose a patch format](#choose-a-patch-format)
@@ -18,35 +16,14 @@ contains the differences, not a copy of the game.
 
 <!-- END doctoc -->
 
-## What are Original and Modified?
+**Original** is the clean, untouched game; **Modified** is your finished
+translation, fix, restoration, or hack. rom-weaver records what must change to
+turn one into the other, so the direction matters - swapping them creates a
+patch that undoes your work.
 
-Creating a patch is a comparison:
-
-- **Original** is the clean, untouched game.
-- **Modified** is your finished translation, fix, restoration, or hack.
-
-rom-weaver records what must change to turn Original into Modified. The
-direction matters. Swapping the files creates a patch that undoes your work
-instead.
-
-Anyone applying the patch later needs the same Original, byte for byte. That
-is why a good release names the region and revision and publishes checksums.
-
-## Practice with the included sample
-
-Open [guided Create](https://rom-weaver.com/create?guide=create). It loads two
-tiny homebrew NES ROMs and points to the real Create controls. You can learn
-the workflow without using any commercial game data.
-
-The Original displays `HELLO WORLD`. The Modified file displays
-`MODIFIED WORLD`. The patch made by the sample only needs to describe the
-changed word.
-
-Choose **Download the sample ROMs** from the **New here?** beacon on the
-empty Create page or
-[download `first-create.zip`](https://rom-weaver.com/first-create.zip) if you
-want to keep the pair. The same files are used for automated browser and CLI
-verification in this project.
+Never done this before? The
+[guided Create tour](https://rom-weaver.com/create?guide=create) runs the same
+workflow on two tiny homebrew ROMs.
 
 ## Prepare a clean release pair
 
@@ -111,8 +88,8 @@ the Original checksum, so put that checksum prominently in the release notes.
 Large files and disc projects often use xdelta, VCDIFF, or PPF. A community's
 existing tool support can matter more than a theoretical best choice.
 
-The [patch format guide](patch-formats.md) compares the main choices. The
-format list in Create only offers formats rom-weaver can make for the files
+[Choosing a patch format](../explanation/patch-formats.md) compares the main
+choices. The format list in Create only offers formats rom-weaver can make for the files
 you selected.
 
 ## Create and download the patch
@@ -141,7 +118,8 @@ you selected.
 </figure>
 
 The browser reads both ROMs and creates the patch locally. None of those files
-are uploaded.
+are uploaded - see
+[why your files stay on your device](../explanation/local-first.md).
 
 ## Test the downloaded patch
 
@@ -177,9 +155,10 @@ Tell users:
 - which additions are optional and which combinations work;
 - what changed, who contributed, and where to report a problem.
 
-Several patches are easier to use as one rom-weaver bundle. It carries the
-order, choices, checksums, patch files, and output settings so users do not
-have to copy them by hand. Continue with
+Several patches are easier to use as one
+[bundle](../explanation/bundles.md), which carries the order, choices,
+checksums, patch files, and output settings so users do not have to copy them
+by hand. Continue with
 [Create and share a patch bundle](create-bundles.md).
 
 ## Release an update
@@ -192,5 +171,4 @@ update. It requires users to install version 1 first and in the exact expected
 state. That can be intentional, but say so clearly if you choose it.
 
 For scripts or command-line publishing, use the
-[CLI patch creation guide](../cli/create.md). Back to the
-[browser guide index](README.md).
+[CLI patch creation guide](cli-create.md).

@@ -6,7 +6,6 @@ original stays untouched and the new file never leaves your device.
 <!-- START doctoc -->
 ## Table of contents
 
-- [Practice with the included sample](#practice-with-the-included-sample)
 - [What do you need?](#what-do-you-need)
 - [Add the files](#add-the-files)
 - [Read the ROM and patch cards](#read-the-rom-and-patch-cards)
@@ -18,34 +17,8 @@ original stays untouched and the new file never leaves your device.
 
 <!-- END doctoc -->
 
-## Practice with the included sample
-
-Open [guided Apply](https://rom-weaver.com/apply?guide=apply) before using a
-game you care about. It loads a tiny homebrew NES ROM and two legal practice
-patches. The guide points at the same controls you will use with real files.
-
-Patch 1 changes `HELLO` to `MODIFIED`. Patch 2 changes `WORLD` to `ROM`.
-Applying both in order gives `MODIFIED ROM`.
-The finished ROM's SHA-256 is
-`e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`.
-That fingerprint lets you confirm your result is exactly the practice result.
-
-<figure class="docs-screenshot-pair" aria-label="The practice ROM before and after both patches">
-  <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-hello-world.webp" width="1024" height="768" alt="The original homebrew sample ROM displaying HELLO WORLD in an NES emulator" loading="lazy" decoding="async">
-    <figcaption>Before: the clean practice ROM.</figcaption>
-  </figure>
-  <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-modified-rom.webp" width="1024" height="768" alt="The homebrew sample ROM displaying MODIFIED ROM after both patches" loading="lazy" decoding="async">
-    <figcaption>After: both patches applied in order.</figcaption>
-  </figure>
-</figure>
-
-You can choose **Download a test bundle** from the **New here?** beacon on the
-empty Apply page or
-[download `first-weave.zip`](https://rom-weaver.com/first-weave.zip). The
-archive contains the sample ROM, both IPS patches, and the recipe that puts
-them in order.
+Never done this before? [Your first patch in the browser](../tutorials/first-patch.md)
+walks the same workflow with homebrew practice files first.
 
 ## What do you need?
 
@@ -73,7 +46,7 @@ but a known-good copy makes updates and troubleshooting much easier.
 4. If an archive contains several possible files, choose the entry the patch
    author named.
 
-You can add [supported archives](formats.md), including ZIP, 7z, RAR, and tar,
+You can add [supported archives](work-with-archives.md), including ZIP, 7z, RAR, and tar,
 without extracting them first. rom-weaver looks inside, including inside nested
 archives. Disc containers such as CHD and RVZ are unpacked to the form the
 patch expects.
@@ -157,16 +130,13 @@ In **0x04 Apply**:
 </figure>
 
 Everything happens locally in the browser. The ROM, patches, and result are
-not sent to rom-weaver. The [privacy guide](../legal/privacy.md) explains local
-browser storage and the small amount of normal site traffic.
+not sent to rom-weaver - see
+[why your files stay on your device](../explanation/local-first.md).
 
 ## Open a bundle
 
-A rom-weaver bundle is a saved patching recipe. It can include patch files,
-their order, optional choices, expected checksums, and output settings. A
-public bundle normally does not include the original game.
-
-Add the bundle archive to **0x01 Inputs**. If it is patch-only, rom-weaver
+A [bundle](../explanation/bundles.md) is a saved patching recipe. Add the
+bundle archive to **0x01 Inputs**. If it is patch-only, rom-weaver
 shows which ROM it expects. Add your matching ROM. Review optional patch
 switches, then use **APPLY & DOWNLOAD** just as you would for loose files.
 
@@ -203,7 +173,6 @@ change when you can. Some bad combinations fail later.
 Do not delete the clean original. Give the patched result a name that includes
 the project and version so you can tell it apart later.
 
-If you need automation or terminal commands, switch to the complete
-[CLI apply guide](../cli/apply.md). If you want to make your own
-change, continue with [Create a ROM patch](create-rom-patches.md). Back to the
-[browser guide index](README.md).
+If you need automation or terminal commands, switch to the
+[CLI apply guide](cli-apply.md). If you want to make your own change, continue
+with [Create a ROM patch](create-rom-patches.md).

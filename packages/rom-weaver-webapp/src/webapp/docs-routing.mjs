@@ -13,30 +13,55 @@ const SITE_ORIGIN = "https://rom-weaver.com";
 
 /** @type {readonly DocSource[]} */
 const DOC_SOURCES = Object.freeze([
-  Object.freeze({ file: "usage/README.md", label: "Overview", slug: "docs" }),
-  Object.freeze({ file: "usage/get-started.md", label: "Browser usage", slug: "docs/get-started" }),
-  Object.freeze({ file: "usage/formats.md", label: "Formats", slug: "docs/formats" }),
-  Object.freeze({ file: "usage/apply-rom-patches.md", label: "Apply patches", slug: "docs/apply-rom-patches" }),
-  Object.freeze({ file: "usage/create-rom-patches.md", label: "Create patches", slug: "docs/create-rom-patches" }),
-  Object.freeze({ file: "usage/create-bundles.md", label: "Create bundles", slug: "docs/create-bundles" }),
+  Object.freeze({ file: "README.md", label: "Overview", slug: "docs" }),
+  Object.freeze({ file: "faq.md", label: "FAQ", slug: "docs/faq" }),
+  Object.freeze({ file: "tutorials/first-patch.md", label: "Your first patch", slug: "docs/get-started" }),
   Object.freeze({
-    file: "usage/fix-checksum-errors.md",
+    file: "tutorials/cli-first-weave.md",
+    label: "Your first weave (CLI)",
+    slug: "docs/cli-get-started",
+  }),
+  Object.freeze({
+    file: "how-to/apply-rom-patches.md",
+    label: "Apply patches (browser)",
+    slug: "docs/apply-rom-patches",
+  }),
+  Object.freeze({
+    file: "how-to/create-rom-patches.md",
+    label: "Create patches (browser)",
+    slug: "docs/create-rom-patches",
+  }),
+  Object.freeze({ file: "how-to/create-bundles.md", label: "Create bundles (browser)", slug: "docs/create-bundles" }),
+  Object.freeze({
+    file: "how-to/fix-checksum-errors.md",
     label: "Fix checksum errors",
     slug: "docs/fix-checksum-errors",
   }),
-  Object.freeze({ file: "usage/faq.md", label: "FAQ", slug: "docs/faq" }),
-  Object.freeze({ file: "usage/patch-formats.md", label: "Patch formats", slug: "docs/patch-formats" }),
+  Object.freeze({ file: "how-to/work-with-archives.md", label: "Work with archives", slug: "docs/formats" }),
+  Object.freeze({ file: "how-to/install-cli.md", label: "Install the CLI", slug: "docs/install" }),
+  Object.freeze({ file: "how-to/cli-apply.md", label: "Apply patches (CLI)", slug: "docs/cli-apply" }),
+  Object.freeze({ file: "how-to/cli-create.md", label: "Create patches (CLI)", slug: "docs/cli-create" }),
+  Object.freeze({ file: "how-to/cli-bundles.md", label: "Bundles (CLI)", slug: "docs/cli-bundles" }),
+  Object.freeze({ file: "reference/cli.md", label: "CLI reference", slug: "docs/cli" }),
   Object.freeze({
-    file: "usage/compression-formats.md",
+    file: "reference/formats.md",
+    label: "Supported formats",
+    slug: "docs/supported-formats",
+  }),
+  Object.freeze({
+    file: "explanation/how-patching-works.md",
+    label: "How patching works",
+    slug: "docs/how-patching-works",
+  }),
+  Object.freeze({ file: "explanation/local-first.md", label: "Why files stay local", slug: "docs/local-first" }),
+  Object.freeze({ file: "explanation/patch-formats.md", label: "Patch formats", slug: "docs/patch-formats" }),
+  Object.freeze({
+    file: "explanation/compression-formats.md",
     label: "Compression formats",
     slug: "docs/compression-formats",
   }),
-  Object.freeze({ file: "cli/install.md", label: "Install", slug: "docs/install" }),
-  Object.freeze({ file: "cli/get-started.md", label: "Get started", slug: "docs/cli-get-started" }),
-  Object.freeze({ file: "cli/apply.md", label: "Apply patches", slug: "docs/cli-apply" }),
-  Object.freeze({ file: "cli/create.md", label: "Create patches", slug: "docs/cli-create" }),
-  Object.freeze({ file: "cli/bundles.md", label: "Bundles", slug: "docs/cli-bundles" }),
-  Object.freeze({ file: "cli/reference.md", label: "CLI reference", slug: "docs/cli" }),
+  Object.freeze({ file: "explanation/bundles.md", label: "What a bundle is", slug: "docs/bundles" }),
+  Object.freeze({ file: "explanation/browser-and-cli.md", label: "Browser and CLI", slug: "docs/browser-and-cli" }),
   Object.freeze({ file: "hosting/self-hosting.md", label: "Self-hosting", slug: "docs/self-hosting" }),
   Object.freeze({
     file: "hosting/webapp-integration.md",
@@ -45,11 +70,6 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({ file: "hosting/env-vars.md", label: "Environment variables", slug: "docs/environment-variables" }),
   Object.freeze({ file: "hosting/webapp-runtime-status.md", label: "Webapp status", slug: "docs/webapp-status" }),
-  Object.freeze({
-    file: "reference/formats.md",
-    label: "Supported formats",
-    slug: "docs/supported-formats",
-  }),
   Object.freeze({ file: "development/ARCHITECTURE.md", label: "Architecture", slug: "docs/architecture" }),
   Object.freeze({ file: "development/development.md", label: "Development", slug: "docs/development" }),
   Object.freeze({ file: "development/references.md", label: "References", slug: "docs/references" }),
@@ -64,7 +84,12 @@ const DOC_SOURCES = Object.freeze([
  * not already the words we want to show.
  */
 /** @type {Readonly<Record<string, string>>} */
-const DOC_GROUP_TITLES = Object.freeze({ cli: "CLI", hosting: "Hosting", usage: "Browser usage" });
+const DOC_GROUP_TITLES = Object.freeze({
+  "": "Start here",
+  explanation: "Explanation",
+  "how-to": "How-to guides",
+  hosting: "Hosting",
+});
 
 /**
  * Title of the shelf a source file sits on, from its directory under `docs/`.

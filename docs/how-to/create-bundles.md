@@ -7,8 +7,6 @@ same result you tested.
 <!-- START doctoc -->
 ## Table of contents
 
-- [What does a bundle do?](#what-does-a-bundle-do)
-- [Practice with the guided Bundle tour](#practice-with-the-guided-bundle-tour)
 - [Choose what to include](#choose-what-to-include)
 - [Build the patch recipe](#build-the-patch-recipe)
 - [Turn on bundle output and download it](#turn-on-bundle-output-and-download-it)
@@ -18,49 +16,10 @@ same result you tested.
 
 <!-- END doctoc -->
 
-## What does a bundle do?
-
-A bundle is a recipe, not a pre-patched game. Its required
-`rom-weaver-bundle.json` file records:
-
-- which clean ROM is expected;
-- the patch files and their order;
-- which patches are required or optional;
-- patch names, authors, versions, and descriptions;
-- expected checksums before and after steps;
-- output filename and format defaults.
-
-The bundle archive can carry the patch files beside that recipe. A user drops
-one archive into Apply, supplies their matching ROM, reviews optional choices,
-and runs the job.
-
-This solves the fiddly parts of a multi-patch release. Users no longer have to
-rename files, remember an order, copy checksums, or wonder which optional
-patches may be combined.
-
-## Practice with the guided Bundle tour
-
-Open the [guided Bundle tour](https://rom-weaver.com/apply?guide=bundle). It
-loads the same tiny homebrew ROM and two patches used by guided Apply, then
-opens the real bundle controls.
-
-The guide shows five ideas:
-
-1. The ROM card identifies the starting file.
-2. The patch stack is the recipe, including its order, details, checks, and
-   On or Off choices.
-3. An Off patch becomes optional in the bundle.
-4. **Bundle + patches (.zip)** is selected in **Output Options**.
-5. **Create ZIP Bundle** checks and builds the release. The button then becomes
-   **Download ZIP Bundle**.
-
-The practice bundle is safe to share because its ROM is project-owned
-homebrew. The guide still selects a patch-only ZIP because that is the right
-default for a public release.
-
-If you want the starting files without a tour, choose **Download a test bundle**
-from the **New here?** beacon on [Apply](https://rom-weaver.com/apply) or
-[download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
+New to bundles? [What a bundle is](../explanation/bundles.md) covers what one
+contains and when it is worth making, and the
+[guided Bundle tour](https://rom-weaver.com/apply?guide=bundle) builds one from
+the homebrew practice files.
 
 ## Choose what to include
 
@@ -201,6 +160,5 @@ resolved against the recipe URL.
 
 The [webapp integration guide](../hosting/webapp-integration.md) covers
 multiple URL parameters, same-origin files, hosting headers, and error
-handling. For scripted bundle creation, use the separate
-[CLI bundle guide](../cli/bundles.md). Back to the
-[browser guide index](README.md).
+handling. For scripted bundle creation, use the
+[CLI bundle guide](cli-bundles.md).

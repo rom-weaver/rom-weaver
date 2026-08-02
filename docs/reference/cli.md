@@ -2,8 +2,8 @@
 
 Every rom-weaver command and global flag, the archive-selection options, JSON
 output, exit codes, file permissions, shell completions, and man pages.
-Installation is covered in [Install the CLI](install.md), and the task guides
-start at [Get started with the CLI](get-started.md).
+Installation is covered in [Install the CLI](../how-to/install-cli.md), and the task guides
+start at [Get started with the CLI](../tutorials/cli-first-weave.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -176,8 +176,8 @@ The full support matrix - every patch format, container and compressed ROM or
 disc image, create-time codec, checksum algorithm, trim target, and detected
 header - lives in [Supported formats](../reference/formats.md). For picking a
 format rather than looking one up, see the
-[archive formats](../usage/formats.md) and
-[compression formats](../usage/compression-formats.md) guides.
+[archive formats](../how-to/work-with-archives.md) and
+[compression formats](../explanation/compression-formats.md) guides.
 
 ## JSON output
 
@@ -233,7 +233,7 @@ Common fixes:
 - **Inside a container.** The message adds a container hint, because the usual
   cause is a uid mismatch against a bind mount. Re-run with
   `--user "$(id -u):$(id -g)"` as shown in
-  [Run in Docker](install.md#run-in-docker).
+  [Run in Docker](../how-to/install-cli.md#run-in-docker).
 
 Permission failures exit `1`. Under `--json` they arrive as a terminal event
 with `"status": "failed"`, carrying `"stage": "validate"` when the preflight

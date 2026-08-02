@@ -1263,7 +1263,7 @@ asset list. That is why adding them does not interact with
 and the step is safe on a rerun and after the release is published.
 
 The consumer side is a single query against the digest - see
-[Verifying a download](../cli/install.md#verifying-a-download), where both install scripts'
+[Verifying a download](../how-to/install-cli.md#verifying-a-download), where both install scripts'
 check and the `gh attestation verify` route for a file downloaded by hand are
 written out.
 

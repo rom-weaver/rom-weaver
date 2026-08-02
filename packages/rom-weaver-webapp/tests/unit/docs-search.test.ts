@@ -5,7 +5,7 @@ import { createDocRoute } from "../../src/webapp/docs-content.mjs";
 import { createDocsSearchIndex, findSearchToken, searchDocs, searchTokens } from "../../src/webapp/docs-search.mjs";
 
 const route = createDocRoute(
-  { file: "usage/fixture.md", label: "Checksum guide", slug: "docs/fixture" },
+  { file: "how-to/fixture.md", label: "Checksum guide", slug: "docs/fixture" },
   `# Checksum guide
 
 Find the right checksum workflow here.

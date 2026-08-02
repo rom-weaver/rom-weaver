@@ -1,4 +1,4 @@
-# Pick a patch format
+# Choosing a patch format
 
 BPS, IPS, xdelta, PPF, and a dozen more. This guide explains what actually
 separates them and which one to publish in.
@@ -26,7 +26,7 @@ is supported before you consider converting it.
 
 Converting a patch to another format does not fix a checksum error either. The
 format is not the problem; the starting file is. Go to
-[Fix a checksum error](fix-checksum-errors.md) instead.
+[Fix a checksum error](../how-to/fix-checksum-errors.md) instead.
 
 This guide is for people publishing a patch.
 
@@ -58,7 +58,7 @@ the result came out right.
 That makes it a strong default for cartridge games when your audience has a
 BPS-compatible patcher. rom-weaver applies and creates BPS. In the webapp,
 choose BPS in the **0x04 Output** format selector. For a scripted release, use
-the separate [CLI patch creation guide](../cli/create.md).
+the separate [CLI patch creation guide](../how-to/cli-create.md).
 
 ## IPS and IPS32
 
@@ -131,5 +131,5 @@ names, extensions, and what rom-weaver can currently apply and create.
 - **Publishing several patches at once:** any of the above, plus a rom-weaver
   bundle to record the order, the optional pieces, and the checksums.
 
-Picked one? [Create a patch](create-rom-patches.md) walks through making it
-and, more importantly, testing it. Back to the [guide index](README.md).
+Picked one? [Create a patch](../how-to/create-rom-patches.md) walks through making it
+and, more importantly, testing it. Back to the [guide index](../README.md).
