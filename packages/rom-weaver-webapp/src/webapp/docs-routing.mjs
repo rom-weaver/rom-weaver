@@ -86,9 +86,7 @@ const DOC_SOURCES = Object.freeze([
 /** @type {Readonly<Record<string, string>>} */
 const DOC_GROUP_TITLES = Object.freeze({
   "": "Start here",
-  explanation: "Explanation",
   "how-to": "How-to guides",
-  hosting: "Hosting",
 });
 
 /**

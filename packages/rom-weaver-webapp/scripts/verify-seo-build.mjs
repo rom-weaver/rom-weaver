@@ -245,7 +245,10 @@ for (const route of DOC_ROUTES) {
   const guide = ["docs/tutorials/", "docs/how-to/", "docs/explanation/"].some((folder) =>
     route.source.startsWith(folder),
   );
-  const minimumWords = guide ? (route.slug === "docs" || legalPage ? 250 : 500) : 150;
+  // The hub is an index of links, not a guide, but it still has to say enough
+  // to stand on its own as the published documentation landing page.
+  let minimumWords = guide ? 500 : 150;
+  if (route.slug === "docs") minimumWords = 250;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {
     throw new Error(`${route.slug} has ${wordCount} visible words; expected at least ${minimumWords}`);
