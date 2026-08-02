@@ -90,12 +90,15 @@
   padding: var(--sp-s) var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none;
 }
 .rw-app .log-filter-bar .log-controls { display: flex; align-items: center; gap: var(--sp-s); min-inline-size: 0; }
-/* the level picker (or the storage refresh) parks at the far end, so the row
-   reads left-to-right as "which log" then "how much of it". Named rather than
-   positional: the view toggle is conditional, and a `:last-child` rule would
-   move the picker to the middle of the row on the tabs that lack it. */
+/* Everything after the view toggle parks at the far end, so the row reads
+   left-to-right as "which log", then what to do with it. The break is named
+   rather than positional: the view toggle is conditional, and a `:last-child`
+   rule would strand the group mid-row on the tabs that lack it. */
 .rw-app .log-filter-bar .log-controls > .loglevel,
 .rw-app .log-filter-bar .log-controls > .log-refresh { margin-inline-start: auto; }
+/* copy/download trail the picker they belong with - the head's auto margin
+   would otherwise split the free space between the two groups */
+.rw-app .log-filter-bar .log-controls > .log-actions { margin-inline-start: 0; }
 .rw-app .log-filter-bar .log-filter { inline-size: 100%; height: 30px; font-size: .76rem; padding-block: 0; }
 .rw-app .log-filter-bar .loglevel { display: flex; flex: 0 0 auto; }
 .rw-app .log-filter-bar .loglevel .select { width: max-content; height: 30px; font-size: var(--dropdown-fs, .76rem); padding-block: 0; }

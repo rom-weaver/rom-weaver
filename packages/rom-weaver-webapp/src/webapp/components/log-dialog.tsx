@@ -486,50 +486,6 @@ const LogDialog = ({
               ) : null}
             </div>
           ) : null}
-          {tab === "logs" || tab === "storage" ? (
-            <div className="dlg-actions log-actions">
-              <button
-                aria-label={localizer.message("ui.common.copy")}
-                className={`btn slim ghost log-icon-btn${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}
-                onClick={() => {
-                  copyToClipboard(exportText)
-                    .then(() => {
-                      setCopyFailed(false);
-                      setCopiedAll(true);
-                      window.setTimeout(() => setCopiedAll(false), 1300);
-                    })
-                    .catch((error) => {
-                      logger.warn("Log copy failed", { message: String(error) });
-                      setCopiedAll(false);
-                      setCopyFailed(true);
-                      window.setTimeout(() => setCopyFailed(false), 1600);
-                    });
-                }}
-                title={localizer.message("ui.common.copy")}
-                type="button"
-              >
-                {copiedAll ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-              </button>
-              <button
-                aria-label={localizer.message("ui.result.download")}
-                className="btn slim ghost log-icon-btn"
-                onClick={() => {
-                  void triggerBrowserDownload(
-                    exportText,
-                    showingOpfs
-                      ? "rom-weaver-opfs.txt"
-                      : showingPrevious
-                        ? "rom-weaver-previous-log.txt"
-                        : "rom-weaver-log.txt",
-                  );
-                }}
-                title={localizer.message("ui.result.download")}
-                type="button"
-              >
-                <Download aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
           <button
             aria-label={localizer.message("ui.common.close")}
             className="dlg-x"
@@ -644,6 +600,48 @@ const LogDialog = ({
                     </select>
                   </label>
                 )}
+                <div className="dlg-actions log-actions">
+                  <button
+                    aria-label={localizer.message("ui.common.copy")}
+                    className={`btn slim ghost log-icon-btn${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}
+                    onClick={() => {
+                      copyToClipboard(exportText)
+                        .then(() => {
+                          setCopyFailed(false);
+                          setCopiedAll(true);
+                          window.setTimeout(() => setCopiedAll(false), 1300);
+                        })
+                        .catch((error) => {
+                          logger.warn("Log copy failed", { message: String(error) });
+                          setCopiedAll(false);
+                          setCopyFailed(true);
+                          window.setTimeout(() => setCopyFailed(false), 1600);
+                        });
+                    }}
+                    title={localizer.message("ui.common.copy")}
+                    type="button"
+                  >
+                    {copiedAll ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                  </button>
+                  <button
+                    aria-label={localizer.message("ui.result.download")}
+                    className="btn slim ghost log-icon-btn"
+                    onClick={() => {
+                      void triggerBrowserDownload(
+                        exportText,
+                        showingOpfs
+                          ? "rom-weaver-opfs.txt"
+                          : showingPrevious
+                            ? "rom-weaver-previous-log.txt"
+                            : "rom-weaver-log.txt",
+                      );
+                    }}
+                    title={localizer.message("ui.result.download")}
+                    type="button"
+                  >
+                    <Download aria-hidden="true" />
+                  </button>
+                </div>
               </div>
               <input
                 aria-label={localizer.message("ui.log.filterLabel")}
