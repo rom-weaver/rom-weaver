@@ -17,6 +17,23 @@ fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
         || native_file_identity_matches(left, right)
 }
 
+pub(super) fn warn_on_rom_name_mismatch(expected: Option<&str>, actual_path: &Path) {
+    let Some(expected) = expected else {
+        return;
+    };
+    let Some(actual) = actual_path.file_name().and_then(|name| name.to_str()) else {
+        return;
+    };
+    if expected.to_lowercase() == actual.to_lowercase() {
+        return;
+    }
+    warn!(
+        expected_rom_name = expected,
+        actual_rom_name = actual,
+        "bundle ROM name mismatch; continuing because file-name checks are advisory"
+    );
+}
+
 // same-file compares dev/inode on Unix and volume serial + file index on
 // Windows. The Windows half cannot be written against std on stable: the
 // MetadataExt equivalents are still unstable behind `windows_by_handle`
@@ -308,7 +325,10 @@ impl CliApp {
         // track's filesystem rather than patching bytes, so it follows a
         // dedicated path.
         if args.patches.iter().any(|patch| Self::is_dcp_patch(patch)) {
-            return self.run_dcp_apply(args);
+            let expected_rom_name = bundle_resolution
+                .as_ref()
+                .and_then(|resolution| resolution.expected_rom_name.as_deref());
+            return self.run_dcp_apply(args, expected_rom_name);
         }
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -367,13 +387,11 @@ impl CliApp {
             )
         };
         // Per-patch header modes: a missing entry inherits the last given mode;
-        // an empty list means all-auto. `Auto` needs checksum evidence: N64
-        // byte-order rewrites and cheat codes pin offsets to the original bytes,
-        // and --ignore-checksum-validation removes the evidence itself, so those
-        // runs degrade auto to keep.
+        // an empty list means all-auto. N64 byte-order rewrites and cheat codes
+        // pin offsets to the original bytes, so those runs degrade auto to keep.
+        // Ignoring checksum enforcement does not discard representation evidence.
         let any_explicit_n64_transform = n64_byte_order.iter().any(|mode| mode.target().is_some());
-        let auto_evidence_available =
-            !any_explicit_n64_transform && codes.is_empty() && !ignore_checksum_validation;
+        let auto_evidence_available = !any_explicit_n64_transform && codes.is_empty();
         let any_explicit_strip = patch_header.contains(&PatchApplyHeaderMode::Strip);
         let output_header_mode = output_header.unwrap_or_default();
         if !codes.is_empty() && (any_explicit_strip || any_explicit_n64_transform) {
@@ -556,7 +574,7 @@ impl CliApp {
                         no_extract,
                         no_ignore,
                         kind_filter: input_kind_filter,
-                        stop_on_disc_image_codec: false,
+                        stop_on_single_payload_codec: false,
                     },
                 ) {
                     Ok(resolved) => resolved,
@@ -571,6 +589,12 @@ impl CliApp {
                 } = resolved;
                 (source, extracted_archives, cleanup_paths)
             };
+        warn_on_rom_name_mismatch(
+            bundle_resolution
+                .as_ref()
+                .and_then(|resolution| resolution.expected_rom_name.as_deref()),
+            &resolved_input,
+        );
         // Seed host-provided input checksums so handler source verification skips
         // a re-read. Keyed by the resolved path; header/N64 transforms write a
         // distinct temp path whose lookup misses and recomputes. Skipped for disc
@@ -588,7 +612,7 @@ impl CliApp {
                 no_extract,
                 no_ignore,
                 kind_filter: patch_kind_filter,
-                stop_on_disc_image_codec: false,
+                stop_on_single_payload_codec: false,
             },
             PatchResolveLabels {
                 command: "patch-apply",
@@ -696,7 +720,7 @@ impl CliApp {
                     && (add_header
                         || strip_output_header
                         || repair_checksum
-                        || n64_order.is_some_and(|order| order.from != order.to)
+                        || n64_order.is_some()
                         || patch_count > 1);
                 let needs_staged_output =
                     is_disc || requires_compat_finalize || compression_options.enabled;
@@ -723,7 +747,7 @@ impl CliApp {
                 // Resolve every step's input basis (CLI flag > bundle declaration >
                 // inference against the prepared input) and verify declared
                 // base-basis steps against the base once, before the chain runs.
-                let step_verifications = match self.resolve_apply_step_verifications(
+                let step_verifications = match self.plan_apply_step_verifications(
                     &resolved_patches,
                     usize::from(!codes.is_empty()),
                     bundle_resolution
@@ -731,7 +755,13 @@ impl CliApp {
                         .map(|resolution| resolution.step_verifications.clone())
                         .unwrap_or_default(),
                     &patch_basis,
-                    &apply_input,
+                    PatchApplyBaseInputs {
+                        prepared: apply_input.as_path(),
+                        original: resolved_input.as_path(),
+                        prepared_headerless: header_state.headerless.then_some(true),
+                        prepared_n64_byte_order: n64_order.map(|order| order.from),
+                        original_n64_byte_order: n64_order.map(|order| order.to),
+                    },
                     &context,
                 ) {
                     Ok(steps) => steps,
@@ -1620,30 +1650,73 @@ impl CliApp {
 
     pub(super) fn transition_n64_byte_order(
         &self,
-        mode: PatchN64ByteOrderMode,
+        plan: ChainN64TransitionPlan<'_>,
         resolved_patch: &Path,
         current_input: &mut PathBuf,
         state: &mut Option<N64ByteOrderTransform>,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
     ) -> Result<()> {
-        let Some((source, target)) = self.resolve_patch_n64_target(
-            current_input,
-            Some(resolved_patch),
-            None,
+        context.cancel().check()?;
+        let ChainN64TransitionPlan {
             mode,
-            context,
-        )?
-        else {
-            return Ok(());
+            base_variant,
+            base_representation,
+        } = plan;
+        let planned_order = base_representation.and_then(|value| value.n64_byte_order);
+        let (source, target) = if let Some(planned) = planned_order {
+            let source = if let Some(order) = *state {
+                order.from
+            } else {
+                Self::detect_n64_byte_order_path(current_input)?.ok_or_else(|| {
+                    RomWeaverError::Validation(format!(
+                        "could not detect N64 byte order for `{}`",
+                        current_input.display()
+                    ))
+                })?
+            };
+            let requested = match mode {
+                PatchN64ByteOrderMode::Auto => planned,
+                PatchN64ByteOrderMode::Keep => source,
+                concrete => concrete.target().unwrap_or(source),
+            };
+            if mode != PatchN64ByteOrderMode::Auto && requested != planned {
+                return Err(RomWeaverError::ValidationCode(
+                    ValidationCodeError::new("patch.base.n64_byte_order_mismatch")
+                        .with_message(
+                            "patch N64 byte-order mode conflicts with the base ROM representation selected by checksum planning",
+                        )
+                        .with_field("patch", resolved_patch.display().to_string())
+                        .with_field("base_variant", base_variant.unwrap_or_default().to_string())
+                        .with_field("n64_byte_order", mode.id()),
+                ));
+            }
+            debug!(
+                base_variant = base_variant.unwrap_or_default(),
+                n64_byte_order = planned.id(),
+                "chain N64: enforcing the planner-selected base representation"
+            );
+            (source, requested)
+        } else {
+            let Some(resolved) = self.resolve_patch_n64_target(
+                current_input,
+                Some(resolved_patch),
+                None,
+                mode,
+                context,
+            )?
+            else {
+                return Ok(());
+            };
+            resolved
         };
         let original = state.map(|order| order.to).unwrap_or(source);
         if source != target {
             let transformed_path = context
                 .temp_paths()
                 .next_path("patch-apply-chain-n64-byte-order", Some("bin"));
-            Self::rewrite_n64_byte_order(current_input, &transformed_path, source, target)?;
             temp_paths.push(transformed_path.clone());
+            Self::rewrite_n64_byte_order(current_input, &transformed_path, source, target)?;
             *current_input = transformed_path;
             debug!(
                 from = source.id(),
@@ -1750,24 +1823,62 @@ impl CliApp {
 
     /// Transition the on-disk header state between chain steps so patch `mode`'s
     /// step applies against the bytes it was authored for. Explicit keep/strip
-    /// force the state (a keep with nothing ever stripped is a no-op); auto acts
-    /// only on checksum proof from this patch's embedded source CRC32 - no
-    /// evidence, or evidence matching the current bytes, carries the state over
-    /// untouched, and evidence matching neither variant is left for the handler's
-    /// own strict validation to report.
+    /// force a compatible state; auto first honors a base representation proven
+    /// by the shared planner, then falls back to this patch's embedded source
+    /// CRC32. With no evidence, the current state carries over untouched.
     fn chain_header_transition(
         &self,
-        mode: PatchApplyHeaderMode,
+        plan: ChainHeaderTransitionPlan<'_>,
         resolved_patch: &Path,
         current_input: &mut PathBuf,
         state: &mut ChainHeaderState,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
     ) -> Result<()> {
-        let desired_headerless = match mode {
-            PatchApplyHeaderMode::Keep => false,
-            PatchApplyHeaderMode::Strip => true,
-            PatchApplyHeaderMode::Auto => {
+        context.cancel().check()?;
+        let ChainHeaderTransitionPlan {
+            mode,
+            base_variant,
+            base_representation,
+        } = plan;
+        let planned_headerless = base_representation.and_then(|value| value.headerless);
+        let requested_headerless = match mode {
+            PatchApplyHeaderMode::Keep => Some(false),
+            PatchApplyHeaderMode::Strip => Some(true),
+            PatchApplyHeaderMode::Auto => None,
+        };
+        if let (Some(planned), Some(requested)) = (planned_headerless, requested_headerless)
+            && planned != requested
+        {
+            return Err(RomWeaverError::ValidationCode(
+                ValidationCodeError::new("patch.base.header_mode_mismatch")
+                    .with_message(
+                        "patch header mode conflicts with the base ROM representation selected by checksum planning",
+                    )
+                    .with_field("patch", resolved_patch.display().to_string())
+                    .with_field("base_variant", base_variant.unwrap_or_default().to_string())
+                    .with_field(
+                        "patch_header",
+                        match mode {
+                            PatchApplyHeaderMode::Keep => "keep",
+                            PatchApplyHeaderMode::Strip => "strip",
+                            PatchApplyHeaderMode::Auto => "auto",
+                        },
+                    ),
+            ));
+        }
+        let desired_headerless = match (mode, planned_headerless) {
+            (PatchApplyHeaderMode::Auto, Some(planned)) => {
+                debug!(
+                    base_variant = base_variant.unwrap_or_default(),
+                    headerless = planned,
+                    "chain header: enforcing the planner-selected base representation"
+                );
+                planned
+            }
+            (PatchApplyHeaderMode::Keep, _) => false,
+            (PatchApplyHeaderMode::Strip, _) => true,
+            (PatchApplyHeaderMode::Auto, None) => {
                 let Some(required_crc32) =
                     self.embedded_patch_source_crc32(resolved_patch, context)
                 else {
@@ -1856,8 +1967,8 @@ impl CliApp {
             let stripped_path = context
                 .temp_paths()
                 .next_path("patch-apply-chain-noheader", Some("bin"));
-            let result = Self::strip_header_to_temp(current_input, &stripped_path)?;
             temp_paths.push(stripped_path.clone());
+            let result = Self::strip_header_to_temp(current_input, &stripped_path)?;
             debug!(
                 header = ?result.matched_header,
                 "chain header: stripped header before this patch"
@@ -1876,8 +1987,8 @@ impl CliApp {
             let restored_path = context
                 .temp_paths()
                 .next_path("patch-apply-chain-rehead", Some("bin"));
-            Self::copy_with_optional_header(current_input, &restored_path, Some(&header_bytes))?;
             temp_paths.push(restored_path.clone());
+            Self::copy_with_optional_header(current_input, &restored_path, Some(&header_bytes))?;
             debug!("chain header: restored the stripped header before this patch");
             state.headerless = false;
             *current_input = restored_path;
@@ -2062,6 +2173,26 @@ struct ChainHeaderState {
     stripped_header_match: Option<KnownRomHeaderMatch>,
 }
 
+struct ChainHeaderTransitionPlan<'a> {
+    mode: PatchApplyHeaderMode,
+    base_variant: Option<&'a str>,
+    base_representation: Option<patch_plan::BaseRepresentation>,
+}
+
+pub(super) struct ChainN64TransitionPlan<'a> {
+    pub(super) mode: PatchN64ByteOrderMode,
+    pub(super) base_variant: Option<&'a str>,
+    pub(super) base_representation: Option<patch_plan::BaseRepresentation>,
+}
+
+struct PatchApplyBaseInputs<'a> {
+    prepared: &'a Path,
+    original: &'a Path,
+    prepared_headerless: Option<bool>,
+    prepared_n64_byte_order: Option<N64ByteOrder>,
+    original_n64_byte_order: Option<N64ByteOrder>,
+}
+
 struct RunPatchApplyLoopInputs<'a> {
     resolved_patches: &'a [(PathBuf, PathBuf)],
     apply_input: PathBuf,
@@ -2128,13 +2259,18 @@ impl CliApp {
             )?;
             applied_formats.push(handler.descriptor().name);
             let patch_start_percent = patch_progress_segment_start(index, patch_count);
+            let step = step_verifications.get(index);
 
             // Later chain steps may need a different header state than the previous
             // patch left behind (explicit per-patch mode, or auto evidence from this
             // patch's embedded source checksum).
             if index > 0
                 && let Err(error) = self.chain_header_transition(
-                    chain_header_modes.get(index).copied().unwrap_or_default(),
+                    ChainHeaderTransitionPlan {
+                        mode: chain_header_modes.get(index).copied().unwrap_or_default(),
+                        base_variant: step.and_then(|step| step.base_variant.as_deref()),
+                        base_representation: step.and_then(|step| step.base_representation),
+                    },
                     resolved_patch_path,
                     &mut current_input,
                     header_state,
@@ -2157,7 +2293,11 @@ impl CliApp {
             }
             if index > 0
                 && let Err(error) = self.transition_n64_byte_order(
-                    chain_n64_modes.get(index).copied().unwrap_or_default(),
+                    ChainN64TransitionPlan {
+                        mode: chain_n64_modes.get(index).copied().unwrap_or_default(),
+                        base_variant: step.and_then(|step| step.base_variant.as_deref()),
+                        base_representation: step.and_then(|step| step.base_representation),
+                    },
                     resolved_patch_path,
                     &mut current_input,
                     n64_order,
@@ -2227,13 +2367,16 @@ impl CliApp {
                 None,
             );
 
-            let step = step_verifications.get(index);
             let step_is_base = index > 0
                 && step.and_then(|step| step.basis) == Some(patch_plan::PatchInputBasis::Base);
-            // A previous-basis step with declared mid-chain input checks
-            // verifies them against the real intermediate before it runs.
+            let step_declares_base = step_is_base
+                && step.and_then(|step| step.basis_source)
+                    == Some(patch_plan::PatchBasisSource::Declared);
+            // An unbased bundle input check still describes the real
+            // intermediate even when embedded evidence independently infers
+            // Base. Only an explicit Base declaration verifies once up front.
             if context.strict_patch_checksums()
-                && !step_is_base
+                && !step_declares_base
                 && index > 0
                 && let Some(declared) = step.and_then(|step| step.declared_input.as_ref())
                 && let Err(error) = Self::verify_chain_step_state(&current_input, declared, context)
@@ -2297,6 +2440,19 @@ impl CliApp {
                     None,
                 );
             }
+            if let Some(selection) = step.and_then(|step| step.execution) {
+                patch_context = patch_context.with_patch_endpoint_selection(selection);
+            }
+            if let Some(order) = n64_order.as_ref().map(|order| order.from).or_else(|| {
+                step.and_then(|step| step.base_representation)
+                    .and_then(|representation| representation.n64_byte_order)
+            }) {
+                patch_context = patch_context.with_patch_input_n64_byte_order(match order {
+                    N64ByteOrder::BigEndian => PatchInputN64ByteOrder::BigEndian,
+                    N64ByteOrder::LittleEndian => PatchInputN64ByteOrder::LittleEndian,
+                    N64ByteOrder::ByteSwapped => PatchInputN64ByteOrder::ByteSwapped,
+                });
+            }
             report = match handler.apply(&request, &patch_context) {
                 Ok(report) => report,
                 Err(RomWeaverError::Unsupported(op)) => OperationReport::unsupported(
@@ -2325,6 +2481,21 @@ impl CliApp {
                     );
                 }
                 return Err(Box::new(report));
+            }
+            if report
+                .details
+                .as_ref()
+                .and_then(|details| details.pointer("/patch/output_representation/n64_byte_order"))
+                .and_then(Value::as_str)
+                == Some("big-endian")
+            {
+                let original = n64_order
+                    .as_ref()
+                    .map_or(N64ByteOrder::BigEndian, |order| order.to);
+                *n64_order = Some(N64ByteOrderTransform {
+                    from: N64ByteOrder::BigEndian,
+                    to: original,
+                });
             }
             if !progress_tracker.saw_meaningful_running_progress() {
                 self.emit_running(
@@ -2411,28 +2582,45 @@ impl CliApp {
         Ok(())
     }
 
-    /// Resolve each chain step's verification spec with precedence CLI
-    /// `--patch-basis` > bundle `basis` > inference (the patch's embedded
-    /// source CRC32 matching the prepared input). Declared base-basis
-    /// mid-chain steps verify against the base here, once, before the chain
-    /// runs. The synthetic cheat step (resolved index 0 when codes are
-    /// present) consumes the base by construction and carries no declaration.
-    /// With checksum validation ignored the whole resolution is skipped.
-    fn resolve_apply_step_verifications(
+    /// Assemble apply's declarations, then use the same whole-file endpoint
+    /// planner as `patch validate --plan` to resolve every step's basis.
+    /// Declared base steps still verify against the base before the chain;
+    /// ignore mode still resolves basis, representation, and execution but does
+    /// not enforce declared or embedded checks.
+    fn plan_apply_step_verifications(
         &self,
         resolved_patches: &[(PathBuf, PathBuf)],
         cheat_steps: usize,
         bundle_steps: Vec<patch_plan::PatchStepVerification>,
         cli_basis: &[PatchBasisMode],
-        apply_input: &Path,
+        base_inputs: PatchApplyBaseInputs<'_>,
         context: &OperationContext,
     ) -> Result<Vec<patch_plan::PatchStepVerification>> {
+        let original_representation = Self::base_representation(
+            base_inputs.original,
+            None,
+            base_inputs.original_n64_byte_order,
+        )?;
+        let prepared_representation = Self::base_representation(
+            base_inputs.prepared,
+            base_inputs.prepared_headerless,
+            base_inputs.prepared_n64_byte_order,
+        )?;
+        let endpoint_inputs = if base_inputs.prepared == base_inputs.original {
+            vec![(base_inputs.prepared, "raw", prepared_representation)]
+        } else {
+            vec![
+                (
+                    base_inputs.prepared,
+                    "prepared-raw",
+                    prepared_representation,
+                ),
+                (base_inputs.original, "raw", original_representation),
+            ]
+        };
         let step_count = resolved_patches.len();
         let mut steps: Vec<patch_plan::PatchStepVerification> =
             vec![patch_plan::PatchStepVerification::default(); step_count];
-        if !context.strict_patch_checksums() || step_count <= 1 {
-            return Ok(steps);
-        }
         let user_count = step_count.saturating_sub(cheat_steps);
         // Declared sources align with the user-visible patch list; discovery
         // or archive expansion can change the resolved count, in which case
@@ -2451,92 +2639,158 @@ impl CliApp {
                 )));
             }
             for (user_index, mode) in cli_basis.iter().enumerate() {
-                if let Some(basis) = mode.declared() {
-                    let step = &mut steps[cheat_steps + user_index];
-                    step.basis = Some(basis);
-                    step.basis_source = Some(PatchBasisSource::Declared);
+                let step = &mut steps[cheat_steps + user_index];
+                step.basis = mode.declared();
+                step.basis_source = step.basis.map(|_| PatchBasisSource::Declared);
+            }
+        }
+        if step_count <= 1 && context.strict_patch_checksums() {
+            return Ok(steps);
+        }
+
+        let mut base_endpoint_matches = vec![Vec::new(); step_count];
+        let plan_inputs: Vec<patch_plan::PlanPatchInput> = resolved_patches
+            .iter()
+            .enumerate()
+            .map(|(index, (patch_path, resolved_patch_path))| {
+                let handler = self.patches.probe(resolved_patch_path);
+                let declared_basis = steps[index].basis;
+                // Unbased bundle checks constrain inference and remain a
+                // previous-step runtime gate; only explicit declarations may
+                // use them as independent base evidence. Ignore mode retains
+                // endpoint planning without turning declarations back into
+                // validation gates.
+                let declared_input = context
+                    .strict_patch_checksums()
+                    .then(|| steps[index].declared_input.clone())
+                    .flatten()
+                    .unwrap_or_default();
+                let declared_output = context
+                    .strict_patch_checksums()
+                    .then(|| steps[index].declared_output.clone())
+                    .flatten()
+                    .unwrap_or_default();
+                let mut plan_input = Self::build_plan_patch_input(
+                    patch_path,
+                    resolved_patch_path,
+                    handler.as_deref(),
+                    declared_basis,
+                    declared_input,
+                    declared_output,
+                    context,
+                );
+                plan_input.declared_input_infers_base = steps[index].basis.is_some();
+                if patch_plan::should_resolve_base_endpoints(index, plan_input.declared_basis)
+                    && let Some(handler) = handler.as_deref()
+                {
+                    plan_input.base_executions = match Self::resolve_base_endpoint_selections(
+                        handler,
+                        resolved_patch_path,
+                        &endpoint_inputs,
+                        context,
+                    ) {
+                        Ok(matches) => {
+                            let selections =
+                                matches.iter().map(|matched| matched.selection).collect();
+                            base_endpoint_matches[index] = matches;
+                            selections
+                        }
+                        Err(RomWeaverError::Cancelled) => {
+                            return Err(RomWeaverError::Cancelled);
+                        }
+                        Err(error) => {
+                            debug!(
+                                %error,
+                                patch = %patch_path.display(),
+                                "handler-normalized base endpoint evidence unavailable"
+                            );
+                            Vec::new()
+                        }
+                    };
                 }
+                Ok(plan_input)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let base_variants = Self::plan_apply_base_variants(
+            base_inputs.original,
+            original_representation,
+            base_inputs.prepared,
+            prepared_representation,
+            &plan_inputs,
+            context,
+        )?;
+        let resolved = patch_plan::resolve_verification_plan(&base_variants, &plan_inputs);
+
+        for (index, verdict) in resolved.per_patch.iter().enumerate() {
+            if verdict.basis == patch_plan::PatchInputBasis::Base
+                && plan_inputs[index].base_executions.len() > 1
+            {
+                return Err(RomWeaverError::ValidationCode(
+                    ValidationCodeError::new("patch.base.endpoint_ambiguous")
+                        .with_message(
+                            "patch input matches multiple reversible endpoints against the base ROM",
+                        )
+                        .with_field("patch_index", index as u64)
+                        .with_field(
+                            "patch",
+                            resolved_patches[index].0.display().to_string(),
+                        )
+                        .with_field(
+                            "matches",
+                            plan_inputs[index].base_executions.len() as u64,
+                        ),
+                ));
             }
         }
 
-        // Lazy base identity: the CRC32 of the exact bytes the chain consumes.
-        let mut cached_base_crc32: Option<Option<String>> = None;
-        let mut resolve_base_crc32 = |context: &OperationContext| -> Option<String> {
-            if cached_base_crc32.is_none() {
-                let computed = context.seeded_checksum(apply_input, "crc32").or_else(|| {
-                    File::open(apply_input)
-                        .ok()
-                        .and_then(|file| {
-                            Self::crc32_of_reader(&mut BufReader::new(file), context).ok()
-                        })
-                        .flatten()
-                });
-                trace!(base_crc32 = ?computed, "resolved base identity for basis inference");
-                cached_base_crc32 = Some(computed);
-            }
-            cached_base_crc32.clone().expect("just seeded")
-        };
-
         for index in 1..step_count {
-            let (patch_path, resolved_patch_path) = &resolved_patches[index];
-            let step_basis = steps[index].basis;
-            match step_basis {
-                None => {
-                    // Inference: a mid-chain patch whose embedded source CRC32
-                    // equals the base consumes the base, not the previous
-                    // patch's output.
-                    let Some(embedded) =
-                        self.embedded_patch_source_crc32(resolved_patch_path, context)
-                    else {
-                        continue;
-                    };
-                    if resolve_base_crc32(context).is_some_and(|base| base == embedded) {
-                        debug!(
-                            index,
-                            patch = %patch_path.display(),
-                            "patch input checks match the base ROM; resolved basis to base"
-                        );
-                        steps[index].basis = Some(patch_plan::PatchInputBasis::Base);
-                        steps[index].basis_source =
-                            Some(patch_plan::PatchBasisSource::InferredBase);
-                    }
-                }
-                Some(patch_plan::PatchInputBasis::Base) => {
-                    // A declared base step verifies against the base once, up
-                    // front: its declared checks when present, else its
-                    // embedded source CRC32.
-                    if let Some(declared) = steps[index].declared_input.clone() {
-                        Self::verify_chain_step_state(apply_input, &declared, context).map_err(
-                            |error| {
-                                RomWeaverError::ValidationCode(
-                                    ValidationCodeError::new("patch.base.input_mismatch")
-                                        .with_message(
-                                            "patch declares basis base but its input checks do not match the ROM",
-                                        )
-                                        .with_field("patch_index", index as u64)
-                                        .with_field("patch", patch_path.display().to_string())
-                                        .with_field("detail", error.to_string()),
-                                )
-                            },
-                        )?;
-                    } else if let Some(embedded) =
-                        self.embedded_patch_source_crc32(resolved_patch_path, context)
-                        && let Some(base) = resolve_base_crc32(context)
-                        && base != embedded
-                    {
-                        return Err(RomWeaverError::ValidationCode(
-                            ValidationCodeError::new("patch.base.input_mismatch")
-                                .with_message(
-                                    "patch declares basis base but its embedded source checksum does not match the ROM",
-                                )
-                                .with_field("patch_index", index as u64)
-                                .with_field("patch", patch_path.display().to_string())
-                                .with_field("expected", embedded)
-                                .with_field("actual", base),
-                        ));
-                    }
-                }
-                Some(patch_plan::PatchInputBasis::Previous) => {}
+            let (patch_path, _) = &resolved_patches[index];
+            let required_base_failed = resolved.per_patch[index].input_verdict
+                == patch_plan::PatchInputVerdict::Failed
+                || (!plan_inputs[index].declared_input.is_empty()
+                    && patch_plan::base_state_verdict(
+                        &plan_inputs[index].declared_input,
+                        &base_variants,
+                    ) == patch_plan::PatchInputVerdict::Failed);
+            if context.strict_patch_checksums()
+                && steps[index].basis == Some(patch_plan::PatchInputBasis::Base)
+                && steps[index].basis_source == Some(patch_plan::PatchBasisSource::Declared)
+                && required_base_failed
+            {
+                return Err(RomWeaverError::ValidationCode(
+                    ValidationCodeError::new("patch.base.input_mismatch")
+                        .with_message(
+                            "patch declares basis base but its input checks do not match the ROM",
+                        )
+                        .with_field("patch_index", index as u64)
+                        .with_field("patch", patch_path.display().to_string())
+                        .with_field("detail", resolved.per_patch[index].message.clone()),
+                ));
+            }
+            if resolved.per_patch[index].basis_source == patch_plan::PatchBasisSource::InferredBase
+            {
+                debug!(
+                    index,
+                    patch = %patch_path.display(),
+                    "patch input checks match the base ROM; resolved basis to base"
+                );
+            }
+        }
+        let mut steps = patch_plan::apply_resolved_bases(&resolved, &base_variants, steps);
+        for ((step, verdict), endpoint_matches) in steps
+            .iter_mut()
+            .zip(&resolved.per_patch)
+            .zip(&base_endpoint_matches)
+        {
+            if step.base_representation.is_none()
+                && verdict.basis == patch_plan::PatchInputBasis::Base
+                && let Some(selection) = verdict.execution
+                && let Some(matched) = endpoint_matches
+                    .iter()
+                    .find(|matched| matched.selection == selection)
+            {
+                step.base_variant = Some(matched.variant.clone());
+                step.base_representation = Some(matched.representation);
             }
         }
         Ok(steps)

@@ -92,7 +92,7 @@ It is intentionally a living document. Some patch families do not have stable fo
 
 ## Quick mapping for `rom-weaver` patch families
 
-| `rom-weaver` format   | Primary reference(s)                                                      |
+| `rom-weaver` format   | Primary references                                                        |
 | --------------------- | ------------------------------------------------------------------------- |
 | `IPS`, `IPS32`, `EBP` | IPS spec, Flips IPS delta creator, RomPatcher.js IPS implementation       |
 | `BPS`                 | byuu BPS spec, Flips/MultiPatch, RomPatcher.js BPS implementation         |

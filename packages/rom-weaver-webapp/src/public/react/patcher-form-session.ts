@@ -6,24 +6,14 @@ import {
 import { emitTraceLog } from "../../lib/logging.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
-import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult } from "../../types/workflow-runtime-types.ts";
-import {
-  inertDialogController,
-  inertOutputController,
-  inertStackController,
-  inertUiController,
-  useLiveStoreController,
-} from "./apply-session-controllers.ts";
+import { inertOutputController, inertStackController, useLiveStoreController } from "./apply-session-controllers.ts";
 import {
   createRomInputRow,
-  formatOperationTiming,
   getPendingInputDisplayFileName,
-  getStagedDecompressionTimeMs,
   resolveMergedRomFileName,
   sortRomInputs,
-  sumStagedInfoSize,
 } from "./apply-session-inputs.ts";
 import { getTraceSourceSummaries, logUiError } from "./apply-session-logging.ts";
 import { createStageSettingsKey, getLegacyCompressionThreads } from "./apply-session-settings.ts";
@@ -40,7 +30,7 @@ import type {
   StagedInputInfo,
 } from "./apply-session-types.ts";
 import { getBinarySourceListStableIds, getBinarySourceSize, sameBinarySourceLists } from "./input-session-helpers.ts";
-import { combineSectionTimingText, createSectionSizeText, getGeneratedOutputName } from "./output-view-model.ts";
+import { getGeneratedOutputName } from "./output-view-model.ts";
 import type { ApplyPatchFormSettings, BinarySource, NoticeController } from "./patcher-form.ts";
 import {
   formatElapsedTiming,
@@ -167,8 +157,6 @@ const useLocalApplyPatchFormSession = ({
     applyStartedAt: null,
     compressionStartedAt: null,
   });
-  const busyRef = useRef(busy);
-  const disabledRef = useRef(disabled);
   const inputStageMachine = useStageGenerationMachine();
   // `keys` snapshots the stable source keys AT sync time. A cleared/removed then re-added source keeps
   // its name/size/lastModified signature but is minted a FRESH key (useStableSourceKeys forgets a
@@ -339,14 +327,6 @@ const useLocalApplyPatchFormSession = ({
       resolvedThreads,
     ],
   );
-  const fallbackInputCompressedBytes =
-    effectiveInputs.reduce((total, input) => total + (getBinarySourceSize(input) || 0), 0) || null;
-  const primaryRomInput = romInputs[0] || null;
-  const inputCompressedTotal =
-    completedSizeSummary.inputBytes === null ? (primaryRomInput?.sourceSize ?? fallbackInputCompressedBytes) : null;
-  const inputCompressedDisplayBytes = completedSizeSummary.inputCompressedBytes ?? inputCompressedTotal;
-  const inputUncompressedBytes =
-    completedSizeSummary.inputBytes ?? primaryRomInput?.size ?? fallbackInputCompressedBytes;
   const stagedPatchInfos = activePatches
     .map((patch) => patchInfoByKey[getPatchKey(patch)])
     .filter((info): info is StagedInputInfo => !!info);
@@ -355,40 +335,13 @@ const useLocalApplyPatchFormSession = ({
   const activePatchOptions = activePatches.map((patch) => {
     const info = patchInfoByKey[getPatchKey(patch)];
     return {
+      ...(info?.basisChoice ? { basis: info.basisChoice } : {}),
       ...(info?.headerChoice === "keep" || info?.headerChoice === "strip" ? { header: info.headerChoice } : {}),
       ...(info?.n64ByteOrderChoice ? { n64ByteOrder: info.n64ByteOrderChoice } : {}),
       ...(info?.validateInputChecksum ? { validateInputChecksum: info.validateInputChecksum } : {}),
       ...(info?.validateOutputChecksum ? { validateOutputChecksum: info.validateOutputChecksum } : {}),
     };
   });
-  const stagedPatchCompressedBytes = sumStagedInfoSize(stagedPatchInfos, "sourceSize");
-  const stagedPatchRawBytes = sumStagedInfoSize(stagedPatchInfos, "size");
-  const fallbackPatchCompressedBytes =
-    activePatches.reduce((total, patch) => total + (getBinarySourceSize(patch) || 0), 0) || null;
-  const patchCompressedBytes =
-    completedSizeSummary.patchCompressedBytes ?? stagedPatchCompressedBytes ?? fallbackPatchCompressedBytes;
-  const patchRawBytes = completedSizeSummary.patchBytes ?? stagedPatchRawBytes ?? patchCompressedBytes;
-  const localSectionTimingSizes = createSectionSizeText({
-    inputCompressedBytes: inputCompressedDisplayBytes,
-    inputUncompressedBytes,
-    outputRawBytes: completedSizeSummary.rawBytes,
-    outputRecompressedBytes: completedSizeSummary.outputBytes,
-    patchCompressedBytes,
-    patchRawBytes,
-  });
-  const inputDecompressionTimeMs = (() => {
-    const elapsedMs = completedSizeSummary.inputDecompressionTimeMs ?? primaryRomInput?.decompressionTimeMs;
-    if (!(primaryRomInput?.wasDecompressed || completedSizeSummary.inputDecompressionTimeMs !== null)) return null;
-    if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs)) return null;
-    return elapsedMs;
-  })();
-  const inputOperationTimingText = formatOperationTiming("extract", inputDecompressionTimeMs);
-  const outputOperationTimingText = [
-    formatOperationTiming("apply", completedApplyTimeMs),
-    formatOperationTiming("compress", completedCompressionTimeMs),
-  ]
-    .filter(Boolean)
-    .join(" / ");
   const applyTimingText = formatElapsedTiming(completedApplyTimeMs);
   const compressTimingText = formatElapsedTiming(completedCompressionTimeMs);
   // Download-button total: every action that produced the output (apply +
@@ -397,20 +350,6 @@ const useLocalApplyPatchFormSession = ({
     completedApplyTimeMs === null && completedCompressionTimeMs === null
       ? ""
       : formatElapsedTiming((completedApplyTimeMs ?? 0) + (completedCompressionTimeMs ?? 0));
-  const patchDecompressionTimingText = (() => {
-    const elapsedMs = getStagedDecompressionTimeMs(stagedPatchInfos);
-    if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs)) return "";
-    return `extract: ${formatTiming(createTiming(elapsedMs))}`;
-  })();
-  const localPatcherSectionTimings = useMemo(
-    () => ({
-      checksum: "",
-      input: inputOperationTimingText,
-      output: combineSectionTimingText(outputOperationTimingText, localSectionTimingSizes.output),
-      patch: patchDecompressionTimingText,
-    }),
-    [inputOperationTimingText, localSectionTimingSizes.output, outputOperationTimingText, patchDecompressionTimingText],
-  );
   const strictInputChecksumValidation = activeSettings.validation?.requireInputChecksumMatch === true;
   const hasStrictInputChecksumMismatch =
     strictInputChecksumValidation && stagedPatchInfos.some((info) => info.checksumPreflightMismatch === true);
@@ -447,7 +386,6 @@ const useLocalApplyPatchFormSession = ({
         entry.progress || entry.loading
           ? createRomInputRow({
               ...entry,
-              disabled: disabledRef.current,
               loading: false,
               progress: null,
             })
@@ -520,12 +458,9 @@ const useLocalApplyPatchFormSession = ({
   const localUiState = useMemo(
     () =>
       buildUiViewState({
-        activePatches,
-        activeSettings,
         busy,
         checksumOverrideChecked,
         disabled,
-        effectiveInputs,
         effectiveOutputNoticeMessage,
         hasStrictInputChecksumMismatch,
         inputNoticeMessage,
@@ -535,20 +470,14 @@ const useLocalApplyPatchFormSession = ({
         patchProgress,
         patchProgressByKey,
         patchStaging,
-        primaryRomInput,
         romInputs,
-        sectionTimings: localPatcherSectionTimings,
       }),
     [
-      activePatches,
-      activeSettings,
       busy,
       checksumOverrideChecked,
       disabled,
-      effectiveInputs,
       inputStaging,
       hasStrictInputChecksumMismatch,
-      localPatcherSectionTimings,
       effectiveOutputNoticeMessage,
       inputNoticeMessage,
       outputRuntimeNoticeMessage,
@@ -556,7 +485,6 @@ const useLocalApplyPatchFormSession = ({
       patchProgressByKey,
       patchStaging,
       patchNoticeMessage,
-      primaryRomInput,
       romInputs,
     ],
   );
@@ -623,14 +551,6 @@ const useLocalApplyPatchFormSession = ({
     () => buildNoticeViewState({ failureMessage, failurePlacement }),
     [failureMessage, failurePlacement],
   );
-
-  useEffect(() => {
-    busyRef.current = busy;
-  }, [busy]);
-
-  useEffect(() => {
-    disabledRef.current = disabled;
-  }, [disabled]);
 
   const updateSettings = useCallback(
     (nextSettings: ApplyPatchFormSettings) => {
@@ -750,8 +670,6 @@ const useLocalApplyPatchFormSession = ({
           patchable: info.patchable ?? patch.patchable ?? existing.patchable,
           size: info.size ?? patch.size ?? existing.size,
           sourceSize: info.sourceSize ?? patch.sourceSize ?? existing.sourceSize,
-          splitBinAvailable: info.splitBinAvailable ?? patch.splitBinAvailable ?? existing.splitBinAvailable,
-          wasDecompressed: info.wasDecompressed ?? patch.wasDecompressed ?? existing.wasDecompressed,
         });
         const remaining = current.filter((entry) => entry.id !== rowId && entry.id !== existing.id);
         return sortRomInputs([...remaining, nextRow]);
@@ -802,7 +720,6 @@ const useLocalApplyPatchFormSession = ({
             const existing = byId.get(id);
             return createRomInputRow({
               ...existing,
-              disabled: disabledRef.current || busyRef.current,
               id,
               info: {
                 ...existing?.info,
@@ -815,7 +732,6 @@ const useLocalApplyPatchFormSession = ({
               progress: existing?.progress || null,
               size: existing?.size ?? getBinarySourceSize(input) ?? undefined,
               sourceSize: existing?.sourceSize ?? getBinarySourceSize(input) ?? undefined,
-              valid: existing?.valid ?? false,
             });
           }),
         );
@@ -861,7 +777,6 @@ const useLocalApplyPatchFormSession = ({
   );
   const { syncPatchFiles, syncRomInput, validatePatchesDeferred } = useInputStaging({
     machines: { inputStageMachine, patchStageMachine },
-    refs: { busyRef, disabledRef },
     report: { emitSessionTrace, onError, setSectionErrorMessage },
     rows: { getInputKey, getPatchKey, getStableInputInfo, mergeRomInput, reclassifyArchiveToPatch, updatePatches },
     session: {
@@ -1105,9 +1020,8 @@ const useLocalApplyPatchFormSession = ({
       setRomInputs,
       updateInputs,
       updatePatches,
-      updateSettings,
     },
-    state: { activePatches, activeSettings, effectiveInputs, failurePlacement, outputErrorMessage, romInputs },
+    state: { activePatches, effectiveInputs, failurePlacement, outputErrorMessage, romInputs },
   });
   const localUiController = useMemo(
     () => ({
@@ -1278,10 +1192,4 @@ const useLocalApplyPatchFormSession = ({
   };
 };
 
-export {
-  inertDialogController,
-  inertOutputController,
-  inertStackController,
-  inertUiController,
-  useLocalApplyPatchFormSession,
-};
+export { inertOutputController, inertStackController, useLocalApplyPatchFormSession };

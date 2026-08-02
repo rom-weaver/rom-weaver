@@ -4,10 +4,12 @@ This is the release *decision* and its one-time setup. For the pipeline that
 executes it - workflows, jobs, caching, and the publish fan-out - see
 [`docs/development/ci.md`](../docs/development/ci.md).
 
-`release.yml` runs Release Please after CI succeeds on `main`, or when started
-manually. Conventional `feat`, `fix`, and breaking-change commits update a
-release pull request and `CHANGELOG.md`. Merging that pull request creates the
-`vX.Y.Z` tag and GitHub Release, then publishes:
+Start `release.yml` manually to open or refresh the Release Please pull request
+after CI succeeds for the exact `main` commit. Conventional `feat`, `fix`, and
+breaking-change commits update that pull request and `CHANGELOG.md`. Merging it
+creates a **draft** GitHub Release and starts the publish fan-out. The final job
+publishes the draft, which creates the `vX.Y.Z` tag and then triggers the
+crates.io publication. The fan-out publishes:
 
 - the Cargo workspace to crates.io;
 - 11 npm packages: `@rom-weaver/cli`, its nine
@@ -18,18 +20,11 @@ release pull request and `CHANGELOG.md`. Merging that pull request creates the
 - `ghcr.io/rom-weaver/rom-weaver-cli`;
 - `ghcr.io/rom-weaver/rom-weaver-webapp`.
 
-The existing v0.7.2 container images predate the organization transfer and
-remain under `ghcr.io/brandonocasey`. User-facing Docker examples keep that
-verified path until the first post-transfer release publishes the organization
-images above.
-
 The npm packages include npm provenance, Cargo authenticates with crates.io's
 GitHub OIDC trusted publisher, and both container images include an SBOM plus
 signed SLSA build provenance. Publishers check the registry before writing, so
 reruns skip versions that already exist instead of failing halfway through a
 release.
-
-v0.7.2 is the first release with every public installation channel completed.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -151,17 +146,20 @@ nightly. Without that cascade a quiet stretch on `main` would leave beta and
 nightly serving code older than production - the opposite of what their names
 promise, and useless for reproducing a release-day bug.
 
-Production is CI-gated by construction: Release Please only tags after the
-release PR's required checks are green, so an unreviewed push can never reach
-`rom-weaver.com`. After that PR merges, the release workflow starts from the
-merged PR event rather than waiting for a duplicate full CI run on the merge
-commit. `workflow_dispatch` accepts a `deploy_channel` input to force one
-channel manually; that override deploys only the channel named and does not
-cascade.
+Production is CI-gated by construction: only a release pull request whose
+required checks are green can reach the draft-first fan-out, and its tag does
+not exist until the final job publishes the draft. After that pull request
+merges, the release workflow starts from the merged PR event rather than
+waiting for a duplicate full CI run on the merge commit. `workflow_dispatch`
+accepts a `deploy_channel` input to force one channel manually; that override
+deploys only the channel named and does not cascade.
 
 Required repository secrets: `CLOUDFLARE_API_TOKEN` (needs **Account -
 Cloudflare Pages - Edit**, plus **Zone - DNS - Edit** to attach custom domains)
 and `CLOUDFLARE_ACCOUNT_ID`.
+
+The optional `CLOUDFLARE_ZONE_ID` secret enables the `/assets/*` zone Cache
+Rule. When it is set, the API token also needs **Zone - Cache Rules - Edit**.
 
 The workflow creates its own Pages project on first run for a channel, so there
 is no manual bootstrap and no local `wrangler login` - which matters because
@@ -196,12 +194,9 @@ compatible COEP mode at runtime. Preserve and test both paths on Safari and iOS.
 
 ## Normal release flow
 
-Commit and push changes using Conventional Commits:
-
-```bash
-git commit -m "feat(cli): describe the feature"
-git push origin main
-```
+Land changes on `main` through squash-merged pull requests. Use a Conventional
+Commit title for the pull request, because that title becomes the commit
+Release Please reads.
 
 Use `feat(scope): ...` for a minor release, `fix(scope): ...` for a patch, and
 `feat(scope)!: ...` (or a `BREAKING CHANGE:` footer) for a major release. Other

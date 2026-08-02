@@ -18,6 +18,9 @@ use super::*;
 pub(super) struct BundleApplyResolution {
     /// `(source label, requirements)`, merged in order after CLI flags.
     pub checks: Vec<(String, FilenameRequirements)>,
+    /// Advisory file-name expectation for a ROM supplied separately from the
+    /// bundle. Compared after auto-extraction resolves the logical ROM leaf.
+    pub expected_rom_name: Option<String>,
     /// `(source label, requirements)` for the final output: the last selected
     /// patch's `outputChecks`, or the bundle's `output.checks` when the
     /// selection ends the full chain.
@@ -72,6 +75,18 @@ impl CliApp {
         };
         let source = self.load_bundle_apply_source(source, args, context)?;
         let bundle = parse_bundle_bytes(&source.loaded.bytes)?;
+        let expected_rom_name = matches!(source.mode, BundleApplySourceKind::Explicit)
+            .then(|| {
+                bundle
+                    .rom
+                    .as_ref()?
+                    .name
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_owned)
+            })
+            .flatten();
         for warning in &source.loaded.warnings {
             warn!(bundle = %source.archive_source.display(), "{warning}");
         }
@@ -163,6 +178,9 @@ impl CliApp {
                 // every earlier bundle patch is selected too.
                 let is_chain_prefix = *index == position;
                 step_verifications.push(patch_plan::PatchStepVerification {
+                    execution: None,
+                    base_variant: None,
+                    base_representation: None,
                     basis: entry.basis,
                     basis_source: entry.basis.map(|_| PatchBasisSource::Declared),
                     declared_input: entry
@@ -266,6 +284,7 @@ impl CliApp {
 
         Ok(Some(BundleApplyResolution {
             checks,
+            expected_rom_name,
             output_checks,
             step_verifications,
         }))

@@ -34,18 +34,21 @@ trait, plus the registry that probes an unknown patch file down to a format.
 - **Validation before writing.** `validate` dry-run applies to a temp path, so
   a patch chain can be checked end to end before anything is written.
 - **Checksum discipline.** Formats that carry expected input/output checksums
-  are enforced against `rom-weaver-checksum`; formats that carry none (IPS) are
-  verified against the declared base instead.
+  are enforced against `rom-weaver-checksum`. Formats that carry none, such as
+  IPS, cannot prove that the chosen base is correct on their own; the CLI can
+  add that check with `--expect-in`.
 - **Parallel VCDIFF.** The xdelta encoder splits window encoding across
   threads, and `apply_patch_bytes` exposes in-memory VCDIFF apply for callers
   that patch individual files inside a container.
 
 ## Usage
 
-```toml
-[dependencies]
-rom-weaver-patches = "0.6"
+```bash
+cargo add rom-weaver-patches
 ```
+
+`cargo add` selects the current release. To follow the exact-pinning guidance
+below, change its generated requirement to `=X.Y.Z`.
 
 ## Related crates
 
@@ -53,7 +56,7 @@ rom-weaver-patches = "0.6"
 | --- | --- |
 | [`rom-weaver-core`](https://crates.io/crates/rom-weaver-core) | Registry traits, `RomWeaverError`, I/O and threading helpers. |
 | [`rom-weaver-checksum`](https://crates.io/crates/rom-weaver-checksum) | Checksum engines and the streaming variant engine. |
-| [`rom-weaver-containers`](https://crates.io/crates/rom-weaver-containers) | Archive and disc-image handlers. |
+| [`rom-weaver-containers`](https://crates.io/crates/rom-weaver-containers) | Archive, disc-image, and ROM-specific compression handlers. |
 | [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli) | The `rom-weaver` binary and the command library both frontends share. |
 
 ## Stability
@@ -71,6 +74,6 @@ yourself.
 
 ## License
 
-Copyright (C) Brandon Casey. Licensed under
+Copyright © Brandon Casey. Licensed under
 [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
 Bundled third-party components retain their own licenses.

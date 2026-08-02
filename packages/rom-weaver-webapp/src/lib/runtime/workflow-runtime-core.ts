@@ -677,8 +677,8 @@ const createSharedCompressionRuntime = (
   };
   const extract = async (request: Parameters<NonNullable<WorkflowRuntime["compression"]["extract"]>>[0]) => {
     // A single-payload recursive descent always uses the generic archive extract: the Rust core
-    // extracts chd/rvz/z3ds discs and descends nested containers uniformly, so disc inputs need no
-    // separate list + per-format extract step.
+    // extracts chd/rvz/z3ds single-payload containers and descends nested containers uniformly, so
+    // disc inputs need no separate list + per-format extract step.
     if (request.descendSinglePayload && archiveRuntime.extract) return archiveRuntime.extract(request);
     const registration = getRomSpecificCompressionFormatRegistration(request.format);
     if (registration) return extractRomSpecificHandlers[registration.format](registration, request);

@@ -17,8 +17,7 @@ import { ConfirmDialog, Modal } from "../../src/public/react/components/ds/modal
 import { DiscTracksPanel, SourceInfoList } from "../../src/public/react/components/ds/source-info-list.tsx";
 import { CreatePatchFormView } from "../../src/public/react/create-patch-form-view.tsx";
 import { CreatePatchForm, TrimPatchForm } from "../../src/public/react/index.tsx";
-import { ArchiveDialog } from "../../src/public/react/patcher-react-shared.tsx";
-import { createEmptyPatcherUiState, createInitialDialogState } from "../../src/public/react/patcher-ui-state.ts";
+import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-state.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
@@ -359,15 +358,31 @@ const outputState = () => ({
   totalTiming: "",
 });
 
+const emptyRomRowState = () => ({
+  info: {
+    archiveName: "",
+    checksumsExpanded: true,
+    checksumTiming: "",
+    crc32: "",
+    fileName: "",
+    md5: "",
+    romInfo: "",
+    sha1: "",
+    validationPhase: "idle",
+  },
+  loading: false,
+  progress: null,
+});
+
 // A staged ROM row with checksums computed and the checksum drawer EXPANDED.
 const stagedRomRow = (fileName) => {
-  const base = createEmptyPatcherUiState();
+  const base = emptyRomRowState();
   return {
-    ...base.romInput,
+    ...base,
     groupId: "",
     id: `rom:${fileName}`,
     info: {
-      ...base.romInfo,
+      ...base.info,
       checksumsExpanded: true,
       crc32: "C6FB1252",
       fileName,
@@ -443,7 +458,6 @@ const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
   );
 
 const applyControllers = (ui, patches, output) => ({
-  dialog: storeOf({ ...createInitialDialogState() }),
   output: storeOf(output ?? outputState()),
   patchStack: { ...storeOf({ items: patches }), removeItem: noop, reorder: noop },
   ui: storeOf(ui),
@@ -491,9 +505,9 @@ const doneApplyPage = () => applyPage(stagedUi(), [stagedPatchItem("rebalance.ip
 // checksums (open) with a headerless variant sub-group + a trim readout + a lead
 // blurb, a cue-sheet drawer, and a Files drawer (it came from an archive).
 const richRomRow = (fileName) => {
-  const base = createEmptyPatcherUiState();
+  const base = emptyRomRowState();
   return {
-    ...base.romInput,
+    ...base,
     archivePathEntries: [
       {
         decompressionTimeMs: 120,
@@ -508,7 +522,7 @@ const richRomRow = (fileName) => {
     groupId: "",
     id: `rom:${fileName}`,
     info: {
-      ...base.romInfo,
+      ...base.info,
       archiveName: "games.7z",
       checksumsExpanded: true,
       checksumTiming: "12 ms",
@@ -535,7 +549,6 @@ const richRomRow = (fileName) => {
     kind: "rom",
     order: 0,
     size: 700_000_000,
-    wasDecompressed: true,
   };
 };
 
@@ -778,21 +791,6 @@ const candidateDialog = (multiSelect) =>
     state: { reject: noop, request: candidateRequest(multiSelect), resolve: noop },
   });
 const DIALOGS = {
-  archive: () =>
-    createElement(ArchiveDialog, {
-      controller: {
-        ...storeOf({
-          entries: [
-            { id: "r0", label: "Pokemon_Emerald.gba" },
-            { id: "r1", label: "Pokemon_Ruby.gba" },
-          ],
-          open: true,
-          selectionType: "rom",
-          title: "Select a ROM from archive.zip",
-        }),
-        selectEntry: noop,
-      },
-    }),
   candidate: () => candidateDialog(false),
   "candidate (multi-select)": () => candidateDialog(true),
   confirm: () =>

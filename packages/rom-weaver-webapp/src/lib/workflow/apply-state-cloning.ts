@@ -5,7 +5,7 @@ import type {
   ApplyWorkflowResolvedInput,
 } from "../../types/apply-workflow.ts";
 import type { SelectionFileCandidate } from "../../types/selection.ts";
-import type { InputAsset } from "../input/input-assets.ts";
+import { getPrimaryInputAsset, type InputAsset } from "../input/input-assets.ts";
 import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
 import type {
   InternalPatchChecksumPreflight,
@@ -22,7 +22,6 @@ import {
   getAssetParentCompressions,
   getAssetSourceSize,
   getInputAssetChecksums,
-  getPrimaryInputAsset,
 } from "./staged-source-checksums.ts";
 
 const clonePatchRequirements = (
@@ -91,6 +90,7 @@ const clonePatchState = (
   state: InternalSourceState,
   parentCompressions: ApplyWorkflowParentCompression[],
 ): ApplyWorkflowPatchState => ({
+  basisChoice: state.basisChoice,
   candidates: state.candidates.map(cloneCandidate),
   checksumPreflight: clonePatchChecksumPreflight(state.checksumPreflight),
   checksumTimeMs: state.checksumTimeMs,

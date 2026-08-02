@@ -5,10 +5,6 @@ use std::path::{Path, PathBuf};
 
 const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
 const LZMA_SDK_PATCH_ROOT: &str = "lzma-sdk/patches";
-const PATCH_ROOT: &str = "libarchive/patches";
-// Appended to the staged 7zip reader on every target so the solid-block index of
-// the current entry is reachable from Rust.
-const SEVENZ_SOLID_BLOCK_PATCH_FILE: &str = "7zip_solid_block.c";
 const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
 const VENDORED_LZMA_SDK: &str = "lzma-sdk/vendor/C";
 // rom-weaver's own opaque wrapper over the SDK. libarchive ships its own
@@ -163,20 +159,6 @@ const WRITE_ALWAYS_DROP_ENTRIES: &[&str] = &[
     "archive_write_set_format_by_name.c",
     "archive_write_set_format_filter_by_ext.c",
     "archive_write_set_format_iso9660.c",
-];
-
-const WRITE_CORE_DROP_ENTRIES: &[&str] = &[
-    "archive_write.c",
-    "archive_write_add_filter_none.c",
-    "archive_write_open_fd.c",
-    "archive_write_open_filename.c",
-    "archive_write_private.h",
-    "archive_write_set_format_7zip.c",
-    "archive_write_set_format_private.h",
-    "archive_write_set_format_wasm_shim.c",
-    "archive_write_set_format_zip.c",
-    "archive_write_set_options.c",
-    "archive_write_set_passphrase.c",
 ];
 
 const WRITE_EXTRA_DROP_ENTRIES: &[&str] = &[
@@ -591,17 +573,8 @@ fn is_wasm32_target() -> bool {
         .unwrap_or(false)
 }
 
-fn feature_enabled(name: &str) -> bool {
-    let key = name.replace('-', "_").to_ascii_uppercase();
-    env::var(format!("CARGO_FEATURE_{key}")).is_ok()
-}
-
-fn write_archives_enabled() -> bool {
-    true
-}
-
 fn write_extra_enabled() -> bool {
-    feature_enabled("libarchive-write-extra")
+    env::var("CARGO_FEATURE_LIBARCHIVE_WRITE_EXTRA").is_ok()
 }
 
 fn is_wasm_threads_target() -> bool {
@@ -645,10 +618,6 @@ fn wasm_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
     manifest_dir.join(WASM_PATCH_ROOT).join(relative_path)
 }
 
-fn patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
-    manifest_dir.join(PATCH_ROOT).join(relative_path)
-}
-
 fn emit_vendor_patch_rerun_if_changed(manifest_dir: &Path) {
     for patch_file in WASM_PATCH_FILES {
         println!(
@@ -662,10 +631,6 @@ fn emit_vendor_patch_rerun_if_changed(manifest_dir: &Path) {
             lzma_sdk_patch_path(manifest_dir, patch_file).display()
         );
     }
-    println!(
-        "cargo:rerun-if-changed={}",
-        patch_path(manifest_dir, SEVENZ_SOLID_BLOCK_PATCH_FILE).display()
-    );
 }
 
 fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Path) -> PathBuf {
@@ -688,17 +653,9 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
     // staged copy; the vendored tree stays a verbatim snapshot of the fork.
     copy_dir_recursive(libarchive_dir, &staged).expect("failed to stage libarchive source tree");
     drop_test_subdirectories(&staged).expect("failed to drop libarchive test subdirectories");
-    let write_archives = write_archives_enabled();
     let write_extra = write_extra_enabled();
-    if write_archives {
-        add_wasm_archive_write_format_shim(manifest_dir, &staged.join("libarchive"))
-            .expect("failed to add libarchive format shim");
-    }
-    add_archive_read_7zip_solid_block_accessor(
-        manifest_dir,
-        &staged.join("libarchive/archive_read_support_format_7zip.c"),
-    )
-    .expect("failed to add libarchive 7zip solid-block accessor");
+    add_wasm_archive_write_format_shim(manifest_dir, &staged.join("libarchive"))
+        .expect("failed to add libarchive format shim");
     if wasm_target {
         patch_archive_util_tempdir_for_wasm(
             manifest_dir,
@@ -706,7 +663,7 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
         )
         .expect("failed to patch libarchive temporary directory fallback for wasm");
     }
-    if wasm_target && write_archives {
+    if wasm_target {
         patch_archive_write_set_format_7zip_for_wasm(
             &staged.join("libarchive/archive_write_set_format_7zip.c"),
         )
@@ -716,7 +673,6 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
         manifest_dir,
         &staged.join("libarchive/CMakeLists.txt"),
         wasm_target,
-        write_archives,
         write_extra,
     )
     .expect("failed to patch libarchive CMakeLists.txt");
@@ -800,43 +756,6 @@ fn patch_archive_util_tempdir_for_wasm(
     )
 }
 
-// Every field the appended accessor reads. Checking them here turns a vendor
-// refresh that renames or drops one into a build failure naming the field,
-// instead of a compiler error inside a generated source file.
-const SEVENZ_SOLID_BLOCK_REQUIRED_FIELDS: &[&str] = &[
-    "uint32_t\t\t folderIndex;",
-    "uint64_t\t\t numFolders;",
-    "struct _7zip_entry\t*entry;",
-    "struct _7z_coders_info\t ci;",
-];
-
-// Append the solid-block accessor to the staged 7zip reader. It has to live in
-// that translation unit: `struct _7zip` and `struct _7zip_entry` are file-local,
-// so no out-of-tree file can read `zip->entry->folderIndex`.
-fn add_archive_read_7zip_solid_block_accessor(
-    manifest_dir: &Path,
-    sevenz_path: &Path,
-) -> std::io::Result<()> {
-    let content = fs::read_to_string(sevenz_path)?;
-    for field in SEVENZ_SOLID_BLOCK_REQUIRED_FIELDS {
-        if !content.contains(field) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "libarchive 7zip reader field `{}` was not found in {}; the solid-block accessor needs it",
-                    field.replace('\t', " "),
-                    sevenz_path.display()
-                ),
-            ));
-        }
-    }
-    let accessor = fs::read_to_string(patch_path(manifest_dir, SEVENZ_SOLID_BLOCK_PATCH_FILE))?;
-    if content.contains("rom_weaver_7zip_entry_solid_block") {
-        return Ok(());
-    }
-    fs::write(sevenz_path, format!("{content}\n{accessor}"))
-}
-
 fn patch_archive_write_set_format_7zip_for_wasm(sevenz_path: &Path) -> std::io::Result<()> {
     let content = fs::read_to_string(sevenz_path)?;
     let patched_threads = content.replace("zip->opt_threads = 1;", "zip->opt_threads = 0;");
@@ -904,7 +823,6 @@ fn patch_cmakelists(
     manifest_dir: &Path,
     cmakelists_path: &Path,
     wasm_target: bool,
-    write_archives: bool,
     write_extra: bool,
 ) -> std::io::Result<()> {
     let mut drop_entries = HashSet::new();
@@ -923,13 +841,6 @@ fn patch_cmakelists(
             .iter()
             .map(|entry| (*entry).to_owned()),
     );
-    if !write_archives {
-        drop_entries.extend(
-            WRITE_CORE_DROP_ENTRIES
-                .iter()
-                .map(|entry| (*entry).to_owned()),
-        );
-    }
     if !write_extra {
         drop_entries.extend(
             WRITE_EXTRA_DROP_ENTRIES
@@ -947,7 +858,7 @@ fn patch_cmakelists(
             continue;
         }
         lines.push(line);
-        if write_archives && !shim_inserted && trimmed == "archive_write_set_format_private.h" {
+        if !shim_inserted && trimmed == "archive_write_set_format_private.h" {
             lines.push("  archive_write_set_format_wasm_shim.c");
             shim_inserted = true;
         }
@@ -1146,15 +1057,12 @@ fn generate_bindings(libarchive_dir: &Path, target_sysroot: Option<&Path>) {
         ]);
 
     if wasm_target {
-        let write_archives = write_archives_enabled();
         let write_extra = write_extra_enabled();
         for function in WASM_BINDGEN_READ_FUNCTIONS {
             bindgen_builder = bindgen_builder.allowlist_function(function);
         }
-        if write_archives {
-            for function in WASM_BINDGEN_WRITE_FUNCTIONS {
-                bindgen_builder = bindgen_builder.allowlist_function(function);
-            }
+        for function in WASM_BINDGEN_WRITE_FUNCTIONS {
+            bindgen_builder = bindgen_builder.allowlist_function(function);
         }
         if write_extra {
             for function in WASM_BINDGEN_WRITE_EXTRA_FUNCTIONS {

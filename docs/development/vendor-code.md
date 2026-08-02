@@ -29,11 +29,10 @@ why, and the exact steps to go back to upstream.
 ## The publishing constraint
 
 `cargo publish` rewrites every path dependency into a registry dependency and
-then requires that crate to exist on crates.io. `rom-weaver-cli` is intended for
-publication so that `cargo install rom-weaver-cli` can work after the first
-release. Every internal path dependency in its graph must therefore also be
-published. There is no way to publish a crate while keeping one of its path
-dependencies private.
+then requires that crate to exist on crates.io. `rom-weaver-cli` is published
+so that `cargo install rom-weaver-cli` works. Every internal path dependency in
+its graph must therefore also be published. There is no way to publish a crate
+while keeping one of its path dependencies private.
 
 To see the current list:
 
@@ -102,18 +101,8 @@ Pruning is also what keeps the published crate viable: the full tree packages to
 about 6.3 MB against crates.io's 10 MiB limit, the pruned one to about 1.3 MB.
 
 Every transformation - the test-subdirectory strip, the wasm patches in
-`libarchive/patches/wasm/`, the all-target patches in `libarchive/patches/`, and
-the `CMakeLists.txt` source-list edits - is applied to a staged copy under
-`OUT_DIR`, never to the committed tree.
-
-`libarchive/patches/7zip_solid_block.c` is the one all-target patch today. It
-appends `rom_weaver_7zip_entry_solid_block()` to the staged 7zip reader so
-extract chunking can see which solid block an entry lives in; the accessor has
-to live in that translation unit because `struct _7zip` is file-local, and it is
-declared by hand in `src/libarchive/read.rs` rather than through bindgen because
-no header declares it. `build.rs` asserts every struct field the accessor reads
-before appending, so a refresh that renames one fails the build with the field
-name instead of a compiler error in a generated file.
+`libarchive/patches/wasm/`, and the `CMakeLists.txt` source-list edits - is
+applied to a staged copy under `OUT_DIR`, never to the committed tree.
 
 ### Going back to upstream
 
@@ -143,7 +132,8 @@ and the SHA-256 of the published `.7z`). Refresh it with:
 
 ```bash
 node scripts/vendor-lzma-sdk.mjs           # re-fetch the pinned version
-node scripts/vendor-lzma-sdk.mjs 26.03     # move the pin
+new_version=26.02                           # replace with a verified release
+node scripts/vendor-lzma-sdk.mjs "$new_version"
 ```
 
 The script fetches `https://www.7-zip.org/a/lzma<ver>.7z`, extracts it with
@@ -308,10 +298,10 @@ publish rom-weaver.
 Its base is recorded in `crates/rom-weaver-containers/src/nod/NOD_VERSION`. Local
 patches are developed in the fork
 [brandonocasey/nod](https://github.com/brandonocasey/nod) on the `local-changes`
-branch, which is kept as upstream `main` plus whatever is currently out for
-review upstream ([#27](https://github.com/encounter/nod/pull/27) and
-[#28](https://github.com/encounter/nod/pull/28) today). Anything that lands
-upstream is dropped from `local-changes` rather than carried twice.
+branch, which is kept as upstream `main` plus the changes currently under
+upstream review. `NOD_VERSION` records the exact base, fork commit, and included
+pull requests; anything that lands upstream is dropped from `local-changes`
+rather than carried twice.
 
 Unlike `LIBARCHIVE_VERSION`, `NOD_VERSION` records a **base, not a mirror**, and
 it lists the exact categories the two trees differ by. There is no `vendor-nod`
@@ -341,8 +331,8 @@ done
 Anything that diff reports outside the categories in `NOD_VERSION` is a real
 divergence and should be either upstreamed or written down.
 
-When a nod release lands with the needed API and feature support, replace the copy
-with the registry crate:
+When a published nod version contains the needed API and feature support,
+replace the copy with the registry crate:
 
 1. Verify the release contains the required Rust disc reader/writer APIs and
    compression/threading features.
@@ -401,7 +391,7 @@ turn it off, and the inlined copy simply deletes it. The content here is
 therefore 0.8.3 plus the outcome of that commit, which is why `XDVDFS_VERSION`
 records the sha alongside the release.
 
-But no release has been cut since 0.8.3 (2024-11-13). This was still true as of
+However, no release has been cut since 0.8.3 (2024-11-13). This was still true as of
 2026-07-25, with crates.io's `write` feature still listing `wax`. A `git`
 dependency is not an option because crates.io rejects any crate that has one.
 Keeping it as a vendored workspace member would have meant publishing

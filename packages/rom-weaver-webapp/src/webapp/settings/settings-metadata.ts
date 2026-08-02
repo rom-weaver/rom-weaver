@@ -44,27 +44,14 @@ type SettingsState = {
   chdCreateCdCodecs: string;
   chdCreateDvdCodecs: string;
   rvzCodec: string;
-  rvzCompressionLevel: number | "";
   rvzBlockSize: number;
-  z3dsCompressionLevel: number | "";
   sevenZipCodec: string;
-  sevenZipLevel: number | "";
   zipCodec: string;
-  zipLevel: number | "";
   threads: number | "auto";
 };
 
-type NumericDraftValue = number | "" | string;
-
-type SettingsDraftState = Omit<
-  SettingsState,
-  "rvzCompressionLevel" | "rvzBlockSize" | "z3dsCompressionLevel" | "sevenZipLevel" | "zipLevel" | "threads"
-> & {
-  rvzCompressionLevel: NumericDraftValue;
+type SettingsDraftState = Omit<SettingsState, "rvzBlockSize" | "threads"> & {
   rvzBlockSize: number | string;
-  z3dsCompressionLevel: NumericDraftValue;
-  sevenZipLevel: NumericDraftValue;
-  zipLevel: NumericDraftValue;
   threads: number | string;
 };
 
@@ -172,23 +159,11 @@ const SETTINGS_FIELD_ORDER = [
   "chdCreateCdCodecs",
   "chdCreateDvdCodecs",
   "rvzCodec",
-  "rvzCompressionLevel",
   "rvzBlockSize",
-  "z3dsCompressionLevel",
   "sevenZipCodec",
-  "sevenZipLevel",
   "zipCodec",
-  "zipLevel",
   "threads",
 ] as const satisfies readonly SettingsFieldKey[];
-
-const SETTINGS_LEVEL_OVERRIDE_FIELDS = [
-  "rvzCompressionLevel",
-  "z3dsCompressionLevel",
-  "sevenZipLevel",
-  "zipLevel",
-] as const satisfies readonly SettingsFieldKey[];
-const SETTINGS_LEVEL_OVERRIDE_FIELD_SET = new Set<SettingsFieldKey>(SETTINGS_LEVEL_OVERRIDE_FIELDS);
 const STANDARD_CODEC_MIN_LEVEL = COMPRESSION_PROFILE_LEVELS.standard.min;
 const STANDARD_CODEC_MAX_LEVEL = COMPRESSION_PROFILE_LEVELS.standard.max;
 const ZSTD_CODEC_MIN_LEVEL = COMPRESSION_PROFILE_LEVELS.zstd.min;
@@ -434,30 +409,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     )}].`,
     validationLabel: "RVZ codec",
   },
-  rvzCompressionLevel: {
-    defaultValue: "",
-    disabled: ({ uiState }) => !uiState.rvzEnabled,
-    id: "settings-rvz-compression-level",
-    key: "rvzCompressionLevel",
-    kind: "number",
-    label: getSettingsLabel("levelOverride"),
-    labelDataLocalize: "Compression level override",
-    max: getCodecMaxLevel(COMPRESSION_DEFAULTS.rvzCodec, ZSTD_CODEC_MAX_LEVEL),
-    min: getCodecMinLevel(COMPRESSION_DEFAULTS.rvzCodec, ZSTD_CODEC_MIN_LEVEL),
-    placeholder: "Uses Compression Level",
-    step: 1,
-    suggestion: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
-      COMPRESSION_DEFAULTS.rvzCodec,
-      ZSTD_CODEC_MIN_LEVEL,
-      ZSTD_CODEC_MAX_LEVEL,
-    )}.`,
-    suggestionDataLocalize: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
-      COMPRESSION_DEFAULTS.rvzCodec,
-      ZSTD_CODEC_MIN_LEVEL,
-      ZSTD_CODEC_MAX_LEVEL,
-    )}.`,
-    validationLabel: "RVZ compression level override",
-  },
   sevenZipCodec: {
     codecOptions: getCompressionCodecOptions("sevenZipCodec"),
     defaultValue: COMPRESSION_DEFAULTS.sevenZipCodec,
@@ -482,30 +433,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     )}].`,
     validationLabel: "7z codec",
   },
-  sevenZipLevel: {
-    defaultValue: "",
-    disabled: ({ uiState }) => !uiState.sevenZipEnabled,
-    id: "settings-7z-level",
-    key: "sevenZipLevel",
-    kind: "number",
-    label: getSettingsLabel("levelOverride"),
-    labelDataLocalize: "Compression level override",
-    max: getCodecMaxLevel(COMPRESSION_DEFAULTS.sevenZipCodec, STANDARD_CODEC_MAX_LEVEL),
-    min: getCodecMinLevel(COMPRESSION_DEFAULTS.sevenZipCodec, STANDARD_CODEC_MIN_LEVEL),
-    placeholder: "Uses Compression Level",
-    step: 1,
-    suggestion: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
-      COMPRESSION_DEFAULTS.sevenZipCodec,
-      STANDARD_CODEC_MIN_LEVEL,
-      STANDARD_CODEC_MAX_LEVEL,
-    )}.`,
-    suggestionDataLocalize: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
-      COMPRESSION_DEFAULTS.sevenZipCodec,
-      STANDARD_CODEC_MIN_LEVEL,
-      STANDARD_CODEC_MAX_LEVEL,
-    )}.`,
-    validationLabel: "7z compression level override",
-  },
   threads: {
     defaultValue: "auto",
     disabled: ({ uiState }) => !uiState.threadsEnabled,
@@ -524,29 +451,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
         : "Valid values: auto or 1.",
     validationLabel: "Threads",
   },
-  z3dsCompressionLevel: {
-    defaultValue: "",
-    id: "settings-z3ds-compression-level",
-    key: "z3dsCompressionLevel",
-    kind: "number",
-    label: getSettingsLabel("levelOverride"),
-    labelDataLocalize: "Compression level override",
-    max: getCodecMaxLevel(COMPRESSION_DEFAULTS.z3dsCodec, ZSTD_CODEC_MAX_LEVEL),
-    min: getCodecMinLevel(COMPRESSION_DEFAULTS.z3dsCodec, ZSTD_CODEC_MIN_LEVEL),
-    placeholder: "Uses Compression Level",
-    step: 1,
-    suggestion: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
-      COMPRESSION_DEFAULTS.z3dsCodec,
-      ZSTD_CODEC_MIN_LEVEL,
-      ZSTD_CODEC_MAX_LEVEL,
-    )}.`,
-    suggestionDataLocalize: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
-      COMPRESSION_DEFAULTS.z3dsCodec,
-      ZSTD_CODEC_MIN_LEVEL,
-      ZSTD_CODEC_MAX_LEVEL,
-    )}.`,
-    validationLabel: "Z3DS compression level override",
-  },
   zipCodec: {
     codecOptions: getCompressionCodecOptions("zipCodec"),
     defaultValue: COMPRESSION_DEFAULTS.zipCodec,
@@ -564,47 +468,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       "zipCodec",
     )}. Store does not use a level.`,
     validationLabel: "ZIP codec",
-  },
-  zipLevel: {
-    defaultValue: "",
-    disabled: ({ settings, uiState }) =>
-      !uiState.zipEnabled || normalizeCodecName(String(settings.zipCodec)) === "store",
-    id: "settings-zip-level",
-    key: "zipLevel",
-    kind: "number",
-    label: getSettingsLabel("levelOverride"),
-    labelDataLocalize: "ZIP compression level override",
-    max: ({ settings }) => getCodecMaxLevel(String(settings.zipCodec), STANDARD_CODEC_MAX_LEVEL),
-    min: ({ settings }) => getCodecMinLevel(String(settings.zipCodec), STANDARD_CODEC_MIN_LEVEL),
-    placeholder: "Uses Compression Level",
-    step: 1,
-    suggestion: ({ settings }) =>
-      normalizeCodecName(String(settings.zipCodec)) === "store"
-        ? "Unused for Store. Blank uses the compression profile."
-        : normalizeCodecName(String(settings.zipCodec)) === "zstd"
-          ? `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
-              "zstd",
-              ZSTD_CODEC_MIN_LEVEL,
-              ZSTD_CODEC_MAX_LEVEL,
-            )}.`
-          : `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
-              String(settings.zipCodec),
-              STANDARD_CODEC_MIN_LEVEL,
-              STANDARD_CODEC_MAX_LEVEL,
-            )}.`,
-    suggestionDataLocalize: ({ settings }) =>
-      normalizeCodecName(String(settings.zipCodec)) === "zstd"
-        ? `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
-            "zstd",
-            ZSTD_CODEC_MIN_LEVEL,
-            ZSTD_CODEC_MAX_LEVEL,
-          )}.`
-        : `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
-            String(settings.zipCodec),
-            STANDARD_CODEC_MIN_LEVEL,
-            STANDARD_CODEC_MAX_LEVEL,
-          )}.`,
-    validationLabel: "ZIP compression level override",
   },
 };
 
@@ -631,7 +494,7 @@ const SETTINGS_VALID_DEFAULT_COMPRESSION = getSettingsChoiceValues("defaultCompr
 const SETTINGS_VALID_COMPRESSION_PROFILES = getSettingsChoiceValues("compressionProfile");
 
 const SETTINGS_PANEL_FIELD_ORDER: SettingsFieldKey[] = SETTINGS_FIELD_ORDER.filter(
-  (fieldKey) => SETTINGS_FIELD_METADATA[fieldKey].kind !== "hidden" && !SETTINGS_LEVEL_OVERRIDE_FIELD_SET.has(fieldKey),
+  (fieldKey) => SETTINGS_FIELD_METADATA[fieldKey].kind !== "hidden",
 );
 
 const SETTINGS_FIELD_ID_TO_KEY = SETTINGS_FIELD_ORDER.reduce<Record<string, SettingsFieldKey>>((mapping, fieldKey) => {
@@ -771,7 +634,6 @@ export {
   SETTINGS_FIELD_ID_TO_KEY,
   SETTINGS_FIELD_METADATA,
   SETTINGS_FIELD_ORDER,
-  SETTINGS_LEVEL_OVERRIDE_FIELDS,
   SETTINGS_PANEL_FIELD_ORDER,
   SETTINGS_VALID_COMPRESSION_PROFILES,
 };

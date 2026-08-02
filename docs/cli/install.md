@@ -2,8 +2,8 @@
 
 Every way to install the rom-weaver command-line tool: package managers,
 verified install scripts, npm, Docker, and building from source. Each method
-installs the same binary; pick the one that fits your machine and move on to
-your [first weave](get-started.md#first-weave).
+installs the same `rom-weaver` CLI; pick the one that fits your machine and
+move on to your [first weave](get-started.md#first-weave).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -143,9 +143,9 @@ if ($count -gt 0) {
 every release automatically, and that attestation lists the digest of every
 asset in it - so an unfiltered query returns a hit for any file in any release,
 and the check passes on files nothing built. That automatic attestation only
-says "this was in release X", which is also true of an asset a stolen token
+says "this was in release X," which is also true of an asset a stolen token
 uploaded to the draft. Filtering to SLSA provenance is what makes a hit mean
-"the release workflow produced this".
+"the release workflow produced this."
 
 Because it is the release workflow's own attestation, it only exists for
 releases cut after this was added. Verifying an asset from an earlier release
@@ -231,7 +231,7 @@ npm install --save-dev @rom-weaver/cli
 
 ### cargo-binstall
 
-Fetches the released binary instead of compiling the workspace, which
+Fetches the released binary instead of compiling from source, which
 `cargo install rom-weaver-cli` would otherwise do.
 
 ```bash
@@ -281,11 +281,11 @@ there and pass paths under `/work`. Arguments after the image name go straight t
 `rom-weaver`, so `--help` and every subcommand work unchanged.
 
 `--user "$(id -u):$(id -g)"` is what makes the output usable. Bind-mounted files
-keep their host ownership, and without it the container runs as the base image's
-`nonroot` user (uid 65532): reading your files may be refused, and anything it
-does write ends up owned by a uid that does not exist on the host. rom-weaver
-reads no home directory or user config, so an arbitrary uid needs no matching
-account inside the image.
+keep their host ownership. Without that flag, the container runs as the base
+image's `nonroot` user (uid 65532). The container may refuse permission to read
+your files, and anything it writes ends up owned by a uid that does not exist on
+the host. rom-weaver reads no home directory or user config, so an arbitrary uid
+needs no matching account inside the image.
 
 The image is distroless - it contains the `rom-weaver` binary and its C runtime
 and nothing else, so there is no shell inside and `--entrypoint sh` will not get

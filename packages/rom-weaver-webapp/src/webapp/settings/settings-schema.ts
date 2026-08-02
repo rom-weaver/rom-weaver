@@ -8,7 +8,6 @@ import {
   normalizeCompressionProfile,
   normalizeIntegerInRange,
   parseIntegerInRange,
-  resolveCompressionLevels,
 } from "./settings-compression.ts";
 import type {
   SettingsDraft,
@@ -22,7 +21,6 @@ import {
   getDefaultSettings,
   getDefaultThreads,
   getSettingsChoiceValues,
-  getSettingsFieldDefaultValue,
   getSettingsFieldId,
   getSettingsFieldMax,
   getSettingsFieldMin,
@@ -31,7 +29,6 @@ import {
   LOCAL_STORAGE_SETTINGS_ID,
   normalizeChoiceSetting,
   SETTINGS_FIELD_ORDER,
-  SETTINGS_LEVEL_OVERRIDE_FIELDS,
 } from "./settings-metadata.ts";
 
 const logger = createLogger("settings");
@@ -87,8 +84,6 @@ const FORMAT_CODEC_FIELDS = [
   ...SINGLE_CODEC_FIELDS,
   ...CHD_CODEC_FIELDS,
 ] as const satisfies readonly SettingsFieldKey[];
-const isLevelOverrideField = (fieldKey: SettingsFieldKey): boolean =>
-  (SETTINGS_LEVEL_OVERRIDE_FIELDS as readonly SettingsFieldKey[]).includes(fieldKey);
 const isSingleCodecField = (fieldKey: SettingsFieldKey): boolean =>
   (SINGLE_CODEC_FIELDS as readonly SettingsFieldKey[]).includes(fieldKey);
 
@@ -222,10 +217,6 @@ const assignSetting = <K extends SettingsFieldKey>(settings: SettingsState, fiel
 
 const isValidationFieldEnabled = (fieldKey: SettingsFieldKey, settings: SettingsState): boolean =>
   !isSettingsFieldDisabled(fieldKey, settings as SettingsDraftState);
-
-const applyDefaultFields = (settings: SettingsState, fieldKeys: readonly SettingsFieldKey[]) => {
-  for (const fieldKey of fieldKeys) assignSetting(settings, fieldKey, getSettingsFieldDefaultValue(fieldKey));
-};
 
 const applyBooleanFields = (
   rawDraft: SettingsDraft,
@@ -407,13 +398,9 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     requireInputChecksumMatch: validation.requireInputChecksumMatch,
     rvzBlockSize: compression.rvzBlockSize,
     rvzCodec: compression.rvzCodec,
-    rvzCompressionLevel: compression.rvzCompressionLevel,
     sevenZipCodec: compression.sevenZipCodec,
-    sevenZipLevel: compression.sevenZipLevel,
     threads: compression.threads ?? compression.workerThreads,
-    z3dsCompressionLevel: compression.z3dsCompressionLevel,
     zipCodec: compression.zipCodec,
-    zipLevel: compression.zipLevel,
     ...storageSettings,
   };
 };
@@ -610,7 +597,6 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     };
   };
   for (const fieldKey of SETTINGS_FIELD_ORDER) {
-    if (isLevelOverrideField(fieldKey)) continue;
     if (fieldKey === "chdCreateCdCodecs" || fieldKey === "chdCreateDvdCodecs") {
       if (canonicalSettings[fieldKey] !== canonicalDefaults[fieldKey]) storeSetting(fieldKey, settings[fieldKey]);
       continue;
@@ -648,7 +634,6 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
       fieldKey,
       validateConditionalCodecField(fieldKey, rawDraft, validation, settings),
     );
-  applyDefaultFields(validation.settings, SETTINGS_LEVEL_OVERRIDE_FIELDS);
   validation.settings.rvzBlockSize = validateConditionalPositiveIntegerField(
     "rvzBlockSize",
     rawDraft,
@@ -660,37 +645,7 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
   return validation;
 };
 
-const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: Record<string, unknown>) => {
-  const settings = materializeChdCodecSettings(source || getDefaultSettings());
-  const compressionLevels = resolveCompressionLevels(settings);
-  return Object.assign(
-    {
-      accent: settings.accent,
-      bundlePackage: settings.bundlePackage,
-      chdCreateCdCodecs: settings.chdCreateCdCodecs,
-      chdCreateDvdCodecs: settings.chdCreateDvdCodecs,
-      compressionProfile: settings.compressionProfile,
-      defaultCompression: settings.defaultCompression,
-      fixChecksum: settings.fixChecksum,
-      language: settings.language,
-      logLevel: settings.logLevel,
-      requireInputChecksumMatch: settings.requireInputChecksumMatch !== false,
-      rvzBlockSize: settings.rvzBlockSize,
-      rvzCodec: compressionLevels.rvzCodec,
-      rvzCompressionLevel: compressionLevels.rvzCompressionLevel,
-      sevenZipCodec: compressionLevels.sevenZipCodec,
-      sevenZipLevel: compressionLevels.sevenZipLevel,
-      threads: settings.threads,
-      z3dsCompressionLevel: compressionLevels.z3dsCompressionLevel,
-      zipCodec: compressionLevels.zipCodec,
-      zipLevel: compressionLevels.zipLevel,
-    },
-    extraSettings || {},
-  );
-};
-
 export {
-  buildSettingsForWebapp,
   getDefaultSettings,
   loadSettings,
   SETTINGS_STORAGE_VERSION,

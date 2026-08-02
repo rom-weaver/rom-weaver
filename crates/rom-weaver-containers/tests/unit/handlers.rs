@@ -620,6 +620,13 @@ mod tests {
     }
 
     #[test]
+    fn z3ds_is_a_single_payload_codec_container() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("z3ds").expect("z3ds handler");
+        assert!(handler.is_single_payload_codec_container());
+    }
+
+    #[test]
     fn find_by_output_extension_resolves_by_extension_only() {
         let registry = ContainerRegistry::new();
         let resolved_name = |path: &str| {

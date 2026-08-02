@@ -6,7 +6,6 @@ import OutputCompressionManager from "../../lib/compression/output-compression-m
 import { getCreatePatchFormatsForSizes } from "../../lib/create/patch-format-limits.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
-import { formatByteSize, formatPercentFixed } from "../../presentation/workflow-presentation.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 
 type OutputOption = {
@@ -15,15 +14,6 @@ type OutputOption = {
 };
 
 type OutputOptionLabelMap = Record<string, string>;
-
-type SectionSizeSummary = {
-  inputCompressedBytes?: number | null;
-  inputUncompressedBytes?: number | null;
-  patchCompressedBytes?: number | null;
-  patchRawBytes?: number | null;
-  outputRawBytes?: number | null;
-  outputRecompressedBytes?: number | null;
-};
 
 type OutputNameSettings = Pick<NonNullable<ApplySettings["output"]>, "extension" | "outputName" | "suffix">;
 
@@ -237,59 +227,13 @@ const createTrimOutputOptions = (rawExtension: string, { rawLabel }: { rawLabel?
   ]);
 };
 
-const formatLabeledByteSize = (label: string, value?: number | null) => {
-  const formattedSize = formatByteSize(value);
-  return formattedSize ? `${label}: ${formattedSize}` : "";
-};
-
-const formatLabeledSizeRatio = (value?: number | null, baseValue?: number | null) =>
-  typeof value === "number" && Number.isFinite(value) && typeof baseValue === "number" && Number.isFinite(baseValue)
-    ? `(${formatPercentFixed((value / Math.max(1, baseValue)) * 100, 1)})`
-    : "";
-
-const createSectionSizeText = ({
-  inputCompressedBytes,
-  inputUncompressedBytes,
-  patchCompressedBytes,
-  patchRawBytes,
-  outputRawBytes,
-  outputRecompressedBytes,
-}: SectionSizeSummary) => ({
-  input: [
-    formatLabeledByteSize("in", inputCompressedBytes),
-    formatLabeledByteSize("raw", inputUncompressedBytes),
-    formatLabeledSizeRatio(inputCompressedBytes, inputUncompressedBytes),
-  ]
-    .filter(Boolean)
-    .join(" / "),
-  output: [
-    formatLabeledByteSize("raw", outputRawBytes),
-    formatLabeledByteSize("out", outputRecompressedBytes),
-    formatLabeledSizeRatio(outputRecompressedBytes, outputRawBytes),
-  ]
-    .filter(Boolean)
-    .join(" / "),
-  patch: [
-    formatLabeledByteSize("in", patchCompressedBytes),
-    formatLabeledByteSize("patch", patchRawBytes),
-    formatLabeledSizeRatio(patchCompressedBytes, patchRawBytes),
-  ]
-    .filter(Boolean)
-    .join(" / "),
-});
-
-const combineSectionTimingText = (timingText?: string | null, sizeText?: string | null) =>
-  [String(timingText || ""), String(sizeText || "")].filter(Boolean).join(" | ");
-
 export type { OutputOption };
 export {
-  combineSectionTimingText,
   createApplyOutputOptions,
   createCompressionTypeOptions,
   createCreateOutputCompressionOptions,
   createCreatePatchFormatOptions,
   createOutputOptions,
-  createSectionSizeText,
   createTrimOutputOptions,
   getGeneratedOutputName,
 };

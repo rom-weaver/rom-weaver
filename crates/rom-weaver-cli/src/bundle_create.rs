@@ -312,10 +312,16 @@ impl CliApp {
             .map(|path| fs::metadata(path).map(|meta| meta.len()).unwrap_or(0))
             .unwrap_or(0);
         let mut hashed_bytes: u64 = 0;
+        // Presence matters: an explicit empty --rom-name suppresses the
+        // sourceless-ROM default, which lets the web authoring field be cleared.
+        let rom_name = args.rom_name.as_deref().and_then(|name| {
+            let name = name.trim();
+            (!name.is_empty()).then(|| name.to_owned())
+        });
 
         let rom = match (&args.rom, &args.rom_url) {
             (None, None) => {
-                if args.rom_name.is_some() {
+                if rom_name.is_some() {
                     warnings.push(
                         "--rom-name ignored: no ROM given with --input or --rom-url".to_string(),
                     );
@@ -358,7 +364,11 @@ impl CliApp {
                     .then(|| required_base_name(path, "rom"))
                     .transpose()?;
                 Some(BundleRom {
-                    name: args.rom_name.clone().or(sourceless_name),
+                    name: if args.rom_name.is_some() {
+                        rom_name.clone()
+                    } else {
+                        sourceless_name
+                    },
                     url: url_override.clone(),
                     path: distribute_path.then_some(base_name),
                     checks: Some(BundleChecks {
@@ -368,7 +378,7 @@ impl CliApp {
                 })
             }
             (None, Some(url)) => Some(BundleRom {
-                name: args.rom_name.clone(),
+                name: rom_name,
                 url: Some(url.clone()),
                 path: None,
                 checks: None,

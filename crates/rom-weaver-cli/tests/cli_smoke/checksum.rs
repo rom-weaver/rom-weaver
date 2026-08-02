@@ -48,6 +48,29 @@ fn checksum_value_no_trim_fix(path: &std::path::Path, algorithm: &str) -> String
         .to_string()
 }
 
+fn assert_streamed_multi_checksum(output: &[u8], source: &Path, source_label: &str) {
+    let events = parse_json_lines(output);
+    let terminal = events.last().expect("terminal checksum event");
+    assert_eq!(terminal["command"], "checksum");
+    assert_eq!(terminal["status"], "succeeded");
+
+    let expected_sha1 = checksum_value(source, "sha1");
+    let expected_crc32 = checksum_value(source, "crc32");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(label.starts_with(&format!("sha1={expected_sha1} crc32={expected_crc32};")));
+    assert_eq!(label.matches("sha1=").count(), 1);
+    assert!(label.contains(source_label));
+    assert!(!label.contains("checksum source resolved via"));
+    assert_eq!(terminal["details"]["checksums"]["sha1"], expected_sha1);
+    assert_eq!(terminal["details"]["checksums"]["crc32"], expected_crc32);
+    assert!(events.iter().any(|event| {
+        event["status"] == "running"
+            && event["stage"] == "checksum"
+            && event["label"] == "computing 3 checksum algorithm(s)"
+            && event["percent"].as_f64() == Some(100.0)
+    }));
+}
+
 fn checksum_test_n64_byte_swapped(bytes: &[u8]) -> Vec<u8> {
     let mut swapped = bytes.to_vec();
     for word in swapped.chunks_exact_mut(4) {
@@ -349,12 +372,15 @@ fn checksum_auto_extract_stream_container_uses_streamed_hashing() {
     let compressed = temp.child("game.bin.gz");
     write_gzip_fixture(temp.child("game.bin").path(), compressed.path());
 
-    let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
     let output = command_stdout(
         &[
             "checksum",
             "--input",
             compressed.path().to_str().expect("path"),
+            "--algo",
+            "SHA1",
+            "--algo",
+            "crc32",
             "--algo",
             "sha1",
             "--json",
@@ -362,14 +388,11 @@ fn checksum_auto_extract_stream_container_uses_streamed_hashing() {
         0,
     );
 
-    let json = parse_single_json_line(&output);
-    assert_eq!(json["command"], "checksum");
-    assert_eq!(json["status"], "succeeded");
-    let label = json["label"].as_str().expect("label");
-    let actual = label_digest_value(label, "sha1").expect("sha1 digest");
-    assert_eq!(actual, expected_payload);
-    assert!(label.contains("checksum source streamed from gz container"));
-    assert!(!label.contains("checksum source resolved via"));
+    assert_streamed_multi_checksum(
+        &output,
+        temp.child("game.bin").path(),
+        "checksum source streamed from gz container",
+    );
 }
 
 #[test]
@@ -435,12 +458,15 @@ fn checksum_auto_extract_tar_stream_uses_streamed_hashing() {
         archive.path(),
     );
 
-    let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
     let output = command_stdout(
         &[
             "checksum",
             "--input",
             archive.path().to_str().expect("path"),
+            "--algo",
+            "SHA1",
+            "--algo",
+            "crc32",
             "--algo",
             "sha1",
             "--json",
@@ -448,14 +474,11 @@ fn checksum_auto_extract_tar_stream_uses_streamed_hashing() {
         0,
     );
 
-    let json = parse_single_json_line(&output);
-    assert_eq!(json["command"], "checksum");
-    assert_eq!(json["status"], "succeeded");
-    let label = json["label"].as_str().expect("label");
-    let actual = label_digest_value(label, "sha1").expect("sha1 digest");
-    assert_eq!(actual, expected_payload);
-    assert!(label.contains("checksum source streamed from tar.gz container entry"));
-    assert!(!label.contains("checksum source resolved via"));
+    assert_streamed_multi_checksum(
+        &output,
+        temp.child("game.bin").path(),
+        "checksum source streamed from tar.gz container entry",
+    );
 }
 
 #[test]

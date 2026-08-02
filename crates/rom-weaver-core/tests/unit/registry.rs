@@ -208,7 +208,7 @@ fn guard_registration(create_support: CreateSupport) -> ContainerHandlerRegistra
             extract_threads: ThreadCapability::single_threaded(),
             create_threads: ThreadCapability::single_threaded(),
         },
-        is_single_payload_disc_image: true,
+        is_single_payload_codec_container: true,
         create_support,
     }
 }
@@ -240,7 +240,7 @@ fn traced_container_handler_forwards_every_operation() {
     let context = guard_context();
 
     assert_eq!(handler.descriptor().name, "guard");
-    assert!(handler.is_single_payload_disc_image());
+    assert!(handler.is_single_payload_codec_container());
     assert!(handler.capabilities().create);
 
     assert_eq!(

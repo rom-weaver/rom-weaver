@@ -47,6 +47,7 @@ publishing, and retry procedures - see the [release guide](../../.github/RELEASI
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, manual | **Yes** | Build, lint, test, deploy the webapp |
 | `pull-request.yml` | PR (open/reopen/sync/edit), PR comment | **Yes** | The required `CLA Signed` and `PR Title Lint` checks |
+| `dependabot-auto-merge.yml` | Dependabot PR open/reopen/sync | No | Arm native squash auto-merge for patch and minor updates after required checks pass |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool, with an exact cached CLI |
@@ -54,31 +55,31 @@ publishing, and retry procedures - see the [release guide](../../.github/RELEASI
 | `cache-cleanup.yml` | every 6 h, manual | No | Reap closed-PR and superseded Actions caches |
 | `cloudflare-preview-cleanup.yml` | every 6 h, manual | No | Reap stale Cloudflare Pages preview deployments |
 | `release.yml` | manual, release PR merge | n/a | Release Please, then the publish fan-out |
+| `release-retry.yml` | manual | n/a | Validate a failed/cancelled Release run and rerun its failed jobs and dependents |
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
 | `npm-publish.yml` | called by `release.yml` | n/a | 9 platform packages, launcher, alias |
 | `docker-publish.yml` | called by `release.yml`, manual | n/a | CLI + webapp images to ghcr.io (the `latest`/`beta` channels; `nightly` is pushed from `ci.yml`) |
 | `attestation-dry-run.yml` | manual | No | Prove the release attest steps and both installers' checks without cutting a release |
+| `attestation-dry-run-called.yml` | called by `attestation-dry-run.yml` | No | Prove that attestation permissions survive a reusable-workflow boundary |
 
 `pull-request.yml` holds the two gates a **contributor** rather than the code has
 to clear: the CLA signature (`CLA Check` job) and a Conventional Commits pull
 request title (`Title Check` job), under the `PR Gates` workflow. They share a file because they share every
 constraint - each posts a commit status against the pull request head instead of
-relying on its own check run, each keeps exactly one marker comment on the
-thread, each has to work for a pull request from a fork, and each is required by
-the `main protection` ruleset. Both run on `pull_request_target`, which is what
-supplies a write token on a fork's pull request; nothing from the head is
-checked out or executed, and the scripts, the allowlist and the commitlint
-config all come from the base commit.
+relying on its own check run, each has to work for a pull request from a fork,
+and each is required by the `main protection` ruleset. Both run on
+`pull_request_target`, which is what supplies a write token on a fork's pull
+request; nothing from the head is checked out or executed, and the scripts, the
+allowlist and the commitlint config all come from the base commit.
 
 | Script | Test | Posts |
 | --- | --- | --- |
 | `scripts/ci/cla-gate.mjs` | `cla-gate.test.mjs` | `CLA Signed` |
-| `scripts/ci/pr-title-gate.mjs` | `pr-title-gate.test.mjs` | `PR Title Lint` |
-| `scripts/ci/github-api.mjs` | (exercised by both) | - |
-| `scripts/ci/commitlint-report.mjs` | (exercised by the title gate's step) | - |
+| `scripts/ci/github-api.mjs` | (exercised by the CLA gate) | - |
 
-Both tests drive the script against a stub GitHub API served over real HTTP, so
-the JSON, base64 and status handling runs rather than a mock of it.
+The title job runs commitlint and posts `PR Title Lint` directly with `gh api`.
+The CLA test drives its script against a stub GitHub API served over real HTTP,
+so the JSON, base64 and status handling runs rather than a mock of it.
 
 The CLA gate checks every contributor to a pull request against
 [CLA version 2.0](../../CLA.md), whose grant covers every repository in the
@@ -175,50 +176,14 @@ and squash merges take `PR_TITLE` as the subject, so the title is the only text
 that reaches `main` and the only text Release Please reads. Branch commits are
 squashed away, so they are not linted.
 
-commitlint runs in the workflow step and hands the gate script a verdict plus a
-file. That split is deliberate: routing an attacker-controlled title through
-`GITHUB_OUTPUT` would let a crafted heredoc delimiter forge step outputs, and it
-keeps the half worth testing free of a commitlint install.
-
-The file is JSON, not commitlint's own paragraph. `scripts/ci/commitlint-report.mjs`
-is a commitlint formatter (`--format`, passed by path so nothing has to be
-installed) that writes the report out structurally - a `name`, `level` and
-`message` per problem - and returns the plain text that lands in the log. The
-gate branches on rule names, which is what lets the comment say something
-specific instead of restating the format under every kind of failure:
-
-| Rules | What the comment adds |
-| --- | --- |
-| `type-empty` | That the title has no `type:` prefix, and that this is also why `subject-empty` fired on a title that plainly has a subject. |
-| `type-case`, `type-enum` | Names the type it rejected, and lists the allowed ones. |
-| `header-max-length` | How many characters have to go, and no example of a shape the title already has. |
-
-**The gate never proposes a replacement title.** commitlint hands it a rule name
-and a message; it never hands over a corrected title, so any rename would be one
-the gate invented - and the type is the part it cannot possibly know. Squash
-merges make the title the commit subject and Release Please reads the type for
-the changelog section and the version bump, so a guessed `fix:` on a feature is
-not a cosmetic miss: it is a wrong bump and a wrong changelog entry, landed
-silently. A rejected title costs a rename and says so out loud. Naming the rule
-that broke and the types that are allowed is the whole job.
-
-Valid types are read from `.config/commitlint.config.mjs` - the same file that
-rejected the title - so the advice cannot drift from the rule. A failure that
-carries no lint result at all is commitlint breaking rather than a bad title, so
-the gate throws instead of posting. Editing the title reruns the gate; passing
-**deletes** the comment, so a green pull request carries no gate chatter. The
-title is quoted in a block quote as an inline code span, opened with a backtick
-run longer than any inside it - inside a span GitHub neither links nor notifies
-an `@mention`, and a shorter run cannot close it. A fence would protect the same
-amount but carries a copy button and a horizontal scrollbar, which is the wrong
-trade for a string you have to read whole and are about to retype. The CLA
-gate's fence around the signing phrase is the opposite case, and keeps its
-fence: there the copy button is the point.
-
-Every sentence in either comment is one unbroken line. GitHub renders a single
-newline inside a comment as a hard break, so prose wrapped to a column shows the
-reader a line break mid-sentence - the source and the render disagree, and only
-the render matters.
+commitlint runs directly in the workflow step, reading the title from an
+environment variable through standard input. The step posts the required
+`PR Title Lint` status with `gh api`; it does not route the contributor-controlled
+title through `GITHUB_OUTPUT` or interpolate it into shell source. A rejected
+title leaves commitlint's exact rule in the Title Check log and a short failure
+annotation on the run. Editing the title reruns the job. Valid types still come
+only from `.config/commitlint.config.mjs`, so local hooks and the pull request
+gate enforce the same rules.
 
 Nothing publishes on a push, and nothing reacts to one either. `release.yml` has
 no `push` trigger: the release pull request is created and refreshed only by a
@@ -553,13 +518,11 @@ instead would gate a required check on `deploy-preview-fast`, which is
 `continue-on-error: true` precisely so a Cloudflare outage cannot redden a
 build, and which is not ordered ahead of this job anyway.
 
-Applying `dist/_headers` is what puts the `Link:` preload hints in front of the
-audit, and the preview server replays them in a real `103` ahead of each HTML
-response the way the edge does - without that, Lighthouse would grade a
-discovery path for the render-critical CSS and entry module that production does
-not have. `scripts/pages-headers.mjs` parses the file; documents get the `103`,
-subresources do not, since a subresource ignores the hint and the extra
-informational response would only add to what the audit measures.
+Applying `dist/_headers` gives the preview server the same security, cache, and
+content-signal behavior as Pages. Builds intentionally disable deploy-sensitive
+`Link` hints, so the preview server does not emit a `103` whose cached hashed URLs
+could outlive a deployment. The HTML's own stylesheet, modulepreload, and font
+links remain the render-critical discovery path that production serves.
 
 `wrangler pages dev` is the closer emulator for everything else - it runs
 `_routes.json` and the sidecar Function for real - but it cannot serve this gate:
@@ -635,25 +598,13 @@ promptly. The `Content-Signal` header permits agent input on every channel,
 permits search use only on production, and declines AI training. Non-production
 channels add their `X-Robots-Tag` in the same file.
 
-Every response also carries `Link:` preload headers for the two
-render-critical subresources - the stylesheet and the entry module. Neither is
-discoverable until the document has been fetched and parsed, so Cloudflare
-replays them in a `103 Early Hints` response and both fetches start during
-server think time; browsers that ignore `103` still act on the header when the
-document response lands, which is earlier than the parser either way. They ride
-in the `/*` block rather than an enumerated route list, so every prerendered
-route, every docs slug, and any route added later is covered without upkeep;
-subresource responses carry the header too and ignore it. Both use `rel=preload`
-(`as=style` and `as=script`) rather than `rel=modulepreload` for the entry:
-Cloudflare only replays `preload` and `preconnect` in the `103`, so a
-`modulepreload` line still works on the document response but is dropped from
-the Early Hints, which is the half worth having. Chrome starts the entry fetch
-from the `as=script` hint and the module script reuses it, so nothing
-double-fetches. The hinted URLs are read back out of the built `index.html` by
-`packages/rom-weaver-webapp/scripts/critical-asset-hints.mjs`, which the build
-and `scripts/verify-seo-build.mjs` share so the emitted header and the check
-guarding it cannot drift; the verifier fails the build if either drifts from the
-URL the document actually requests.
+The generated `/*` block explicitly disables `Link` headers. Cloudflare caches
+HTTP 103 Early Hints separately from the document; deploy-specific hashed URLs
+in a wildcard `Link` header can therefore outlive the deployment that emitted
+them and preload dead CSS or JS files during rollout. The HTML already carries
+the exact hashed module, stylesheet, and font URLs, so it remains the single
+source of truth for resource discovery while the build verifier rejects any
+accidental reintroduction of deploy-sensitive `Link` hints.
 
 Pages has no precompressed-sibling convention and recompresses assets on the
 fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse
@@ -728,7 +679,7 @@ trust).
 
 The channels form a stability ladder - `prod` above `beta` above `nightly` -
 and a ref deploys to the channel it enters at **plus every less-stable channel
-below it**. Otherwise a quiet stretch on `main` would leave beta and nightly
+below it**. Otherwise, a quiet stretch on `main` would leave beta and nightly
 serving code older than production, which makes them useless for reproducing a
 release-day bug.
 
@@ -856,7 +807,7 @@ build dependencies, `cross` for the musl targets, and - for Windows - the
 for the cross-arch legs.
 
 Non-cross Linux x86-64 legs also run `scripts/install-jwasm.sh` so the LZMA
-SDK's assembly decode loop is compiled in (see `docs/vendor-code.md`); a
+SDK's assembly decode loop is compiled in (see [vendor-code.md](vendor-code.md)); a
 missing assembler downgrades that binary to the portable C loop with a build
 warning, never a failure. The musl legs build through `cross`, whose container
 never runs that script, so they keep the C loop. Windows x86-64 needs no step -
@@ -1070,7 +1021,7 @@ spec would tag every platform package as a prerelease.
 | --- | --- |
 | `semver-check` | nothing - gates the publish on no accidental breaking API change |
 | `cargo-publish-dry-run` | nothing - gates npm and draft publication on crates.io accepting Cargo metadata |
-| `static-webapp` | `rom-weaver-webapp.tar.gz` + checksum on the GitHub release |
+| `static-webapp` | `rom-weaver-webapp.tar.gz` on the draft release + signed build provenance |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order |
 | `publish-containers` | `ghcr.io/rom-weaver/rom-weaver-cli` and `-webapp`, signed provenance |
 | `publish-release` | flips the draft release to published, creating the tag |
@@ -1228,8 +1179,8 @@ gates on it. Both write a manifest whose download URL is
 downloadable - pushing them earlier put a live formula in the tap and a live
 manifest in the bucket whose URLs 404 until the draft was published.
 
-The ordering costs the property that a tap failure holds the draft, and that is
-the better half of the trade. These two are the only publishes in the fan-out
+The ordering means that a tap failure no longer holds the draft, but that is an
+acceptable trade. These two are the only publishes in the fan-out
 that are trivially retryable: a git push to a repository we own, with no
 registry state to reconcile. Rerunning the job fixes it. Everything that *is*
 irreversible - npm, the container registry, the release itself - still gates
@@ -1385,10 +1336,11 @@ compile for the layer that runs the build.
 
 | Secret | Used by | For |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `ci.yml` deploy | Pages Direct Upload |
-| `RELEASE_PLEASE_TOKEN` | `release.yml` | Opening the release pull request |
-| `HOMEBREW_TAP_TOKEN` | `release.yml` | Pushing to the tap repository |
-| `SCOOP_BUCKET_TOKEN` | `release.yml` | Pushing to the Scoop bucket repository |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `ci.yml`, preview cleanup | Pages Direct Upload and preview deletion |
+| `CLOUDFLARE_ZONE_ID` (optional) | `ci.yml` | Maintaining the `/assets/*` zone Cache Rule; the API token also needs Cache Rules edit permission |
+| `RELEASE_PLEASE_TOKEN` | `release.yml` | Release pull request and release-metadata operations |
+| `PACKAGE_MANAGER_TOKEN` | `release.yml` | Pushing stable releases to the Homebrew tap and Scoop bucket repositories |
+| `NPM_BOOTSTRAP_TOKEN` (optional) | `npm-publish.yml` | First publication of a newly added npm package before trusted publishing can be configured |
 | `GITHUB_TOKEN` | everywhere | ghcr.io, releases, statuses, cache deletion |
 
 crates.io needs no stored secret - `rust-lang/crates-io-auth-action` mints a
@@ -1431,7 +1383,7 @@ npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 npm --prefix packages/rom-weaver-webapp run build
 ```
 
-`actionlint` is shellcheck-aware and also lints inline workflow `run:` scripts;
+`actionlint` is shellcheck-aware and lints inline workflow `run:` scripts;
 the separate `shellcheck` task covers the tracked shell files, and `npm test`
 covers the Node.js tooling. `docker` is
 conditional on image-plumbing changes and is most directly reproduced with the

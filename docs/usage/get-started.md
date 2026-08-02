@@ -38,21 +38,21 @@ Open [guided Apply](https://rom-weaver.com/apply?guide=apply). rom-weaver loads
 a tiny homebrew NES ROM and two patches made for this project. No commercial
 game data is involved.
 
-The guide points to four parts of the real Weave page:
+The guide points to four parts of the real Apply page:
 
 1. The **ROM** card shows the starting file and its checksums.
 2. The **Patches** cards show the order. Patch 1 changes `HELLO` to
    `MODIFIED`. Patch 2 changes `WORLD` to `ROM`.
 3. **Add files** stays available if you need another ROM, patch, archive, or
    bundle.
-4. **Weave** controls the output. Choose **WEAVE & DOWNLOAD** to make the new
+4. **Apply** controls the output. Choose **APPLY & DOWNLOAD** to make the new
    ROM.
 
 The finished sample displays `MODIFIED ROM`. Its SHA-256 is
 `e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`, so you
 can check that your download is byte-for-byte identical. If you want to inspect
 the files yourself, choose **Download a test bundle** from the **New here?**
-beacon on the empty Weave page or
+beacon on the empty Apply page or
 [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
 
 The sample is also useful later. [Guided Create](https://rom-weaver.com/create?guide=create)
@@ -70,15 +70,15 @@ Once the sample makes sense, you need two things:
 Then:
 
 1. Open [Apply](https://rom-weaver.com/apply).
-2. Add the ROM and patch together. You may drag them onto **0x01 Add files** or
-   tap the picker.
+2. Add the ROM and patch together. You may drag them onto **0x01 Inputs** or
+   choose **Add files**.
 3. Wait for the ROM and patch cards to finish reading and checking.
 4. Read every warning. A different filename is only a clue. A checksum or size
    mismatch means the bytes differ and needs attention.
 5. If there is more than one patch, drag the numbered handles into the order
    the author gave you.
-6. In **0x04 Weave**, give the result a new name.
-7. Choose **WEAVE & DOWNLOAD**.
+6. In **0x04 Apply**, give the result a new name.
+7. Choose **APPLY & DOWNLOAD**.
 8. Open the new file in the emulator or hardware you normally use.
 
 The original ROM is not overwritten. Keep it somewhere safe because an update
@@ -138,7 +138,7 @@ patch or patch-only bundle, not the copyrighted original ROM.
 
 ## Where to go next
 
-- [Apply a ROM patch](apply-rom-patches.md) for the complete Weave webapp
+- [Apply a ROM patch](apply-rom-patches.md) for the complete Apply webapp
   workflow.
 - [Create a ROM patch](create-rom-patches.md) when you have clean and modified
   files.

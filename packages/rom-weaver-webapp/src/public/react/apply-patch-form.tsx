@@ -41,8 +41,8 @@ import { useCandidateSelection } from "./candidate-selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
-import { inertDialogController, useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
-import type { ApplyPatchFormProps, CandidateSelectionPrompt, InternalApplyPatchFormProps } from "./public-types.ts";
+import { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
+import type { ApplyPatchFormProps, CandidateSelectionPrompt } from "./public-types.ts";
 import { useApplySettings, useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
 import { type BundleSessionControllers, useBundleApplySession } from "./use-bundle-apply-session.ts";
@@ -204,8 +204,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const providerSettings = useApplySettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
-  const internalProps = props as InternalApplyPatchFormProps;
-  const { startup, controllers } = internalProps;
+  const { startup } = props;
   const handleSelectionCancelledRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
     onCancelSelection: (request) => handleSelectionCancelledRef.current(request),
@@ -323,10 +322,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [localBundleSession, setLocalBundleSession] = useState<BundleApplySession | null>(null);
   const [bundleDismissed, setBundleDismissed] = useState(false);
   const bundleSessionKey = props.bundleSession?.key;
-  const previousBundleSessionKeyRef = useRef(bundleSessionKey);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The bundle session key intentionally triggers a dismissal reset.
   useEffect(() => {
-    if (previousBundleSessionKeyRef.current === bundleSessionKey) return;
-    previousBundleSessionKeyRef.current = bundleSessionKey;
     setBundleDismissed(false);
   }, [bundleSessionKey]);
   const activeBundleSession = bundleDismissed ? null : localBundleSession || props.bundleSession || null;
@@ -956,7 +953,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       // Disabled patches never reach the workflow; the bench keeps their cards.
       // Their index-aligned run options travel with the kept patches so the
       // filtered re-stage can replay them onto its fresh stages.
-      const filteredRun = filterEnabledPatchRun(rawInput.patches, rawInput.patchOptions);
+      const patchIds = getPatchIds();
+      const runOptions = rawInput.patches.map((_patch, index) => {
+        const basis = bundleMetaRef.current.get(patchIds[index] || "")?.basis;
+        return {
+          ...rawInput.patchOptions?.[index],
+          ...(basis ? { basis } : {}),
+        };
+      });
+      const filteredRun = filterEnabledPatchRun(rawInput.patches, runOptions);
       const input: ApplyWorkflowSessionInput = { ...rawInput, ...filteredRun };
       const runPreparedWorkflow = async ({
         input: stagedInput,
@@ -1043,6 +1048,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       syncWorkflowOutputOverrides,
       prepareWorkflow,
       filterEnabledPatchRun,
+      getPatchIds,
       workflowHandle,
     ],
   );
@@ -1314,6 +1320,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       input: ApplyWorkflowSessionInput,
       patchIndex: number,
       option: {
+        basis?: "base" | "previous";
         validateInputChecksum?: string;
         validateOutputChecksum?: string;
         header?: "keep" | "strip";
@@ -1392,9 +1399,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       stagePatches,
       validatePatches,
     });
-  const resolvedUiController = controllers?.ui || localUiController;
-  const resolvedStackController = controllers?.patchStack || localStackController;
-  const resolvedOutputController = controllers?.output || localOutputController;
+  const resolvedUiController = localUiController;
+  const resolvedStackController = localStackController;
+  const resolvedOutputController = localOutputController;
   bundleControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
 
   // "Export bundle…" (output card secondary action): snapshots the current
@@ -1403,6 +1410,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const bundleExportReady =
     (!!stagedBundleSources?.rom && stagedBundleSources.patches.length > 0) ||
     (!!bundleSourcesRef.current?.rom && bundleSourcesRef.current.patches.length > 0);
+  const bundleExportRomName =
+    stagedBundleSources?.rom?.fileName ||
+    bundleSourcesRef.current?.rom?.fileName ||
+    (lastInputsRef.current.length === 1
+      ? getReactBinarySourceFileName(lastInputsRef.current[0] as BinarySource, "rom.bin")
+      : "");
   const bundleExport = useBundleExport({
     bundleMetaById,
     disabledPatchIds,
@@ -1431,6 +1444,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     getStackItems: () => resolvedStackController.getState().items,
     initialBundleRom: defaultBundleContents === "rom",
     initialFormat: defaultBundleFormat,
+    initialRomName: bundleExportRomName,
     ready: bundleExportReady,
     ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
   });
@@ -1506,8 +1520,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         bundleMetaById={bundleMetaById}
         bundleSessionMatches={bundleSessionMatches}
         controllers={{
-          dialog: controllers?.dialog || inertDialogController,
-          notice: controllers?.notice || localNoticeController,
+          notice: localNoticeController,
           output: resolvedOutputController,
           patchStack: resolvedStackController,
           ui: resolvedUiController,

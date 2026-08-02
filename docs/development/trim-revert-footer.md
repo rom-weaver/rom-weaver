@@ -51,9 +51,10 @@ When a valid footer is present:
 
 The result is byte-identical to the pre-trim original.
 
-When no valid footer is present (a clean trim, or a file trimmed by another tool), revert falls
-back to the per-format heuristic: NDS/3DS restore to the cartridge size implied by the header
-and GBA to the next power of two, filling with `0xFF`.
+When no valid footer is present (a clean trim or a file trimmed by another tool),
+revert falls back to the per-format heuristic. NDS/3DS restore to the cartridge
+size implied by the header, while GBA restores to the next power of two and fills
+with `0xFF`.
 
 ## Notes and invariants
 

@@ -30,8 +30,8 @@ const CLI_LONG_ABOUT: &str = "\
 Inspect, extract, checksum, compress, trim, and patch ROMs and disc images.
 
 rom-weaver reads compressed input directly, so you rarely have to unpack a file
-first. Point --input at an archive or disc image and the ROM inside it is found
-for you; pass --no-extract to work on the raw bytes instead.
+first. Point --input at an archive or single-payload compressed format; the ROM
+inside it is found for you. Pass --no-extract to work on the raw bytes instead.
 
 Everything runs on your machine. Nothing is uploaded.";
 

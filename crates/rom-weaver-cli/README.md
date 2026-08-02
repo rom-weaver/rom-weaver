@@ -30,10 +30,11 @@ orchestration code.
   xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered
   multi-patch chains, strict checksum validation, and cheat-code baking. Three
   of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
-- **Inspect and extract containers.** ZIP, 7z, RAR, tar, CHD, RVZ, Z3DS, CSO,
-  PBP, GCZ, WIA, WBFS, and more, including nested archives.
-- **Create compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS, validated
-  against reference tools such as `chdman` and `dolphin-tool`.
+- **Inspect and extract archives, disc images, and compressed ROMs.** ZIP, 7z,
+  RAR, tar, CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including
+  nested archives.
+- **Create compressed output.** ZIP, 7z, CHD, RVZ, and Z3DS. CHD and RVZ
+  output is validated against `chdman` and `dolphin-tool`, respectively.
 - **Checksum and verify.** CRC-32, MD5, SHA-1, SHA-256, BLAKE3, and friends,
   with copier-header detection and header-aware checksum variants.
 - **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS,
@@ -41,7 +42,8 @@ orchestration code.
   original byte-for-byte.
 - **Share workflows.** `rom-weaver-bundle.json` bundles pin patch order,
   checksums, and output naming so others can replay the exact workflow.
-- **Scriptable.** Line-delimited JSON output for every command.
+- **Scriptable.** Operation commands can emit line-delimited JSON; schema and
+  completion generators keep their native output formats.
 
 Everything runs locally. Nothing is uploaded.
 
@@ -61,12 +63,12 @@ To skip the toolchain entirely, run the published Linux image:
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" \
-  ghcr.io/brandonocasey/rom-weaver-cli:latest probe --input /work/game.iso
+  ghcr.io/rom-weaver/rom-weaver-cli:latest probe --input /work/game.iso
 ```
 
 Mount your ROM directory at `/work` and pass paths under it. `--user` matters:
 bind-mounted files keep their host ownership, so without it the container
-cannot read files it does not own.
+may be unable to read private files and writes use the image's uid.
 
 Prebuilt binaries and a Homebrew tap are available. See the
 [project README](https://github.com/rom-weaver/rom-weaver#install) for the
@@ -115,7 +117,7 @@ output, man pages, Docker usage, and file permissions.
 | --- | --- |
 | [`rom-weaver-core`](https://crates.io/crates/rom-weaver-core) | Registry traits, `RomWeaverError`, I/O and threading helpers. |
 | [`rom-weaver-checksum`](https://crates.io/crates/rom-weaver-checksum) | Checksum engines and the streaming variant engine. |
-| [`rom-weaver-containers`](https://crates.io/crates/rom-weaver-containers) | Archive and disc-image handlers. |
+| [`rom-weaver-containers`](https://crates.io/crates/rom-weaver-containers) | Archive, disc-image, and ROM-specific compression handlers. |
 | [`rom-weaver-patches`](https://crates.io/crates/rom-weaver-patches) | ROM patch format handlers. |
 
 ## Stability
@@ -123,10 +125,8 @@ output, man pages, Docker usage, and file permissions.
 rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in
 minor releases. Patching, compressing, extracting, and bundling are tested
 extensively; the flags and JSON shapes around them may still change on the way
-to v1.0. `trim` and `tools` are untested but theoretically working, and are
-disabled in the webapp for that reason. The `rom_weaver_app` library this crate
-also exposes is an internal seam between the native and wasm frontends, not a
-supported API.
+to v1.0. The `rom_weaver_app` library this crate also exposes is an internal
+seam between the native and wasm frontends, not a supported API.
 
 ## Documentation
 
@@ -136,7 +136,7 @@ supported API.
 
 ## License
 
-Copyright (C) Brandon Casey. Licensed under
+Copyright © Brandon Casey. Licensed under
 [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
 Bundled third-party components retain their own licenses; release builds ship a
 generated `CLI_NOTICE` attribution and license inventory.

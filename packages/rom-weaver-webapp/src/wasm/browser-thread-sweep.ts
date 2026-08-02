@@ -12,7 +12,7 @@
  * Archive formats carry TWO entry sizes that straddle the point where ingest
  * starts splitting entries across threads, measured on desktop Chromium as
  * somewhere in (256 KiB, 512 KiB]: at 256 KiB `extract-step` reads 1 at every
- * thread count, and at 512 KiB it tracks the request exactly, 1..16. Disc
+ * thread count, and at 512 KiB it tracks the request exactly, 1..16. Single-payload
  * formats already split at 4 MiB, so a second size there would only cost
  * runtime. Sizes above 512 KiB (1 MiB, 2 MiB) were measured and split
  * identically, so they buy nothing the 512 KiB tier does not already show.
@@ -45,7 +45,7 @@
  * five threads up for z3ds.
  *
  * Input shape is per format: archive formats get 16 entries, and the
- * single-image formats (chd, z3ds, rvz) get one file because that is the only
+ * single-payload formats (chd, z3ds, rvz) get one file because that is the only
  * shape they accept.
  *
  * RUNTIME, desktop Chromium: ~28 min for the full 112-cell matrix, and that is
@@ -102,12 +102,12 @@ const GCN_HEADER_SIZE = 0x440;
 
 /**
  * `entries` archives many files so ingest has per-entry work to spread;
- * `disc` is a single image, the only shape chd/z3ds/rvz accept.
+ * `single-payload` is one file, the only shape chd/z3ds/rvz accept.
  */
-type ThreadSweepShape = "disc" | "entries";
+type ThreadSweepShape = "single-payload" | "entries";
 
 type ThreadSweepFormat = {
-  /** Entries per archive for `entries`, always 1 for `disc`. */
+  /** Entries per archive for `entries`, always 1 for `single-payload`. */
   entryCount: number;
   format: string;
   /** rvz needs a real disc header; the others take arbitrary bytes. */
@@ -147,9 +147,30 @@ const THREAD_SWEEP_FORMATS: readonly ThreadSweepFormat[] = [
     payloadBytes: [256 * KIB, 512 * KIB],
     shape: "entries",
   },
-  { entryCount: 1, format: "chd", gameCubeHeader: false, name: "chd", payloadBytes: [4 * MIB], shape: "disc" },
-  { entryCount: 1, format: "z3ds", gameCubeHeader: false, name: "z3ds", payloadBytes: [4 * MIB], shape: "disc" },
-  { entryCount: 1, format: "rvz", gameCubeHeader: true, name: "rvz", payloadBytes: [4 * MIB], shape: "disc" },
+  {
+    entryCount: 1,
+    format: "chd",
+    gameCubeHeader: false,
+    name: "chd",
+    payloadBytes: [4 * MIB],
+    shape: "single-payload",
+  },
+  {
+    entryCount: 1,
+    format: "z3ds",
+    gameCubeHeader: false,
+    name: "z3ds",
+    payloadBytes: [4 * MIB],
+    shape: "single-payload",
+  },
+  {
+    entryCount: 1,
+    format: "rvz",
+    gameCubeHeader: true,
+    name: "rvz",
+    payloadBytes: [4 * MIB],
+    shape: "single-payload",
+  },
 ];
 
 /** Thread telemetry the CLI reported for one command in one cell of the matrix. */
@@ -416,13 +437,13 @@ export async function runBrowserThreadSweep(
             observations.push(ingestObservation);
 
             // Compare whatever ingest actually emitted against the source it came
-            // from; disc formats rename their output, so match on basename.
+            // from; single-payload formats rename their output, so match on basename.
             const emitted = getIngestedPaths(ingestTerminal);
             assert(
               emitted.length === entries.length,
               `${name}: ingest reported ${emitted.length} assets, expected ${entries.length}`,
             );
-            // Multi-entry archives keep their entry names; a single-image format is
+            // Multi-entry archives keep their entry names; a single-payload format is
             // renamed after the archive (a.rvz -> a.iso), so match it by position.
             let compared = 0;
             for (const [index, emittedPath] of emitted.entries()) {

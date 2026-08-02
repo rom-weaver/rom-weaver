@@ -11,7 +11,7 @@ import type {
   StagedInputInfo,
 } from "./apply-session-types.ts";
 import { reorder } from "./components/ds/use-list-reorder.ts";
-import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
+import type { BinarySource } from "./patcher-form.ts";
 import { toError } from "./patcher-form-session-utils.ts";
 import type { PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
@@ -41,11 +41,9 @@ interface InputUiControllerContext {
     setFailurePlacement: Dispatch<SetStateAction<FailurePlacement>>;
     updateInputs: (nextInputs: BinarySource[]) => void;
     updatePatches: (nextPatches: BinarySource[]) => void;
-    updateSettings: (nextSettings: ApplyPatchFormSettings) => void;
   };
   state: {
     activePatches: BinarySource[];
-    activeSettings: ApplyPatchFormSettings;
     effectiveInputs: BinarySource[];
     failurePlacement: FailurePlacement;
     outputErrorMessage: string;
@@ -148,16 +146,6 @@ const useInputUiController = (context: InputUiControllerContext) => {
         if (state.effectiveInputs.length === 1) actions.updateInputs([]);
         else actions.updateInputs(state.effectiveInputs.filter((_input, inputIndex) => inputIndex !== index));
       },
-      setAlterHeader: (checked: boolean) => {
-        const { actions, state } = contextRef.current;
-        actions.updateSettings({
-          ...state.activeSettings,
-          compatibility: {
-            ...state.activeSettings.compatibility,
-            fixChecksum: checked,
-          },
-        });
-      },
       setChecksumOverride: (checked: boolean) => {
         contextRef.current.actions.setChecksumOverrideChecked(checked);
       },
@@ -250,6 +238,7 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
       setPatchOption: async (
         index: number,
         option: {
+          basis?: "base" | "previous";
           validateInputChecksum?: string;
           validateOutputChecksum?: string;
           header?: "keep" | "strip";

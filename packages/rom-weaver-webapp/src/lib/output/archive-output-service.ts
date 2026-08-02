@@ -6,7 +6,7 @@ import {
 } from "../../presentation/workflow-presentation.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { ArchiveEntryInput } from "../../types/runtime.ts";
-import type { CreateWorkflowDeps, PatchFileInstance, SharedProgressEventLike } from "../../types/workflow-internal.ts";
+import type { PatchFileInstance, SharedProgressEventLike } from "../../types/workflow-internal.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type {
   ApplyWorkflowOptions,
@@ -255,7 +255,10 @@ const createSingleFileArchiveOutput = async ({
   unsupportedRuntimeMessage,
 }: {
   compression: ArchiveCreateCompression;
-  deps: Pick<CreateWorkflowDeps, "getPatchFileBytes" | "hasArchiveFileName">;
+  deps: {
+    getPatchFileBytes: typeof getPatchFileBytes;
+    hasArchiveFileName: typeof hasArchiveFileName;
+  };
   entryFile: PatchFileInstance;
   entryNameDetailKey: string;
   fallbackEntryName: string;

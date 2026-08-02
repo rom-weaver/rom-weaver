@@ -35,7 +35,7 @@ port 8080 for an HTTPS reverse proxy or local testing:
 ```bash
 docker run --detach --name rom-weaver-webapp \
   --publish 8080:8080 \
-  ghcr.io/brandonocasey/rom-weaver-webapp:latest
+  ghcr.io/rom-weaver/rom-weaver-webapp:latest
 ```
 
 Check it with `curl http://localhost:8080/health`. Stop and remove it with:
@@ -44,9 +44,6 @@ Check it with `curl http://localhost:8080/health`. Stop and remove it with:
 docker rm --force rom-weaver-webapp
 ```
 
-The currently published legacy image is under `ghcr.io/brandonocasey`; new
-releases publish the same image under `ghcr.io/rom-weaver/rom-weaver-webapp`.
-
 For standalone HTTPS, mount a certificate pair and set `HTTPS_PORT`:
 
 ```bash
@@ -54,7 +51,7 @@ docker run --detach --name rom-weaver-webapp \
   --publish 8443:8080 \
   --env HTTPS_PORT=8443 \
   --volume "$PWD/certs:/certs:ro" \
-  ghcr.io/brandonocasey/rom-weaver-webapp:latest
+  ghcr.io/rom-weaver/rom-weaver-webapp:latest
 ```
 
 With `fullchain.pem` and `privkey.pem` in `./certs`, open
@@ -180,8 +177,11 @@ preserve its directory structure, and configure the
 for a subpath, redirect its bare path to a trailing slash, such as
 `/rom-weaver` to `/rom-weaver/`.
 
-To pin a release, replace `latest` in the URL with its tag, for example
-`v0.10.2`.
+To pin a release, use its tag in the release-download URL:
+
+```text
+https://github.com/rom-weaver/rom-weaver/releases/download/vX.Y.Z/rom-weaver-webapp.tar.gz
+```
 
 ### Build static files from source
 
@@ -277,7 +277,7 @@ registration, and scope resolve to the same directory.
 The service worker precaches the build, checks for updates, and can serve
 same-origin navigation and manifest requests from its cache. It can also add
 the cross-origin isolation headers to responses inside its scope when the host
-cannot configure them. It cannot alter the very first document response before
+cannot configure them. It cannot alter the first document response before
 it controls the page, so server or proxy headers remain the preferred setup.
 
 On first install, the worker claims the app and the client may reload once to

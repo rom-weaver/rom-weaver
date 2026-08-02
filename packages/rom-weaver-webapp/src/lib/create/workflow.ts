@@ -1,21 +1,19 @@
-import {
-  createPatchFile,
-  getDefaultCreatePatchOutputFileName,
-  getPatchFileBytes,
-} from "../../lib/input/binary-service.ts";
+import { getDefaultCreatePatchOutputFileName, getPatchFileBytes } from "../../lib/input/binary-service.ts";
+import { getPrimaryInputAsset } from "../../lib/input/input-assets.ts";
+import { prepareInputAssets } from "../../lib/input/input-preparation-service.ts";
 import { getProgressEventPercent } from "../../presentation/workflow-presentation.ts";
-import { getNamedSource, getNamedSourceFileName } from "../../storage/shared/binary/source-file-utils.ts";
 import type { SourceRef } from "../../types/source.ts";
-import type { CreateWorkflowDeps, PatchFileInstance } from "../../types/workflow-internal.ts";
+import type { PatchFileInstance } from "../../types/workflow-internal.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { CreatePatchInput, CreatePatchResult, JsonValue } from "../../types/workflow-runtime-types.ts";
-import { patchWorkflowDeps } from "../apply/workflow.ts";
+import { toPublicOutput } from "../apply/patch-apply-service.ts";
 import {
   createSingleFileArchiveOutput,
   getArchiveOutputCompression,
   hasArchiveFileName,
 } from "../output/archive-output-service.ts";
 import { requireOutputName } from "../output/output-name-validation.ts";
+import { reportProgress } from "../progress/progress-reporting.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import {
   getWorkflowSourceFileName,
@@ -38,11 +36,7 @@ const getCreateCompression = (options: CreatePatchInput["options"]) => options?.
 const getCreateOutputName = (options: CreatePatchInput["options"]) => options?.output?.outputName;
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("create");
 
-const runCreateWorkflow = async (
-  input: CreatePatchInput,
-  runtime: WorkflowRuntime,
-  deps: CreateWorkflowDeps,
-): Promise<CreatePatchResult> => {
+const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRuntime): Promise<CreatePatchResult> => {
   const options = input.options || {};
   requireOutputName(options.output?.outputName);
   const format = getCreateFormat(options);
@@ -58,10 +52,10 @@ const runCreateWorkflow = async (
     role: "original" | "modified",
     selectedArchiveEntry?: string,
   ): Promise<CreateSourceInput> => {
-    if (!shouldPrepareWorkflowSource(source, options, selectedArchiveEntry, deps)) {
+    if (!shouldPrepareWorkflowSource(source, options, selectedArchiveEntry)) {
       traceWorkflowStage(options, "stage.skip", "source.prepare", role, {
         reason: "direct source",
-        sourceName: getWorkflowSourceFileName(source, `${role}.bin`, deps),
+        sourceName: getWorkflowSourceFileName(source, `${role}.bin`),
       });
       return Promise.resolve(source);
     }
@@ -70,14 +64,14 @@ const runCreateWorkflow = async (
       "source.prepare",
       role,
       () =>
-        deps.prepareInputAssets(source, optionsForRole(role), 0, runtime, selectedArchiveEntry).then((assets) => {
-          const selected = assets.find((asset) => asset.patchable) || assets[0];
+        prepareInputAssets(source, optionsForRole(role), 0, runtime, selectedArchiveEntry).then((assets) => {
+          const selected = getPrimaryInputAsset(assets);
           if (!selected) throw new Error(`${role} source did not contain a patchable file`);
           return selected.file;
         }),
       () => ({
         selectedArchiveEntry,
-        sourceName: getWorkflowSourceFileName(source, `${role}.bin`, deps),
+        sourceName: getWorkflowSourceFileName(source, `${role}.bin`),
       }),
     );
   };
@@ -86,11 +80,11 @@ const runCreateWorkflow = async (
     const compression = getArchiveOutputCompression(getCreateCompression(options), "create patch");
     if (compression === "none") {
       traceWorkflowStage(options, "stage.skip", "compress", "output", { reason: "output compression disabled" });
-      return deps.toPublicOutput(patchFile, runtime);
+      return toPublicOutput(patchFile, runtime);
     }
     return createSingleFileArchiveOutput({
       compression,
-      deps,
+      deps: { getPatchFileBytes, hasArchiveFileName },
       entryFile: patchFile,
       entryNameDetailKey: "patchEntryName",
       fallbackEntryName: patchFile.fileName || `patch.${format}`,
@@ -106,20 +100,20 @@ const runCreateWorkflow = async (
   const original = await prepareCreateSource(input.original, "original", input.selectedOriginalEntryName);
 
   if (shouldUseWorkerCreate) {
-    deps.reportProgress(options, {
+    reportProgress(options, {
       label: "Creating patch...",
       percent: null,
       stage: "create",
     });
     const modified = await prepareCreateSource(input.modified, "modified", input.selectedModifiedEntryName);
-    const defaultPatchFileName = deps.getDefaultCreatePatchOutputFileName(
-      getWorkflowSourceFileName(modified, "modified.bin", deps),
+    const defaultPatchFileName = getDefaultCreatePatchOutputFileName(
+      getWorkflowSourceFileName(modified, "modified.bin"),
       format,
     );
     const requestedFileName = getCreateOutputName(options) || defaultPatchFileName;
     const compression = getArchiveOutputCompression(getCreateCompression(options), "create patch");
     const basePatchFileName =
-      compression !== "none" && deps.hasArchiveFileName(requestedFileName, compression)
+      compression !== "none" && hasArchiveFileName(requestedFileName, compression)
         ? defaultPatchFileName
         : requestedFileName;
     // Embed the source crc32 into the patch file name via Rust `--checksum-name`
@@ -144,7 +138,7 @@ const runCreateWorkflow = async (
           modified: modified as SourceRef,
           onLog: options.onLog,
           onProgress: (progress) =>
-            deps.reportProgress(options, {
+            reportProgress(options, {
               label: typeof progress.label === "string" && progress.label ? progress.label : "Creating patch...",
               percent: getProgressEventPercent(progress),
               stage: "create",
@@ -176,14 +170,4 @@ const runCreateWorkflow = async (
   throw new Error("Patch creation requires the rom-weaver wasm runtime");
 };
 
-const createWorkflowDeps: CreateWorkflowDeps = {
-  ...(patchWorkflowDeps as unknown as CreateWorkflowDeps),
-  createPatchFile,
-  getDefaultCreatePatchOutputFileName,
-  getNamedSource,
-  getNamedSourceFileName,
-  getPatchFileBytes,
-  hasArchiveFileName,
-};
-
-export { createWorkflowDeps, runCreateWorkflow };
+export { runCreateWorkflow };

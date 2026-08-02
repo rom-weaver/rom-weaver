@@ -299,6 +299,9 @@ test("compress panel shows codec level overrides and clears them when level chan
   expect(resolveCompressionLevels({ compressionProfile: "min", zipCodec: "zstd" }).zipLevel).toBe(-7);
   expect(resolveCompressionLevels({ compressionProfile: "min", rvzCodec: "zstd" }).rvzCompressionLevel).toBe(-7);
   expect(resolveCompressionLevels({ compressionProfile: "min" }).z3dsCompressionLevel).toBe(-7);
+  expect(resolveCompressionLevels({ compressionProfile: "max", rvzCodec: "zstd:-5" }).rvzCompressionLevel).toBe(-5);
+  expect(resolveCompressionLevels({ compressionProfile: "max", sevenZipCodec: "lzma2:6" }).sevenZipLevel).toBe(6);
+  expect(resolveCompressionLevels({ compressionProfile: "max", zipCodec: "zstd:-7" }).zipLevel).toBe(-7);
 
   const zipPanel = buildCompressPanel("zip", {
     compressionProfile: "max",

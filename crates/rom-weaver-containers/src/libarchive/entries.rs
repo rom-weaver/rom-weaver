@@ -15,9 +15,6 @@ pub struct RegularArchiveEntryMetadata {
     pub path: String,
     pub is_dir: bool,
     pub size: Option<u64>,
-    // 7z solid-block (folder) index; `None` for every other format and for entries with no
-    // stream. Extract chunking uses it to keep one solid block on one worker.
-    pub solid_block: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -209,7 +206,6 @@ pub fn list_regular_archive_entries(
             entries.push(RegularArchiveEntryMetadata {
                 index,
                 is_dir: entry.is_dir() || entry_path.ends_with('/') || entry_path.ends_with('\\'),
-                solid_block: entry.solid_block(),
                 path: entry_path,
                 size: entry.size(),
             });
@@ -294,7 +290,6 @@ where
             let entry_info = RegularArchiveEntryMetadata {
                 index,
                 is_dir: entry.is_dir() || entry_path.ends_with('/') || entry_path.ends_with('\\'),
-                solid_block: entry.solid_block(),
                 path: entry_path,
                 size: entry.size(),
             };

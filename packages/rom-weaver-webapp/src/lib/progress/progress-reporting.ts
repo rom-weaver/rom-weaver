@@ -1,10 +1,4 @@
-import {
-  createProgressEvent,
-  getProgressEventPercent,
-  getRawProgressLabel,
-  normalizeProgressPercent,
-} from "../../presentation/workflow-presentation.ts";
-import type { JsonObject, JsonValue, ProgressEvent as SharedProgressEvent } from "../../types/runtime.ts";
+import { createProgressEvent } from "../../presentation/workflow-presentation.ts";
 import type {
   ApplyWorkflowOptions,
   CompressionWorkflowOptions,
@@ -12,9 +6,6 @@ import type {
   ProgressEvent,
 } from "../../types/workflow-runtime-types.ts";
 import { createLogger } from "../logging.ts";
-
-const isRecord = (value: JsonValue | object | null | undefined): value is JsonObject =>
-  !!value && typeof value === "object" && !ArrayBuffer.isView(value) && !(value instanceof ArrayBuffer);
 
 const logger = createLogger("workflow:progress");
 // Bounded LRU of the last-logged value per `stage:label`. Labels embed per-file/per-op names, so a
@@ -60,33 +51,6 @@ const logProgressEvent = (options: ProgressOptions, event: ProgressEvent) => {
   );
 };
 
-const normalizeApplyProgressInput = (
-  progress: SharedProgressEvent | JsonValue | object | null | undefined,
-  total?: string | number | null | undefined,
-) => {
-  if (isRecord(progress)) {
-    return {
-      details: progress as JsonValue,
-      label: getRawProgressLabel(progress, "Applying patch..."),
-      percent: getProgressEventPercent(progress),
-    };
-  }
-
-  const loadedValue =
-    typeof progress === "string" || typeof progress === "number" || progress === null || progress === undefined
-      ? normalizeProgressPercent(progress)
-      : null;
-  const totalValue = normalizeProgressPercent(total);
-  return {
-    details: undefined,
-    label: "Applying patch...",
-    percent:
-      loadedValue !== null && totalValue !== null && totalValue > 0
-        ? Math.max(0, Math.min(100, (loadedValue / totalValue) * 100))
-        : null,
-  };
-};
-
 type ProgressOptions = ApplyWorkflowOptions | CreateWorkflowOptions | CompressionWorkflowOptions | undefined;
 
 const reportPublicProgress = (options: ProgressOptions, event: ProgressEvent) => {
@@ -107,4 +71,4 @@ const reportPublicProgress = (options: ProgressOptions, event: ProgressEvent) =>
 const reportProgress = (options: ApplyWorkflowOptions | CreateWorkflowOptions | undefined, event: ProgressEvent) =>
   reportPublicProgress(options, event);
 
-export { normalizeApplyProgressInput, reportProgress };
+export { reportProgress };

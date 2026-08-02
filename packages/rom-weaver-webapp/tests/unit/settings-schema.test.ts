@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { getCompressionCodecLevelMax } from "../../src/lib/compression/codec-fields.ts";
-import type { SettingsDraft, SettingsState, StorageLike } from "../../src/webapp/settings/settings-metadata.ts";
+import type { SettingsDraft, StorageLike } from "../../src/webapp/settings/settings-metadata.ts";
 import {
   getSettingsFieldId,
   LOCAL_STORAGE_SETTINGS_ID,
   SETTINGS_FIELD_ORDER,
 } from "../../src/webapp/settings/settings-metadata.ts";
 import {
-  buildSettingsForWebapp,
   getDefaultSettings,
   loadSettings,
   SETTINGS_STORAGE_VERSION,
@@ -199,6 +198,41 @@ describe("loadSettings", () => {
     expect(legacy.threads).toBe(loadSettings(storeThreads({ threads: 3 })).threads);
   });
 
+  it("ignores removed compression-level keys while preserving live codec settings", () => {
+    const storage = makeStorage(
+      JSON.stringify({
+        create: {
+          compression: {
+            profile: "high",
+            rvzCodec: "zstd:12",
+            rvzCompressionLevel: 3,
+            sevenZipCodec: "lzma2:7",
+            sevenZipLevel: 4,
+            z3dsCompressionLevel: 5,
+            zipCodec: "zstd:-7",
+            zipLevel: 6,
+          },
+        },
+        version: SETTINGS_STORAGE_VERSION,
+      }),
+    );
+    const loaded = loadSettings(storage);
+
+    expect(loaded).toMatchObject({
+      compressionProfile: "high",
+      rvzCodec: "zstd:12",
+      sevenZipCodec: "lzma2:7",
+      zipCodec: "zstd:-7",
+    });
+    for (const field of ["rvzCompressionLevel", "sevenZipLevel", "z3dsCompressionLevel", "zipLevel"])
+      expect(loaded).not.toHaveProperty(field);
+
+    const serialized = serializeSettingsForStorage(loaded);
+    expect(serialized).not.toBeNull();
+    for (const field of ["rvzCompressionLevel", "sevenZipLevel", "z3dsCompressionLevel", "zipLevel"])
+      expect(serialized).not.toContain(field);
+  });
+
   it("resets and returns defaults on corrupt JSON", () => {
     const storage = makeStorage("{not valid json");
     expect(loadSettings(storage)).toEqual(getDefaultSettings());
@@ -223,23 +257,5 @@ describe("loadSettings", () => {
     const storage = makeStorage(payload);
     expect(loadSettings(storage)).toEqual(getDefaultSettings());
     expect(storage.removedKeys).toEqual([LOCAL_STORAGE_SETTINGS_ID]);
-  });
-});
-
-describe("buildSettingsForWebapp", () => {
-  it("materializes chd codecs and resolved compression levels from defaults", () => {
-    const built = buildSettingsForWebapp(getDefaultSettings()) as SettingsState & Record<string, unknown>;
-    expect(typeof built.chdCreateCdCodecs).toBe("string");
-    expect((built.chdCreateCdCodecs as string).length).toBeGreaterThan(0);
-    expect(typeof built.chdCreateDvdCodecs).toBe("string");
-    expect(typeof built.rvzCodec).toBe("string");
-    expect(built.requireInputChecksumMatch).toBe(true);
-  });
-
-  it("merges extraSettings over the materialized base", () => {
-    const built = buildSettingsForWebapp(null, { extraFlag: 42, logLevel: "trace" }) as Record<string, unknown>;
-    expect(built.extraFlag).toBe(42);
-    expect(built.logLevel).toBe("trace");
-    expect(typeof built.chdCreateCdCodecs).toBe("string");
   });
 });

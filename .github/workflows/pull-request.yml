@@ -2,19 +2,17 @@ name: PR Gates
 
 # The two gates a contributor - rather than the code - has to clear: the CLA
 # signature and a Conventional Commits pull request title. They share a file
-# because they share everything that makes them awkward. Both post a commit
-# status against the pull request head rather than relying on their own check
-# run, both keep exactly one marker comment on the thread, both must work for a
-# pull request from a fork, and both are required by the `main protection`
-# ruleset.
+# because they share the same security boundary. Both post a commit status
+# against the pull request head rather than relying on their own check run,
+# both must work for a pull request from a fork, and both are required by the
+# `main protection` ruleset.
 #
 # `pull_request_target` runs from the base branch with a write token, which is
-# what lets a fork's pull request receive a status and a comment. Nothing from
+# what lets a fork's pull request receive a status. Nothing from
 # the pull request head is ever checked out or executed here: the scripts, the
 # allowlist and the commitlint config all come from the base commit, and the
 # only head-supplied value either job touches is the pull request title, which
-# reaches commitlint through an environment variable and reaches the comment
-# inside a fenced block.
+# reaches commitlint through an environment variable.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, edited]
@@ -87,6 +85,8 @@ jobs:
 
   pr-title:
     name: Title Check
+    env:
+      STATUS_CONTEXT: PR Title Lint
     # Only a title edit can change the outcome; body and base edits cannot. A
     # comment cannot change it at all, so this half sits out `issue_comment`.
     if: >-
@@ -96,7 +96,7 @@ jobs:
     timeout-minutes: 5
     # Release Please can edit its own pull request within seconds, and a human
     # retitling by hand types several edits in a row. Only the newest verdict
-    # matters, and the loser has posted nothing by the time it is cancelled.
+    # matters; a superseded run can leave only a temporary pending status.
     concurrency:
       # The fallback is never used - the job sits out `issue_comment` - but an
       # empty group is not a legal value even on a skipped job.
@@ -104,9 +104,20 @@ jobs:
       cancel-in-progress: true
     permissions:
       contents: read
-      pull-requests: write
       statuses: write
     steps:
+      - name: Mark title check pending
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          STATUS_TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            --field state=pending \
+            --field context="$STATUS_CONTEXT" \
+            --field description="Checking pull request title" \
+            --field target_url="$STATUS_TARGET_URL"
+
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
@@ -117,32 +128,50 @@ jobs:
           node-version: 24.18.0
           cache: npm
 
-      # commitlint runs here rather than inside the gate script so its output
-      # never has to cross a step boundary: routing an attacker-controlled title
-      # through `GITHUB_OUTPUT` would let a crafted heredoc delimiter forge step
-      # outputs. A file and one process do not have that problem.
-      #
-      # `--format` points at a path rather than a package name so the formatter
-      # loads without being installed. It writes the structured report to
-      # LINT_REPORT_FILE itself rather than the step redirecting stdout, which
-      # keeps npm's own chatter out of the JSON, and returns the plain text that
-      # lands in the log.
       - name: Check pull request title
         env:
-          # Read by commitlint and by the gate, so both report on one string. A
-          # retitle mid-run would otherwise leave the comment quoting one title
-          # and counting the characters of another.
           PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          LINT_REPORT_FILE: ${{ runner.temp }}/commitlint.json
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          STATUS_TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if printf '%s\n' "$PULL_REQUEST_TITLE" |
+          lint_title() {
             npm exec --yes --package="@commitlint/cli@21.2.1" --package="@commitlint/config-conventional@21.2.0" -- \
-              commitlint --config .config/commitlint.config.mjs --format ./scripts/ci/commitlint-report.mjs
+              commitlint --config .config/commitlint.config.mjs
+          }
+          # commitlint uses exit 1 for invalid titles and broken installs/configs.
+          # A known-good title proves the gate works before we classify the PR.
+          if ! preflight_output=$(printf '%s\n' "chore(ci): preflight" | lint_title 2>&1)
           then
-            LINT_VERDICT=pass
-          else
-            LINT_VERDICT=fail
+            printf '%s\n' "$preflight_output" | sed 's/^/commitlint: /'
+            echo "::error title=commitlint failed to run::The title gate is broken, not the pull request title"
+            exit 1
           fi
-          LINT_VERDICT="$LINT_VERDICT" node scripts/ci/pr-title-gate.mjs
+          if output=$(printf '%s\n' "$PULL_REQUEST_TITLE" | lint_title 2>&1)
+          then
+            state=success
+            description="Pull request title follows Conventional Commits"
+          else
+            printf '%s\n' "$output" | sed 's/^/commitlint: /'
+            state=failure
+            description="Rename the pull request to type(scope): description"
+            echo "::error title=Invalid pull request title::$description"
+          fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            --field state="$state" \
+            --field context="$STATUS_CONTEXT" \
+            --field description="$description" \
+            --field target_url="$STATUS_TARGET_URL"
+
+      - name: Mark broken title gate
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          STATUS_TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            --field state=error \
+            --field context="$STATUS_CONTEXT" \
+            --field description="Title gate failed to run; re-run this workflow" \
+            --field target_url="$STATUS_TARGET_URL"

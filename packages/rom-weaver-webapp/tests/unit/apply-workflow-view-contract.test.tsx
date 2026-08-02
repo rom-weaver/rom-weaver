@@ -4,14 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { notifyGuidedSampleView, requestGuidedSampleStart } from "../../src/public/react/guided-sample-start.ts";
 import type {
-  DialogController,
   PatcherOutputController,
   PatcherStackController,
   PatcherUiController,
 } from "../../src/public/react/patcher-form.ts";
 import type { PatcherOutputState, PatchStackItemState } from "../../src/public/react/patcher-presentation.ts";
 import type { PatcherUiState, RomInputRowState } from "../../src/public/react/patcher-ui-state.ts";
-import { createEmptyPatcherUiState, createInitialDialogState } from "../../src/public/react/patcher-ui-state.ts";
+import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-state.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 
 /**
@@ -46,14 +45,24 @@ const outputState = (overrides: Partial<PatcherOutputState> = {}): PatcherOutput
   }) as unknown as PatcherOutputState;
 
 const romRow = (fileName: string): RomInputRowState => {
-  const base = createEmptyPatcherUiState();
   return {
-    ...base.romInput,
     groupId: "",
     id: `rom:${fileName}`,
-    info: { ...base.romInfo, crc32: "C6FB1252", fileName },
+    info: {
+      archiveName: "",
+      checksumsExpanded: true,
+      checksumTiming: "",
+      crc32: "C6FB1252",
+      fileName,
+      md5: "",
+      romInfo: "",
+      sha1: "",
+      validationPhase: "idle",
+    },
     kind: "rom",
+    loading: false,
     order: 0,
+    progress: null,
     size: 13,
   } as unknown as RomInputRowState;
 };
@@ -87,7 +96,6 @@ const renderView = ({
   ui: PatcherUiState;
 }) => {
   const controllers = {
-    dialog: storeOf({ ...createInitialDialogState() }) as unknown as DialogController,
     output: storeOf(outputState()) as unknown as PatcherOutputController,
     patchStack: {
       ...storeOf({ items: patches }),
@@ -199,7 +207,6 @@ describe("apply workflow view - empty bench", () => {
     );
     const ui = createEmptyPatcherUiState();
     const controllers = {
-      dialog: storeOf({ ...createInitialDialogState() }) as unknown as DialogController,
       output: storeOf(outputState()) as unknown as PatcherOutputController,
       patchStack: storeOf({ items: [] }) as unknown as PatcherStackController,
       ui: storeOf(ui) as unknown as PatcherUiController,
@@ -420,9 +427,11 @@ describe("apply workflow view - bundle controls", () => {
     format: "zip",
     progress: null,
     ready: true,
+    romName: "game.bin",
     runExport: async () => undefined,
     setBundleRom: () => undefined,
     setFormat: () => undefined,
+    setRomName: () => undefined,
   });
 
   const bundleTools = (setBundlePackage: (value: string) => void, exportVisible = true) => ({

@@ -3,13 +3,7 @@ import type { ParsedBundleCreateResult } from "../../types/bundle.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { PatcherOutputState, PatchStackItemState, PatchStackState } from "./patcher-presentation.ts";
-import type {
-  DialogEntry,
-  NoticeState,
-  PatcherSectionNoticeKey,
-  PatcherUiState,
-  StoreController,
-} from "./patcher-ui-state.ts";
+import type { NoticeState, PatcherSectionNoticeKey, PatcherUiState, StoreController } from "./patcher-ui-state.ts";
 
 type ApplyPatchFormSettings = ApplySettings;
 type BinarySource = File | FileSystemFileHandle;
@@ -31,11 +25,7 @@ type PatcherUiController = StoreController<PatcherUiState> & {
   removeRomInput?: (id: string) => void;
   toggleRomInputChecksums?: (id: string) => void;
   providePatchInputFiles?: (fileList: FileList | BinarySource[] | null) => void;
-  setAlterHeader?: (checked: boolean) => void;
-  selectEmbeddedPatch?: (value: string) => void;
-  setOptionalPatch?: (id: string, checked: boolean) => void;
   setChecksumOverride?: (checked: boolean) => void;
-  setOutputChecksumOverride?: (checked: boolean) => void;
   dismissNotice?: (key: PatcherSectionNoticeKey) => void;
 };
 
@@ -50,6 +40,7 @@ type PatcherStackController = StoreController<PatchStackState> & {
   setPatchOption?: (
     index: number,
     option: {
+      basis?: "base" | "previous";
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
       header?: "keep" | "strip";
@@ -75,18 +66,6 @@ type NoticeController = StoreController<NoticeState> & {
   dismiss?: () => void;
 };
 
-type DialogController = StoreController<{ open: boolean; title: string; entries: DialogEntry[] }> & {
-  selectEntry?: (entryId: string) => void;
-};
-
-type ApplyPatchFormControllers = {
-  dialog?: DialogController;
-  notice?: NoticeController;
-  output?: PatcherOutputController;
-  patchStack?: PatcherStackController;
-  ui?: PatcherUiController;
-};
-
 type ApplyPatchFormProps = {
   assetBaseUrl?: string;
   inputs?: BinarySource[];
@@ -101,7 +80,6 @@ type ApplyPatchFormProps = {
   containerInputsEnabled?: boolean;
   compressionOptions?: string[];
   startup?: StartupState;
-  controllers?: ApplyPatchFormControllers;
   /** A `?bundle=` boot session: seeds enablement/output defaults once its files land. */
   bundleSession?: BundleApplySession | null;
   onInputsChange?: (inputs: BinarySource[]) => void;
@@ -120,7 +98,6 @@ export type {
   ApplyPatchFormProps,
   ApplyPatchFormSettings,
   BinarySource,
-  DialogController,
   NoticeController,
   PageFileDrop,
   PatcherOutputController,

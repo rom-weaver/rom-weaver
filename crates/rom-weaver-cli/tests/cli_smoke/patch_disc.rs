@@ -737,26 +737,51 @@ fn patch_apply_dcp_rebuilds_gdrom_through_cli() {
         ],
         0,
     );
+    temp.child("rom-weaver-bundle.json")
+        .write_str(
+            r#"{
+  "version": 1,
+  "rom": { "name": "expected-track.bin" },
+  "patches": [{ "path": "update.dcp" }]
+}"#,
+        )
+        .expect("bundle");
 
     let out_dir = temp.child("out");
     fs::create_dir_all(out_dir.path()).expect("output dir");
-    let events = parse_json_lines(&command_stdout(
-        &[
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "--log-level",
+            "warn",
             "patch",
             "apply",
             "--input",
             temp.child("disc.gdi").path().to_str().expect("path"),
-            "--patch",
-            temp.child("update.dcp").path().to_str().expect("path"),
+            "--bundle",
+            temp.child("rom-weaver-bundle.json")
+                .path()
+                .to_str()
+                .expect("path"),
             "--no-compress",
             "--output",
             out_dir.child("disc.gdi").path().to_str().expect("path"),
             "--json",
-        ],
-        0,
-    ));
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .clone();
+    let events = parse_json_lines(&output.stdout);
     let terminal = events.last().expect("terminal event");
     assert_patch_envelope(terminal, "patch-apply", "dcp", "succeeded");
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(
+        stderr.contains("bundle ROM name mismatch")
+            && stderr.contains("expected-track.bin")
+            && stderr.contains("track03.bin"),
+        "expected advisory name warning, got: {stderr}"
+    );
 
     let mut rebuilt = GdRomFs::open(
         File::open(out_dir.child("track03.bin").path()).expect("rebuilt track"),

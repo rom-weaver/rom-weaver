@@ -1,6 +1,5 @@
 import { applyAccent } from "./accent.ts";
 import {
-  buildSettingsForWebapp,
   copySettings,
   getCompressionProfileFromIndex,
   getDefaultSettings,
@@ -335,9 +334,6 @@ const createWebappRootController = (options: ControllerOptions) => {
       optionsForSelection?: { fallbackOnError?: boolean; historyMode?: RouteHistoryMode },
     ) {
       return this.selectView(mode, optionsForSelection);
-    },
-    buildSettingsForRuntime(overrides?: { allowDropFiles?: boolean; ondropfiles?: () => void }) {
-      return buildSettingsForWebapp(store.getState().settings, overrides);
     },
     closeSettings() {
       if (!store.getState().settingsDialogOpen) return;

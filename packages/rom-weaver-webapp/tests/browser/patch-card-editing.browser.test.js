@@ -46,7 +46,7 @@ const buildZip = async (entries, outputName) => {
 let bundleZipSeq = 0;
 
 /** A checks-only (without-ROM) bundle zip: index + core patch + optional patch. */
-const buildWithoutRomBundle = async ({ romCrc32, outputCrc32 }) => {
+const buildWithoutRomBundle = async ({ romCrc32, outputCrc32, romName = "game.bin" }) => {
   const patchFile = await loadFixtureFile(RAW_PATCH);
   const alternateFile = new File([await patchFile.arrayBuffer()], "alternate.ips", {
     type: "application/octet-stream",
@@ -60,7 +60,7 @@ const buildWithoutRomBundle = async ({ romCrc32, outputCrc32 }) => {
       { name: "Core", path: "change.ips" },
       { name: "Alternate", optional: true, path: "alternate.ips" },
     ],
-    rom: { checks: { checksums: { crc32: romCrc32 } }, name: "game.bin" },
+    rom: { checks: { checksums: { crc32: romCrc32 } }, name: romName },
     version: 1,
   };
   const bundleFile = new File([JSON.stringify(bundleJson)], "rom-weaver-bundle.json", { type: "application/json" });
@@ -141,10 +141,10 @@ test("bundle-renamed patch keeps its source file in the Files drawer", async () 
     .toContain("change.ips");
 });
 
-test("bundle-expected ROM checks fold into the staged ROM card with match marks", async () => {
+test("bundle-expected ROM name and checks fold into the staged ROM card with match marks", async () => {
   const [romFile, bundleArchive] = await Promise.all([
     loadFixtureFile(RAW_ROM),
-    buildWithoutRomBundle({ romCrc32: ROM_CRC32 }),
+    buildWithoutRomBundle({ romCrc32: ROM_CRC32, romName: "GAME.BIN" }),
   ]);
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive, romFile], id: 1 } }));
 
@@ -154,6 +154,7 @@ test("bundle-expected ROM checks fold into the staged ROM card with match marks"
   const expectedGroup = () => document.getElementById("rom-weaver-rom-expected-checks");
   await waitForState(expectedGroup, 30000);
   expect(expectedGroup().textContent).toContain("Expected");
+  expect(expectedGroup().textContent).toContain("GAME.BIN");
   expect(expectedGroup().textContent).toContain(ROM_CRC32);
   // The matching ROM earns the per-row verified mark once its hash lands.
   await expect.poll(() => !!expectedGroup()?.querySelector(".ck-mark.ok"), { timeout: 30000 }).toBe(true);
@@ -171,7 +172,23 @@ test("a mismatching ROM flags the expected rows", async () => {
   const expectedGroup = () => document.getElementById("rom-weaver-rom-expected-checks");
   await waitForState(expectedGroup, 30000);
   await expect.poll(() => !!expectedGroup()?.querySelector(".ck-mark.bad"), { timeout: 30000 }).toBe(true);
-  expect(expectedGroup().querySelector(".ck-mark.ok")).toBeNull();
+  // The filename can match even when the checksum does not.
+  expect(expectedGroup().querySelector(".ck-mark.ok")).not.toBeNull();
+});
+
+test("a ROM name mismatch warns without blocking weave", async () => {
+  const [romFile, bundleArchive] = await Promise.all([
+    loadFixtureFile(RAW_ROM),
+    buildWithoutRomBundle({ romCrc32: ROM_CRC32, romName: "expected.bin" }),
+  ]);
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive, romFile], id: 1 } }));
+
+  await waitForApplyButtonEnabled();
+  const expectedGroup = await waitForState(() => document.getElementById("rom-weaver-rom-expected-checks"), 30000);
+  expect(expectedGroup.textContent).toContain("expected.bin");
+  expect(expectedGroup.querySelector(".ck-mark.bad")).not.toBeNull();
+  expect(document.querySelector(".expected-mismatch-info")).not.toBeNull();
+  expect(document.getElementById("rom-weaver-button-apply")?.disabled).toBe(false);
 });
 
 test("bundle output verification stands down for partial selections and diverged chains", async () => {

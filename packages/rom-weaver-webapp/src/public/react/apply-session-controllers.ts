@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import type {
-  DialogController,
-  PatcherOutputController,
-  PatcherStackController,
-  PatcherUiController,
-} from "./patcher-form.ts";
+import type { PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
-import { createInertPatcherUiSessionState, type PatcherUiSessionState } from "./patcher-ui-state.ts";
 
-const createInertState = (): PatcherUiSessionState => createInertPatcherUiSessionState();
 const createStaticStoreController = <State>(state: State) => ({
   getState: () => state,
   subscribe: () => () => undefined,
@@ -35,10 +28,6 @@ const useLiveStoreController = <State>(state: State) => {
   return useMemo(() => ({ getState, subscribe }), [getState, subscribe]);
 };
 
-const inertState = createInertState();
-
-const inertUiController: PatcherUiController = createStaticStoreController(inertState);
-const inertDialogController: DialogController = createStaticStoreController(inertState);
 const inertStackController: PatcherStackController = {
   ...createStaticStoreController({ items: [] }),
   removeItem: () => undefined,
@@ -75,11 +64,4 @@ const inertOutputController: PatcherOutputController = {
   setOutputHeader: () => undefined,
 };
 
-export {
-  createInertState,
-  inertDialogController,
-  inertOutputController,
-  inertStackController,
-  inertUiController,
-  useLiveStoreController,
-};
+export { inertOutputController, inertStackController, useLiveStoreController };

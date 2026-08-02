@@ -252,7 +252,7 @@ upstream `qbsdiff` depends on `bzip2` with default features on, so
 pin is the only thing keeping `bzip2-sys` selected; drop it and the bzip2
 implementation underneath BDF patch output silently swaps.
 
-`libbz2-rs-sys` therefore compiles but is never linked. Keep the scoped
+As a result, `libbz2-rs-sys` compiles but is never linked. Keep the scoped
 `.config/deny.toml` exception for its `bzip2-1.0.6` license. If `qbsdiff` later exposes
 a feature that disables its default bzip2 backend, remove the extra backend
 and the exception together.

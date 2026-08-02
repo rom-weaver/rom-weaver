@@ -714,12 +714,9 @@ const readPreviewAsset = (cache, filePath, fallbackPath, allowFallback, callback
   });
 };
 
-// Cloudflare replays the `Link:` hints in a 103 before the document response, which is the
-// whole point of emitting them - a preview that only sent them on the 200 would grade a
-// discovery path production does not have. The preview server is HTTP/2, which is what
-// Chrome requires to act on a 103. Documents only: Pages hints every response, but a
-// subresource ignores them, and sending a 103 ahead of one is noise the audit would
-// measure.
+// Keep this helper for compatibility with older generated build directories. New builds
+// disable deploy-sensitive Link headers because Cloudflare caches their 103 Early Hints
+// separately from the document; stale hints can preload deleted hashed assets.
 const sendEarlyHints = (res, pagesHeaders, isDocument) => {
   if (!(isDocument && pagesHeaders.Link)) return;
   if (typeof res.writeEarlyHints !== "function") return;

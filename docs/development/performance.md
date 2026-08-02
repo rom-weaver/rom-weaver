@@ -3,8 +3,9 @@
 How rom-weaver is benchmarked, what the numbers currently are, and how to
 reproduce them.
 
-Every format is measured against the tool that defines it, in both directions:
-compress and extract. Output size is recorded next to every timing.
+The benchmark suites below measure CHD, RVZ, 7z, and zip against their
+reference tools in both directions: compress and extract. Output size is
+recorded next to every timing.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -49,10 +50,10 @@ output relative to the reference's, so negative means smaller.
 | Harness | What it measures | Command |
 | --- | --- | --- |
 | `scripts/bench-disc-tools.mjs` | rom-weaver vs the reference tool for CHD, RVZ, 7z, and zip, compress and extract, timed by [hyperfine](https://github.com/sharkdp/hyperfine) | `mise run bench-chd`, `bench-rvz`, `bench-7z`, `bench-zip` |
-| `scripts/bench-command-paths.py` | Elapsed time, peak RSS, and throughput across every CLI command path | `python3 scripts/bench-command-paths.py` |
+| `scripts/bench-command-paths.py` | Elapsed time, peak RSS, and throughput for compress, extract, checksum, patch create, and patch apply | `python3 scripts/bench-command-paths.py` |
 | `scripts/bench-checksum-threading.py` | Checksum scaling from one thread to many | `python3 scripts/bench-checksum-threading.py` |
 | `scripts/bench-solid-extract.py` | Redundant decode when extracting a solid archive in parallel, as user CPU relative to one thread | `python3 scripts/bench-solid-extract.py` |
-| `packages/rom-weaver-webapp/tests/wasm/*.bench.mjs` | Browser WASM worker-client and checksum threading | `npm --prefix packages/rom-weaver-webapp run test:browser:wasm` |
+| `packages/rom-weaver-webapp/tests/wasm/*.bench.mjs` | Browser WASM worker-client and checksum threading | `npm --prefix packages/rom-weaver-webapp run test:browser:wasm:bench` |
 
 `scripts/parity-check.mjs` is the correctness counterpart: it checks that
 rom-weaver's CHD output round-trips through chdman and its RVZ output through
@@ -65,8 +66,8 @@ benchmarks per source it recognises, one compress and one extract, then hands bo
 commands to [hyperfine](https://github.com/sharkdp/hyperfine), which runs a
 warmup pass followed by the measured runs.
 
-Each run is preceded by a `--prepare` step that deletes the previous output, so
-every run starts from the same clean slate: `rom-weaver extract` stops rather
+Each run is preceded by a `--prepare` step that deletes the previous output.
+Every run starts from the same clean slate: `rom-weaver extract` stops rather
 than overwrite files already in the output directory, and a reference tool that
 skipped a write because the target existed would be timed as instant.
 
@@ -144,16 +145,16 @@ sizes, so the size columns are exact even though they and the time columns come
 from different runs. #213 touches only GameCube junk detection, so no other suite
 was affected.
 
-The **7z tables** were re-measured in full a second time, on the change that
-moves native LZMA2 writes and eligible LZMA1/LZMA2 reads onto 7-Zip's own LZMA
-SDK - the same coders `7zz` runs. Filter chains, LZMA1 writes, and WebAssembly
-writes stay on liblzma. Both tables changed enough that nothing from the earlier
-sittings survives in them. The first re-measure covered the seeded parallel
+The **7z tables** were re-measured in full a second time as part of the change
+that moves native LZMA2 writes and eligible LZMA1/LZMA2 reads onto 7-Zip's own
+LZMA SDK - the same coders `7zz` runs. Filter chains, LZMA1 writes, and
+WebAssembly writes stay on liblzma. Both tables changed enough that no earlier
+result survives in them. The first re-measure covered the seeded parallel
 blocks, 7-Zip's per-level dictionary sizes, and the single-member extract
-pipeline, which together bought output smaller than 7zz's at the cost of
-compress time; the SDK swap gives that fraction of a percent of size back and
-takes the time. The extract rows move with the pipeline and the decoder, the
-compress rows with the encoder.
+pipeline. Together, those changes produced output smaller than 7zz's but
+increased compression time. The SDK swap gives that fraction of a percent of
+size back but also takes time. The extract rows move with the pipeline and the
+decoder. The compress rows move with the encoder.
 
 Time change is rom-weaver's elapsed time minus the reference tool's, in seconds
 and as a percentage of the reference, so negative means rom-weaver finished

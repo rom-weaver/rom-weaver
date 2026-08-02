@@ -14,7 +14,7 @@ const BUNDLE_GUIDE_ANCHORS = [
   "turn-on-bundle-output-and-download-it",
   "test-the-finished-download",
   "publish-a-useful-release",
-  "open-a-hosted-bundle-in-weave",
+  "open-a-hosted-bundle-in-apply",
 ];
 
 const routeFor = (slug: string) => {
@@ -22,6 +22,11 @@ const routeFor = (slug: string) => {
   if (!route) throw new Error(`no docs route for ${slug}`);
   return route;
 };
+
+const shelfTitles = [...new Set(DOC_ROUTES.map((route) => route.group))];
+const defaultShelfTitle = DOC_ROUTES[0]?.group;
+const shelfFor = (shelves: HTMLDetailsElement[], title: string) =>
+  shelves.find((shelf) => shelf.querySelector(".guide-shelf-title, .docs-index-title")?.textContent === title);
 
 const setSeoMetadata = (title: string, description: string, canonicalUrl: string) => {
   document.title = title;
@@ -306,30 +311,31 @@ Fixture description.
     const { unmount } = render(<DocsPage active slug="docs/cli" />);
 
     const nav = document.querySelector(".docs-rails .guide-nav");
-    expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual([
-      "Browser usage",
-      "CLI",
-      "Hosting",
-      "Reference",
-      "Development",
-      "Legal",
-    ]);
+    expect(defaultShelfTitle).toBe("Browser usage");
+    expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual(
+      shelfTitles,
+    );
     // Every published route reaches the nav, so a new guide can never be
     // stranded off the shelves.
     expect(nav?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
     expect(nav?.querySelector('a[aria-current="page"]')?.textContent).toBe("CLI reference");
     const shelves = [...(nav?.querySelectorAll<HTMLDetailsElement>(".guide-shelf") ?? [])];
-    expect(shelves.map((shelf) => shelf.open)).toEqual([true, false, false, false, false, false]);
-    fireEvent.click(shelves[2]?.querySelector("summary") as HTMLElement);
-    expect(shelves[2]?.open).toBe(true);
+    expect(shelves.map((shelf) => shelf.open)).toEqual(shelfTitles.map((title) => title === defaultShelfTitle));
+    const hostingShelf = shelfFor(shelves, routeFor("docs/self-hosting").group);
+    fireEvent.click(hostingShelf?.querySelector("summary") as HTMLElement);
+    expect(hostingShelf?.open).toBe(true);
 
     unmount();
     render(<DocsPage active slug="docs/privacy" />);
-    await vi.waitFor(() =>
-      expect(
-        [...document.querySelectorAll<HTMLDetailsElement>(".docs-rails .guide-shelf")].map((shelf) => shelf.open),
-      ).toEqual([true, false, true, false, false, false]),
-    );
+    await vi.waitFor(() => {
+      const currentShelves = [...document.querySelectorAll<HTMLDetailsElement>(".docs-rails .guide-shelf")];
+      const openTitles = new Set(
+        currentShelves
+          .filter((shelf) => shelf.open)
+          .map((shelf) => shelf.querySelector(".guide-shelf-title")?.textContent),
+      );
+      expect(openTitles).toEqual(new Set([defaultShelfTitle, routeFor("docs/self-hosting").group]));
+    });
   });
 
   it("sends the reader back to the top of a guide from the end of it", () => {
@@ -513,17 +519,11 @@ Fixture description.
 
     const index = document.querySelector(".docs-index");
     const shelves = [...(index?.querySelectorAll<HTMLDetailsElement>(".docs-index-shelf") ?? [])];
-    expect(shelves.map((shelf) => shelf.querySelector(".docs-index-title")?.textContent)).toEqual([
-      "Browser usage",
-      "CLI",
-      "Hosting",
-      "Reference",
-      "Development",
-      "Legal",
-    ]);
-    expect(shelves.map((shelf) => shelf.open)).toEqual([true, false, false, false, false, false]);
-    fireEvent.click(shelves[1]?.querySelector("summary") as HTMLElement);
-    expect(shelves[1]?.open).toBe(true);
+    expect(shelves.map((shelf) => shelf.querySelector(".docs-index-title")?.textContent)).toEqual(shelfTitles);
+    expect(shelves.map((shelf) => shelf.open)).toEqual(shelfTitles.map((title) => title === defaultShelfTitle));
+    const cliShelf = shelfFor(shelves, routeFor("docs/cli").group);
+    fireEvent.click(cliShelf?.querySelector("summary") as HTMLElement);
+    expect(cliShelf?.open).toBe(true);
     // Everything but the hub itself, so the landing page never links to itself.
     expect(index?.querySelectorAll("a")).toHaveLength(DOC_ROUTES.length - 1);
     // Every card carries its own page's opening sentence, matched by the page it

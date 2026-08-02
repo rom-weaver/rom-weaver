@@ -1,5 +1,4 @@
 import { Archive } from "lucide-react";
-import type { ReactNode } from "react";
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../../../storage/shared/timing.ts";
@@ -18,7 +17,6 @@ type ExtractionLevel = {
   name: string;
   sizeLabel?: string;
   sizeBytes?: number;
-  rawBytes?: string;
   timing?: string;
 };
 
@@ -42,11 +40,13 @@ type ExtractPanelProps = {
   /** Folder path within the source archive (e.g. "patches › v1.2"), shown as a
    * muted prefix on the name line. The archive itself is intentionally omitted. */
   folderPath?: string;
-  legacyArchiveClassName?: string;
-  legacyFileClassName?: string;
   fileEntries?: ExtractionFileEntry[];
   parentCompressions?: ExtractionParentLevel[];
   timing?: string;
+};
+
+type ExtractNameProps = Pick<ExtractPanelProps, "fileName" | "folderPath"> & {
+  displayName?: string;
 };
 
 /** Card display name: basename without the extension (the format badge carries the type). */
@@ -60,9 +60,6 @@ const formatExtractionElapsedMs = (ms?: number) =>
   typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : undefined;
 
 const formatExtractionTimingLabel = (timing?: string) => (timing ? `Extract ${timing}` : undefined);
-
-const formatRawByteLabel = (value?: number) =>
-  typeof value === "number" && Number.isFinite(value) ? `${Math.floor(value)} B` : undefined;
 
 const buildExtractionLevels = (
   fileName: string,
@@ -110,7 +107,7 @@ const TreeRow = ({ level, depth }: { level: ExtractionLevel; depth: number }) =>
     {depth > 0 ? <span aria-hidden="true" className="tree-elbow" /> : null}
     <span className="tree-name">{level.name}</span>
     <span className="tree-meta">
-      <span className="tree-size" title={level.rawBytes}>
+      <span className="tree-size" data-size-bytes={level.sizeBytes}>
         {level.sizeLabel || ""}
       </span>
       <span className="tree-time">{level.timing || ""}</span>
@@ -127,135 +124,21 @@ const formatRatio = (first: ExtractionLevel, last: ExtractionLevel) => {
   return Number.isFinite(ratio) ? ` (${ratio}%)` : "";
 };
 
-const ExtractionTree = ({ levels, timing }: { levels: ExtractionLevel[]; timing?: string }) => {
-  if (levels.length === 0) return null;
-  const last = levels.at(-1);
-  if (!last) return null;
-
-  const nameLine = (
-    <div className="nmline">
-      <span className="nm">{last.name}</span>
-    </div>
-  );
-
-  const first = levels[0];
-  const sizeText =
-    levels.length === 1
-      ? (last.sizeLabel ?? "")
-      : first?.sizeLabel && last.sizeLabel
-        ? `${first.sizeLabel} → ${last.sizeLabel}${formatRatio(first, last)}`
-        : "";
-
-  return (
-    <>
-      {nameLine}
-      <Drawer
-        bodyClassName="taskbody"
-        className="extract-d"
-        label="Files"
-        labelIcon={<Archive aria-hidden="true" />}
-        readouts={
-          <>
-            {sizeText ? <DrawerReadout>{sizeText}</DrawerReadout> : null}
-            {timing ? <DrawerReadout time>{formatExtractionTimingLabel(timing)}</DrawerReadout> : null}
-          </>
-        }
-      >
-        <div className="tree mono">
-          {levels.map((level, index) => (
-            <TreeRow
-              depth={level.depth ?? index}
-              key={`${level.name}:${level.sizeBytes ?? ""}:${level.timing ?? ""}`}
-              level={level}
-            />
-          ))}
-        </div>
-      </Drawer>
-    </>
-  );
-};
-
-const LegacyExtractionLabel = ({
-  archiveClassName,
-  archiveEntries,
-  className,
-  fileName,
-  size,
-}: {
-  archiveClassName: string;
-  archiveEntries?: ExtractionParentLevel[];
-  className: string;
-  fileName: string;
-  size?: number;
-}) => {
-  const sizeLabel = typeof size === "number" ? formatByteSize(size) : "";
-  const rawSizeLabel = formatRawByteLabel(size);
-  const archiveSize = archiveEntries?.[0]?.sourceSize ?? archiveEntries?.[0]?.outputSize;
-  const archiveSizeLabel = typeof archiveSize === "number" ? formatByteSize(archiveSize) : "";
-  const archiveRawSizeLabel = formatRawByteLabel(archiveSize);
-  return (
-    <span className={`${className} sr-only`}>
-      <strong>{fileName}</strong>
-      {sizeLabel ? <span data-size-bytes={rawSizeLabel}>{sizeLabel}</span> : null}
-      {archiveEntries?.length ? (
-        <span className={archiveClassName}>
-          <strong>{fileName}</strong>
-          {archiveSizeLabel ? <span data-size-bytes={archiveRawSizeLabel}> {archiveSizeLabel}</span> : null}
-          {archiveEntries.map((entry) => ` ${entry.fileName}`).join("")}
-        </span>
-      ) : null}
+/** The card name line. */
+const ExtractName = ({ displayName, fileName, folderPath }: ExtractNameProps) => (
+  <div className="nmline" data-file-name={fileName}>
+    {/* assistive tech (and text-based assertions) get the full filename;
+        the visible face drops the extension - the format badge carries it */}
+    <span className="sr-only">{fileName}</span>
+    <span
+      aria-hidden="true"
+      className="nm"
+      title={[displayName?.trim(), folderPath ? `${folderPath} › ${fileName}` : fileName].filter(Boolean).join(" — ")}
+    >
+      {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
+      {displayName?.trim() || getDisplayName(fileName)}
     </span>
-  );
-};
-
-/** The card name line (plus the legacy sr-only metadata span tests read). */
-const ExtractName = ({
-  displayName,
-  fileName,
-  fileSize,
-  folderPath,
-  legacyArchiveClassName = "rom-weaver-patch-stack-archive",
-  legacyFileClassName,
-  nameActions,
-  nameEditor,
-  parentCompressions,
-}: Omit<ExtractPanelProps, "decompressionTimeMs" | "timing"> & {
-  displayName?: string;
-  /** Trailing controls on the name line (e.g. the pencil edit toggle). */
-  nameActions?: ReactNode;
-  /** An in-place editor rendered instead of the static name face (the sr-only
-   * filename and legacy label stay for identity). */
-  nameEditor?: ReactNode;
-}) => (
-  <>
-    {legacyFileClassName ? (
-      <LegacyExtractionLabel
-        archiveClassName={legacyArchiveClassName}
-        archiveEntries={parentCompressions}
-        className={legacyFileClassName}
-        fileName={fileName}
-        size={fileSize}
-      />
-    ) : null}
-    <div className="nmline">
-      {/* assistive tech (and text-based assertions) get the full filename;
-          the visible face drops the extension - the format badge carries it */}
-      <span className="sr-only">{fileName}</span>
-      {nameEditor ?? (
-        <span
-          aria-hidden="true"
-          className="nm"
-          title={[displayName?.trim(), folderPath ? `${folderPath} › ${fileName}` : fileName]
-            .filter(Boolean)
-            .join(" — ")}
-        >
-          {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
-          {displayName?.trim() || getDisplayName(fileName)}
-        </span>
-      )}
-      {nameActions}
-    </div>
-  </>
+  </div>
 );
 
 /** Just the Files drawer (no name line) - for cards that render the name separately. */
@@ -311,4 +194,4 @@ const ExtractDrawer = ({
   );
 };
 
-export { ExtractDrawer, ExtractionTree, ExtractName, type ExtractPanelProps };
+export { ExtractDrawer, ExtractName, type ExtractPanelProps };

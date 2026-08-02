@@ -1,9 +1,10 @@
 # Supported formats
 
-The authoritative support matrix for everything rom-weaver reads and writes:
-every patch format it can apply and create, every container and compressed
-disc image it can probe, extract, and build, the codecs available at create
-time, and the checksum, trim, and header capabilities that surround them.
+This is the authoritative support matrix for everything rom-weaver reads and
+writes. It covers every patch format the tool can apply and create, every
+container and format-specific compressed ROM or disc image it can probe, extract,
+and build, and the codecs available at create time. It also lists the checksum,
+trim, and header capabilities that surround them.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -150,6 +151,12 @@ reproduces the original padding exactly rather than guessing at it; see the
 Probe, checksum, and patch apply recognize headers for A78, LNX, NES/FDS,
 SNES copier and SMC variants, PCE copier formats, Game Boy/GBA, Mega Drive,
 SMS/Game Gear, all N64 byte orders, NDS, Neo Geo Pocket, and MSX.
+
+`patch apply --repair-checksum` can repair SNES, NES, Game Boy/GBA, Mega
+Drive, SMS/Game Gear, N64, Atari 7800/Lynx, PCE/TurboGrafx-16, Virtual Boy,
+Neo Geo Pocket, MSX, and NDS compatibility fields. It validates but does not
+rewrite FDS, Atari Jaguar, ColecoVision, Watara Supervision, or Intellivision
+headers.
 
 
 For format specifications and upstream implementations, see

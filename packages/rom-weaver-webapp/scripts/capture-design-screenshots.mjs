@@ -6,60 +6,28 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import {
+  DOCS_SCREENSHOT_CASES,
+  DOCS_SCREENSHOT_FORMATS,
+  DOCS_SCREENSHOT_THEMES,
+  DOCS_SCREENSHOT_VIEWPORTS,
+} from "./docs-screenshot-manifest.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT_DIR = path.resolve(process.env.ROM_WEAVER_SCREENSHOT_OUTPUT || path.join(PACKAGE_DIR, "design"));
 const BASE_URL = process.env.ROM_WEAVER_SCREENSHOT_BASE_URL || "https://localhost:4173/";
-const CASES = [
-  {
-    name: "apply-patches",
-    route: "/apply?bundle=first-weave.zip",
-    target: "#rom-weaver-row-patch-stack",
-    waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
-  },
-  {
-    name: "apply-output",
-    route: "/apply?bundle=first-weave.zip",
-    target: "#rom-weaver-row-output-file-name",
-    waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
-  },
-  {
-    dismissGuide: true,
-    name: "create-inputs",
-    route: "/create?guide=create",
-    target: "#patch-builder-row-original, .swap-row, #patch-builder-row-modified",
-    waitFor: "Checksum from extract",
-  },
-  {
-    dismissGuide: true,
-    name: "create-output",
-    route: "/create?guide=create",
-    target: "#patch-builder-row-output",
-    waitFor: "Checksum from extract",
-  },
-  {
-    dismissGuide: true,
-    name: "bundle-output",
-    openOutputOptions: true,
-    route: "/apply?guide=bundle",
-    target: "#rom-weaver-row-output-file-name",
-    waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
-  },
-];
 const CASE_FILTER = process.env.ROM_WEAVER_SCREENSHOT_CASE;
-const CAPTURE_CASES = CASE_FILTER ? CASES.filter(({ name }) => name === CASE_FILTER) : CASES;
+const CAPTURE_CASES = CASE_FILTER
+  ? DOCS_SCREENSHOT_CASES.filter(({ name }) => name === CASE_FILTER)
+  : DOCS_SCREENSHOT_CASES;
 if (!CAPTURE_CASES.length) throw new Error(`Unknown screenshot case: ${CASE_FILTER}`);
-const VIEWPORTS = [
-  { name: "desktop", viewport: { width: 1164, height: 900 }, deviceScaleFactor: 2, isMobile: false },
-  { name: "mobile", viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
-];
-const THEMES = ["light", "dark"];
 const IMAGE_MAGICK = ["magick", "convert"].find(
   (command) => spawnSync(command, ["-version"], { stdio: "ignore" }).status === 0,
 );
+const CAPTURE_EXTENSION_LIST = DOCS_SCREENSHOT_FORMATS.map(({ extension }) => extension).join(",");
 
 if (!IMAGE_MAGICK)
-  throw new Error("Screenshot capture requires ImageMagick (magick or convert) for AVIF and WebP output");
+  throw new Error("Screenshot capture requires ImageMagick (magick or convert) for the configured formats");
 
 const pageUrl = (route) => new URL(route, BASE_URL).toString();
 
@@ -121,8 +89,8 @@ const capture = async () => {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const browser = await chromium.launch();
   try {
-    for (const viewport of VIEWPORTS) {
-      for (const theme of THEMES) {
+    for (const viewport of DOCS_SCREENSHOT_VIEWPORTS) {
+      for (const theme of DOCS_SCREENSHOT_THEMES) {
         for (const captureCase of CAPTURE_CASES) {
           const context = await browser.newContext({
             colorScheme: theme,
@@ -135,7 +103,6 @@ const capture = async () => {
           const page = await context.newPage();
           await page.goto(pageUrl(captureCase.route), { waitUntil: "domcontentloaded" });
           await page.locator("body").waitFor({ state: "visible" });
-          if (captureCase.click) await page.getByRole("button", { name: captureCase.click, exact: true }).click();
           await page.getByText(captureCase.waitFor, { exact: true }).last().waitFor({ state: "visible" });
           if (captureCase.dismissGuide) await page.getByRole("button", { name: "End guide", exact: true }).click();
           if (captureCase.openOutputOptions) {
@@ -149,19 +116,15 @@ const capture = async () => {
           await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
           const outputBase = path.join(OUTPUT_DIR, `${captureCase.name}-${viewport.name}-${theme}`);
           const { crop, shot } = await captureRegion(page, captureCase.target);
-          const avif = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", "-quality", "80", "avif:-"], {
-            input: shot,
-            maxBuffer: 64 * 1024 * 1024,
-          });
-          const webp = execFileSync(
-            IMAGE_MAGICK,
-            ["png:-", "-crop", crop, "+repage", "-define", "webp:lossless=true", "-define", "webp:method=6", "webp:-"],
-            { input: shot, maxBuffer: 64 * 1024 * 1024 },
-          );
-          fs.writeFileSync(`${outputBase}.avif`, avif);
-          fs.writeFileSync(`${outputBase}.webp`, webp);
+          for (const { extension, imageMagickArgs } of DOCS_SCREENSHOT_FORMATS) {
+            const image = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", ...imageMagickArgs], {
+              input: shot,
+              maxBuffer: 64 * 1024 * 1024,
+            });
+            fs.writeFileSync(`${outputBase}.${extension}`, image);
+          }
           await context.close();
-          console.log(`Captured ${path.relative(PACKAGE_DIR, outputBase)}.{avif,webp}`);
+          console.log(`Captured ${path.relative(PACKAGE_DIR, outputBase)}.{${CAPTURE_EXTENSION_LIST}}`);
         }
       }
     }

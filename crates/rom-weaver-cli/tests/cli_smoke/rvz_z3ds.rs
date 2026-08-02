@@ -255,7 +255,7 @@ fn rvz_extract_probe_emits_platform_and_container_details() {
     assert_eq!(json["status"], "succeeded");
     // `--probe` folds the container probe block into the extract result.
     assert!(!json["details"]["container"]["recommended_compress_format"].is_null());
-    // Single-payload disc image identity, backfilled from the decoded output without `--checksum`.
+    // Single-payload codec identity, backfilled from the decoded output without `--checksum`.
     let entry = emitted_file_entry(json, "disc.iso");
     assert_eq!(entry["platform"], "Nintendo GameCube");
     assert_eq!(entry["disc_format"], "DVD");

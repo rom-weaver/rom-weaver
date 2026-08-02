@@ -2,6 +2,7 @@ use super::*;
 
 use rayon::prelude::*;
 
+use super::patch_apply::ChainN64TransitionPlan;
 use super::patch_commands::{
     PatchApplyProgressSink, PatchApplyProgressTracker, patch_progress_segment_start,
 };
@@ -139,7 +140,7 @@ impl CliApp {
                 no_extract,
                 no_ignore,
                 kind_filter: input_kind_filter,
-                stop_on_disc_image_codec: false,
+                stop_on_single_payload_codec: false,
             },
         ) {
             Ok(resolved) => resolved,
@@ -165,7 +166,7 @@ impl CliApp {
                 no_extract,
                 no_ignore,
                 kind_filter: patch_kind_filter,
-                stop_on_disc_image_codec: false,
+                stop_on_single_payload_codec: false,
             },
             PatchResolveLabels {
                 command: "patch-validate",
@@ -344,12 +345,13 @@ impl CliApp {
             }
 
             if plan {
-                return self.run_patch_validate_plan(
-                    &resolved_patches,
-                    &validate_input,
-                    &context,
-                    probe_threads.clone(),
-                    IndependentValidationSummary {
+                return self.run_patch_validate_plan(PatchValidatePlanInputs {
+                    resolved_patches: &resolved_patches,
+                    validate_input: &validate_input,
+                    temp_paths: &mut temp_paths,
+                    context: &context,
+                    probe_threads: probe_threads.clone(),
+                    summary: IndependentValidationSummary {
                         extracted_archives,
                         n64_byte_order: (n64_order.is_some()
                             || n64_byte_order != PatchN64ByteOrderMode::Auto)
@@ -360,13 +362,12 @@ impl CliApp {
                         expected_size: effective_expected_size,
                         expected_input_checksums: expected_input_checksums.clone(),
                     },
-                    PlanFlagInputs {
+                    flags: PlanFlagInputs {
                         basis: patch_basis,
                         input_checks: patch_input_check,
                         output_checks: patch_output_check,
-                        cached_input_checksums: cached_input_checksums.clone(),
                     },
-                );
+                });
             }
 
             if independent {
@@ -419,7 +420,11 @@ impl CliApp {
 
                 if index > 0
                     && let Err(error) = self.transition_n64_byte_order(
-                        n64_byte_order,
+                        ChainN64TransitionPlan {
+                            mode: n64_byte_order,
+                            base_variant: None,
+                            base_representation: None,
+                        },
                         resolved_patch_path,
                         &mut current_input,
                         &mut n64_order,
@@ -683,6 +688,7 @@ impl CliApp {
                         ready_jobs.push(IndependentReadyJob {
                             index,
                             patch: patch_label,
+                            input: validate_input.to_path_buf(),
                             resolved: resolved_patch_path.clone(),
                             format,
                             handler,
@@ -720,7 +726,6 @@ impl CliApp {
 
         let (computed, planned) = match self.validate_ready_jobs(
             &ready_jobs,
-            validate_input,
             context,
             patch_count,
             &format!("validating {patch_count} patch(es) independently"),
@@ -826,15 +831,15 @@ impl CliApp {
     fn validate_ready_jobs(
         &self,
         ready_jobs: &[IndependentReadyJob],
-        validate_input: &Path,
         context: &OperationContext,
         patch_count: usize,
         running_label: &str,
     ) -> std::result::Result<(Vec<PerPatchVerdict>, ThreadExecution), Box<OperationReport>> {
         let run_one =
             |job: &IndependentReadyJob| -> std::result::Result<PerPatchVerdict, RomWeaverError> {
+                context.cancel().check()?;
                 let request = PatchValidateRequest {
-                    input: validate_input.to_path_buf(),
+                    input: job.input.clone(),
                     patches: vec![job.resolved.clone()],
                 };
                 let verdict = match job.handler.validate(&request, context) {
@@ -957,15 +962,16 @@ impl CliApp {
     /// and emit the typed `PatchValidationPlan` under
     /// `details.patch_validation`. Exit contract matches `--independent`:
     /// mixed results still exit 0; only cancellation is a hard failure.
-    fn run_patch_validate_plan(
-        &self,
-        resolved_patches: &[(PathBuf, PathBuf)],
-        validate_input: &Path,
-        context: &OperationContext,
-        probe_threads: Option<ThreadExecution>,
-        summary: IndependentValidationSummary,
-        flags: PlanFlagInputs,
-    ) -> OperationReport {
+    fn run_patch_validate_plan(&self, inputs: PatchValidatePlanInputs<'_>) -> OperationReport {
+        let PatchValidatePlanInputs {
+            resolved_patches,
+            validate_input,
+            temp_paths,
+            context,
+            probe_threads,
+            summary,
+            flags,
+        } = inputs;
         let patch_count = resolved_patches.len();
         debug!(patch_count, "patch-validate running plan resolution");
         let fail = |message: String| {
@@ -977,6 +983,11 @@ impl CliApp {
                 probe_threads.clone(),
             )
         };
+        let base_representation = match Self::base_representation(validate_input, None, None) {
+            Ok(representation) => representation,
+            Err(error) => return fail(error.to_string()),
+        };
+        let endpoint_base_inputs = [(validate_input, "raw", base_representation)];
 
         let PlanAlignedMetadata {
             basis_modes,
@@ -997,15 +1008,9 @@ impl CliApp {
         // Assemble what is known about each patch.
         let mut plan_inputs: Vec<patch_plan::PlanPatchInput> = Vec::with_capacity(patch_count);
         for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
-            let mut declared_input = patch_plan::PlanState::default();
-            if let Some(patch_name) = patch_path.file_name().and_then(|name| name.to_str()) {
-                let requirements = parse_filename_requirements(patch_name);
-                declared_input.checksums = requirements.checksums;
-                declared_input.size = requirements.size;
-            }
+            let mut declared_input = Self::filename_plan_state(patch_path);
             if let Some(tokens) = input_check_flags[index].as_ref() {
                 match Self::parse_plan_check_tokens(tokens, "--patch-input-check") {
-                    // Explicit flags win over filename tokens per algorithm.
                     Ok(parsed) => declared_input.checksums.extend(parsed),
                     Err(error) => return fail(error.to_string()),
                 }
@@ -1017,38 +1022,60 @@ impl CliApp {
                     Err(error) => return fail(error.to_string()),
                 }
             }
-            let embedded = handlers[index]
-                .as_ref()
-                .and_then(|handler| handler.describe_metadata(resolved_patch_path, context).ok())
-                .map(|report| patch_plan::parse_endpoint_variants(report.details.as_ref()))
-                .unwrap_or_default();
-            plan_inputs.push(patch_plan::PlanPatchInput {
-                name: patch_path.to_string_lossy().to_string(),
-                format: handlers[index]
-                    .as_ref()
-                    .map(|handler| handler.descriptor().name.to_string()),
-                declared_basis: basis_modes[index].unwrap_or_default().declared(),
+            let mut plan_input = Self::build_plan_patch_input(
+                patch_path,
+                resolved_patch_path,
+                handlers[index].as_deref(),
+                basis_modes[index].unwrap_or_default().declared(),
                 declared_input,
                 declared_output,
-                embedded,
-            });
+                context,
+            );
+            if patch_plan::should_resolve_base_endpoints(index, plan_input.declared_basis)
+                && let Some(handler) = handlers[index].as_deref()
+            {
+                plan_input.base_executions = match Self::resolve_base_endpoint_selections(
+                    handler,
+                    resolved_patch_path,
+                    &endpoint_base_inputs,
+                    context,
+                ) {
+                    Ok(matches) => matches
+                        .into_iter()
+                        .map(|matched| matched.selection)
+                        .collect(),
+                    Err(RomWeaverError::Cancelled) => {
+                        return fail(RomWeaverError::Cancelled.to_string());
+                    }
+                    Err(error) => {
+                        debug!(
+                            %error,
+                            patch = %patch_path.display(),
+                            "handler-normalized base endpoint evidence unavailable"
+                        );
+                        Vec::new()
+                    }
+                };
+            }
+            plan_inputs.push(plan_input);
         }
 
-        let base_variants =
-            match self.plan_base_variants(validate_input, &plan_inputs, &flags, context) {
-                Ok(variants) => variants,
-                Err(error) => return fail(error.to_string()),
-            };
+        let base_variants = match self.plan_base_variants(validate_input, &plan_inputs, context) {
+            Ok(variants) => variants,
+            Err(error) => return fail(error.to_string()),
+        };
 
-        let resolved = patch_plan::resolve_verification_plan(&base_variants, &plan_inputs);
+        let mut resolved = patch_plan::resolve_verification_plan(&base_variants, &plan_inputs);
         let mut per_patch = resolved.per_patch;
 
         // Probe failures override whatever the planner said.
-        for (index, failure) in probe_failures.into_iter().enumerate() {
-            if let Some(message) = failure {
-                per_patch[index].input_verdict = PatchInputVerdict::Failed;
-                per_patch[index].message = message;
-            }
+        for (entry, message) in per_patch
+            .iter_mut()
+            .zip(probe_failures)
+            .filter_map(|(entry, failure)| failure.map(|message| (entry, message)))
+        {
+            entry.input_verdict = PatchInputVerdict::Failed;
+            entry.message = message;
         }
 
         // Probe the base for chain heads, proven base inputs, and speculative chained inputs. A
@@ -1057,31 +1084,22 @@ impl CliApp {
             verdict.basis == PatchInputBasis::Previous
                 && verdict.basis_source == PatchBasisSource::Default
         };
-        let ready_jobs: Vec<IndependentReadyJob> = resolved_patches
-            .iter()
-            .enumerate()
-            .filter_map(|(index, (patch_path, resolved_patch_path))| {
-                let verdict = &per_patch[index];
-                let consumes_base = index == 0
-                    || verdict.basis == PatchInputBasis::Base
-                    || is_speculative_base(verdict);
-                if !consumes_base || verdict.input_verdict == PatchInputVerdict::Failed {
-                    return None;
-                }
-                let handler = handlers[index].clone()?;
-                handler.capabilities().apply.then(|| IndependentReadyJob {
-                    index,
-                    patch: patch_path.to_string_lossy().to_string(),
-                    resolved: resolved_patch_path.clone(),
-                    format: handler.descriptor().name.to_string(),
-                    handler,
-                })
-            })
-            .collect();
+        let ready_jobs = match Self::plan_ready_jobs(PlanReadyJobInputs {
+            resolved_patches,
+            validate_input,
+            temp_paths,
+            context,
+            handlers: &handlers,
+            plan_inputs: &plan_inputs,
+            base_variants: &base_variants,
+            per_patch: &per_patch,
+        }) {
+            Ok(jobs) => jobs,
+            Err(error) => return fail(error.to_string()),
+        };
         let preflight_count = ready_jobs.len();
         let (preflight_verdicts, planned) = match self.validate_ready_jobs(
             &ready_jobs,
-            validate_input,
             context,
             patch_count,
             &format!("validating {preflight_count} of {patch_count} patch(es) against the input"),
@@ -1169,6 +1187,8 @@ impl CliApp {
         } else {
             format!("; {}", validation_labels.join("; "))
         };
+        resolved.output_verification =
+            patch_plan::resolve_output_verification(&plan_inputs, &per_patch);
 
         let plan_payload = PatchValidationPlan {
             plan: true,
@@ -1209,6 +1229,114 @@ impl CliApp {
         );
         report.details = Some(json!({ "patch_validation": payload }));
         report
+    }
+
+    fn plan_ready_jobs(inputs: PlanReadyJobInputs<'_>) -> Result<Vec<IndependentReadyJob>> {
+        let PlanReadyJobInputs {
+            resolved_patches,
+            validate_input,
+            temp_paths,
+            context,
+            handlers,
+            plan_inputs,
+            base_variants,
+            per_patch,
+        } = inputs;
+        let is_speculative_base = |verdict: &PatchPlanVerdict| {
+            verdict.basis == PatchInputBasis::Previous
+                && verdict.basis_source == PatchBasisSource::Default
+        };
+        let mut ready_jobs: Vec<IndependentReadyJob> = resolved_patches
+            .iter()
+            .enumerate()
+            .filter_map(|(index, (patch_path, resolved_patch_path))| {
+                let verdict = &per_patch[index];
+                let reverse_only_base_match = plan_inputs[index].has_only_reverse_base_executions();
+                // A reversible reverse match may be an ordinary forward revert
+                // of the intermediate; it does not prove a speculative base step.
+                if is_speculative_base(verdict) && reverse_only_base_match {
+                    return None;
+                }
+                let consumes_base = index == 0
+                    || verdict.basis == PatchInputBasis::Base
+                    || is_speculative_base(verdict);
+                if !consumes_base || verdict.input_verdict == PatchInputVerdict::Failed {
+                    return None;
+                }
+                let handler = handlers[index].clone()?;
+                handler.capabilities().apply.then(|| IndependentReadyJob {
+                    index,
+                    patch: patch_path.to_string_lossy().to_string(),
+                    input: validate_input.to_path_buf(),
+                    resolved: resolved_patch_path.clone(),
+                    format: handler.descriptor().name.to_string(),
+                    handler,
+                })
+            })
+            .collect();
+        let raw_representation = base_variants
+            .iter()
+            .find(|variant| variant.name == "raw")
+            .map(|variant| variant.representation)
+            .unwrap_or_default();
+        let mut staged_inputs: Vec<(patch_plan::BaseRepresentation, PathBuf)> = Vec::new();
+        for job in &mut ready_jobs {
+            let PatchInputMatch::Base { variant } = &per_patch[job.index].matched else {
+                continue;
+            };
+            let Some(target) = base_variants
+                .iter()
+                .find(|candidate| candidate.name == *variant)
+                .map(|candidate| candidate.representation)
+            else {
+                continue;
+            };
+            if target == raw_representation {
+                continue;
+            }
+            if let Some((_, input)) = staged_inputs
+                .iter()
+                .find(|(representation, _)| *representation == target)
+            {
+                job.input = input.clone();
+                continue;
+            }
+
+            let mut staged = validate_input.to_path_buf();
+            if target.headerless != raw_representation.headerless {
+                if target.headerless != Some(true) {
+                    return Err(RomWeaverError::Validation(
+                        "cannot restore a ROM header while staging patch validation".to_string(),
+                    ));
+                }
+                context.cancel().check()?;
+                let headerless = context
+                    .temp_paths()
+                    .next_path("patch-validate-plan-input-noheader", Some("bin"));
+                temp_paths.push(headerless.clone());
+                Self::strip_header_to_temp(&staged, &headerless)?;
+                staged = headerless;
+            }
+            if target.n64_byte_order != raw_representation.n64_byte_order {
+                let (Some(source), Some(target_order)) =
+                    (raw_representation.n64_byte_order, target.n64_byte_order)
+                else {
+                    return Err(RomWeaverError::Validation(
+                        "cannot resolve N64 byte order while staging patch validation".to_string(),
+                    ));
+                };
+                context.cancel().check()?;
+                let transformed = context
+                    .temp_paths()
+                    .next_path("patch-validate-plan-input-n64-byte-order", Some("bin"));
+                temp_paths.push(transformed.clone());
+                Self::rewrite_n64_byte_order(&staged, &transformed, source, target_order)?;
+                staged = transformed;
+            }
+            staged_inputs.push((target, staged.clone()));
+            job.input = staged;
+        }
+        Ok(ready_jobs)
     }
 
     fn align_plan_metadata(
@@ -1277,85 +1405,388 @@ impl CliApp {
         Self::parse_patch_apply_checksum_values(&tokens, flag)
     }
 
-    /// Compute the base ROM variants the planner matches against: `raw`
-    /// covering the union of algorithms any patch references (seeded values
-    /// reused), plus a `headerless` CRC32 variant when a strippable copier
-    /// header is detected and any patch pins a CRC32.
-    fn plan_base_variants(
+    fn filename_plan_state(patch_path: &Path) -> patch_plan::PlanState {
+        patch_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(parse_filename_requirements)
+            .map(|requirements| patch_plan::PlanState {
+                checksums: requirements.checksums,
+                size: requirements.size,
+            })
+            .unwrap_or_default()
+    }
+
+    /// Build the planner record shared by plan-mode validation and apply-time
+    /// basis resolution. Plan validation adds every filename declaration before
+    /// calling; apply deliberately does not, because only the first patch name
+    /// is part of apply's long-standing hard input gate.
+    pub(super) fn build_plan_patch_input(
+        patch_path: &Path,
+        resolved_patch_path: &Path,
+        handler: Option<&dyn rom_weaver_core::PatchHandler>,
+        declared_basis: Option<PatchInputBasis>,
+        declared_input: patch_plan::PlanState,
+        declared_output: patch_plan::PlanState,
+        context: &OperationContext,
+    ) -> patch_plan::PlanPatchInput {
+        let embedded = handler
+            .and_then(|handler| handler.describe_metadata(resolved_patch_path, context).ok())
+            .map(|report| patch_plan::parse_endpoint_variants(report.details.as_ref()))
+            .unwrap_or_default();
+        patch_plan::PlanPatchInput {
+            name: patch_path.to_string_lossy().to_string(),
+            format: handler.map(|handler| handler.descriptor().name.to_string()),
+            declared_basis,
+            declared_input,
+            declared_input_infers_base: true,
+            declared_output,
+            embedded,
+            base_executions: Vec::new(),
+        }
+    }
+
+    /// Resolve handler-normalized base endpoints against both the exact bytes
+    /// the chain consumes and the original resolved representation. Compat
+    /// transforms can make either path the only one a format recognizes.
+    pub(super) fn resolve_base_endpoint_selections(
+        handler: &dyn rom_weaver_core::PatchHandler,
+        patch_path: &Path,
+        base_inputs: &[(&Path, &str, patch_plan::BaseRepresentation)],
+        context: &OperationContext,
+    ) -> Result<Vec<patch_plan::BaseEndpointMatch>> {
+        let mut matches = Vec::new();
+        let mut first_error = None;
+        for &(input, variant, representation) in base_inputs {
+            match handler.resolve_endpoint_selections(patch_path, input, context) {
+                Ok(found) => {
+                    for selection in found {
+                        if !matches
+                            .iter()
+                            .any(|matched: &patch_plan::BaseEndpointMatch| {
+                                matched.selection == selection
+                            })
+                        {
+                            matches.push(patch_plan::BaseEndpointMatch {
+                                selection,
+                                variant: variant.to_string(),
+                                representation,
+                            });
+                        }
+                    }
+                }
+                Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
+                Err(error) => {
+                    debug!(
+                        %error,
+                        input = %input.display(),
+                        "handler-normalized endpoint resolution failed for base representation"
+                    );
+                    first_error.get_or_insert(error);
+                }
+            }
+        }
+        if matches.is_empty()
+            && let Some(error) = first_error
+        {
+            return Err(error);
+        }
+        Ok(matches)
+    }
+
+    /// Compute all base representations used by strict plan validation.
+    pub(super) fn plan_base_variants(
         &self,
         validate_input: &Path,
         plan_inputs: &[patch_plan::PlanPatchInput],
-        flags: &PlanFlagInputs,
         context: &OperationContext,
     ) -> Result<Vec<patch_plan::BaseVariant>> {
         let mut algorithms: Vec<String> = Vec::new();
-        let mut wants_crc32 = false;
         for input in plan_inputs {
             let mut collect = |state: &patch_plan::PlanState| {
                 for algorithm in state.checksums.keys() {
-                    if algorithm == "crc32" {
-                        wants_crc32 = true;
-                    }
                     if !algorithms.iter().any(|existing| existing == algorithm) {
                         algorithms.push(algorithm.clone());
                     }
                 }
             };
             collect(&input.declared_input);
-            for (embedded_input, _) in &input.embedded {
-                collect(embedded_input);
+            for variant in &input.embedded {
+                collect(&variant.input);
             }
         }
 
-        let input_size = fs::metadata(validate_input)?.len();
+        let representation = Self::base_representation(validate_input, None, None)?;
+        Self::base_variants_for_algorithms(
+            validate_input,
+            &algorithms,
+            context,
+            false,
+            "",
+            representation,
+        )
+    }
+
+    /// Apply only needs extra whole-base hashes for a declared base check or
+    /// when an automatic later step has embedded endpoint evidence that can
+    /// distinguish base from previous. Inference-only hashing is best-effort;
+    /// an explicit declared base state remains a strict validation request.
+    pub(super) fn plan_apply_base_variants(
+        original_input: &Path,
+        original_representation: patch_plan::BaseRepresentation,
+        prepared_input: &Path,
+        prepared_representation: patch_plan::BaseRepresentation,
+        plan_inputs: &[patch_plan::PlanPatchInput],
+        context: &OperationContext,
+    ) -> Result<Vec<patch_plan::BaseVariant>> {
+        let mut algorithms = Vec::new();
+        let mut has_required_base_state = false;
+        for input in plan_inputs.iter().skip(1) {
+            if input.declared_basis == Some(PatchInputBasis::Previous) {
+                continue;
+            }
+            for algorithm in input.declared_input.checksums.keys() {
+                if !algorithms.iter().any(|existing| existing == algorithm) {
+                    algorithms.push(algorithm.clone());
+                }
+            }
+            if input.declared_basis == Some(PatchInputBasis::Base) {
+                has_required_base_state |= !input.declared_input.is_empty();
+            }
+            for variant in &input.embedded {
+                for algorithm in variant.input.checksums.keys() {
+                    if !algorithms.iter().any(|existing| existing == algorithm) {
+                        algorithms.push(algorithm.clone());
+                    }
+                }
+            }
+        }
+        let build_variants = || -> Result<Vec<patch_plan::BaseVariant>> {
+            let mut variants = Self::base_variants_for_algorithms(
+                original_input,
+                &algorithms,
+                context,
+                !has_required_base_state,
+                "",
+                original_representation,
+            )?;
+            if prepared_input != original_input {
+                for variant in Self::base_variants_for_algorithms(
+                    prepared_input,
+                    &algorithms,
+                    context,
+                    !has_required_base_state,
+                    "prepared-",
+                    prepared_representation,
+                )? {
+                    if !variants
+                        .iter()
+                        .any(|existing| existing.state == variant.state)
+                    {
+                        variants.push(variant);
+                    }
+                }
+            }
+            Ok(variants)
+        };
+        match build_variants() {
+            Ok(variants) => Ok(variants),
+            Err(RomWeaverError::Cancelled) => Err(RomWeaverError::Cancelled),
+            Err(error) if !has_required_base_state => {
+                debug!(%error, "base inference unavailable; preserving normal patch execution");
+                Ok(vec![patch_plan::BaseVariant {
+                    name: "raw".to_string(),
+                    state: patch_plan::PlanState::default(),
+                    representation: original_representation,
+                }])
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn base_variants_for_algorithms(
+        input: &Path,
+        algorithms: &[String],
+        context: &OperationContext,
+        best_effort: bool,
+        name_prefix: &str,
+        raw_representation: patch_plan::BaseRepresentation,
+    ) -> Result<Vec<patch_plan::BaseVariant>> {
+        let input_size = match fs::metadata(input) {
+            Ok(metadata) => Some(metadata.len()),
+            Err(error) if best_effort => {
+                debug!(%error, input = %input.display(), "base size unavailable for inference");
+                None
+            }
+            Err(error) => return Err(error.into()),
+        };
+
+        if let Some(input_size) = input_size
+            && !algorithms.is_empty()
+            && input_size.is_multiple_of(4)
+            && raw_representation.n64_byte_order.is_some()
+        {
+            let n64_variants = (|| {
+                trace!(?algorithms, "computing N64 base byte-order checksums");
+                let name_hint = input.file_name().and_then(|name| name.to_str());
+                let mut engine = StreamingVariantChecksums::new(
+                    algorithms,
+                    input_size,
+                    name_hint,
+                    context.variant_hash_execution().effective_threads,
+                )?;
+                let mut file = File::open(input)?;
+                let mut buffer = vec![0_u8; 1024 * 1024];
+                loop {
+                    context.cancel().check()?;
+                    let read = file.read(&mut buffer)?;
+                    if read == 0 {
+                        break;
+                    }
+                    engine.update(&buffer[..read])?;
+                }
+
+                let variants = engine
+                    .finalize()?
+                    .rows
+                    .into_iter()
+                    .filter_map(|row| {
+                        let order = match row.id.as_str() {
+                            "n64-byte-order:big-endian" => N64ByteOrder::BigEndian,
+                            "n64-byte-order:little-endian" => N64ByteOrder::LittleEndian,
+                            "n64-byte-order:byte-swapped" => N64ByteOrder::ByteSwapped,
+                            _ => return None,
+                        };
+                        let name = if raw_representation.n64_byte_order == Some(order) {
+                            format!("{name_prefix}raw")
+                        } else {
+                            format!("{name_prefix}n64-{}", order.id())
+                        };
+                        Some(patch_plan::BaseVariant {
+                            name,
+                            state: patch_plan::PlanState {
+                                checksums: row.checksums,
+                                size: Some(input_size),
+                            },
+                            representation: patch_plan::BaseRepresentation {
+                                n64_byte_order: Some(order),
+                                ..raw_representation
+                            },
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                Ok::<_, RomWeaverError>(variants)
+            })();
+            match n64_variants {
+                Ok(variants) if variants.len() == 3 => return Ok(variants),
+                Ok(_) => {}
+                Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
+                Err(error) if best_effort => {
+                    debug!(%error, input = %input.display(), "N64 base variants unavailable for inference");
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
         let mut raw = patch_plan::PlanState {
             checksums: BTreeMap::new(),
-            size: Some(input_size),
+            size: input_size,
         };
-        let missing: Vec<&str> = algorithms
-            .iter()
-            .filter(|algorithm| !flags.cached_input_checksums.contains_key(*algorithm))
-            .map(String::as_str)
-            .collect();
-        for (algorithm, value) in &flags.cached_input_checksums {
-            if algorithms.iter().any(|wanted| wanted == algorithm) {
+        let mut missing = Vec::new();
+        for algorithm in algorithms {
+            if let Some(value) = context.seeded_checksum(input, algorithm) {
                 raw.checksums
                     .insert(algorithm.clone(), value.to_ascii_lowercase());
+            } else {
+                missing.push(algorithm.as_str());
             }
         }
         if !missing.is_empty() {
             trace!(algorithms = ?missing, "computing base checksums for verification plan");
-            let computed = checksum_file_values(validate_input, &missing, context)?;
-            raw.checksums.extend(computed);
+            match checksum_file_values(input, &missing, context) {
+                Ok(computed) => raw.checksums.extend(computed),
+                Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
+                Err(error) if best_effort => {
+                    debug!(%error, input = %input.display(), "base checksums unavailable for inference");
+                }
+                Err(error) => return Err(error),
+            }
         }
         let mut variants = vec![patch_plan::BaseVariant {
-            name: "raw".to_string(),
+            name: format!("{name_prefix}raw"),
             state: raw,
+            representation: raw_representation,
         }];
 
-        // Phase 1 keeps the headerless variant CRC32-only: the copier-header
-        // formats that need it (BPS/UPS/IPS-with-filename-tokens) all pin
-        // CRC32.
-        if wants_crc32
-            && let Ok(header_match) = Self::detect_strippable_rom_header(validate_input)
+        if let Ok(header_match) = Self::detect_strippable_rom_header(input)
             && let Some(stripped) = header_match.stripped_bytes()
         {
             let stripped = stripped as u64;
-            let mut reader = BufReader::new(File::open(validate_input)?);
-            reader.seek(SeekFrom::Start(stripped))?;
-            if let Some(crc32) = Self::crc32_of_reader(&mut reader, context)? {
-                let mut checksums = BTreeMap::new();
-                checksums.insert("crc32".to_string(), crc32);
-                variants.push(patch_plan::BaseVariant {
-                    name: "headerless".to_string(),
+            let headerless = if algorithms.is_empty() {
+                Ok(patch_plan::BaseVariant {
+                    name: format!("{name_prefix}headerless"),
                     state: patch_plan::PlanState {
-                        checksums,
-                        size: Some(input_size.saturating_sub(stripped)),
+                        checksums: BTreeMap::new(),
+                        size: input_size.map(|size| size.saturating_sub(stripped)),
                     },
-                });
+                    representation: patch_plan::BaseRepresentation {
+                        headerless: Some(true),
+                        ..raw_representation
+                    },
+                })
+            } else {
+                (|| {
+                    let mut reader = BufReader::new(File::open(input)?);
+                    reader.seek(SeekFrom::Start(stripped))?;
+                    let values = checksum_reader_values_with_progress(
+                        &mut reader,
+                        algorithms,
+                        context,
+                        &mut |_| {},
+                    )?;
+                    Ok::<_, RomWeaverError>(patch_plan::BaseVariant {
+                        name: format!("{name_prefix}headerless"),
+                        state: patch_plan::PlanState {
+                            checksums: values.values,
+                            size: input_size.map(|size| size.saturating_sub(stripped)),
+                        },
+                        representation: patch_plan::BaseRepresentation {
+                            headerless: Some(true),
+                            ..raw_representation
+                        },
+                    })
+                })()
+            };
+            match headerless {
+                Ok(variant) => variants.push(variant),
+                Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
+                Err(error) if best_effort => {
+                    debug!(%error, input = %input.display(), "headerless base checksums unavailable for inference");
+                }
+                Err(error) => return Err(error),
             }
         }
         Ok(variants)
+    }
+
+    pub(super) fn base_representation(
+        input: &Path,
+        headerless: Option<bool>,
+        n64_byte_order: Option<N64ByteOrder>,
+    ) -> Result<patch_plan::BaseRepresentation> {
+        let headerless = headerless.or_else(|| {
+            Self::detect_strippable_rom_header(input)
+                .ok()
+                .map(|_| false)
+        });
+        let n64_byte_order = match n64_byte_order {
+            Some(order) => Some(order),
+            None => Self::detect_n64_byte_order_path(input)?,
+        };
+        Ok(patch_plan::BaseRepresentation {
+            headerless,
+            n64_byte_order,
+        })
     }
 }
 
@@ -1365,7 +1796,27 @@ struct PlanFlagInputs {
     basis: Vec<PatchBasisMode>,
     input_checks: Vec<String>,
     output_checks: Vec<String>,
-    cached_input_checksums: BTreeMap<String, String>,
+}
+
+struct PatchValidatePlanInputs<'a> {
+    resolved_patches: &'a [(PathBuf, PathBuf)],
+    validate_input: &'a Path,
+    temp_paths: &'a mut Vec<PathBuf>,
+    context: &'a OperationContext,
+    probe_threads: Option<ThreadExecution>,
+    summary: IndependentValidationSummary,
+    flags: PlanFlagInputs,
+}
+
+struct PlanReadyJobInputs<'a> {
+    resolved_patches: &'a [(PathBuf, PathBuf)],
+    validate_input: &'a Path,
+    temp_paths: &'a mut Vec<PathBuf>,
+    context: &'a OperationContext,
+    handlers: &'a [Option<Arc<dyn rom_weaver_core::PatchHandler>>],
+    plan_inputs: &'a [patch_plan::PlanPatchInput],
+    base_variants: &'a [patch_plan::BaseVariant],
+    per_patch: &'a [PatchPlanVerdict],
 }
 
 struct PlanAlignedMetadata {
@@ -1398,6 +1849,7 @@ struct IndependentValidationSummary {
 struct IndependentReadyJob {
     index: usize,
     patch: String,
+    input: PathBuf,
     resolved: PathBuf,
     format: String,
     handler: Arc<dyn rom_weaver_core::PatchHandler>,
@@ -1410,4 +1862,122 @@ struct PerPatchVerdict {
     format: Option<String>,
     passed: bool,
     message: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cancelled_context(temp_root: PathBuf) -> OperationContext {
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        OperationContext::new(
+            ThreadBudget::Fixed(1),
+            temp_root,
+            Arc::new(rom_weaver_core::NoopProgressSink),
+            cancel,
+        )
+    }
+
+    #[test]
+    fn best_effort_base_hashing_never_swallows_cancellation() {
+        let temp = assert_fs::TempDir::new().expect("temp dir");
+        let raw = temp.path().join("raw.bin");
+        fs::write(&raw, b"base bytes").expect("raw fixture");
+        let context = cancelled_context(temp.path().join("raw-temp"));
+        let error = CliApp::base_variants_for_algorithms(
+            &raw,
+            &["md5".to_string()],
+            &context,
+            true,
+            "",
+            patch_plan::BaseRepresentation::default(),
+        )
+        .expect_err("raw inference cancellation must propagate");
+        assert!(matches!(error, RomWeaverError::Cancelled));
+
+        let headered = temp.path().join("headered.nes");
+        let mut bytes = b"NES\x1a".to_vec();
+        bytes.resize(0x10, 0);
+        bytes.resize(0x10 + 32 * 1024, 0x5a);
+        fs::write(&headered, bytes).expect("headered fixture");
+        let context = cancelled_context(temp.path().join("headered-temp"));
+        context.seed_checksums(
+            &headered,
+            &BTreeMap::from([("md5".to_string(), "0".repeat(32))]),
+        );
+        let error = CliApp::base_variants_for_algorithms(
+            &headered,
+            &["md5".to_string()],
+            &context,
+            true,
+            "",
+            patch_plan::BaseRepresentation::default(),
+        )
+        .expect_err("headerless inference cancellation must propagate");
+        assert!(matches!(error, RomWeaverError::Cancelled));
+    }
+
+    #[test]
+    fn apply_base_planning_never_swallows_cancellation() {
+        let temp = assert_fs::TempDir::new().expect("temp dir");
+        let input = temp.path().join("base.bin");
+        fs::write(&input, b"base bytes").expect("fixture");
+        let plan_inputs = [
+            patch_plan::PlanPatchInput::default(),
+            patch_plan::PlanPatchInput {
+                embedded: vec![patch_plan::PlanEndpointVariant {
+                    input: patch_plan::PlanState {
+                        checksums: BTreeMap::from([("md5".to_string(), "0".repeat(32))]),
+                        size: None,
+                    },
+                    ..patch_plan::PlanEndpointVariant::default()
+                }],
+                ..patch_plan::PlanPatchInput::default()
+            },
+        ];
+        let context = cancelled_context(temp.path().join("apply-temp"));
+
+        let representation = patch_plan::BaseRepresentation::default();
+        let error = CliApp::plan_apply_base_variants(
+            &input,
+            representation,
+            &input,
+            representation,
+            &plan_inputs,
+            &context,
+        )
+        .expect_err("apply inference cancellation must propagate");
+
+        assert!(matches!(error, RomWeaverError::Cancelled));
+    }
+
+    #[test]
+    fn ready_job_validation_checks_cancellation_before_the_handler() {
+        let temp = assert_fs::TempDir::new().expect("temp dir");
+        let app = CliApp::new(
+            Arc::new(rom_weaver_core::NoopProgressSink),
+            Arc::new(rom_weaver_core::NoninteractivePrompter),
+            false,
+            false,
+        );
+        let missing = temp.path().join("must-not-be-read.ips");
+        let jobs = [IndependentReadyJob {
+            index: 0,
+            patch: missing.to_string_lossy().into_owned(),
+            input: missing.clone(),
+            resolved: missing,
+            format: "IPS".to_string(),
+            handler: app.patches.handlers()[0].clone(),
+        }];
+        let context = cancelled_context(temp.path().join("ready-job-temp"));
+
+        let report = match app.validate_ready_jobs(&jobs, &context, 1, "cancelled validation") {
+            Ok(_) => panic!("cancelled ready job must abort the batch"),
+            Err(report) => report,
+        };
+
+        assert_eq!(report.status, OperationStatus::Failed);
+        assert!(report.label.to_ascii_lowercase().contains("cancel"));
+    }
 }

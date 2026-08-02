@@ -1,12 +1,10 @@
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
 import { stripOperationScopeChain } from "../../lib/runtime/run-output-paths.ts";
-import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { ArchivePathEntry, StagedInputInfo } from "./apply-session-types.ts";
 import { getBinarySourceFileName } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
-import { createInertPatcherUiSessionState } from "./patcher-ui-state.ts";
 
 const createRomInputRow = (
   partial: Omit<Partial<RomInputRowState>, "info"> & {
@@ -15,7 +13,8 @@ const createRomInputRow = (
     info?: Partial<RomInputRowState["info"]>;
   },
 ): RomInputRowState => ({
-  ...createInertPatcherUiSessionState().romInput,
+  loading: false,
+  progress: null,
   ...partial,
   groupId: partial.groupId || "",
   id: partial.id,
@@ -179,7 +178,6 @@ const getChecksumProgressInfoPatch = (
   if (isChecksum) info.validationPhase = "checksum";
   else if (isExtracting) info.validationPhase = "extract";
   return {
-    disabled: true,
     info,
     loading: true,
   };
@@ -231,48 +229,13 @@ const resolveMergedRomFileName = ({
   return nextFileName;
 };
 
-const sumStagedInfoSize = (infos: StagedInputInfo[], key: "size" | "sourceSize") => {
-  let total = 0;
-  let found = false;
-  for (const info of infos) {
-    const value = info[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      total += value;
-      found = true;
-    }
-  }
-  return found ? total : null;
-};
-
-const getStagedDecompressionTimeMs = (infos: StagedInputInfo[]) => {
-  if (!infos.some((info) => info.wasDecompressed)) return null;
-  let total = 0;
-  let found = false;
-  for (const info of infos) {
-    const elapsedMs = info.decompressionTimeMs;
-    if (typeof elapsedMs === "number" && Number.isFinite(elapsedMs)) {
-      total += elapsedMs;
-      found = true;
-    }
-  }
-  return found ? total : null;
-};
-
-const formatOperationTiming = (label: string, elapsedMs: number | null) => {
-  if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs) || elapsedMs < 0) return "";
-  return `${label}: ${formatTiming(createTiming(elapsedMs))}`;
-};
-
 export {
   createRomInputRow,
-  formatOperationTiming,
   getChecksumProgressInfoPatch,
   getPendingInputDisplayFileName,
   getProgressDetails,
   getProgressStagedInputInfo,
-  getStagedDecompressionTimeMs,
   isCompressedInputFileName,
   resolveMergedRomFileName,
   sortRomInputs,
-  sumStagedInfoSize,
 };

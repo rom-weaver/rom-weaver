@@ -36,9 +36,7 @@ type SessionState = ReturnType<typeof useLocalPatcherSessionState>;
 type RomInputPatch = Omit<Partial<RomInputRowState>, "info"> & { info?: Partial<RomInputRowState["info"]> };
 
 const buildFinalRomInputRow = ({
-  busy,
   current,
-  disabled,
   finalized,
   getInputKey,
   index,
@@ -47,9 +45,7 @@ const buildFinalRomInputRow = ({
   rawInfo,
   resolveRowInfo,
 }: {
-  busy: boolean;
   current: RomInputRowState[];
-  disabled: boolean;
   finalized: boolean;
   getInputKey: (source: BinarySource, sources?: BinarySource[]) => string;
   index: number;
@@ -67,7 +63,6 @@ const buildFinalRomInputRow = ({
     archivePathEntries: info.parentCompressions ?? existing?.archivePathEntries,
     chdMode: info.chdMode ?? existing?.chdMode,
     cueText: info.cueText ?? existing?.cueText,
-    disabled: finalized ? disabled || busy : true,
     gdiText: info.gdiText ?? existing?.gdiText,
     groupId: info.groupId ?? existing?.groupId,
     id,
@@ -90,9 +85,6 @@ const buildFinalRomInputRow = ({
     progress: finalized ? null : existing?.progress || (index ? createWaitingWorkflowProgress() : initialProgress),
     size: info.size ?? existing?.size,
     sourceSize: info.sourceSize ?? existing?.sourceSize,
-    splitBinAvailable: info.splitBinAvailable ?? existing?.splitBinAvailable,
-    valid: finalized,
-    wasDecompressed: info.wasDecompressed ?? existing?.wasDecompressed,
   });
 };
 
@@ -121,7 +113,6 @@ const buildPendingRomInputRow = ({
   const isQueued = index > 0 || hasRetainedInputs;
   return createRomInputRow({
     ...existing,
-    disabled: true,
     id,
     info: {
       ...existing?.info,
@@ -138,7 +129,6 @@ const buildPendingRomInputRow = ({
     order: index,
     progress:
       existingProgress || (retained && existing ? null : isQueued ? createWaitingWorkflowProgress() : initialProgress),
-    valid: retained && existing ? existing.valid : false,
   });
 };
 
@@ -247,10 +237,6 @@ interface InputStagingContext {
   machines: {
     inputStageMachine: StageGenerationMachine;
     patchStageMachine: StageGenerationMachine;
-  };
-  refs: {
-    busyRef: MutableRefObject<boolean>;
-    disabledRef: MutableRefObject<boolean>;
   };
   report: {
     emitSessionTrace: (message: string, details?: Record<string, unknown>) => void;
@@ -482,12 +468,11 @@ const useInputStaging = (context: InputStagingContext) => {
     };
 
     const syncRomInput = (snapshot: ApplyWorkflowStageSnapshot, previousInputs: BinarySource[] = []) => {
-      const { machines, refs, report, rows, session, stage } = contextRef.current;
+      const { machines, report, rows, session, stage } = contextRef.current;
       const { inputStageMachine, patchStageMachine } = machines;
       const inputStageGenerationRef = inputStageMachine.stageGenerationRef;
       const inputProgressGenerationRef = inputStageMachine.progressGenerationRef;
       const patchStageGeneration = patchStageMachine.stageGenerationRef.current;
-      const { busyRef, disabledRef } = refs;
       const { emitSessionTrace, onError, setSectionErrorMessage } = report;
       const { getInputKey, getPatchKey, getStableInputInfo, mergeRomInput, reclassifyArchiveToPatch, updatePatches } =
         rows;
@@ -530,9 +515,7 @@ const useInputStaging = (context: InputStagingContext) => {
           return sortRomInputs(
             infos.map((rawInfo, index) =>
               buildFinalRomInputRow({
-                busy: busyRef.current,
                 current,
-                disabled: disabledRef.current,
                 finalized,
                 getInputKey,
                 index,
@@ -584,11 +567,9 @@ const useInputStaging = (context: InputStagingContext) => {
             sourceSize: info.sourceSize,
           });
           mergeRomInput(resolveRowInfo(info), {
-            disabled: true,
             info: { validationPhase: "idle" },
             loading: false,
             progress: null,
-            valid: true,
           });
         },
         onImplicitPatches: (patches, infos = []) => {
@@ -653,11 +634,9 @@ const useInputStaging = (context: InputStagingContext) => {
             sourceSize: info.sourceSize,
           });
           mergeRomInput(resolveRowInfo(info), {
-            disabled: true,
             info: { validationPhase: "idle" },
             loading: false,
             progress: null,
-            valid: !!info.fileName,
           });
         },
       })
@@ -737,7 +716,6 @@ const useInputStaging = (context: InputStagingContext) => {
             current.map((entry) =>
               createRomInputRow({
                 ...entry,
-                disabled: disabledRef.current || busyRef.current,
                 info: { ...entry.info, validationPhase: "idle" },
                 loading: false,
                 progress: null,

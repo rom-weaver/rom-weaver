@@ -127,6 +127,7 @@ const useBundleApplySession = ({
           const inputChecks = index === 0 ? session.chainEndpointChecks.input?.checksums : undefined;
           const validateInputChecksum = inputChecks?.sha1 || inputChecks?.md5 || inputChecks?.crc32;
           await controllersRef.current.patchStack?.setPatchOption?.(index, {
+            ...(entry.basis ? { basis: entry.basis } : {}),
             ...(entry.header === "keep" || entry.header === "strip" ? { header: entry.header } : {}),
             ...(validateInputChecksum ? { validateInputChecksum } : {}),
             // A local bundle can finish staging before its session metadata lands. Its option update

@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { expect, test, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
-import { inertDialogController, useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
+import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
 import {
   clickApplyButton,
   getInputStackRows,
@@ -103,7 +103,6 @@ const createChecksumOverrideHarnessElement = (
       });
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,
@@ -144,7 +143,6 @@ test("removing the ROM clears patch validation errors", async () => {
       });
     return createElement(ApplyWorkflowFormView, {
       controllers: {
-        dialog: inertDialogController,
         notice: localNoticeController,
         output: localOutputController,
         patchStack: localStackController,
@@ -269,7 +267,7 @@ test("checksum override dispatch uses one-shot validation relax", async () => {
   expect(callInput?.options?.validation?.requireInputChecksumMatch).toBe(false);
 });
 
-test("expected validation sizes retain raw byte metadata and hide legacy actual input text", async () => {
+test("expected validation sizes and file cards retain raw byte metadata", async () => {
   mount(createChecksumOverrideHarnessElement(vi.fn(async () => undefined)));
 
   const patchRow = await waitForState(() => {
@@ -280,26 +278,14 @@ test("expected validation sizes retain raw byte metadata and hide legacy actual 
   expect(patchRow).toBeInstanceOf(HTMLElement);
   expect(patchRow?.textContent).toContain("1.02 KB (1024 B)");
   await expect
-    .poll(
-      () =>
-        document.querySelector(
-          "#rom-weaver-list-input-stack .rom-weaver-input-stack-file span[data-size-bytes='8192 B']",
-        ),
-      { timeout: 30000 },
-    )
+    .poll(() => document.querySelector("#rom-weaver-list-input-stack .tree-size[data-size-bytes='8192']"), {
+      timeout: 30000,
+    })
     .not.toBeNull();
-  const inputTimingLabel = Array.from(
-    document.querySelectorAll("#rom-weaver-list-input-stack .rom-weaver-input-stack-file span"),
-  ).find((entry) => entry.textContent?.trim().startsWith("time:"));
-  expect(inputTimingLabel?.getAttribute("data-size-bytes") || null).toBeNull();
   await expect
-    .poll(
-      () =>
-        document.querySelector(
-          "#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file span[data-size-bytes='16384 B']",
-        ),
-      { timeout: 30000 },
-    )
+    .poll(() => document.querySelector("#rom-weaver-list-patch-stack .tree-size[data-size-bytes='16384']"), {
+      timeout: 30000,
+    })
     .not.toBeNull();
 
   const statusText = patchRow?.textContent || "";

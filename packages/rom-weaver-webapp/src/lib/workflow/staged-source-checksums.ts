@@ -55,9 +55,6 @@ const getPatchFilePrecomputedChecksums = (
   return out;
 };
 
-// Disc sheets (cue/gdi) are sidecars, not ROM data - never checksum them.
-const isChecksummableInputAsset = (asset: InputAsset) => asset.kind !== "cue" && asset.kind !== "gdi";
-
 const getInputAssetChecksums = (asset: InputAsset | undefined): StandardWorkflowChecksums | undefined => {
   if (!asset) return undefined;
   return (asset.checksums as StandardWorkflowChecksums | undefined) || getPatchFilePrecomputedChecksums(asset.file);
@@ -80,9 +77,6 @@ const getAssetSourceSize = (asset: InputAsset, fallback?: number) =>
   typeof asset.preparation?.sourceSize === "number" && Number.isFinite(asset.preparation.sourceSize)
     ? asset.preparation.sourceSize
     : fallback;
-
-const getPrimaryInputAsset = (assets: InputAsset[]) =>
-  assets.find((asset) => asset.patchable) || assets.find(isChecksummableInputAsset) || assets[0];
 
 const cloneChecksumRomProbe = (romProbe: ChecksumRomProbe | undefined): ChecksumRomProbe | undefined =>
   romProbe
@@ -219,6 +213,4 @@ export {
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
   getPatchFilePrecomputedRomType,
-  getPrimaryInputAsset,
-  isChecksummableInputAsset,
 };

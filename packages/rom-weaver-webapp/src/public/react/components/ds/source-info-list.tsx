@@ -68,6 +68,7 @@ type SourceInfoChecksums = {
 /** What a bundle expects this file to be (its rom/chain-input checks). */
 type SourceInfoExpectedChecks = {
   checksums?: Record<string, string>;
+  name?: string;
   size?: number;
 };
 
@@ -84,7 +85,13 @@ const expectedSizeMark = (expectedSize: string, computedBytes: string): "bad" | 
   return computedBytes === expectedSize ? "ok" : "bad";
 };
 
-/* At least one expected field was actually compared and disagreed - the
+const expectedNameMark = (expected: string, actual: string | undefined): "bad" | "ok" | undefined => {
+  const actualName = (actual || "").trim();
+  if (!actualName) return undefined;
+  return actualName.toLowerCase() === expected.trim().toLowerCase() ? "ok" : "bad";
+};
+
+/* At least one strict expected field was actually compared and disagreed - the
    header-level "this is not the expected ROM" signal. */
 const hasExpectedMismatch = (
   expected: SourceInfoExpectedChecks,
@@ -110,7 +117,7 @@ const ExpectedMismatchInfo = () => (
     title="Not the expected ROM"
   >
     <strong>Not the expected ROM</strong>
-    <p>This ROM's checks do not match what the bundle was authored against - see the Expected rows below.</p>
+    <p>This ROM's name or checks do not match what the bundle was authored against - see the Expected rows below.</p>
     <p>You can still apply the patches, but the result may differ from what the bundle's author intended.</p>
   </InfoToggle>
 );
@@ -119,8 +126,8 @@ const ExpectedMismatchInfo = () => (
  * transform variant's. */
 type ComputedCheckSet = { byteValue: string; checksums?: SourceInfoChecksums | null; id: string; label: string };
 
-/* The expectation matches a computed set when every expected field that the
-   set can answer agrees, and at least one field was actually compared. */
+/* Strict checksum/size expectations select a computed set independently of
+   the advisory file name, which gets its own mark. */
 const matchesExpected = (expected: SourceInfoExpectedChecks, set: ComputedCheckSet): boolean => {
   let compared = 0;
   for (const [algorithm, value] of Object.entries(expected.checksums || {})) {
@@ -142,9 +149,11 @@ const matchesExpected = (expected: SourceInfoExpectedChecks, set: ComputedCheckS
    remaining hashes - no duplicate Computed group, no other variants. */
 const MatchedExpectedGroup = ({
   expected,
+  fileName,
   matched,
 }: {
   expected: SourceInfoExpectedChecks;
+  fileName?: string;
   matched: ComputedCheckSet;
 }) => {
   const expectedChecksums = expected.checksums || {};
@@ -163,6 +172,9 @@ const MatchedExpectedGroup = ({
         </span>
         <span className="ck-head-note">Expected</span>
       </div>
+      {expected.name ? (
+        <ChecksumRow label="NAME" mark={expectedNameMark(expected.name, fileName)} value={expected.name} />
+      ) : null}
       {rowValue("crc32") ? <ChecksumRow label="CRC32" mark={rowMark("crc32")} value={rowValue("crc32")} /> : null}
       {byteValue ? (
         <ChecksumRow copyValue={byteValue} label="BYTES" mark={expectedSize ? "ok" : undefined} value={byteValue} />
@@ -218,17 +230,20 @@ const ExpectedChecksGroup = ({
   bytes,
   checksums,
   expected,
+  fileName,
   mismatch,
 }: {
   bytes?: number;
   checksums?: SourceInfoChecksums | null;
   expected?: SourceInfoExpectedChecks;
+  fileName?: string;
   /** A compared field disagreed: the head carries the ✗ / "No match" verdict. */
   mismatch?: boolean;
 }) => {
   const expectedChecksums = expected?.checksums || {};
+  const expectedName = expected?.name?.trim() || "";
   const expectedSize = typeof expected?.size === "number" ? String(expected.size) : "";
-  if (!(Object.keys(expectedChecksums).length || expectedSize)) return null;
+  if (!(expectedName || Object.keys(expectedChecksums).length || expectedSize)) return null;
   const computedBytes = typeof bytes === "number" && Number.isFinite(bytes) ? String(Math.floor(bytes)) : "";
   // CRC32 then BYTES first so the two short ck-half rows pair on one grid row.
   const orderedAlgorithms = ["crc32", "md5", "sha1", ...Object.keys(expectedChecksums).sort()].filter(
@@ -247,6 +262,9 @@ const ExpectedChecksGroup = ({
           </>
         ) : null}
       </div>
+      {expectedName ? (
+        <ChecksumRow label="NAME" mark={expectedNameMark(expectedName, fileName)} value={expectedName} />
+      ) : null}
       {orderedAlgorithms.map((algorithm) => (
         <Fragment key={algorithm}>
           <ChecksumRow
@@ -292,6 +310,7 @@ const ExpectedChecksGroup = ({
 const buildStagingGroups = (
   pending: ChecksumPendingGroup[],
   expected: SourceInfoExpectedChecks | undefined,
+  fileName: string | undefined,
   hasExpected: boolean,
 ): ChecksumPendingGroup[] => {
   const variantCount = pending.filter((group) => group.id !== "raw").length;
@@ -301,7 +320,7 @@ const buildStagingGroups = (
   );
   if (!hasExpected) return groups;
   const baseIndex = groups.findIndex((group) => group.id === "raw");
-  const expectedGroup = { content: <ExpectedChecksGroup expected={expected} />, id: "expected" };
+  const expectedGroup = { content: <ExpectedChecksGroup expected={expected} fileName={fileName} />, id: "expected" };
   return groups.toSpliced(baseIndex < 0 ? groups.length : baseIndex + 1, 0, expectedGroup);
 };
 
@@ -391,6 +410,7 @@ const SourceInfoList = ({
   defaultOpen = false,
   expected,
   extractTiming,
+  fileName,
   label = "Checks",
   lead,
   onToggle,
@@ -408,6 +428,8 @@ const SourceInfoList = ({
    * per-row match marks against the computed values. */
   expected?: SourceInfoExpectedChecks;
   extractTiming?: ExtractTiming;
+  /** Logical ROM leaf name compared with `expected.name`. */
+  fileName?: string;
   /** Section heading; defaults to "Checks". Disc cards pass the track filename. */
   label?: string;
   lead?: ReactNode;
@@ -421,12 +443,16 @@ const SourceInfoList = ({
   /** Trim-padding probe; surfaces a "Trim" group only when padding is detected. */
   trim?: TrimFixDetails | null;
 }) => {
-  const hasExpected = !!(Object.keys(expected?.checksums || {}).length || typeof expected?.size === "number");
+  const hasExpected = !!(
+    expected?.name?.trim() ||
+    Object.keys(expected?.checksums || {}).length ||
+    typeof expected?.size === "number"
+  );
   if (pending?.length) {
     return (
       <PendingChecks
         defaultOpen={defaultOpen}
-        groups={buildStagingGroups(pending, expected, hasExpected)}
+        groups={buildStagingGroups(pending, expected, fileName, hasExpected)}
         label={label}
         onToggle={onToggle}
         open={open}
@@ -434,7 +460,7 @@ const SourceInfoList = ({
     );
   }
   const hasBytes = typeof bytes === "number" && Number.isFinite(bytes);
-  if (!(hasBytes || checksums || lead || progress || trim?.detected)) return null;
+  if (!(hasBytes || checksums || hasExpected || lead || progress || trim?.detected)) return null;
   const byteValue = hasBytes ? String(Math.floor(bytes as number)) : "";
   // When transform variants (headerless, auto-trimmed…) are present - or the
   // bundle contributes an "Expected" group - the base checksums become one of
@@ -457,8 +483,11 @@ const SourceInfoList = ({
         })),
       ].find((set) => matchesExpected(expected as SourceInfoExpectedChecks, set))
     : undefined;
+  const expectedName = expected?.name?.trim() || "";
+  const expectedNameMismatch = !!expectedName && expectedNameMark(expectedName, fileName) === "bad";
   const expectedMismatch =
-    hasExpected && !expectedMatch && hasExpectedMismatch(expected as SourceInfoExpectedChecks, checksums, byteValue);
+    expectedNameMismatch ||
+    (hasExpected && !expectedMatch && hasExpectedMismatch(expected as SourceInfoExpectedChecks, checksums, byteValue));
   // BYTES rides directly after CRC32 - the two short rows pair onto one grid
   // row in wide drawers, so they stay adjacent in the DOM.
   const baseRows = (
@@ -481,7 +510,11 @@ const SourceInfoList = ({
     >
       {expectedMatch ? (
         <>
-          <MatchedExpectedGroup expected={expected as SourceInfoExpectedChecks} matched={expectedMatch} />
+          <MatchedExpectedGroup
+            expected={expected as SourceInfoExpectedChecks}
+            fileName={fileName}
+            matched={expectedMatch}
+          />
           <CollapsedVariantGroups
             baseLabel={expectedMatch.id === "base" ? undefined : baseGroupLabel}
             baseRows={expectedMatch.id === "base" ? undefined : baseRows}
@@ -500,7 +533,13 @@ const SourceInfoList = ({
             baseRows
           )}
           {hasExpected ? (
-            <ExpectedChecksGroup bytes={bytes} checksums={checksums} expected={expected} mismatch={expectedMismatch} />
+            <ExpectedChecksGroup
+              bytes={bytes}
+              checksums={checksums}
+              expected={expected}
+              fileName={fileName}
+              mismatch={expectedMismatch}
+            />
           ) : null}
           <VariantGroups bytes={bytes} variants={checksumVariants} />
         </>

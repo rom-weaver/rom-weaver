@@ -14,7 +14,7 @@ same result you tested.
 - [Turn on bundle output and download it](#turn-on-bundle-output-and-download-it)
 - [Test the finished download](#test-the-finished-download)
 - [Publish a useful release](#publish-a-useful-release)
-- [Open a hosted bundle in Weave](#open-a-hosted-bundle-in-weave)
+- [Open a hosted bundle in Apply](#open-a-hosted-bundle-in-apply)
 
 <!-- END doctoc -->
 
@@ -107,15 +107,18 @@ supported, especially when a later patch depends on an earlier one.
 
 ## Turn on bundle output and download it
 
-In **0x04 Weave**:
+In **0x04 Apply**:
 
 1. Set the output filename and format users should receive after patching.
 2. Open **Options**.
 3. Find **Bundle**. It starts at **Hide bundle creation**. Turn bundle output
    on by choosing **Bundle + patches (.zip)** for a normal public release.
-4. Choose **Create ZIP Bundle**.
-5. Wait while rom-weaver calculates checksums and checks the recipe.
-6. When the button changes to **Download ZIP Bundle**, choose it and save the
+4. Confirm or edit **Expected ROM name**. A different supplied filename warns
+   without blocking the weave; checksum and size requirements stay strict.
+   Clear the field to omit the name check.
+5. Choose **Create ZIP Bundle**.
+6. Wait while rom-weaver calculates checksums and checks the recipe.
+7. When the button changes to **Download ZIP Bundle**, choose it and save the
    archive.
 
 <figure class="docs-screenshot">
@@ -123,19 +126,19 @@ In **0x04 Weave**:
     <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-light.avif" width="1170" height="1368">
     <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-light.avif" width="2242" height="796">
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-light.webp" width="1170" height="1368">
-    <img src="/docs/screenshots/bundle-output-desktop-light.webp" width="2242" height="796" alt="Cropped Weave output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the light theme">
+    <img src="/docs/screenshots/bundle-output-desktop-light.webp" width="2242" height="796" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
     <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-dark.avif" width="1170" height="1368">
     <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-dark.avif" width="2242" height="796">
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-dark.webp" width="1170" height="1368">
-    <img src="/docs/screenshots/bundle-output-desktop-dark.webp" width="2242" height="796" alt="Cropped Weave output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the dark theme">
+    <img src="/docs/screenshots/bundle-output-desktop-dark.webp" width="2242" height="796" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the dark theme">
   </picture>
   <figcaption>The bundle setting lives inside Output Options. The focused capture keeps the selector and action readable.</figcaption>
 </figure>
 
 Bundle creation does not apply the patches. It packages the recipe you have
-staged. **WEAVE & DOWNLOAD** remains available separately when you also want
+staged. **APPLY & DOWNLOAD** remains available separately when you also want
 to build the patched output.
 
 Your ROM and patches are read locally. A patch-only bundle carries the ROM's
@@ -150,7 +153,7 @@ Test the archive you will publish, not only the loose files used to make it:
 3. For a patch-only bundle, add a fresh copy of the documented Original.
 4. Confirm the displayed patch order, names, required switches, and optional
    switches match the release.
-5. Run **WEAVE & DOWNLOAD**.
+5. Run **APPLY & DOWNLOAD**.
 6. Compare the result checksum with your intended Modified file.
 7. Launch the result in the emulator or hardware you support.
 8. Repeat for every optional combination you promise works.
@@ -184,7 +187,7 @@ For an update, rebuild the recipe from the same clean Original and the new
 patch files. Update the patch details and test the new archive from a fresh
 page.
 
-## Open a hosted bundle in Weave
+## Open a hosted bundle in Apply
 
 You can give users a link that preloads a public bundle:
 

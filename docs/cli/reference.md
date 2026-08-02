@@ -66,10 +66,10 @@ xz -dc game.iso.xz | rom-weaver probe --input - --json
 | Command | Purpose |
 | --- | --- |
 | `probe` | Identify a file: its format, its platform, and any header it carries. |
-| `extract` | Unpack an archive or disc image. |
+| `extract` | Unpack an archive or single-payload compressed format. |
 | `checksum` | Hash a file, a byte range, or a ROM inside an archive. |
 | `ingest` | Sort a file into ROMs and patches, unpacking and hashing as needed. |
-| `compress` | Pack files into an archive or a compressed disc image. |
+| `compress` | Pack files into an archive, disc image, or ROM-specific compressed format. |
 | `trim` | Cut the padding off a ROM, or put it back. |
 | `patch apply` | Apply one or more patches to a ROM, in order. |
 | `patch create` | Build a patch from an original ROM and a changed one. |
@@ -111,7 +111,9 @@ for instance, is an error rather than a synonym for `deflate`.
 Every command accepts these global flags, listed under `Global options` in its
 help:
 
-- `--json` prints one JSON object per line instead of human-readable output.
+- `--json` prints operation reports as one JSON object per line instead of
+  human-readable output. Asset generators such as `bundle schema` and
+  `completions` keep their native schema or script output.
 - `--progress` and `--no-progress` override the automatic choice, which is to
   show progress on a terminal and hide it when output is piped.
 - `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs
@@ -126,9 +128,9 @@ help:
   default. `--color` keeps color even when piped, though the live progress bar
   stays terminal-only.
 
-Most commands also accept `-j`/`--threads auto|N`. `auto` uses every core; a
-number caps it, and a format may still use fewer when its implementation has a
-lower ceiling.
+Most commands also accept `-j`/`--threads auto|N`. `auto` uses the available
+core count as its ceiling; a number sets a lower ceiling, and format or memory
+limits may still use fewer.
 
 List-valued flags (`--algo`, `--checksum`, `--filter`, `--codec`, `--expect-in`,
 `--expect-out`, `--assume-in`, and the compression codec flags) can be repeated
@@ -136,7 +138,7 @@ or comma-separated: `--algo crc32,sha1` and `--algo crc32 --algo sha1` do the
 same thing.
 
 rom-weaver only asks interactive questions when stdin and stderr are both
-terminals and `--json` is off. Otherwise it decides on its own or fails.
+terminals and `--json` is off. Otherwise, it decides on its own or fails.
 
 ## Reaching inside archives
 
@@ -170,8 +172,8 @@ platform (`--probe`).
 ## Supported formats
 
 
-The full support matrix - every patch format, container and compressed disc
-image, create-time codec, checksum algorithm, trim target, and detected
+The full support matrix - every patch format, container and compressed ROM or
+disc image, create-time codec, checksum algorithm, trim target, and detected
 header - lives in [Supported formats](../reference/formats.md). For picking a
 format rather than looking one up, see the
 [archive formats](../usage/formats.md) and
@@ -180,9 +182,11 @@ format rather than looking one up, see the
 ## JSON output
 
 
-Pass `--json` to emit one JSON object per line, including progress, status,
-warnings, selected inputs, and emitted-file metadata where relevant. JSON mode
-disables interactive selection, making it the stable interface for scripts:
+Pass `--json` to make operation commands emit one JSON object per line,
+including progress, status, warnings, selected inputs, and emitted-file
+metadata where relevant. JSON mode disables interactive selection, making it
+the stable interface for scripts. Commands that generate an asset, such as
+`bundle schema` and `completions`, still write that asset in its native format.
 
 ```bash
 rom-weaver --json probe --input game.sfc | jq

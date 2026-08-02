@@ -56,6 +56,8 @@ type StagedInputInfo = {
     matched: { kind: "base"; variant: string } | { kind: "patch_output"; index: number } | { kind: "none" };
     expectedPredecessor?: number;
   };
+  /** User input-basis pin (`undefined` = Auto). */
+  basisChoice?: "base" | "previous";
   sourceChecksumState?: string;
   format?: string;
   validateInputChecksum?: string;
@@ -142,6 +144,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
     patches: BinarySource[];
     /** Index-aligned per-patch run options (header/PPF-undo/checks) replayed onto re-staged runs. */
     patchOptions?: Array<{
+      basis?: "base" | "previous";
       header?: "keep" | "strip";
       n64ByteOrder?: "keep" | "big-endian" | "little-endian" | "byte-swapped";
       ppfUndo?: boolean;
@@ -204,6 +207,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
     input: ApplyWorkflowStageSnapshot,
     patchIndex: number,
     option: {
+      basis?: "base" | "previous";
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
       header?: "keep" | "strip";

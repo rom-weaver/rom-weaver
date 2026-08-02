@@ -20,8 +20,9 @@ separates them and which one to publish in.
 
 ## Applying a patch? Use the format you received
 
-Use whatever format you were handed. rom-weaver applies 21 families of patch,
-so it is very unlikely you need to do anything about the format at all.
+Use whatever format you were handed. rom-weaver applies 21 patch families; the
+[full format table](../reference/formats.md#patch-formats) shows whether yours
+is supported before you consider converting it.
 
 Converting a patch to another format does not fix a checksum error either. The
 format is not the problem; the starting file is. Go to
@@ -40,9 +41,9 @@ the wrong file, the patcher stops and says so. Some store nothing, so the
 patcher happily applies your changes to the wrong game and hands back a broken
 file that looks fine until it is not.
 
-That difference decides most of your choice. Size and speed barely matter at
-these file sizes. Whether your users can find out they made a mistake matters
-a lot.
+That difference decides most of your choice. For cartridge-sized files, size
+and speed usually matter less than whether users can detect a mistake. Disc-sized
+files make patch size and tool support more important.
 
 No format records everything, though. None of them know which region you meant
 or which revision, so write the region, the revision, the header state, the
@@ -54,30 +55,30 @@ BPS stores a checksum of the original, of the finished file, and of the patch
 itself. A patcher can therefore reject the wrong starting file, and confirm
 the result came out right.
 
-That makes it a strong default for cartridge games, as long as your audience
-uses a patcher from this century. rom-weaver applies and creates BPS. In the
-webapp, choose BPS in the **0x04 Patch** format selector. For a scripted
-release, use the separate [CLI patch creation guide](../cli/create.md).
+That makes it a strong default for cartridge games when your audience has a
+BPS-compatible patcher. rom-weaver applies and creates BPS. In the webapp,
+choose BPS in the **0x04 Output** format selector. For a scripted release, use
+the separate [CLI patch creation guide](../cli/create.md).
 
 ## IPS and IPS32
 
-IPS is ancient and universally supported. It is a plain list of "at this
-offset, write these bytes". Nothing else. In particular, no checksum of the
-original, so an IPS patcher cannot tell a correct starting file from a wrong
-one.
+IPS is one of the oldest and most widely supported patch formats. It is a plain
+list of "at this offset, write these bytes." Nothing else. In particular, it
+stores no checksum of the original, so an IPS patcher cannot tell a correct
+starting file from a wrong one.
 
 Pick IPS when reaching old tools matters more than catching user error, and
 always publish the expected checksums beside the download.
 
-IPS also has a hard size limit built into how it stores offsets: it cannot
-address files at or beyond 16 MiB. IPS32 widens the offsets so larger files
-work. rom-weaver applies and creates both.
+IPS also has a hard limit built into its 24-bit offsets: it cannot encode a
+change that starts at or beyond 16 MiB. Create stops offering IPS when either
+input reaches that boundary. IPS32 widens the offsets so larger files work.
+rom-weaver applies and creates both.
 
 ## UPS
 
 UPS stores checksums of the input and the output, so it can catch a wrong
-starting file the way BPS does. It is well established in ROM patching and
-some communities standardized on it years ago.
+starting file the way BPS does.
 
 Pick UPS when the tools or the community you are publishing into expect it.
 rom-weaver applies and creates it.
@@ -97,9 +98,9 @@ to run. rom-weaver applies and creates xdelta and VCDIFF.
 
 ## PPF
 
-PPF has been the disc patching format since the CD era, and plenty of projects
-still ship it. Different PPF versions can do different things, so your release
-notes carry more weight than usual here.
+PPF was designed for disc patching and remains in use. Different PPF versions
+can do different things, so your release notes carry more weight than usual
+here.
 
 Discs need more care than cartridges in general. A file ending in `.bin` or
 `.iso` tells you almost nothing: track layout, image format, and which dump it

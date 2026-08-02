@@ -12,7 +12,6 @@ import {
 const source = (name: string, size = 16): BinarySource => ({ name, size }) as unknown as BinarySource;
 
 const makeRow = (overrides: Partial<RomInputRowState> = {}): RomInputRowState => ({
-  disabled: false,
   groupId: "",
   id: "input-1",
   info: {
@@ -26,23 +25,18 @@ const makeRow = (overrides: Partial<RomInputRowState> = {}): RomInputRowState =>
     sha1: "",
     validationPhase: "idle",
   },
-  invalid: false,
   kind: "",
   loading: false,
   order: 0,
   progress: null,
-  valid: true,
   ...overrides,
 });
 
 const uiInput = (overrides: Partial<Parameters<typeof buildUiViewState>[0]> = {}) =>
   buildUiViewState({
-    activePatches: [],
-    activeSettings: {},
     busy: false,
     checksumOverrideChecked: false,
     disabled: false,
-    effectiveInputs: [],
     effectiveOutputNoticeMessage: "",
     hasStrictInputChecksumMismatch: false,
     inputNoticeMessage: "",
@@ -52,9 +46,7 @@ const uiInput = (overrides: Partial<Parameters<typeof buildUiViewState>[0]> = {}
     patchProgress: null,
     patchProgressByKey: {},
     patchStaging: false,
-    primaryRomInput: null,
     romInputs: [],
-    sectionTimings: { checksum: "", input: "", output: "", patch: "" },
     ...overrides,
   });
 
@@ -67,34 +59,15 @@ describe("buildNoticeViewState", () => {
 });
 
 describe("buildUiViewState", () => {
-  it("marks rom/patch inputs valid based on presence", () => {
-    const state = uiInput({ activePatches: [source("p.ips")], effectiveInputs: [source("a.bin")] });
-    expect(state.romInput.valid).toBe(true);
-    expect(state.patchInput.valid).toBe(true);
-  });
-
-  it("falls back to joined input names when no primary row is staged", () => {
-    const state = uiInput({ effectiveInputs: [source("a.bin"), source("b.bin")] });
-    expect(state.romInfo.fileName).toBe("a.bin, b.bin");
-  });
-
-  it("prefers the staged primary row file name and checksums", () => {
-    const primary = makeRow({ info: { ...makeRow().info, crc32: "DEADBEEF", fileName: "rom.sfc" } });
-    const state = uiInput({ effectiveInputs: [source("a.bin")], primaryRomInput: primary, romInputs: [primary] });
-    expect(state.romInfo.fileName).toBe("rom.sfc");
-    expect(state.romInfo.crc32).toBe("DEADBEEF");
-  });
-
   it("shows the checksum override only on a strict mismatch", () => {
     expect(uiInput().checksumOverride.visible).toBe(false);
     expect(uiInput({ hasStrictInputChecksumMismatch: true }).checksumOverride.visible).toBe(true);
   });
 
-  it("reports input loading while staging or while a row reports progress", () => {
-    expect(uiInput({ inputStaging: true }).romInput.loading).toBe(true);
-    const busyRow = makeRow({ progress: { percent: 5 } });
-    expect(uiInput({ romInputs: [busyRow] }).romInput.loading).toBe(true);
-    expect(uiInput().romInput.loading).toBe(false);
+  it("reports patch loading while staging or progress is active", () => {
+    expect(uiInput({ patchStaging: true }).patchInput.loading).toBe(true);
+    expect(uiInput({ patchProgress: { percent: 5 } }).patchInput.loading).toBe(true);
+    expect(uiInput().patchInput.loading).toBe(false);
   });
 
   it("surfaces section notices when their messages are set", () => {

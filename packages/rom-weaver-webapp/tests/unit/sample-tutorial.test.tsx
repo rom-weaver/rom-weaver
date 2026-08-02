@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SampleTutorial,
@@ -20,7 +20,7 @@ const STEPS: readonly SampleTutorialStep[] = [
   { body: "Review the second section.", openDrawers: true, target: "#tutorial-second", title: "Second section" },
 ];
 
-const TutorialSection = ({ id, label }: { id: string; label: string }) => {
+const TutorialSection = ({ children, id, label }: { children?: ReactNode; id: string; label: string }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [open, setOpen] = useState(false);
   return (
@@ -38,6 +38,7 @@ const TutorialSection = ({ id, label }: { id: string; label: string }) => {
       >
         Actions
       </button>
+      {children}
     </section>
   );
 };
@@ -139,7 +140,7 @@ it("removes the guide query when the tutorial ends", () => {
     </div>,
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "End guide" }));
+  fireEvent.click(screen.getByRole("button", { name: "Exit tutorial" }));
   expect(window.location.search).toBe("");
   expect(onClose).toHaveBeenCalledOnce();
 });
@@ -177,6 +178,11 @@ describe("sample tutorial", () => {
     const actions = screen.getByRole("list", { name: "Available actions" });
     expect(actions.textContent).toContain("Checks");
     expect(actions.querySelector("svg")).toBeTruthy();
+    expect(screen.getByText("The top-right X exits; the final action button also ends the tutorial.")).toBeTruthy();
+    const back = screen.getByRole("button", { name: "Back" }) as HTMLButtonElement;
+    expect(back.disabled).toBe(false);
+    expect(back.getAttribute("aria-disabled")).toBe("true");
+    expect(document.querySelector("[aria-live]")?.textContent).not.toContain("top-right X");
     fireEvent.click(first);
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -185,7 +191,17 @@ describe("sample tutorial", () => {
     await waitFor(() => expect(second.classList.contains("sample-tutorial-target")).toBe(true));
     expect(screen.getByRole("button", { name: "Second drawer" }).getAttribute("aria-expanded")).toBe("true");
     expect(first.classList.contains("sample-tutorial-target")).toBe(false);
+    expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(false);
 
+    back.focus();
+    fireEvent.click(back);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy());
+    expect(document.activeElement).toBe(back);
+    expect(back.disabled).toBe(false);
+    expect(back.getAttribute("aria-disabled")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onClose).toHaveBeenCalledOnce();
   });
@@ -325,6 +341,7 @@ describe("sample tutorial", () => {
     const ctaSteps: readonly SampleTutorialStep[] = [
       { body: "Press it.", cta: ".btn.run", target: "#tutorial-cta", title: "Finish" },
     ];
+    const onClose = vi.fn();
     const workbench = (guided: boolean) => (
       <div className="rw-app">
         <section id="tutorial-cta">
@@ -332,7 +349,7 @@ describe("sample tutorial", () => {
             Apply
           </button>
         </section>
-        {guided ? <SampleTutorial loadingBody="Loading." onClose={vi.fn()} ready steps={ctaSteps} /> : null}
+        {guided ? <SampleTutorial loadingBody="Loading." onClose={onClose} ready steps={ctaSteps} /> : null}
       </div>
     );
     const { rerender } = render(workbench(false));
@@ -340,8 +357,42 @@ describe("sample tutorial", () => {
 
     const button = screen.getByRole("button", { name: "Apply" });
     await waitFor(() => expect(button.dataset.guideCta).toBe("true"));
+    fireEvent.click(button);
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     rerender(workbench(false));
     expect(button.dataset.guideCta).toBeUndefined();
+  });
+
+  it("leaves an opened drawer open when the final action ends the guide", async () => {
+    const ctaSteps: readonly SampleTutorialStep[] = [
+      {
+        body: "Press it.",
+        cta: ".btn.run",
+        openDrawers: true,
+        target: "#tutorial-cta",
+        title: "Finish",
+      },
+    ];
+    const onClose = vi.fn();
+    const workbench = (guided: boolean) => (
+      <div className="rw-app">
+        <TutorialSection id="tutorial-cta" label="Output options">
+          <button className="btn run" type="button">
+            Apply
+          </button>
+        </TutorialSection>
+        {guided ? <SampleTutorial loadingBody="Loading." onClose={onClose} ready steps={ctaSteps} /> : null}
+      </div>
+    );
+    const { rerender } = render(workbench(false));
+    rerender(workbench(true));
+
+    const drawer = screen.getByRole("button", { name: "Output options" });
+    await waitFor(() => expect(drawer.getAttribute("aria-expanded")).toBe("true"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(onClose).toHaveBeenCalledOnce();
+    rerender(workbench(false));
+    expect(drawer.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("re-closes the drawers it opened when the guide ends", async () => {

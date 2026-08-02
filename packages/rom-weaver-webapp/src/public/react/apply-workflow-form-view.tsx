@@ -37,16 +37,13 @@ import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } f
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { createCompressionTypeOptions } from "./output-view-model.ts";
 import type {
-  DialogController,
   NoticeController,
   PatcherOutputController,
   PatcherStackController,
   PatcherUiController,
   StartupState,
 } from "./patcher-form.ts";
-import { inertUiController } from "./patcher-form-session.ts";
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
-import { ArchiveDialog as SharedArchiveDialog } from "./patcher-react-shared.tsx";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
@@ -275,7 +272,7 @@ const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [["package", "Create ZIP Bundle"]],
-    body: "Press Create ZIP Bundle. After rom-weaver checks the recipe, the same button becomes Download ZIP Bundle.",
+    body: "Press Create ZIP Bundle to finish the tutorial. After rom-weaver checks the recipe, the same control becomes Download ZIP Bundle.",
     cta: "#rom-weaver-button-export-bundle",
     openDrawers: true,
     placement: "top",
@@ -396,9 +393,11 @@ type BundleExportState = {
   format: string;
   progress: ProgressViewModel | null;
   ready: boolean;
+  romName: string;
   runExport: () => Promise<void>;
   setBundleRom: (value: boolean) => void;
   setFormat: (value: string) => void;
+  setRomName: (value: string) => void;
 };
 
 const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
@@ -578,6 +577,8 @@ type RomRowDeps = {
   /** The bundle's expected base-ROM checks - an "Expected" group with match
    * marks inside the staged ROM's Checks drawer (single-ROM sessions only). */
   expectedChecks?: ParsedBundleChecks;
+  /** Advisory expected logical ROM basename from bundle `rom.name`. */
+  expectedName?: string;
 };
 
 /**
@@ -690,13 +691,19 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         ...(variant.id === "raw" ? {} : { label: variant.label }),
       }))
     : [{ id: "raw", rows: baseChecksumRows }];
+  const expected =
+    deps.expectedChecks || deps.expectedName
+      ? {
+          ...deps.expectedChecks,
+          ...(deps.expectedName ? { name: deps.expectedName } : {}),
+        }
+      : undefined;
   return {
     card: {
       extract: {
         fileEntries,
         fileName: romInput.info.fileName,
         fileSize: romBytes,
-        legacyFileClassName: "rom-weaver-input-stack-file",
         parentCompressions: romInput.archivePathEntries,
         timing: TIMING_LABEL(romInput.decompressionTimeMs),
       },
@@ -723,7 +730,8 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
           checksumVariants: staging ? undefined : romInput.info.checksumVariants,
           // Also while staging: the bundle already declares these, so they reserve their own group
           // (and read) before the hashes land instead of appearing with them.
-          ...(deps.expectedChecks ? { expected: deps.expectedChecks } : {}),
+          ...(expected ? { expected } : {}),
+          fileName: romInput.info.fileName,
           lead: !staging && romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
           onToggle: () => ui.toggleRomInputChecksums?.(romInput.id),
           open: staging ? true : romInput.info.checksumsExpanded,
@@ -864,7 +872,6 @@ const renderDiscGroup = (
         fileName: discName,
         fileEntries,
         fileSize: totalFileBytes || totalBytes || undefined,
-        legacyFileClassName: "rom-weaver-input-stack-file",
         parentCompressions: groupRows.find((row) => row.archivePathEntries?.length)?.archivePathEntries,
       },
       meta:
@@ -1047,21 +1054,6 @@ const ApplyOutputAction = ({
         <span>{uiState.checksumOverride.label}</span>
       </label>
     ) : null}
-    {uiState.outputChecksumWarning.visible ? (
-      <div id="rom-weaver-row-output-checksum-warning">
-        <Notice level="warn">{uiState.outputChecksumWarning.message}</Notice>
-        <label className="checkrow warn">
-          <input
-            checked={uiState.outputChecksumWarning.checked}
-            disabled={uiState.outputChecksumWarning.disabled}
-            id="rom-weaver-checkbox-output-checksum-override"
-            onChange={(event) => uiController.setOutputChecksumOverride?.(event.currentTarget.checked)}
-            type="checkbox"
-          />
-          <span>{uiState.outputChecksumWarning.label}</span>
-        </label>
-      </div>
-    ) : null}
     <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
       <p aria-live="polite" className="patch-off-note">
         <TriangleAlert aria-hidden="true" />
@@ -1198,6 +1190,21 @@ const BundleOutputFields = ({
           <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
         </select>
       </OutputField>
+      {bundleTools?.exportVisible && !bundleExport.bundleRom ? (
+        <OutputField label="Expected ROM name">
+          <input
+            aria-label="Expected ROM name"
+            autoComplete="off"
+            className="input"
+            disabled={bundleExport.busy}
+            id="rom-weaver-bundle-rom-name"
+            onChange={(event) => bundleExport.setRomName(event.currentTarget.value)}
+            spellCheck={false}
+            type="text"
+            value={bundleExport.romName}
+          />
+        </OutputField>
+      ) : null}
     </>
   );
 };
@@ -1249,7 +1256,6 @@ function ApplyWorkflowFormView({
     patchStack: PatcherStackController;
     ui: PatcherUiController;
     notice?: NoticeController;
-    dialog?: DialogController;
   };
   /** Bundle export controls live directly in the Output options drawer. */
   bundleExport?: BundleExportState;
@@ -1270,7 +1276,7 @@ function ApplyWorkflowFormView({
   pendingDrops?: PendingDrop[];
   startup?: StartupState;
 }) {
-  const uiController = controllers.ui || inertUiController;
+  const uiController = controllers.ui;
   const uiState = useSyncExternalStore(uiController.subscribe, uiController.getState, uiController.getState);
   const outputState = useSyncExternalStore(
     controllers.output.subscribe,
@@ -1350,6 +1356,7 @@ function ApplyWorkflowFormView({
     ui: uiController,
     verificationStates: romVerificationStates,
     ...(singleRom && expectedRomChecks ? { expectedChecks: expectedRomChecks } : {}),
+    ...(singleRom && bundleRomExpectation?.name ? { expectedName: bundleRomExpectation.name } : {}),
   };
   const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
@@ -1607,11 +1614,6 @@ function ApplyWorkflowFormView({
                   onDismiss={dismissSectionNotice("inputNotice")}
                   state={uiState.inputNotice}
                 />
-                <SectionNotice
-                  id="rom-weaver-checksum-notice-message"
-                  onDismiss={dismissSectionNotice("checksumNotice")}
-                  state={uiState.checksumNotice}
-                />
               </>
             }
             num="0x02"
@@ -1626,7 +1628,6 @@ function ApplyWorkflowFormView({
             disabledFlags={disabledPatchFlags}
             emptyState={patchesNeedsInput}
             fault={applyFailed}
-            internalDescription={uiState.patchDetails.description}
             onBundleMetaChange={(index, updates) => {
               const id = patchIds[index];
               if (id) onBundleMetaChange?.(id, updates);
@@ -1634,22 +1635,18 @@ function ApplyWorkflowFormView({
             onTogglePatch={patchEnablement?.onToggle}
             overrideAvailable={uiState.checksumOverride.visible}
             patches={patches}
-            patchInput={uiState.patchInput}
-            patchNotice={uiState.patchNotice}
             patchStack={controllers.patchStack}
             romActualsById={romActualsById}
-            ui={uiController}
+            notice={
+              <SectionNotice
+                id="rom-weaver-patch-notice-message"
+                onDismiss={dismissSectionNotice("patchNotice")}
+                state={uiState.patchNotice}
+              />
+            }
             woven={wovenSteps}
           />
 
-          {uiState.patchDetails.requirementsValue ? (
-            <div className="descblk mono" id="rom-weaver-row-patch-requirements">
-              <div className="k">{uiState.patchDetails.requirementsLabel}</div>
-              <div className="v" id="rom-weaver-patch-requirements-value">
-                {uiState.patchDetails.requirementsValue}
-              </div>
-            </div>
-          ) : null}
           <WorkflowOutputStep
             action={renderOutputAction}
             compress={buildOutputCompressionPanel({
@@ -1713,7 +1710,6 @@ function ApplyWorkflowFormView({
           steps={sampleTutorial === "bundle" ? BUNDLE_SAMPLE_TUTORIAL_STEPS : APPLY_SAMPLE_TUTORIAL_STEPS}
         />
       ) : null}
-      <SharedArchiveDialog controller={controllers.dialog} />
     </section>
   );
 }

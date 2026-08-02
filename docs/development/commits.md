@@ -22,11 +22,12 @@ the one that has to parse.
 
 ```text
 type(scope): description
+type: description
 ```
 
 - `type` is required and must come from the list below.
-- `scope` is optional in Conventional Commits but **required by this project's
-  commitlint config**, so include one.
+- `scope` is optional. Include the shortest useful scope when the affected area
+  is clear; an unscoped title is also valid.
 - `description` is lower case, imperative, and no trailing full stop.
 - The whole header is capped at 150 characters - raised from the usual 100 so
   grouped Dependabot titles fit.
@@ -88,13 +89,13 @@ Before 1.0 a breaking change bumps the **minor** version, because
 - `Fixes #123` closes the issue when the pull request merges.
 
 The [release guide](../../.github/RELEASING.md) covers the rest of the release
-flow, which is manually dispatched rather than triggered by merging.
+flow. Opening or refreshing the release pull request is manually dispatched;
+merging that pull request starts the publish fan-out.
 
 ## Checking a title before you push
 
-`PR Title Lint` comments on the pull request with the exact rule that
-failed and the list of valid types, and deletes that comment once you rename the
-pull request. To check a message locally:
+`PR Title Lint` reports the failing commitlint rule in the Title Check log. To
+check a message locally:
 
 ```bash
 echo "fix(webapp): handle empty patch archives" | npx commitlint --config .config/commitlint.config.mjs

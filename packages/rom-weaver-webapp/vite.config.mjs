@@ -9,8 +9,8 @@ import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
-import { criticalAssetLinkHeaders } from "./scripts/critical-asset-hints.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
+import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
@@ -24,36 +24,8 @@ const repoRoot = path.resolve(rootDir, "../..");
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
-const docsScreenshotCaptures = [
-  "apply-output-desktop-dark",
-  "apply-output-desktop-light",
-  "apply-output-mobile-dark",
-  "apply-output-mobile-light",
-  "apply-patches-desktop-dark",
-  "apply-patches-desktop-light",
-  "apply-patches-mobile-dark",
-  "apply-patches-mobile-light",
-  "bundle-output-desktop-dark",
-  "bundle-output-desktop-light",
-  "bundle-output-mobile-dark",
-  "bundle-output-mobile-light",
-  "create-inputs-desktop-dark",
-  "create-inputs-desktop-light",
-  "create-inputs-mobile-dark",
-  "create-inputs-mobile-light",
-  "create-output-desktop-dark",
-  "create-output-desktop-light",
-  "create-output-mobile-dark",
-  "create-output-mobile-light",
-];
-const docsScreenshotNames = [
-  ...docsScreenshotCaptures.flatMap((name) => [`${name}.avif`, `${name}.webp`]),
-  "first-sample-hello-world.webp",
-  "first-sample-modified-world.webp",
-  "first-sample-modified-rom.webp",
-];
 const docsScreenshotSources = Object.fromEntries(
-  docsScreenshotNames.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),
+  DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),
 );
 
 // A manifest's icons are read at install time, so an installed PWA's icon can
@@ -467,14 +439,6 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
   };
 };
 
-// See scripts/critical-asset-hints.mjs for why these are emitted and why both use
-// `rel=preload`. They ride in the `/*` block rather than an enumerated route list: every
-// document in the build - the prerendered workflow routes, 404.html, every docs slug, and
-// any route added later - loads the same two assets, and a list would silently stop
-// covering new ones. The hint also lands on subresource responses, which ignore it.
-const readCriticalAssetLinks = (distDir) =>
-  criticalAssetLinkHeaders(fs.readFileSync(path.join(distDir, "index.html"), "utf8"));
-
 // Cloudflare Pages serves dist/_headers on every response, so deployed pages are cross-origin
 // isolated from the first network load instead of round-tripping through the service worker's
 // COEP-injection reload. Hosts without header control still use the service-worker fallback.
@@ -495,11 +459,8 @@ const writeCloudflareHeadersAsset = (channel) => {
       };
       const distDir = path.resolve(rootDir, outDir);
       const outputPath = path.join(distDir, "_headers");
-      const headerLines = [
-        ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
-        ...readCriticalAssetLinks(distDir),
-      ]
-        .map((line) => `  ${line}`)
+      const headerLines = Object.entries(headers)
+        .map(([name, value]) => `  ${name}: ${value}`)
         .join("\n");
       // The attribution files are named `LICENSE-APACHE`, `COPYING`, `NOTICE`
       // and so on. With no extension Cloudflare types them as a binary
@@ -509,7 +470,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {

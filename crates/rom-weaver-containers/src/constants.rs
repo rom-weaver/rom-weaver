@@ -1,6 +1,11 @@
 pub(crate) const LIBARCHIVE_CREATE_IO_BUFFER_BYTES: usize = 128 * 1024;
 pub(crate) const LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES: usize = 1024 * 1024;
 pub(crate) const LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES: usize = 8 * 1024 * 1024;
+/// Read window for the parallel extract path, where every in-flight chunk is a live buffer: up to
+/// one per worker plus the bounded channel's backlog. 8 MiB there is past the point of diminishing
+/// returns for a decode loop - measured user CPU is flat from 8 MiB down to 256 KiB on a solid 7z -
+/// while costing 8x the resident bytes, which is what a wasm linear memory never gives back.
+pub(crate) const LIBARCHIVE_PARALLEL_EXTRACT_CHUNK_BYTES: usize = 1024 * 1024;
 pub(crate) const PARALLEL_COORDINATOR_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
 
 const COPY_PROGRESS_DEFAULT_BUFFER_BYTES: usize = 64 * 1024;

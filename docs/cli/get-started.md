@@ -32,7 +32,7 @@ The original ROM displays `HELLO WORLD`; the first IPS patch changes `HELLO`
 to `MODIFIED`, and the second changes `WORLD` to `ROM`. The final ROM displays
 `MODIFIED ROM`. The final SHA-256 should be
 `e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`.
-Open the result in any NES emulator to run it.
+Open the result in an NES emulator to run it.
 
 | Original ROM | After the first patch | After both patches |
 | :---: | :---: | :---: |
@@ -109,4 +109,5 @@ identical bytes.
   release.
 - [Bundles from the CLI](bundles.md): package patches into a repeatable,
   verifiable recipe.
-- [CLI reference](reference.md): every command, flag, and output format.
+- [CLI reference](reference.md): the command map, global behavior, and output
+  formats.

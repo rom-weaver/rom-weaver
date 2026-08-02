@@ -127,12 +127,6 @@ const getProgressEventVisualPercent = (event?: WorkflowValue | object | null): n
   return clampProgressPercent(getNumericValue(source.percent));
 };
 
-const getRawProgressLabel = (progress: WorkflowValue | object | null, fallbackLabel: string): string => {
-  if (isRecord(progress) && typeof progress.label === "string" && progress.label) return progress.label;
-  if (isRecord(progress) && typeof progress.message === "string" && progress.message) return progress.message;
-  return fallbackLabel;
-};
-
 const formatProgressMessage = ({
   label,
   percent,
@@ -437,10 +431,8 @@ export {
   formatPercentFixed,
   getProgressEventPercent,
   getProgressEventThreadCount,
-  getRawProgressLabel,
   isCompressionWriteTelemetryProgress,
   normalizeProgressDisplayPercent,
-  normalizeProgressPercent,
 };
 
 type ProgressViewModel = ReturnType<typeof createProgressViewModel>;

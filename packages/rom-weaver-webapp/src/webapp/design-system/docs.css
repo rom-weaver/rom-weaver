@@ -128,7 +128,7 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   color: var(--chassis);
   scroll-margin-block: 6rem;
 }
-/* Shelves: one per folder under docs/. Browser usage opens first; after that,
+/* Shelves: one per folder under docs/. Browser usage opens by default; after that,
    the reader's choices carry across pages. */
 .rw-app .guide-shelf { padding: 3px 5px; }
 .rw-app .guide-shelf + .guide-shelf { border-top: 1px solid var(--seam-soft); }
@@ -483,7 +483,7 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 }
 
 /* --- hub index ---
-   Browser usage opens first. The longer reference shelves stay one tap away. */
+   Browser usage opens by default. The longer reference shelves stay one tap away. */
 .rw-app .docs-index {
   display: grid;
   gap: var(--sp-s);

@@ -64,8 +64,8 @@ Headers and byte order:
   patch's own source checksum.
 - `--output-header auto|keep|strip` decides whether the finished ROM keeps its
   header. Auto keeps the ones emulators need and drops the ones they do not.
-- `--repair-checksum` recomputes the ROM's internal header checksum afterwards,
-  so the console does not reject it.
+- `--repair-checksum` repairs supported internal checksums and compatibility
+  header fields after patching.
 - `--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped` puts an
   N64 ROM in the interleaving a patch expects. Auto matches the patch's source
   CRC32, and the output is written back in the order the input arrived in.
@@ -110,4 +110,6 @@ reports a verdict per patch, rather than stopping at the first failure.
   [Fix a checksum error](../usage/fix-checksum-errors.md).
 - Record a finished run as a shareable recipe with
   [Bundles from the CLI](bundles.md).
-- Every flag on these commands is in the [CLI reference](reference.md).
+- Run `rom-weaver patch apply --help` or `rom-weaver patch validate --help`
+  for every flag; the [CLI reference](reference.md) covers their shared
+  behavior.

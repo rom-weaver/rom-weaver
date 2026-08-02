@@ -59,6 +59,42 @@ fn sheet_directory(input: &Path) -> &Path {
     }
 }
 
+fn discover_disc_files(input: &Path, kind: DiscSheetKind) -> Result<(Vec<PathBuf>, Vec<DiscFile>)> {
+    let mut sheet_paths = vec![input.to_path_buf()];
+    let mut referenced_names = enumerate_disc_sheet_refs(input)?.referenced_files;
+    // A `.cue` with a sibling `.gdi` is a GD-ROM whose tracks are the union
+    // of both sheets; the CHD create path reads both, so stage both.
+    if kind == DiscSheetKind::Cue
+        && let Some(gdi) = sibling_gdi_path(input)
+    {
+        for name in enumerate_disc_sheet_refs(&gdi)?.referenced_files {
+            if !referenced_names
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&name))
+            {
+                referenced_names.push(name);
+            }
+        }
+        sheet_paths.push(gdi);
+    }
+
+    let sheet_dir = sheet_directory(input);
+    let files = referenced_names
+        .into_iter()
+        .map(|name| {
+            let path = sheet_dir.join(&name);
+            if !path.is_file() {
+                return Err(RomWeaverError::Validation(format!(
+                    "disc sheet `{}` references `{name}`, which was not found next to it",
+                    input.display()
+                )));
+            }
+            Ok(DiscFile { name, path })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok((sheet_paths, files))
+}
+
 impl CliApp {
     pub(super) fn patch_source_crc32_for_auto_target(
         &self,
@@ -96,54 +132,13 @@ impl CliApp {
         };
         trace!(input = %input.display(), ?kind, ?target, "resolving disc patch input");
 
-        let mut sheet_paths = vec![input.to_path_buf()];
-        let mut referenced_names = enumerate_disc_sheet_refs(input)?.referenced_files;
-        // A `.cue` with a sibling `.gdi` is a GD-ROM whose tracks are the union
-        // of both sheets; the CHD create path reads both, so stage both.
-        if kind == DiscSheetKind::Cue
-            && let Some(gdi) = sibling_gdi_path(input)
-        {
-            for name in enumerate_disc_sheet_refs(&gdi)?.referenced_files {
-                if !referenced_names
-                    .iter()
-                    .any(|existing| existing.eq_ignore_ascii_case(&name))
-                {
-                    referenced_names.push(name);
-                }
-            }
-            sheet_paths.push(gdi);
-        }
-
-        let sheet_dir = sheet_directory(input);
-        let mut files = Vec::with_capacity(referenced_names.len());
-        for name in &referenced_names {
-            let path = sheet_dir.join(name);
-            if !path.is_file() {
-                return Err(RomWeaverError::Validation(format!(
-                    "disc sheet `{}` references `{name}`, which was not found next to it",
-                    input.display()
-                )));
-            }
-            files.push(DiscFile {
-                name: name.clone(),
-                path,
-            });
-        }
+        let (sheet_paths, files) = discover_disc_files(input, kind)?;
         trace!(tracks = files.len(), "enumerated disc tracks");
-
         let target_index =
             self.select_disc_target(input, &files, target, patch_source_crc32, context)?;
-        let target_file = files[target_index].path.clone();
-        trace!(target = %target_file.display(), "selected disc patch target track");
-
-        let warnings = self.confirm_disc_grouping(input, sheet_dir, &files)?;
-
-        Ok(Some(DiscContext {
-            sheet_paths,
-            files,
-            target_file,
-            warnings,
-        }))
+        trace!(target = %files[target_index].path.display(), "selected disc patch target track");
+        self.finish_disc_context(input, sheet_paths, files, target_index)
+            .map(Some)
     }
 
     /// Build a disc context for a `.dcp` apply: enumerate the disc's tracks and
@@ -156,49 +151,28 @@ impl CliApp {
         };
         trace!(input = %input.display(), ?kind, "resolving .dcp disc input");
 
-        let mut sheet_paths = vec![input.to_path_buf()];
-        let mut referenced_names = enumerate_disc_sheet_refs(input)?.referenced_files;
-        if kind == DiscSheetKind::Cue
-            && let Some(gdi) = sibling_gdi_path(input)
-        {
-            for name in enumerate_disc_sheet_refs(&gdi)?.referenced_files {
-                if !referenced_names
-                    .iter()
-                    .any(|existing| existing.eq_ignore_ascii_case(&name))
-                {
-                    referenced_names.push(name);
-                }
-            }
-            sheet_paths.push(gdi);
-        }
-
-        let sheet_dir = sheet_directory(input);
-        let mut files = Vec::with_capacity(referenced_names.len());
-        for name in &referenced_names {
-            let path = sheet_dir.join(name);
-            if !path.is_file() {
-                return Err(RomWeaverError::Validation(format!(
-                    "disc sheet `{}` references `{name}`, which was not found next to it",
-                    input.display()
-                )));
-            }
-            files.push(DiscFile {
-                name: name.clone(),
-                path,
-            });
-        }
-
+        let (sheet_paths, files) = discover_disc_files(input, kind)?;
         let target_index = self.select_dcp_data_track(input, &files)?;
-        let target_file = files[target_index].path.clone();
-        trace!(target = %target_file.display(), "selected GD-ROM data track for .dcp rebuild");
-        let warnings = self.confirm_disc_grouping(input, sheet_dir, &files)?;
+        trace!(target = %files[target_index].path.display(), "selected GD-ROM data track for .dcp rebuild");
+        self.finish_disc_context(input, sheet_paths, files, target_index)
+            .map(Some)
+    }
 
-        Ok(Some(DiscContext {
+    fn finish_disc_context(
+        &self,
+        input: &Path,
+        sheet_paths: Vec<PathBuf>,
+        files: Vec<DiscFile>,
+        target_index: usize,
+    ) -> Result<DiscContext> {
+        let target_file = files[target_index].path.clone();
+        let warnings = self.confirm_disc_grouping(input, sheet_directory(input), &files)?;
+        Ok(DiscContext {
             sheet_paths,
             files,
             target_file,
             warnings,
-        }))
+        })
     }
 
     /// Choose the GD-ROM high-density data track from a disc's files: the

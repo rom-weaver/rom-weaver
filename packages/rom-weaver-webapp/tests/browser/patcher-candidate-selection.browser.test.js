@@ -139,7 +139,7 @@ test("clearing ROM input releases extracted OPFS files", async () => {
   clearButton.click();
 
   await expect
-    .poll(() => !document.querySelector("#rom-weaver-list-input-stack .rom-weaver-input-stack-file"), {
+    .poll(() => !document.querySelector("#rom-weaver-list-input-stack .nmline[data-file-name]"), {
       timeout: 30000,
     })
     .toBe(true);
@@ -162,7 +162,7 @@ test("clearing CHD ROM input does not leave staged OPFS source files", async () 
   clearButton.click();
 
   await expect
-    .poll(() => !document.querySelector("#rom-weaver-list-input-stack .rom-weaver-input-stack-file"), {
+    .poll(() => !document.querySelector("#rom-weaver-list-input-stack .nmline[data-file-name]"), {
       timeout: 30000,
     })
     .toBe(true);
@@ -186,7 +186,7 @@ test("clearing a selected archive input requires selection again when re-added",
   clearButton.click();
 
   await expect
-    .poll(() => !document.querySelector("#rom-weaver-list-input-stack .rom-weaver-input-stack-file"), {
+    .poll(() => !document.querySelector("#rom-weaver-list-input-stack .nmline[data-file-name]"), {
       timeout: 30000,
     })
     .toBe(true);
@@ -220,8 +220,7 @@ test("cancelling input candidate selection removes the pending ROM input", async
     .poll(
       () =>
         !(
-          getCandidateSelectionList() ||
-          document.querySelector("#rom-weaver-list-input-stack .rom-weaver-input-stack-file")
+          getCandidateSelectionList() || document.querySelector("#rom-weaver-list-input-stack .nmline[data-file-name]")
         ),
       { timeout: 30000 },
     )
@@ -254,8 +253,7 @@ test("cancelling patch candidate selection removes the pending patch", async () 
     .poll(
       () =>
         !(
-          getCandidateSelectionList() ||
-          document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file")
+          getCandidateSelectionList() || document.querySelector("#rom-weaver-list-patch-stack .nmline[data-file-name]")
         ),
       { timeout: 30000 },
     )
@@ -283,7 +281,7 @@ test("cancelling patch candidate selection does not trigger render-phase React w
         () =>
           !(
             getCandidateSelectionList() ||
-            document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file")
+            document.querySelector("#rom-weaver-list-patch-stack .nmline[data-file-name]")
           ),
         { timeout: 30000 },
       )
