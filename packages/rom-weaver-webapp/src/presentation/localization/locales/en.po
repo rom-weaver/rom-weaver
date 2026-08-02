@@ -425,6 +425,11 @@ msgstr "Offline"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.active"
+msgstr "Offline active"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.ready"
 msgstr "Offline ready"
 
@@ -710,6 +715,11 @@ msgstr "The service worker is off, so rom-weaver needs the network each visit. P
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.activeDesc"
+msgstr "The service worker served this page from the cache, so rom-weaver is running with no network."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.theme"
 msgstr "Theme"
 
@@ -767,6 +777,11 @@ msgstr "Version"
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.github"
 msgstr "View source on GitHub"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.offlineLegend"
+msgstr "What the offline states mean"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

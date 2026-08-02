@@ -381,10 +381,18 @@ const useHydratedServiceWorkerStatus = (status: ServiceWorkerStatus | null | und
   return hydrated ? status : resolved;
 };
 
-/** Runtime health the brand's status control paints, and the status dialog explains. */
-type RuntimeState = "ready" | "update" | "installing" | "disabled";
+/**
+ * Runtime health the brand's status control paints, and the status dialog
+ * explains. `active` and `ready` are the two halves of a working cache: active
+ * means this very page came out of it, ready means the copy is there and the
+ * next load will. The order below is the order the legend lists them in.
+ */
+type RuntimeState = "active" | "ready" | "update" | "installing" | "disabled";
+
+const RUNTIME_STATES: readonly RuntimeState[] = ["active", "ready", "update", "installing", "disabled"];
 
 const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: MessageId }> = {
+  active: { description: "ui.runtime.activeDesc", label: "ui.runtime.active" },
   disabled: { description: "ui.runtime.disabledDesc", label: "ui.runtime.disabled" },
   installing: { description: "ui.runtime.installingDesc", label: "ui.runtime.installing" },
   ready: { description: "ui.runtime.readyDesc", label: "ui.runtime.ready" },
@@ -395,18 +403,21 @@ const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: Me
 const resolveRuntimeState = (status: ServiceWorkerStatus | null | undefined, updateReady: boolean): RuntimeState => {
   if (updateReady) return "update";
   if (status === "off") return "disabled";
-  if (status === "active" || status === "ready") return "ready";
+  if (status === "active") return "active";
+  if (status === "ready") return "ready";
   return "installing";
 };
 
 const CLOUD_PATH = "M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 2 8.5";
 
-/** Cloud glyph: checked when cached, bobbing arrow on an update, spinner while
- * installing, slashed when offline support is off. */
+/** Cloud glyph: checked when the page came from the cache, dotted when the cache
+ * is only standing by, bobbing arrow on an update, spinner while installing,
+ * slashed when offline support is off. */
 const RuntimeGlyph = ({ state }: { state: RuntimeState }) => (
   <svg aria-hidden="true" strokeWidth={2.4} viewBox="0 0 24 24">
     {state === "installing" ? <path d="M21 12a9 9 0 1 1-6.2-8.56" /> : <path d={CLOUD_PATH} />}
-    {state === "ready" ? <path d="m9 13.5 2.2 2.2L15 12" /> : null}
+    {state === "active" ? <path d="m9 13.5 2.2 2.2L15 12" /> : null}
+    {state === "ready" ? <circle cx="12" cy="14" r="1.4" /> : null}
     {state === "disabled" ? <path d="m4 4 16 16" /> : null}
     {state === "update" ? (
       <g className="dl-arrow">
@@ -865,6 +876,7 @@ export {
   Reveal,
   RUNTIME_MESSAGES,
   resolveRuntimeState,
+  RUNTIME_STATES,
   RuntimeGlyph,
   UpdateBanner,
   WakeLockBanner,

@@ -120,8 +120,10 @@ describe("Masthead", () => {
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
 
     const status = container.querySelector(".sub-status") as HTMLButtonElement;
-    expect(status.dataset.sw).toBe("ready");
-    expect(status.getAttribute("aria-label")).toBe("Offline ready");
+    // a service worker controlling this page is `active`; `ready` is the cache
+    // that is only standing by for the next load
+    expect(status.dataset.sw).toBe("active");
+    expect(status.getAttribute("aria-label")).toBe("Offline active");
     fireEvent.click(status);
     expect(onOpenStatus).toHaveBeenCalledTimes(1);
 

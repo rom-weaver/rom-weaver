@@ -186,6 +186,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.step.patches": msg({ id: "ui.step.patches", message: "Patches" }),
   "ui.step.rom": msg({ id: "ui.step.rom", message: "ROM" }),
   "ui.theme.toDark": msg({ id: "ui.theme.toDark", message: "Switch to dark theme" }),
+  "ui.runtime.active": msg({ id: "ui.runtime.active", message: "Offline active" }),
+  "ui.runtime.activeDesc": msg({
+    id: "ui.runtime.activeDesc",
+    message: "The service worker served this page from the cache, so rom-weaver is running with no network.",
+  }),
   "ui.runtime.disabled": msg({ id: "ui.runtime.disabled", message: "Offline support off" }),
   "ui.runtime.disabledDesc": msg({
     id: "ui.runtime.disabledDesc",
@@ -200,7 +205,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.runtime.ready": msg({ id: "ui.runtime.ready", message: "Offline ready" }),
   "ui.runtime.readyDesc": msg({
     id: "ui.runtime.readyDesc",
-    message: "rom-weaver is cached in this browser and works fully offline.",
+    message: "rom-weaver is cached in this browser. The next visit loads from that copy, with or without a network.",
   }),
   "ui.runtime.update": msg({ id: "ui.runtime.update", message: "Update available" }),
   "ui.runtime.updateDesc": msg({
@@ -214,6 +219,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.status.envPwa": msg({ id: "ui.status.envPwa", message: "Installed app (PWA)" }),
   "ui.status.envWeb": msg({ id: "ui.status.envWeb", message: "Browser tab" }),
   "ui.status.offline": msg({ id: "ui.status.offline", message: "Offline" }),
+  "ui.status.offlineLegend": msg({ id: "ui.status.offlineLegend", message: "What the offline states mean" }),
   "ui.status.pullRequest": msg({ id: "ui.status.pullRequest", message: "Pull request" }),
   "ui.status.version": msg({ id: "ui.status.version", message: "Version" }),
   "ui.theme.toLight": msg({ id: "ui.theme.toLight", message: "Switch to light theme" }),

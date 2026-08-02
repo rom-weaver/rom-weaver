@@ -425,6 +425,11 @@ msgstr "Sin conexión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.active"
+msgstr "Sin conexión activo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.ready"
 msgstr "Lista sin conexión"
 
@@ -576,7 +581,7 @@ msgstr "Inicio de rom-weaver"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.readyDesc"
-msgstr "rom-weaver está en la caché de este navegador y funciona totalmente sin conexión."
+msgstr "rom-weaver está en la caché de este navegador. La próxima visita cargará desde esa copia, con o sin red."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -710,6 +715,11 @@ msgstr "El service worker está desactivado, así que rom-weaver necesita la red
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.activeDesc"
+msgstr "El service worker sirvió esta página desde la caché, así que rom-weaver funciona sin red."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.theme"
 msgstr "Tema"
 
@@ -767,6 +777,11 @@ msgstr "Versión"
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.github"
 msgstr "Ver el código en GitHub"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.offlineLegend"
+msgstr "Qué significan los estados sin conexión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

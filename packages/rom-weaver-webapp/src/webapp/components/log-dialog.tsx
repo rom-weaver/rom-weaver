@@ -13,7 +13,14 @@ import { CHANNEL_BADGE } from "../build-channel.ts";
 import { GITHUB_URL, LICENSE_URL, NOTICE_URL, PRIVACY_URL } from "../project-links.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
-import { prefersReducedMotion, readPwaState, resolveRuntimeState, RUNTIME_MESSAGES, RuntimeGlyph } from "./shell.tsx";
+import {
+  prefersReducedMotion,
+  readPwaState,
+  resolveRuntimeState,
+  RUNTIME_MESSAGES,
+  RUNTIME_STATES,
+  RuntimeGlyph,
+} from "./shell.tsx";
 import type { RuntimeState } from "./shell.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 
@@ -209,6 +216,31 @@ const StatusRows = ({ localizer, runtimeState }: { localizer: Localizer; runtime
     </dl>
   );
 };
+
+/**
+ * Every offline state at once, so the badge in the row above is read against the
+ * four it could have been rather than on its own. The current one is marked
+ * instead of being left out - a reader looking for what they have should find it
+ * in the same list, not by elimination.
+ */
+const OfflineLegend = ({ current, localizer }: { current: RuntimeState; localizer: Localizer }) => (
+  <section className="sw-legend">
+    <h3 className="sw-legend-title">{localizer.message("ui.status.offlineLegend")}</h3>
+    <dl>
+      {RUNTIME_STATES.map((state) => (
+        <div className="sw-legend-row" data-current={state === current ? "" : undefined} key={state}>
+          <dt>
+            <span className="sw-chip" data-sw={state}>
+              <RuntimeGlyph state={state} />
+              {localizer.message(RUNTIME_MESSAGES[state].label)}
+            </span>
+          </dt>
+          <dd>{localizer.message(RUNTIME_MESSAGES[state].description)}</dd>
+        </div>
+      ))}
+    </dl>
+  </section>
+);
 
 /**
  * Licence, attribution and privacy - the part of the old settings About group
@@ -538,14 +570,14 @@ const LogDialog = ({
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
             <StatusRows localizer={localizer} runtimeState={runtimeState} />
-            <div className="sw-summary">
-              <p className="panel-note">{localizer.message(RUNTIME_MESSAGES[runtimeState].description)}</p>
-              {runtimeState === "update" && onReload ? (
+            {runtimeState === "update" && onReload ? (
+              <div className="sw-summary">
                 <button className="btn primary" onClick={onReload} type="button">
                   {localizer.message("ui.update.reloadNow")}
                 </button>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
+            <OfflineLegend current={runtimeState} localizer={localizer} />
             <AboutLines />
           </div>
         ) : null}

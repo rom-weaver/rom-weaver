@@ -344,9 +344,26 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
   border: 1px solid var(--seam-soft); border-radius: 999px;
 }
 .rw-app .sw-chip svg { width: 13px; height: 13px; }
-.rw-app .sw-chip[data-sw="ready"] { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 35%, transparent); }
+.rw-app .sw-chip[data-sw="active"] { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 35%, transparent); }
+/* a cache standing by, not one in use: the same colour, quieter */
+.rw-app .sw-chip[data-sw="ready"] { color: color-mix(in oklab, var(--verified) 72%, var(--ink-3)); border-color: color-mix(in oklab, var(--verified) 24%, transparent); }
 .rw-app .sw-chip[data-sw="update"] { color: var(--care); border-color: color-mix(in oklab, var(--care) 40%, transparent); }
 .rw-app .sw-chip[data-sw="disabled"] { color: var(--ink-4); }
+/* ── offline legend ── */
+.rw-app .sw-legend { margin-block-start: var(--sp-l); padding-block-start: var(--sp-m); border-block-start: 1px solid var(--seam); }
+.rw-app .sw-legend-title {
+  margin: 0 0 var(--sp-s); font-size: .74rem; font-weight: 650; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.rw-app .sw-legend dl { display: flex; flex-direction: column; gap: var(--sp-s); margin: 0; }
+.rw-app .sw-legend-row { display: grid; grid-template-columns: 10.5rem minmax(0, 1fr); gap: var(--sp-m); align-items: baseline; }
+.rw-app .sw-legend-row dd { min-width: 0; margin: 0; font-size: .78rem; color: var(--ink-3); }
+/* the one you have, named in the same list as the four you could have */
+.rw-app .sw-legend-row[data-current] dd { color: var(--ink-2); }
+.rw-app .sw-legend-row[data-current] .sw-chip { background: color-mix(in oklab, currentColor 12%, transparent); }
+@media (max-width: 519px) {
+  .rw-app .sw-legend-row { grid-template-columns: minmax(0, 1fr); gap: var(--sp-2xs); }
+}
 .rw-app .status-rows { display: flex; flex-direction: column; gap: var(--sp-s); margin: 0; }
 .rw-app .status-row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: var(--sp-m); align-items: baseline; }
 .rw-app .status-row dt { font-size: .74rem; font-weight: 650; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
