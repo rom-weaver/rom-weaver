@@ -40,6 +40,11 @@ html:has(.rw-modal) { overflow: hidden; }
    guide above the dock. The rest of its styling is in docs.css with the guide;
    only the modal-frame overrides are here, where they outrank the
    `.rw-modal-card` defaults above. */
+/* The sheet's head is one line of title and the close button, so the two share a
+   centre line. `flex-start` is for the heads that carry a subtitle under the
+   title, where the button belongs beside the first line, not beside the pair. */
+.rw-modal.guide-sheet .modal-head { align-items: center; }
+.rw-modal.guide-sheet .modal-head .dlg-x { align-self: center; }
 @media (max-width: 860px) {
   .rw-modal.guide-sheet { place-items: end stretch; padding: 0; }
   .rw-modal.guide-sheet .rw-modal-card {
