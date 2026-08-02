@@ -21,15 +21,6 @@
   .rw-app .btn.danger:hover { background: color-mix(in oklab, var(--fault) 10%, transparent); }
 }
 .rw-app .btn.slim { height: 30px; padding-inline: 12px; font-size: .76rem; }
-/* Reset wears the plain slim ghost box so it reads as one of the labelled
-   controls rather than its own invention. The only thing it keeps for itself is
-   turning fault-coloured under the finger - it throws the bench away, and the
-   button should say so at the moment you commit to it. */
-.rw-app .btn.reset-btn { white-space: nowrap; }
-@media (hover: hover) {
-  .rw-app .btn.reset-btn:hover { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 45%, transparent); }
-}
-.rw-app .btn.reset-btn:active { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 45%, transparent); }
 /* the bundle button is the bundle's shipping tag: label-stock paper held on
    by a dashed thread stitch - quieter than the solid weft-orange run button
    above it, but cut from the same cloth */

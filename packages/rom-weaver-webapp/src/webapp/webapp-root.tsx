@@ -143,7 +143,7 @@ const selectViewWithTransition = (select: () => void) => runFlatViewTransition(s
 const ResetButton = ({ onReset }: { onReset: () => void }) => {
   const localizer = useUiLocalizer();
   return (
-    <button className="btn ghost slim reset-btn" onClick={onReset} type="button">
+    <button className="reset-btn" onClick={onReset} type="button">
       <RotateCcw aria-hidden="true" />
       <span>{localizer.message("ui.settings.reset")}</span>
     </button>

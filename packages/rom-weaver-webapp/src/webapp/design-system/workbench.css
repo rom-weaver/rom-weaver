@@ -68,12 +68,37 @@
    through every form's first step. */
 .rw-app .panel.workflow { position: relative; }
 .rw-app .workflow-panel-head {
-  position: absolute; z-index: 5; display: flex;
+  position: absolute; z-index: 5; display: flex; align-items: center;
   /* the step column runs edge to edge inside a workflow panel (webapp-modals.css
-     zeroes the head's gutter), so the button's right edge is the panel's */
+     zeroes the head's gutter), so the control's right edge is the panel's */
   inset-block-start: calc(var(--step-lead, 0px) + var(--tools-rail-h, 0px) + var(--step-pt));
   inset-inline-end: 0;
+  /* The box is the heading's own line: the step type's `1lh`, plus the 2px the
+     number block pads above and below. Centring in it lands reset on the
+     heading's optical line whatever the type scales to - the old top-alignment
+     only looked centred because the button happened to be the same height, and
+     stopped once it was not. */
+  font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem);
+  block-size: calc(1lh + 4px);
 }
+/* No box: the heading band stays type, and the control says what it is by
+   turning fault-coloured under the finger - it throws the bench away. Wearing
+   the shared `.btn` box made it the one framed thing in the band, reading as a
+   form control dropped into a headline. */
+.rw-app .reset-btn {
+  position: relative; display: inline-flex; gap: 5px; align-items: center; padding: 0;
+  font: inherit; font-size: .74rem; font-weight: 650; letter-spacing: .02em; color: var(--ink-3);
+  white-space: nowrap; appearance: none; cursor: pointer; background: transparent; border: 0;
+  transition: color .18s;
+}
+.rw-app .reset-btn svg { flex: none; width: 13px; height: 13px; }
+/* the ink is well under the target-size floor without a box to carry it, so the
+   floor rides an invisible halo instead - the same trick the brand sub-line uses */
+.rw-app .reset-btn::after { position: absolute; inset: -6px -8px; content: ""; }
+@media (hover: hover) {
+  .rw-app .reset-btn:hover { color: var(--fault); }
+}
+.rw-app .reset-btn:active { color: var(--fault); }
 /* Tools puts its command rail above the first step, so `0x01` starts one rail
    lower. The rail is a fixed box: 34px tab + 10px padding either side + 1px seam
    (masthead.css `.tools-subnav`); phone-dock.css restates both of these for the
