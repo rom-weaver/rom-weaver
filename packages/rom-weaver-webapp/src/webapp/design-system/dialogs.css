@@ -37,9 +37,21 @@
 /* Log dialog */
 .rw-app .log-dlg { max-width: min(1280px, calc(100vw - 32px)); }
 .rw-app .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
-.rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
+/* One row, never two. The rail is a scroller by design, so when the head runs
+   out of width the tabs are what should give - wrapping instead sent the close
+   button down to a line of its own, adrift at the far side of the dialog from
+   the rail it belongs to. */
+/* The tabs ARE the title here, so the rail rides the head's own bottom rule
+   rather than floating above it - the selected tab's weft then reads as a mark
+   on a rail instead of a stray underline in open space. */
+.rw-app .log-dlg .dlg-head { flex-wrap: nowrap; row-gap: var(--sp-m); align-items: flex-end; padding-block-end: 0; }
 .rw-app .log-dlg .dlg-title { flex: 0 1 auto; }
-.rw-app .log-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: var(--sp-s); align-items: center; margin-inline-start: auto; min-inline-size: 0; }
+/* The controls share the rail's row but not its baseline - sitting them on the
+   rule would read as two more tabs. */
+.rw-app .log-dlg .dlg-head > .dlg-x { flex: none; }
+.rw-app .log-dlg .dlg-head > .dlg-x,
+.rw-app .log-dlg .dlg-head > .log-actions { margin-block-end: var(--sp-s); }
+.rw-app .log-actions { display: flex; flex: none; gap: var(--sp-s); align-items: center; margin-inline-start: auto; min-inline-size: 0; }
 .rw-app .log-actions > * { flex: 0 1 auto; min-inline-size: max-content; }
 .rw-app .log-actions .log-icon-btn { flex: 0 0 30px; inline-size: 30px; padding-inline: 0; }
 .rw-app .log-actions .btn.copied { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 55%, transparent); }
@@ -267,12 +279,16 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
    it never wraps and never vanishes. The status/logs dialog wears it as its
    header - the tabs are the title. */
 .rw-app .subrail {
-  position: relative; display: flex; flex: 1 1 auto; gap: var(--sp-xs); min-inline-size: 0;
+  position: relative; display: flex; flex: 1 1 0; gap: var(--sp-xs); min-inline-size: 0;
   overflow-x: auto; scrollbar-width: none;
+  /* Keeps a part-scrolled tab from resting half-cut, so the rail always reads as
+     whole tabs and the cut edge is never mistaken for the end of the list. */
+  scroll-snap-type: inline proximity;
 }
 .rw-app .subrail::-webkit-scrollbar { display: none; }
 .rw-app .dialog-subrail { padding: 0; background: transparent; }
 .rw-app .subtab {
+  scroll-snap-align: start;
   display: inline-flex; gap: var(--sp-s); align-items: center; min-height: 36px; padding: 4px 12px 7px;
   font-size: .8rem; font-weight: 650; color: var(--ink-3); white-space: nowrap;
   appearance: none; cursor: pointer; background: transparent; border: 0;
