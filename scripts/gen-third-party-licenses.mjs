@@ -94,7 +94,7 @@ a component, a copyright line, a source link, or a license looks wrong, please
 [open an issue](https://github.com/rom-weaver/rom-weaver/issues) and say which
 release version and which entry.
 
-Back to the [guide index](../usage/README.md).
+Back to the [guide index](../README.md).
 `;
 // License text file name prefixes (matched case-insensitively, files only).
 const LICENSE_FILE_RE = /^(licen[sc]e|copying|unlicense|notice)/i;

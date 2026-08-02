@@ -2,8 +2,8 @@
 
 Every rom-weaver command and global flag, the archive-selection options, JSON
 output, exit codes, file permissions, shell completions, and man pages.
-Installation is covered in [Install the CLI](../how-to/install-cli.md), and the task guides
-start at [Get started with the CLI](../tutorials/cli-first-weave.md).
+Installation is covered in [Install the CLI](../how-to/install-cli.md), and the
+tutorial is [Your first weave in the terminal](../tutorials/cli-first-weave.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -100,10 +100,10 @@ command people reach for most.
 
 Format names have alternates too, accepted anywhere `--format` is: `7zip` for
 `7z`, `3ds` for `z3ds`, `xdelta3` for `xdelta`, `bsdiff` for `bdf`, and more.
-The [format tables](../reference/formats.md) list every one.
+The [format tables](formats.md) list every one.
 
 Codecs are stricter. Each format accepts only the codec names in its own row of
-the [codec table](../reference/formats.md#create-time-codecs), and the only
+the [codec table](formats.md#create-time-codecs), and the only
 two alternates are CHD's
 `huffman` for `huff` and `avhu` for `avhuff`. Passing `--codec zlib` to a ZIP,
 for instance, is an error rather than a synonym for `deflate`.
@@ -174,7 +174,7 @@ platform (`--probe`).
 
 The full support matrix - every patch format, container and compressed ROM or
 disc image, create-time codec, checksum algorithm, trim target, and detected
-header - lives in [Supported formats](../reference/formats.md). For picking a
+header - lives in [Supported formats](formats.md). For picking a
 format rather than looking one up, see the
 [archive formats](../how-to/work-with-archives.md) and
 [compression formats](../explanation/compression-formats.md) guides.

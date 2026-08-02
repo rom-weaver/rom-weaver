@@ -2,7 +2,8 @@
 
 Apply one patch or an ordered chain in the terminal, control headers, byte
 order, and checksum verification, and validate patches without writing
-anything. New to the CLI? Start with [Get started](../tutorials/cli-first-weave.md).
+anything. New to the CLI? Start with
+[your first weave](../tutorials/cli-first-weave.md).
 
 <!-- START doctoc -->
 ## Table of contents
