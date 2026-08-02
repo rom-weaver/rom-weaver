@@ -19,6 +19,16 @@ const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
 const assertIncludes = (source, expected, label) => {
   if (!source.includes(expected)) throw new Error(`${label} is missing ${JSON.stringify(expected)}`);
 };
+// The parser-time resolver in index.html finds its slots by class, so what has
+// to hold is that the class is ON the element - not that it is the element's
+// whole class attribute. Prerendered markup composes class lists (`sub-chip
+// sub-status`), and a literal `class="sub-status"` breaks the moment a token
+// gains a sibling. Tokens are compared exactly: a substring test would let
+// `sub-status-text` answer for `sub-status`.
+const assertHasClass = (source, className, label) => {
+  const present = [...source.matchAll(/class="([^"]*)"/g)].some((match) => match[1].split(/\s+/).includes(className));
+  if (!present) throw new Error(`${label} is missing the ${JSON.stringify(className)} class`);
+};
 const assertCount = (source, expected, count, label) => {
   const actual = source.split(expected).length - 1;
   if (actual !== count)
@@ -128,9 +138,9 @@ assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create desc
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
 assertIncludes(applyHtml, 'aria-selected="true" class="mode" data-mode="patcher"', "apply prerendered workflow");
 assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator"', "create prerendered workflow");
-assertIncludes(applyHtml, 'class="build-tag"', "preloaded build tag");
-assertIncludes(applyHtml, 'class="masthead-threads-count"', "preloaded thread count");
-assertIncludes(applyHtml, 'class="sub-status"', "preloaded runtime status control");
+assertHasClass(applyHtml, "build-tag", "preloaded build tag");
+assertHasClass(applyHtml, "masthead-threads-count", "preloaded thread count");
+assertHasClass(applyHtml, "sub-status", "preloaded runtime status control");
 assertIncludes(applyHtml, 'data-service-worker-enabled="true"', "service-worker build marker");
 const runtimeResolver =
   '<span class="shell-identity" hidden=""></span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
