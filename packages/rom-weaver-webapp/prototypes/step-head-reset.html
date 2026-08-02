@@ -1,0 +1,400 @@
+<!doctype html>
+<html data-accent="madder" data-theme="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport" />
+    <title>rom-weaver — reset on the 0x01 header row</title>
+    <style>
+      /* ═════════════════════════════════════════════════════════════════════
+         Reset sits on the `0x01` heading row and is the only framed thing in a
+         band that is otherwise type - a form control dropped into a headline.
+         Four ways to sit it down, all on the real step-head CSS.
+
+         A is what ships. B borrows the box the step head ALREADY uses at this
+         end of the row (`.step-meta .rb`), which is the only option that fits
+         by construction rather than by resemblance.
+         ═════════════════════════════════════════════════════════════════════ */
+      :root {
+        --thread: #d9690f;
+        --thread-ink: #1c1206;
+        --font: "Archivo", "Segoe UI", system-ui, sans-serif;
+        --r-s: 6px;
+        --r-m: 9px;
+        --r-l: 13px;
+        --sp-2xs: 2px;
+        --sp-xs: 4px;
+        --sp-s: clamp(6px, 2.5px + 0.625vw, 8px);
+        --sp-m: clamp(8px, 1px + 1.25vw, 12px);
+        --sp-l: clamp(11px, 2.25px + 1.5625vw, 16px);
+        --sp-xl: clamp(16px, 2px + 2.5vw, 24px);
+        --ctl: 40px;
+        --badge-fs: 0.72rem;
+        --step-pt: clamp(16px, 4vw - 8px, 22px);
+        --ease: cubic-bezier(0.2, 0.85, 0.3, 1);
+        --weave-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M9.5 2h10.5v6H9.5zM0 2h.5v6H0zM0 12h10.5v6H0zM19.5 12h.5v6h-.5zM2 0h6v10.5H2zM2 19.5h6v.5H2zM12 9.5h6v10.5h-6zM12 0h6v.5h-6z'/></svg>");
+      }
+      :root[data-theme="dark"] {
+        --chassis: #0c0f13;
+        --plate: #161b21;
+        --plate-2: #1c222a;
+        --well: #0f1318;
+        --seam: #39414e;
+        --seam-soft: #2c333f;
+        --seam-strong: #4b5564;
+        --ink: #edf0f5;
+        --ink-2: #b3bbc8;
+        --ink-3: #9aa3b1;
+        --ink-4: #939cab;
+        --weft: #e7d3a8;
+        --thread-text: #ef8534;
+        --fault: #e0606a;
+        color-scheme: dark;
+      }
+      :root[data-theme="light"] {
+        --chassis: #ece9e1;
+        --plate: #ffffff;
+        --plate-2: #f7f5ef;
+        --well: #efede6;
+        --seam: #d4d2ca;
+        --seam-soft: #e1dfd8;
+        --seam-strong: #b4b1a6;
+        --ink: #1a1d22;
+        --ink-2: #4b5159;
+        --ink-3: #62686f;
+        --ink-4: #686d76;
+        --weft: #92400e;
+        --thread-text: #b03a0a;
+        --fault: #b91c1c;
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: var(--sp-xl);
+        font-family: var(--font);
+        color: var(--ink);
+        background: var(--chassis);
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 1.05rem;
+      }
+      .lede {
+        margin: 0 0 18px;
+        max-width: 64ch;
+        font-size: 0.8rem;
+        line-height: 1.55;
+        color: var(--ink-3);
+      }
+      .rig {
+        display: flex;
+        gap: var(--sp-m);
+        align-items: center;
+        flex-wrap: wrap;
+        padding: var(--sp-m);
+        margin-block-end: 26px;
+        border: 1px dashed var(--seam-strong);
+        border-radius: var(--r-m);
+        font-size: 0.76rem;
+        color: var(--ink-3);
+      }
+      .rig button {
+        appearance: none;
+        min-height: 30px;
+        padding: 0 12px;
+        font: inherit;
+        font-weight: 650;
+        color: var(--ink-2);
+        cursor: pointer;
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      .specimens {
+        display: grid;
+        gap: 24px;
+      }
+      .specimen {
+        display: grid;
+        gap: 9px;
+      }
+      .caption {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+      .caption b {
+        font-size: 0.84rem;
+      }
+      .caption span {
+        font-size: 0.74rem;
+        line-height: 1.5;
+        color: var(--ink-3);
+      }
+      .caption em {
+        font-style: normal;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--thread-text);
+      }
+      .widths {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 390px;
+        gap: 14px;
+        align-items: start;
+      }
+      @media (max-width: 900px) {
+        .widths {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .width-label {
+        margin: 0 0 5px;
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-4);
+      }
+
+      /* ── the real step head, from workbench.css + webapp-modals.css ── */
+      .panel {
+        position: relative;
+        padding: 0 var(--sp-l) var(--sp-l);
+        background: var(--plate);
+        border: 1px solid var(--seam-soft);
+        border-radius: var(--r-l);
+      }
+      .step-head {
+        display: flex;
+        gap: var(--sp-s);
+        align-items: center;
+        min-height: 38px;
+        padding: var(--step-pt) 0 2px;
+      }
+      .step-num {
+        position: relative;
+        isolation: isolate;
+        padding: 2px 18px 2px 9px;
+        font:
+          650 clamp(0.9rem, 1.1vw + 0.55rem, 1.06rem) ui-monospace,
+          monospace;
+        color: var(--weft);
+        letter-spacing: 0.06em;
+      }
+      .step-num::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        border-radius: 3px 0 0 3px;
+        background: linear-gradient(90deg, var(--thread) 52%, transparent 96%);
+        opacity: 0.2;
+        mask-image: var(--weave-mask);
+        mask-size: 9px 9px;
+      }
+      .step-title {
+        margin: 0;
+        font-size: clamp(0.9rem, 1.1vw + 0.55rem, 1.06rem);
+        font-weight: 650;
+        color: var(--ink);
+      }
+      .step-body {
+        padding: 6px 0 0;
+        font-size: 0.78rem;
+        color: var(--ink-4);
+      }
+      /* the panel-head overlay that puts reset on the heading row */
+      .panel-head {
+        position: absolute;
+        z-index: 5;
+        display: flex;
+        inset-block-start: var(--step-pt);
+        inset-inline-end: var(--sp-l);
+      }
+
+      /* ── A · shipping: the shared .btn ghost slim box ── */
+      [data-variant="btn"] .reset {
+        appearance: none;
+        display: inline-flex;
+        gap: var(--sp-s);
+        align-items: center;
+        justify-content: center;
+        height: 30px;
+        padding-inline: 12px;
+        font: 650 0.76rem var(--font);
+        letter-spacing: 0.02em;
+        color: var(--ink);
+        white-space: nowrap;
+        cursor: pointer;
+        background: transparent;
+        border: 1px solid var(--seam-strong);
+        border-radius: var(--r-s);
+      }
+
+      /* ── B · the badge the step head already uses at this end of the row ── */
+      [data-variant="rb"] .reset {
+        appearance: none;
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+        padding: 2px 8px;
+        font: 500 var(--badge-fs) var(--font);
+        font-stretch: 86%;
+        letter-spacing: 0.01em;
+        color: var(--ink-3);
+        white-space: nowrap;
+        cursor: pointer;
+        background: var(--well);
+        border: 1px solid var(--seam-soft);
+        border-radius: 6px;
+      }
+      [data-variant="rb"] .reset svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      /* ── C · the sub-line's hairline pill, borrowed up ── */
+      [data-variant="pill"] .reset {
+        appearance: none;
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+        padding: 0 9px;
+        height: 20px;
+        font: 650 0.68rem var(--font);
+        color: var(--ink-3);
+        white-space: nowrap;
+        cursor: pointer;
+        background: color-mix(in oklab, currentColor 10%, transparent);
+        border: 1px solid color-mix(in oklab, currentColor 45%, transparent);
+        border-radius: 999px;
+      }
+      [data-variant="pill"] .reset svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      /* ── D · no box at all: the row stays pure type ── */
+      [data-variant="bare"] .reset {
+        appearance: none;
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+        padding: 0;
+        font: 650 0.74rem var(--font);
+        color: var(--ink-3);
+        white-space: nowrap;
+        cursor: pointer;
+        background: transparent;
+        border: 0;
+      }
+      [data-variant="bare"] .reset svg {
+        width: 13px;
+        height: 13px;
+      }
+
+      /* the one thing every variant keeps: it turns fault-coloured under the
+         finger, because it throws the bench away */
+      @media (hover: hover) {
+        .reset:hover {
+          color: var(--fault);
+          border-color: color-mix(in oklab, var(--fault) 45%, transparent);
+        }
+      }
+      .reset:active {
+        color: var(--fault);
+        border-color: color-mix(in oklab, var(--fault) 45%, transparent);
+      }
+      .reset svg {
+        flex: none;
+        width: 14px;
+        height: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Reset on the 0x01 header row</h1>
+    <p class="lede">
+      Real step-head CSS at real width — desktop left, 390px phone right. <b>A</b> is what ships: the only framed box in
+      a band that is otherwise type. Each variant keeps the fault-coloured press, which is the one thing the control
+      should say for itself.
+    </p>
+
+    <div class="rig">
+      <span><b>Rig</b></span>
+      <button data-theme-toggle type="button">Toggle light / dark</button>
+      <span>hover a reset to see its pressed colour</span>
+    </div>
+
+    <div class="specimens" id="specimens"></div>
+
+    <script>
+      const ICON =
+        '<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
+
+      const VARIANTS = [
+        {
+          id: "btn",
+          name: "A · shared button box",
+          note: "ships today — 30px tall, seam border, the same box as Save and Run",
+          tag: "current",
+        },
+        {
+          id: "rb",
+          name: "B · the step-head badge",
+          note: "the box this row already uses at this end (.step-meta .rb): well fill, hairline seam, badge type",
+        },
+        {
+          id: "pill",
+          name: "C · hairline pill",
+          note: "the chip the brand sub-line just adopted, borrowed up into the step head",
+        },
+        {
+          id: "bare",
+          name: "D · no box",
+          note: "icon and label only, so the heading band stays pure type; fault colour is the whole affordance",
+        },
+      ];
+
+      const frame = (variant) => `
+        <div class="panel" data-variant="${variant.id}">
+          <div class="panel-head">
+            <button class="reset" type="button">${ICON}<span>Reset</span></button>
+          </div>
+          <div class="step-head">
+            <span class="step-num">0x01</span>
+            <h2 class="step-title">Inputs</h2>
+          </div>
+          <div class="step-body">Drop or click to add ROMs, patches, bundles, or archives</div>
+        </div>`;
+
+      document.getElementById("specimens").innerHTML = VARIANTS.map(
+        (variant) => `
+        <section class="specimen">
+          <div class="caption"><b>${variant.name}</b>${variant.tag ? `<em>${variant.tag}</em>` : ""}<span>${
+            variant.note
+          }</span></div>
+          <div class="widths">
+            <div><p class="width-label">desktop</p>${frame(variant)}</div>
+            <div><p class="width-label">phone · 390px</p>${frame(variant)}</div>
+          </div>
+        </section>`,
+      ).join("");
+
+      const root = document.documentElement;
+      document.querySelector("[data-theme-toggle]").addEventListener("click", () => {
+        const dark = root.dataset.theme
+          ? root.dataset.theme === "dark"
+          : matchMedia("(prefers-color-scheme: dark)").matches;
+        root.dataset.theme = dark ? "light" : "dark";
+      });
+    </script>
+  </body>
+</html>
