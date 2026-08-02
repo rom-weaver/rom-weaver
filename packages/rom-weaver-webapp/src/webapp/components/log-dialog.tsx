@@ -12,6 +12,7 @@ import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH
 import { CHANNEL_BADGE } from "../build-channel.ts";
 import { GITHUB_URL, LICENSE_URL, NOTICE_URL, PRIVACY_URL } from "../project-links.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
+import { ChangelogPanel } from "./changelog-panel.tsx";
 import { prefersReducedMotion, readPwaState, resolveRuntimeState, RUNTIME_MESSAGES, RuntimeGlyph } from "./shell.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 
@@ -460,32 +461,6 @@ const LogDialog = ({
               </button>
             ))}
           </div>
-          {tab === "settings" && (onRestoreDefaults || onSaveSettings) ? (
-            <div className="dlg-actions log-actions settings-actions">
-              {onRestoreDefaults ? (
-                <button
-                  className="btn ghost"
-                  onClick={onRestoreDefaults}
-                  title={localizer.message("ui.settings.defaults")}
-                  type="button"
-                >
-                  <RotateCcw aria-hidden="true" />
-                  <span className="bl">{localizer.message("ui.settings.defaults")}</span>
-                </button>
-              ) : null}
-              {onSaveSettings ? (
-                <button
-                  className="btn primary"
-                  onClick={onSaveSettings}
-                  title={localizer.message("ui.settings.save")}
-                  type="button"
-                >
-                  <Save aria-hidden="true" />
-                  <span className="bl">{localizer.message("ui.settings.save")}</span>
-                </button>
-              ) : null}
-            </div>
-          ) : null}
           <button
             aria-label={localizer.message("ui.common.close")}
             className="dlg-x"
@@ -496,6 +471,36 @@ const LogDialog = ({
             <X aria-hidden="true" />
           </button>
         </header>
+        {tab === "settings" && (onRestoreDefaults || onSaveSettings) ? (
+          <div className="dlg-subhead">
+            <div className="log-controls">
+              <div className="dlg-actions settings-actions">
+                {onRestoreDefaults ? (
+                  <button
+                    className="btn ghost"
+                    onClick={onRestoreDefaults}
+                    title={localizer.message("ui.settings.defaults")}
+                    type="button"
+                  >
+                    <RotateCcw aria-hidden="true" />
+                    <span className="bl">{localizer.message("ui.settings.defaults")}</span>
+                  </button>
+                ) : null}
+                {onSaveSettings ? (
+                  <button
+                    className="btn primary"
+                    onClick={onSaveSettings}
+                    title={localizer.message("ui.settings.save")}
+                    type="button"
+                  >
+                    <Save aria-hidden="true" />
+                    <span className="bl">{localizer.message("ui.settings.save")}</span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
         {tab === "settings" ? (
           <div
             aria-labelledby="logtab-settings"
@@ -531,21 +536,22 @@ const LogDialog = ({
             id="logpanel-changelog"
             role="tabpanel"
           >
-            <p className="panel-note">
-              <a href={`${GITHUB_BASE}/releases`} rel="noreferrer" target="_blank">
-                {localizer.message("ui.log.tabChangelog")} ↗
-              </a>
-            </p>
-            {onOpenChangelog ? (
-              <button className="btn ghost" onClick={onOpenChangelog} type="button">
-                {localizer.message("ui.update.whatsNew")}
-              </button>
+            <ChangelogPanel active={tab === "changelog"} localizer={localizer} />
+            {/* The tab lists what has shipped; this opens the update dialog,
+                which is the same data asked the other question - what the
+                pending deploy would bring. Only offered when there is one. */}
+            {onOpenChangelog && updateReady ? (
+              <div className="changelog-note">
+                <button className="btn ghost" onClick={onOpenChangelog} type="button">
+                  {localizer.message("ui.update.whatsNew")}
+                </button>
+              </div>
             ) : null}
           </div>
         ) : null}
         {tab === "logs" || tab === "storage" ? (
           <>
-            <div className="log-filter-bar">
+            <div className="dlg-subhead">
               {/* The controls take the row; the filter gets the next one to
                   itself. Sharing one row meant the filter and the view toggle
                   fought for the same width, and on a phone both lost - the
