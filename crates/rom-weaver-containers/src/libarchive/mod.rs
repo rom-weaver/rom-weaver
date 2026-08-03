@@ -300,4 +300,191 @@ mod tests {
             Ok(())
         })
     }
+
+    // --- Error-code translation (ffi.rs) ---------------------------------
+
+    #[test]
+    fn path_to_cstring_accepts_a_normal_path() {
+        let cstring = path_to_cstring(Path::new("archive.zip"), "test path").unwrap();
+        assert_eq!(cstring.as_bytes(), b"archive.zip");
+    }
+
+    #[test]
+    fn path_to_cstring_rejects_interior_nul_byte() {
+        #[cfg(unix)]
+        {
+            use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+            let bytes = b"bad\0name.zip";
+            let path = Path::new(OsStr::from_bytes(bytes));
+            let err = path_to_cstring(path, "test path").unwrap_err();
+            assert!(matches!(err, RomWeaverError::Validation(_)));
+            assert!(err.to_string().contains("interior NUL byte"));
+        }
+    }
+
+    #[test]
+    fn check_status_ok_and_warn_are_success() {
+        // ARCHIVE_OK and ARCHIVE_WARN both resolve to Ok without needing a
+        // live archive pointer to format an error message from.
+        assert!(check_free_status(ARCHIVE_OK, "ok status").is_ok());
+        assert!(check_free_status(ARCHIVE_WARN, "warn status").is_ok());
+    }
+
+    #[test]
+    fn check_free_status_translates_a_non_ok_status_to_validation_error() {
+        let err = check_free_status(-30 /* ARCHIVE_FATAL */, "free failed").unwrap_err();
+        assert!(matches!(err, RomWeaverError::Validation(_)));
+        let message = err.to_string();
+        assert!(message.contains("free failed"));
+        assert!(message.contains("-30"));
+    }
+
+    #[test]
+    fn read_archive_open_filename_translates_missing_file_error() -> Result<()> {
+        run_with_large_stack("missing-file", || {
+            let temp_dir = TempDir::new("missing-file")?;
+            let missing = temp_dir.path().join("does-not-exist.zip");
+
+            let mut reader = ReadArchive::new("reader alloc")?;
+            reader.support_regular_archives("reader setup")?;
+            let err = reader
+                .open_filename(&missing, "archive source", 2 * 1024 * 1024, "open failed")
+                .unwrap_err();
+            assert!(matches!(err, RomWeaverError::Validation(_)));
+            assert!(err.to_string().contains("open failed"));
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn list_regular_archive_entries_rejects_a_truncated_archive() -> Result<()> {
+        run_with_large_stack("truncated", || {
+            let temp_dir = TempDir::new("truncated")?;
+            let source = temp_dir.path().join("fixture.zip");
+            create_zip_fixture(&source)?;
+
+            // Cut the valid zip down to its first few bytes: not a
+            // recognizable header, so listing must fail cleanly rather than
+            // panic on a partially-decoded structure.
+            let truncated_bytes = fs::read(&source)?;
+            fs::write(&source, &truncated_bytes[..truncated_bytes.len().min(8)])?;
+
+            let err = list_regular_archive_entries(&source, "zip").unwrap_err();
+            assert!(matches!(err, RomWeaverError::Validation(_)));
+
+            let probe_err =
+                probe_regular_archive_format(&source, "zip", RegularArchiveProbeFormat::Zip)
+                    .unwrap_err();
+            assert!(matches!(probe_err, RomWeaverError::Validation(_)));
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn list_regular_archive_entries_treats_a_zero_byte_file_as_the_empty_format() -> Result<()> {
+        // libarchive's "empty format" support (enabled by
+        // `support_regular_archives`) recognizes a 0-byte input as a valid,
+        // empty archive rather than an error -- unlike a truncated non-empty
+        // file, which fails header parsing (see the truncated-archive test).
+        run_with_large_stack("empty-file", || {
+            let temp_dir = TempDir::new("empty-file")?;
+            let source = temp_dir.path().join("empty.zip");
+            fs::write(&source, [])?;
+
+            let entries = list_regular_archive_entries(&source, "zip")?;
+            assert!(entries.is_empty());
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn write_archive_open_filename_rejects_missing_parent_directory() -> Result<()> {
+        run_with_large_stack("write-missing-dir", || {
+            let temp_dir = TempDir::new("write-missing-dir")?;
+            let output = temp_dir.path().join("no/such/dir/out.zip");
+
+            let mut archive = WriteArchive::new("writer alloc")?;
+            archive.set_format(WriteFormat::Zip, "format")?;
+            archive.add_filter(WriteFilter::None, "filter")?;
+            let err = archive
+                .open_filename(&output, "archive output", "open failed")
+                .unwrap_err();
+            assert!(matches!(err, RomWeaverError::Validation(_)));
+            assert!(err.to_string().contains("open failed"));
+            Ok(())
+        })
+    }
+
+    // --- Entry metadata handling -------------------------------------------
+
+    #[test]
+    fn entry_metadata_reports_file_sizes_and_no_solid_block_for_zip() -> Result<()> {
+        run_with_large_stack("metadata", || {
+            let temp_dir = TempDir::new("metadata")?;
+            let source = temp_dir.path().join("fixture.zip");
+            create_zip_fixture(&source)?;
+
+            let entries = list_regular_archive_entries(&source, "zip")?;
+            let file_entry = entries
+                .iter()
+                .find(|entry| normalize_relaxed(&entry.path) == "dir/file.txt")
+                .ok_or_else(|| RomWeaverError::Validation("missing dir/file.txt entry".into()))?;
+            assert!(!file_entry.is_dir);
+            assert_eq!(file_entry.size, Some(5));
+            // Zip has no solid-block concept; only 7z folders populate this.
+            assert_eq!(file_entry.solid_block, None);
+
+            let dir_entry = entries
+                .iter()
+                .find(|entry| normalize_relaxed(&entry.path) == "dir")
+                .ok_or_else(|| RomWeaverError::Validation("missing dir entry".into()))?;
+            assert!(dir_entry.is_dir);
+            Ok(())
+        })
+    }
+
+    // --- Write -> read round trip through the low-level read.rs API --------
+
+    #[test]
+    fn seven_zip_write_then_low_level_read_round_trips_payload() -> Result<()> {
+        run_with_large_stack("7z-round-trip", || {
+            let temp_dir = TempDir::new("7z-round-trip")?;
+            let source = temp_dir.path().join("fixture.7z");
+
+            let mut writer = WriteArchive::new("7z writer alloc")?;
+            writer.set_format(WriteFormat::SevenZ, "7z format")?;
+            writer.add_filter(WriteFilter::None, "7z filter")?;
+            writer.open_filename(&source, "7z output", "7z open")?;
+
+            let payload = b"round trip payload";
+            writer.start_entry(
+                EntrySpec {
+                    pathname: "payload.bin",
+                    file_type: EntryFileType::Regular,
+                    perm: 0o644,
+                    size: payload.len() as u64,
+                },
+                "7z start entry",
+            )?;
+            writer.write_data_all(payload, "7z write data")?;
+            writer.finish_entry("7z finish entry")?;
+            writer.close("7z close", "7z release")?;
+
+            // Read it back with the raw ReadArchive API directly (not the
+            // higher-level entries.rs helpers), to exercise read.rs on its own.
+            let mut reader = ReadArchive::new("7z reader alloc")?;
+            reader.support_regular_archives("7z reader setup")?;
+            reader.open_filename(&source, "7z source", 2 * 1024 * 1024, "7z open for read")?;
+            assert!(reader.next_header("7z next header")?);
+
+            let mut decoded = Vec::new();
+            let copied = reader.read_entry_to_writer(&mut decoded, 4096, "7z read entry")?;
+            assert_eq!(copied, payload.len() as u64);
+            assert_eq!(decoded, payload);
+
+            assert!(!reader.next_header("7z next header (eof)")?);
+            reader.close("7z reader close", "7z reader release")?;
+            Ok(())
+        })
+    }
 }
