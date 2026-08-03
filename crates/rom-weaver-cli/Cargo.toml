@@ -74,6 +74,10 @@ required-features = ["wasm-app"]
 name = "rom-weaver-typegen"
 path = "src/typegen_main.rs"
 required-features = ["typescript-types"]
+# Enables `cargo test --features typescript-types --example rom-weaver-typegen`
+# to run the `#[cfg(test)]` module pinning the generator's output; see
+# tests/unit/typegen_main.rs.
+test = true
 
 [package.metadata.binstall]
 pkg-fmt = "tgz"
