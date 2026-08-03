@@ -58,8 +58,8 @@
 .rw-app .brand-hy { color: var(--ink-4); font-weight: 400; }
 
 /* the sub-line never clips: every piece has a compact form chosen by breakpoint
-   - threads reads "8T", the status keeps its glyph, and the build tag sheds its
-   secondary half on phones */
+   - threads reads "8T", the status keeps its glyph, and build identity remains
+   complete on phones */
 /* The row is as tall as its ink, not as tall as its targets: the controls keep
    the 24px box the target-size floor needs (see the block below) and overflow
    this row symmetrically, so a preview build wearing three of them is no taller
@@ -198,7 +198,6 @@
   .rw-app .sub-status-rule::before { content: ""; }
 }
 @media (max-width: 719px) {
-  .rw-app .build-tag .tag-extra { display: none; }
   /* the glyph is the whole control here, so it takes the room the label had */
   .rw-app .sub-status { --sub-glyph: 13px; }
 }
@@ -411,7 +410,6 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 @media (max-width: 999px) {
   .rw-app .desktop-more { display: none; }
   .rw-app .mobile-more { display: inline-flex; }
-  .rw-app .mobile-utility-source, .rw-app .mobile-utility-support { display: none; }
   .rw-app .masthead-settings { display: none; }
   .rw-app .dock .mobile-more { display: flex; position: relative; }
   .rw-app .dock .mobile-more .dock-action { width: 100%; }

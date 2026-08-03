@@ -409,3 +409,28 @@ test("WebappRoot keeps diagnostics behind More - the Log dialog owns them", asyn
   await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });
+
+test("mobile masthead keeps external links and complete build identity visible", async () => {
+  page.viewport(390, 844);
+  mountWebappRoot();
+
+  await expect.poll(() => document.querySelector(".masthead-tools")).toBeTruthy();
+  for (const selector of [".mobile-utility-source", ".mobile-utility-support"]) {
+    const link = document.querySelector(selector);
+    expect(link).not.toBeNull();
+    expect(getComputedStyle(link).display).not.toBe("none");
+    expect(link.getBoundingClientRect().width).toBeGreaterThan(0);
+  }
+
+  const buildTag = document.querySelector(".build-tag");
+  expect(buildTag?.textContent).toMatch(/v\d/);
+  const badge = buildTag?.querySelector(".channel-badge");
+  if (badge) {
+    expect(getComputedStyle(badge).display).not.toBe("none");
+    expect(badge.textContent).toMatch(/v\d/);
+  }
+  const previewVersion = buildTag?.querySelector(".tag-extra");
+  if (previewVersion) expect(getComputedStyle(previewVersion).display).not.toBe("none");
+
+  page.viewport(1280, 900);
+});

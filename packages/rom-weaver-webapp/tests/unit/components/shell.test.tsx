@@ -179,6 +179,7 @@ describe("Masthead", () => {
     expect(badge.getAttribute("data-channel")).toBe("pr");
     expect(badge.getAttribute("href")).toBe("https://example.com/repo/pull/123");
     expect(badge.getAttribute("target")).toBe("_blank");
+    expect(badge.querySelector(".tag-extra")?.textContent).toBe(" · v1.2.3");
 
     rerender(withSettings(<Masthead {...mastheadProps} channelBadge="nightly" />));
     const channel = container.querySelector(".channel-badge") as HTMLButtonElement;
