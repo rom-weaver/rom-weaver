@@ -132,13 +132,18 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(createController().getState().currentView).toBe("patcher");
   });
 
-  it("returns to the system tab it was left on", () => {
+  it("returns to the system tab it was left on, with the address settled first", () => {
     window.history.replaceState({}, "", "/system/storage");
     const controller = createController();
     controller.selectView("patcher");
     expect(window.location.pathname).toBe("/apply");
+    // Subscribers render the sub-path out of `window.location`, so the address
+    // has to be final by the time the view change notifies them.
+    const pathsSeenBySubscribers: string[] = [];
+    controller.subscribe(() => pathsSeenBySubscribers.push(window.location.pathname));
     controller.selectView("system");
     expect(window.location.pathname).toBe("/system/storage");
+    expect(pathsSeenBySubscribers).toEqual(["/system/storage"]);
   });
 
   it("resolves the system route from every shape of its path", () => {

@@ -332,9 +332,13 @@ const createWebappRootController = (options: ControllerOptions) => {
 
   const commitMode = (mode: WebappView, historyMode: RouteHistoryMode = "push") => {
     rememberSystemPath();
+    // The address has to be final before the store notifies: routes that read a
+    // sub-path out of the URL (the System tab, the docs slug) are rendered from
+    // `window.location` in the same synchronous pass this setState triggers, so
+    // writing it afterwards paints the new route at the old route's sub-path.
+    writeWorkflowViewToPath(mode, historyMode, mode === "system" ? systemResumePath : null);
     setState({ currentView: mode });
     persistWorkflowView(options.storage, mode);
-    writeWorkflowViewToPath(mode, historyMode, mode === "system" ? systemResumePath : null);
   };
 
   const updatePatcherSession = (nextPatcherSession: Partial<PatcherSessionState>) => {
