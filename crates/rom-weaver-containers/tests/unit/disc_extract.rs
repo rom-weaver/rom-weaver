@@ -236,13 +236,19 @@ fn logical_bytes_sums_track_frame_sizes() {
 }
 
 #[test]
-fn logical_bytes_rejects_overflowing_frame_counts() {
+fn logical_bytes_succeeds_for_track_sizes_near_u32_max() {
+    // Neither the per-track multiply nor the running-total add can actually
+    // overflow u64 here: `u32::MAX as u64 * CD_FRAME_BYTES` is ~1.05e13, and
+    // even summing several such tracks stays far below u64::MAX (~1.8e19) -
+    // reaching that would take on the order of a million tracks, not a
+    // realistic test fixture. This asserts the near-the-u32-boundary case
+    // that `checked_mul`/`checked_add` guard against a false positive on,
+    // not the overflow path itself (`logical_bytes` returns `Err` via
+    // `checked_add`/`checked_mul`; it never saturates).
     let layout = DiscLayout {
         kind: DiscKind::CdRom,
         tracks: vec![track(1, DiscTrackMode::Mode1, u32::MAX, 0)],
     };
-    // `u32::MAX * CD_FRAME_BYTES` overflows u64? No -- but repeated tracks
-    // pushing the running total past u64::MAX must still error cleanly.
     let two_huge_tracks = DiscLayout {
         kind: DiscKind::CdRom,
         tracks: vec![
