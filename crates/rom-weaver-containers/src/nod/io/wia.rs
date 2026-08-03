@@ -2087,3 +2087,399 @@ fn compress_bound(compression: Compression, size: usize) -> usize {
         _ => unimplemented!("CompressionKind::compress_bound {:?}", compression),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Builds a minimal, otherwise-valid `WIADisc` value: uncompressed, no
+    /// partitions, no raw data, and no groups. Callers tweak fields to
+    /// exercise specific validation branches.
+    fn minimal_disc(chunk_size: u32) -> WIADisc {
+        WIADisc {
+            disc_type: DiscKind::GameCube.into(),
+            compression: WIACompression::None.into(),
+            compression_level: I32::new(0),
+            chunk_size: U32::new(chunk_size),
+            disc_head: [0u8; DISC_HEAD_SIZE],
+            num_partitions: U32::new(0),
+            partition_type_size: U32::new(size_of::<WIAPartition>() as u32),
+            partition_offset: U64::new(0),
+            partition_hash: sha1_hash(&[]),
+            num_raw_data: U32::new(0),
+            raw_data_offset: U64::new(0),
+            raw_data_size: U32::new(0),
+            num_groups: U32::new(0),
+            group_offset: U64::new(0),
+            group_size: U32::new(0),
+            compr_data_len: 0,
+            compr_data: [0u8; 7],
+        }
+    }
+
+    /// Serializes a `WIAFileHeader` + `WIADisc` pair into a byte buffer that
+    /// [`BlockReaderWIA::new`] can parse, wiring up `disc_size`/`disc_hash`
+    /// and `file_head_hash` correctly. `mutate_disc` runs before the disc
+    /// hash is computed, so it can corrupt fields that should fail
+    /// `WIADisc::validate`. `corrupt_after_hash` runs after hashing so it can
+    /// exercise the hash-mismatch path without touching validated fields.
+    fn build_wia_bytes(magic: MagicBytes, disc: WIADisc, corrupt_disc_hash: bool) -> Vec<u8> {
+        let disc_bytes = disc.as_bytes().to_vec();
+        let mut disc_hash = sha1_hash(&disc_bytes);
+        if corrupt_disc_hash {
+            disc_hash[0] ^= 0xFF;
+        }
+
+        let mut header = WIAFileHeader {
+            magic,
+            version: U32::new(WIA_VERSION),
+            version_compatible: U32::new(WIA_VERSION_READ_COMPATIBLE),
+            disc_size: U32::new(disc_bytes.len() as u32),
+            disc_hash,
+            iso_file_size: U64::new(0),
+            wia_file_size: U64::new(0),
+            file_head_hash: [0u8; 20],
+        };
+        if magic == RVZ_MAGIC {
+            header.version = U32::new(RVZ_VERSION);
+            header.version_compatible = U32::new(RVZ_VERSION_READ_COMPATIBLE);
+        }
+        let header_bytes = header.as_bytes();
+        header.file_head_hash =
+            sha1_hash(&header_bytes[..header_bytes.len() - size_of::<HashBytes>()]);
+
+        let mut out = header.as_bytes().to_vec();
+        out.extend_from_slice(&disc_bytes);
+        out
+    }
+
+    // --- WIAFileHeader::validate ------------------------------------------
+
+    #[test]
+    fn file_header_validate_accepts_well_formed_header() {
+        let bytes = build_wia_bytes(WIA_MAGIC, minimal_disc(0x200000), false);
+        let header = WIAFileHeader::read_from_bytes(&bytes[..size_of::<WIAFileHeader>()]).unwrap();
+        header.validate().expect("well-formed header should parse");
+    }
+
+    #[test]
+    fn file_header_validate_rejects_bad_magic() {
+        let bytes = build_wia_bytes(*b"NOPE", minimal_disc(0x200000), false);
+        let header = WIAFileHeader::read_from_bytes(&bytes[..size_of::<WIAFileHeader>()]).unwrap();
+        let err = header.validate().unwrap_err();
+        assert!(matches!(err, Error::DiscFormat(_)));
+    }
+
+    #[test]
+    fn file_header_validate_rejects_unsupported_version() {
+        let mut bytes = build_wia_bytes(WIA_MAGIC, minimal_disc(0x200000), false);
+        let mut header =
+            WIAFileHeader::read_from_bytes(&bytes[..size_of::<WIAFileHeader>()]).unwrap();
+        header.version_compatible = U32::new(0x0200_0000);
+        // Re-sign the file head hash so only the version check fails.
+        let header_bytes = header.as_bytes().to_vec();
+        header.file_head_hash =
+            sha1_hash(&header_bytes[..header_bytes.len() - size_of::<HashBytes>()]);
+        bytes[..size_of::<WIAFileHeader>()].copy_from_slice(header.as_bytes());
+        let err = header.validate().unwrap_err();
+        assert!(matches!(err, Error::DiscFormat(_)));
+    }
+
+    #[test]
+    fn file_header_validate_rejects_tampered_file_head_hash() {
+        let bytes = build_wia_bytes(WIA_MAGIC, minimal_disc(0x200000), false);
+        let mut header =
+            WIAFileHeader::read_from_bytes(&bytes[..size_of::<WIAFileHeader>()]).unwrap();
+        header.file_head_hash[0] ^= 0xFF;
+        let err = header.validate().unwrap_err();
+        assert!(matches!(err, Error::DiscFormat(_)));
+    }
+
+    // --- WIADisc::validate ---------------------------------------------------
+
+    #[test]
+    fn disc_validate_rejects_non_multiple_wia_chunk_size() {
+        let disc = minimal_disc(0x1FFFFF);
+        let err = disc.validate(false).unwrap_err();
+        assert!(matches!(err, Error::DiscFormat(_)));
+    }
+
+    #[test]
+    fn disc_validate_rejects_undersized_rvz_chunk_size() {
+        let mut disc = minimal_disc(0x8000);
+        disc.chunk_size = U32::new(1024);
+        let err = disc.validate(true).unwrap_err();
+        assert!(matches!(err, Error::DiscFormat(_)));
+    }
+
+    #[test]
+    fn disc_validate_rejects_partition_type_size_mismatch() {
+        let mut disc = minimal_disc(0x200000);
+        disc.partition_type_size = U32::new(4);
+        let err = disc.validate(false).unwrap_err();
+        assert!(matches!(err, Error::DiscFormat(_)));
+    }
+
+    #[test]
+    fn disc_validate_rejects_unknown_disc_type_and_compression() {
+        let mut bad_type = minimal_disc(0x200000);
+        bad_type.disc_type = U32::new(99);
+        assert!(bad_type.validate(false).is_err());
+
+        let mut bad_compression = minimal_disc(0x200000);
+        bad_compression.compression = U32::new(99);
+        assert!(bad_compression.validate(false).is_err());
+    }
+
+    /// `BlockReaderWIA` doesn't implement `Debug` (it holds a `dyn
+    /// DiscStream`), so `Result::unwrap_err` isn't available; this mirrors
+    /// it without requiring `T: Debug`.
+    fn expect_err<T>(result: Result<T>, context: &str) -> Error {
+        match result {
+            Ok(_) => panic!("expected an error: {context}"),
+            Err(err) => err,
+        }
+    }
+
+    // --- BlockReaderWIA::new (full parse, error paths) -----------------------
+
+    #[test]
+    fn block_reader_new_parses_minimal_valid_wia() {
+        let bytes = build_wia_bytes(WIA_MAGIC, minimal_disc(0x200000), false);
+        let reader = BlockReaderWIA::new(Box::new(bytes)).expect("minimal WIA should parse");
+        assert_eq!(reader.disc.compression(), WIACompression::None);
+        assert_eq!(reader.groups.len(), 0);
+        assert_eq!(reader.raw_data.len(), 0);
+    }
+
+    #[test]
+    fn block_reader_new_rejects_truncated_header() {
+        let mut bytes = build_wia_bytes(WIA_MAGIC, minimal_disc(0x200000), false);
+        // Cut the buffer short before the file header even finishes.
+        bytes.truncate(0x20);
+        let err = expect_err(BlockReaderWIA::new(Box::new(bytes)), "truncated header");
+        // A truncated stream fails as an I/O error surfaced through the
+        // "Reading WIA/RVZ file header" context, not a panic.
+        assert!(!format!("{err}").is_empty());
+    }
+
+    #[test]
+    fn block_reader_new_rejects_bad_magic() {
+        let bytes = build_wia_bytes(*b"NOPE", minimal_disc(0x200000), false);
+        let err = expect_err(BlockReaderWIA::new(Box::new(bytes)), "bad magic");
+        assert!(matches!(err, Error::DiscFormat(_)));
+    }
+
+    #[test]
+    fn block_reader_new_rejects_disc_hash_mismatch() {
+        let bytes = build_wia_bytes(WIA_MAGIC, minimal_disc(0x200000), true);
+        let err = expect_err(BlockReaderWIA::new(Box::new(bytes)), "disc hash mismatch");
+        assert!(matches!(err, Error::DiscFormat(_)));
+        assert!(format!("{err}").contains("hash mismatch"));
+    }
+
+    #[test]
+    fn block_reader_new_rejects_invalid_disc_body() {
+        // A chunk size that fails `WIADisc::validate` must surface as an
+        // error rather than being silently accepted.
+        let bytes = build_wia_bytes(WIA_MAGIC, minimal_disc(0x123456), false);
+        let err = expect_err(BlockReaderWIA::new(Box::new(bytes)), "invalid disc body");
+        assert!(matches!(err, Error::DiscFormat(_)));
+    }
+
+    // --- BlockReaderWIA::read_block (chunk-table / group-data error paths) ---
+
+    /// Builds a `BlockReaderWIA` directly (bypassing on-disk serialization)
+    /// with a single raw-data region and caller-supplied groups, so
+    /// chunk-table edge cases can be exercised without hand-rolling the full
+    /// compressed group-header stream.
+    fn reader_with_raw_data(
+        backing: Vec<u8>,
+        num_sectors: u32,
+        groups: Vec<RVZGroup>,
+    ) -> BlockReaderWIA {
+        let disc = minimal_disc(0x200000);
+        let raw_data = WIARawData {
+            raw_data_offset: U64::new(0),
+            raw_data_size: U64::new(num_sectors as u64 * SECTOR_SIZE as u64),
+            group_index: U32::new(0),
+            num_groups: U32::new(groups.len() as u32),
+        };
+        BlockReaderWIA {
+            inner: Box::new(backing),
+            header: WIAFileHeader {
+                magic: WIA_MAGIC,
+                version: U32::new(WIA_VERSION),
+                version_compatible: U32::new(WIA_VERSION_READ_COMPATIBLE),
+                disc_size: U32::new(0),
+                disc_hash: [0u8; 20],
+                iso_file_size: U64::new(0),
+                wia_file_size: U64::new(0),
+                file_head_hash: [0u8; 20],
+            },
+            disc,
+            partitions: Arc::from(Vec::<WIAPartition>::new()),
+            raw_data: Arc::from(vec![raw_data]),
+            groups: Arc::from(groups),
+            nkit_header: None,
+            decompressor: DecompressionKind::None,
+        }
+    }
+
+    #[test]
+    fn read_block_rejects_truncated_group_data() {
+        // The group claims 0x8000 bytes of data starting at offset 0, but
+        // the backing stream is empty: the read must fail, not panic.
+        let group = RVZGroup {
+            data_offset: U32::new(0),
+            data_size_and_flag: U32::new(0x8000),
+            rvz_packed_size: U32::new(0),
+        };
+        let mut reader = reader_with_raw_data(Vec::new(), 4, vec![group]);
+        // A raw-data group's size is `num_sectors * SECTOR_SIZE`, not the
+        // (smaller) hash-stripped `SECTOR_DATA_SIZE`; the buffer must be at
+        // least that large to get past the output-size check first.
+        let mut out = vec![0u8; 4 * SECTOR_SIZE];
+        let err = reader.read_block(&mut out, 0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+    }
+
+    #[test]
+    fn read_block_rejects_out_of_range_chunk_table_entry() {
+        // `raw_data.num_groups` claims one group, but none were supplied:
+        // `self.groups.get(0)` misses and the reader must error cleanly.
+        let mut reader = reader_with_raw_data(Vec::new(), 4, Vec::new());
+        let mut out = vec![0u8; 4 * SECTOR_SIZE];
+        let err = reader.read_block(&mut out, 0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(format!("{err}").contains("Couldn't find WIA/RVZ group index"));
+    }
+
+    #[test]
+    fn read_block_rejects_undersized_output_buffer() {
+        let group = RVZGroup {
+            data_offset: U32::new(0),
+            data_size_and_flag: U32::new(4),
+            rvz_packed_size: U32::new(0),
+        };
+        let mut reader = reader_with_raw_data(vec![0u8; 16], 4, vec![group]);
+        let mut out = vec![0u8; 4]; // Smaller than a sector's worth of data.
+        let err = reader.read_block(&mut out, 0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn read_block_reports_out_of_bounds_sector_as_none_block() {
+        let mut reader = reader_with_raw_data(Vec::new(), 4, Vec::new());
+        let mut out = vec![0u8; SECTOR_DATA_SIZE];
+        // Sector 999 falls outside the single raw-data region covering
+        // sectors 0..4.
+        let block = reader
+            .read_block(&mut out, 999)
+            .expect("no panic for oob sector");
+        assert_eq!(block.kind, BlockKind::None);
+    }
+
+    #[test]
+    fn read_block_zero_size_group_returns_zero_block() {
+        // A group with data_size 0 is the documented "all zero" special case.
+        let group = RVZGroup {
+            data_offset: U32::new(0),
+            data_size_and_flag: U32::new(0),
+            rvz_packed_size: U32::new(0),
+        };
+        let mut reader = reader_with_raw_data(Vec::new(), 4, vec![group]);
+        let mut out = vec![0u8; 4 * SECTOR_SIZE];
+        let block = reader
+            .read_block(&mut out, 0)
+            .expect("zero group should not error");
+        assert_eq!(block.kind, BlockKind::Zero);
+    }
+
+    // --- Pure struct helpers ---------------------------------------------
+
+    #[test]
+    fn wia_partition_data_sector_and_group_membership() {
+        let pd = WIAPartitionData {
+            first_sector: U32::new(10),
+            num_sectors: U32::new(5),
+            group_index: U32::new(2),
+            num_groups: U32::new(3),
+        };
+        assert_eq!(pd.start_sector(), 10);
+        assert_eq!(pd.end_sector(), 15);
+        assert!(pd.contains_sector(10));
+        assert!(pd.contains_sector(14));
+        assert!(!pd.contains_sector(15));
+        assert!(pd.contains_group(2));
+        assert!(pd.contains_group(4));
+        assert!(!pd.contains_group(5));
+    }
+
+    #[test]
+    fn wia_raw_data_offset_and_sector_math() {
+        let rd = WIARawData {
+            raw_data_offset: U64::new(SECTOR_SIZE as u64 + 100),
+            raw_data_size: U64::new(SECTOR_SIZE as u64),
+            group_index: U32::new(0),
+            num_groups: U32::new(1),
+        };
+        // Start offset rounds down to the previous sector boundary.
+        assert_eq!(rd.start_offset(), SECTOR_SIZE as u64);
+        assert_eq!(rd.start_sector(), 1);
+        // End offset rounds up to the next sector boundary.
+        assert_eq!(rd.end_offset(), SECTOR_SIZE as u64 * 2 + 100);
+        assert_eq!(rd.end_sector(), 3);
+        assert!(rd.contains_sector(1));
+        assert!(rd.contains_sector(2));
+        assert!(!rd.contains_sector(3));
+    }
+
+    #[test]
+    fn rvz_group_flag_and_size_bit_packing() {
+        let compressed = RVZGroup {
+            data_offset: U32::new(0),
+            data_size_and_flag: U32::new(COMPRESSED_BIT | 0x1234),
+            rvz_packed_size: U32::new(0),
+        };
+        assert!(compressed.is_compressed());
+        assert_eq!(compressed.data_size(), 0x1234);
+
+        let uncompressed = RVZGroup {
+            data_offset: U32::new(0),
+            data_size_and_flag: U32::new(0x1234),
+            rvz_packed_size: U32::new(0),
+        };
+        assert!(!uncompressed.is_compressed());
+        assert_eq!(uncompressed.data_size(), 0x1234);
+    }
+
+    #[test]
+    fn wia_group_and_rvz_group_round_trip() {
+        let wia_group = WIAGroup {
+            data_offset: U32::new(42),
+            data_size: U32::new(1000),
+        };
+        let rvz = RVZGroup::from(&wia_group);
+        assert!(rvz.is_compressed());
+        assert_eq!(rvz.data_size(), 1000);
+        assert_eq!(rvz.data_offset.get(), 42);
+
+        let back = WIAGroup::from(&rvz);
+        assert_eq!(back, wia_group);
+    }
+
+    #[test]
+    fn disc_kind_and_compression_round_trip_and_reject_unknown() {
+        assert_eq!(DiscKind::try_from(1).unwrap(), DiscKind::GameCube);
+        assert_eq!(DiscKind::try_from(2).unwrap(), DiscKind::Wii);
+        assert!(DiscKind::try_from(3).is_err());
+
+        assert_eq!(WIACompression::try_from(0).unwrap(), WIACompression::None);
+        assert_eq!(
+            WIACompression::try_from(5).unwrap(),
+            WIACompression::Zstandard
+        );
+        assert!(WIACompression::try_from(6).is_err());
+    }
+}
