@@ -69,6 +69,10 @@ path = "src/main.rs"
 name = "rom-weaver-app"
 path = "src/wasm_main.rs"
 required-features = ["wasm-app"]
+# Enables `cargo test --features wasm-app --example rom-weaver-app` to run the
+# `#[cfg(test)]` module covering `parse_wasm_run_request` and the panic
+# marker; see tests/unit/wasm_main.rs.
+test = true
 
 [[example]]
 name = "rom-weaver-typegen"
