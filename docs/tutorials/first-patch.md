@@ -60,11 +60,11 @@ untouched.
 
 <figure class="docs-screenshot-pair" aria-label="The practice ROM before and after both patches">
   <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-hello-world.webp" width="1024" height="768" alt="The original homebrew sample ROM displaying HELLO WORLD in an NES emulator" loading="lazy" decoding="async">
+    <img src="/docs/screenshots/first-sample-hello-world.webp" width="1024" height="768" alt="The original homebrew sample ROM displaying HELLO WORLD in an NES emulator">
     <figcaption>Before: the clean practice ROM.</figcaption>
   </figure>
   <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-modified-rom.webp" width="1024" height="768" alt="The homebrew sample ROM displaying MODIFIED ROM after both patches" loading="lazy" decoding="async">
+    <img src="/docs/screenshots/first-sample-modified-rom.webp" width="1024" height="768" alt="The homebrew sample ROM displaying MODIFIED ROM after both patches">
     <figcaption>After: both patches applied in order.</figcaption>
   </figure>
 </figure>

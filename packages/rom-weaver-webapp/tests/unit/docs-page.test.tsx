@@ -271,6 +271,19 @@ Fixture description.
     }
   });
 
+  it("loads the tutorial screenshots before they enter the viewport", () => {
+    render(<DocsPage active slug="docs/get-started" />);
+
+    const images = [...document.querySelectorAll<HTMLImageElement>(".docs-article img")];
+    expect(images).toHaveLength(2);
+    for (const image of images) {
+      expect(image.getAttribute("loading")).toBeNull();
+      expect(image.getAttribute("decoding")).toBeNull();
+      expect(Number(image.getAttribute("width"))).toBeGreaterThan(0);
+      expect(Number(image.getAttribute("height"))).toBeGreaterThan(0);
+    }
+  });
+
   it("resolves hosted documents, repository-only documents, and published images from their source file", () => {
     const route = createDocRoute(
       { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
