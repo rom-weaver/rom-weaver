@@ -156,7 +156,7 @@
   .rw-app .sub-chip:hover { text-decoration-color: currentColor; }
 }
 .rw-app .sub-chip:active { text-decoration-color: currentColor; }
-.rw-app .masthead-threads-space { flex: none; inline-size: .28em; font-size: 0; }
+.rw-app .masthead-threads-space { flex: none; inline-size: .28em; font-size: inherit; }
 /* The worker state lands after hydration and recolors the status button. Its
    color transition is disabled in the action-group rule below because Lighthouse
    flags that load-time main-thread animation. */
