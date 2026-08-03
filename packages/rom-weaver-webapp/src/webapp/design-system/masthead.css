@@ -57,9 +57,8 @@
 .rw-app .brand-word b { color: var(--thread-text); font-weight: 650; }
 .rw-app .brand-hy { color: var(--ink-4); font-weight: 400; }
 
-/* the sub-line never clips: every piece has a compact form chosen by breakpoint
-   - threads reads "8T", the status keeps its glyph, and build identity remains
-   complete on phones */
+/* the sub-line never clips: version and threads each have a compact form chosen
+   by breakpoint, and build identity remains complete on phones */
 /* The row is as tall as its ink, not as tall as its targets: the controls keep
    the 24px box the target-size floor needs (see the block below) and overflow
    this row symmetrically, so a preview build wearing three of them is no taller
@@ -71,7 +70,7 @@
   color: var(--ink-4); white-space: nowrap;
 }
 .rw-app .sub-item { display: inline-flex; flex: none; gap: var(--sp-xs); align-items: center; }
-/* the version opens the changelog, the thread count opens settings; the
+/* the version opens the changelog and the thread count opens settings; the
    underline in the `.sub-chip` block below is the affordance both wear */
 .rw-app .sub-link {
   position: relative; display: inline-flex; align-items: center; justify-content: center;
@@ -114,17 +113,7 @@
 }
 .rw-app a.channel-badge:active, .rw-app button.channel-badge:active { background: color-mix(in oklab, currentColor 22%, transparent); }
 
-/* the runtime status rides the brand info line: a state-coloured glyph that
-   opens the status dialog */
-/* The glyph size is a variable because the rule under it has to be exactly as
-   wide as the glyph, and the target box it sits in is twice that. */
-.rw-app .sub-status {
-  --sub-glyph: 12px;
-  position: relative; display: inline-flex; gap: 3px; align-items: center; justify-content: center;
-  font: inherit; font-size: .9em; font-weight: 600;
-  appearance: none; cursor: pointer;
-}
-.rw-app .sub-status svg { flex: none; width: var(--sub-glyph); height: var(--sub-glyph); }
+/* the runtime status is a state-coloured button in the top-right action group */
 .rw-app .sub-status[data-sw="active"] { color: var(--verified); }
 .rw-app .sub-status[data-sw="ready"] { color: var(--ink-2); }
 .rw-app .sub-status[data-sw="update"] { color: var(--care-text); }
@@ -132,20 +121,20 @@
 .rw-app .sub-status[data-sw="installing"] svg { animation: sw-spin 1.1s linear infinite; }
 .rw-app .sub-status[data-sw="disabled"] { color: var(--ink-4); }
 /* ── the sub-line control ──
-   These are links under a wordmark, not badges on it: three pills stacked under
+   These are links under a wordmark, not badges on it: two pills stacked under
    the brand read as decoration on the logo rather than as three places to go.
    Each one keeps its own colour, which is the state or the channel talking, and
    wears the dotted underline this app uses everywhere for "this goes somewhere".
 
-   All three carry `.sub-chip`, so the rules below name one class rather than
-   three selectors six times over - the CSS budget notices the difference.
+   Both carry `.sub-chip`, so the rules below name one class rather than two
+   selectors four times over - the CSS budget notices the difference.
 
    The box stays 24px for the target-size floor, and nothing is painted on it -
    axe measures the target on the element, not on a halo over it, and an
    unpainted box can overflow the row without anything showing at the edge. */
 .rw-app .sub-chip {
   position: relative;
-  /* 26, not the 24px floor: the sub-row packs three of these 4px apart, and a
+  /* 26, not the 24px floor: the sub-row packs two of these 4px apart, and a
      target sitting exactly on the minimum leaves no room for rounding. */
   min-inline-size: 26px; block-size: 26px; padding: 0 2px;
   background: transparent; border: 0;
@@ -163,70 +152,25 @@
   .rw-app .sub-chip:hover { text-decoration-color: currentColor; }
 }
 .rw-app .sub-chip:active { text-decoration-color: currentColor; }
-/* The worker state lands after hydration and recolors the status chip, and a
-   colour transition firing during load is a main-thread animation Lighthouse's
-   non-composited-animations audit flags - so this one chip snaps. The other
-   two sub-chips never recolor at load and keep the fade. */
-.rw-app .sub-status.sub-chip { transition: none; }
-/* With no text there is nothing to underline, and a bare glyph beside two
-   underlined controls stops reading as one of them. The rule is drawn inside the
-   box rather than on its edge: the box is taller than the row it sits in, and
-   anything painted at its bottom shows past the masthead. */
-/* No `content` here, so it draws nothing until one of the glyph-only rules below
-   turns it on. It is the width of the glyph, not of the box: the box is a 24px
-   target with a 12px mark centred in it, and a rule spanning the target reads as
-   an underline belonging to something twice the size of what is above it. */
-.rw-app .sub-status-rule::before {
-  position: absolute; inset-block-start: 19px; block-size: 1px;
-  inset-inline-start: 50%; inline-size: var(--sub-glyph); translate: -50% 0;
-  background: repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 3px);
-  opacity: .45; transition: opacity .18s;
-}
-@media (hover: hover) {
-  .rw-app .sub-status-rule:hover::before { opacity: 1; }
-}
-.rw-app .sub-status-rule:active::before { opacity: 1; }
-/* On the wide desktop layout the identity line has room to read as useful
-   context rather than footnote text. The status is the one action in that
-   line, so give it a quiet button shape while keeping the compact glyph-only
-   treatment below the rail threshold. */
+/* The worker state lands after hydration and recolors the status button. Its
+   color transition is disabled in the action-group rule below because Lighthouse
+   flags that load-time main-thread animation. */
 @media (min-width: 1160px) {
   .rw-app .brand-sub-row {
     block-size: 20px; column-gap: var(--sp-s); margin-block-start: 2px;
-    font-size: clamp(.78rem, .7rem + .15vw, .86rem); color: var(--ink-3);
+    font-size: clamp(.82rem, .75rem + .2vw, .94rem); color: var(--ink-3);
   }
-  .rw-app .brand-sub-row .sub-status {
-    --sub-glyph: 16px;
-    gap: var(--sp-xs); min-inline-size: 32px; block-size: 30px; padding-inline: var(--sp-s);
-    border: 1px solid color-mix(in oklab, currentColor 36%, var(--seam));
-    border-radius: var(--r-s); background: color-mix(in oklab, currentColor 7%, transparent);
-    text-decoration: none;
-  }
-  @media (hover: hover) {
-    .rw-app .brand-sub-row .sub-status:hover {
-      border-color: currentColor; background: color-mix(in oklab, currentColor 13%, transparent);
-    }
-  }
-  .rw-app .brand-sub-row .sub-status:active {
-    border-color: currentColor; background: color-mix(in oklab, currentColor 18%, transparent);
-  }
-  .rw-app .brand-sub-row .sub-status:focus-visible { outline: 2px solid var(--thread); outline-offset: 2px; }
-  .rw-app .brand-sub-row .sub-status-rule::before { display: none; }
+  .rw-app .brand-sub-row .build-tag .channel-badge { font-size: inherit; }
 }
-/* when a channel badge is present the status yields to glyph-only at every
-   width - the badge is the rarer, louder signal, and together they cannot fit
-   inside the 1220px app column in long locales */
-.rw-app .brand-sub-row:has(.channel-badge) .sub-status-text { display: none; }
-.rw-app .brand-sub-row:has(.channel-badge) .sub-status-rule::before { content: ""; }
-/* through the compact rail band the status keeps just its glyph, which also
-   keeps the brand's min-content narrow enough that nothing can collide */
+
+/* The status keeps only its glyph while the rail is compact, but retains the
+   same top-right action target and accessible name at every width. */
 @media (max-width: 1159px) {
-  .rw-app .sub-status-text { display: none; }
-  .rw-app .sub-status-rule::before { content: ""; }
+  .rw-app .masthead-status { width: clamp(30px, 22px + 1.2vw, 38px); padding-inline: 0; }
+  .rw-app .masthead-status-text { display: none; }
 }
 @media (max-width: 719px) {
-  /* the glyph is the whole control here, so it takes the room the label had */
-  .rw-app .sub-status { --sub-glyph: 13px; }
+  .rw-app .masthead-status svg { width: 13px; height: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .rw-app .sub-status svg { animation: none; }
@@ -354,6 +298,12 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 .rw-app .tool:active { color: var(--ink); background: var(--plate-2); border-color: var(--seam); }
 .rw-app .tool svg { width: clamp(15px, 13.8px + .25vw, 17px); height: clamp(15px, 13.8px + .25vw, 17px); }
 .rw-app .tool[aria-expanded="true"] { color: var(--ink); background: var(--well); border-color: var(--seam); }
+.rw-app .masthead-status {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-xs);
+  width: auto; padding-inline: var(--sp-s); font-size: .78rem; font-weight: 650; transition: none;
+}
+.rw-app .masthead-status svg { flex: none; width: 16px; height: 16px; }
+.rw-app .masthead-status-text { white-space: nowrap; }
 /* Desktop keeps the important destinations compact; the tooltip and aria-label
    carry their names without turning the actions cluster into another nav. */
 .rw-app .tool-text { display: none; }

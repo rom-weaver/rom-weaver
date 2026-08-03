@@ -1,5 +1,4 @@
 import {
-  BookOpen,
   createLucideIcon,
   Heart,
   Info,
@@ -244,7 +243,7 @@ const PhoneDock = ({
   tabs: WorkflowTab[];
 }) => {
   const dockRef = useRef<HTMLDivElement | null>(null);
-  const dockTabs = tabs.filter((tab) => tab.id !== "docs" && tab.id !== "tools");
+  const dockTabs = tabs.filter((tab) => tab.id !== "tools");
   const interactiveTabs = betaToolsEnabled ? dockTabs : dockTabs.filter((tab) => !isBetaWorkflowTab(tab));
   const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusedId = interactiveTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
@@ -382,7 +381,6 @@ type UtilityMenuProps = {
   localizer: Localizer;
   menuClassName?: string;
   onOpenChangelog: () => void;
-  onOpenDocs: () => void;
   onOpenLog: () => void;
   onOpenStatus: () => void;
   onOpenStorage?: () => void;
@@ -399,7 +397,6 @@ const UtilityMenu = ({
   menuId,
   onClose,
   onOpenChangelog,
-  onOpenDocs,
   onOpenLog,
   onOpenStatus,
   onOpenStorage,
@@ -473,10 +470,6 @@ const UtilityMenu = ({
       ref={menuRef}
       role="menu"
     >
-      <button onClick={() => select(onOpenDocs)} role="menuitem" type="button">
-        <BookOpen aria-hidden="true" />
-        {localizer.message("ui.nav.docs")}
-      </button>
       <button onClick={() => select(onOpenStatus)} role="menuitem" type="button">
         <Info aria-hidden="true" />
         {localizer.message("ui.log.tabStatus")}
@@ -971,26 +964,7 @@ const Masthead = ({
                   </button>
                 </span>
               ) : null}
-              <span className="sub-item">
-                <button
-                  aria-haspopup="dialog"
-                  aria-label={runtimeLabel}
-                  className="sub-chip sub-status sub-status-rule"
-                  data-sw={runtimeState}
-                  onClick={onOpenStatus}
-                  type="button"
-                >
-                  <RuntimeGlyph state={runtimeState} />
-                  <span aria-hidden="true" className="sub-status-text">
-                    {runtimeLabel}
-                  </span>
-                </button>
-              </span>
             </span>
-            {/* the parser-time resolver in index.html rewrites the thread count
-                and runtime status before the shell paints, and removes itself;
-                this empty marker is the only stable place to inject it */}
-            <span className="shell-identity" hidden />
           </span>
         </span>
         <ModeRail
@@ -1033,6 +1007,22 @@ const Masthead = ({
             </a>
           ) : null}
           <span aria-hidden="true" className="actions-sep" />
+          <button
+            aria-haspopup="dialog"
+            aria-label={runtimeLabel}
+            className="tool masthead-status sub-status"
+            data-sw={runtimeState}
+            onClick={onOpenStatus}
+            type="button"
+          >
+            <RuntimeGlyph state={runtimeState} />
+            <span aria-hidden="true" className="masthead-status-text sub-status-text">
+              {runtimeLabel}
+            </span>
+            <span aria-hidden="true" className="tip">
+              {runtimeLabel}
+            </span>
+          </button>
           <ThemeToggle localizer={localizer} />
           {/* stays open on pick: arrow keys walk the radio group, and comparing
               two lots should not cost a reopen */}
@@ -1072,7 +1062,6 @@ const Masthead = ({
             moreLabel={moreLabel}
             onClose={closeUtility}
             onOpenChangelog={onOpenChangelog}
-            onOpenDocs={() => onSelectTab("docs")}
             onOpenLog={onOpenLog}
             onOpenStatus={onOpenStatus}
             onOpenStorage={onOpenStorage ?? onOpenLog}
@@ -1095,7 +1084,6 @@ const Masthead = ({
               menuId="more-menu"
               onClose={closeUtility}
               onOpenChangelog={onOpenChangelog}
-              onOpenDocs={() => onSelectTab("docs")}
               onOpenLog={onOpenLog}
               onOpenStatus={onOpenStatus}
               onOpenStorage={onOpenStorage ?? onOpenLog}
@@ -1107,6 +1095,10 @@ const Masthead = ({
             />
           ) : null}
         </div>
+        {/* The parser-time resolver in index.html rewrites the thread count and
+            runtime status before the shell paints, and removes itself. Keep its
+            marker after the action group so both slots exist when it runs. */}
+        <span className="shell-identity" hidden />
       </header>
       <PhoneDock
         betaToolsEnabled={betaToolsEnabled}
@@ -1138,7 +1130,6 @@ const Masthead = ({
               moreLabel={moreLabel}
               onClose={closeUtility}
               onOpenChangelog={onOpenChangelog}
-              onOpenDocs={() => onSelectTab("docs")}
               onOpenLog={onOpenLog}
               onOpenStatus={onOpenStatus}
               onOpenStorage={onOpenStorage ?? onOpenLog}

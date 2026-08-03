@@ -63,7 +63,7 @@ describe("Masthead", () => {
 
     for (const [list, selectedClass, labels] of [
       [rail, "mode", ["Apply", "Create", "Docs", "Trim"]],
-      [dock, "dock-tab", ["Apply", "Create", "Trim"]],
+      [dock, "dock-tab", ["Apply", "Create", "Docs", "Trim"]],
     ] as const) {
       const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);
       expect(tabs.map((tab) => tab.textContent)).toEqual(labels);
@@ -77,9 +77,9 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // github + support | theme, accent, settings, more - and Reset is
+    // github + support | status, theme, accent, settings, more - and Reset is
     // gone: it lives in the workflow panel head now
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
     expect(container.querySelector(".actions-sep")).toBeTruthy();
     expect(container.querySelector(".tool-support")).toBeTruthy();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
@@ -89,7 +89,7 @@ describe("Masthead", () => {
 
   it("keeps utility destinations behind More on both layouts", () => {
     const onOpenStorage = vi.fn();
-    const { container, getByRole } = render(
+    const { container, getByRole, queryByRole } = render(
       withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} />),
     );
     const more = container.querySelector(".desktop-more .tool") as HTMLButtonElement;
@@ -100,7 +100,7 @@ describe("Masthead", () => {
     const menu = container.querySelector('[role="menu"]') as HTMLElement;
     expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(menu.hidden).toBe(false);
-    expect(getByRole("menuitem", { name: "Docs" })).toBeTruthy();
+    expect(queryByRole("menuitem", { name: "Docs" })).toBeNull();
     expect(getByRole("menuitem", { name: "Tools" })).toBeTruthy();
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
     expect(onOpenStorage).toHaveBeenCalledTimes(1);

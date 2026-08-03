@@ -148,7 +148,8 @@
         const statusSlot = document.querySelector(".sub-status");
         const statusIcon = statusSlot?.querySelector("svg");
         const statusText = statusSlot?.querySelector(".sub-status-text");
-        if (!(threadSlot && threadCount && statusSlot && statusIcon && statusText)) return;
+        const statusTip = statusSlot?.querySelector(".tip");
+        if (!(threadSlot && threadCount && statusSlot && statusIcon && statusText && statusTip)) return;
 
         const hardwareConcurrency = navigator.hardwareConcurrency;
         const hardwareThreads =
@@ -211,6 +212,7 @@
           if (!english) return;
           statusSlot.setAttribute("aria-label", wording[state]);
           statusText.textContent = wording[state];
+          statusTip.textContent = wording[state];
         };
 
         // A controller means this page came out of the cache; without

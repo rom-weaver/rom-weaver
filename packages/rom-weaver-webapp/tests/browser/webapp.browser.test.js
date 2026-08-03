@@ -202,6 +202,7 @@ test("WebappRoot keeps Trim gated and Tools behind More", async () => {
     .toEqual(["Apply", "Create", "Docs"]);
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "Tools" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
 });
 
 test("enabled Tools stays behind More on desktop and phone", async () => {
@@ -224,6 +225,7 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
       await page.getByRole("button", { name: "Settings" }).hover();
       await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
     }
+    await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
   }
   page.viewport(1280, 900);
@@ -248,6 +250,8 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
   page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
   await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
+  expect(document.querySelector(".brand-sub-row .sub-status")).toBeNull();
+  expect(document.querySelector(".masthead-tools .sub-status")).toBeTruthy();
   for (const [width, height] of [
     [1280, 900],
     [1100, 900],
@@ -255,14 +259,17 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
   ]) {
     page.viewport(width, height);
     await expect.poll(() => getComputedStyle(document.querySelector(".sub-status svg")).display).not.toBe("none");
-    const badged = Boolean(document.querySelector(".brand-sub-row .channel-badge"));
-    const expected = badged || width <= 1159 ? "none" : "inline";
-    await expect.poll(() => getComputedStyle(document.querySelector(".sub-status-text")).display).toBe(expected);
+    const expectedVisible = width > 1159;
+    await expect
+      .poll(() => getComputedStyle(document.querySelector(".sub-status-text")).display !== "none")
+      .toBe(expectedVisible);
     if (width >= 1160) {
       expect(Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row")).fontSize)).toBeGreaterThan(
         12,
       );
-      expect(getComputedStyle(document.querySelector(".sub-status")).borderTopWidth).toBe("1px");
+      expect(
+        Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row .build-tag .sub-chip")).fontSize),
+      ).toBeGreaterThan(12);
       expect(getComputedStyle(document.querySelector(".sub-status svg")).width).toBe("16px");
       expect(getComputedStyle(document.querySelector(".sub-status")).cursor).toBe("pointer");
     }
@@ -440,7 +447,7 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
 });
 
 test("WebappRoot keeps diagnostics behind More - the Log dialog owns them", async () => {
-  // Settings stays direct; Docs and diagnostics share the responsive More menu.
+  // Settings stays direct; Docs is a top-level route and diagnostics share More.
   mountWebappRoot();
   await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
