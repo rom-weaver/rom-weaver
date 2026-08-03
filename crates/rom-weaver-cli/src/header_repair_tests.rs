@@ -682,6 +682,45 @@ fn build_test_n64_rom() -> Vec<u8> {
     bytes
 }
 
+/// Independent reimplementation of the N64 CIC-style CRC: seed both
+/// accumulators with `0xF8CA4DDC` and fold every big-endian 4-byte word from
+/// 0x1000..0x101000 through the same six-register mix production uses. This
+/// operates directly on already-big-endian bytes (bypassing
+/// `read_n64_word_normalized`'s byte-order handling entirely, since the test
+/// fixture is always built big-endian), so it exercises the checksum math
+/// independently of the byte-order plumbing under test.
+fn n64_reference_checksum(bytes: &[u8]) -> (u32, u32) {
+    let seed = 0xF8CA4DDCu32;
+    let (mut t1, mut t2, mut t3, mut t4, mut t5, mut t6) = (seed, seed, seed, seed, seed, seed);
+
+    for offset in (0x1000usize..0x101000usize).step_by(4) {
+        let d = u32::from_be_bytes([
+            bytes[offset],
+            bytes[offset + 1],
+            bytes[offset + 2],
+            bytes[offset + 3],
+        ]);
+        if t6.wrapping_add(d) < t6 {
+            t4 = t4.wrapping_add(1);
+        }
+        t6 = t6.wrapping_add(d);
+        t3 ^= d;
+
+        let shift = d & 0x1F;
+        let rotated = if shift == 0 { d } else { d.rotate_left(shift) };
+
+        t5 = t5.wrapping_add(rotated);
+        if t2 > d {
+            t2 ^= rotated;
+        } else {
+            t2 ^= t6 ^ d;
+        }
+        t1 = t1.wrapping_add(t5 ^ d);
+    }
+
+    (t6 ^ t4 ^ t3, t5 ^ t2 ^ t1)
+}
+
 #[test]
 fn repair_checksum_file_repairs_n64_and_leaves_other_bytes_untouched() {
     let scratch = ScratchDir::new("n64-repair");
@@ -693,29 +732,15 @@ fn repair_checksum_file_repairs_n64_and_leaves_other_bytes_untouched() {
     assert!(!matched.contains(&"n64".to_string()));
 
     let fixed = fs::read(&path).expect("read n64 output");
-    let old_crc = (
-        u32::from_be_bytes([
-            original[0x10],
-            original[0x11],
-            original[0x12],
-            original[0x13],
-        ]),
-        u32::from_be_bytes([
-            original[0x14],
-            original[0x15],
-            original[0x16],
-            original[0x17],
-        ]),
-    );
     let new_crc = (
         u32::from_be_bytes([fixed[0x10], fixed[0x11], fixed[0x12], fixed[0x13]]),
         u32::from_be_bytes([fixed[0x14], fixed[0x15], fixed[0x16], fixed[0x17]]),
     );
-    // The CIC-style CRC accumulator (seed 0xF8CA4DDC, t1..t6 over every 4-byte
-    // word from 0x1000..0x101000) is not reimplemented independently here;
-    // the idempotency test below is the primary correctness evidence. This
-    // just confirms the all-zero seed values actually got replaced.
-    assert_ne!(old_crc, new_crc);
+    assert_eq!(
+        new_crc,
+        n64_reference_checksum(&fixed),
+        "n64 repair must write the exact CIC-style CRC pair, not just any non-zero value"
+    );
 
     let diff: BTreeSet<usize> = (0..original.len())
         .filter(|&index| original[index] != fixed[index])
