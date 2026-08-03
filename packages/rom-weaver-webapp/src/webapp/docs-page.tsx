@@ -241,24 +241,31 @@ const SectionRail = ({
   initializing: boolean;
   route: DocRoute;
   onNavigate?: () => void;
-}) => (
-  <nav aria-label="On this page" className={initializing ? "warp-rail is-initializing" : "warp-rail"}>
-    <span className="warp-rail-title">On this page</span>
-    <ol className="warp-rail-list">
-      {route.sections.map((section, index) => (
-        <li key={section.id}>
-          <OutlineLink
-            current={index === activeIndex}
-            href={`/${route.slug}#${section.id}`}
-            index={index}
-            label={section.label}
-            onNavigate={onNavigate}
-          />
-        </li>
-      ))}
-    </ol>
-  </nav>
-);
+}) => {
+  // The server cannot measure a restored scroll position. At the top of a
+  // freshly opened guide the first heading is the honest fallback, and using
+  // it here keeps the marker painted through hydration instead of flashing in
+  // after the first client measurement.
+  const initialIndex = activeIndex < 0 && route.sections.length > 0 ? 0 : activeIndex;
+  return (
+    <nav aria-label="On this page" className={initializing ? "warp-rail is-initializing" : "warp-rail"}>
+      <span className="warp-rail-title">On this page</span>
+      <ol className="warp-rail-list">
+        {route.sections.map((section, index) => (
+          <li key={section.id}>
+            <OutlineLink
+              current={index === initialIndex}
+              href={`/${route.slug}#${section.id}`}
+              index={index}
+              label={section.label}
+              onNavigate={onNavigate}
+            />
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+};
 
 const DocsSearch = ({
   onNavigate,

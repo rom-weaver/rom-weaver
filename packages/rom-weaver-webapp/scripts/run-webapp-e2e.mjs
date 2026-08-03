@@ -427,6 +427,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (!docsReloadHtml.includes('class="warp-rail is-initializing"')) {
       throw new Error("Docs route response is missing the static rail initialization state");
     }
+    if (!docsReloadHtml.includes('aria-current="true"')) {
+      throw new Error("Docs route response is missing the static initial rail marker");
+    }
     const docsTrail = page.locator(".docs-trail");
     await docsTrail.waitFor({ state: "attached" });
     const trailGeometry = await docsTrail.evaluate((element) => {

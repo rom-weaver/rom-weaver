@@ -237,13 +237,12 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   background: var(--thread);
   transform: scaleX(0);
   transform-origin: left center;
-  transition: transform .3s var(--ease);
+  transition: none;
 }
-/* The active section is measured during hydration. Do not animate that
-   first correction from the server's neutral marker; scroll-driven changes
-   after the shell settles should still glide between sections. */
-#webapp-root[aria-busy="true"] .rw-app .warp-pick { transition: none; }
-.rw-app .warp-rail.is-initializing .warp-pick { transition: none; }
+/* The active section is measured during hydration. Do not animate that first
+   correction from the server's fallback marker; scroll-driven changes after
+   the shell settles should still glide between sections. */
+.rw-app .warp-rail:not(.is-initializing) .warp-pick { transition: transform .3s var(--ease); }
 .rw-app .warp-index {
   color: var(--ink-4);
   font-family: var(--mono);
