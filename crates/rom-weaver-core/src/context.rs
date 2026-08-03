@@ -463,3 +463,7 @@ impl OperationContext {
         Ok((pool, execution))
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/context.rs"]
+mod tests;

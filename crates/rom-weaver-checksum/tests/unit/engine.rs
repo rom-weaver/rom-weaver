@@ -1,27 +1,31 @@
 use std::{
     collections::BTreeMap,
     fs::{self, File},
-    io::Write,
+    io::{Cursor, Write},
     path::{Path, PathBuf},
     sync::Arc,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crc32fast::Hasher as Crc32Hasher;
 use proptest::prelude::*;
 use rom_weaver_core::{
     CancellationToken, ChecksumRequest, NoopProgressSink, OperationContext, ThreadBudget,
 };
 
 use super::{
-    ADLER32_PARALLEL_MIN_BYTES_PER_THREAD, ADLER32_PARALLEL_THRESHOLD, ARC,
-    BLAKE3_PARALLEL_MIN_BYTES_PER_THREAD, BLAKE3_PARALLEL_THRESHOLD,
+    ADLER32_PARALLEL_MIN_BYTES_PER_THREAD, ADLER32_PARALLEL_THRESHOLD, ARC, Algorithm,
+    BLAKE3_PARALLEL_MIN_BYTES_PER_THREAD, BLAKE3_PARALLEL_THRESHOLD, CRC16_GF2_DIM,
     CRC16_PARALLEL_MIN_BYTES_PER_THREAD, CRC16_PARALLEL_THRESHOLD,
     CRC32_PARALLEL_MIN_BYTES_PER_THREAD, CRC32_PARALLEL_THRESHOLD,
     CRC32C_PARALLEL_MIN_BYTES_PER_THREAD, CRC32C_PARALLEL_THRESHOLD, ChecksumMode, Crc16State,
     FANOUT_PARALLEL_THRESHOLD, NativeChecksumEngine, ResolvedRange, StreamingChecksum,
-    adler32_checksum, combine_adler32_partials, combine_crc16_partials, combine_crc32c_partials,
-    crc32c_append, plan_checksum, supported_algorithms,
+    StreamingChecksumTiming, adler32_checksum, adler32_combine,
+    checksum_reader_values_with_progress, combine_adler32_partials, combine_crc16_partials,
+    combine_crc32_partials, combine_crc32c_partials, crc16_arc_combine, crc32c_append,
+    gf2_matrix_square_u16, gf2_matrix_times_u16, partition_algorithms, plan_checksum,
+    supported_algorithms,
 };
 
 #[test]
@@ -719,5 +723,307 @@ fn checksum_range_rejects_out_of_bounds_requests() {
         error
             .to_string()
             .contains("checksum range start 6 is past the end")
+    );
+}
+
+fn assert_crc32_combine_matches_sequential(data: &[u8], split_hints: &[u16]) {
+    let boundaries = chunk_boundaries(data.len(), split_hints);
+    let mut partials = Vec::with_capacity(boundaries.len().saturating_sub(1));
+    for window in boundaries.windows(2) {
+        let start = window[0];
+        let end = window[1];
+        let chunk = &data[start..end];
+        let mut hasher = Crc32Hasher::new();
+        hasher.update(chunk);
+        partials.push(Ok(hasher));
+    }
+
+    let combined = combine_crc32_partials(partials).expect("combine");
+    let sequential = crc32fast::hash(data);
+    assert_eq!(combined.finalize(), sequential);
+}
+
+#[test]
+fn combine_crc32_partials_empty_data() {
+    assert_crc32_combine_matches_sequential(&[], &[]);
+}
+
+#[test]
+fn combine_crc32_partials_single_byte() {
+    assert_crc32_combine_matches_sequential(&[0x42], &[]);
+}
+
+#[test]
+fn combine_crc32_partials_unaligned_splits() {
+    let data: Vec<u8> = (0..10_007u32).map(|index| (index % 251) as u8).collect();
+    assert_crc32_combine_matches_sequential(&data, &[7, 1_000, 5_003, 9_999]);
+}
+
+#[test]
+fn combine_crc32_partials_large_buffer() {
+    let data: Vec<u8> = (0..(300 * 1024_u32))
+        .map(|index| (index % 251) as u8)
+        .collect();
+    assert_crc32_combine_matches_sequential(&data, &[1, 4_096, 65_535, 30_000, 50_000]);
+}
+
+#[test]
+fn combine_crc32_partials_empty_vec_returns_fresh_hasher() {
+    let combined = combine_crc32_partials(Vec::new()).expect("combine");
+    assert_eq!(combined.finalize(), Crc32Hasher::new().finalize());
+}
+
+proptest! {
+    #[test]
+    fn crc32_chunk_combine_matches_sequential(
+        data in proptest::collection::vec(any::<u8>(), 0..(512 * 1024)),
+        split_hints in proptest::collection::vec(any::<u16>(), 0..32),
+    ) {
+        let boundaries = chunk_boundaries(data.len(), &split_hints);
+        let mut partials = Vec::with_capacity(boundaries.len().saturating_sub(1));
+        for window in boundaries.windows(2) {
+            let start = window[0];
+            let end = window[1];
+            let chunk = &data[start..end];
+            let mut hasher = Crc32Hasher::new();
+            hasher.update(chunk);
+            partials.push(Ok(hasher));
+        }
+
+        let combined = combine_crc32_partials(partials).expect("combine");
+        let sequential = crc32fast::hash(&data);
+        prop_assert_eq!(combined.finalize(), sequential);
+    }
+}
+
+#[test]
+fn crc16_arc_combine_matches_known_concatenation() {
+    let first = b"hello ";
+    let second = b"world";
+
+    let mut state1 = Crc16State::<ARC>::new();
+    state1.update(first);
+    let crc1 = state1.get();
+
+    let mut state2 = Crc16State::<ARC>::new();
+    state2.update(second);
+    let crc2 = state2.get();
+
+    let combined = crc16_arc_combine(crc1, crc2, second.len());
+
+    let mut sequential_state = Crc16State::<ARC>::new();
+    sequential_state.update(b"hello world");
+    assert_eq!(combined, sequential_state.get());
+}
+
+#[test]
+fn crc16_arc_combine_len2_zero_returns_crc1_unchanged() {
+    assert_eq!(crc16_arc_combine(0x1234, 0x5678, 0), 0x1234);
+}
+
+#[test]
+fn adler32_combine_matches_known_concatenation() {
+    let first = b"hello ";
+    let second = b"world";
+
+    let adler1 = adler32_checksum(first);
+    let adler2 = adler32_checksum(second);
+    let combined = adler32_combine(adler1, adler2, second.len());
+
+    assert_eq!(combined, adler32_checksum(b"hello world"));
+}
+
+#[test]
+fn adler32_combine_len2_zero_returns_adler1_unchanged() {
+    assert_eq!(adler32_combine(0xdead_beef, 0x1234_5678, 0), 0xdead_beef);
+}
+
+#[test]
+fn gf2_matrix_square_u16_of_zero_matrix_is_zero() {
+    let zero = [0u16; CRC16_GF2_DIM];
+    let mut squared = [1u16; CRC16_GF2_DIM];
+    gf2_matrix_square_u16(&mut squared, &zero);
+    assert_eq!(squared, [0u16; CRC16_GF2_DIM]);
+}
+
+#[test]
+fn gf2_matrix_times_u16_of_zero_vector_is_zero() {
+    let mat = [0xffffu16; CRC16_GF2_DIM];
+    assert_eq!(gf2_matrix_times_u16(&mat, 0), 0);
+}
+
+#[test]
+fn partition_algorithms_preserves_all_algorithms_without_duplication() {
+    let algorithms = [
+        Algorithm::Crc32,
+        Algorithm::Md5,
+        Algorithm::Sha1,
+        Algorithm::Sha256,
+        Algorithm::Blake3,
+    ];
+    let groups = partition_algorithms(&algorithms, 3);
+    let mut flattened = groups.into_iter().flatten().collect::<Vec<_>>();
+    flattened.sort();
+    let mut expected = algorithms.to_vec();
+    expected.sort();
+    assert_eq!(flattened, expected);
+}
+
+#[test]
+fn partition_algorithms_filters_empty_groups() {
+    let algorithms = [Algorithm::Crc32, Algorithm::Md5];
+    let groups = partition_algorithms(&algorithms, 5);
+    assert_eq!(groups.len(), algorithms.len());
+    assert!(groups.iter().all(|group| group.len() == 1));
+}
+
+#[test]
+fn partition_algorithms_single_worker_yields_one_group() {
+    let algorithms = [Algorithm::Crc32, Algorithm::Md5, Algorithm::Sha1];
+    let groups = partition_algorithms(&algorithms, 1);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0], algorithms.to_vec());
+}
+
+#[test]
+fn partition_algorithms_round_robin_distribution() {
+    let algorithms = [
+        Algorithm::Crc32,
+        Algorithm::Md5,
+        Algorithm::Sha1,
+        Algorithm::Sha256,
+        Algorithm::Blake3,
+    ];
+    let groups = partition_algorithms(&algorithms, 2);
+    assert_eq!(groups.len(), 2);
+    assert_eq!(
+        groups[0],
+        vec![Algorithm::Crc32, Algorithm::Sha1, Algorithm::Blake3]
+    );
+    assert_eq!(groups[1], vec![Algorithm::Md5, Algorithm::Sha256]);
+}
+
+fn assert_single_algorithm_matches_at_size(algorithm: &str, file_name: &str, size: usize) {
+    let temp = TestDir::new();
+    let source = temp.path().join(file_name);
+    write_patterned_file(&source, size);
+
+    let request = ChecksumRequest {
+        source,
+        algorithms: vec![algorithm.into()],
+        start: None,
+        length: None,
+    };
+
+    let sequential = NativeChecksumEngine
+        .checksum_file(
+            &request,
+            &checksum_context(&temp.path().join("seq"), ThreadBudget::Fixed(1)),
+        )
+        .expect("sequential report");
+    let parallel = NativeChecksumEngine
+        .checksum_file(
+            &request,
+            &checksum_context(&temp.path().join("par"), ThreadBudget::Fixed(8)),
+        )
+        .expect("parallel report");
+
+    assert_eq!(parallel.label, sequential.label);
+}
+
+#[test]
+fn chunked_checksum_matches_sequential_at_small_and_unaligned_sizes() {
+    let sizes = [0usize, 1, 1_000_003];
+    for algorithm in ["crc32", "crc32c", "crc16", "adler32"] {
+        for (index, size) in sizes.iter().enumerate() {
+            let file_name = format!("small-{algorithm}-{index}.bin");
+            assert_single_algorithm_matches_at_size(algorithm, &file_name, *size);
+        }
+    }
+}
+
+#[test]
+fn streaming_checksum_new_parallel_low_thread_counts_match_sync() {
+    let algorithms = vec!["crc32".into(), "md5".into(), "sha1".into()];
+    let expected = BTreeMap::from([
+        ("crc32".to_string(), "0d4a1185".to_string()),
+        (
+            "md5".to_string(),
+            "5eb63bbbe01eeed093cb22bb8f5acdc3".to_string(),
+        ),
+        (
+            "sha1".to_string(),
+            "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed".to_string(),
+        ),
+    ]);
+
+    for max_threads in [0usize, 1usize] {
+        let mut checksum = StreamingChecksum::new_parallel(&algorithms, max_threads)
+            .expect("parallel checksum")
+            .expect("algorithms");
+        checksum.update(b"hello ").expect("update");
+        checksum
+            .update_owned(b"world".to_vec())
+            .expect("owned update");
+        assert_eq!(checksum.finalize().expect("finalize"), expected);
+    }
+}
+
+#[test]
+fn finalize_timed_reports_default_timing_for_sync_path() {
+    let algorithms = vec!["crc32".into()];
+    let mut checksum = StreamingChecksum::new(&algorithms)
+        .expect("sync checksum")
+        .expect("algorithms");
+    checksum.update(b"hello world").expect("update");
+    let (_, timing) = checksum.finalize_timed().expect("finalize");
+    assert_eq!(timing, StreamingChecksumTiming::default());
+    assert!(!timing.threaded);
+    assert_eq!(timing.workers, 0);
+    assert_eq!(timing.hash_busy_ns, 0);
+}
+
+#[test]
+fn finalize_timed_reports_threaded_for_parallel_path() {
+    let algorithms = vec!["crc32".into(), "md5".into()];
+    let mut checksum = StreamingChecksum::new_parallel(&algorithms, 2)
+        .expect("parallel checksum")
+        .expect("algorithms");
+    let chunk = vec![0xabu8; 1 << 16];
+    for _ in 0..8 {
+        checksum.update(&chunk).expect("update");
+    }
+    let (_, timing) = checksum.finalize_timed().expect("finalize");
+    assert!(timing.threaded);
+    assert!(timing.workers > 0);
+}
+
+#[test]
+fn checksum_reader_values_with_progress_reports_total_and_digests() {
+    let temp = TestDir::new();
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(2));
+    let algorithms = vec!["crc32".into(), "adler32".into()];
+    let data = b"hello world".to_vec();
+    let mut reader = Cursor::new(data.clone());
+
+    let mut progress_events = Vec::new();
+    let values =
+        checksum_reader_values_with_progress(&mut reader, &algorithms, &context, &mut |progress| {
+            progress_events.push(progress)
+        })
+        .expect("checksum reader values");
+
+    assert_eq!(progress_events.len(), 1);
+    let progress = progress_events[0];
+    assert_eq!(progress.processed_bytes, data.len() as u64);
+    assert_eq!(progress.total_bytes, data.len() as u64);
+
+    assert_eq!(
+        values.values.get("crc32").expect("crc32 present"),
+        &format!("{:08x}", crc32fast::hash(&data))
+    );
+    assert_eq!(
+        values.values.get("adler32").expect("adler32 present"),
+        &format!("{:08x}", adler32_checksum(&data))
     );
 }

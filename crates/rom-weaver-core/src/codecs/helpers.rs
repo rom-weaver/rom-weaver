@@ -135,3 +135,7 @@ pub fn decode_xz_exact(payload: &[u8], expected_len: u64) -> Result<Vec<u8>> {
         "xz",
     )
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/codecs_helpers.rs"]
+mod tests;

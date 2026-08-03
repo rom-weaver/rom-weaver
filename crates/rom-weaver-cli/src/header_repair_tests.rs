@@ -415,3 +415,336 @@ fn repair_checksum_file_covers_19_profile_matrix() {
     assert_eq!(repaired_profiles.len() + matched_profiles.len(), 19);
     assert!(repaired_profiles.is_disjoint(&matched_profiles));
 }
+
+// --- Per-platform repair coverage below: correct-value assertions, ---
+// --- untouched-byte diffing, and already-valid round-trip checks.   ---
+
+/// Builds a fixed-size (0x10000, power-of-two LoROM) SNES ROM with a valid
+/// title window at 0x7FC0 and a correct checksum/complement pair already in
+/// place, using the same fill pattern as the 19-profile matrix test above
+/// (proven not to accidentally match any other profile).
+fn build_test_snes_rom() -> Vec<u8> {
+    let mut bytes = vec![0_u8; 0x10000];
+    for (index, value) in bytes.iter_mut().enumerate().skip(0x200) {
+        *value = (index as u8).wrapping_mul(3).wrapping_add(1);
+    }
+    bytes[0x7FC0..0x7FD5].copy_from_slice(b"ROMWEAVER SNES TEST!!");
+    // This fill pattern makes both the lo-ROM (0x7FC0) and hi-ROM (0xFFC0)
+    // title windows look printable; `repair_snes_checksum_file` checks
+    // hi-ROM first, so it wins and the checksum lives at 0xFFDE/0xFFDC.
+    let (checksum, complement) = snes_reference_checksum(&bytes, 0xFFDE, 0xFFDC);
+    bytes[0xFFDC..0xFFDE].copy_from_slice(&complement.to_le_bytes());
+    bytes[0xFFDE..0xFFE0].copy_from_slice(&checksum.to_le_bytes());
+    bytes
+}
+
+/// Independent reimplementation of the SNES checksum: sum every byte in the
+/// ROM, treating the checksum and complement fields as zero, masked to 16
+/// bits. `checksum` is the complement of `sum & 0xFFFF`.
+fn snes_reference_checksum(
+    bytes: &[u8],
+    checksum_offset: usize,
+    complement_offset: usize,
+) -> (u16, u16) {
+    let mut sum = 0_u32;
+    for (index, value) in bytes.iter().enumerate() {
+        let in_checksum = index >= checksum_offset && index < checksum_offset + 2;
+        let in_complement = index >= complement_offset && index < complement_offset + 2;
+        if in_checksum || in_complement {
+            continue;
+        }
+        sum = sum.wrapping_add(u32::from(*value));
+    }
+    let checksum = (sum & 0xFFFF) as u16;
+    (checksum, checksum ^ 0xFFFF)
+}
+
+#[test]
+fn repair_checksum_file_repairs_snes_and_leaves_other_bytes_untouched() {
+    let scratch = ScratchDir::new("snes-repair");
+    let mut snes = build_test_snes_rom();
+    snes[0xFFDE] ^= 0x7F;
+    let original = snes.clone();
+
+    let (path, repaired, matched) = repair_fixture(scratch.path(), "corrupt.sfc", &snes);
+    assert!(repaired.contains(&"snes".to_string()));
+    assert!(!matched.contains(&"snes".to_string()));
+
+    let fixed = fs::read(&path).expect("read snes output");
+    let (expected_checksum, expected_complement) = snes_reference_checksum(&fixed, 0xFFDE, 0xFFDC);
+    assert_eq!(
+        u16::from_le_bytes([fixed[0xFFDE], fixed[0xFFDF]]),
+        expected_checksum
+    );
+    assert_eq!(
+        u16::from_le_bytes([fixed[0xFFDC], fixed[0xFFDD]]),
+        expected_complement
+    );
+
+    let diff: BTreeSet<usize> = (0..original.len())
+        .filter(|&index| original[index] != fixed[index])
+        .collect();
+    let expected_range: BTreeSet<usize> = [0xFFDC, 0xFFDD, 0xFFDE, 0xFFDF].into_iter().collect();
+    assert!(
+        diff.is_subset(&expected_range),
+        "snes repair touched unexpected bytes: {diff:?}"
+    );
+}
+
+#[test]
+fn repair_checksum_file_is_idempotent_for_valid_snes_header() {
+    let scratch = ScratchDir::new("snes-idempotent");
+    let snes = build_test_snes_rom();
+    let (path, repaired, matched) = repair_fixture(scratch.path(), "valid.sfc", &snes);
+    assert!(
+        repaired.is_empty(),
+        "valid snes header must not be repaired"
+    );
+    assert!(matched.contains(&"snes".to_string()));
+    assert_eq!(fs::read(&path).expect("read snes"), snes);
+}
+
+#[test]
+fn repair_checksum_file_repairs_nes_padding_and_leaves_other_bytes_untouched() {
+    let scratch = ScratchDir::new("nes-repair");
+    let mut nes = with_nes_header(b"nes-payload-1234");
+    nes[11] = 0xFF;
+    nes[12] = 0xAB;
+    nes[13] = 0xCD;
+    nes[14] = 0xEF;
+    nes[15] = 0x12;
+    let original = nes.clone();
+
+    let (path, repaired, matched) = repair_fixture(scratch.path(), "corrupt.nes", &nes);
+    assert!(repaired.contains(&"nes".to_string()));
+    assert!(!matched.contains(&"nes".to_string()));
+
+    let fixed = fs::read(&path).expect("read nes output");
+    assert_eq!(&fixed[11..16], &[0, 0, 0, 0, 0]);
+
+    let diff: BTreeSet<usize> = (0..original.len())
+        .filter(|&index| original[index] != fixed[index])
+        .collect();
+    let expected_range: BTreeSet<usize> = (11..16).collect();
+    assert!(
+        diff.is_subset(&expected_range),
+        "nes repair touched unexpected bytes: {diff:?}"
+    );
+}
+
+#[test]
+fn repair_checksum_file_is_idempotent_for_valid_nes_header() {
+    let scratch = ScratchDir::new("nes-idempotent");
+    let nes = with_nes_header(b"nes-payload-1234");
+    let (path, repaired, matched) = repair_fixture(scratch.path(), "valid.nes", &nes);
+    assert!(repaired.is_empty(), "valid nes header must not be repaired");
+    assert!(matched.contains(&"nes".to_string()));
+    assert_eq!(fs::read(&path).expect("read nes"), nes);
+}
+
+#[test]
+fn repair_checksum_file_gba_repair_leaves_other_bytes_untouched() {
+    let scratch = ScratchDir::new("gba-repair-bytes");
+    let mut gba = build_test_gba_rom(0x4000);
+    gba[0x1BD] ^= 0x7F;
+    let original = gba.clone();
+
+    let (path, repaired, _) = repair_fixture(scratch.path(), "corrupt.gba", &gba);
+    assert!(repaired.contains(&"gba".to_string()));
+
+    let fixed = fs::read(&path).expect("read gba output");
+    assert_eq!(fixed[0x1BD], gba_header_checksum(&fixed));
+
+    let diff: BTreeSet<usize> = (0..original.len())
+        .filter(|&index| original[index] != fixed[index])
+        .collect();
+    let expected_range: BTreeSet<usize> = [0x1BD].into_iter().collect();
+    assert_eq!(diff, expected_range);
+}
+
+/// Builds a Sega Genesis/Mega Drive ROM with the "SEGA" security probe and a
+/// correct big-endian checksum at 0x18E already in place.
+fn build_test_genesis_rom(payload_len: usize) -> Vec<u8> {
+    let rom_len = payload_len.max(0x210);
+    let mut bytes = vec![0_u8; rom_len];
+    bytes[0x100..0x104].copy_from_slice(b"SEGA");
+    for (index, value) in bytes.iter_mut().enumerate().skip(0x200) {
+        *value = (index as u8).wrapping_mul(11).wrapping_add(0x13);
+    }
+    let checksum = sega_genesis_checksum(&bytes);
+    bytes[0x18E..0x190].copy_from_slice(&checksum.to_be_bytes());
+    bytes
+}
+
+#[test]
+fn repair_checksum_file_repairs_genesis_and_leaves_other_bytes_untouched() {
+    let scratch = ScratchDir::new("genesis-repair");
+    let mut genesis = build_test_genesis_rom(0x300);
+    genesis[0x18E] ^= 0xFF;
+    genesis[0x18F] ^= 0xFF;
+    let original = genesis.clone();
+
+    let (path, repaired, matched) = repair_fixture(scratch.path(), "corrupt.md", &genesis);
+    assert!(repaired.contains(&"sega-genesis".to_string()));
+    assert!(!matched.contains(&"sega-genesis".to_string()));
+
+    let fixed = fs::read(&path).expect("read genesis output");
+    let checksum = u16::from_be_bytes([fixed[0x18E], fixed[0x18F]]);
+    assert_eq!(checksum, sega_genesis_checksum(&fixed));
+
+    let diff: BTreeSet<usize> = (0..original.len())
+        .filter(|&index| original[index] != fixed[index])
+        .collect();
+    let expected_range: BTreeSet<usize> = [0x18E, 0x18F].into_iter().collect();
+    assert!(
+        diff.is_subset(&expected_range),
+        "genesis repair touched unexpected bytes: {diff:?}"
+    );
+}
+
+#[test]
+fn repair_checksum_file_is_idempotent_for_valid_genesis_header() {
+    let scratch = ScratchDir::new("genesis-idempotent");
+    let genesis = build_test_genesis_rom(0x300);
+    let (path, repaired, matched) = repair_fixture(scratch.path(), "valid.md", &genesis);
+    assert!(
+        repaired.is_empty(),
+        "valid genesis header must not be repaired"
+    );
+    assert!(matched.contains(&"sega-genesis".to_string()));
+    assert_eq!(fs::read(&path).expect("read genesis"), genesis);
+}
+
+/// Builds an NDS ROM whose logo window carries the DS/GBA magic bytes at
+/// 0xC0..0xC4 (required for the profile to match at all) and a header CRC16
+/// that is correct for that content.
+fn build_test_valid_nds_rom(file_size: usize) -> Vec<u8> {
+    let mut rom = build_test_nds_rom(0x00, 0x3200, 0x3200, file_size);
+    rom[0xC0..0xC4].copy_from_slice(&[0x24, 0xFF, 0xAE, 0x51]);
+    let header_crc = nds_crc16(&rom[..0x15E]);
+    rom[0x15E..0x160].copy_from_slice(&header_crc.to_le_bytes());
+    rom
+}
+
+#[test]
+fn repair_checksum_file_repairs_nds_and_leaves_other_bytes_untouched() {
+    let scratch = ScratchDir::new("nds-repair");
+    let mut nds = build_test_valid_nds_rom(0x6000);
+    nds[0x15E] ^= 0xFF;
+    nds[0x15F] ^= 0xFF;
+    let original = nds.clone();
+
+    let (path, repaired, matched) = repair_fixture(scratch.path(), "corrupt.nds", &nds);
+    assert!(repaired.contains(&"nds".to_string()));
+    assert!(!matched.contains(&"nds".to_string()));
+
+    let fixed = fs::read(&path).expect("read nds output");
+    let crc = u16::from_le_bytes([fixed[0x15E], fixed[0x15F]]);
+    assert_eq!(crc, nds_crc16(&fixed[..0x15E]));
+
+    let diff: BTreeSet<usize> = (0..original.len())
+        .filter(|&index| original[index] != fixed[index])
+        .collect();
+    let expected_range: BTreeSet<usize> = [0x15E, 0x15F].into_iter().collect();
+    assert!(
+        diff.is_subset(&expected_range),
+        "nds repair touched unexpected bytes: {diff:?}"
+    );
+}
+
+#[test]
+fn repair_checksum_file_is_idempotent_for_valid_nds_header() {
+    let scratch = ScratchDir::new("nds-idempotent");
+    let nds = build_test_valid_nds_rom(0x6000);
+    let (path, repaired, matched) = repair_fixture(scratch.path(), "valid.nds", &nds);
+    assert!(repaired.is_empty(), "valid nds header must not be repaired");
+    assert!(matched.contains(&"nds".to_string()));
+    assert_eq!(fs::read(&path).expect("read nds"), nds);
+}
+
+/// Builds a minimum-size (0x101000) big-endian `.z64` ROM with a valid byte
+/// order magic and a deterministic body fill, matching the fixture shape
+/// already proven clean (matches only the `n64` profile) by the 19-profile
+/// matrix test above. The checksum words are left at zero so the fixture
+/// always starts out wrong.
+fn build_test_n64_rom() -> Vec<u8> {
+    let mut bytes = vec![0_u8; 0x101000];
+    bytes[..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
+    // The high bit is forced on so every fill byte falls outside the
+    // printable ASCII range: the SNES title-window check
+    // (`is_valid_snes_title_file`) scans this same body for 21 consecutive
+    // printable bytes at 0x7FC0/0xFFC0, and an all-ASCII arithmetic fill
+    // (as used elsewhere in this file) happened to satisfy it here, making
+    // the SNES repair spuriously fire on this N64 fixture too.
+    for (index, value) in bytes[0x1000..].iter_mut().enumerate() {
+        *value = (index as u8).wrapping_mul(9).wrapping_add(0x11) | 0x80;
+    }
+    bytes
+}
+
+#[test]
+fn repair_checksum_file_repairs_n64_and_leaves_other_bytes_untouched() {
+    let scratch = ScratchDir::new("n64-repair");
+    let n64 = build_test_n64_rom();
+    let original = n64.clone();
+
+    let (path, repaired, matched) = repair_fixture(scratch.path(), "corrupt.z64", &n64);
+    assert!(repaired.contains(&"n64".to_string()));
+    assert!(!matched.contains(&"n64".to_string()));
+
+    let fixed = fs::read(&path).expect("read n64 output");
+    let old_crc = (
+        u32::from_be_bytes([
+            original[0x10],
+            original[0x11],
+            original[0x12],
+            original[0x13],
+        ]),
+        u32::from_be_bytes([
+            original[0x14],
+            original[0x15],
+            original[0x16],
+            original[0x17],
+        ]),
+    );
+    let new_crc = (
+        u32::from_be_bytes([fixed[0x10], fixed[0x11], fixed[0x12], fixed[0x13]]),
+        u32::from_be_bytes([fixed[0x14], fixed[0x15], fixed[0x16], fixed[0x17]]),
+    );
+    // The CIC-style CRC accumulator (seed 0xF8CA4DDC, t1..t6 over every 4-byte
+    // word from 0x1000..0x101000) is not reimplemented independently here;
+    // the idempotency test below is the primary correctness evidence. This
+    // just confirms the all-zero seed values actually got replaced.
+    assert_ne!(old_crc, new_crc);
+
+    let diff: BTreeSet<usize> = (0..original.len())
+        .filter(|&index| original[index] != fixed[index])
+        .collect();
+    let expected_range: BTreeSet<usize> = (0x10..0x18).collect();
+    assert!(
+        diff.is_subset(&expected_range),
+        "n64 repair touched unexpected bytes outside the checksum words"
+    );
+}
+
+#[test]
+fn repair_checksum_file_is_idempotent_for_valid_n64_header() {
+    let scratch = ScratchDir::new("n64-idempotent");
+    let n64 = build_test_n64_rom();
+
+    let (first_path, first_repaired, _) = repair_fixture(scratch.path(), "first.z64", &n64);
+    assert!(first_repaired.contains(&"n64".to_string()));
+    let repaired_once = fs::read(&first_path).expect("read first n64 repair");
+
+    let (second_path, second_repaired, second_matched) =
+        repair_fixture(scratch.path(), "second.z64", &repaired_once);
+    assert!(
+        second_repaired.is_empty(),
+        "already-repaired n64 header must not be repaired again"
+    );
+    assert!(second_matched.contains(&"n64".to_string()));
+    assert_eq!(
+        fs::read(&second_path).expect("read second n64 repair"),
+        repaired_once
+    );
+}
