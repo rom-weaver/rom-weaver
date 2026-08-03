@@ -253,7 +253,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         const problems = [];
         if (!result.threadRetained) problems.push("thread node was replaced");
         if (!result.runtimeRetained) problems.push("runtime node was replaced");
-        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3T"))
+        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3 Threads"))
           problems.push(`thread text changed: ${JSON.stringify(result.threadTexts)}`);
         if (result.runtimeTexts.length !== 1)
           problems.push(`runtime text changed: ${JSON.stringify(result.runtimeTexts)}`);
