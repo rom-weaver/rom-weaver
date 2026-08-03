@@ -409,6 +409,10 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 @media (max-width: 999px) {
   .rw-app .mobile-more { display: inline-flex; }
   .rw-app .mobile-utility-source, .rw-app .mobile-utility-support, .rw-app .mobile-utility-log { display: none; }
+  .rw-app .masthead-settings { display: none; }
+  .rw-app .dock .mobile-more { display: flex; position: relative; }
+  .rw-app .dock .mobile-more .dock-action { width: 100%; }
+  .rw-app .dock .mobile-more-menu { inset-block-start: auto; inset-block-end: calc(100% + var(--sp-xs)); }
 }
 
 /* ── the dock (phone primary nav) ── */
@@ -420,19 +424,23 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
   border-block-start: 1px solid var(--seam-soft);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
 }
-.rw-app .dock-tab {
+.rw-app .dock-tabs { display: contents; }
+.rw-app .dock-tab, .rw-app .dock-action {
   position: relative; display: flex; flex-direction: column; gap: 2px; align-items: center;
   min-height: 48px; padding: 6px 2px 4px; font-size: .62rem; font-weight: 650;
   color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; text-decoration: none;
   border-radius: var(--r-s); appearance: none; border: 0; background: transparent; cursor: pointer;
+  font-family: inherit;
 }
-.rw-app .dock-tab svg { width: 20px; height: 20px; }
-.rw-app .dock-tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rw-app .dock-tab[aria-selected="true"] { color: var(--thread-text); }
+.rw-app .dock-tab svg, .rw-app .dock-action svg { width: 20px; height: 20px; }
+.rw-app .dock-tab span, .rw-app .dock-action span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-app .dock-tab[aria-selected="true"], .rw-app .dock-action[aria-expanded="true"] { color: var(--thread-text); }
 @media (hover: hover) {
-  .rw-app .dock-tab:not([aria-selected="true"]):hover { color: var(--ink); }
+  .rw-app .dock-tab:not([aria-selected="true"]):hover,
+  .rw-app .dock-action:not([aria-expanded="true"]):hover { color: var(--ink); }
 }
-.rw-app .dock-tab:not([aria-selected="true"]):active { color: var(--ink); }
+.rw-app .dock-tab:not([aria-selected="true"]):active,
+.rw-app .dock-action:not([aria-expanded="true"]):active { color: var(--ink); }
 /* the shuttle stitch: a thread carried along the dock's top seam */
 .rw-app .dock-thumb { display: none; }
 @supports (anchor-name: --rw-dock) {

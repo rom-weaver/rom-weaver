@@ -22,6 +22,7 @@ const withSettings = (children: ReactNode) => (
 const TABS = [
   { href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
+  { href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
 ];
 
@@ -49,7 +50,7 @@ describe("Masthead", () => {
     );
     const [rail, dock] = getAllByRole("tablist", { name: "Workflow" });
     expect(rail?.classList.contains("mode-rail")).toBe(true);
-    expect(dock?.classList.contains("dock")).toBe(true);
+    expect(dock?.classList.contains("dock-tabs")).toBe(true);
     expect(rail?.querySelector(".mode-thumb")).toBeTruthy();
     expect(dock?.querySelector(".dock-thumb")).toBeTruthy();
     // "/" maps to no route, so the brand has to name one or the browser
@@ -59,12 +60,12 @@ describe("Masthead", () => {
     expect(logoHome.querySelector(".brand-mark")).toBeTruthy();
     expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
 
-    for (const [list, selectedClass] of [
-      [rail, "mode"],
-      [dock, "dock-tab"],
+    for (const [list, selectedClass, labels] of [
+      [rail, "mode", ["Apply", "Create", "Docs", "Trim"]],
+      [dock, "dock-tab", ["Apply", "Create", "Trim"]],
     ] as const) {
       const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);
-      expect(tabs.map((tab) => tab.textContent)).toEqual(["Apply", "Create", "Trim"]);
+      expect(tabs.map((tab) => tab.textContent)).toEqual(labels);
       expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
       expect(tabs[0]?.classList.contains(selectedClass)).toBe(true);
       // roving tabindex: exactly one reachable tab per list
@@ -74,9 +75,9 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // github + support | theme, accent, log, more, settings - and Reset is
+    // github + support | theme, accent, log, settings - and Reset is
     // gone: it lives in the workflow panel head now
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
     expect(container.querySelector(".actions-sep")).toBeTruthy();
     expect(container.querySelector(".tool-support")).toBeTruthy();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
@@ -97,6 +98,7 @@ describe("Masthead", () => {
     fireEvent.click(more);
     expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(menu.hidden).toBe(false);
+    expect(getByRole("menuitem", { name: "Docs" })).toBeTruthy();
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
     expect(onOpenStorage).toHaveBeenCalledTimes(1);
     expect(more.getAttribute("aria-expanded")).toBe("false");
@@ -230,8 +232,8 @@ describe("Masthead", () => {
 
   it("preloads Settings before interaction completes", () => {
     const onPreloadSettings = vi.fn();
-    const { getByRole } = render(withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />));
-    const settings = getByRole("button", { name: "Settings" });
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />));
+    const settings = container.querySelector(".dock-settings") as HTMLButtonElement;
     fireEvent.pointerEnter(settings);
     fireEvent.focus(settings);
     fireEvent.pointerDown(settings);

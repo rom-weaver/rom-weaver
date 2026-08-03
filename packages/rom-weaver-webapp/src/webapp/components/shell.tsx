@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   createLucideIcon,
   Heart,
   Info,
@@ -227,6 +228,7 @@ const PhoneDock = ({
   betaToolsEnabled = true,
   controlsPanels = true,
   current,
+  mobileActions,
   navLabel,
   onSelect,
   tabs,
@@ -234,12 +236,14 @@ const PhoneDock = ({
   betaToolsEnabled?: boolean;
   controlsPanels?: boolean;
   current: string;
+  mobileActions?: ReactNode;
   navLabel: string;
   onSelect: (id: string) => void;
   tabs: WorkflowTab[];
 }) => {
   const dockRef = useRef<HTMLDivElement | null>(null);
-  const interactiveTabs = betaToolsEnabled ? tabs : tabs.filter((tab) => !isBetaWorkflowTab(tab));
+  const dockTabs = tabs.filter((tab) => tab.id !== "docs");
+  const interactiveTabs = betaToolsEnabled ? dockTabs : dockTabs.filter((tab) => !isBetaWorkflowTab(tab));
   const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusedId = interactiveTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
   const handleKeyDown = createTabListKeyDown(
@@ -250,33 +254,36 @@ const PhoneDock = ({
   );
   return (
     <nav aria-label={navLabel} className="dock-nav">
-      <div
-        aria-label={navLabel}
-        aria-orientation="horizontal"
-        className="dock"
-        onKeyDown={handleKeyDown}
-        ref={dockRef}
-        role="tablist"
-      >
-        <span aria-hidden="true" className="dock-thumb" />
-        {tabs.map((tab) => (
-          <a
-            aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
-            aria-selected={tab.id === current}
-            className="dock-tab"
-            data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
-            data-mode={tab.id}
-            href={tab.href}
-            id={`docktab-${tab.id}`}
-            key={tab.id}
-            onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
-            role="tab"
-            tabIndex={tab.id === focusedId ? 0 : -1}
-          >
-            {tab.icon}
-            <span>{tab.label}</span>
-          </a>
-        ))}
+      <div className="dock">
+        <div
+          aria-label={navLabel}
+          aria-orientation="horizontal"
+          className="dock-tabs"
+          onKeyDown={handleKeyDown}
+          ref={dockRef}
+          role="tablist"
+        >
+          <span aria-hidden="true" className="dock-thumb" />
+          {dockTabs.map((tab) => (
+            <a
+              aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
+              aria-selected={tab.id === current}
+              className="dock-tab"
+              data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
+              data-mode={tab.id}
+              href={tab.href}
+              id={`docktab-${tab.id}`}
+              key={tab.id}
+              onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
+              role="tab"
+              tabIndex={tab.id === focusedId ? 0 : -1}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </a>
+          ))}
+        </div>
+        {mobileActions}
       </div>
     </nav>
   );
@@ -373,6 +380,7 @@ const MobileUtilityMenu = ({
   localizer,
   onClose,
   onOpenChangelog,
+  onOpenDocs,
   onOpenLog,
   onOpenStatus,
   onOpenStorage,
@@ -385,6 +393,7 @@ const MobileUtilityMenu = ({
   localizer: Localizer;
   onClose: () => void;
   onOpenChangelog: () => void;
+  onOpenDocs: () => void;
   onOpenLog: () => void;
   onOpenStatus: () => void;
   onOpenStorage?: () => void;
@@ -441,6 +450,10 @@ const MobileUtilityMenu = ({
       ref={menuRef}
       role="menu"
     >
+      <button onClick={() => select(onOpenDocs)} role="menuitem" type="button">
+        <BookOpen aria-hidden="true" />
+        {localizer.message("ui.nav.docs")}
+      </button>
       <button onClick={() => select(onOpenStatus)} role="menuitem" type="button">
         <Info aria-hidden="true" />
         {localizer.message("ui.log.tabStatus")}
@@ -761,6 +774,7 @@ const Masthead = ({
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const logLabel = localizer.message("ui.tools.log");
+  const moreLabel = localizer.message("ui.tools.more");
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
@@ -776,7 +790,9 @@ const Masthead = ({
     if (!(accentOpen || utilityOpen)) return undefined;
     const dismiss = (event: Event) => {
       const tools = toolsRef.current;
-      if (tools && event.target instanceof Node && tools.contains(event.target)) return;
+      const target = event.target;
+      if (target instanceof Node && (tools?.contains(target) || moreRef.current?.parentElement?.contains(target)))
+        return;
       setAccentOpen(false);
       setUtilityOpen(false);
     };
@@ -942,41 +958,11 @@ const Masthead = ({
               {logLabel}
             </span>
           </button>
-          <span className="mobile-more">
-            <button
-              aria-controls="mobile-more-menu"
-              aria-expanded={utilityOpen}
-              aria-haspopup="menu"
-              aria-label={localizer.message("ui.tools.more")}
-              className="tool"
-              onClick={() => setUtilityOpen((open) => !open)}
-              ref={moreRef}
-              type="button"
-            >
-              <MoreHorizontal aria-hidden="true" />
-            </button>
-            <MobileUtilityMenu
-              confirmExternalNavigation={confirmExternalNavigation}
-              donateHref={donateHref}
-              githubHref={githubHref}
-              localizer={localizer}
-              onClose={() => {
-                setUtilityOpen(false);
-                moreRef.current?.focus();
-              }}
-              onOpenChangelog={onOpenChangelog}
-              onOpenLog={onOpenLog}
-              onOpenStatus={onOpenStatus}
-              onOpenStorage={onOpenStorage ?? onOpenLog}
-              open={utilityOpen}
-              triggerRef={moreRef}
-            />
-          </span>
           <button
             aria-expanded={settingsOpen}
             aria-haspopup="dialog"
             aria-label={settingsLabel}
-            className="tool"
+            className="tool masthead-settings"
             onClick={onOpenSettings}
             onFocus={onPreloadSettings}
             onPointerDown={onPreloadSettings}
@@ -994,6 +980,54 @@ const Masthead = ({
         betaToolsEnabled={betaToolsEnabled}
         controlsPanels={tabsControlPanels}
         current={currentTab}
+        mobileActions={
+          <>
+            <button
+              aria-expanded={settingsOpen}
+              aria-haspopup="dialog"
+              className="dock-action dock-settings"
+              onClick={onOpenSettings}
+              onFocus={onPreloadSettings}
+              onPointerDown={onPreloadSettings}
+              onPointerEnter={onPreloadSettings}
+              type="button"
+            >
+              <Settings aria-hidden="true" />
+              <span>{settingsLabel}</span>
+            </button>
+            <span className="mobile-more">
+              <button
+                aria-controls="mobile-more-menu"
+                aria-expanded={utilityOpen}
+                aria-haspopup="menu"
+                className="dock-action"
+                onClick={() => setUtilityOpen((open) => !open)}
+                ref={moreRef}
+                type="button"
+              >
+                <MoreHorizontal aria-hidden="true" />
+                <span>{moreLabel}</span>
+              </button>
+              <MobileUtilityMenu
+                confirmExternalNavigation={confirmExternalNavigation}
+                donateHref={donateHref}
+                githubHref={githubHref}
+                localizer={localizer}
+                onClose={() => {
+                  setUtilityOpen(false);
+                  moreRef.current?.focus();
+                }}
+                onOpenChangelog={onOpenChangelog}
+                onOpenDocs={() => onSelectTab("docs")}
+                onOpenLog={onOpenLog}
+                onOpenStatus={onOpenStatus}
+                onOpenStorage={onOpenStorage ?? onOpenLog}
+                open={utilityOpen}
+                triggerRef={moreRef}
+              />
+            </span>
+          </>
+        }
         navLabel={navLabel}
         onSelect={onSelectTab}
         tabs={tabs}
