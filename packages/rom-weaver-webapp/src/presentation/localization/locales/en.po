@@ -615,11 +615,6 @@ msgstr "Save"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.wakelock.text"
-msgstr "Screen stays awake while a job is running."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Settings"
 

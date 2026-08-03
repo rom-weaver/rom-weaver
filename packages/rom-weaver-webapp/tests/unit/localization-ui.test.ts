@@ -21,7 +21,6 @@ const LOAD_BEARING_UI_IDS = [
   "ui.common.dismiss",
   "ui.update.ready",
   "ui.update.reload",
-  "ui.wakelock.text",
   "ui.drop.release",
   "ui.footer.donate",
   "ui.env.threads",

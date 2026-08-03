@@ -1,12 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { createLogger } from "../../lib/logging.ts";
-import { useUiLocalizer } from "../../public/react/settings-context.tsx";
-import { WakeLockBanner } from "./shell.tsx";
 
 const logger = createLogger("wake-lock-notice");
-
-const DEFAULT_WAKE_LOCK_WARNING =
-  "Screen wake lock is unavailable. Keep this tab visible and prevent the device from sleeping while processing runs.";
 
 type WakeLockSentinelLike = {
   released?: boolean;
@@ -20,29 +15,18 @@ type NavigatorWithWakeLock = Navigator & {
   };
 };
 
-/**
- * Holds a screen wake lock while a job runs and surfaces the loom wake-lock
- * banner: informational while the lock is held, a warning when the lock is
- * unavailable. Dismissal lasts for the current activation.
- */
-function ProcessingWakeLockNotice({ active }: { active: boolean }) {
-  const localizer = useUiLocalizer();
-  const [warningMessage, setWarningMessage] = useState("");
-  const [lockHeld, setLockHeld] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+/** Holds a screen wake lock while the page has pending work. */
+function useScreenWakeLock(active: boolean) {
   const sentinelRef = useRef<WakeLockSentinelLike | null>(null);
 
   useEffect(() => {
-    setDismissed(false);
     const releaseSentinel = () => {
       const sentinel = sentinelRef.current;
       sentinelRef.current = null;
-      setLockHeld(false);
       if (!sentinel || sentinel.released) return;
       void sentinel.release().catch(() => undefined);
     };
     if (!active) {
-      setWarningMessage("");
       releaseSentinel();
       return;
     }
@@ -50,17 +34,14 @@ function ProcessingWakeLockNotice({ active }: { active: boolean }) {
     const wakeLockNavigator = navigator as NavigatorWithWakeLock;
     if (!wakeLockNavigator.wakeLock?.request) {
       logger.trace("Wake lock API unavailable");
-      setWarningMessage(DEFAULT_WAKE_LOCK_WARNING);
       return;
     }
 
     let disposed = false;
     const handleRelease = () => {
       sentinelRef.current = null;
-      setLockHeld(false);
       if (disposed || !active) return;
       if (document.visibilityState === "visible") void acquireWakeLock();
-      else setWarningMessage(DEFAULT_WAKE_LOCK_WARNING);
     };
     const acquireWakeLock = async () => {
       if (disposed || sentinelRef.current || document.visibilityState === "hidden") return;
@@ -72,11 +53,11 @@ function ProcessingWakeLockNotice({ active }: { active: boolean }) {
         }
         logger.trace("Wake lock acquired");
         sentinelRef.current = sentinel;
-        setLockHeld(true);
-        setWarningMessage("");
         sentinel.addEventListener?.("release", handleRelease);
-      } catch {
-        setWarningMessage(DEFAULT_WAKE_LOCK_WARNING);
+      } catch (error) {
+        logger.trace("Wake lock request failed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
     };
     const handleVisibilityChange = () => {
@@ -97,13 +78,6 @@ function ProcessingWakeLockNotice({ active }: { active: boolean }) {
       releaseSentinel();
     };
   }, [active]);
-
-  const open = active && !dismissed && (!!warningMessage || lockHeld);
-  return (
-    <WakeLockBanner onDismiss={() => setDismissed(true)} open={open}>
-      {warningMessage || localizer.message("ui.wakelock.text")}
-    </WakeLockBanner>
-  );
 }
 
-export { ProcessingWakeLockNotice };
+export { useScreenWakeLock };

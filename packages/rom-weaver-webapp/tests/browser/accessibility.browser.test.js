@@ -22,7 +22,7 @@ import { RomWeaverSettingsProvider } from "../../src/public/react/settings-conte
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
-import { Masthead, UpdateBanner, WakeLockBanner } from "../../src/webapp/components/shell.tsx";
+import { Masthead, UpdateBanner } from "../../src/webapp/components/shell.tsx";
 import {
   getDefaultSettings,
   getSettingsUiState,
@@ -749,12 +749,7 @@ const Banners = () =>
   createElement(
     RomWeaverSettingsProvider,
     { settings: {} },
-    createElement(
-      "div",
-      { className: "rw-app" },
-      createElement(UpdateBanner, { onOpenChangelog: noop, open: true }),
-      createElement(WakeLockBanner, { onDismiss: noop, open: true }, "Keeping the screen awake while this job runs."),
-    ),
+    createElement("div", { className: "rw-app" }, createElement(UpdateBanner, { onOpenChangelog: noop, open: true })),
   );
 
 // ── Modals / dialogs ─────────────────────────────────────────────────────────
@@ -854,7 +849,7 @@ const WEBAPP_SURFACES = [
     name: "dense apply with enabled, disabled, and invalid patches",
     page: true,
   },
-  { factory: () => createElement(Banners), name: "update + wake-lock banners" },
+  { factory: () => createElement(Banners), name: "update banner" },
   ...Object.entries(DIALOGS).map(([name, factory]) => ({
     factory: () => ModalHost(factory()),
     name: `${name} dialog`,

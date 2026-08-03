@@ -86,7 +86,7 @@
   .rw-app .rm.replace:hover { color: var(--thread-text); border-color: color-mix(in oklab, var(--thread) 40%, transparent); background: color-mix(in oklab, var(--thread) 8%, transparent); }
 }
 /* Remove user-agent padding so icon glyphs center. */
-.rw-app .copy, .rw-app .cue-copy, .rw-app .notice .x, .rw-app .banner-x, .dlg-x, .rw-app .cancel, .rw-app .stage-cancel, .rw-app .info-btn { padding: 0; }
+.rw-app .copy, .rw-app .cue-copy, .rw-app .notice .x, .dlg-x, .rw-app .cancel, .rw-app .stage-cancel, .rw-app .info-btn { padding: 0; }
 .rw-app .rm svg { width: calc(var(--ctrl-h) * .47); height: calc(var(--ctrl-h) * .47); }
 /* Overlay state labels so toggling never shifts the row. */
 .rw-app .patch-enable {

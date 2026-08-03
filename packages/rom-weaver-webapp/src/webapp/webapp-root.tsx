@@ -24,10 +24,11 @@ import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { Masthead, UpdateBanner } from "./components/shell.tsx";
-import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
+import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
 import { getSettingsUiState, SETTINGS_FIELD_METADATA } from "./settings/settings-state.ts";
+import { shouldWarnBeforeUnload } from "./unload-guard.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
@@ -200,9 +201,10 @@ const DropVeil = () => {
  * updates on every progress tick, and re-rendering the whole workbench per
  * tick makes the weave animations stutter during extraction.
  */
-const ActivityWakeLockNotice = () => {
+const ActivityWakeLock = ({ pageHasPendingChanges }: { pageHasPendingChanges: boolean }) => {
   const activity = useSyncExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
-  return <ProcessingWakeLockNotice active={activity.state === "running"} />;
+  useScreenWakeLock(pageHasPendingChanges || activity.state === "running" || activity.state === "staging");
+  return null;
 };
 
 const ActivityFinishMarker = () => {
@@ -527,6 +529,16 @@ function WebappRoot({
         </div>
       </section>
     ) : null;
+  const pageHasPendingChanges = shouldWarnBeforeUnload({
+    creatorState: state.creatorSession,
+    outputState: state.patcherSession,
+    patchStackState: { items: Array.from({ length: state.patcherSession.patchCount }) },
+    patcherFormEdited: !!(state.patcherSession.outputName.trim() || state.patcherSession.outputCompression !== "none"),
+    romFilePresent: state.patcherSession.romFilePresent,
+    toolsActive: state.toolsSession.active,
+    trimState: state.trimSession,
+    webappState: state,
+  });
   return (
     <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
@@ -600,7 +612,7 @@ function WebappRoot({
             title={pageUpdate.title}
           />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
-          <ActivityWakeLockNotice />
+          <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
             {notFound ? (
               <section aria-labelledby="not-found-title" className="not-found-page">
