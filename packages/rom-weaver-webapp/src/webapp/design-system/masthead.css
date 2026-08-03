@@ -326,9 +326,15 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 .rw-app .tool:active { color: var(--ink); background: var(--plate-2); border-color: var(--seam); }
 .rw-app .tool svg { width: clamp(15px, 13.8px + .25vw, 17px); height: clamp(15px, 13.8px + .25vw, 17px); }
 .rw-app .tool[aria-expanded="true"] { color: var(--ink); background: var(--well); border-color: var(--seam); }
-/* The tools are icon-only; the tooltip/aria-label carries the name. */
+/* Desktop keeps the two important destinations named; the remaining tools are
+   still icon-only and use the tooltip/aria-label. */
 .rw-app .tool-text { display: none; }
 .rw-app .dock-action .tool-text { display: inline; }
+.rw-app .masthead-settings, .rw-app .desktop-more .tool {
+  display: inline-flex; align-items: center; gap: var(--sp-xs); width: auto; padding-inline: var(--sp-s);
+}
+.rw-app .masthead-settings .tool-text, .rw-app .desktop-more .tool-text { display: inline; }
+.rw-app .masthead-settings .tip, .rw-app .desktop-more .tip { display: none; }
 
 /* support wears the thread at rest - the one action that stays warm. The heart
    beats a soft double-thump at rest, filled and quickened under the pointer. */

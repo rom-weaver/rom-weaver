@@ -10,6 +10,7 @@ import {
   ScrollText,
   Settings,
   SunMedium,
+  Wrench,
   X,
 } from "lucide-react";
 import type { IconNode } from "lucide-react";
@@ -165,7 +166,8 @@ const ModeRail = ({
   // A tablist needs exactly one tabIndex 0 to stay keyboard reachable, and the
   // current view is not always one of these tabs - the 404 shell renders the
   // rail with nothing selected. Roving focus falls back to the first tab.
-  const interactiveTabs = betaToolsEnabled ? tabs : tabs.filter((tab) => !isBetaWorkflowTab(tab));
+  const railTabs = tabs.filter((tab) => tab.id !== "tools");
+  const interactiveTabs = betaToolsEnabled ? railTabs : railTabs.filter((tab) => !isBetaWorkflowTab(tab));
   const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
   const focusedId = interactiveTabs[focusIndex]?.id ?? "";
@@ -194,7 +196,7 @@ const ModeRail = ({
         role="tablist"
       >
         <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
-        {tabs.map((tab) => (
+        {railTabs.map((tab) => (
           <a
             aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
             aria-selected={tab.id === current}
@@ -242,7 +244,7 @@ const PhoneDock = ({
   tabs: WorkflowTab[];
 }) => {
   const dockRef = useRef<HTMLDivElement | null>(null);
-  const dockTabs = tabs.filter((tab) => tab.id !== "docs");
+  const dockTabs = tabs.filter((tab) => tab.id !== "docs" && tab.id !== "tools");
   const interactiveTabs = betaToolsEnabled ? dockTabs : dockTabs.filter((tab) => !isBetaWorkflowTab(tab));
   const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusedId = interactiveTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
@@ -383,6 +385,9 @@ type UtilityMenuProps = {
   onOpenLog: () => void;
   onOpenStatus: () => void;
   onOpenStorage?: () => void;
+  onOpenTools?: () => void;
+  toolsEnabled?: boolean;
+  toolsLabel?: string;
 };
 
 const UtilityMenu = ({
@@ -397,6 +402,9 @@ const UtilityMenu = ({
   onOpenLog,
   onOpenStatus,
   onOpenStorage,
+  onOpenTools,
+  toolsEnabled,
+  toolsLabel,
   open,
   triggerRef,
 }: UtilityMenuProps & {
@@ -478,6 +486,12 @@ const UtilityMenu = ({
         <Newspaper aria-hidden="true" />
         {localizer.message("ui.log.tabChangelog")}
       </button>
+      {toolsEnabled && onOpenTools ? (
+        <button onClick={() => select(onOpenTools)} role="menuitem" type="button">
+          <Wrench aria-hidden="true" />
+          {toolsLabel ?? "Tools"}
+        </button>
+      ) : null}
       <span aria-hidden="true" className="more-separator" />
       {githubHref ? (
         <a
@@ -829,6 +843,7 @@ const Masthead = ({
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const moreLabel = localizer.message("ui.tools.more");
+  const toolsLabel = tabs.find((tab) => tab.id === "tools")?.label ?? "Tools";
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
@@ -1019,6 +1034,9 @@ const Masthead = ({
             type="button"
           >
             <Settings aria-hidden="true" />
+            <span aria-hidden="true" className="tool-text">
+              {settingsLabel}
+            </span>
             <span aria-hidden="true" className="tip">
               {settingsLabel}
             </span>
@@ -1038,9 +1056,12 @@ const Masthead = ({
             onOpenLog={onOpenLog}
             onOpenStatus={onOpenStatus}
             onOpenStorage={onOpenStorage ?? onOpenLog}
+            onOpenTools={() => onSelectTab("tools")}
             onPreloadLog={onPreloadLog}
             onToggle={() => toggleUtility("desktop")}
             open={utilityOpen && utilityPlacement === "desktop"}
+            toolsEnabled={betaToolsEnabled}
+            toolsLabel={toolsLabel}
             triggerRef={desktopMoreRef}
           />
         </div>
@@ -1079,9 +1100,12 @@ const Masthead = ({
               onOpenLog={onOpenLog}
               onOpenStatus={onOpenStatus}
               onOpenStorage={onOpenStorage ?? onOpenLog}
+              onOpenTools={() => onSelectTab("tools")}
               onPreloadLog={onPreloadLog}
               onToggle={() => toggleUtility("mobile")}
               open={utilityOpen && utilityPlacement === "mobile"}
+              toolsEnabled={betaToolsEnabled}
+              toolsLabel={toolsLabel}
               triggerRef={mobileMoreRef}
             />
           </>

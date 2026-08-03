@@ -51,6 +51,8 @@ const WORKFLOW_TABS = [
   // resume - see `isResumableWorkflowView`.
   { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
+  // Beta-only utility route. The shell keeps it out of both primary navs and
+  // exposes it from More when the beta-tools setting is enabled.
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
 

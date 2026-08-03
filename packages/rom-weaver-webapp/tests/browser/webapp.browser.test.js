@@ -150,7 +150,7 @@ beforeEach(() => {
 });
 
 test("WebappRoot mounts the full workflow shell and stages archive inputs", async () => {
-  // The Trim and Tools tabs are beta-gated (see `betaToolsEnabled`), so the full-shell assertions
+  // Trim is beta-gated (see `betaToolsEnabled`), so the full-shell assertions
   // below require the flag on - matching the pattern the sibling controller unit tests use.
   mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
@@ -162,7 +162,9 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /apply/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /create/i })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /tools/i })).toBeInTheDocument();
+  await page.getByRole("button", { name: "More" }).click();
+  await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
+  await page.getByRole("button", { name: "More" }).click();
 
   await romInput.upload(await loadFixtureFile(ONE_ROM_ZIP, "application/zip"));
   await selectCandidateIfPrompted("game.bin");
@@ -187,7 +189,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
-test("WebappRoot keeps Trim and Tools behind the beta flag and Guides in front of it", async () => {
+test("WebappRoot keeps Trim gated and Tools behind More", async () => {
   mountWebappRoot();
   // Docs is reference rather than a workflow, but it rides in the rail so the
   // readers it is written for do not have to go hunting for it.
@@ -198,6 +200,29 @@ test("WebappRoot keeps Trim and Tools behind the beta flag and Guides in front o
         .map((tab) => tab.textContent),
     )
     .toEqual(["Apply", "Create", "Docs"]);
+  await page.getByRole("button", { name: "More" }).click();
+  await expect.element(page.getByRole("menuitem", { name: "Tools" })).not.toBeInTheDocument();
+});
+
+test("enabled Tools stays behind More on desktop and phone", async () => {
+  for (const [width, height] of [
+    [1280, 900],
+    [390, 844],
+  ]) {
+    page.viewport(width, height);
+    mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
+    await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
+    await page.getByRole("button", { name: "More" }).click();
+    await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
+    expect(document.querySelector(`[role="tab"][data-mode="tools"]`)).toBeNull();
+    expect(document.querySelector(`.dock-tab[data-mode="tools"]`)).toBeNull();
+    if (width >= 1000) {
+      expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).not.toBe("none");
+      expect(getComputedStyle(document.querySelector(".desktop-more .tool-text")).display).not.toBe("none");
+    }
+    await page.getByRole("button", { name: "More" }).click();
+  }
+  page.viewport(1280, 900);
 });
 
 test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {

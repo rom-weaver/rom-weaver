@@ -24,6 +24,7 @@ const TABS = [
   { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
   { href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
+  { href: "tools", icon: <svg aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
 
 const mastheadProps = {
@@ -66,6 +67,7 @@ describe("Masthead", () => {
     ] as const) {
       const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);
       expect(tabs.map((tab) => tab.textContent)).toEqual(labels);
+      expect(list?.querySelector('[data-mode="tools"]')).toBeNull();
       expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
       expect(tabs[0]?.classList.contains(selectedClass)).toBe(true);
       // roving tabindex: exactly one reachable tab per list
@@ -99,6 +101,7 @@ describe("Masthead", () => {
     expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(menu.hidden).toBe(false);
     expect(getByRole("menuitem", { name: "Docs" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "Tools" })).toBeTruthy();
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
     expect(onOpenStorage).toHaveBeenCalledTimes(1);
     expect(more.getAttribute("aria-expanded")).toBe("false");
