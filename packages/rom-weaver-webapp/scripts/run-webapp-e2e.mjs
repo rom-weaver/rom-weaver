@@ -422,7 +422,11 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     // WebKit otherwise treats the workflow body's entrance translate as its
     // containing block and leaves the bar below the article.
     await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "mobile"));
-    await page.goto(new URL("docs", baseUrl).href, { waitUntil: "commit" });
+    const docsReloadResponse = await page.goto(new URL("docs/get-started/", baseUrl).href, { waitUntil: "commit" });
+    const docsReloadHtml = (await docsReloadResponse?.text()) ?? "";
+    if (!docsReloadHtml.includes('class="warp-rail is-initializing"')) {
+      throw new Error("Docs route response is missing the static rail initialization state");
+    }
     const docsTrail = page.locator(".docs-trail");
     await docsTrail.waitFor({ state: "attached" });
     const trailGeometry = await docsTrail.evaluate((element) => {

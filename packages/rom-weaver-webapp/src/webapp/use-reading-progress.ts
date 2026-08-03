@@ -1,4 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
+
+// Measure before the first client paint. The server still renders the stable
+// empty state, while a reload avoids animating the active section marker in
+// from the wrong state after hydration.
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /**
  * How far into the document the reader is, and the shape of the document they
@@ -15,6 +20,8 @@ type ReadingProgress = {
   activeIndex: number;
   /** Document scroll position, 0 at the top and 1 at the scroll limit. */
   fraction: number;
+  /** True until the first client measurement has settled. */
+  initializing: boolean;
   /** Each section's share of the document, summing to 1. */
   weights: readonly number[];
 };
@@ -22,7 +29,7 @@ type ReadingProgress = {
 /** Reading line: a heading counts as current once it passes under the masthead. */
 const HEADING_BAND_PX = 108;
 
-const EMPTY: ReadingProgress = { activeIndex: -1, fraction: 0, weights: [] };
+const EMPTY: ReadingProgress = { activeIndex: -1, fraction: 0, initializing: true, weights: [] };
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -70,13 +77,17 @@ const measure = (sections: readonly { id: string }[]): Measurement => {
  */
 const useReadingProgress = (sections: readonly { id: string }[], active: boolean): ReadingProgress => {
   const [progress, setProgress] = useState<ReadingProgress>(EMPTY);
+  const [initializing, setInitializing] = useState(true);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!active || sections.length === 0) {
       setProgress(EMPTY);
+      setInitializing(false);
       return undefined;
     }
+    setInitializing(true);
     let frame = 0;
+    let settleFrame = 0;
     // Re-measured on resize and after layout shifts (fonts, images) rather than
     // cached once: a guide's images land well after the first paint.
     let measured: Measurement = { end: 0, start: 0, weights: [] };
@@ -107,6 +118,7 @@ const useReadingProgress = (sections: readonly { id: string }[], active: boolean
       setProgress({
         activeIndex: activeIndex < 0 ? 0 : activeIndex,
         fraction: atLimit ? 1 : clamp01(span > 0 ? travelled / span : 0),
+        initializing: true,
         weights: measured.weights,
       });
     };
@@ -122,6 +134,9 @@ const useReadingProgress = (sections: readonly { id: string }[], active: boolean
 
     remeasure();
     read();
+    // Keep the first measured marker out of the transition until the browser
+    // has painted the settled shell. Later scroll changes remain animated.
+    settleFrame = requestAnimationFrame(() => setInitializing(false));
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", relayout);
     document.fonts?.ready?.then(relayout).catch(() => undefined);
@@ -130,13 +145,14 @@ const useReadingProgress = (sections: readonly { id: string }[], active: boolean
     if (observer && article) observer.observe(article);
     return () => {
       if (frame) cancelAnimationFrame(frame);
+      if (settleFrame) cancelAnimationFrame(settleFrame);
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", relayout);
       observer?.disconnect();
     };
   }, [active, sections]);
 
-  return progress;
+  return { ...progress, initializing };
 };
 
 export { useReadingProgress };

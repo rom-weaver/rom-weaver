@@ -1,6 +1,6 @@
 import "./design-system/docs-route.css";
 import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import type { DocSearchEntry } from "virtual:rom-weaver-docs-search";
@@ -30,6 +30,11 @@ const DEFAULT_DOC_SHELF_STATE = Object.fromEntries(
   DOC_SHELVES.map((shelf) => [shelf.title, shelf.title === DEFAULT_DOC_SHELF]),
 ) as DocShelfState;
 
+// Read the persisted shelf state before the first client paint. The server
+// keeps its deterministic default for hydration; the browser applies the
+// reader's saved drawers without showing a closed-to-open reload transition.
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 const readDocShelfState = (): DocShelfState => {
   try {
     const stored = JSON.parse(sessionStorage.getItem(DOC_SHELF_STATE_KEY) || "{}") as Record<string, unknown>;
@@ -47,7 +52,7 @@ const readDocShelfState = (): DocShelfState => {
 const useDocShelfState = () => {
   const [openShelves, setOpenShelves] = useState(DEFAULT_DOC_SHELF_STATE);
   const [ready, setReady] = useState(false);
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     setOpenShelves(readDocShelfState());
     setReady(true);
   }, []);
@@ -228,14 +233,16 @@ const OutlineLink = ({
  */
 const SectionRail = ({
   activeIndex,
+  initializing,
   route,
   onNavigate,
 }: {
   activeIndex: number;
+  initializing: boolean;
   route: DocRoute;
   onNavigate?: () => void;
 }) => (
-  <nav aria-label="On this page" className="warp-rail">
+  <nav aria-label="On this page" className={initializing ? "warp-rail is-initializing" : "warp-rail"}>
     <span className="warp-rail-title">On this page</span>
     <ol className="warp-rail-list">
       {route.sections.map((section, index) => (
@@ -490,6 +497,7 @@ const DocsFaqPreview = () => (
 const TrailHead = ({
   activeIndex,
   fraction,
+  initializing,
   onSearchSelect,
   onSearchQueryChange,
   onShelfToggle,
@@ -501,6 +509,7 @@ const TrailHead = ({
 }: {
   activeIndex: number;
   fraction: number;
+  initializing: boolean;
   onSearchSelect: (result: DocSearchResult, query: string) => void;
   onSearchQueryChange: (query: string) => void;
   onShelfToggle: (title: string, open: boolean) => void;
@@ -547,7 +556,9 @@ const TrailHead = ({
       {/* Both lists at once: the outline the reader is inside, then every guide.
           Two separate sheets meant guessing which one a single button promised. */}
       <Modal onClose={closeSheet} open={sheetOpen} title={route.title} variant="guide-sheet">
-        {outlined ? <SectionRail activeIndex={activeIndex} onNavigate={closeSheet} route={route} /> : null}
+        {outlined ? (
+          <SectionRail activeIndex={activeIndex} initializing={initializing} onNavigate={closeSheet} route={route} />
+        ) : null}
         <DocsNav
           currentSlug={route.slug}
           onNavigate={closeSheet}
@@ -698,7 +709,7 @@ const DocsPage = ({
   const hub = route.slug === HUB_SLUG;
   // One subscription for the page: the desktop rail and the phone trail read the
   // same position, and the hook measures the document on every scroll frame.
-  const { activeIndex, fraction, weights } = useReadingProgress(route.sections, active);
+  const { activeIndex, fraction, initializing, weights } = useReadingProgress(route.sections, active);
   const pageTurned = useDocsPageTurned(route.slug);
   const { onShelfToggle, openShelves } = useDocShelfState();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
@@ -769,6 +780,7 @@ const DocsPage = ({
       <TrailHead
         activeIndex={activeIndex}
         fraction={fraction}
+        initializing={initializing}
         key={route.slug}
         onSearchSelect={onSearchSelect}
         onSearchQueryChange={onSearchQueryChange}
@@ -782,7 +794,9 @@ const DocsPage = ({
       <div className="docs-layout">
         <div className="docs-rails">
           <DocsNav currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} />
-          {route.sections.length > 0 ? <SectionRail activeIndex={activeIndex} route={route} /> : null}
+          {route.sections.length > 0 ? (
+            <SectionRail activeIndex={activeIndex} initializing={initializing} route={route} />
+          ) : null}
         </div>
         <section className="docs-panel">
           {/* Keyed on the route so a guide switch remounts the article and
