@@ -10,6 +10,7 @@ import {
   Settings,
   SunMedium,
   Wrench,
+  X,
 } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
@@ -1203,6 +1204,12 @@ const Reveal = ({ open, children }: { open: boolean; children: ReactNode }) => (
   <div className={join("reveal", open && "is-open")} hidden={!open}>
     {children}
   </div>
+);
+
+const BannerDismissButton = ({ label, onDismiss }: { label: string; onDismiss: () => void }) => (
+  <button aria-label={label} className="banner-x" onClick={onDismiss} title={label} type="button">
+    <X aria-hidden="true" />
+  </button>
 );
 
 export type { RuntimeState };
