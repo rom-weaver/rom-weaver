@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
+import { isLegalDocRoute } from "../src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
@@ -219,7 +220,7 @@ for (const route of DOC_ROUTES) {
   );
   assertIncludes(docsHtml, '<base href="/" />', `${route.slug} asset base`);
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
-  const legalPage = route.slug === "docs/notices" || route.slug === "docs/privacy";
+  const legalPage = isLegalDocRoute(route.slug);
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);
   // The guided-sample offer is the hub's, not every page's: the guides all
   // closing on the same three buttons made it furniture. Each guide still reaches
