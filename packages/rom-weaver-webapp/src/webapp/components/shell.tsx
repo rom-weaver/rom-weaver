@@ -1198,33 +1198,6 @@ const BannerDismissButton = ({ label, onDismiss }: { label: string; onDismiss: (
   </button>
 );
 
-/** Wake-lock caution banner inside a {@link Reveal}. */
-const WakeLockBanner = ({
-  open,
-  children,
-  onDismiss,
-}: {
-  open: boolean;
-  children: ReactNode;
-  onDismiss?: () => void;
-}) => {
-  const localizer = useUiLocalizer();
-  return (
-    <Reveal open={open}>
-      <div className="wakelock" role="status">
-        <svg aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M12 3a6 6 0 0 1 6 6c0 2.2-1.2 3.4-2.2 4.6-.8 1-1.3 1.7-1.3 2.9h-5c0-1.2-.5-1.9-1.3-2.9C7.2 12.4 6 11.2 6 9a6 6 0 0 1 6-6Z" />
-          <path d="M10 20h4m-3.4 2.5h2.8" />
-        </svg>
-        <span className="wakelock-text">{children}</span>
-        {onDismiss ? (
-          <BannerDismissButton label={localizer.message("ui.common.dismiss")} onDismiss={onDismiss} />
-        ) : null}
-      </div>
-    </Reveal>
-  );
-};
-
 export type { RuntimeState };
 export {
   Masthead,
@@ -1236,5 +1209,4 @@ export {
   RUNTIME_STATES,
   RuntimeGlyph,
   UpdateBanner,
-  WakeLockBanner,
 };

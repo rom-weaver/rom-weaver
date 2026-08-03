@@ -279,7 +279,6 @@ describe("UpdateBanner", () => {
         />,
       ),
     );
-
     const changelogButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
     expect(changelogButton.textContent).toBe("What’s new");
     expect(changelogButton.getAttribute("aria-label")).toContain("A newer app version is ready.");

@@ -615,11 +615,6 @@ msgstr "Guardar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.wakelock.text"
-msgstr "La pantalla permanece activa mientras se ejecuta un trabajo."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Ajustes"
 

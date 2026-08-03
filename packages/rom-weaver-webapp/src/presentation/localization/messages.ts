@@ -248,7 +248,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.urlSession.error": msg({ id: "ui.urlSession.error", message: "Shared session download failed" }),
   "ui.urlSession.loading": msg({ id: "ui.urlSession.loading", message: "Loading shared session…" }),
-  "ui.wakelock.text": msg({ id: "ui.wakelock.text", message: "Screen stays awake while a job is running." }),
 };
 
 export { MESSAGES };

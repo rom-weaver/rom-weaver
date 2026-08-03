@@ -1,4 +1,4 @@
-/* ═══ update banner / wake-lock ═══ */
+/* ═══ update banner ═══ */
 /* CSS-only slide reveal (replaces the old JS slideToggle tween): the wrapper
    collapses via grid-rows, the content fades in a second beat via
    transition-delay, and display none↔grid rides allow-discrete so [hidden]
@@ -138,25 +138,6 @@
 .rw-app .rel-summary:active { background: color-mix(in oklab, var(--ink) 5%, transparent); }
 .rw-app .rel-body { padding: 0 var(--sp-m) var(--sp-m); border-block-start: 1px solid var(--seam-soft); padding-block-start: var(--sp-s); }
 .rw-app .rel-link { display: inline-block; margin-block-start: var(--sp-m); font-size: .8rem; color: var(--thread-text); }
-/* banner dismiss (update + wake-lock) - sized to --ctrl-h so it reads as a
-   sibling of the other row controls, not a stray small glyph */
-.rw-app .banner-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); flex: none; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }
-@media (hover: hover) {
-  .rw-app .banner-x:hover { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
-}
-.rw-app .banner-x:active { color: var(--ink); background: color-mix(in oklab, currentColor 10%, transparent); }
-.rw-app .banner-x svg { width: 14px; height: 14px; }
-
-.rw-app .wakelock {
-  display: flex; align-items: center; gap: var(--sp-m);
-  padding: var(--sp-s) var(--sp-m); border: 1px dashed color-mix(in oklab, var(--care) 45%, var(--seam));
-  border-radius: var(--r-m); background: color-mix(in oklab, var(--care) 7%, var(--plate));
-  font-size: .82rem; color: var(--ink-2);
-}
-.rw-app .wakelock svg { width: 15px; height: 15px; color: var(--care); flex: none; }
-.rw-app .wakelock .wakelock-text { flex: 1 1 auto; min-width: 0; }
-.rw-app .wakelock .banner-x svg { color: inherit; }
-
 /* page-wide drop veil */
 /* the veil overlays only the active form panel (same grid cell), not the whole
    tall workbench / empty page below it */

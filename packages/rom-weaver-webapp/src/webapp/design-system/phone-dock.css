@@ -40,7 +40,6 @@
 
   .rw-app .updates-ver { margin-inline-start: 0; font-size: .7rem; }
   .rw-app .updates .btn.slim { height: 32px; padding-inline: 9px; }
-  .rw-app .updates .banner-x { width: 28px; height: 32px; }
 
   .rw-app .update-ready {
     min-height: 38px;
