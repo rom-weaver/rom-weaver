@@ -71,6 +71,24 @@ const brandMarkAssets = () => {
       isBuild = config.command === "build";
     },
     configureServer(server) {
+      server.watcher.add(logoSourcePath);
+      const reloadOnLogoChange = (file) => {
+        if (path.resolve(String(file)) !== logoSourcePath) return;
+        cachedMarks = null;
+        const graphs = [
+          server.environments?.client?.moduleGraph,
+          server.environments?.ssr?.moduleGraph,
+          server.moduleGraph,
+        ];
+        for (const graph of graphs) {
+          const module = graph?.getModuleById?.(RESOLVED_ID);
+          if (module) graph.invalidateModule(module);
+        }
+        server.hot.send({ type: "full-reload" });
+      };
+      server.watcher.on("add", reloadOnLogoChange);
+      server.watcher.on("change", reloadOnLogoChange);
+      server.watcher.on("unlink", reloadOnLogoChange);
       server.middlewares.use(middleware);
     },
     load(id) {
