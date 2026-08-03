@@ -1,8 +1,13 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
+import { listBrowserOpfs } from "../../../src/storage/browser/browser-opfs-cleanup.ts";
 import { LogDialog } from "../../../src/webapp/components/log-dialog.tsx";
+
+vi.mock("../../../src/storage/browser/browser-opfs-cleanup.ts", () => ({
+  listBrowserOpfs: vi.fn(),
+}));
 
 // The suite runs without vitest globals, so RTL cannot auto-clean between tests.
 afterEach(cleanup);
@@ -95,5 +100,24 @@ describe("LogDialog", () => {
     select.value = "trace";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     expect(onLevelChange).toHaveBeenCalledWith("trace");
+  });
+
+  it("shows file leaves instead of parent directories in Storage", async () => {
+    vi.mocked(listBrowserOpfs).mockResolvedValue([
+      { kind: "directory", path: "/operations" },
+      { kind: "directory", path: "/operations/run" },
+      { kind: "file", path: "/operations/run/input.iso", size: 123 },
+      { kind: "directory", path: "/rom-weaver-out" },
+    ]);
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog initialTab="storage" onClose={() => undefined} onLevelChange={() => undefined} open />
+      </RomWeaverSettingsProvider>,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".opfs-row")).toHaveLength(1));
+    expect(container.querySelector(".opfs-summary")?.textContent).toBe("1 file");
+    expect(container.querySelector(".opfs-row")?.textContent).toContain("/operations/run/input.iso");
+    expect(container.querySelector(".opfs-row")?.textContent).not.toContain("directory");
   });
 });
