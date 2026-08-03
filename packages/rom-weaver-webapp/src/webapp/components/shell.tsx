@@ -704,7 +704,7 @@ const Masthead = ({
                 <button
                   aria-haspopup="dialog"
                   aria-label={runtimeLabel}
-                  className="sub-chip sub-status"
+                  className="sub-chip sub-status sub-status-rule"
                   data-sw={runtimeState}
                   onClick={onOpenStatus}
                   type="button"
