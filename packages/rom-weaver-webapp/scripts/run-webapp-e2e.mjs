@@ -8,7 +8,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, webkit } from "playwright";
 import { DOC_SOURCES, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
@@ -23,7 +23,8 @@ const CSS_COVERAGE_BUDGET = JSON.parse(
 const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb";
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
 // Derived from the route table, so a new guide is audited without a second edit.
-const DOCS_ROUTES = DOC_SOURCES.map((source) => source.slug);
+export const computeDocsRouteSlugs = (docSources) => docSources.map((source) => source.slug);
+const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
 const A11Y_VIEWPORTS = [
   { height: 720, label: "desktop", width: 1280 },
   { height: 844, label: "mobile", width: 390 },
@@ -60,7 +61,7 @@ const reservePort = () =>
 // misconfigured URL should fail loudly rather than silently trust an unknown certificate.
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
-const shouldRejectUnauthorized = (url) => {
+export const shouldRejectUnauthorized = (url) => {
   try {
     return !LOOPBACK_HOSTNAMES.has(new URL(url).hostname);
   } catch {
@@ -343,7 +344,7 @@ const scanLiveApp = async (page, label) => {
   process.stdout.write(`PASS accessibility ${label}\n`);
 };
 
-const checkCssCoverage = (entries) => {
+export const checkCssCoverage = (entries) => {
   const coverage = summarizeCssCoverage(entries);
   if (coverage.stylesheetCount === 0) throw new Error("CSS coverage did not include a bundled stylesheet");
   const usedPercent = ((coverage.usedBytes / coverage.totalBytes) * 100).toFixed(1);
@@ -655,7 +656,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await page.locator(".docs-article h1").waitFor({ state: "visible" });
       await installAuditTools();
       const headings = await page.locator("h1").count();
-      if (headings !== 1) throw new Error(`${slug} rendered ${headings} level-one headings; expected exactly 1`);
+      assertSingleDocsHeading(headings, slug);
       // This origin is not production, so once the page is live every sample
       // download has to have moved to it. The served HTML still names
       // production, which is the right answer for a crawler but the wrong one
@@ -675,8 +676,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           production: countBlocksNaming(productionOrigin),
         };
       }, SITE_ORIGIN);
-      if (samples.production)
-        throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
+      assertNoProductionDocsSamples(samples, slug);
       retargetedSamples += samples.local;
       await scanVariants(slug);
       if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
@@ -695,7 +695,37 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   }
 };
 
-const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
+export const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
+
+// Every docs route must render exactly one top-level heading; extracted so
+// the invariant (and its exact message) is pinned independently of the live
+// Playwright walk that calls it once per route in DOCS_ROUTES.
+export const assertSingleDocsHeading = (headingCount, slug) => {
+  if (headingCount !== 1) throw new Error(`${slug} rendered ${headingCount} level-one headings; expected exactly 1`);
+};
+
+// A docs route running against a non-production origin must retarget every
+// sample download away from production - extracted for the same reason as
+// assertSingleDocsHeading above.
+export const assertNoProductionDocsSamples = (samples, slug) => {
+  if (samples.production) throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
+};
+
+// Pure half of createWorkerReuseCorpus's manifest.json: the one deterministic
+// "case" entry (payload/archive bytes in, sha256-pinned metadata out), split
+// out so it is testable without touching the filesystem or a wall-clock
+// timestamp.
+export const buildWorkerReuseManifestCase = (archive, payload) => ({
+  compressedBytes: archive.byteLength,
+  entryCount: MANY_ENTRIES_COUNT,
+  expectedSha256: sha256(payload),
+  fileName: "many-entries.zip",
+  id: "many-entries",
+  kind: "generated",
+  sha256: sha256(archive),
+  uncompressedBytes: MANY_ENTRIES_COUNT * MANY_ENTRY_SIZE,
+  url: "/__rom_weaver_corpus__/files/many-entries.zip",
+});
 
 const createWorkerReuseCorpus = () => {
   const corpusDir = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-worker-reuse-"));
@@ -708,19 +738,7 @@ const createWorkerReuseCorpus = () => {
   fs.writeFileSync(
     path.join(corpusDir, "manifest.json"),
     `${JSON.stringify({
-      cases: [
-        {
-          compressedBytes: archive.byteLength,
-          entryCount: MANY_ENTRIES_COUNT,
-          expectedSha256: sha256(payload),
-          fileName: "many-entries.zip",
-          id: "many-entries",
-          kind: "generated",
-          sha256: sha256(archive),
-          uncompressedBytes: MANY_ENTRIES_COUNT * MANY_ENTRY_SIZE,
-          url: "/__rom_weaver_corpus__/files/many-entries.zip",
-        },
-      ],
+      cases: [buildWorkerReuseManifestCase(archive, payload)],
       generatedAt: new Date().toISOString(),
       version: 1,
     })}\n`,
@@ -938,7 +956,13 @@ const runWithRetry = async () => {
   }
 };
 
-runWithRetry().catch((error) => {
-  process.stderr.write(`${error?.stack || String(error)}\n`);
-  process.exitCode = 1;
-});
+// Guards direct execution (`node scripts/run-webapp-e2e.mjs`, or via the
+// `test:e2e:webapp*`/`test:e2e:a11y` npm scripts) from module import - the
+// unit tests in run-webapp-e2e.test.mjs import this file for its exported
+// pure helpers and must not trigger a full browser E2E run as a side effect.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runWithRetry().catch((error) => {
+    process.stderr.write(`${error?.stack || String(error)}\n`);
+    process.exitCode = 1;
+  });
+}
