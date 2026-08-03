@@ -4,4 +4,4 @@
  * redesigned UI is composed without duplicating markup.
  */
 
-export { ConfirmDialog, Modal } from "./modal.tsx";
+export { ConfirmDialog } from "./modal.tsx";

@@ -21,7 +21,6 @@ import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-sta
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
-import { ChangelogDialog } from "../../src/webapp/components/changelog-dialog.tsx";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
 import { Masthead, UpdateBanner, WakeLockBanner } from "../../src/webapp/components/shell.tsx";
 import {
@@ -753,7 +752,7 @@ const Banners = () =>
     createElement(
       "div",
       { className: "rw-app" },
-      createElement(UpdateBanner, { onReload: noop, open: true }),
+      createElement(UpdateBanner, { onOpenChangelog: noop, open: true }),
       createElement(WakeLockBanner, { onDismiss: noop, open: true }, "Keeping the screen awake while this job runs."),
     ),
   );
@@ -807,7 +806,15 @@ const DIALOGS = {
       open: true,
       title: "Reload and lose changes?",
     }),
-  "update changelog": () => createElement(ChangelogDialog, { onClose: noop, onReload: noop, open: true }),
+  "update changelog": () =>
+    createElement(LogDialog, {
+      initialTab: "changelog",
+      onClose: noop,
+      onLevelChange: noop,
+      onReload: noop,
+      open: true,
+      updateReady: true,
+    }),
   log: () => createElement(LogDialog, { onClose: noop, onLevelChange: noop, open: true }),
   // Settings is the unified dialog's first tab now, not a Modal of its own.
   settings: () =>

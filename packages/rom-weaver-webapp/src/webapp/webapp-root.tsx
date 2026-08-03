@@ -60,9 +60,6 @@ const getGuideView = (guide: GuidedSample): WebappView => (guide === "create" ? 
 // the masthead and idle post-boot preload can fetch the same promise.
 const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog }));
 const LogDialog = lazy(loadLogDialog);
-const loadChangelogDialog = () =>
-  import("./components/changelog-dialog.tsx").then((module) => ({ default: module.ChangelogDialog }));
-const ChangelogDialog = lazy(loadChangelogDialog);
 const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
 const SettingsPanel = lazy(loadSettingsPanel);
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
@@ -218,7 +215,6 @@ function WebappRoot({
   // discard-confirmation flow first; the dialog itself only closes once that
   // flow actually clears `settingsDialogOpen`.
   const settingsCloseArmedRef = useRef(false);
-  const [changelogOpen, setChangelogOpen] = useState(false);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
   // silently discard the user's work. Each form mounts on first visit and then
@@ -266,7 +262,6 @@ function WebappRoot({
       if (cancelled) return;
       void loadLogDialog().catch(() => undefined);
       void loadSettingsPanel().catch(() => undefined);
-      void loadChangelogDialog().catch(() => undefined);
     };
     const scheduleDialogPreload = () => {
       if (cancelled) return;
@@ -343,6 +338,26 @@ function WebappRoot({
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
   }, []);
+  // Every changelog affordance - the version chip, the update notification, and
+  // the runtime chip while it is amber - lands on the one tab that holds every
+  // view of the changelog.
+  const openChangelogTab = useCallback(() => {
+    preloadLogDialog();
+    setLogTab("changelog");
+    setLogOpen(true);
+  }, [preloadLogDialog]);
+  // The runtime chip reports a state, and Status is where that state is
+  // explained - except in the one state that asks for an action. An amber chip
+  // is an update waiting, so it goes where the update is described.
+  const openStatusTab = useCallback(() => {
+    if (pageUpdate.ready) {
+      openChangelogTab();
+      return;
+    }
+    preloadLogDialog();
+    setLogTab("status");
+    setLogOpen(true);
+  }, [openChangelogTab, pageUpdate.ready, preloadLogDialog]);
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
@@ -493,15 +508,12 @@ function WebappRoot({
             commitsSinceVersion={COMMITS_SINCE_VERSION}
             dirty={Boolean(DIRTY_HASH)}
             donateHref={DONATE_URL}
-            onOpenChangelog={() => setChangelogOpen(true)}
+            onOpenChangelog={openChangelogTab}
             onOpenLog={() => {
               setLogTab("logs");
               setLogOpen(true);
             }}
-            onOpenStatus={() => {
-              setLogTab("status");
-              setLogOpen(true);
-            }}
+            onOpenStatus={openStatusTab}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
@@ -523,16 +535,7 @@ function WebappRoot({
             tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
             tabsControlPanels={!notFound}
           />
-          <UpdateBanner onReload={actions.onReloadUpdate} open={pageUpdate.ready} />
-          {changelogOpen ? (
-            <Suspense fallback={null}>
-              <ChangelogDialog
-                onClose={() => setChangelogOpen(false)}
-                onReload={actions.onReloadUpdate}
-                open={changelogOpen}
-              />
-            </Suspense>
-          ) : null}
+          <UpdateBanner onOpenChangelog={openChangelogTab} open={pageUpdate.ready} />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLockNotice />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
@@ -622,7 +625,6 @@ function WebappRoot({
               level={state.settings.logLevel}
               onClose={closeDialog}
               onLevelChange={actions.onLogLevelChange}
-              onOpenChangelog={() => setChangelogOpen(true)}
               onReload={actions.onReloadUpdate}
               onRestoreDefaults={actions.onRestoreDefaults}
               onSaveSettings={saveSettings}

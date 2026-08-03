@@ -143,25 +143,10 @@
     height: 24px;
   }
 
-  .rw-modal.changelog-modal { padding: var(--sp-m); }
-  .rw-modal.changelog-modal .rw-modal-card {
-    width: 100%;
-    max-width: min(520px, calc(100vw - 20px));
-    max-height: calc(100dvh - 20px);
-  }
-
-  .rw-modal.changelog-modal .modal-head { padding: var(--sp-m); }
-  .rw-modal.changelog-modal .modal-body { padding: var(--sp-m); }
   /* Below the title rather than beside it - the head has no width left to share. */
-  .rw-modal.changelog-modal .changelog-head-meta { flex: 1 0 100%; justify-content: space-between; }
-  .rw-modal.changelog-modal .changelog-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--sp-s);
-    padding-block-start: 4px;
-  }
-
-  .rw-modal.changelog-modal .changelog-actions .btn {
+  .rw-app .changelog-update-head { display: block; }
+  .rw-app .changelog-update-head .changelog-head-meta { justify-content: space-between; }
+  .rw-app .changelog-actions .btn {
     width: 100%;
     height: 44px;
     padding-inline: 10px;
