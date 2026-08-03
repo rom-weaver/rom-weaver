@@ -102,12 +102,13 @@ describe("LogDialog", () => {
     expect(onLevelChange).toHaveBeenCalledWith("trace");
   });
 
-  it("shows file leaves instead of parent directories in Storage", async () => {
+  it("shows only bottom-most OPFS entries without their parent paths", async () => {
     vi.mocked(listBrowserOpfs).mockResolvedValue([
       { kind: "directory", path: "/operations" },
       { kind: "directory", path: "/operations/run" },
       { kind: "file", path: "/operations/run/input.iso", size: 123 },
       { kind: "directory", path: "/rom-weaver-out" },
+      { kind: "directory", path: "/rom-weaver-out/run" },
     ]);
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
@@ -115,9 +116,12 @@ describe("LogDialog", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    await waitFor(() => expect(container.querySelectorAll(".opfs-row")).toHaveLength(1));
-    expect(container.querySelector(".opfs-summary")?.textContent).toBe("1 file");
-    expect(container.querySelector(".opfs-row")?.textContent).toContain("/operations/run/input.iso");
-    expect(container.querySelector(".opfs-row")?.textContent).not.toContain("directory");
+    await waitFor(() => expect(container.querySelectorAll(".opfs-row")).toHaveLength(2));
+    expect(container.querySelector(".opfs-summary")?.textContent).toBe("2 entries");
+    const rows = Array.from(container.querySelectorAll(".opfs-row"), (row) => row.textContent);
+    expect(rows).toEqual([expect.stringContaining("input.iso"), expect.stringContaining("run")]);
+    expect(rows.join("\n")).not.toContain("/operations/");
+    expect(rows.join("\n")).not.toContain("/rom-weaver-out/");
+    expect(rows.join("\n")).not.toContain("directory /operations");
   });
 });
