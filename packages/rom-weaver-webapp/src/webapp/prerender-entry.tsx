@@ -6,7 +6,7 @@ import { createWebappRootController } from "./webapp-controller.ts";
 import { createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 import { WebappRoot } from "./webapp-root.tsx";
-import { preloadWorkflowRoute } from "./workflow-routes.tsx";
+import { preloadDocsRouteHtml, preloadWorkflowRoute } from "./workflow-routes.tsx";
 
 /**
  * Build-time prerender of the landing shell: the exact markup the client's
@@ -58,7 +58,12 @@ const renderLandingShellHtml = async (
   notFound = false,
   docsSlug = "docs",
 ): Promise<string> => {
-  if (!notFound) await preloadWorkflowRoute(currentView);
+  if (!notFound) {
+    await preloadWorkflowRoute(currentView);
+    // The docs article is its own per-guide chunk; renderToString cannot
+    // suspend, so the requested guide's HTML resolves up front too.
+    if (currentView === "docs") await preloadDocsRouteHtml(docsSlug);
+  }
   const controller = createWebappRootController({
     onApplySettings: noop,
     onCreatorViewRequested: () => true,

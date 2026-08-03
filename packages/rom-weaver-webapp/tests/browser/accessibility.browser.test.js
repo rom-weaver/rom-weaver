@@ -61,6 +61,9 @@ let mountedRoot = null;
 let host = null;
 let noMotion = null;
 let fetchSpy = null;
+// The real fetch, captured before the changelog stub below wraps it, so asset
+// requests (the brand-mark SVGs) still reach the server.
+const nativeFetch = globalThis.fetch.bind(globalThis);
 
 // Kill entrance/expand animation + transition timing so colours are sampled at
 // their settled values, never a mid-fade frame (matching the live-app audit).
@@ -1063,16 +1066,19 @@ describe("accent dye-lot accessibility", () => {
             // The badge surface must really render the re-dyed inline SVG.
             if (badge) {
               expect(host.querySelector(".channel-badge")?.getAttribute("data-channel")).toBe("nightly");
-              // The logo is an <img> of an inlined, re-dyed SVG. If the ?raw import ever
-              // resolved to a URL or an empty string instead of the file's text, the mark
-              // would silently render blank and every scan above would pass on nothing.
+              // The logo is an <img> of a pre-tinted per-accent SVG asset
+              // (scripts/brand-mark-assets.mjs). If the virtual module ever
+              // resolved to the wrong accent or an empty string, the mark would
+              // silently render stock (or blank) and every scan above would
+              // pass on nothing - so fetch the asset and check the dye took.
               const markSrc = host.querySelector("img.brand-mark")?.getAttribute("src") || "";
-              expect(markSrc.startsWith("data:image/svg+xml,")).toBe(true);
-              expect(markSrc).toContain(encodeURIComponent("<svg"));
-              expect(markSrc).toContain(encodeURIComponent(accent.swatch));
-              expect(markSrc).toContain(encodeURIComponent(accent.highlight));
+              expect(markSrc).toMatch(new RegExp(`assets/brand-mark-${accent.value}-[0-9a-f]{8}\\.svg$`));
+              const markSvg = await (await nativeFetch(markSrc)).text();
+              expect(markSvg).toContain("<svg");
+              expect(markSvg).toContain(accent.swatch);
+              expect(markSvg).toContain(accent.highlight);
               // No madder left anywhere once a different dye is selected.
-              if (accent.value !== "madder") expect(markSrc).not.toContain(encodeURIComponent("#d9690f"));
+              if (accent.value !== "madder") expect(markSvg).not.toContain("#d9690f");
             }
 
             const surfaceViolations = await scanViolations(host, { onlyRules: ["color-contrast"], region: isPage });

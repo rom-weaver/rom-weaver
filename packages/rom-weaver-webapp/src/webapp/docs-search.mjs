@@ -1,7 +1,7 @@
 /**
  * @typedef {{ id: string | null, label: string, text: string }} SearchEntry
  * @typedef {{ description: string, html: string, label: string, sections: readonly { id: string, label: string }[], slug: string, title: string }} SearchSourceRoute
- * @typedef {SearchSourceRoute & { searchEntries: readonly SearchEntry[] }} SearchRoute
+ * @typedef {{ description: string, label: string, searchEntries: readonly SearchEntry[], sections: readonly { id: string, label: string }[], slug: string, title: string }} SearchRoute
  * @typedef {{ entry: SearchEntry, route: SearchRoute, routeIndex: number, entryIndex: number, score: number, snippet: string }} SearchMatch
  * @typedef {{ index: number, score: number, text: string }} SearchTokenMatch
  */
@@ -87,46 +87,61 @@ const createSnippet = (text, query) => {
   return `${start > 0 ? "…" : ""}${clean.slice(start, end)}${end < clean.length ? "…" : ""}`;
 };
 
-/** @param {SearchSourceRoute} route @returns {SearchRoute} */
-const indexRoute = (route) => {
-  if (typeof document === "undefined") {
-    return { ...route, searchEntries: [{ id: null, label: route.title, text: `${route.title} ${route.description}` }] };
-  }
+/** Entities marked emits in rendered guide HTML; anything unrecognized decays to a space. */
+const TEXT_ENTITIES = /** @type {Record<string, string>} */ ({
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: " ",
+  quot: '"',
+});
 
-  const template = document.createElement("template");
-  template.innerHTML = route.html;
-  const children = [...template.content.children];
-  const headings = children.filter((element) => element.tagName === "H2");
-  /** @param {Element[]} elements */
-  const textOf = (elements) =>
-    elements
-      .map((element) => element.textContent ?? "")
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-  const firstHeading = headings[0];
-  const firstHeadingIndex = firstHeading ? children.indexOf(firstHeading) : -1;
+/** @param {string} value */
+const decodeTextEntities = (value) =>
+  value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (_match, reference) => {
+    const name = String(reference).toLowerCase();
+    const named = TEXT_ENTITIES[name];
+    if (named !== undefined) return named;
+    if (!name.startsWith("#")) return " ";
+    const code = name.startsWith("#x") ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
+    return Number.isFinite(code) ? String.fromCodePoint(code) : " ";
+  });
+
+/** @param {string} html */
+const htmlToText = (html) =>
+  decodeTextEntities(String(html).replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+
+// String-based rather than DOM-based so the index can be prebuilt at build
+// time (scripts/docs-virtual-module.mjs) and the guides' HTML never has to
+// ship a second time just to be searchable. Guide sections are the `<h2>`
+// blocks renderMarkdown (docs-content.mjs) emits, one per `sections` entry and
+// always top-level, so splitting on the tags recovers the same section texts
+// the old DOM walk produced.
+/** @param {SearchSourceRoute} route @returns {SearchRoute} */
+const indexRoute = ({ description, html, label, sections, slug, title }) => {
+  const parts = String(html).split(/(?=<h2[\s>])/);
+  const intro = parts[0] ?? "";
   /** @type {SearchEntry[]} */
   const entries = [
     {
       id: null,
-      label: route.title,
-      text: `${route.title} ${route.description} ${textOf(children.slice(0, firstHeadingIndex < 0 ? children.length : firstHeadingIndex))}`.trim(),
+      label: title,
+      text: `${title} ${description} ${htmlToText(intro)}`.trim(),
     },
   ];
-  headings.forEach((heading, index) => {
-    const section = route.sections[index];
-    if (!section) return;
-    const start = children.indexOf(heading);
-    const nextHeading = headings[index + 1];
-    const next = nextHeading ? children.indexOf(nextHeading) : -1;
+  sections.forEach((section, index) => {
+    const part = parts[index + 1];
+    if (part === undefined) return;
     entries.push({
       id: section.id,
       label: section.label,
-      text: textOf(children.slice(start, next < 0 ? children.length : next)),
+      text: htmlToText(part),
     });
   });
-  return { ...route, searchEntries: entries };
+  return { description, label, searchEntries: entries, sections, slug, title };
 };
 
 /** @param {readonly SearchSourceRoute[]} routes */

@@ -22,7 +22,6 @@ import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
-import { ChangelogDialog } from "./components/changelog-dialog.tsx";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
@@ -61,6 +60,9 @@ const getGuideView = (guide: GuidedSample): WebappView => (guide === "create" ? 
 // the masthead and idle post-boot preload can fetch the same promise.
 const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog }));
 const LogDialog = lazy(loadLogDialog);
+const loadChangelogDialog = () =>
+  import("./components/changelog-dialog.tsx").then((module) => ({ default: module.ChangelogDialog }));
+const ChangelogDialog = lazy(loadChangelogDialog);
 const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
 const SettingsPanel = lazy(loadSettingsPanel);
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
@@ -264,6 +266,7 @@ function WebappRoot({
       if (cancelled) return;
       void loadLogDialog().catch(() => undefined);
       void loadSettingsPanel().catch(() => undefined);
+      void loadChangelogDialog().catch(() => undefined);
     };
     const scheduleDialogPreload = () => {
       if (cancelled) return;
@@ -518,11 +521,15 @@ function WebappRoot({
             tabsControlPanels={!notFound}
           />
           <UpdateBanner onReload={actions.onReloadUpdate} open={pageUpdate.ready} />
-          <ChangelogDialog
-            onClose={() => setChangelogOpen(false)}
-            onReload={actions.onReloadUpdate}
-            open={changelogOpen}
-          />
+          {changelogOpen ? (
+            <Suspense fallback={null}>
+              <ChangelogDialog
+                onClose={() => setChangelogOpen(false)}
+                onReload={actions.onReloadUpdate}
+                open={changelogOpen}
+              />
+            </Suspense>
+          ) : null}
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLockNotice />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>

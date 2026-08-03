@@ -28,7 +28,7 @@ import { createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath } 
 import { readPwaState } from "./components/shell.tsx";
 import { getSoftNavigationUrl } from "./soft-navigation.ts";
 import { resolveThreads, selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
-import { preloadWorkflowRoute } from "./workflow-routes.tsx";
+import { preloadDocsRouteHtml, preloadWorkflowRoute } from "./workflow-routes.tsx";
 import {
   type ConfirmationDialogState,
   createEmptyConfirmationDialogState,
@@ -216,11 +216,17 @@ applicationStatusReady = true;
 
 // The landing tab's workflow form is its own chunk. Start it at module
 // evaluation, then wait for it before hydration so React does not commit a
-// Suspense fallback over the prerendered form. A failed load resolves anyway -
-// the route's Suspense boundary owns the error.
-const initialWorkflowRoute = isNotFoundPage
-  ? Promise.resolve()
-  : preloadWorkflowRoute(webappController.getState().currentView).catch(() => undefined);
+// Suspense fallback over the prerendered form. A docs document additionally
+// waits for the served guide's HTML chunk, which hydration must find in the
+// docs page cache. A failed load resolves anyway - the route's Suspense
+// boundary owns the error.
+const preloadInitialWorkflowRoute = async (): Promise<unknown> => {
+  const view = webappController.getState().currentView;
+  await preloadWorkflowRoute(view);
+  if (view === "docs") await preloadDocsRouteHtml();
+  return undefined;
+};
+const initialWorkflowRoute = isNotFoundPage ? Promise.resolve() : preloadInitialWorkflowRoute().catch(() => undefined);
 let initialWorkflowRouteReady = false;
 void initialWorkflowRoute.then(() => {
   initialWorkflowRouteReady = true;
