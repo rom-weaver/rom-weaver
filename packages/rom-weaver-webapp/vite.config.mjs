@@ -343,6 +343,9 @@ const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
 const PRERENDER_RUNTIME_SLOT = '<span class="shell-identity" hidden=""></span>';
 const PRERENDER_RUNTIME_RESOLVER =
   "<script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}finally{document.currentScript.remove()}</script>";
+/** No prerendered markup: the route paints itself, and nothing lies in the meantime. */
+const EMPTY_PRERENDER_ROOT = '<div id="webapp-root" aria-busy="true"></div>';
+
 const PRERENDER_ROOT = (shell) =>
   `<div id="webapp-root" aria-busy="true">${shell.replace(
     PRERENDER_RUNTIME_SLOT,
@@ -420,11 +423,22 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
         ["tools", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
         // One document per System tab, so a deep link resolves offline instead
-        // of falling through to 404.html. Chrome only - no prerendered shell -
-        // so they inherit the patcher markup exactly as trim and tools do.
+        // of falling through to 404.html.
+        //
+        // These ship an EMPTY root rather than the patcher shell every other
+        // derived route inherits. The shell is a promise that the page you asked
+        // for is already painted, and for /system it is not: the visitor would
+        // watch the Apply hero paint under an Apply-selected tab and then be
+        // replaced. Prerendering the route properly is not the fix either - the
+        // Threads field renders a hardware-derived placeholder the build machine
+        // cannot know, so its markup would mismatch on hydration. An empty root
+        // is honest: nothing paints until the route can paint itself.
         ...SYSTEM_ROUTE_SLUGS.map((systemSlug) => [
           systemSlug,
-          withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, systemSlug), routePreloadLinks.get("system")),
+          withRoutePreloadLinks(
+            makeBetaRouteNoindex(indexHtml, systemSlug).replace(patcherRoot, EMPTY_PRERENDER_ROOT),
+            routePreloadLinks.get("system"),
+          ),
         ]),
       ]) {
         const routeDir = path.join(distDir, slug);

@@ -159,7 +159,6 @@ for (const route of [
   "create/index.html",
   "trim/index.html",
   "tools/index.html",
-  "system/index.html",
 ]) {
   const html = read(route);
   assertIncludes(html, runtimeResolver, `${route} parser-time runtime status resolver placement`);
@@ -283,6 +282,16 @@ const bundledScripts = fs
 for (const script of bundledScripts) {
   if (read(script).includes("markedjs/marked"))
     throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
+}
+
+// The System route ships no prerendered shell, so its documents must carry no
+// workflow markup at all - painting the Apply page under an Apply-selected tab
+// and then replacing it is exactly what the empty root exists to prevent.
+for (const slug of SYSTEM_ROUTE_SLUGS) {
+  const html = read(`${slug}/index.html`);
+  assertIncludes(html, '<div id="webapp-root" aria-busy="true"></div>', `${slug} empty prerender root`);
+  if (html.includes('aria-selected="true" class="mode"'))
+    throw new Error(`${slug}/index.html preselects a workflow tab it does not render`);
 }
 
 for (const beta of ["trim", "tools", ...SYSTEM_ROUTE_SLUGS]) {
