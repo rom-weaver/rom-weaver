@@ -133,9 +133,11 @@ describe("prepareInputAssets", () => {
   // resolveCueInputAssets calls decodeUtf8(getPatchFileBytes(cueFile)) synchronously right away.
   // That means a *directly dropped* top-level `.cue` source can never reach the sidecar-track
   // resolution logic this function otherwise implements - it always fails here first, before any
-  // `runtime.sidecars.read` call happens. This looks like a real bug (or at least dead code) in
-  // prepareInputAssets's single-source CUE path; prepareMultipleDirectInputAssets (tested above) is
-  // the one path that actually reaches CUE+track grouping. Documenting current behavior below.
+  // `runtime.sidecars.read` call happens. This is a known bug in prepareInputAssets's single-source
+  // CUE path, not intended behavior; prepareMultipleDirectInputAssets (tested above) is the one path
+  // that actually reaches CUE+track grouping. This test deliberately pins the current (buggy)
+  // behavior - when the bug is fixed, it must be updated to assert the real sidecar-track resolution
+  // instead of this early throw.
   it("throws when handed a path-backed CUE source directly, before any sidecar resolution runs", async () => {
     const cueSource = { fileName: "game.cue", source: "/vfs/staged/game.cue" } as unknown as SourceRef;
     const sidecarRead = vi.fn(async () => makeFile("track-bytes", "track01.bin") as unknown as SourceRef);
