@@ -336,13 +336,9 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 
 /* ── status tab ── */
 .rw-app .status-panel { display: block; flex: 1 1 auto; min-height: 0; }
-/* what the offline row's badge means, in a sentence - the badge itself is the
-   first status row, so this carries only the explanation and the one action */
-.rw-app .sw-summary {
-  display: flex; flex-direction: column; gap: var(--sp-s); align-items: flex-start;
-  margin-block-start: var(--sp-m);
-}
-.rw-app .sw-summary .panel-note { margin: 0; font-size: .82rem; color: var(--ink-3); }
+/* the one action the status tab can offer: reload onto a downloaded update. The
+   sentence that used to sit here is in the legend below, beside its own state. */
+.rw-app .sw-summary { margin-block-start: var(--sp-m); }
 .rw-app .sw-chip {
   display: inline-flex; gap: var(--sp-xs); align-items: center; min-height: 22px; padding: 1px 8px;
   font-size: .7rem; font-weight: 600; color: var(--ink-3); white-space: nowrap;
@@ -356,25 +352,28 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 .rw-app .sw-chip[data-sw="ready"] { color: var(--ink-2); }
 .rw-app .sw-chip[data-sw="update"] { color: var(--care-text); border-color: color-mix(in oklab, var(--care) 40%, transparent); }
 .rw-app .sw-chip[data-sw="disabled"] { color: var(--ink-4); }
-/* ── offline legend ── */
+/* ── offline legend ──
+   Label-and-value rows, the same shape the build facts above use, so the two
+   lists share their layout and differ only in how wide the label column has to
+   be for the widest state name. */
 .rw-app .sw-legend { margin-block-start: var(--sp-l); padding-block-start: var(--sp-m); border-block-start: 1px solid var(--seam); }
-.rw-app .sw-legend-title {
-  margin: 0 0 var(--sp-s); font-size: .74rem; font-weight: 650; color: var(--ink-3);
-  text-transform: uppercase; letter-spacing: .04em;
+.rw-app .sw-legend-title, .rw-app .status-row dt {
+  font-size: .74rem; font-weight: 650; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em;
 }
-.rw-app .sw-legend dl { display: flex; flex-direction: column; gap: var(--sp-s); margin: 0; }
-.rw-app .sw-legend-row { display: grid; grid-template-columns: 10.5rem minmax(0, 1fr); gap: var(--sp-m); align-items: baseline; }
-.rw-app .sw-legend-row dd { min-width: 0; margin: 0; font-size: .78rem; color: var(--ink-3); }
+.rw-app .sw-legend-title { margin: 0 0 var(--sp-s); }
+.rw-app .status-rows, .rw-app .sw-legend dl { display: flex; flex-direction: column; gap: var(--sp-s); margin: 0; }
+.rw-app .status-row, .rw-app .sw-legend-row { display: grid; gap: var(--sp-m); align-items: baseline; }
+.rw-app .status-row { grid-template-columns: 7.5rem minmax(0, 1fr); }
+.rw-app .sw-legend-row { grid-template-columns: 10.5rem minmax(0, 1fr); }
+.rw-app .status-row dd, .rw-app .sw-legend-row dd { min-width: 0; margin: 0; }
+.rw-app .sw-legend-row dd { font-size: .78rem; color: var(--ink-3); }
 /* the one you have, named in the same list as the four you could have */
 .rw-app .sw-legend-row[data-current] dd { color: var(--ink-2); }
 .rw-app .sw-legend-row[data-current] .sw-chip { background: color-mix(in oklab, currentColor 12%, transparent); }
 @media (max-width: 519px) {
   .rw-app .sw-legend-row { grid-template-columns: minmax(0, 1fr); gap: var(--sp-2xs); }
 }
-.rw-app .status-rows { display: flex; flex-direction: column; gap: var(--sp-s); margin: 0; }
-.rw-app .status-row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: var(--sp-m); align-items: baseline; }
-.rw-app .status-row dt { font-size: .74rem; font-weight: 650; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
-.rw-app .status-row dd { min-width: 0; margin: 0; font-size: .84rem; overflow-wrap: anywhere; }
+.rw-app .status-row dd { font-size: .84rem; overflow-wrap: anywhere; }
 .rw-app .status-row code { padding: 1px 6px; font-size: .78rem; background: var(--well); border: 1px solid var(--seam-soft); border-radius: 4px; }
 .rw-app .status-row a { color: var(--thread-text); text-decoration: underline dotted; text-underline-offset: 2px; }
 

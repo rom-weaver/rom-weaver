@@ -637,16 +637,23 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   max-width: var(--measure); margin-block-start: var(--sp-xl);
   padding-block-start: var(--sp-l); border-block-start: 1px solid var(--seam-soft);
 }
-.rw-app .docs-step-gap { flex: 1 1 0; }
+/* The step and the way back up are the same object with different corners, so
+   the box, the press feedback and the weft-coloured mark are written once. Only
+   `display` stays in the phone block, which is where the button turns on. */
 .rw-app .docs-to-top { display: none; }
-.rw-app .docs-step {
-  flex: 1 1 0; display: inline-flex; gap: var(--sp-s); align-items: center; min-width: 0; min-height: 44px;
-  padding: var(--sp-s) var(--sp-m); border: 1px solid var(--seam); border-radius: var(--r-m);
-  background: var(--well); color: var(--ink-2); text-decoration: none;
+.rw-app .docs-step, .rw-app .docs-step-gap { flex: 1 1 0; }
+.rw-app .docs-step, .rw-app .docs-to-top {
+  gap: var(--sp-s); align-items: center; min-height: 44px;
+  border: 1px solid var(--seam); background: var(--well); color: var(--ink-2);
+  font: inherit; cursor: pointer; text-decoration: none;
   transition: border-color .18s, background .18s, color .18s;
 }
+.rw-app .docs-step {
+  display: inline-flex; min-width: 0;
+  padding: var(--sp-s) var(--sp-m); border-radius: var(--r-m);
+}
 .rw-app .docs-step:last-child { justify-content: flex-end; text-align: end; }
-.rw-app .docs-step svg { flex: none; width: 16px; height: 16px; color: var(--weft); }
+.rw-app .docs-step svg, .rw-app .docs-to-top svg { flex: none; width: 16px; height: 16px; color: var(--weft); }
 .rw-app .docs-step-copy { display: grid; min-width: 0; gap: 1px; }
 /* --ink-4 is a hair under 4.5:1 on the light plate at this size, and the
    direction label is the one word that has to be legible before the page name */
@@ -657,9 +664,9 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   font-size: .84rem; font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 @media (hover: hover) {
-  .rw-app .docs-step:hover { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
+  .rw-app .docs-step:hover, .rw-app .docs-to-top:hover { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
 }
-.rw-app .docs-step:active { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
+.rw-app .docs-step:active, .rw-app .docs-to-top:active { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
 
 /* --- the trail ---
    Desktop keeps the sidebar and never shows this. */
@@ -770,38 +777,22 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 
   /* --- the way back up ---
      Phone-only, and on its own row under the two steps: three controls abreast
-     leaves each step too narrow to read the page it names. */
+     leaves each step too narrow to read the page it names. The box it wears is
+     shared with the steps above; only its own shape is here. */
   .rw-app .docs-onward { flex-wrap: wrap; }
   .rw-app .docs-to-top {
     order: 1;
     flex: 1 0 100%;
-    justify-content: center;
     display: inline-flex;
-    align-items: center;
-    gap: var(--sp-s);
-    min-height: 44px;
+    justify-content: center;
     padding-inline: var(--sp-l);
-    border: 1px solid var(--seam);
     border-radius: 999px;
-    background: var(--well);
-    color: var(--ink-2);
-    font: inherit;
     font-size: .7rem;
     font-weight: 750;
     font-stretch: 88%;
     letter-spacing: .08em;
     text-transform: uppercase;
-    cursor: pointer;
   }
-  .rw-app .docs-to-top svg { flex: none; width: 15px; height: 15px; color: var(--weft); }
-  .rw-app .docs-to-top:active { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
-
-  /* A narrow desktop window gets this layout too, so the phone button still
-     wants its hover half. */
-  @media (hover: hover) {
-    .rw-app .docs-to-top:hover { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
-  }
-
 }
 
 @media (max-width: 520px) {
