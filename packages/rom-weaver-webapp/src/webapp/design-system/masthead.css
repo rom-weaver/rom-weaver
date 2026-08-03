@@ -456,27 +456,6 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 @media (prefers-reduced-motion: reduce) {
   .rw-app .dl-arrow { animation: none; }
 }
-/* the loud update path is mobile-only; on desktop the amber status glyph in the
-   brand line is the persistent notice */
-.rw-app .update-banner {
-  position: fixed; inset-block-end: calc(var(--dock-h) + var(--sp-s)); inset-inline: 0; z-index: 999;
-  display: none; gap: var(--sp-s); align-items: center; justify-content: center;
-  width: fit-content; max-width: calc(100% - var(--sp-m) * 2); min-height: 44px;
-  padding: var(--sp-s) var(--sp-l); margin-inline: auto;
-  font-family: inherit; font-size: .82rem; font-weight: 650; color: var(--ink); cursor: pointer;
-  background: color-mix(in oklab, var(--care) 14%, var(--plate));
-  border: 1px solid color-mix(in oklab, var(--care) 45%, transparent);
-  border-radius: var(--r-m); box-shadow: var(--overlay-shadow);
-}
-.rw-app .update-banner svg { width: 14px; height: 14px; color: var(--care); }
-@media (max-width: 999px) {
-  .rw-app .update-banner { display: flex; }
-}
-@media (hover: hover) {
-  .rw-app .update-banner:hover { background: color-mix(in oklab, var(--care) 20%, var(--plate)); }
-}
-.rw-app .update-banner:active { background: color-mix(in oklab, var(--care) 24%, var(--plate)); }
-
 /* Reset lives in the workflow panel head now: a labelled, contextual action
    instead of an anonymous icon in the global toolbar. It wears no box at all -
    see `.reset-btn` in workbench.css, beside the step head it rides. */

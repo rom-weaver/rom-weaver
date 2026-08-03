@@ -29,6 +29,11 @@
   padding: var(--sp-s) var(--sp-m); border: 1px solid color-mix(in oklab, var(--thread) 36%, var(--seam));
   border-radius: var(--r-m); background: color-mix(in oklab, var(--thread) 8%, var(--plate));
 }
+.rw-app .updates.update-ready {
+  width: 100%;
+  border-color: color-mix(in oklab, var(--care) 45%, var(--seam));
+}
+.rw-app .updates.update-ready .updates-pulse { background: var(--care); }
 .rw-app .updates-pulse { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--thread); animation: pulse 2.2s ease-in-out infinite; }
 .rw-app .updates-text { flex: 1 1 auto; min-width: 0; font-size: .88rem; }
 .rw-app .updates-text b { font-weight: 650; }

@@ -9,7 +9,7 @@ type WorkerAssetRoot = typeof globalThis & {
 // Input staging is retired (browser inputs read directly - see browser-opfs-source-ref), so this client
 // drives OPFS listing, output-side writes, truncates, and transient-tree cleanup. "stage-error" remains the
 // generic failure reply for every action.
-type BrowserOpfsStorageAction = "list" | "remove" | "truncate" | "write";
+type BrowserOpfsStorageAction = "list" | "list-metadata" | "remove" | "truncate" | "write";
 
 type BrowserOpfsEntry = {
   kind: "directory" | "file";

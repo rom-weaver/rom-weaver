@@ -46,6 +46,7 @@ import {
   traceRandomAccessFileIoStats,
 } from "./browser-opfs-stdio-events.ts";
 import { closeSyncFiles } from "./browser-opfs-sync-access.ts";
+import { cleanupBrowserOpfsRunScratch } from "./browser-opfs-run-cleanup.ts";
 import type { NormalizedVirtualFile } from "./browser-opfs-virtual-files.ts";
 import { attachThreadWorkerCensus, readThreadWorkerCensus } from "./browser-wasi-thread-census.ts";
 import {
@@ -75,6 +76,7 @@ import {
 } from "./rom-weaver-runtime-utils.ts";
 import type { RomWeaverEnv } from "./rom-weaver-types.d.ts";
 import { normalizeDefaultThreads, resolveBrowserDefaultThreads } from "./workers/browser-thread-budget.ts";
+import { createVfsPathId } from "../storage/vfs/path-id.ts";
 
 const DEFAULT_BROWSER_RAYON_GLOBAL_THREADS = DEFAULT_BROWSER_THREAD_COUNT;
 const MAX_BROWSER_RAYON_GLOBAL_THREADS = 8;
@@ -269,6 +271,8 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         runEnv: runOptions.env,
         threaded,
       });
+      const opfsRunId = createVfsPathId();
+      env.ROM_WEAVER_OPFS_RUN_ID = opfsRunId;
       const envList = Object.entries(env).map(([key, value]) => `${key}=${String(value)}`);
       const wasmMemory = createRunWasmMemory(importsEnvMemory, options);
       const threadIdState = createThreadIdState();
@@ -473,6 +477,11 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         await cleanupBrowserOpfsMounts(mounts);
         for (const file of proxyBlobInputs) opfsProxy.unregisterBlobSource(file.path);
         if (!runSucceeded || runOptions.invalidateMountCacheAfterRun) await mountCache.invalidateMounts(mounts);
+        try {
+          await cleanupBrowserOpfsRunScratch({ runId: opfsRunId, trace, workGuestPath });
+        } catch (error) {
+          trace(`[browser-opfs] run scratch cleanup failed ${formatErrorForTrace(error)}`);
+        }
         trace("[browser-opfs] cleanup done");
         const runEndedAtMs = nowMs();
         const setupMs = setupDoneAtMs === null ? null : setupDoneAtMs - runStartedAtMs;

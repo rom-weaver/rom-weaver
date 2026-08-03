@@ -1160,30 +1160,42 @@ const Masthead = ({
   );
 };
 
-/**
- * The loud update path, phones only (masthead.css hides it above the dock
- * threshold). It opens the Changelog tab rather than reloading outright: that
- * tab leads with what the waiting deploy brings and carries the reload button
- * under it, so the same tap both explains the update and offers it. The amber
- * brand-line status is the desktop notice, and it, the version chip and this
- * banner all reach the same tab.
- */
-const UpdateBanner = ({ open, onOpenChangelog }: { open: boolean; onOpenChangelog: () => void }) => {
+/** Update-ready banner inside a {@link Reveal}. */
+const UpdateBanner = ({
+  open,
+  title,
+  onReload,
+  onDismiss,
+  onOpenChangelog,
+}: {
+  open: boolean;
+  title: string;
+  onReload: () => void;
+  onDismiss: () => void;
+  onOpenChangelog: () => void;
+}) => {
   const localizer = useUiLocalizer();
-  if (!open) return null;
   return (
-    <button aria-haspopup="dialog" className="update-banner" onClick={onOpenChangelog} type="button">
-      <svg aria-hidden="true" strokeWidth={2.4} viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="9" />
-        <g className="dl-arrow">
-          <path d="M12 8v7" />
-          <path d="m9 12.6 3 2.9 3-2.9" />
-        </g>
-      </svg>
-      <span>{localizer.message("ui.runtime.update")}</span>
-      {" · "}
-      <b>{localizer.message("ui.update.whatsNew")}</b>
-    </button>
+    <Reveal open={open}>
+      <div className="updates update-ready" role="status">
+        <span aria-hidden="true" className="updates-pulse" />
+        <span className="updates-text">
+          <b>{localizer.message("ui.update.ready")}</b>{" "}
+          <button
+            aria-label={`${localizer.message("ui.update.whatsNew")}: ${title}`}
+            className="updates-ver mono"
+            onClick={onOpenChangelog}
+            type="button"
+          >
+            {localizer.message("ui.update.whatsNew")}
+          </button>
+        </span>
+        <button className="btn slim primary" onClick={onReload} type="button">
+          {localizer.message("ui.update.reload")}
+        </button>
+        <BannerDismissButton label={localizer.message("ui.common.dismiss")} onDismiss={onDismiss} />
+      </div>
+    </Reveal>
   );
 };
 

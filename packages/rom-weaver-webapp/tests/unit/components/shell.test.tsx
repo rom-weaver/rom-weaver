@@ -9,7 +9,7 @@ import { Masthead, Reveal, UpdateBanner } from "../../../src/webapp/components/s
  * App-shell contract: the masthead tablist and the phone dock (both named
  * "Workflow" - the webapp browser test drives tabs by that role/name), the
  * brand's build/threads/runtime controls, the actions cluster, and the
- * mobile-only update banner.
+ * update banner.
  */
 
 // The suite runs without vitest globals, so RTL cannot auto-clean between tests.
@@ -264,19 +264,30 @@ describe("Reveal", () => {
 });
 
 describe("UpdateBanner", () => {
-  it("is a single action opening the changelog, and renders nothing when closed", () => {
+  it("offers reload, release notes, and dismissal", () => {
+    const onDismiss = vi.fn();
     const onOpenChangelog = vi.fn();
-    const { container, rerender } = render(
-      withSettings(<UpdateBanner onOpenChangelog={onOpenChangelog} open={false} />),
+    const onReload = vi.fn();
+    const { container } = render(
+      withSettings(
+        <UpdateBanner
+          onDismiss={onDismiss}
+          onOpenChangelog={onOpenChangelog}
+          onReload={onReload}
+          open
+          title="A newer app version is ready."
+        />,
+      ),
     );
-    expect(container.querySelector(".update-banner")).toBeNull();
-    rerender(withSettings(<UpdateBanner onOpenChangelog={onOpenChangelog} open />));
-    const banner = container.querySelector(".update-banner") as HTMLButtonElement;
-    expect(banner.textContent).toContain("Update available");
-    expect(banner.textContent).toContain("What’s new");
-    // no dismiss: the amber brand-line status is the persistent desktop notice
-    expect(container.querySelector(".banner-x")).toBeNull();
-    fireEvent.click(banner);
+
+    const changelogButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
+    expect(changelogButton.textContent).toBe("What’s new");
+    expect(changelogButton.getAttribute("aria-label")).toContain("A newer app version is ready.");
+    fireEvent.click(changelogButton);
     expect(onOpenChangelog).toHaveBeenCalledTimes(1);
+    fireEvent.click(container.querySelector(".updates .btn.primary") as HTMLButtonElement);
+    expect(onReload).toHaveBeenCalledTimes(1);
+    fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });
