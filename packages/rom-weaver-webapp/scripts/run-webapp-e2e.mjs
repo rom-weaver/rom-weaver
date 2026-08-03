@@ -416,6 +416,25 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (browserName === "chromium") await page.coverage.startCSSCoverage();
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+
+    // On a mobile Docs reload the trail is already in the prerendered shell.
+    // Its fixed position must be viewport-relative before hydration finishes;
+    // WebKit otherwise treats the workflow body's entrance translate as its
+    // containing block and leaves the bar below the article.
+    await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "mobile"));
+    await page.goto(new URL("docs", baseUrl).href, { waitUntil: "commit" });
+    const docsTrail = page.locator(".docs-trail");
+    await docsTrail.waitFor({ state: "attached" });
+    const trailGeometry = await docsTrail.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { bottom: rect.bottom, height: rect.height, viewportHeight: window.innerHeight };
+    });
+    if (Math.abs(trailGeometry.bottom - trailGeometry.viewportHeight) > 1 || trailGeometry.height <= 0) {
+      throw new Error(`Mobile Docs trail is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
+    }
+    await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "desktop"));
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await installAuditTools();
 
     // A cold Docs tab load must keep the current panel until the lazy route is

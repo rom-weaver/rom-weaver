@@ -672,6 +672,12 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
    Desktop keeps the sidebar and never shows this. */
 .rw-app .docs-trail { display: none; }
 
+/* The workflow body has a translate-based entrance animation. WebKit treats
+   an animated ancestor as the containing block for fixed descendants, which
+   sends the phone trail below the viewport during a docs reload. The article
+   owns its own page-turn animation, so keep this shell stationary. */
+.rw-app #panel-docs > .workflow-body { animation: none; }
+
 /* --- responsive --- */
 @media (max-width: 860px) {
   .rw-app { --docs-trail-h: 56px; }
