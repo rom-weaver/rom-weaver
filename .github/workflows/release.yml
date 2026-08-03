@@ -320,7 +320,7 @@ jobs:
           node --input-type=module -e '
             import { DOCS_SCREENSHOT_NAMES } from "./packages/rom-weaver-webapp/scripts/docs-screenshot-manifest.mjs";
             for (const name of DOCS_SCREENSHOT_NAMES) {
-              process.stdout.write("packages/rom-weaver-webapp/design/" + name + "\0");
+              process.stdout.write("docs/screenshots/" + name + "\0");
             }
           ' | xargs -0 git add --
           if git diff --cached --quiet; then

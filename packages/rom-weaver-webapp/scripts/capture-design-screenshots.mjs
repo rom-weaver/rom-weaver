@@ -14,7 +14,10 @@ import {
 } from "./docs-screenshot-manifest.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUTPUT_DIR = path.resolve(process.env.ROM_WEAVER_SCREENSHOT_OUTPUT || path.join(PACKAGE_DIR, "design"));
+const REPO_ROOT = path.resolve(PACKAGE_DIR, "../..");
+const OUTPUT_DIR = path.resolve(
+  process.env.ROM_WEAVER_SCREENSHOT_OUTPUT || path.join(REPO_ROOT, "docs", "screenshots"),
+);
 const BASE_URL = process.env.ROM_WEAVER_SCREENSHOT_BASE_URL || "https://localhost:4173/";
 const CASE_FILTER = process.env.ROM_WEAVER_SCREENSHOT_CASE;
 const CAPTURE_CASES = CASE_FILTER

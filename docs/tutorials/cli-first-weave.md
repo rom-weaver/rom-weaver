@@ -37,7 +37,7 @@ Open the result in an NES emulator to run it.
 
 | Original ROM | After the first patch | After both patches |
 | :---: | :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../../packages/rom-weaver-webapp/design/first-sample-hello-world.webp) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../../packages/rom-weaver-webapp/design/first-sample-modified-world.webp) | ![The sample ROM displaying MODIFIED ROM after both patches](../../packages/rom-weaver-webapp/design/first-sample-modified-rom.webp) |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../screenshots/first-sample-hello-world.webp) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../screenshots/first-sample-modified-world.webp) | ![The sample ROM displaying MODIFIED ROM after both patches](../screenshots/first-sample-modified-rom.webp) |
 
 ## Practice patch creation and bundles
 
