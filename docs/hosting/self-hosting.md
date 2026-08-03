@@ -15,7 +15,7 @@ At the root, its service worker can control every path on that origin. Under
 
 - [Docker](#docker)
   - [Run the published image](#run-the-published-image)
-  - [Build from source with Compose](#build-from-source-with-compose)
+  - [Run with Compose](#run-with-compose)
 - [Static files](#static-files)
   - [Download a release tarball](#download-a-release-tarball)
   - [Build static files from source](#build-static-files-from-source)
@@ -59,27 +59,35 @@ With `fullchain.pem` and `privkey.pem` in `./certs`, open
 certificate when `/certs` does not contain both files; use a trusted
 certificate for anything beyond local testing.
 
-### Build from source with Compose
+### Run with Compose
 
-Docker Compose builds the WASM module, bundles the webapp, and starts the
-included static server from a checkout:
+Docker Compose pulls the published webapp image from GitHub Container Registry
+(GHCR) by default and starts its included static server from a downloaded
+template:
+Download the [Docker Compose template](https://github.com/rom-weaver/rom-weaver/blob/main/docker-compose.yml)
+into a new directory:
 
 ```bash
-git clone https://github.com/rom-weaver/rom-weaver.git
-cd rom-weaver
-docker compose up --build --detach
+mkdir -p rom-weaver-compose
+cd rom-weaver-compose
+curl --fail --location --proto '=https' --tlsv1.2 \
+  --output docker-compose.yml \
+  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docker-compose.yml
+docker compose pull
+docker compose up --detach
 curl --fail --silent --show-error http://localhost:8080/health
 ```
 
-This path only requires Docker with Compose; the image installs the required
-Rust, WASI SDK, Binaryen, and Node.js toolchains. The first build compiles the
-full WASM application and can take several minutes. Later builds reuse Docker's
-layer cache when their inputs have not changed.
+Only Docker with Compose is required. To build the image from source instead,
+clone the repository and add `--build` to the `docker compose up` command from
+its checkout. That advanced path installs the required Rust, WASI SDK, Binaryen,
+and Node.js toolchains; the first build compiles the full WASM application and
+can take several minutes.
 
 To use another host port:
 
 ```bash
-PORT=3000 docker compose up --build --detach
+PORT=3000 docker compose up --detach
 ```
 
 The container listens on port 8080 over plain HTTP. This is suitable when an
@@ -125,7 +133,7 @@ container. If you do not provide a certificate pair, it generates a temporary
 self-signed certificate for `localhost` that expires after seven days:
 
 ```bash
-HTTPS_PORT=8443 docker compose up --build --detach
+HTTPS_PORT=8443 docker compose up --detach
 ```
 
 Open `https://localhost:8443/`. A browser may allow you to proceed through the
@@ -139,7 +147,7 @@ filenames when both are present:
 
 ```bash
 HTTPS_PORT=8443 HTTPS_CERT_DIR=/path/to/certs \
-  docker compose up --build --detach
+  docker compose up --detach
 ```
 
 To use different filenames or mounted paths, set both `HTTPS_CERT` and

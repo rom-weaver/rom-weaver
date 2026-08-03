@@ -1,6 +1,8 @@
-# Start:       docker compose up --build --detach
+# Pull:        docker compose pull
+# Start:       docker compose up --detach
 # Open:        http://localhost:8080
-# Custom port: PORT=3000 docker compose up --build --detach
+# Custom port: PORT=3000 docker compose up --detach
+# Source build: docker compose up --build --detach
 #
 # The container serves HTTP on 8080 for an HTTPS reverse proxy. Set HTTPS_PORT
 # for standalone TLS; mount the certificate directory as described in the guide.
@@ -9,7 +11,8 @@ services:
     build:
       context: .
       dockerfile: packages/rom-weaver-webapp/Dockerfile
-    image: rom-weaver-webapp
+    image: ghcr.io/rom-weaver/rom-weaver-webapp:latest
+    pull_policy: always
     ports:
       - "${HTTPS_PORT:-${PORT:-8080}}:8080"
     environment:
