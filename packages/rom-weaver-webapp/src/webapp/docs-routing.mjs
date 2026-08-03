@@ -18,7 +18,7 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "tutorials/first-patch.md", label: "Your first patch", slug: "docs/get-started" }),
   Object.freeze({
     file: "tutorials/cli-first-weave.md",
-    label: "Your first weave (CLI)",
+    label: "Your first apply (CLI)",
     slug: "docs/cli-get-started",
   }),
   Object.freeze({

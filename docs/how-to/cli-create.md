@@ -2,7 +2,7 @@
 
 Build a patch from an original ROM and a modified one, add SOLID metadata,
 and test the result before publishing it. New to the CLI? Start with
-[your first weave](../tutorials/cli-first-weave.md).
+[your first apply](../tutorials/cli-first-weave.md).
 
 <!-- START doctoc -->
 ## Table of contents

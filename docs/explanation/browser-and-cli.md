@@ -79,5 +79,5 @@ when a browser tab runs out of room on a large disc image.
 ## Related
 
 - [Your first patch in the browser](../tutorials/first-patch.md)
-- [Your first weave in the terminal](../tutorials/cli-first-weave.md)
+- [Your first apply in the terminal](../tutorials/cli-first-weave.md)
 - [Why your files stay on your device](local-first.md)

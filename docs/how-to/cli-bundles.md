@@ -102,7 +102,8 @@ bundle it also takes `-s`/`--select`, `--filter rom|patch`, and `--no-extract`,
 which behave as they do elsewhere. A plain JSON bundle references files by
 relative path, so there is nothing for those options to unpack.
 
-To actually run a bundle, use `rom-weaver weave --bundle <path-or-url>`, with
-`--with` and `--without` to change which optional patches run. `weave` also
-detects a bundle given as its plain input; the exact detection rules are in
+To actually run a bundle, use `rom-weaver patch apply --bundle <path-or-url>`,
+with `--with` and `--without` to change which optional patches run. The
+compatibility spelling `weave` also detects a bundle given as its plain input;
+the exact detection rules are in
 the [CLI reference](../reference/cli.md#bundle-detection).

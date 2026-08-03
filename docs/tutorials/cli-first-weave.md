@@ -1,4 +1,4 @@
-# Your first weave in the terminal
+# Your first apply in the terminal
 
 Run a complete patch job in the terminal with the same tiny homebrew ROMs the
 webapp uses, then practice creating a patch and packaging it as a shareable
@@ -9,14 +9,14 @@ Install first if you have not: [Install the CLI](../how-to/install-cli.md).
 <!-- START doctoc -->
 ## Table of contents
 
-- [First weave](#first-weave)
+- [First apply](#first-apply)
 - [Practice patch creation and bundles](#practice-patch-creation-and-bundles)
 - [What you learned](#what-you-learned)
 - [Next](#next)
 
 <!-- END doctoc -->
 
-## First weave
+## First apply
 
 
 Run a complete patch with the tiny original homebrew NES ROM the webapp uses.
@@ -25,7 +25,7 @@ so there is nothing else to supply.
 
 ```bash
 curl --fail --location --output first-weave.zip https://rom-weaver.com/first-weave.zip
-rom-weaver weave --input first-weave.zip --output modified-rom.nes --no-compress
+rom-weaver patch apply --input first-weave.zip --output modified-rom.nes --no-compress
 rom-weaver checksum --input modified-rom.nes --algo sha256
 ```
 
@@ -60,7 +60,7 @@ rom-weaver patch create \
   --original hello-world.nes \
   --modified modified-world.nes \
   --output sample.bps
-rom-weaver weave \
+rom-weaver patch apply \
   --input hello-world.nes \
   --patch sample.bps \
   --output rebuilt.nes \
@@ -90,7 +90,7 @@ rom-weaver bundle create \
 Test the finished archive from the same clean Original:
 
 ```bash
-rom-weaver weave \
+rom-weaver patch apply \
   --input hello-world.nes \
   --bundle sample-bundle.zip \
   --output bundle-rebuilt.nes \

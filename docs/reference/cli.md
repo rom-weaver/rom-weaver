@@ -3,7 +3,7 @@
 Every rom-weaver command and global flag, the archive-selection options, the
 patching flags, JSON output, exit codes, file permissions, and man pages.
 Installation is covered in [Install the CLI](../how-to/install-cli.md), and the
-tutorial is [Your first weave in the terminal](../tutorials/cli-first-weave.md).
+tutorial is [Your first apply in the terminal](../tutorials/cli-first-weave.md).
 
 <!-- START doctoc -->
 ## Table of contents

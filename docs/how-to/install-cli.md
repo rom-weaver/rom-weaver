@@ -3,7 +3,7 @@
 Every way to install the rom-weaver command-line tool: package managers,
 verified install scripts, npm, Docker, and building from source. Each method
 installs the same `rom-weaver` CLI; pick the one that fits your machine and
-move on to your [first weave](../tutorials/cli-first-weave.md#first-weave).
+move on to your [first apply](../tutorials/cli-first-weave.md#first-apply).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -163,7 +163,7 @@ docker run --rm \
   --volume "$HOME/roms:/work/in:ro" \
   --volume "$PWD/out:/work/out" \
   ghcr.io/rom-weaver/rom-weaver-cli:latest \
-  weave --input /work/in/game.sfc --patch /work/in/hack.bps --output /work/out/patched.sfc
+  patch apply --input /work/in/game.sfc --patch /work/in/hack.bps --output /work/out/patched.sfc
 ```
 
 Tags follow the release: `latest`, the exact version (`X.Y.Z`), and the minor
@@ -193,5 +193,5 @@ For a development checkout, follow the [development guide](../development/develo
 and use `cargo run -p rom-weaver-cli --bin rom-weaver --` in place of
 `rom-weaver`.
 
-Installed? Run your [first weave](../tutorials/cli-first-weave.md#first-weave), then continue
+Installed? Run your [first apply](../tutorials/cli-first-weave.md#first-apply), then continue
 with the task guides or the [CLI reference](../reference/cli.md).

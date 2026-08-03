@@ -130,5 +130,5 @@ differs only in that you supply the game file.
   real patch.
 - [How patching works](../explanation/how-patching-works.md) for what a
   checksum proves and why the exact starting file matters.
-- [Your first weave in the terminal](cli-first-weave.md) to do the same thing
+- [Your first apply in the terminal](cli-first-weave.md) to do the same thing
   from a command line.

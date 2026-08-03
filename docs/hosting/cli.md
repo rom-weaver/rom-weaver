@@ -9,7 +9,7 @@ that points here:
 | Was on this page | Now at |
 | --- | --- |
 | Install, verifying a download, Docker | [Install the CLI](../how-to/install-cli.md) |
-| First weave, practice patch and bundle | [Your first weave in the terminal](../tutorials/cli-first-weave.md) |
+| First apply, practice patch and bundle | [Your first apply in the terminal](../tutorials/cli-first-weave.md) |
 | Applying patches, validation | [Apply patches from the CLI](../how-to/cli-apply.md) |
 | Creating patches, SOLID metadata | [Create patches from the CLI](../how-to/cli-create.md) |
 | Bundles | [Bundles from the CLI](../how-to/cli-bundles.md) |
