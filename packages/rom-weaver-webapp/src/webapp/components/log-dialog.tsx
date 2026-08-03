@@ -81,9 +81,8 @@ const formatLine = (entry: LogStoreEntry) => renderLine(entry, formatDetails(ent
 const formatCopyLine = (entry: LogStoreEntry) => renderLine(entry, serializeDetails(entry.details));
 
 const formatOpfsSize = (size: number | undefined) => (size === undefined ? "—" : `${size.toLocaleString()} B`);
-const getOpfsLeafName = (path: string) => path.slice(path.lastIndexOf("/") + 1) || path;
 const formatOpfsEntry = (entry: BrowserOpfsEntry) =>
-  `${entry.kind.padEnd(9)} ${formatOpfsSize(entry.size).padStart(12)} ${getOpfsLeafName(entry.path)}`;
+  `${entry.kind.padEnd(9)} ${formatOpfsSize(entry.size).padStart(12)} ${entry.path}`;
 const getOpfsLeafEntries = (entries: readonly BrowserOpfsEntry[]) =>
   entries.filter((entry) => !entries.some((candidate) => candidate.path.startsWith(`${entry.path}/`)));
 const formatOpfsEntryCount = (count: number) => `${count.toLocaleString()} entr${count === 1 ? "y" : "ies"}`;
@@ -719,7 +718,7 @@ const LogDialog = ({
                       {visibleOpfs.map((entry) => (
                         <li className="opfs-row" key={`${entry.kind}:${entry.path}`}>
                           <span className="opfs-kind">{entry.kind}</span>
-                          <span className="opfs-path">{getOpfsLeafName(entry.path)}</span>
+                          <span className="opfs-path">{entry.path}</span>
                           <span className="opfs-size">{formatOpfsSize(entry.size)}</span>
                         </li>
                       ))}
