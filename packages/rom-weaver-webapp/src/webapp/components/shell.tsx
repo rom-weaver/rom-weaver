@@ -697,6 +697,7 @@ const guardFooterExternalClick = (
  * - the number IS the useful identity, so it links straight to the pull request.
  */
 const CHANNEL_LETTERS: Record<string, string> = { beta: "B", dev: "D", nightly: "N", preview: "P" };
+const CHANNEL_PREFIXES: Record<string, string> = { beta: "beta", nightly: "nightly" };
 const CHANNEL_MESSAGES: Record<string, MessageId> = {
   beta: "ui.channel.beta",
   dev: "ui.channel.dev",
@@ -753,6 +754,7 @@ const BuildTag = ({
   if (channelBadge) {
     const key = channelBadge.toLowerCase();
     const letter = CHANNEL_LETTERS[key] ?? channelBadge.slice(0, 1).toUpperCase();
+    const prefix = CHANNEL_PREFIXES[key];
     const nameId = CHANNEL_MESSAGES[key];
     const name = nameId ? localizer.message(nameId) : channelBadge;
     return (
@@ -765,7 +767,7 @@ const BuildTag = ({
           onClick={onOpenChangelog}
           type="button"
         >
-          <b className="tag-letter">{letter}</b>
+          {prefix ? <span className="tag-channel">{prefix}</span> : <b className="tag-letter">{letter}</b>}
           {" · "}
           <span className="tag-version">{versionText}</span>
         </button>

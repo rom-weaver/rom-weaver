@@ -108,6 +108,7 @@
 }
 .rw-app .build-tag .channel-badge:active { background: transparent; }
 .rw-app .build-tag .tag-version { font-weight: 600; text-transform: none; letter-spacing: 0; }
+.rw-app .build-tag .tag-channel { font-weight: 800; text-transform: none; letter-spacing: 0; }
 .rw-app .build-tag .tag-letter { font-weight: 800; }
 @media (hover: hover) {
   .rw-app a.channel-badge:hover, .rw-app button.channel-badge:hover { background: color-mix(in oklab, currentColor 18%, transparent); }

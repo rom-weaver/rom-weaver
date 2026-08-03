@@ -189,7 +189,13 @@ describe("Masthead", () => {
     expect(channel.tagName).toBe("BUTTON");
     expect(channel.getAttribute("data-channel")).toBe("nightly");
     expect(channel.getAttribute("aria-label")).toBe("Nightly build, v1.2.3");
-    expect(channel.querySelector(".tag-letter")?.textContent).toBe("N");
+    expect(channel.querySelector(".tag-channel")?.textContent).toBe("nightly");
+    expect(channel.textContent).toBe("nightly · v1.2.3");
+
+    rerender(withSettings(<Masthead {...mastheadProps} channelBadge="beta" />));
+    const beta = container.querySelector(".channel-badge") as HTMLButtonElement;
+    expect(beta.querySelector(".tag-channel")?.textContent).toBe("beta");
+    expect(beta.textContent).toBe("beta · v1.2.3");
   });
 
   it("preloads the Log dialog before interaction completes", () => {
