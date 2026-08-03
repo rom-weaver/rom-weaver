@@ -1,10 +1,15 @@
 import {
+  CloudCheck,
+  CloudDownload,
+  CloudOff,
   createLucideIcon,
   Heart,
   Info,
+  LoaderCircle,
   Moon,
   MoreHorizontal,
   Newspaper,
+  PackageCheck,
   Palette,
   ScrollText,
   Settings,
@@ -644,38 +649,19 @@ const resolveRuntimeState = (status: ServiceWorkerStatus | null | undefined, upd
   return "installing";
 };
 
-const CLOUD_PATH = "M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 2 8.5";
+const RUNTIME_ICONS = {
+  active: CloudCheck,
+  disabled: CloudOff,
+  installing: LoaderCircle,
+  ready: PackageCheck,
+  update: CloudDownload,
+} satisfies Record<RuntimeState, typeof CloudCheck>;
 
-/** A cache being served from wears the cloud; a cache only stored wears the box
- * it is stored in. Two states one tint apart on the same cloud read as the same
- * state at 13px, which is the only size either is ever drawn at. */
-const STORE_PATH = "M4 8.5h16v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z";
-const CHECK_PATH = "m9 13.5 2.2 2.2L15 12";
-
-/** Cloud checked when the page came from the cache, a checked store when the
- * copy is only saved, bobbing arrow on an update, spinner while installing,
- * slashed cloud when offline support is off. */
-const RuntimeGlyph = ({ state }: { state: RuntimeState }) => (
-  <svg aria-hidden="true" strokeWidth={2.4} viewBox="0 0 24 24">
-    {state === "installing" ? <path d="M21 12a9 9 0 1 1-6.2-8.56" /> : null}
-    {state === "ready" ? (
-      <>
-        <path d="M6.5 5h11l2 3.5h-15Z" />
-        <path d={STORE_PATH} />
-        <path d={CHECK_PATH} />
-      </>
-    ) : null}
-    {state === "active" || state === "disabled" || state === "update" ? <path d={CLOUD_PATH} /> : null}
-    {state === "active" ? <path d={CHECK_PATH} /> : null}
-    {state === "disabled" ? <path d="m4 4 16 16" /> : null}
-    {state === "update" ? (
-      <g className="dl-arrow">
-        <path d="M12 12v6" />
-        <path d="m9.5 15.5 2.5 2.5 2.5-2.5" />
-      </g>
-    ) : null}
-  </svg>
-);
+/** Uses the shared Lucide set for every service-worker state. */
+const RuntimeGlyph = ({ state }: { state: RuntimeState }) => {
+  const Icon = RUNTIME_ICONS[state];
+  return <Icon aria-hidden="true" strokeWidth={2.4} />;
+};
 
 const guardFooterExternalClick = (
   event: { preventDefault: () => void },
