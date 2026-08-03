@@ -102,11 +102,12 @@ describe("LogDialog", () => {
     expect(onLevelChange).toHaveBeenCalledWith("trace");
   });
 
-  it("shows only bottom-most OPFS entries without their parent paths", async () => {
+  it("shows bottom-most OPFS entries with their full parent paths", async () => {
     vi.mocked(listBrowserOpfs).mockResolvedValue([
       { kind: "directory", path: "/operations" },
       { kind: "directory", path: "/operations/run" },
-      { kind: "file", path: "/operations/run/input.iso", size: 123 },
+      { kind: "directory", path: "/operations/run/nested" },
+      { kind: "file", path: "/operations/run/nested/input.iso", size: 123 },
       { kind: "directory", path: "/rom-weaver-out" },
       { kind: "directory", path: "/rom-weaver-out/run" },
     ]);
@@ -119,9 +120,11 @@ describe("LogDialog", () => {
     await waitFor(() => expect(container.querySelectorAll(".opfs-row")).toHaveLength(2));
     expect(container.querySelector(".opfs-summary")?.textContent).toBe("2 entries");
     const rows = Array.from(container.querySelectorAll(".opfs-row"), (row) => row.textContent);
-    expect(rows).toEqual([expect.stringContaining("input.iso"), expect.stringContaining("run")]);
-    expect(rows.join("\n")).not.toContain("/operations/");
-    expect(rows.join("\n")).not.toContain("/rom-weaver-out/");
+    expect(rows).toEqual([
+      expect.stringContaining("/operations/run/nested/input.iso"),
+      expect.stringContaining("/rom-weaver-out/run"),
+    ]);
+    expect(rows.join("\n")).toContain("/operations/run/nested/");
     expect(rows.join("\n")).not.toContain("directory /operations");
   });
 });
