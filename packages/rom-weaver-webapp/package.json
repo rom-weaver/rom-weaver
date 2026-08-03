@@ -72,7 +72,7 @@
     "prepare:dist": "node ./scripts/sync-dist.mjs",
     "preview": "node scripts/ensure-preview-build.mjs && node scripts/dev-server.mjs preview",
     "samples:generate": "node scripts/first-sample-assets.mjs",
-    "test": "npm run test:browser",
+    "test": "run-s test:scripts test:browser",
     "test:browser": "node scripts/run-browser-tests.mjs",
     "test:browser:chromium": "ROM_WEAVER_BROWSER=chromium node scripts/run-browser-tests.mjs",
     "test:browser:coverage": "ROM_WEAVER_COVERAGE=1 node scripts/run-browser-tests.mjs",
@@ -92,6 +92,7 @@
     "test:e2e:webapp": "node scripts/run-webapp-e2e.mjs",
     "test:e2e:webapp:webkit": "ROM_WEAVER_BROWSER=webkit node scripts/run-webapp-e2e.mjs",
     "test:performance": "run-s --continue-on-error check:size audit:lighthouse",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "test:unit": "vitest --config ./vitest.unit.config.mjs run",
     "test:unit:coverage": "ROM_WEAVER_COVERAGE=1 vitest --config ./vitest.unit.config.mjs run --coverage",
     "verify:sw:no-coop-coep": "node scripts/verify-service-worker-no-coop-coep.mjs"

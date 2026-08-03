@@ -17,7 +17,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const DS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src", "webapp", "design-system");
 const MANIFESTS = ["index.css", "deferred.css", "docs-route.css"];
@@ -175,19 +175,15 @@ const generalizes = (strong, weak) => {
   return true;
 };
 
-const { order, files } = readManifests();
-
-const rules = [];
-for (const [layerIndex, layer] of order.entries()) {
-  for (const file of files.get(layer) || []) {
-    const relative = file.replace(/^\.\//, "");
-    let css;
-    try {
-      css = scrub(readFileSync(path.join(DS_DIR, relative), "utf8"));
-    } catch {
-      continue;
-    }
-    for (const rule of parseRules(css)) {
+/**
+ * Flatten `{ layer, layerIndex, file, css }` sources into the flat rule list
+ * the violation check operates on. Pure - no filesystem access - so tests can
+ * hand it small inline CSS strings instead of the real design-system files.
+ */
+export const buildLayerRules = (layeredSources) => {
+  const rules = [];
+  for (const { layer, layerIndex, file, css } of layeredSources) {
+    for (const rule of parseRules(scrub(css))) {
       if (rule.atRules.some((at) => at.startsWith("@keyframes"))) continue;
       const properties = declaredProperties(rule.body);
       if (properties.size === 0) continue;
@@ -195,59 +191,100 @@ for (const [layerIndex, layer] of order.entries()) {
       for (const part of rule.prelude.split(",")) {
         const selector = part.trim();
         if (selector) {
-          rules.push({ layer, layerIndex, file: relative, selector, spec: specificity(selector), properties, media });
+          rules.push({ layer, layerIndex, file, selector, spec: specificity(selector), properties, media });
         }
       }
     }
   }
-}
+  return rules;
+};
 
-const failures = [];
-const usedExemptions = new Set();
-const seen = new Set();
-for (const strong of rules) {
-  for (const weak of rules) {
-    // Same layer: ordinary CSS applies, so specificity already protects the override.
-    if (weak.layerIndex <= strong.layerIndex) continue;
-    if (outranks(strong.spec, weak.spec) <= 0) continue;
-    if (!generalizes(strong.selector, weak.selector)) continue;
-    const shared = [...strong.properties].filter((property) => weak.properties.has(property));
-    if (shared.length === 0) continue;
+/** Rule pairs where a higher-specificity earlier-layer rule silently loses. */
+export const findLayerViolations = (rules, exempt) => {
+  const failures = [];
+  const usedExemptions = new Set();
+  const seen = new Set();
+  for (const strong of rules) {
+    for (const weak of rules) {
+      // Same layer: ordinary CSS applies, so specificity already protects the override.
+      if (weak.layerIndex <= strong.layerIndex) continue;
+      if (outranks(strong.spec, weak.spec) <= 0) continue;
+      if (!generalizes(strong.selector, weak.selector)) continue;
+      const shared = [...strong.properties].filter((property) => weak.properties.has(property));
+      if (shared.length === 0) continue;
 
-    const key = `${strong.selector} >>> ${weak.selector}`;
-    if (EXEMPT.has(key)) {
-      usedExemptions.add(key);
-      continue;
+      const key = `${strong.selector} >>> ${weak.selector}`;
+      if (exempt.has(key)) {
+        usedExemptions.add(key);
+        continue;
+      }
+      if (seen.has(`${key}::${shared.join(",")}`)) continue;
+      seen.add(`${key}::${shared.join(",")}`);
+      failures.push(
+        `${strong.file} (layer ${strong.layer}) loses to ${weak.file} (layer ${weak.layer})\n` +
+          `    outranks but loses: \`${strong.selector}\` [${strong.spec.join(",")}] ${strong.media}\n` +
+          `    now wins on order:  \`${weak.selector}\` [${weak.spec.join(",")}] ${weak.media}\n` +
+          `    property/-ies:      ${shared.join(", ")}`,
+      );
     }
-    if (seen.has(`${key}::${shared.join(",")}`)) continue;
-    seen.add(`${key}::${shared.join(",")}`);
-    failures.push(
-      `${strong.file} (layer ${strong.layer}) loses to ${weak.file} (layer ${weak.layer})\n` +
-        `    outranks but loses: \`${strong.selector}\` [${strong.spec.join(",")}] ${strong.media}\n` +
-        `    now wins on order:  \`${weak.selector}\` [${weak.spec.join(",")}] ${weak.media}\n` +
-        `    property/-ies:      ${shared.join(", ")}`,
+  }
+
+  for (const key of exempt.keys()) {
+    if (!usedExemptions.has(key)) {
+      failures.push(`stale EXEMPT entry \`${key}\` matches no rule pair - delete it`);
+    }
+  }
+
+  return { failures, usedExemptions };
+};
+
+/**
+ * Full cascade-layer audit over `{ layer, layerIndex, file, css }` sources.
+ * The pure entry point tests exercise directly.
+ */
+export const checkCssLayers = (layeredSources, exempt = EXEMPT) => {
+  const rules = buildLayerRules(layeredSources);
+  const { failures } = findLayerViolations(rules, exempt);
+  return { failures, ruleCount: rules.length };
+};
+
+const readLayeredSources = () => {
+  const { order, files } = readManifests();
+  const layeredSources = [];
+  for (const [layerIndex, layer] of order.entries()) {
+    for (const file of files.get(layer) || []) {
+      const relative = file.replace(/^\.\//, "");
+      let css;
+      try {
+        css = readFileSync(path.join(DS_DIR, relative), "utf8");
+      } catch {
+        continue;
+      }
+      layeredSources.push({ layer, layerIndex, file: relative, css });
+    }
+  }
+  return { order, layeredSources };
+};
+
+export const main = () => {
+  const { order, layeredSources } = readLayeredSources();
+  const { failures, ruleCount } = checkCssLayers(layeredSources, EXEMPT);
+
+  if (failures.length) {
+    console.error("Cascade layer audit failed:");
+    for (const failure of failures) console.error(`- ${failure}`);
+    console.error(
+      "\nA later layer beats an earlier one no matter how specific the earlier rule is.\n" +
+        "Move the override into the file that owns the component it modifies so the pair\n" +
+        "shares a layer, or add an EXEMPT entry in scripts/check-css-layers.mjs with a reason.",
     );
+    process.exit(1);
   }
-}
 
-for (const key of EXEMPT.keys()) {
-  if (!usedExemptions.has(key)) {
-    failures.push(`stale EXEMPT entry \`${key}\` matches no rule pair - delete it`);
-  }
-}
-
-if (failures.length) {
-  console.error("Cascade layer audit failed:");
-  for (const failure of failures) console.error(`- ${failure}`);
-  console.error(
-    "\nA later layer beats an earlier one no matter how specific the earlier rule is.\n" +
-      "Move the override into the file that owns the component it modifies so the pair\n" +
-      "shares a layer, or add an EXEMPT entry in scripts/check-css-layers.mjs with a reason.",
+  console.log(
+    `Cascade layer audit passed: ${order.length} layer(s), ${ruleCount} rule(s), ` +
+      `${EXEMPT.size} documented exemption(s).`,
   );
-  process.exit(1);
-}
+};
 
-console.log(
-  `Cascade layer audit passed: ${order.length} layer(s), ${rules.length} rule(s), ` +
-    `${EXEMPT.size} documented exemption(s).`,
-);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
