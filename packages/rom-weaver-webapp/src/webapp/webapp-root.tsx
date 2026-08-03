@@ -482,6 +482,9 @@ function WebappRoot({
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
         <div className="app">
           <Masthead
+            // "/" maps to no route, so the brand has to name one or the browser
+            // hard-reloads and every staged file goes with it.
+            homeHref="/apply"
             channelBadge={CHANNEL_BADGE}
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={notFound ? "" : state.currentView}

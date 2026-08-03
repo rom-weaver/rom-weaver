@@ -539,6 +539,14 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   // settings so the Settings panel checkbox can bring it back.
   window.addEventListener(ONBOARDING_DISMISS_EVENT, () => webappController.setOnboardingEnabled(false));
   if (!isNotFoundPage) {
+    // A real page unload - reload, address bar, closing the tab - is the one
+    // exit the app cannot soft-navigate. Everything else that could lose staged
+    // work already asks first; this was the hole. The browser writes its own
+    // wording, so preventDefault is the whole API.
+    window.addEventListener("beforeunload", (event) => {
+      if (!shouldWarnBeforeUnload(getNavigationGuardState())) return;
+      event.preventDefault();
+    });
     const syncRouteFromUrl = (scrollTo?: () => void) => {
       const view = readWorkflowViewFromPath();
       if (!view) return;

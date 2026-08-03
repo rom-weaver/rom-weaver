@@ -114,7 +114,8 @@
 .rw-app .log-dlg .tracelog-virtual-content { position: relative; flex: none; }
 .rw-app .log-dlg .tracelog-virtual-window { position: absolute; inset-inline: 0; width: max-content; min-width: 100%; }
 .rw-app .log-dlg .tracelog .ln { box-sizing: border-box; height: 25px; }
-.rw-app .tracelog-empty { color: var(--ink-4); font-size: .78rem; padding: 4px 2px; }
+/* --ink-4 is the sub-line grey; on the log's `--well` panel it lands at 4.43:1. */
+.rw-app .tracelog-empty { color: var(--ink-3); font-size: .78rem; padding: 4px 2px; }
 .rw-app .opfs-inspector { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--well); padding: var(--sp-m) var(--sp-l); }
 .rw-app .opfs-summary { color: var(--ink-3); font-size: .74rem; padding-block-end: var(--sp-s); }
 .rw-app .opfs-list { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
