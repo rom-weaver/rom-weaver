@@ -15,10 +15,14 @@ const SITE_ORIGIN = "https://rom-weaver.com";
 const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "README.md", label: "Overview", slug: "docs" }),
   Object.freeze({ file: "faq.md", label: "FAQ", slug: "docs/faq" }),
-  Object.freeze({ file: "tutorials/first-patch.md", label: "Your first patch", slug: "docs/get-started" }),
+  Object.freeze({
+    file: "tutorials/first-patch.md",
+    label: "Apply your first patch (browser)",
+    slug: "docs/get-started",
+  }),
   Object.freeze({
     file: "tutorials/cli-first-weave.md",
-    label: "Your first apply (CLI)",
+    label: "Apply your first patch (CLI)",
     slug: "docs/cli-get-started",
   }),
   Object.freeze({
