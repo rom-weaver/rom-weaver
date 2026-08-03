@@ -1,20 +1,24 @@
 import "./design-system/docs-route.css";
 import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
-import { DOC_ROUTES } from "virtual:rom-weaver-docs";
+import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
+import type { DocSearchEntry } from "virtual:rom-weaver-docs-search";
+import { createLogger } from "../lib/logging.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { Modal } from "../public/react/components/ds/modal.tsx";
 import { GUIDED_SAMPLE_HREFS, type GuidedSample } from "../public/react/guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
-import { createDocsSeoMetadata, groupDocRoutes } from "./docs-routing.mjs";
-import { createDocsSearchIndex, findSearchToken, searchDocs } from "./docs-search.mjs";
+import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
+import { findSearchToken, searchDocs } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
 
 type DocRoute = (typeof DOC_ROUTES)[number];
-type DocSearchRoute = ReturnType<typeof createDocsSearchIndex>[number];
+type DocSearchRoute = DocRoute & { searchEntries: readonly DocSearchEntry[] };
 type DocSearchResult = ReturnType<typeof searchDocs>[number];
+
+const logger = createLogger("docs-page");
 
 /** Shelves are fixed at build time; the route table never changes at runtime. */
 const DOC_SHELVES = groupDocRoutes(DOC_ROUTES);
@@ -83,6 +87,96 @@ const findDocsRoute = (slug: string) => {
   const route = DOC_ROUTES.find((entry) => entry.slug === slug) ?? DOC_ROUTES.at(0);
   if (!route) throw new Error("Docs must define at least one route");
   return route;
+};
+
+/**
+ * Each guide's HTML is its own lazy chunk (scripts/docs-virtual-module.mjs), so
+ * a docs visit downloads the page being read instead of every guide at once.
+ *
+ * The cache is read synchronously during render, mirroring the workflow-routes
+ * preload contract: a page resolved before its first render - the prerendered
+ * landing guide, or a hover-warmed neighbour - never flashes empty. Prerender
+ * and the client boot both await `preloadDocsHtml` before mounting a docs
+ * document (see prerender-entry.tsx and webapp.ts), so hydration always finds
+ * the article it is standing on.
+ */
+const docsHtmlCache = new Map<string, string>();
+const docsHtmlPending = new Map<string, Promise<void>>();
+
+const resolveDocsSlug = (slug?: string): string => {
+  if (slug) return findDocsRoute(slug).slug;
+  if (typeof window === "undefined") return HUB_SLUG;
+  return findDocsRoute(readDocsSlugFromPathname(window.location.pathname)).slug;
+};
+
+const preloadDocsHtml = (slug?: string): Promise<void> => {
+  const resolved = resolveDocsSlug(slug);
+  if (docsHtmlCache.has(resolved)) return Promise.resolve();
+  const pending = docsHtmlPending.get(resolved);
+  if (pending) return pending;
+  const loader = DOC_PAGE_LOADERS[resolved];
+  if (!loader) return Promise.resolve();
+  logger.trace("Docs page HTML requested", { slug: resolved });
+  const load = loader().then(
+    (module) => {
+      docsHtmlPending.delete(resolved);
+      docsHtmlCache.set(resolved, module.html);
+      logger.trace("Docs page HTML loaded", { slug: resolved });
+    },
+    (error) => {
+      // Dropped from `pending` so the next navigation to the page retries.
+      docsHtmlPending.delete(resolved);
+      logger.warn("Docs page HTML failed to load", {
+        message: error instanceof Error ? error.message : String(error || ""),
+        slug: resolved,
+      });
+      throw error;
+    },
+  );
+  docsHtmlPending.set(resolved, load);
+  return load;
+};
+
+/** Fire-and-forget warmup for link hover/focus; failures retry on navigation. */
+const warmDocsHtml = (slug: string) => {
+  void preloadDocsHtml(slug).catch(() => undefined);
+};
+
+const useDocsHtml = (slug: string): string | undefined => {
+  const cached = docsHtmlCache.get(slug);
+  const [, forceRender] = useReducer((count: number) => count + 1, 0);
+  useEffect(() => {
+    if (cached !== undefined) return;
+    let live = true;
+    preloadDocsHtml(slug).then(
+      () => {
+        if (live) forceRender();
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [cached, slug]);
+  return cached;
+};
+
+/** Joined once on demand: route metadata plus the prebuilt text entries of the lazy search chunk. */
+let docsSearchIndexPromise: Promise<readonly DocSearchRoute[]> | null = null;
+
+const loadDocsSearchIndex = (): Promise<readonly DocSearchRoute[]> => {
+  docsSearchIndexPromise ??= import("virtual:rom-weaver-docs-search").then(
+    ({ SEARCH_ENTRIES }) => DOC_ROUTES.map((route) => ({ ...route, searchEntries: SEARCH_ENTRIES[route.slug] ?? [] })),
+    (error) => {
+      // Cleared so the next search interaction retries the chunk.
+      docsSearchIndexPromise = null;
+      logger.warn("Docs search index failed to load", {
+        message: error instanceof Error ? error.message : String(error || ""),
+      });
+      throw error;
+    },
+  );
+  return docsSearchIndexPromise;
 };
 
 const sectionNumber = (index: number) => String(index + 1).padStart(2, "0");
@@ -246,6 +340,8 @@ const DocsSearch = ({
                       className={index === activeIndex ? "is-active" : undefined}
                       href={href}
                       id={`${resultListId}-${index}`}
+                      onFocus={() => warmDocsHtml(result.route.slug)}
+                      onPointerEnter={() => warmDocsHtml(result.route.slug)}
                       onClick={() => {
                         onSelect?.(result, query);
                         onQueryChange("");
@@ -299,6 +395,8 @@ const DocsNav = ({
                 aria-current={entry.slug === currentSlug ? "page" : undefined}
                 href={`/${entry.slug}`}
                 onClick={onNavigate}
+                onFocus={() => warmDocsHtml(entry.slug)}
+                onPointerEnter={() => warmDocsHtml(entry.slug)}
               >
                 {entry.label}
               </a>
@@ -337,7 +435,11 @@ const DocsIndex = ({
           <ul>
             {routes.map((entry) => (
               <li key={entry.slug}>
-                <a href={`/${entry.slug}`}>
+                <a
+                  href={`/${entry.slug}`}
+                  onFocus={() => warmDocsHtml(entry.slug)}
+                  onPointerEnter={() => warmDocsHtml(entry.slug)}
+                >
                   <span className="docs-index-label">{entry.label}</span>
                   <span className="docs-index-blurb">{entry.description}</span>
                 </a>
@@ -469,6 +571,8 @@ const OnwardLink = ({ direction, route }: { direction: "next" | "previous"; rout
     aria-label={`${direction === "next" ? "Next" : "Previous"}: ${route.title}`}
     className="docs-step"
     href={`/${route.slug}`}
+    onFocus={() => warmDocsHtml(route.slug)}
+    onPointerEnter={() => warmDocsHtml(route.slug)}
   >
     {direction === "previous" ? <ChevronLeft aria-hidden="true" /> : null}
     <span className="docs-step-copy">
@@ -582,7 +686,15 @@ const DocsPage = ({
   onStartGuide?: (guide: GuidedSample) => boolean | void;
   slug: string;
 }) => {
-  const route = findDocsRoute(slug);
+  const targetRoute = findDocsRoute(slug);
+  const targetHtml = useDocsHtml(targetRoute.slug);
+  // The reader stays on the guide they can see: a navigation to a page whose
+  // HTML chunk is still downloading keeps the current article (and its rails,
+  // outline, and metadata) until the new one is ready to paint whole.
+  const lastReadyRoute = useRef(targetRoute);
+  if (targetHtml !== undefined) lastReadyRoute.current = targetRoute;
+  const route = targetHtml === undefined ? lastReadyRoute.current : targetRoute;
+  const routeHtml = docsHtmlCache.get(route.slug) ?? "";
   const hub = route.slug === HUB_SLUG;
   // One subscription for the page: the desktop rail and the phone trail read the
   // same position, and the hook measures the document on every scroll frame.
@@ -593,6 +705,15 @@ const DocsPage = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchIndex, setSearchIndex] = useState<readonly DocSearchRoute[]>([]);
   const searchResults = useMemo(() => searchDocs(searchIndex, searchQuery), [searchIndex, searchQuery]);
+  // The prebuilt index is its own lazy chunk, fetched the first time the
+  // reader actually searches; results fill in when it lands.
+  const onSearchQueryChange = useCallback((query: string) => {
+    if (query.trim())
+      void loadDocsSearchIndex()
+        .then(setSearchIndex)
+        .catch(() => undefined);
+    setSearchQuery(query);
+  }, []);
   const initialHighlight = readDocsHighlight();
   const [highlightQuery, setHighlightQuery] = useState(initialHighlight.query);
   const [highlightSection, setHighlightSection] = useState<string | null>(initialHighlight.sectionId);
@@ -601,18 +722,13 @@ const DocsPage = ({
   // The deployment's own base applies after mount, and only re-renders the
   // guides where the two differ.
   const [sampleBase, setSampleBase] = useState(AUTHORED_SAMPLE_BASE);
-  const html = useMemo(() => retargetSampleUrls(route.html, sampleBase), [route, sampleBase]);
+  const html = useMemo(() => retargetSampleUrls(routeHtml, sampleBase), [routeHtml, sampleBase]);
   useEffect(() => {
     if (!active) return;
     syncDocsSeoMetadata(route);
   }, [active, route]);
   useEffect(() => {
-    if (!active) {
-      setSearchIndex([]);
-      setSearchQuery("");
-      return;
-    }
-    setSearchIndex(createDocsSearchIndex(DOC_ROUTES));
+    if (!active) setSearchQuery("");
   }, [active]);
   useEffect(() => setSampleBase(assetBaseUrl || AUTHORED_SAMPLE_BASE), [assetBaseUrl]);
   useEffect(() => {
@@ -643,7 +759,7 @@ const DocsPage = ({
       <div className="docs-search-header">
         <DocsSearch
           onSelect={onSearchSelect}
-          onQueryChange={setSearchQuery}
+          onQueryChange={onSearchQueryChange}
           query={searchQuery}
           results={searchResults}
         />
@@ -655,7 +771,7 @@ const DocsPage = ({
         fraction={fraction}
         key={route.slug}
         onSearchSelect={onSearchSelect}
-        onSearchQueryChange={setSearchQuery}
+        onSearchQueryChange={onSearchQueryChange}
         onShelfToggle={onShelfToggle}
         openShelves={openShelves}
         route={route}
@@ -740,4 +856,4 @@ const DocsPage = ({
   );
 };
 
-export { DocsPage };
+export { DocsPage, preloadDocsHtml };

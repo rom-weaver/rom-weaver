@@ -1,10 +1,16 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { DOC_ROUTES } from "virtual:rom-weaver-docs";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
-import { DocsPage } from "../../src/webapp/docs-page.tsx";
+import { DocsPage, preloadDocsHtml } from "../../src/webapp/docs-page.tsx";
 import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
+
+// Guide HTML ships as one lazy chunk per page; rendering a guide synchronously
+// requires its HTML resolved first, exactly as the app preloads before mount.
+beforeAll(async () => {
+  await Promise.all(DOC_ROUTES.map((route) => preloadDocsHtml(route.slug)));
+});
 
 const BUNDLE_GUIDE_ANCHORS = [
   "choose-what-to-include",
@@ -118,18 +124,23 @@ describe("DocsPage", () => {
     expect(unrewritten).toEqual([]);
   });
 
-  it("keeps links between published guide sections pointed at real anchors", () => {
+  it("keeps links between published guide sections pointed at real anchors", async () => {
     const routes = new Map(DOC_ROUTES.map((route) => [`/${route.slug}`, route]));
+    const htmlOf = new Map(
+      await Promise.all(
+        DOC_ROUTES.map(async (route) => [route.slug, (await DOC_PAGE_LOADERS[route.slug]()).html] as const),
+      ),
+    );
     for (const route of DOC_ROUTES) {
       const source = document.createElement("template");
-      source.innerHTML = route.html;
+      source.innerHTML = htmlOf.get(route.slug) ?? "";
       for (const link of source.content.querySelectorAll<HTMLAnchorElement>("a[href*='#']")) {
         const targetUrl = new URL(link.getAttribute("href") ?? "", SITE_ORIGIN);
         const targetRoute = routes.get(targetUrl.pathname);
         if (!(targetRoute && targetUrl.hash)) continue;
 
         const target = document.createElement("template");
-        target.innerHTML = targetRoute.html;
+        target.innerHTML = htmlOf.get(targetRoute.slug) ?? "";
         const ids = [...target.content.querySelectorAll<HTMLElement>("[id]")].map((element) => element.id);
         expect(ids, `${route.slug} links to missing ${targetUrl.pathname}${targetUrl.hash}`).toContain(
           decodeURIComponent(targetUrl.hash.slice(1)),
@@ -383,7 +394,7 @@ Fixture description.
     expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();
   });
 
-  it("fuzzy-searches guide text and links directly to the matching section", () => {
+  it("fuzzy-searches guide text and links directly to the matching section", async () => {
     render(<DocsPage active slug="docs" />);
 
     const input = screen.getAllByRole("combobox", { name: "Search documentation" })[0] as HTMLInputElement;
@@ -393,10 +404,15 @@ Fixture description.
       (entry) => entry.id === "what-does-the-warning-mean",
     );
     expect(section).toBeTruthy();
-    const resultLink = document.querySelector<HTMLAnchorElement>(
-      `.docs-search-results a[href^="/docs/fix-checksum-errors?highlight="][href$="#${section?.id}"]`,
+    // The search index is a lazy chunk fetched on the first keystroke, so the
+    // results fill in once it lands.
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector<HTMLAnchorElement>(
+          `.docs-search-results a[href^="/docs/fix-checksum-errors?highlight="][href$="#${section?.id}"]`,
+        ),
+      ).toBeTruthy(),
     );
-    expect(resultLink).toBeTruthy();
     expect(screen.getByRole("status").textContent).toMatch(/result/);
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
@@ -431,12 +447,15 @@ Fixture description.
     expect(document.querySelector(".rw-modal.guide-sheet")).toBeNull();
   });
 
-  it("shares search state with the mobile search", () => {
+  it("shares search state with the mobile search", async () => {
     render(<DocsPage active slug="docs" />);
     const inputs = screen.getAllByRole("combobox", { name: "Search documentation" });
     fireEvent.change(inputs.at(-1) as HTMLElement, { target: { value: "OPFS" } });
 
-    expect(document.querySelectorAll(".docs-trail .docs-search-results a[href*='#']").length).toBeGreaterThan(0);
+    // The search index is a lazy chunk fetched on the first keystroke.
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll(".docs-trail .docs-search-results a[href*='#']").length).toBeGreaterThan(0),
+    );
   });
 
   it("highlights and centers the selected search term in its section", async () => {
