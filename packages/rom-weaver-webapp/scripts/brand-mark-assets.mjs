@@ -22,6 +22,8 @@ import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
 
 const VIRTUAL_ID = "virtual:rom-weaver-brand-marks";
 const RESOLVED_ID = `\0${VIRTUAL_ID}`;
+const VIRTUAL_ID_FILTER = /^virtual:rom-weaver-brand-marks$/;
+const RESOLVED_ID_FILTER = new RegExp(`^${RESOLVED_ID}$`);
 
 const logoSourcePath = path.resolve(import.meta.dirname, "../src/assets/app/root/logo.svg");
 
@@ -91,20 +93,26 @@ const brandMarkAssets = () => {
       server.watcher.on("unlink", reloadOnLogoChange);
       server.middlewares.use(middleware);
     },
-    load(id) {
-      if (id !== RESOLVED_ID) return undefined;
-      const marks = getMarks();
-      if (isBuild) {
-        for (const mark of marks) this.emitFile({ fileName: mark.fileName, source: mark.source, type: "asset" });
-      }
-      const entries = marks
-        .map((mark) => `  ${JSON.stringify(mark.value)}: ${JSON.stringify(`./${mark.fileName}`)},`)
-        .join("\n");
-      return `export const BRAND_MARK_SRC = {\n${entries}\n};\n`;
+    load: {
+      filter: { id: RESOLVED_ID_FILTER },
+      handler(id) {
+        if (id !== RESOLVED_ID) return undefined;
+        const marks = getMarks();
+        if (isBuild) {
+          for (const mark of marks) this.emitFile({ fileName: mark.fileName, source: mark.source, type: "asset" });
+        }
+        const entries = marks
+          .map((mark) => `  ${JSON.stringify(mark.value)}: ${JSON.stringify(`./${mark.fileName}`)},`)
+          .join("\n");
+        return `export const BRAND_MARK_SRC = {\n${entries}\n};\n`;
+      },
     },
     name: "rom-weaver-brand-mark-assets",
-    resolveId(id) {
-      return id === VIRTUAL_ID ? RESOLVED_ID : undefined;
+    resolveId: {
+      filter: { id: VIRTUAL_ID_FILTER },
+      handler(id) {
+        return id === VIRTUAL_ID ? RESOLVED_ID : undefined;
+      },
     },
   };
 };

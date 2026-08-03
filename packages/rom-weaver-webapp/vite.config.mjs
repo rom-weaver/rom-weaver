@@ -769,14 +769,13 @@ const collectChunkCss = (bundle, chunkFileNames) => {
 // (see "Worker URLs" in docs/development/ARCHITECTURE.md).
 const WORKER_URL_IMPORT_PATTERN = /[?&]worker(?:&|$)/;
 const URL_IMPORT_PATTERN = /[?&]url(?:&|$)/;
+const WORKER_OR_URL_IMPORT_FILTER = /[?&](?:worker|url)(?:&|$)/;
 
 // Filled by the plugin below with the absolute path of every emitted worker
 // entry, so the chunk grouping can tell worker-only modules from app modules.
 const workerEntryFiles = new Set();
-/** Memoized isWorkerOnlyModule answers; the module graph is rebuilt per build, so it resets there. */
-const workerOnlyModules = new Map();
-/** Memoized isWorkerReachableModule answers; cleared with the above. */
-const workerReachableModules = new Map();
+/** Memoized worker graph classifications; the module graph is rebuilt per build. */
+const workerModuleKinds = new Map();
 
 const shareWorkerRuntimeChunks = () => {
   const chunkRefs = new Map();
@@ -785,25 +784,27 @@ const shareWorkerRuntimeChunks = () => {
     buildStart() {
       chunkRefs.clear();
       workerEntryFiles.clear();
-      workerOnlyModules.clear();
-      workerReachableModules.clear();
+      workerModuleKinds.clear();
     },
     enforce: "pre",
-    load(id) {
-      if (!(WORKER_URL_IMPORT_PATTERN.test(id) && URL_IMPORT_PATTERN.test(id))) return null;
-      const workerFile = id.split("?")[0];
-      let ref = chunkRefs.get(workerFile);
-      if (!ref) {
-        workerEntryFiles.add(workerFile);
-        ref = this.emitFile({
-          id: workerFile,
-          name: path.basename(workerFile, path.extname(workerFile)),
-          preserveSignature: false,
-          type: "chunk",
-        });
-        chunkRefs.set(workerFile, ref);
-      }
-      return `export default import.meta.ROLLUP_FILE_URL_${ref};`;
+    load: {
+      filter: { id: WORKER_OR_URL_IMPORT_FILTER },
+      handler(id) {
+        if (!(WORKER_URL_IMPORT_PATTERN.test(id) && URL_IMPORT_PATTERN.test(id))) return null;
+        const workerFile = id.split("?")[0];
+        let ref = chunkRefs.get(workerFile);
+        if (!ref) {
+          workerEntryFiles.add(workerFile);
+          ref = this.emitFile({
+            id: workerFile,
+            name: path.basename(workerFile, path.extname(workerFile)),
+            preserveSignature: false,
+            type: "chunk",
+          });
+          chunkRefs.set(workerFile, ref);
+        }
+        return `export default import.meta.ROLLUP_FILE_URL_${ref};`;
+      },
     },
     name: "rom-weaver-share-worker-runtime-chunks",
   };
@@ -813,58 +814,45 @@ const shareWorkerRuntimeChunks = () => {
 // Grouping by path instead would sweep up the wasm modules the document entry
 // also uses (the OPFS proxy client, the command builders), which would drag the
 // whole worker runtime onto the first-paint critical path.
-const isWorkerOnlyModule = (moduleId, ctx) => {
-  const cached = workerOnlyModules.get(moduleId);
-  if (cached !== undefined) return cached;
+const classifyWorkerModule = (moduleId, ctx) => {
+  const cached = workerModuleKinds.get(moduleId);
+  if (cached) return cached;
   const visited = new Set([moduleId]);
   const pending = [moduleId];
   let workerOnly = true;
-  while (pending.length > 0 && workerOnly) {
+  let workerReachable = false;
+  while (pending.length > 0 && !(workerReachable && !workerOnly)) {
     const id = pending.pop();
     // Only the bare path is the worker entry; the `?worker&url` module of the same file is the
     // URL stub the app imports, and its own importers decide where it belongs.
-    if (workerEntryFiles.has(id)) continue;
-    const info = ctx.getModuleInfo(id);
-    const importers = info ? [...info.importers, ...info.dynamicImporters] : [];
-    if (importers.length === 0) {
-      workerOnly = false;
-      break;
+    if (workerEntryFiles.has(id)) {
+      workerReachable = true;
+      continue;
     }
-    for (const importer of importers) {
+    const info = ctx.getModuleInfo(id);
+    if (!info || (info.importers.length === 0 && info.dynamicImporters.length === 0)) {
+      workerOnly = false;
+      continue;
+    }
+    for (const importer of [...info.importers, ...info.dynamicImporters]) {
       if (visited.has(importer)) continue;
       visited.add(importer);
       pending.push(importer);
     }
   }
-  workerOnlyModules.set(moduleId, workerOnly);
-  return workerOnly;
+  const result = { workerOnly, workerReachable };
+  workerModuleKinds.set(moduleId, result);
+  return result;
 };
+
+const isWorkerOnlyModule = (moduleId, ctx) => classifyWorkerModule(moduleId, ctx).workerOnly;
 
 // True when at least one import path reaching this module starts at a worker
 // entry. `isWorkerOnlyModule` above answers the stricter question; this one
 // catches the modules a worker and the document both use, which is what decides
 // whether a worker has to download the document's chunk to reach them.
 const isWorkerReachableModule = (moduleId, ctx) => {
-  const cached = workerReachableModules.get(moduleId);
-  if (cached !== undefined) return cached;
-  const visited = new Set([moduleId]);
-  const pending = [moduleId];
-  let reachable = false;
-  while (pending.length > 0 && !reachable) {
-    const id = pending.pop();
-    if (workerEntryFiles.has(id)) {
-      reachable = true;
-      break;
-    }
-    const info = ctx.getModuleInfo(id);
-    for (const importer of info ? [...info.importers, ...info.dynamicImporters] : []) {
-      if (visited.has(importer)) continue;
-      visited.add(importer);
-      pending.push(importer);
-    }
-  }
-  workerReachableModules.set(moduleId, reachable);
-  return reachable;
+  return classifyWorkerModule(moduleId, ctx).workerReachable;
 };
 
 /** Everything a worker can reach that is not worker-only: the overlap between a
@@ -1025,7 +1013,7 @@ export default defineConfig(({ command, mode }) => {
       ],
     },
     plugins: [
-      docsVirtualModule(),
+      docsVirtualModule(DOC_ROUTES),
       brandMarkAssets(),
       shareWorkerRuntimeChunks(),
       serveRootStaticAssets(appChannel, appChannelLabel),
