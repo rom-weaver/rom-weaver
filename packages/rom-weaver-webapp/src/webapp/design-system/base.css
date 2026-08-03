@@ -139,7 +139,6 @@
 .rw-app .stage-status .pct { color: var(--thread-text); font-variant-numeric: tabular-nums; font-weight: 650; }
 .rw-app button { font: inherit; color: inherit; }
 .rw-app svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.rw-app svg.apply-patch-icon { fill: currentColor; stroke: none; }
 .rw-app a { color: var(--ink-2); text-decoration: none; }
 @media (hover: hover) {
   .rw-app a:hover { color: var(--thread-text); }
