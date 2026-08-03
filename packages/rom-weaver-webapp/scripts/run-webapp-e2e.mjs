@@ -488,9 +488,10 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await page.getByRole("button", { name: "Create ZIP Bundle", exact: true }).click();
         const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
         await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
-        const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });
-        await downloadButton.click();
-        const download = await downloadPromise;
+        const [download] = await Promise.all([
+          page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+          downloadButton.click(),
+        ]);
         if (!download.suggestedFilename().endsWith(".zip")) {
           throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
         }
@@ -664,9 +665,10 @@ const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
       return button instanceof HTMLButtonElement && !button.disabled && /apply/i.test(button.textContent || "");
     });
 
-    const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });
-    await apply.click();
-    const download = await downloadPromise;
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+      apply.click(),
+    ]);
     const downloadPath = await download.path();
     if (!downloadPath) throw new Error(`${name}: Playwright did not expose the downloaded file`);
     const bytes = fs.readFileSync(downloadPath);
