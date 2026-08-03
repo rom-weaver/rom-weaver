@@ -559,6 +559,7 @@ const Masthead = ({
   currentTab,
   dirty,
   donateHref,
+  homeHref,
   onSelectTab,
   onOpenChangelog,
   onOpenLog,
@@ -585,6 +586,8 @@ const Masthead = ({
   currentTab: string;
   dirty?: boolean;
   donateHref?: string;
+  /** The workbench, as a route: a bare "/" maps to no route and so hard-reloads. */
+  homeHref: string;
   onSelectTab: (id: string) => void;
   onOpenChangelog: () => void;
   onOpenLog: () => void;
@@ -654,12 +657,12 @@ const Masthead = ({
       </a>
       <header className="masthead">
         <span className="brand">
-          <a aria-label={localizer.message("ui.nav.home")} className="brand-mark-link" href="/">
+          <a aria-label={localizer.message("ui.nav.home")} className="brand-mark-link" href={homeHref}>
             <BrandMark />
           </a>
           <span className="brand-copy">
             <span className="brand-word-row">
-              <a className="brand-word-link" href="/">
+              <a className="brand-word-link" href={homeHref}>
                 <BrandHeading className="brand-word">
                   rom<span className="brand-hy">-</span>
                   <b>weaver</b>

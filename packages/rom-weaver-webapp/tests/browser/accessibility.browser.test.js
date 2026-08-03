@@ -433,6 +433,7 @@ const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
         createElement(Masthead, {
           ...mastheadProps,
           currentTab,
+          homeHref: "/apply",
           onOpenChangelog: noop,
           onOpenLog: noop,
           onOpenSettings: noop,
@@ -898,6 +899,7 @@ describe("webapp keyboard navigation", () => {
           { className: "rw-app" },
           createElement(Masthead, {
             currentTab: "patcher",
+            homeHref: "/apply",
             onOpenChangelog: noop,
             onOpenLog: noop,
             onOpenSettings: noop,
@@ -1116,6 +1118,7 @@ describe("webapp responsive navigation", () => {
             { className: "app" },
             createElement(Masthead, {
               currentTab: "patcher",
+              homeHref: "/apply",
               onOpenChangelog: noop,
               onOpenLog: noop,
               onOpenSettings: noop,

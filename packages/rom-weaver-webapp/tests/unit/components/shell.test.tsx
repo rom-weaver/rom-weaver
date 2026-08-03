@@ -27,6 +27,7 @@ const TABS = [
 
 const mastheadProps = {
   currentTab: "patcher",
+  homeHref: "/apply",
   donateHref: "https://example.com/donate",
   githubHref: "https://example.com/repo",
   onOpenChangelog: () => undefined,
@@ -50,10 +51,12 @@ describe("Masthead", () => {
     expect(dock?.classList.contains("dock")).toBe(true);
     expect(rail?.querySelector(".mode-thumb")).toBeTruthy();
     expect(dock?.querySelector(".dock-thumb")).toBeTruthy();
+    // "/" maps to no route, so the brand has to name one or the browser
+    // hard-reloads and every staged file goes with it.
     const logoHome = getByRole("link", { name: "rom-weaver home" });
-    expect(logoHome.getAttribute("href")).toBe("/");
+    expect(logoHome.getAttribute("href")).toBe("/apply");
     expect(logoHome.querySelector(".brand-mark")).toBeTruthy();
-    expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/");
+    expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
 
     for (const [list, selectedClass] of [
       [rail, "mode"],

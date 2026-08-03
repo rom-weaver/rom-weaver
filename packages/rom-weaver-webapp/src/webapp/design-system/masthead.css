@@ -145,7 +145,9 @@
    unpainted box can overflow the row without anything showing at the edge. */
 .rw-app .sub-chip {
   position: relative;
-  min-inline-size: 24px; block-size: 24px; padding: 0 2px;
+  /* 26, not the 24px floor: the sub-row packs three of these 4px apart, and a
+     target sitting exactly on the minimum leaves no room for rounding. */
+  min-inline-size: 26px; block-size: 26px; padding: 0 2px;
   background: transparent; border: 0;
   text-decoration: underline dotted;
   text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
