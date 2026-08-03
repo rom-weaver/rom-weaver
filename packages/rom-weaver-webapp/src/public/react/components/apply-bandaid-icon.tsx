@@ -1,6 +1,11 @@
 /** Adapted from SVG Repo's CC0 Patch icon: https://www.svgrepo.com/svg/165375/patch */
 const ApplyBandaidIcon = ({ className }: { className?: string }) => (
-  <svg aria-hidden="true" className={className} fill="currentColor" viewBox="0 0 512 512">
+  <svg
+    aria-hidden="true"
+    className={`apply-patch-icon ${className ?? ""}`.trim()}
+    fill="currentColor"
+    viewBox="0 0 512 512"
+  >
     <g>
       <g>
         <path d="M375.83,160.681c-4.513,0-8.17,3.658-8.17,8.17v174.298c0,4.512,3.657,8.17,8.17,8.17c4.513,0,8.17-3.658,8.17-8.17V168.851C384,164.339,380.343,160.681,375.83,160.681z" />
