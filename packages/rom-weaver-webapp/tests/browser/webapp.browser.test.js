@@ -237,7 +237,7 @@ test("WebappRoot reports the configured thread count in the masthead, not the co
   // navigator.hardwareConcurrency and a user who dialled threads down to 1
   // still read the host core count in the header.
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
-  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1T");
+  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1 Threads");
   await expect
     .poll(() => document.querySelector(".masthead-threads")?.getAttribute("aria-label") || "")
     .toContain("1 threads");
