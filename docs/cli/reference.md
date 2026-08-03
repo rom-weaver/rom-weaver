@@ -18,5 +18,5 @@ the webapp's `_redirects` can move.
 | --- | --- |
 | Commands, flags, JSON output, exit codes, permissions, completions, man pages | [CLI reference](../reference/cli.md) |
 | Installing, verifying a download, Docker | [Install the CLI](../how-to/install-cli.md) |
-| A first run with the sample files | [Your first weave in the terminal](../tutorials/cli-first-weave.md) |
+| A first run with the sample files | [Your first apply in the terminal](../tutorials/cli-first-weave.md) |
 | Every documentation page | [Documentation index](../README.md) |

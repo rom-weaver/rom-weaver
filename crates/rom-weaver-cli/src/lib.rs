@@ -292,7 +292,7 @@ Write a rom-weaver-bundle.json recipe from local ROM and patch files.
 
 A bundle records which ROM the patches are for, what order they run in, and
 what the result should hash to. Hand it to someone else and
-`rom-weaver weave --bundle` reproduces your exact result.
+`rom-weaver patch apply --bundle` reproduces your exact result.
 
 Checksums come from the real files, so nothing here is taken on faith. Every
 --patch-* flag describes the --patch before it.
@@ -318,7 +318,7 @@ Entries that name a file are looked for in the archive, or next to the recipe.
 Pass --output to write those files out and get real paths back. Entries that
 name a url are reported as they are; nothing is downloaded.
 
-To actually run a bundle, use `rom-weaver weave --bundle` instead."
+To actually run a bundle, use `rom-weaver patch apply --bundle` instead."
         )
     )]
     Parse(BundleParseCommand),

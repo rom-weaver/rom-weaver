@@ -41,7 +41,7 @@ supplied.
 
 - [Your first patch in the browser](tutorials/first-patch.md): patch a homebrew
   ROM and verify the result byte for byte.
-- [Your first weave in the terminal](tutorials/cli-first-weave.md): the same
+- [Your first apply in the terminal](tutorials/cli-first-weave.md): the same
   job, plus creating and bundling a patch, from a command line.
 
 ## How-to guides

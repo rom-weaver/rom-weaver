@@ -392,7 +392,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.addScriptTag({ path: AXE_SCRIPT_PATH });
     await page.addStyleTag({
       content:
-        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}",
+        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}" +
+        '.rw-app .btn[data-guide-cta="true"]{animation:none!important;}',
     });
   };
 

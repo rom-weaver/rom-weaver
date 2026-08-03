@@ -2,7 +2,7 @@
 
 Apply one patch or an ordered chain in the terminal, handle headers and byte
 order, verify checksums, and validate patches without writing anything. New to
-the CLI? Start with [your first weave](../tutorials/cli-first-weave.md). Each
+the CLI? Start with [your first apply](../tutorials/cli-first-weave.md). Each
 recipe uses only the flags its task needs; the
 [patching flags](../reference/cli.md#patching) are catalogued in the reference.
 
@@ -23,20 +23,20 @@ recipe uses only the flags its task needs; the
 Apply one patch, or several in order, each on the result of the last:
 
 ```bash
-rom-weaver weave \
+rom-weaver patch apply \
   --input original.sfc \
   --patch translation.bps \
   --output translated.sfc \
   --no-compress
 
-rom-weaver weave \
+rom-weaver patch apply \
   --input original.sfc \
   --patch base.ips \
   --patch fixes.ups \
   --output patched.zip
 ```
 
-`weave` is the short name for `patch apply`; either spelling works.
+`patch apply` is the canonical spelling; `weave` remains accepted for compatibility.
 
 The result is compressed by default, into whatever the `--output` extension
 names. Pass `--no-compress` for a plain ROM, or set `--compress-format`,
@@ -52,7 +52,7 @@ When a patch page publishes the expected checksums, pin them so the run fails
 loudly instead of producing a broken ROM:
 
 ```bash
-rom-weaver weave \
+rom-weaver patch apply \
   --input original.sfc \
   --patch translation.bps \
   --output translated.sfc \
@@ -72,7 +72,7 @@ it. Override them when a patch author tells you to, and repair internal
 checksums the patch left stale:
 
 ```bash
-rom-weaver weave \
+rom-weaver patch apply \
   --input game.smc \
   --patch hack.ips \
   --output patched.sfc \
@@ -90,7 +90,7 @@ arrived in, so usually there is nothing to do. Force a specific order only
 when auto has nothing to match against:
 
 ```bash
-rom-weaver weave \
+rom-weaver patch apply \
   --input game.n64 \
   --patch fix.bps \
   --output fixed.z64 \
