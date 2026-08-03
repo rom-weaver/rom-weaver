@@ -652,55 +652,7 @@ const Masthead = ({
                 </BrandHeading>
               </a>
             </span>
-            <span className="brand-sub-row">
-              {version ? (
-                <span className="sub-item">
-                  <BuildTag
-                    changelogHref={changelogHref}
-                    channelBadge={channelBadge}
-                    commitDistance={commitDistance}
-                    confirmExternalNavigation={confirmExternalNavigation}
-                    dirty={dirty}
-                    githubBaseHref={githubBaseHref}
-                    localizer={localizer}
-                    version={version}
-                    versionTitle={versionTitle}
-                  />
-                </span>
-              ) : null}
-              {threads ? (
-                <span className="sub-item">
-                  <a
-                    aria-label={`${threads} ${threadsLabel}`}
-                    className="sub-chip sub-link masthead-threads"
-                    data-thread-label={threadsLabel}
-                    href={threadsHref}
-                    onFocus={onPreloadSystem}
-                    onPointerDown={onPreloadSystem}
-                    onPointerEnter={onPreloadSystem}
-                  >
-                    <span className="masthead-threads-count">{threads}</span>
-                    <span aria-hidden="true">T</span>
-                  </a>
-                </span>
-              ) : null}
-              <span className="sub-item">
-                <a
-                  aria-label={runtimeLabel}
-                  className="sub-chip sub-status sub-status-rule"
-                  data-sw={runtimeState}
-                  href={statusHref}
-                  onFocus={onPreloadSystem}
-                  onPointerDown={onPreloadSystem}
-                  onPointerEnter={onPreloadSystem}
-                >
-                  <RuntimeGlyph state={runtimeState} />
-                  <span aria-hidden="true" className="sub-status-text">
-                    {runtimeLabel}
-                  </span>
-                </a>
-              </span>
-            </span>
+            <span className="brand-slogan">{localizer.message("ui.masthead.slogan")}</span>
             {/* the parser-time resolver in index.html rewrites the thread count
                 and runtime status before the shell paints, and removes itself;
                 this empty marker is the only stable place to inject it */}
@@ -716,6 +668,59 @@ const Masthead = ({
           tabs={tabs}
         />
         <div className="masthead-tools" ref={toolsRef}>
+          {/* Build identity and machine state: what this copy of the app is and
+              what it is doing. The brand says who it is; these say what it is,
+              so they sit at the far end rather than under the word-mark. */}
+          <span className="masthead-state">
+            {version ? (
+              <span className="sub-item">
+                <BuildTag
+                  changelogHref={changelogHref}
+                  channelBadge={channelBadge}
+                  commitDistance={commitDistance}
+                  confirmExternalNavigation={confirmExternalNavigation}
+                  dirty={dirty}
+                  githubBaseHref={githubBaseHref}
+                  localizer={localizer}
+                  version={version}
+                  versionTitle={versionTitle}
+                />
+              </span>
+            ) : null}
+            {threads ? (
+              <span className="sub-item">
+                <a
+                  aria-label={`${threads} ${threadsLabel}`}
+                  className="sub-chip sub-link masthead-threads"
+                  data-thread-label={threadsLabel}
+                  href={threadsHref}
+                  onFocus={onPreloadSystem}
+                  onPointerDown={onPreloadSystem}
+                  onPointerEnter={onPreloadSystem}
+                >
+                  <span className="masthead-threads-count">{threads}</span>
+                  <span aria-hidden="true">T</span>
+                </a>
+              </span>
+            ) : null}
+            <span className="sub-item">
+              <a
+                aria-label={runtimeLabel}
+                className="sub-chip sub-status sub-status-rule"
+                data-sw={runtimeState}
+                href={statusHref}
+                onFocus={onPreloadSystem}
+                onPointerDown={onPreloadSystem}
+                onPointerEnter={onPreloadSystem}
+              >
+                <RuntimeGlyph state={runtimeState} />
+                <span aria-hidden="true" className="sub-status-text">
+                  {runtimeLabel}
+                </span>
+              </a>
+            </span>
+          </span>
+          <span aria-hidden="true" className="actions-sep" />
           {githubHref ? (
             <a
               className="tool"

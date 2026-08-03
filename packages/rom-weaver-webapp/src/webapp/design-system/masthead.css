@@ -57,18 +57,21 @@
 .rw-app .brand-word b { color: var(--thread-text); font-weight: 650; }
 .rw-app .brand-hy { color: var(--ink-4); font-weight: 400; }
 
-/* the sub-line never clips: every piece has a compact form chosen by breakpoint
-   - threads reads "8T", the status keeps its glyph, and the build tag sheds its
-   secondary half on phones */
-/* The row is as tall as its ink, not as tall as its targets: the controls keep
-   the 24px box the target-size floor needs (see the block below) and overflow
-   this row symmetrically, so a preview build wearing three of them is no taller
-   in the masthead than a production build wearing none. Nothing is painted on
-   that box, so the overflow never shows at the masthead's edge. */
-.rw-app .brand-sub-row {
-  display: flex; column-gap: var(--sp-xs); align-items: center; block-size: 16px;
+/* the state cluster never clips: every piece has a compact form chosen by
+   breakpoint - threads reads "8T", the status keeps its glyph, and the build tag
+   sheds its secondary half on phones */
+.rw-app .masthead-state {
+  display: flex; column-gap: var(--sp-xs); align-items: center;
   font-size: clamp(.64rem, .58rem + .25vw, .76rem); font-variant-numeric: tabular-nums; line-height: 1.2;
-  color: var(--ink-4); white-space: nowrap;
+  color: var(--ink-4); white-space: nowrap; min-inline-size: 0;
+}
+/* The slogan the sub-line used to displace. It is the one line that tells a
+   first-time visitor what this is, so it takes the brand's second row back and
+   the build/threads/offline readouts move to the far end with the other
+   controls - identity on the left, machine state on the right. */
+.rw-app .brand-slogan {
+  display: block; font-size: clamp(.64rem, .58rem + .25vw, .76rem); line-height: 1.2;
+  color: var(--ink-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rw-app .sub-item { display: inline-flex; flex: none; gap: var(--sp-xs); align-items: center; }
 /* the version opens the changelog, the thread count opens settings; the
@@ -145,7 +148,7 @@
    unpainted box can overflow the row without anything showing at the edge. */
 .rw-app .sub-chip {
   position: relative;
-  /* 26, not the 24px floor: the sub-row packs three of these 4px apart, and a
+  /* 26, not the 24px floor: the cluster packs three of these 4px apart, and a
      target sitting exactly on the minimum leaves no room for rounding. */
   min-inline-size: 26px; block-size: 26px; padding: 0 2px;
   background: transparent; border: 0;
@@ -189,8 +192,8 @@
 /* when a channel badge is present the status yields to glyph-only at every
    width - the badge is the rarer, louder signal, and together they cannot fit
    inside the 1220px app column in long locales */
-.rw-app .brand-sub-row:has(.channel-badge) .sub-status-text { display: none; }
-.rw-app .brand-sub-row:has(.channel-badge) .sub-status-rule::before { content: ""; }
+.rw-app .masthead-state:has(.channel-badge) .sub-status-text { display: none; }
+.rw-app .masthead-state:has(.channel-badge) .sub-status-rule::before { content: ""; }
 /* through the compact rail band the status keeps just its glyph, which also
    keeps the brand's min-content narrow enough that nothing can collide */
 @media (max-width: 1159px) {

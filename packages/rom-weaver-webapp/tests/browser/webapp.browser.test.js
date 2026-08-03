@@ -225,7 +225,7 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
   ]) {
     page.viewport(width, height);
     await expect.poll(() => getComputedStyle(document.querySelector(".sub-status svg")).display).not.toBe("none");
-    const badged = Boolean(document.querySelector(".brand-sub-row .channel-badge"));
+    const badged = Boolean(document.querySelector(".masthead-state .channel-badge"));
     const expected = badged || width <= 1159 ? "none" : "inline";
     await expect.poll(() => getComputedStyle(document.querySelector(".sub-status-text")).display).toBe(expected);
   }
