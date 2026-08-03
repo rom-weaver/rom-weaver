@@ -157,9 +157,10 @@
    color transition is disabled in the action-group rule below because Lighthouse
    flags that load-time main-thread animation. */
 @media (min-width: 1160px) {
+  .rw-app .brand-word { font-size: clamp(1.18rem, 1.08rem + .5vw, 1.75rem); }
   .rw-app .brand-sub-row {
     block-size: 20px; column-gap: var(--sp-s); margin-block-start: 2px;
-    font-size: clamp(.82rem, .75rem + .2vw, .94rem); color: var(--ink-3);
+    font-size: clamp(.68rem, .62rem + .15vw, .8rem); color: var(--ink-3);
   }
   .rw-app .brand-sub-row .build-tag .channel-badge { font-size: inherit; }
 }

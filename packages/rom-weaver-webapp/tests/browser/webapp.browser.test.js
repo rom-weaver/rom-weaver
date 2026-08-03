@@ -261,12 +261,12 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
     page.viewport(width, height);
     await expect.poll(() => getComputedStyle(document.querySelector(".sub-status svg")).display).not.toBe("none");
     if (width >= 1160) {
-      expect(Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row")).fontSize)).toBeGreaterThan(
-        12,
-      );
+      const titleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-word")).fontSize);
+      const subtitleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row")).fontSize);
+      expect(titleSize).toBeGreaterThan(subtitleSize * 1.8);
       expect(
         Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row .build-tag .sub-chip")).fontSize),
-      ).toBeGreaterThan(12);
+      ).toBeLessThanOrEqual(subtitleSize);
       expect(getComputedStyle(document.querySelector(".sub-status svg")).width).toBe("16px");
       expect(getComputedStyle(document.querySelector(".sub-status")).cursor).toBe("pointer");
     }
