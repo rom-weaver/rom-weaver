@@ -1,4 +1,5 @@
 import { GITHUB_URL } from "../project-links.ts";
+import { readAppBaseUrl } from "../webapp-controller.ts";
 
 /**
  * The deploy-root `changelog.json` and the pieces every view of it shares.
@@ -53,8 +54,17 @@ const readReleaseChangelog = (value: unknown): ReleaseChangelog | undefined => {
   return hasNotes && hasMeta ? release : undefined;
 };
 
+// Against the app's own base, not the current URL: a nested route (`/system/
+// changelog`, `/docs/<guide>`) would otherwise resolve a bare name inside
+// itself, and whether that happens to work depends on a `<base>` tag the dev
+// server and the build inject differently.
+const changelogAssetUrl = () => {
+  const documentUrl = typeof window === "undefined" ? "http://localhost/" : window.location.href;
+  return new URL(`changelog.json?t=${Date.now()}`, new URL(readAppBaseUrl(), documentUrl)).href;
+};
+
 const fetchChangelog = async (): Promise<{ entries: ChangelogEntry[]; release?: ReleaseChangelog }> => {
-  const response = await fetch(`./changelog.json?t=${Date.now()}`, { cache: "no-store" });
+  const response = await fetch(changelogAssetUrl(), { cache: "no-store" });
   if (!response.ok) throw new Error(`changelog fetch failed: ${response.status}`);
   const data: unknown = await response.json();
   if (!Array.isArray(data)) throw new Error("changelog is not an array");

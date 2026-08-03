@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { SystemPage, type SystemPageProps } from "../../../src/webapp/system-page.tsx";
@@ -102,6 +102,29 @@ describe("SystemPage", () => {
     select.value = "trace";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     expect(onLevelChange).toHaveBeenCalledWith("trace");
+  });
+
+  it("spends the deep-link hash instead of re-focusing on every later visit", async () => {
+    window.history.replaceState({}, "", "/system#set-threads");
+    const { rerender } = renderPage({ tab: "settings" });
+    await waitFor(() => expect(window.location.hash).toBe(""));
+
+    // Coming back to the tab later must not drag the reader to the field a
+    // deep link pointed at once.
+    rerender(
+      <RomWeaverSettingsProvider settings={{}}>
+        <SystemPage
+          active
+          draftSettings={{}}
+          onDraftChange={() => undefined}
+          onLevelChange={() => undefined}
+          tab="settings"
+          tabHref={tabHref}
+          validation={{ invalidFields: [], messages: [] }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(window.location.hash).toBe("");
   });
 
   it("shows no log lines while another route is on screen", () => {

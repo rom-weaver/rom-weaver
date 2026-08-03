@@ -654,7 +654,12 @@ const prerenderWebappShell = (prerenderedShells) => ({
       if (ctx.server) {
         const route = devPrerenderRoute(ctx.originalUrl ?? ctx.path);
         const shell = await prerender.renderLandingShellWithServer(ctx.server, route.view, false, route.docsSlug);
-        const routeHtml = route.view === "docs" ? html.replace("<head>", '<head>\n    <base href="/" />') : html;
+        // A nested route (`/docs/<guide>`, `/system/<tab>`) is served at its own
+        // depth, so without a base every bare-name URL in the document resolves
+        // inside the route rather than at the app root. The build injects the
+        // same thing per emitted document.
+        const nested = route.view === "docs" || route.view === "system";
+        const routeHtml = nested ? html.replace("<head>", '<head>\n    <base href="/" />') : html;
         // Production ships the bundled CSS as a render-blocking <link>, so its
         // prerendered shell paints styled. Dev serves CSS as HMR'd JS modules
         // that only apply after the bundle runs, which would flash the shell

@@ -299,6 +299,11 @@ const useSettingsFieldFocus = (active: boolean, focusHint: SettingsFocusHint | n
 /**
  * A deep link names its field in the URL hash (`/system#set-threads`), so the
  * hint is read from the address rather than handed down through the tree.
+ *
+ * Reading it also spends it: the hash is an instruction for this arrival, not a
+ * property of the page. Left in place it would re-scroll and re-focus that one
+ * field on every later visit to the tab, and the field the reader actually came
+ * back for would be yanked off screen.
  */
 let focusHintToken = 0;
 const useHashFocusHint = (armed: boolean): SettingsFocusHint | null => {
@@ -308,6 +313,9 @@ const useHashFocusHint = (armed: boolean): SettingsFocusHint | null => {
     const readHash = () => {
       const fieldId = decodeURIComponent(window.location.hash.slice(1));
       if (!fieldId) return;
+      const spent = new URL(window.location.href);
+      spent.hash = "";
+      window.history.replaceState(window.history.state, "", spent);
       focusHintToken += 1;
       setFocusHint({ fieldId, token: focusHintToken });
     };
