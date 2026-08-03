@@ -20,6 +20,8 @@ const VIRTUAL_ID = "virtual:rom-weaver-docs";
 const PAGE_VIRTUAL_PREFIX = "virtual:rom-weaver-docs-page/";
 const SEARCH_VIRTUAL_ID = "virtual:rom-weaver-docs-search";
 const RESOLVED_PREFIX = "\0";
+const VIRTUAL_ID_FILTER = /^virtual:rom-weaver-docs(?:$|-search$|-page\/)/;
+const RESOLVED_ID_FILTER = new RegExp(`^${RESOLVED_PREFIX}virtual:rom-weaver-docs(?:$|-search$|-page/)`);
 
 /** @param {string} id */
 const isDocsVirtualId = (id) => id === VIRTUAL_ID || id === SEARCH_VIRTUAL_ID || id.startsWith(PAGE_VIRTUAL_PREFIX);
@@ -66,16 +68,16 @@ const createSearchModuleSource = (routes) => {
 };
 
 /** Serves the rendered guides to the app as `virtual:rom-weaver-docs*` modules. */
-const docsVirtualModule = () => {
+const docsVirtualModule = (initialRoutes = null) => {
   /** One render of the guides feeds every virtual module of a build; dev edits clear it below. */
-  let cachedRoutes = null;
+  let cachedRoutes = initialRoutes;
   const getRoutes = () => {
     cachedRoutes ??= readDocRoutes();
     return cachedRoutes;
   };
   return {
     buildStart() {
-      cachedRoutes = null;
+      cachedRoutes = initialRoutes;
     },
     configureServer(server) {
       const watchedDocs = [
@@ -94,20 +96,26 @@ const docsVirtualModule = () => {
       server.watcher.on("change", reloadOnGuideChange);
       server.watcher.on("unlink", reloadOnGuideChange);
     },
-    load(id) {
-      if (!id.startsWith(RESOLVED_PREFIX)) return undefined;
-      const virtualId = id.slice(RESOLVED_PREFIX.length);
-      if (!isDocsVirtualId(virtualId)) return undefined;
-      if (virtualId === VIRTUAL_ID) return createMetadataModuleSource(getRoutes());
-      if (virtualId === SEARCH_VIRTUAL_ID) return createSearchModuleSource(getRoutes());
-      const slug = virtualId.slice(PAGE_VIRTUAL_PREFIX.length);
-      const route = getRoutes().find((entry) => entry.slug === slug);
-      if (!route) throw new Error(`docs virtual module: no docs route for slug '${slug}'`);
-      return `export const html = ${JSON.stringify(route.html)};\n`;
+    load: {
+      filter: { id: RESOLVED_ID_FILTER },
+      handler(id) {
+        if (!id.startsWith(RESOLVED_PREFIX)) return undefined;
+        const virtualId = id.slice(RESOLVED_PREFIX.length);
+        if (!isDocsVirtualId(virtualId)) return undefined;
+        if (virtualId === VIRTUAL_ID) return createMetadataModuleSource(getRoutes());
+        if (virtualId === SEARCH_VIRTUAL_ID) return createSearchModuleSource(getRoutes());
+        const slug = virtualId.slice(PAGE_VIRTUAL_PREFIX.length);
+        const route = getRoutes().find((entry) => entry.slug === slug);
+        if (!route) throw new Error(`docs virtual module: no docs route for slug '${slug}'`);
+        return `export const html = ${JSON.stringify(route.html)};\n`;
+      },
     },
     name: "rom-weaver-docs-virtual-module",
-    resolveId(id) {
-      return isDocsVirtualId(id) ? `${RESOLVED_PREFIX}${id}` : undefined;
+    resolveId: {
+      filter: { id: VIRTUAL_ID_FILTER },
+      handler(id) {
+        return isDocsVirtualId(id) ? `${RESOLVED_PREFIX}${id}` : undefined;
+      },
     },
   };
 };

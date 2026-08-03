@@ -304,6 +304,30 @@ const settleAnimations = async (page) => {
   }
 };
 
+const waitForStableBox = async (page, locator) => {
+  const selector = await locator.evaluate((element) => {
+    if (!(element instanceof HTMLElement && element.id)) throw new Error("Stable-layout target needs an element id");
+    return `#${CSS.escape(element.id)}`;
+  });
+  await page.waitForFunction(
+    ({ selector: targetSelector }) => {
+      const element = document.querySelector(targetSelector);
+      if (!(element instanceof HTMLElement)) return false;
+      const rect = element.getBoundingClientRect();
+      const box = [rect.x, rect.y, rect.width, rect.height];
+      const previous = globalThis.__romWeaverStableBox;
+      const now = performance.now();
+      if (previous?.element === element && previous.box.every((value, index) => value === box[index])) {
+        return now - previous.since >= 500;
+      }
+      globalThis.__romWeaverStableBox = { box, element, since: now };
+      return false;
+    },
+    { selector },
+    { polling: 50, timeout: 60_000 },
+  );
+};
+
 const scanLiveApp = async (page, label) => {
   await settleAnimations(page);
   const violations = await page.evaluate(async (tags) => {
@@ -588,6 +612,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await page.getByRole("button", { name: "Create ZIP Bundle", exact: true }).click();
         const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
         await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
+        await waitForStableBox(page, downloadButton);
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
           downloadButton.click(),
