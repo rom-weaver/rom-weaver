@@ -140,7 +140,7 @@ describe("Masthead", () => {
     expect(onOpenChangelog).toHaveBeenCalledTimes(1);
 
     const threads = container.querySelector(".masthead-threads") as HTMLButtonElement;
-    expect(threads.textContent).toBe("8T");
+    expect(threads.textContent).toBe("8 Threads");
     expect(threads.getAttribute("aria-label")).toBe("8 threads");
     fireEvent.click(threads);
     // no deep-link handler supplied, so the thread count still just opens settings
@@ -182,7 +182,7 @@ describe("Masthead", () => {
     expect(badge.getAttribute("data-channel")).toBe("pr");
     expect(badge.getAttribute("href")).toBe("https://example.com/repo/pull/123");
     expect(badge.getAttribute("target")).toBe("_blank");
-    expect(badge.querySelector(".tag-extra")?.textContent).toBe(" · v1.2.3");
+    expect(badge.querySelector(".tag-extra")?.textContent).toBe(" / v1.2.3");
 
     rerender(withSettings(<Masthead {...mastheadProps} channelBadge="nightly" />));
     const channel = container.querySelector(".channel-badge") as HTMLButtonElement;
@@ -190,12 +190,12 @@ describe("Masthead", () => {
     expect(channel.getAttribute("data-channel")).toBe("nightly");
     expect(channel.getAttribute("aria-label")).toBe("Nightly build, v1.2.3");
     expect(channel.querySelector(".tag-channel")?.textContent).toBe("nightly");
-    expect(channel.textContent).toBe("nightly · v1.2.3");
+    expect(channel.textContent).toBe("nightly / v1.2.3");
 
     rerender(withSettings(<Masthead {...mastheadProps} channelBadge="beta" />));
     const beta = container.querySelector(".channel-badge") as HTMLButtonElement;
     expect(beta.querySelector(".tag-channel")?.textContent).toBe("beta");
-    expect(beta.textContent).toBe("beta · v1.2.3");
+    expect(beta.textContent).toBe("beta / v1.2.3");
   });
 
   it("preloads the Log dialog before interaction completes", () => {

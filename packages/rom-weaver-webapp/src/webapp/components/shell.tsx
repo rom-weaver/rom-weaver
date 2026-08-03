@@ -691,10 +691,9 @@ const guardFooterExternalClick = (
 
 /**
  * Version and channel merge into one build tag: a plain dotted link on stable
- * that opens the changelog, and a single coloured pill everywhere else. The
- * channel is carried by one letter (N/B/D) because the sub-line has no width to
- * spare; the full name rides the accessible name. A PR preview is the exception
- * - the number IS the useful identity, so it links straight to the pull request.
+ * that opens the changelog, and a compact channel label everywhere else. A PR
+ * preview is the exception - the number IS the useful identity, so it links
+ * straight to the pull request.
  */
 const CHANNEL_LETTERS: Record<string, string> = { beta: "B", dev: "D", nightly: "N", preview: "P" };
 const CHANNEL_PREFIXES: Record<string, string> = { beta: "beta", nightly: "nightly" };
@@ -744,7 +743,7 @@ const BuildTag = ({
         >
           {`PR-#${prNumber}`}
           <span className="tag-extra">
-            {" · "}
+            {" / "}
             <span className="tag-version">{versionText}</span>
           </span>
         </a>
@@ -768,7 +767,7 @@ const BuildTag = ({
           type="button"
         >
           {prefix ? <span className="tag-channel">{prefix}</span> : <b className="tag-letter">{letter}</b>}
-          {" · "}
+          {" / "}
           <span className="tag-version">{versionText}</span>
         </button>
       </span>
@@ -962,7 +961,7 @@ const Masthead = ({
                     type="button"
                   >
                     <span className="masthead-threads-count">{threads}</span>
-                    <span aria-hidden="true">T</span>
+                    <span aria-hidden="true"> Threads</span>
                   </button>
                 </span>
               ) : null}
