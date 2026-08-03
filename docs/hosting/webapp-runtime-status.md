@@ -1,7 +1,9 @@
 # Webapp masthead metadata
 
 The webapp masthead shows build identity, the configured thread count, and two
-independent runtime facts in one text row.
+independent runtime facts in one text row. Each value links to the System page
+tab that explains it: the version to `/system/changelog`, the thread count to
+the Threads setting, and the runtime state to `/system/status`.
 
 <!-- START doctoc -->
 ## Table of contents

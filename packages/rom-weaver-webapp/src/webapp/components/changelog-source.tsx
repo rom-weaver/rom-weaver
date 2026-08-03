@@ -188,4 +188,4 @@ const EntryGroups = ({
 );
 
 export { commitGroups, EntryGroups, fetchChangelog, releaseTagUrl, REPOSITORY_URL };
-export type { ChangelogEntry, ReleaseChangelog, ReleaseNote };
+export type { ChangelogEntry, ReleaseChangelog };

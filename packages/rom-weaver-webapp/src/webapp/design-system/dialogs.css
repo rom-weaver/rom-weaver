@@ -34,31 +34,33 @@
 .dlg-x:active { transform: translateY(0) scale(.99); }
 .dlg-x svg { width: 15px; height: 15px; }
 .dlg-body { padding: var(--sp-l); overflow: auto; overscroll-behavior: contain; }
-/* Log dialog */
-.rw-app .log-dlg { max-width: min(1280px, calc(100vw - 32px)); }
-.rw-app .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
-/* One row, never two. The rail is a scroller by design, so when the head runs
-   out of width the tabs are what should give - wrapping instead sent the close
-   button down to a line of its own, adrift at the far side of the dialog from
-   the rail it belongs to. */
+/* ── the System route ──
+   The page that replaced the masthead's settings/log dialog. It keeps the
+   dialog's internals - the weft sub-rail, the trace inspector, the settings
+   grid - but sits in a workflow panel instead of a modal, so it supplies its
+   own frame height rather than inheriting a dialog's. */
+.rw-app .system-frame { display: flex; flex-direction: column; min-inline-size: 0; }
 /* The tabs ARE the title here, so the rail rides the head's own bottom rule
    rather than floating above it - the selected tab's weft then reads as a mark
-   on a rail instead of a stray underline in open space. */
-.rw-app .log-dlg .dlg-head { flex-wrap: nowrap; row-gap: var(--sp-m); align-items: flex-end; padding-block-end: 0; }
-.rw-app .log-dlg .dlg-title { flex: 0 1 auto; }
-/* Close shares the rail's row but not its baseline - sitting it on the rule
-   would read as one more tab. Every other control moved to the bar below. */
-.rw-app .log-dlg .dlg-head > .dlg-x { flex: none; margin-block-end: var(--sp-s); }
+   on a rail instead of a stray underline in open space. One row, never two: the
+   rail is a scroller by design, so when the head runs out of width the tabs are
+   what should give. */
+.rw-app .system-head {
+  display: flex; align-items: flex-end; gap: var(--sp-m); flex-wrap: nowrap; row-gap: var(--sp-m);
+  padding: 0 0 0; border-block-end: 1px solid var(--seam-soft); flex: none;
+}
+.rw-app .system-body { padding: var(--sp-l) 0; overscroll-behavior: contain; }
+.rw-app .dlg-actions { display: inline-flex; gap: var(--sp-s); align-items: center; }
 .rw-app .log-actions { display: flex; flex: none; gap: var(--sp-s); align-items: center; min-inline-size: 0; }
 .rw-app .log-actions > * { flex: 0 1 auto; min-inline-size: max-content; }
 .rw-app .log-actions .log-icon-btn { flex: 0 0 30px; inline-size: 30px; padding-inline: 0; }
 .rw-app .log-actions .btn.copied { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 55%, transparent); }
 .rw-app .log-actions .btn.copy-failed { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 55%, transparent); }
-.rw-app .log-dlg .logview {
+.rw-app .system-frame .logview {
   flex: 0 1 auto; display: flex; gap: var(--sp-2xs); margin: 0; padding: 3px; min-inline-size: 0;
   border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well);
 }
-.rw-app .log-dlg .logview .seg-btn {
+.rw-app .system-frame .logview .seg-btn {
   flex: 1 1 0; min-inline-size: 0; height: 28px;
   display: inline-flex; align-items: center; justify-content: center;
   appearance: none; cursor: pointer; border: 0; border-radius: calc(var(--r-s) - 3px);
@@ -68,52 +70,55 @@
   transition: background .18s, color .18s;
 }
 @media (hover: hover) {
-  .rw-app .log-dlg .logview .seg-btn:hover { color: var(--ink); }
+  .rw-app .system-frame .logview .seg-btn:hover { color: var(--ink); }
 }
 /* Touch devices need active feedback because they lack hover. */
-.rw-app .log-dlg .logview .seg-btn:active { color: var(--ink); }
-.rw-app .log-dlg .logview .seg-btn[aria-pressed="true"] {
+.rw-app .system-frame .logview .seg-btn:active { color: var(--ink); }
+.rw-app .system-frame .logview .seg-btn[aria-pressed="true"] {
   background: var(--thread); color: var(--thread-ink);
   box-shadow: 0 1px 3px -1px color-mix(in oklab, var(--thread) 55%, transparent);
 }
 @media (hover: hover) {
-  .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
+  .rw-app .system-frame .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
 }
-.rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:active { color: var(--thread-ink); }
+.rw-app .system-frame .logview .seg-btn[aria-pressed="true"]:active { color: var(--thread-ink); }
 /* Every tab's own controls live in a bar under the head rather than in it, so
-   the head carries nothing but the tab rail and the close button at any width.
-   Rows stack: the controls own the first, and a filter (logs, storage) the one
-   below. Sharing one row made the filter and the view toggle compete for the
-   same width, and a phone left both unusable - ellipsed toggle labels above a
-   filter too narrow to read back what you had typed. */
-.rw-app .dlg-subhead {
+   the head carries nothing but the tab rail at any width. Rows stack: the
+   controls own the first, and a filter (logs, storage) the one below. Sharing
+   one row made the filter and the view toggle compete for the same width, and a
+   phone left both unusable - ellipsed toggle labels above a filter too narrow to
+   read back what you had typed. */
+.rw-app .system-subhead {
   display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-s);
-  padding: var(--sp-s) var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none;
+  padding: var(--sp-s) 0; border-block-end: 1px solid var(--seam-soft); flex: none;
 }
-.rw-app .dlg-subhead .log-controls { display: flex; align-items: center; gap: var(--sp-s); min-inline-size: 0; }
+.rw-app .system-subhead .log-controls { display: flex; align-items: center; gap: var(--sp-s); min-inline-size: 0; }
 /* Everything after the view toggle parks at the far end, so the row reads
    left-to-right as "which log", then what to do with it. The break is named
    rather than positional: the view toggle is conditional, and a `:last-child`
    rule would strand the group mid-row on the tabs that lack it. */
-.rw-app .dlg-subhead .log-controls > .loglevel,
-.rw-app .dlg-subhead .log-controls > .log-refresh { margin-inline-start: auto; }
+.rw-app .system-subhead .log-controls > .loglevel,
+.rw-app .system-subhead .log-controls > .log-refresh { margin-inline-start: auto; }
 /* copy/download trail the picker they belong with - the head's auto margin
    would otherwise split the free space between the two groups */
-.rw-app .dlg-subhead .log-controls > .log-actions { margin-inline-start: 0; }
+.rw-app .system-subhead .log-controls > .log-actions { margin-inline-start: 0; }
 /* Settings has no left-hand control, so its pair carries the auto margin and
-   lands under the close button - where the head used to hold it. */
-.rw-app .dlg-subhead .settings-actions { margin-inline-start: auto; }
-.rw-app .dlg-subhead .log-filter { inline-size: 100%; height: 30px; font-size: .76rem; padding-block: 0; }
-.rw-app .dlg-subhead .loglevel { display: flex; flex: 0 0 auto; }
-.rw-app .dlg-subhead .loglevel .select { width: max-content; height: 30px; font-size: var(--dropdown-fs, .76rem); padding-block: 0; }
-.rw-app .log-body { padding: 0; flex: 1 1 auto; display: flex; min-height: 0; }
-.rw-app .log-dlg .tracelog {
+   lands under the rail's far end. */
+.rw-app .system-subhead .settings-actions { margin-inline-start: auto; }
+.rw-app .system-subhead .log-filter { inline-size: 100%; height: 30px; font-size: .76rem; padding-block: 0; }
+.rw-app .system-subhead .loglevel { display: flex; flex: 0 0 auto; }
+.rw-app .system-subhead .loglevel .select { width: max-content; height: 30px; font-size: var(--dropdown-fs, .76rem); padding-block: 0; }
+/* The tracelog is virtualized off its scroller's measured height, and a page -
+   unlike a dialog - has no height of its own to inherit. This rule IS that
+   height: drop it and the viewport measures zero and no rows ever mount. */
+.rw-app .log-body { padding: 0; flex: 1 1 auto; display: flex; min-height: 0; block-size: min(68dvh, 760px); }
+.rw-app .system-frame .tracelog {
   flex: 1 1 auto; max-height: none; height: auto; min-height: 0;
   border: 0; border-radius: 0; background: var(--well); padding: var(--sp-m) var(--sp-l); font-size: .74rem;
 }
-.rw-app .log-dlg .tracelog-virtual-content { position: relative; flex: none; }
-.rw-app .log-dlg .tracelog-virtual-window { position: absolute; inset-inline: 0; width: max-content; min-width: 100%; }
-.rw-app .log-dlg .tracelog .ln { box-sizing: border-box; height: 25px; }
+.rw-app .system-frame .tracelog-virtual-content { position: relative; flex: none; }
+.rw-app .system-frame .tracelog-virtual-window { position: absolute; inset-inline: 0; width: max-content; min-width: 100%; }
+.rw-app .system-frame .tracelog .ln { box-sizing: border-box; height: 25px; }
 /* --ink-4 is the sub-line grey; on the log's `--well` panel it lands at 4.43:1. */
 .rw-app .tracelog-empty { color: var(--ink-3); font-size: .78rem; padding: 4px 2px; }
 .rw-app .opfs-inspector { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--well); padding: var(--sp-m) var(--sp-l); }
@@ -130,12 +135,12 @@
 .rw-app .log-refresh .spin { animation: log-refresh-spin .8s linear infinite; }
 @keyframes log-refresh-spin { to { transform: rotate(360deg); } }
 
-/* Settings tab of the unified dialog. Viewport units avoid a cyclic width under
+/* Settings tab of the System route. Viewport units avoid a cyclic width under
    inline-size containment, and the named container is the same one the settings
    rows already query. */
-.rw-app .log-dlg .settings-body { container: settings-card / inline-size; padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom)); }
-.rw-app .log-dlg .settings-actions { flex: 0 0 auto; }
-.rw-app .log-dlg .settings-actions .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
+.rw-app .system-frame .settings-body { container: settings-card / inline-size; padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom)); }
+.rw-app .system-frame .settings-actions { flex: 0 0 auto; }
+.rw-app .system-frame .settings-actions .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
 @container settings-card (min-width: 688px) {
   .rw-app .settings-panel { columns: 2; column-gap: var(--sp-m); }
   .rw-app .settings-panel .setcols { display: contents; }
@@ -299,8 +304,8 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 /* ── the weft sub-rail ──
    One pattern for every second-level nav: visually subordinate to the mode rail
    (an underline weft, not a filled pill), scrolling horizontally when cramped so
-   it never wraps and never vanishes. The status/logs dialog wears it as its
-   header - the tabs are the title. */
+   it never wraps and never vanishes. The System route wears it as its header -
+   the tabs are the title. */
 .rw-app .subrail {
   position: relative; display: flex; flex: 1 1 0; gap: var(--sp-xs); min-inline-size: 0;
   overflow-x: auto; scrollbar-width: none;
@@ -309,7 +314,7 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
   scroll-snap-type: inline proximity;
 }
 .rw-app .subrail::-webkit-scrollbar { display: none; }
-.rw-app .dialog-subrail { padding: 0; background: transparent; }
+.rw-app .system-subrail { padding: 0; background: transparent; }
 .rw-app .subtab {
   scroll-snap-align: start;
   display: inline-flex; gap: var(--sp-s); align-items: center; min-height: 36px; padding: 4px 12px 7px;
@@ -378,12 +383,7 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 .rw-app .status-row code { padding: 1px 6px; font-size: .78rem; background: var(--well); border: 1px solid var(--seam-soft); border-radius: 4px; }
 .rw-app .status-row a { color: var(--thread-text); text-decoration: underline dotted; text-underline-offset: 2px; }
 
-/* phones: the inspector and settings take the whole screen */
+/* phones: the trace inspector gets the screen it needs to be readable */
 @media (max-width: 719px) {
-  .rw-app .log-dlg { max-width: 100vw; }
-  .rw-app .log-dlg .dlg-frame {
-    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
-    border: 0; border-radius: 0;
-    padding-block-start: var(--safe-t); padding-block-end: var(--safe-b);
-  }
+  .rw-app .log-body { block-size: min(72dvh, 640px); }
 }

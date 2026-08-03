@@ -21,15 +21,9 @@ import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-sta
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
-import { ChangelogDialog } from "../../src/webapp/components/changelog-dialog.tsx";
-import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
 import { Masthead, UpdateBanner, WakeLockBanner } from "../../src/webapp/components/shell.tsx";
-import {
-  getDefaultSettings,
-  getSettingsUiState,
-  validateSettingsDraft,
-} from "../../src/webapp/settings/settings-state.ts";
-import { SettingsPanel } from "../../src/webapp/webapp-settings.tsx";
+import { getDefaultSettings, validateSettingsDraft } from "../../src/webapp/settings/settings-state.ts";
+import { SystemPage } from "../../src/webapp/system-page.tsx";
 // Load the real design system so axe + getComputedStyle see production colours.
 // deferred.css ships lazily in production (webapp.ts loads it at boot) but the dialog
 // and drawer surfaces under test here live in it, so the test loads it directly.
@@ -416,7 +410,16 @@ const PAGE_TABS = [
   { href: "apply", icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Apply" },
   { href: "create", icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
   { href: "trim", icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
+  { href: "system", icon: createElement("span", { "aria-hidden": "true" }), id: "system", label: "System" },
 ];
+
+// The masthead's chips are System deep links now, not dialog openers.
+const SYSTEM_LINK_PROPS = {
+  changelogHref: "/system/changelog",
+  homeHref: "/apply",
+  statusHref: "/system/status",
+  threadsHref: "/system#set-threads",
+};
 
 // Production page chrome (single <main className="workbench"> + one tabpanel)
 // around an arbitrary workflow form node, mirroring webapp-root.tsx.
@@ -433,11 +436,7 @@ const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
         createElement(Masthead, {
           ...mastheadProps,
           currentTab,
-          homeHref: "/apply",
-          onOpenChangelog: noop,
-          onOpenLog: noop,
-          onOpenSettings: noop,
-          onOpenStatus: noop,
+          ...SYSTEM_LINK_PROPS,
           onSelectTab: noop,
           tabs: PAGE_TABS,
           threads: 8,
@@ -807,25 +806,26 @@ const DIALOGS = {
       open: true,
       title: "Reload and lose changes?",
     }),
-  "update changelog": () => createElement(ChangelogDialog, { onClose: noop, onReload: noop, open: true }),
-  log: () => createElement(LogDialog, { onClose: noop, onLevelChange: noop, open: true }),
-  // Settings is the unified dialog's first tab now, not a Modal of its own.
-  settings: () =>
-    createElement(LogDialog, {
-      initialTab: "settings",
-      onClose: noop,
+};
+
+// Settings, status, logs, storage and the changelog are a route now, so they are
+// scanned as pages - landmark rules included, which a dialog is exempt from.
+const systemPage = (tab) =>
+  Shell(
+    "system",
+    "system",
+    createElement(SystemPage, {
+      active: true,
+      draftSettings: settingsDraft,
+      onDraftChange: noop,
       onLevelChange: noop,
       onRestoreDefaults: noop,
       onSaveSettings: noop,
-      open: true,
-      settingsPanel: createElement(SettingsPanel, {
-        draftSettings: settingsDraft,
-        onDraftChange: noop,
-        uiState: getSettingsUiState(settingsDraft),
-        validation: validateSettingsDraft(settingsDraft),
-      }),
+      tab,
+      tabHref: (entry) => (entry === "settings" ? "/system" : `/system/${entry}`),
+      validation: validateSettingsDraft(settingsDraft),
     }),
-};
+  );
 
 const ModalHost = (node) =>
   createElement(RomWeaverSettingsProvider, { settings: {} }, createElement("div", { className: "rw-app" }, node));
@@ -848,6 +848,11 @@ const WEBAPP_SURFACES = [
     page: true,
   },
   { factory: () => createElement(Banners), name: "update + wake-lock banners" },
+  ...["settings", "status", "logs", "storage"].map((tab) => ({
+    factory: () => systemPage(tab),
+    name: `system ${tab}`,
+    page: true,
+  })),
   ...Object.entries(DIALOGS).map(([name, factory]) => ({
     factory: () => ModalHost(factory()),
     name: `${name} dialog`,
@@ -899,11 +904,7 @@ describe("webapp keyboard navigation", () => {
           { className: "rw-app" },
           createElement(Masthead, {
             currentTab: "patcher",
-            homeHref: "/apply",
-            onOpenChangelog: noop,
-            onOpenLog: noop,
-            onOpenSettings: noop,
-            onOpenStatus: noop,
+            ...SYSTEM_LINK_PROPS,
             onSelectTab,
             tabs: PAGE_TABS,
           }),
@@ -941,13 +942,13 @@ describe("webapp keyboard navigation", () => {
     press("ArrowRight");
     expect(document.activeElement).toBe(tabAt("creator"));
     press("End");
-    expect(document.activeElement).toBe(tabAt("trim"));
+    expect(document.activeElement).toBe(tabAt("system"));
     press("Home");
     expect(document.activeElement).toBe(tabAt("patcher"));
     press("ArrowLeft"); // wraps to the last tab
-    expect(document.activeElement).toBe(tabAt("trim"));
+    expect(document.activeElement).toBe(tabAt("system"));
 
-    expect(selected).toEqual(["creator", "trim", "patcher", "trim"]);
+    expect(selected).toEqual(["creator", "system", "patcher", "system"]);
   });
 
   test("modal wraps Tab focus, restores the opener, and isolates the page", async () => {
@@ -1037,8 +1038,8 @@ const ACCENT_SURFACES = [
   { factory: emptyApplyPage, name: "empty apply (hero + dropzone)", page: true },
   { dense: true, factory: disabledPatchApplyPage, name: "dense apply (cards, drawers, verdicts)", page: true },
   { factory: doneApplyPage, name: "apply completed (result + meter)", page: true },
-  { factory: () => ModalHost(DIALOGS.settings()), name: "settings dialog" },
-  { factory: () => ModalHost(DIALOGS.log()), name: "log dialog" },
+  { factory: () => systemPage("settings"), name: "system settings", page: true },
+  { factory: () => systemPage("logs"), name: "system logs", page: true },
   { factory: () => createElement(Banners), name: "banners" },
   { badge: true, factory: badgedMastheadPage, name: "masthead + channel badge", page: true },
 ];
@@ -1118,11 +1119,7 @@ describe("webapp responsive navigation", () => {
             { className: "app" },
             createElement(Masthead, {
               currentTab: "patcher",
-              homeHref: "/apply",
-              onOpenChangelog: noop,
-              onOpenLog: noop,
-              onOpenSettings: noop,
-              onOpenStatus: noop,
+              ...SYSTEM_LINK_PROPS,
               onSelectTab: noop,
               tabs,
               threads: 8,

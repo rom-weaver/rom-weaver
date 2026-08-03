@@ -47,7 +47,7 @@ type PendingChangeInputState = {
 type PendingChangeState = Record<AppWorkflowView | "settings", boolean>;
 
 const UNSAVED_SETTINGS_UNLOAD_MESSAGE = "You have unsaved settings changes. Reload and lose those changes?";
-const UNSAVED_SETTINGS_DISCARD_MESSAGE = "You have unsaved settings changes. Close settings and discard them?";
+const UNSAVED_SETTINGS_DISCARD_MESSAGE = "You have unsaved settings changes. Leave the System page and discard them?";
 
 const settingsDraftHasChanges = (webappState?: WebappState | null): boolean => {
   if (!(webappState?.settings && webappState.draftSettings)) return false;

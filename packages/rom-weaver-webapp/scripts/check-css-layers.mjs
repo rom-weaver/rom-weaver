@@ -39,7 +39,7 @@ const EXEMPT = new Map([
   [".rw-app .ofld .select >>> .rw-app .select", IOS_FONT_FLOOR],
   [".rw-app .setrow .input >>> .rw-app .input", IOS_FONT_FLOOR],
   [".rw-app .setrow .select >>> .rw-app .select", IOS_FONT_FLOOR],
-  [".rw-app .dlg-subhead .loglevel .select >>> .rw-app .select", IOS_FONT_FLOOR],
+  [".rw-app .system-subhead .loglevel .select >>> .rw-app .select", IOS_FONT_FLOOR],
 ]);
 
 const scrub = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");

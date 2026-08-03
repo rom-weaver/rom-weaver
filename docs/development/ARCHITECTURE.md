@@ -486,10 +486,11 @@ readouts, sage verification).
 - **Shell.** `packages/rom-weaver-webapp/src/webapp/components/shell.tsx`
   (masthead, mode rail with the
   sliding thumb, reveal banners, selvage status strip),
-  `packages/rom-weaver-webapp/src/webapp/components/log-dialog.tsx` (native
-  `<dialog>` trace inspector over
-  `packages/rom-weaver-webapp/src/webapp/log-store.ts`, which chains a
-  capturing sink onto the logger). The selvage state comes from
+  `packages/rom-weaver-webapp/src/webapp/system-page.tsx` (the `/system` route:
+  settings, build/offline status, the trace inspector over
+  `packages/rom-weaver-webapp/src/webapp/log-store.ts` - which chains a
+  capturing sink onto the logger - the OPFS listing, and the changelog, one URL
+  per tab). The selvage state comes from
   `packages/rom-weaver-webapp/src/lib/activity-store.ts`, which the workflow
   forms publish to (idle/running/done/failed + the active stage line).
 - **Primitives.** `packages/rom-weaver-webapp/src/public/react/components/ds/`

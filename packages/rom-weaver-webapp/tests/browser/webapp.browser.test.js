@@ -74,7 +74,6 @@ const waitForInputStackFile = async (fileName) => {
 
 const createNoopActions = () => ({
   onCancelConfirmation: () => undefined,
-  onCloseSettings: () => undefined,
   onConfirmConfirmation: () => undefined,
   onCreatorModifiedChange: () => undefined,
   onCreatorOriginalChange: () => undefined,
@@ -107,7 +106,6 @@ const createWebappState = (settings = getDefaultSettings()) => ({
   draftSettings: settings,
   patcherSession: createEmptyPatcherSessionState(),
   settings,
-  settingsDialogOpen: false,
   startup: {
     message: "",
     status: "ready",
@@ -189,15 +187,16 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps Trim and Tools behind the beta flag and Guides in front of it", async () => {
   mountWebappRoot();
-  // Docs is reference rather than a workflow, but it rides in the rail so the
-  // readers it is written for do not have to go hunting for it.
+  // Docs is reference and System is chrome, but both ride in the rail: the
+  // readers Docs is written for should not have to go hunting for it, and
+  // settings behind an unlabelled gear were found by nobody.
   await expect
     .poll(() =>
       [...document.querySelectorAll('.mode-rail [role="tab"]')]
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply", "Create", "Docs"]);
+    .toEqual(["Apply", "Create", "Docs", "System"]);
 });
 
 test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {
@@ -400,11 +399,13 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
   }
 });
 
-test("WebappRoot keeps diagnostics out of the masthead - the Log dialog owns them", async () => {
-  // The header stays theme / log / settings; the console-copy and mobile dev
-  // tools toggles were folded into the Log dialog surface.
+test("WebappRoot keeps diagnostics out of the masthead - the System route owns them", async () => {
+  // The header keeps theme and accent; logs, settings and every other readout
+  // are a tab in the nav, so there is no icon tray to hide them in.
   mountWebappRoot();
-  await expect.element(page.getByRole("button", { name: "Log" })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: "System" }).first()).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Log" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Settings" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });

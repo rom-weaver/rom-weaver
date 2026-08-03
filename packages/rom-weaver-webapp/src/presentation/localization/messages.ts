@@ -103,6 +103,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.nav.docs": msg({ id: "ui.nav.docs", message: "Docs" }),
   "ui.nav.home": msg({ id: "ui.nav.home", message: "rom-weaver home" }),
   "ui.nav.primary": msg({ id: "ui.nav.primary", message: "Workflow" }),
+  "ui.nav.system": msg({ id: "ui.nav.system", message: "System" }),
   "ui.log.tabChangelog": msg({ id: "ui.log.tabChangelog", message: "Changelog" }),
   "ui.log.tabLogs": msg({ id: "ui.log.tabLogs", message: "Logs" }),
   "ui.log.tabStatus": msg({ id: "ui.log.tabStatus", message: "Status" }),

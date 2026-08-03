@@ -16,6 +16,7 @@ import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
 import { readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
+import { SYSTEM_ROUTE_SLUGS } from "./src/webapp/system-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
@@ -418,10 +419,21 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         ["create", createHtml],
         ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
         ["tools", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
+        // One document per System tab, so a deep link resolves offline instead
+        // of falling through to 404.html. Chrome only - no prerendered shell -
+        // so they inherit the patcher markup exactly as trim and tools do.
+        ...SYSTEM_ROUTE_SLUGS.map((systemSlug) => [
+          systemSlug,
+          withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, systemSlug), routePreloadLinks.get("system")),
+        ]),
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });
-        fs.writeFileSync(path.join(routeDir, "index.html"), html.replace("<head>", '<head>\n    <base href="../" />'));
+        const baseHref = "../".repeat(slug.split("/").length);
+        fs.writeFileSync(
+          path.join(routeDir, "index.html"),
+          html.replace("<head>", `<head>\n    <base href="${baseHref}" />`),
+        );
       }
       fs.writeFileSync(path.join(distDir, "robots.txt"), createRobotsSource(channel));
       if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
@@ -615,6 +627,7 @@ const devPrerenderRoute = (url) => {
   if (segments.at(-1) === "index.html") segments.pop();
   const slug = segments.at(-1) || "";
   if (segments.includes("docs")) return { docsSlug: readDocsSlugFromPathname(pathname), view: "docs" };
+  if (segments.includes("system")) return { docsSlug: "docs", view: "system" };
   return {
     docsSlug: "docs",
     view: slug === "create" || slug === "create.html" ? "creator" : "patcher",
@@ -702,6 +715,7 @@ const WORKFLOW_ROUTE_MODULES = {
   creator: "src/public/react/create-patch-form.tsx",
   docs: "src/webapp/docs-page.tsx",
   patcher: "src/public/react/apply-patch-form.tsx",
+  system: "src/webapp/system-page.tsx",
   tools: "src/webapp/components/tools-form.tsx",
   trim: "src/public/react/trim-form.tsx",
 };

@@ -1,6 +1,7 @@
 import type { PageUpdateState } from "./page-update-state.ts";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import type { ServiceWorkerStatus } from "./pwa/service-worker-cache-state.ts";
+import type { SystemTab } from "./system-tabs.ts";
 import type { UrlSessionParseResult } from "./url-session/url-session-request.ts";
 import type {
   CreatorSessionState,
@@ -31,6 +32,8 @@ const createEmptyConfirmationDialogState = (): ConfirmationDialogState => ({
 
 type WebappRootProps = {
   docsSlug?: string;
+  /** Which System tab the URL names; `/system` alone means the first one. */
+  systemTab?: SystemTab;
   /** Render the normal app chrome with a not-found workbench. */
   notFound?: boolean;
   state: {
@@ -39,7 +42,6 @@ type WebappRootProps = {
     patcherSession: PatcherSessionState;
     toolsSession: { active: boolean };
     trimSession: TrimSessionState;
-    settingsDialogOpen: boolean;
     settings: {
       [key: string]: RuntimeValue;
     };
@@ -69,7 +71,6 @@ type WebappRootProps = {
     onLogLevelChange: (level: string) => void;
     onOpenSettings: () => void;
     onReset: () => void;
-    onCloseSettings: () => void;
     onReloadUpdate: () => void;
     onRestoreDefaults: () => void;
     onSaveClose: () => void;

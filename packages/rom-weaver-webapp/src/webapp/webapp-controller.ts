@@ -30,7 +30,7 @@ import {
 } from "./webapp-state-types.ts";
 
 const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
-const VALID_WORKFLOW_VIEWS: readonly WebappView[] = ["patcher", "creator", "docs", "trim", "tools"];
+const VALID_WORKFLOW_VIEWS: readonly WebappView[] = ["patcher", "creator", "docs", "trim", "tools", "system"];
 const ACTIVE_VIEW_STORAGE_KEY = "rom-weaver-active-view";
 
 const normalizeWorkflowView = (value: unknown): WebappView | null => {
@@ -43,11 +43,12 @@ const isBetaWorkflowView = (view: WebappView): boolean => view === "trim" || vie
 const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
 
-// The guides are a document route people reach by URL or search, not a
-// workflow with in-progress state to come back to. Storing one would make the
-// site root resume it, so reading a guide would quietly redirect `/` to /docs.
-// Read is guarded too, to retire a value stored before this rule existed.
-const isResumableWorkflowView = (view: WebappView): boolean => view !== "docs";
+// The guides and the system page are routes people reach by URL or by going
+// looking, not workflows with in-progress state to come back to. Storing one
+// would make the site root resume it, so reading a guide or checking a setting
+// would quietly redirect `/` away from the workbench. Read is guarded too, to
+// retire a value stored before this rule existed.
+const isResumableWorkflowView = (view: WebappView): boolean => view !== "docs" && view !== "system";
 
 /** Restore the last-used workflow tab so a reload returns to the same tab. */
 const loadPersistedWorkflowView = (storage?: ControllerOptions["storage"]): WebappView => {
@@ -73,6 +74,7 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   creator: "create",
   docs: "docs",
   patcher: "apply",
+  system: "system",
   tools: "tools",
   trim: "trim",
 };
@@ -83,11 +85,32 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "create.html": "creator",
   docs: "docs",
   "docs.html": "docs",
+  system: "system",
+  "system.html": "system",
   tools: "tools",
   trim: "trim",
   // Keep old links usable when a host has not applied the server redirect.
   weave: "patcher",
   "weave.html": "patcher",
+};
+
+/**
+ * Routes that own a sub-path (`/docs/<guide>`, `/system/<tab>`). Their first
+ * segment decides the view, and the segments after it belong to the route
+ * rather than to the router - so the base URL strips from that segment on, and
+ * a view change never rewrites a sub-path back to its parent.
+ */
+const NESTED_ROUTE_SEGMENTS: Record<string, WebappView> = {
+  docs: "docs",
+  system: "system",
+};
+
+const findNestedRouteSegment = (segments: readonly string[]): { index: number; view: WebappView } | null => {
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const view = NESTED_ROUTE_SEGMENTS[segments[index] as string];
+    if (view) return { index, view };
+  }
+  return null;
 };
 
 const readRouteSegments = (pathname?: string): string[] => {
@@ -99,7 +122,8 @@ const readRouteSegments = (pathname?: string): string[] => {
 
 const readWorkflowViewFromPath = (pathname?: string): WebappView | null => {
   const segments = readRouteSegments(pathname);
-  if (segments.includes("docs")) return "docs";
+  const nested = findNestedRouteSegment(segments);
+  if (nested) return nested.view;
   const slug = segments.at(-1) || "";
   return ROUTE_SLUG_TO_VIEW[slug] || null;
 };
@@ -117,8 +141,8 @@ const readAppBaseUrl = (): string => {
   const pathSegments = baseUrl.pathname.split("/");
   while (pathSegments.at(-1) === "") pathSegments.pop();
   if (pathSegments.at(-1) === "index.html") pathSegments.pop();
-  const docsIndex = pathSegments.lastIndexOf("docs");
-  if (docsIndex >= 0) pathSegments.splice(docsIndex);
+  const nested = findNestedRouteSegment(pathSegments.map((segment) => segment.toLowerCase()));
+  if (nested) pathSegments.splice(nested.index);
   else {
     const currentSlug = (pathSegments.at(-1) || "").toLowerCase();
     if (ROUTE_SLUG_TO_VIEW[currentSlug]) pathSegments.pop();
@@ -131,11 +155,13 @@ const readAppBaseUrl = (): string => {
 
 type RouteHistoryMode = "none" | "push" | "replace";
 
-const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode): void => {
+const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode, resumePath?: string | null): void => {
   if (typeof window === "undefined") return;
   if (historyMode === "none") return;
-  if (view === "docs" && readRouteSegments().includes("docs")) return;
-  const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
+  // Already inside the route's own sub-path: the sub-slug is the address, and
+  // collapsing it to the parent would throw the reader back to the hub.
+  if (findNestedRouteSegment(readRouteSegments())?.view === view) return;
+  const nextUrl = new URL(resumePath || VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
   nextUrl.search = window.location.search;
   if (nextUrl.href === window.location.href) return;
   window.history[historyMode === "push" ? "pushState" : "replaceState"](window.history.state, "", nextUrl);
@@ -147,7 +173,6 @@ type WebappState = {
   patcherSession: PatcherSessionState;
   toolsSession: ToolsSessionState;
   trimSession: TrimSessionState;
-  settingsDialogOpen: boolean;
   settings: SettingsState;
   draftSettings: SettingsDraftState;
   validation: ValidationState;
@@ -235,7 +260,6 @@ const createWebappRootController = (options: ControllerOptions) => {
     draftSettings: copySettings(settings),
     patcherSession: createEmptyPatcherSessionState(),
     settings,
-    settingsDialogOpen: false,
     startup: {
       message: "",
       status: "loading",
@@ -295,10 +319,22 @@ const createWebappRootController = (options: ControllerOptions) => {
     options.onLocalizationChange(nextSettings.language);
   };
 
+  // Which System tab the visitor was last on. The route keeps its state while
+  // it is hidden, so coming back to it should come back to the same address -
+  // otherwise the nav tab always lands on Settings.
+  let systemResumePath: string | null = null;
+  const rememberSystemPath = () => {
+    if (typeof window === "undefined") return;
+    if (store.getState().currentView !== "system") return;
+    if (readWorkflowViewFromPath(window.location.pathname) !== "system") return;
+    systemResumePath = window.location.pathname;
+  };
+
   const commitMode = (mode: WebappView, historyMode: RouteHistoryMode = "push") => {
+    rememberSystemPath();
     setState({ currentView: mode });
     persistWorkflowView(options.storage, mode);
-    writeWorkflowViewToPath(mode, historyMode);
+    writeWorkflowViewToPath(mode, historyMode, mode === "system" ? systemResumePath : null);
   };
 
   const updatePatcherSession = (nextPatcherSession: Partial<PatcherSessionState>) => {
@@ -335,15 +371,10 @@ const createWebappRootController = (options: ControllerOptions) => {
     ) {
       return this.selectView(mode, optionsForSelection);
     },
-    closeSettings() {
-      if (!store.getState().settingsDialogOpen) return;
-      setState({ settingsDialogOpen: false });
-    },
     discardDraftSettings() {
       const state = store.getState();
       setState({
         draftSettings: copySettings(state.settings),
-        settingsDialogOpen: false,
         validation: emptyValidation(),
       });
     },
@@ -354,13 +385,19 @@ const createWebappRootController = (options: ControllerOptions) => {
       const state = store.getState();
       return !areSettingsEqual(state.draftSettings, state.settings);
     },
+    /**
+     * Stage a draft for the settings tab. An unsaved one is kept rather than
+     * reset, and an already-clean one is left alone: the store notifies on
+     * every write, and this runs from an effect on entering the tab, so a
+     * write here with nothing to change would re-render forever.
+     */
     openSettings() {
       const state = store.getState();
-      const hasUnsavedDraftChanges = !areSettingsEqual(state.draftSettings, state.settings);
+      if (!areSettingsEqual(state.draftSettings, state.settings)) return;
+      if (state.validation.messages.length === 0) return;
       setState({
-        draftSettings: hasUnsavedDraftChanges ? state.draftSettings : copySettings(state.settings),
-        settingsDialogOpen: true,
-        validation: hasUnsavedDraftChanges ? state.validation : emptyValidation(),
+        draftSettings: copySettings(state.settings),
+        validation: emptyValidation(),
       });
     },
     reloadPersistedSettings() {
@@ -386,7 +423,6 @@ const createWebappRootController = (options: ControllerOptions) => {
         creatorSession: createEmptyCreatorSessionState(),
         draftSettings: copySettings(state.settings),
         patcherSession: createEmptyPatcherSessionState(),
-        settingsDialogOpen: false,
         startup: { message: "", status: "ready" },
         toolsSession: createEmptyToolsSessionState(),
         trimSession: createEmptyTrimSessionState(),
@@ -398,7 +434,7 @@ const createWebappRootController = (options: ControllerOptions) => {
         draftSettings: getDefaultSettings(),
         validation: {
           invalidFields: [],
-          messages: ["Defaults staged. Save and close to apply them."],
+          messages: ["Defaults staged. Save to apply them."],
         },
       });
     },
@@ -415,7 +451,6 @@ const createWebappRootController = (options: ControllerOptions) => {
         syncDraftSettings: true,
         validation: emptyValidation(),
       });
-      setState({ settingsDialogOpen: false });
       return true;
     },
     selectView(mode: string, optionsForSelection?: { fallbackOnError?: boolean; historyMode?: RouteHistoryMode }) {

@@ -1,5 +1,5 @@
-import { BookOpen, GitCompare, House, RotateCcw, Scissors, Wrench } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { BookOpen, GitCompare, House, RotateCcw, Scissors, SlidersHorizontal, Wrench } from "lucide-react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
@@ -22,12 +22,13 @@ import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
-import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
-import { getSettingsUiState, SETTINGS_FIELD_METADATA } from "./settings/settings-state.ts";
+import { SETTINGS_FIELD_METADATA } from "./settings/settings-state.ts";
+import type { SystemPageProps } from "./system-page.tsx";
+import type { SystemTab } from "./system-tabs.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
@@ -37,6 +38,7 @@ import {
   CreatePatchRoute,
   DocsPageRoute,
   preloadWorkflowRoute,
+  SystemPageRoute,
   ToolsRouteForm,
   TrimPatchRoute,
 } from "./workflow-routes.tsx";
@@ -52,19 +54,24 @@ const WORKFLOW_TABS = [
   { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
+  // Settings, status, logs, storage and the changelog are one page, so the tab
+  // is named for what it covers rather than for the gear it replaced.
+  { href: "system", icon: <SlidersHorizontal aria-hidden="true" />, id: "system", label: "System" },
 ];
+
+/**
+ * Route links resolve against where the app is served, not against the current
+ * URL: a bare `href="apply"` read from `/docs/faq` would point at
+ * `/docs/apply`, which only ever worked because the click handler intercepts
+ * it - a middle-click or a copied link did not.
+ */
+const routeHref = (path: string) => new URL(path, new URL(readAppBaseUrl(), "http://rom-weaver.invalid")).pathname;
 
 const getGuideView = (guide: GuidedSample): WebappView => (guide === "create" ? "creator" : "patcher");
 
-// Keep the trace inspector out of the initial bundle, but share its loader so
-// the masthead and idle post-boot preload can fetch the same promise.
-const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog }));
-const LogDialog = lazy(loadLogDialog);
-const loadChangelogDialog = () =>
-  import("./components/changelog-dialog.tsx").then((module) => ({ default: module.ChangelogDialog }));
-const ChangelogDialog = lazy(loadChangelogDialog);
-const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
-const SettingsPanel = lazy(loadSettingsPanel);
+/** Docs and System are reference routes: no dropzone, no reset, no drop veil. */
+const isWorkflowView = (view: WebappView) => view !== "docs" && view !== "system";
+
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
 const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
   import("../platform/browser/browser-api.ts").then(({ preloadBrowserRuntime: preload }) => preload(options));
@@ -73,6 +80,10 @@ const logger = createLogger("webapp-root");
 
 const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
+  if (view === "system") {
+    document.title = "rom-weaver - System";
+    return;
+  }
   const route =
     view === "creator" ? WORKFLOW_SEO_ROUTES.creator : view === "patcher" ? WORKFLOW_SEO_ROUTES.patcher : null;
   if (!route) {
@@ -198,6 +209,7 @@ function WebappRoot({
   serviceWorkerCache,
   urlSession,
   docsSlug = "docs",
+  systemTab = "settings",
   notFound = false,
 }: WebappRootProps) {
   useEntryAnimationLock();
@@ -209,16 +221,9 @@ function WebappRoot({
   // forms stay mounted, so without this the last-mounted form would own prompts.
   useEffect(() => {
     if (notFound) return;
-    setActiveSelectionForm(state.currentView === "docs" ? undefined : state.currentView);
+    const workflowView = state.currentView === "docs" || state.currentView === "system" ? undefined : state.currentView;
+    setActiveSelectionForm(workflowView);
   }, [notFound, state.currentView]);
-  const [logOpen, setLogOpen] = useState(false);
-  const [logTab, setLogTab] = useState<LogDialogTab>("status");
-  const [settingsFocusHint, setSettingsFocusHint] = useState<SettingsFocusHint | null>(null);
-  // The settings tab owns a draft, so closing it runs the controller's
-  // discard-confirmation flow first; the dialog itself only closes once that
-  // flow actually clears `settingsDialogOpen`.
-  const settingsCloseArmedRef = useRef(false);
-  const [changelogOpen, setChangelogOpen] = useState(false);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
   // silently discard the user's work. Each form mounts on first visit and then
@@ -262,29 +267,27 @@ function WebappRoot({
   useEffect(() => {
     if (notFound) return;
     let cancelled = false;
-    const preloadDialogsWhenIdle = () => {
+    const preloadSystemWhenIdle = () => {
       if (cancelled) return;
-      void loadLogDialog().catch(() => undefined);
-      void loadSettingsPanel().catch(() => undefined);
-      void loadChangelogDialog().catch(() => undefined);
+      void preloadWorkflowRoute("system").catch(() => undefined);
     };
-    const scheduleDialogPreload = () => {
+    const scheduleSystemPreload = () => {
       if (cancelled) return;
       if (typeof requestIdleCallback === "function") {
-        requestIdleCallback(preloadDialogsWhenIdle, { timeout: 2000 });
+        requestIdleCallback(preloadSystemWhenIdle, { timeout: 2000 });
       } else {
-        window.setTimeout(preloadDialogsWhenIdle, 0);
+        window.setTimeout(preloadSystemWhenIdle, 0);
       }
     };
-    // A guide never reaches the ROM engine, so it warms the dialogs and leaves
-    // the runtime preload to the workflow tabs.
+    // A guide never reaches the ROM engine, so it warms the system route and
+    // leaves the runtime preload to the workflow tabs.
     let cancelPreload: () => void = () => undefined;
     if (state.currentView === "docs") {
-      scheduleDialogPreload();
+      scheduleSystemPreload();
     } else {
       cancelPreload = scheduleBrowserRuntimePreload(() => {
         if (cancelled) return;
-        void preloadBrowserRuntime({ threads }).then(scheduleDialogPreload);
+        void preloadBrowserRuntime({ threads }).then(scheduleSystemPreload);
       });
     }
     return () => {
@@ -292,57 +295,23 @@ function WebappRoot({
       cancelPreload();
     };
   }, [notFound, state.currentView, threads]);
-  const preloadSettingsPanel = useCallback(() => {
-    void loadSettingsPanel().catch(() => undefined);
+  const preloadSystemRoute = useCallback(() => {
+    void preloadWorkflowRoute("system").catch(() => undefined);
   }, []);
-  // The panel is lazy, but the dialog opens immediately: its tab rail is the
-  // header, so a still-loading panel shows a usable frame rather than a bare
-  // one. Hover/focus/idle preloads mean it is almost always already resident.
-  const openSettingsTab = useCallback(
-    (fieldId?: string) => {
-      preloadSettingsPanel();
-      settingsCloseArmedRef.current = false;
-      setSettingsFocusHint(fieldId ? { fieldId, token: Date.now() } : null);
-      setLogTab("settings");
-      setLogOpen(true);
-      actions.onOpenSettings();
-    },
-    [actions, preloadSettingsPanel],
-  );
-  const handleDialogTabChange = useCallback(
-    (tab: LogDialogTab) => {
-      setLogTab(tab);
-      // Reaching Settings from inside the dialog must stage a draft exactly the
-      // way the gear does, or the panel would edit a stale one.
-      if (tab === "settings") {
-        preloadSettingsPanel();
-        actions.onOpenSettings();
-      }
-    },
-    [actions, preloadSettingsPanel],
-  );
-  const closeDialog = useCallback(() => {
-    if (!state.settingsDialogOpen) {
-      setLogOpen(false);
-      return;
-    }
-    settingsCloseArmedRef.current = true;
-    actions.onCloseSettings();
-  }, [actions, state.settingsDialogOpen]);
-  const saveSettings = useCallback(() => {
-    settingsCloseArmedRef.current = true;
-    actions.onSaveClose();
-  }, [actions]);
+  // Entering the Settings tab stages a draft off the committed settings; an
+  // unsaved one is kept, so leaving the page and coming back does not discard
+  // an edit in progress.
+  const [lastSystemTab, setLastSystemTab] = useState<SystemTab>(systemTab);
   useEffect(() => {
-    if (state.settingsDialogOpen || !settingsCloseArmedRef.current) return;
-    settingsCloseArmedRef.current = false;
-    logger.trace("unified dialog closing after the settings draft settled");
-    setLogOpen(false);
-  }, [state.settingsDialogOpen]);
+    if (state.currentView === "system") setLastSystemTab(systemTab);
+  }, [state.currentView, systemTab]);
+  const onSystemTab = state.currentView === "system" && systemTab === "settings";
+  const openSettingsRef = useRef(actions.onOpenSettings);
+  openSettingsRef.current = actions.onOpenSettings;
+  useEffect(() => {
+    if (onSystemTab) openSettingsRef.current();
+  }, [onSystemTab]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
-  const preloadLogDialog = useCallback(() => {
-    void loadLogDialog().catch(() => undefined);
-  }, []);
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
@@ -387,7 +356,7 @@ function WebappRoot({
   // fires continuously, so a short debounce clears the flag once it stops (drag
   // left the window or dropped) - `dragleave`/`dragend` are unreliable here.
   useEffect(() => {
-    if (notFound || state.currentView === "docs") {
+    if (notFound || !isWorkflowView(state.currentView)) {
       setPageDragging(false);
       return undefined;
     }
@@ -414,7 +383,7 @@ function WebappRoot({
   // Page-level drag: dropping a file anywhere on the page (outside a dropzone
   // box) forwards it to the active tab's unified drop handler via `pageDrop`.
   useEffect(() => {
-    if (notFound || state.currentView === "docs") return undefined;
+    if (notFound || !isWorkflowView(state.currentView)) return undefined;
     const handlePageDragOver = (event: DragEvent) => {
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
@@ -424,7 +393,7 @@ function WebappRoot({
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (logOpen || state.settingsDialogOpen || confirmationDialog.open) return;
+      if (confirmationDialog.open) return;
       const droppedAtMs = perfNow();
       // Read synchronously so dropped folders are captured before the transfer
       // clears; routing/classification is owned by the active tab's unified drop
@@ -455,8 +424,15 @@ function WebappRoot({
       document.removeEventListener("dragover", handlePageDragOver);
       document.removeEventListener("drop", handlePageDrop);
     };
-  }, [confirmationDialog.open, logOpen, notFound, state.currentView, state.settingsDialogOpen]);
+  }, [confirmationDialog.open, notFound, state.currentView]);
 
+  const systemHref = (tab: SystemTab) => routeHref(tab === "settings" ? "system" : `system/${tab}`);
+  // Coming back to System from a workflow returns to the tab it was left on -
+  // the route keeps its state, so its address should keep it too.
+  const routedTabs = WORKFLOW_TABS.map((tab) => ({
+    ...tab,
+    href: tab.id === "system" ? systemHref(lastSystemTab) : routeHref(tab.href),
+  }));
   const workflowPanel = (view: WebappView, form: React.ReactNode) =>
     isViewMounted(view) ? (
       <section
@@ -466,11 +442,11 @@ function WebappRoot({
         id={`panel-${view}`}
         role="tabpanel"
       >
-        {view === "docs" ? null : (
+        {isWorkflowView(view) ? (
           <div className="workflow-panel-head">
             <ResetButton onReset={actions.onReset} />
           </div>
-        )}
+        ) : null}
         <div className="workflow-body">
           {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
           <Suspense fallback={null}>{form}</Suspense>
@@ -482,9 +458,6 @@ function WebappRoot({
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
         <div className="app">
           <Masthead
-            // "/" maps to no route, so the brand has to name one or the browser
-            // hard-reloads and every staged file goes with it.
-            homeHref="/apply"
             channelBadge={CHANNEL_BADGE}
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={notFound ? "" : state.currentView}
@@ -493,20 +466,12 @@ function WebappRoot({
             commitsSinceVersion={COMMITS_SINCE_VERSION}
             dirty={Boolean(DIRTY_HASH)}
             donateHref={DONATE_URL}
-            onOpenChangelog={() => setChangelogOpen(true)}
-            onOpenLog={() => {
-              setLogTab("logs");
-              setLogOpen(true);
-            }}
-            onOpenStatus={() => {
-              setLogTab("status");
-              setLogOpen(true);
-            }}
-            onPreloadLog={preloadLogDialog}
-            onOpenSettings={() => openSettingsTab()}
-            onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
-            onPreloadSettings={preloadSettingsPanel}
+            changelogHref={systemHref("changelog")}
+            homeHref={notFound ? "/apply" : routeHref("apply")}
+            onPreloadSystem={preloadSystemRoute}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+            statusHref={systemHref("status")}
+            threadsHref={`${systemHref("settings")}#${SETTINGS_FIELD_METADATA.threads.id}`}
             threads={resolveThreads(threads)}
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
@@ -519,20 +484,10 @@ function WebappRoot({
               }
               selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]));
             }}
-            settingsOpen={logOpen && logTab === "settings"}
-            tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
+            tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : routedTabs}
             tabsControlPanels={!notFound}
           />
           <UpdateBanner onReload={actions.onReloadUpdate} open={pageUpdate.ready} />
-          {changelogOpen ? (
-            <Suspense fallback={null}>
-              <ChangelogDialog
-                onClose={() => setChangelogOpen(false)}
-                onReload={actions.onReloadUpdate}
-                open={changelogOpen}
-              />
-            </Suspense>
-          ) : null}
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLockNotice />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
@@ -606,7 +561,25 @@ function WebappRoot({
                   "tools",
                   <ToolsRouteForm onSessionChange={actions.onToolsSessionChange} pageDrop={activePageDrop} />,
                 )}
-                {state.currentView === "docs" ? null : <DropVeil />}
+                {workflowPanel(
+                  "system",
+                  <SystemPageRoute
+                    active={state.currentView === "system"}
+                    draftSettings={state.draftSettings as SystemPageProps["draftSettings"]}
+                    level={state.settings.logLevel}
+                    onDraftChange={actions.onDraftChange}
+                    onLevelChange={actions.onLogLevelChange}
+                    onReload={actions.onReloadUpdate}
+                    onRestoreDefaults={actions.onRestoreDefaults}
+                    onSaveSettings={actions.onSaveClose}
+                    serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+                    tab={systemTab}
+                    tabHref={systemHref}
+                    updateReady={pageUpdate.ready}
+                    validation={state.validation}
+                  />,
+                )}
+                {isWorkflowView(state.currentView) ? <DropVeil /> : null}
               </>
             )}
           </main>
@@ -615,35 +588,6 @@ function WebappRoot({
           <div aria-hidden="true" className="dock-pad" />
         </div>
         <ActivityFinishMarker />
-        {logOpen ? (
-          <Suspense fallback={null}>
-            <LogDialog
-              initialTab={logTab}
-              level={state.settings.logLevel}
-              onClose={closeDialog}
-              onLevelChange={actions.onLogLevelChange}
-              onOpenChangelog={() => setChangelogOpen(true)}
-              onReload={actions.onReloadUpdate}
-              onRestoreDefaults={actions.onRestoreDefaults}
-              onSaveSettings={saveSettings}
-              onTabChange={handleDialogTabChange}
-              open={logOpen}
-              serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
-              settingsFocusHint={settingsFocusHint}
-              settingsPanel={
-                <Suspense fallback={null}>
-                  <SettingsPanel
-                    draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-                    onDraftChange={actions.onDraftChange}
-                    uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
-                    validation={state.validation}
-                  />
-                </Suspense>
-              }
-              updateReady={pageUpdate.ready}
-            />
-          </Suspense>
-        ) : null}
         <ConfirmDialog
           body={confirmationDialog.message}
           cancelLabel={confirmationDialog.cancelLabel}

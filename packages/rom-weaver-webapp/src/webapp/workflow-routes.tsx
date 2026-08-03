@@ -3,6 +3,7 @@ import { createLogger } from "../lib/logging.ts";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
 import type { ToolsFormProps } from "./components/tools-form.tsx";
+import type { SystemPageProps } from "./system-page.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
 
 /**
@@ -30,6 +31,7 @@ type WorkflowRouteProps = {
     slug: string;
   };
   patcher: ApplyPatchFormProps;
+  system: SystemPageProps;
   tools: ToolsFormProps;
   trim: TrimPatchFormProps;
 };
@@ -94,6 +96,9 @@ const DocsRoute = createWorkflowRoute("docs", () =>
 const PatcherRoute = createWorkflowRoute("patcher", () =>
   import("../public/react/apply-patch-form.tsx").then((module) => ({ default: module.ApplyPatchForm })),
 );
+const SystemRoute = createWorkflowRoute("system", () =>
+  import("./system-page.tsx").then((module) => ({ default: module.SystemPage })),
+);
 const ToolsRoute = createWorkflowRoute("tools", () =>
   import("./components/tools-form.tsx").then((module) => ({ default: module.ToolsForm })),
 );
@@ -105,6 +110,7 @@ const WORKFLOW_ROUTES = {
   creator: CreatorRoute,
   docs: DocsRoute,
   patcher: PatcherRoute,
+  system: SystemRoute,
   tools: ToolsRoute,
   trim: TrimRoute,
 } as const;
@@ -112,6 +118,7 @@ const WORKFLOW_ROUTES = {
 const CreatePatchRoute = CreatorRoute.Component;
 const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
+const SystemPageRoute = SystemRoute.Component;
 const ToolsRouteForm = ToolsRoute.Component;
 const TrimPatchRoute = TrimRoute.Component;
 
@@ -132,6 +139,7 @@ export {
   DocsPageRoute,
   preloadDocsRouteHtml,
   preloadWorkflowRoute,
+  SystemPageRoute,
   ToolsRouteForm,
   TrimPatchRoute,
 };

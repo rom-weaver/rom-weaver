@@ -34,7 +34,6 @@ describe("createWebappRootController over the vanilla store", () => {
   it("starts on the default workflow view with seeded session state", () => {
     const state = createController().getState();
     expect(state.currentView).toBe("patcher");
-    expect(state.settingsDialogOpen).toBe(false);
     expect(state.patcherSession.romFilePresent).toBe(false);
     expect(window.location.pathname).toBe("/apply");
   });
@@ -114,6 +113,40 @@ describe("createWebappRootController over the vanilla store", () => {
 
     controller.selectView("creator");
     expect(window.location.pathname).toBe("/rom-weaver/create");
+  });
+
+  it("keeps nested system tabs and never resumes into them", () => {
+    window.history.replaceState({}, "", "/system/logs");
+    const controller = createController();
+    expect(controller.getState().currentView).toBe("system");
+    // The sub-slug is the address; selecting the route again must not collapse
+    // it back to the tab rail's first tab.
+    expect(window.location.pathname).toBe("/system/logs");
+    controller.selectView("system");
+    expect(window.location.pathname).toBe("/system/logs");
+
+    controller.selectView("patcher");
+    expect(window.location.pathname).toBe("/apply");
+    // System is chrome, not work in progress, so `/` never resumes there.
+    window.history.replaceState({}, "", "/");
+    expect(createController().getState().currentView).toBe("patcher");
+  });
+
+  it("returns to the system tab it was left on", () => {
+    window.history.replaceState({}, "", "/system/storage");
+    const controller = createController();
+    controller.selectView("patcher");
+    expect(window.location.pathname).toBe("/apply");
+    controller.selectView("system");
+    expect(window.location.pathname).toBe("/system/storage");
+  });
+
+  it("resolves the system route from every shape of its path", () => {
+    expect(readWorkflowViewFromPath("/system")).toBe("system");
+    expect(readWorkflowViewFromPath("/system/")).toBe("system");
+    expect(readWorkflowViewFromPath("/system/index.html")).toBe("system");
+    expect(readWorkflowViewFromPath("/system/storage")).toBe("system");
+    expect(readWorkflowViewFromPath("/rom-weaver/system/changelog")).toBe("system");
   });
 
   it("preserves URL session parameters without emitting hash routes", () => {
@@ -247,7 +280,6 @@ describe("createWebappRootController over the vanilla store", () => {
       pendingDownloadFileName: null,
       romFilePresent: false,
     });
-    expect(state.settingsDialogOpen).toBe(false);
     expect(state.draftSettings).toEqual(state.settings);
     expect(state.startup).toEqual({ message: "", status: "ready" });
     expect(state.toolsSession.active).toBe(false);

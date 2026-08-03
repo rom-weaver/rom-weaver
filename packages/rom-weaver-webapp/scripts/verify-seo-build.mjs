@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
 import { isLegalDocRoute } from "../src/webapp/docs-routing.mjs";
+import { SYSTEM_ROUTE_SLUGS } from "../src/webapp/system-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
@@ -52,6 +53,11 @@ const robots = read("robots.txt");
 
 for (const route of ["apply", "create", "trim", "tools"]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
+}
+// One document per System tab, each with the base depth its own nesting needs.
+for (const slug of SYSTEM_ROUTE_SLUGS) {
+  const baseHref = "../".repeat(slug.split("/").length);
+  assertIncludes(read(`${slug}/index.html`), `<base href="${baseHref}" />`, `${slug} static-host route`);
 }
 assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
 assertIncludes(
@@ -153,6 +159,7 @@ for (const route of [
   "create/index.html",
   "trim/index.html",
   "tools/index.html",
+  "system/index.html",
 ]) {
   const html = read(route);
   assertIncludes(html, runtimeResolver, `${route} parser-time runtime status resolver placement`);
@@ -278,7 +285,7 @@ for (const script of bundledScripts) {
     throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
 }
 
-for (const beta of ["trim", "tools"]) {
+for (const beta of ["trim", "tools", ...SYSTEM_ROUTE_SLUGS]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
     read(`${beta}/index.html`),
@@ -315,7 +322,14 @@ if (production) {
 // generated manifest is on disk.
 const precacheManifest = read("cache-service-worker.js");
 assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
-for (const slug of [...DOC_ROUTES.map((route) => route.slug), "apply", "create", "tools", "trim"]) {
+for (const slug of [
+  ...DOC_ROUTES.map((route) => route.slug),
+  ...SYSTEM_ROUTE_SLUGS,
+  "apply",
+  "create",
+  "tools",
+  "trim",
+]) {
   assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);
 }
 

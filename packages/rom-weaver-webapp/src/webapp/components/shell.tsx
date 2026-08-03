@@ -1,4 +1,4 @@
-import { createLucideIcon, Heart, Moon, Palette, ScrollText, Settings, SunMedium, X } from "lucide-react";
+import { createLucideIcon, Heart, Moon, Palette, SunMedium, X } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -469,23 +469,24 @@ const CHANNEL_MESSAGES: Record<string, MessageId> = {
 };
 
 const BuildTag = ({
+  changelogHref,
   channelBadge,
   commitDistance,
   confirmExternalNavigation,
   dirty,
   githubBaseHref,
   localizer,
-  onOpenChangelog,
   version,
   versionTitle,
 }: {
+  /** The System route's changelog tab - what shipped in this build. */
+  changelogHref: string;
   channelBadge?: string;
   commitDistance: number;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   dirty?: boolean;
   githubBaseHref?: string;
   localizer: Localizer;
-  onOpenChangelog: () => void;
   version: string;
   versionTitle?: string;
 }) => {
@@ -521,37 +522,30 @@ const BuildTag = ({
     const name = nameId ? localizer.message(nameId) : channelBadge;
     return (
       <span className="build-tag">
-        <button
-          aria-haspopup="dialog"
+        <a
           aria-label={`${name}, ${versionText}`}
           className="sub-chip channel-badge"
           data-channel={key}
-          onClick={onOpenChangelog}
-          type="button"
+          href={changelogHref}
         >
           <b className="tag-letter">{letter}</b>
           {" · "}
           <span className="tag-version">{versionText}</span>
-        </button>
+        </a>
       </span>
     );
   }
   return (
     <span className="build-tag">
-      <button
-        aria-haspopup="dialog"
-        className="sub-chip sub-link"
-        onClick={onOpenChangelog}
-        title={versionTitle}
-        type="button"
-      >
+      <a className="sub-chip sub-link" href={changelogHref} title={versionTitle}>
         {versionText}
-      </button>
+      </a>
     </span>
   );
 };
 
 const Masthead = ({
+  changelogHref,
   channelBadge,
   commitsSinceVersion,
   onAccentChange,
@@ -561,23 +555,20 @@ const Masthead = ({
   donateHref,
   homeHref,
   onSelectTab,
-  onOpenChangelog,
-  onOpenLog,
-  onOpenStatus,
-  onPreloadLog,
-  onOpenSettings,
-  onOpenThreads,
-  onPreloadSettings,
+  onPreloadSystem,
+  statusHref,
+  threadsHref,
   tabsControlPanels = true,
   serviceWorkerStatus,
   confirmExternalNavigation,
   githubHref,
-  settingsOpen,
   threads,
   updateReady = false,
   version,
   versionTitle,
 }: {
+  /** System route deep links: the chip that states a fact links to the tab that explains it. */
+  changelogHref: string;
   /** Deploy channel marker; empty on production, which wears the plain brand. */
   channelBadge?: string;
   commitsSinceVersion?: number | null;
@@ -589,19 +580,13 @@ const Masthead = ({
   /** The workbench, as a route: a bare "/" maps to no route and so hard-reloads. */
   homeHref: string;
   onSelectTab: (id: string) => void;
-  onOpenChangelog: () => void;
-  onOpenLog: () => void;
-  onOpenStatus: () => void;
-  onPreloadLog?: () => void;
-  onOpenSettings: () => void;
-  /** Deep link from the thread count into the Threads setting; falls back to plain Settings. */
-  onOpenThreads?: () => void;
-  onPreloadSettings?: () => void;
+  onPreloadSystem?: () => void;
+  statusHref: string;
+  threadsHref: string;
   tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   githubHref?: string;
-  settingsOpen?: boolean;
   threads?: number;
   updateReady?: boolean;
   version?: string;
@@ -613,8 +598,6 @@ const Masthead = ({
   const [accentOpen, setAccentOpen] = useState(false);
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
-  const logLabel = localizer.message("ui.tools.log");
-  const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
   const githubLabel = localizer.message("ui.tools.github");
@@ -673,13 +656,13 @@ const Masthead = ({
               {version ? (
                 <span className="sub-item">
                   <BuildTag
+                    changelogHref={changelogHref}
                     channelBadge={channelBadge}
                     commitDistance={commitDistance}
                     confirmExternalNavigation={confirmExternalNavigation}
                     dirty={dirty}
                     githubBaseHref={githubBaseHref}
                     localizer={localizer}
-                    onOpenChangelog={onOpenChangelog}
                     version={version}
                     versionTitle={versionTitle}
                   />
@@ -687,36 +670,35 @@ const Masthead = ({
               ) : null}
               {threads ? (
                 <span className="sub-item">
-                  <button
-                    aria-haspopup="dialog"
+                  <a
                     aria-label={`${threads} ${threadsLabel}`}
                     className="sub-chip sub-link masthead-threads"
                     data-thread-label={threadsLabel}
-                    onClick={onOpenThreads ?? onOpenSettings}
-                    onFocus={onPreloadSettings}
-                    onPointerDown={onPreloadSettings}
-                    onPointerEnter={onPreloadSettings}
-                    type="button"
+                    href={threadsHref}
+                    onFocus={onPreloadSystem}
+                    onPointerDown={onPreloadSystem}
+                    onPointerEnter={onPreloadSystem}
                   >
                     <span className="masthead-threads-count">{threads}</span>
                     <span aria-hidden="true">T</span>
-                  </button>
+                  </a>
                 </span>
               ) : null}
               <span className="sub-item">
-                <button
-                  aria-haspopup="dialog"
+                <a
                   aria-label={runtimeLabel}
                   className="sub-chip sub-status sub-status-rule"
                   data-sw={runtimeState}
-                  onClick={onOpenStatus}
-                  type="button"
+                  href={statusHref}
+                  onFocus={onPreloadSystem}
+                  onPointerDown={onPreloadSystem}
+                  onPointerEnter={onPreloadSystem}
                 >
                   <RuntimeGlyph state={runtimeState} />
                   <span aria-hidden="true" className="sub-status-text">
                     {runtimeLabel}
                   </span>
-                </button>
+                </a>
               </span>
             </span>
             {/* the parser-time resolver in index.html rewrites the thread count
@@ -774,37 +756,6 @@ const Masthead = ({
             onToggle={() => setAccentOpen((open) => !open)}
             open={accentOpen}
           />
-          <button
-            aria-haspopup="dialog"
-            aria-label={logLabel}
-            className="tool"
-            onClick={onOpenLog}
-            onFocus={onPreloadLog}
-            onPointerDown={onPreloadLog}
-            onPointerEnter={onPreloadLog}
-            type="button"
-          >
-            <ScrollText aria-hidden="true" />
-            <span aria-hidden="true" className="tip">
-              {logLabel}
-            </span>
-          </button>
-          <button
-            aria-expanded={settingsOpen}
-            aria-haspopup="dialog"
-            aria-label={settingsLabel}
-            className="tool"
-            onClick={onOpenSettings}
-            onFocus={onPreloadSettings}
-            onPointerDown={onPreloadSettings}
-            onPointerEnter={onPreloadSettings}
-            type="button"
-          >
-            <Settings aria-hidden="true" />
-            <span aria-hidden="true" className="tip">
-              {settingsLabel}
-            </span>
-          </button>
         </div>
       </header>
       <PhoneDock

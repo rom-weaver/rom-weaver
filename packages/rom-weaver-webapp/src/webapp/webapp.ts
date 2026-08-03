@@ -11,6 +11,7 @@ import { resetBrowserTransientOpfs } from "../storage/browser/browser-opfs-clean
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
+import { readSystemTabFromPathname } from "./system-tabs.ts";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
@@ -292,6 +293,38 @@ const getNavigationGuardState = () => {
   };
 };
 
+/**
+ * The System page stages a settings draft, and a route change is the only
+ * "close" it has. Leaving with unsaved edits therefore asks first - and because
+ * the answer arrives from a dialog, the caller hands over the work to do rather
+ * than waiting on a boolean, so an unguarded switch still commits synchronously
+ * inside its view transition.
+ */
+const runViewChange = (nextView: WebappView, applyChange: () => void) => {
+  const state = webappController.getState();
+  const leavingSystem = state.currentView === "system" && nextView !== "system";
+  if (!(leavingSystem && shouldConfirmDiscardSettings(state))) {
+    applyChange();
+    return;
+  }
+  void (async () => {
+    const accepted = await requestConfirmation({
+      cancelLabel: "Keep editing",
+      confirmLabel: "Discard changes",
+      level: "warning",
+      message: getDiscardSettingsConfirmationMessage(),
+      title: "Discard settings changes?",
+    });
+    if (!accepted) return;
+    webappController.discardDraftSettings();
+    applyChange();
+  })();
+};
+
+const requestViewChange = (view: WebappView) => {
+  runViewChange(view, () => selectViewWithTransition(() => webappController.selectView(view)));
+};
+
 const isLikelyViteReloadTimer = (handler: TimerHandler, timeout?: number) => {
   if (timeout !== VITE_PAGE_RELOAD_TIMEOUT_MS) return false;
   if (typeof handler === "function") return VITE_RELOAD_PATTERN.test(Function.prototype.toString.call(handler));
@@ -395,23 +428,6 @@ const renderWebappRoot = (): undefined => {
   const webappRoot = createElement(WebappClientRoot, {
     actions: {
       onCancelConfirmation: () => closeConfirmationDialog(false),
-      onCloseSettings: () => {
-        const state = webappController.getState();
-        if (!shouldConfirmDiscardSettings(state)) {
-          webappController.closeSettings();
-          return;
-        }
-        void (async () => {
-          const accepted = await requestConfirmation({
-            cancelLabel: "Keep editing",
-            confirmLabel: "Discard changes",
-            level: "warning",
-            message: getDiscardSettingsConfirmationMessage(),
-            title: "Discard settings changes?",
-          });
-          if (accepted) webappController.discardDraftSettings();
-        })();
-      },
       onAccentChange: (accent) => webappController.setAccent(accent),
       onConfirmConfirmation: () => closeConfirmationDialog(true),
       onConfirmExternalNavigation: async () => {
@@ -466,7 +482,7 @@ const renderWebappRoot = (): undefined => {
       onSaveClose: () => {
         webappController.saveDraftSettings();
       },
-      onSelectView: (view) => webappController.selectView(view),
+      onSelectView: (view) => requestViewChange(view),
       onStartGuide: (guide) => {
         const view = guide === "create" ? "creator" : "patcher";
         if (webappController.selectView(view) !== view) return;
@@ -483,6 +499,7 @@ const renderWebappRoot = (): undefined => {
     },
     confirmationDialog: confirmationDialogState,
     docsSlug: readDocsSlugFromPathname(window.location.pathname),
+    systemTab: readSystemTabFromPathname(window.location.pathname),
     notFound: isNotFoundPage,
     pageUpdate: shouldHydrate
       ? getPageUpdateState({
@@ -547,35 +564,46 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
       if (!shouldWarnBeforeUnload(getNavigationGuardState())) return;
       event.preventDefault();
     });
+    // The address the app is actually showing. `popstate` fires after the URL
+    // has already moved, so a declined leave has no other way back to it.
+    let settledRouteUrl = window.location.href;
     const syncRouteFromUrl = (scrollTo?: () => void) => {
       const view = readWorkflowViewFromPath();
       if (!view) return;
       const applyRoute = () => {
+        settledRouteUrl = window.location.href;
         const selectedView = webappController.selectView(view, { historyMode: "none" });
         if (selectedView !== view) webappController.selectView(selectedView, { historyMode: "replace" });
       };
-      // Guide to guide is a page turn inside one route, not a mode switch. The
-      // masthead, trail, and dock are identical either side of it while the
-      // reader's scroll position is not, so a root crossfade dissolves the whole
-      // screen and reads as a reload. The article carries the transition on its
-      // own instead (`docs-page-in` in docs.css), and the scroll lands in the
-      // same synchronous render, so the new guide is never painted at the old
-      // guide's offset first.
-      const withinDocs = view === "docs" && webappController.getState().currentView === "docs";
-      if (withinDocs) {
+      // Guide to guide (and System tab to System tab) is a page turn inside one
+      // route, not a mode switch. The masthead, trail, and dock are identical
+      // either side of it while the reader's scroll position is not, so a root
+      // crossfade dissolves the whole screen and reads as a reload. The article
+      // carries the transition on its own instead (`docs-page-in` in docs.css),
+      // and the scroll lands in the same synchronous render, so the new guide is
+      // never painted at the old guide's offset first.
+      const withinRoute = view === webappController.getState().currentView && (view === "docs" || view === "system");
+      if (withinRoute) {
         applyRoute();
         scrollTo?.();
         return;
       }
-      selectViewWithTransition(applyRoute);
-      // A mode switch updates inside a view transition, so the DOM the scroll
-      // target lives in only exists on the next frame.
-      if (scrollTo) window.requestAnimationFrame(scrollTo);
+      runViewChange(view, () => {
+        selectViewWithTransition(applyRoute);
+        // A mode switch updates inside a view transition, so the DOM the scroll
+        // target lives in only exists on the next frame.
+        if (scrollTo) window.requestAnimationFrame(scrollTo);
+      });
     };
 
     // Back/forward carries the browser's own scroll restoration; only a click
     // decides where the reader lands.
-    window.addEventListener("popstate", () => syncRouteFromUrl());
+    window.addEventListener("popstate", () => {
+      const restoreUrl = settledRouteUrl;
+      syncRouteFromUrl();
+      // Declined: the view never moved, so the address has to come back too.
+      if (window.location.href !== settledRouteUrl) window.history.pushState(window.history.state, "", restoreUrl);
+    });
     document.addEventListener("click", (event) => {
       if (!(event.target instanceof Element)) return;
       const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
@@ -583,13 +611,17 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
       const url = getSoftNavigationUrl(event, anchor, new URL(window.location.href));
       if (!url) return;
       event.preventDefault();
-      window.history.pushState(window.history.state, "", url);
-      syncRouteFromUrl(() => {
-        if (url.hash) {
-          document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" });
-        } else {
-          window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-        }
+      const view = readWorkflowViewFromPath(url.pathname);
+      if (!view) return;
+      runViewChange(view, () => {
+        window.history.pushState(window.history.state, "", url);
+        syncRouteFromUrl(() => {
+          if (url.hash) {
+            document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" });
+          } else {
+            window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+          }
+        });
       });
     });
   }

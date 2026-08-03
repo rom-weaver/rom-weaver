@@ -26,17 +26,16 @@ const TABS = [
 ];
 
 const mastheadProps = {
+  changelogHref: "/system/changelog",
   currentTab: "patcher",
-  homeHref: "/apply",
   donateHref: "https://example.com/donate",
   githubHref: "https://example.com/repo",
-  onOpenChangelog: () => undefined,
-  onOpenLog: () => undefined,
-  onOpenSettings: () => undefined,
-  onOpenStatus: () => undefined,
+  homeHref: "/apply",
   onSelectTab: () => undefined,
+  statusHref: "/system/status",
   tabs: TABS,
   threads: 8,
+  threadsHref: "/system#set-threads",
   version: "1.2.3",
 };
 
@@ -73,14 +72,15 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // github + support | theme, accent, log, settings - and Reset is gone: it
-    // lives in the workflow panel head now
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
+    // github + support | theme, accent. Reset lives in the workflow panel head,
+    // and the log and settings gears are the System route now.
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(4);
     expect(container.querySelector(".actions-sep")).toBeTruthy();
     expect(container.querySelector(".tool-support")).toBeTruthy();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     expect(container.querySelector('[aria-label="Reset"]')).toBeNull();
-    expect(getByRole("button", { name: "Log" })).toBeTruthy();
+    expect(container.querySelector('[aria-label="Log"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Settings"]')).toBeNull();
   });
 
   it("activates a tab with Space as well as Enter", () => {
@@ -94,59 +94,31 @@ describe("Masthead", () => {
   });
 
   it("carries the build, thread count and runtime state on the brand sub-line", () => {
-    const onOpenChangelog = vi.fn();
-    const onOpenSettings = vi.fn();
-    const onOpenStatus = vi.fn();
     const { container, rerender } = render(
-      withSettings(
-        <Masthead
-          {...mastheadProps}
-          commitsSinceVersion={3}
-          dirty
-          onOpenChangelog={onOpenChangelog}
-          onOpenSettings={onOpenSettings}
-          onOpenStatus={onOpenStatus}
-          serviceWorkerStatus="active"
-        />,
-      ),
+      withSettings(<Masthead {...mastheadProps} commitsSinceVersion={3} dirty serviceWorkerStatus="active" />),
     );
-    const buildTag = container.querySelector(".build-tag .sub-link") as HTMLButtonElement;
+    // Each chip states a fact and links to the System tab that explains it.
+    const buildTag = container.querySelector(".build-tag .sub-link") as HTMLAnchorElement;
     expect(buildTag.textContent).toBe("v1.2.3+3*");
-    fireEvent.click(buildTag);
-    expect(onOpenChangelog).toHaveBeenCalledTimes(1);
+    expect(buildTag.getAttribute("href")).toBe("/system/changelog");
 
-    const threads = container.querySelector(".masthead-threads") as HTMLButtonElement;
+    const threads = container.querySelector(".masthead-threads") as HTMLAnchorElement;
     expect(threads.textContent).toBe("8T");
     expect(threads.getAttribute("aria-label")).toBe("8 threads");
-    fireEvent.click(threads);
-    // no deep-link handler supplied, so the thread count still just opens settings
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(threads.getAttribute("href")).toBe("/system#set-threads");
 
-    const status = container.querySelector(".sub-status") as HTMLButtonElement;
+    const status = container.querySelector(".sub-status") as HTMLAnchorElement;
     // a service worker controlling this page is `active`; `ready` is the cache
     // that is only standing by for the next load
     expect(status.dataset.sw).toBe("active");
     expect(status.getAttribute("aria-label")).toBe("Offline active");
-    fireEvent.click(status);
-    expect(onOpenStatus).toHaveBeenCalledTimes(1);
+    expect(status.getAttribute("href")).toBe("/system/status");
 
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("disabled");
     // an available update outranks every other runtime state
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="active" updateReady />));
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("update");
-  });
-
-  it("routes the thread count to the threads deep link when one is offered", () => {
-    const onOpenSettings = vi.fn();
-    const onOpenThreads = vi.fn();
-    const { container } = render(
-      withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} onOpenThreads={onOpenThreads} />),
-    );
-
-    fireEvent.click(container.querySelector(".masthead-threads") as HTMLButtonElement);
-    expect(onOpenThreads).toHaveBeenCalledTimes(1);
-    expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
   it("links pull request build tags to their pull request and channels to the changelog", () => {
@@ -160,21 +132,11 @@ describe("Masthead", () => {
     expect(badge.getAttribute("target")).toBe("_blank");
 
     rerender(withSettings(<Masthead {...mastheadProps} channelBadge="nightly" />));
-    const channel = container.querySelector(".channel-badge") as HTMLButtonElement;
-    expect(channel.tagName).toBe("BUTTON");
+    const channel = container.querySelector(".channel-badge") as HTMLAnchorElement;
+    expect(channel.getAttribute("href")).toBe("/system/changelog");
     expect(channel.getAttribute("data-channel")).toBe("nightly");
     expect(channel.getAttribute("aria-label")).toBe("Nightly build, v1.2.3");
     expect(channel.querySelector(".tag-letter")?.textContent).toBe("N");
-  });
-
-  it("preloads the Log dialog before interaction completes", () => {
-    const onPreloadLog = vi.fn();
-    const { getByRole } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
-    const log = getByRole("button", { name: "Log" });
-    fireEvent.pointerEnter(log);
-    fireEvent.focus(log);
-    fireEvent.pointerDown(log);
-    expect(onPreloadLog).toHaveBeenCalledTimes(3);
   });
 
   it("keeps GitHub and Support in the masthead, with no footer to duplicate them", () => {
@@ -209,14 +171,14 @@ describe("Masthead", () => {
     expect(container.querySelector(".accent-tray")).toBeNull();
   });
 
-  it("preloads Settings before interaction completes", () => {
-    const onPreloadSettings = vi.fn();
-    const { getByRole } = render(withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />));
-    const settings = getByRole("button", { name: "Settings" });
-    fireEvent.pointerEnter(settings);
-    fireEvent.focus(settings);
-    fireEvent.pointerDown(settings);
-    expect(onPreloadSettings).toHaveBeenCalledTimes(3);
+  it("preloads the System route before a deep link completes", () => {
+    const onPreloadSystem = vi.fn();
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadSystem={onPreloadSystem} />));
+    const threads = container.querySelector(".masthead-threads") as HTMLAnchorElement;
+    fireEvent.pointerEnter(threads);
+    fireEvent.focus(threads);
+    fireEvent.pointerDown(threads);
+    expect(onPreloadSystem).toHaveBeenCalledTimes(3);
   });
 });
 

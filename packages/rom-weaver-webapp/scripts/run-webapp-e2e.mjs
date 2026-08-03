@@ -178,8 +178,12 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       try {
         const navigation = page.goto(`${baseUrl}${testCase.path}`, { waitUntil: "domcontentloaded" });
         if (testCase.replayClick) {
-          const settings = page.getByRole("button", { name: "Settings" });
-          await settings.waitFor({ state: "visible" });
+          // The accent picker is a masthead control that exists in the
+          // prerendered shell and changes neither the route nor the theme, so
+          // replaying its click proves the capture works without moving the
+          // view the rest of this audit asserts.
+          const accent = page.getByRole("button", { name: "Accent" });
+          await accent.waitFor({ state: "visible" });
           // Standalone iOS paints with device insets before the app bundle can
           // run. Apply representative values to exercise that same first shell
           // geometry instead of only testing the browser-tab zero-inset case.
@@ -212,7 +216,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           if (!(initialShell.prerendered && initialShell.footerInFirstViewport)) {
             throw new Error(`initial shell dock is not visible: ${JSON.stringify(initialShell)}`);
           }
-          await settings.click();
+          await accent.click();
           releaseScripts();
         }
         await navigation;
@@ -221,7 +225,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           const active = document.querySelector('[role="tab"][aria-selected="true"]');
           return !root?.hasAttribute("aria-busy") && active?.getAttribute("data-mode") === expectedView;
         }, testCase.finalView);
-        if (testCase.replayClick) await page.getByRole("dialog").waitFor({ state: "visible" });
+        if (testCase.replayClick) await page.locator(".accent-tray").waitFor({ state: "visible" });
         await page.evaluate(
           () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
         );
@@ -301,6 +305,17 @@ const settleAnimations = async (page) => {
     });
     if (settled) return;
   }
+};
+
+/**
+ * The System route: settings, status, logs, storage and the changelog, one URL
+ * per tab. The mode rail reaches the route, the sub-rail picks the tab.
+ */
+const openSystemTab = async (page, tab) => {
+  await page.locator('[role="tab"][data-mode="system"]:visible').first().click();
+  await page.locator("#panel-system:not([hidden])").waitFor({ state: "visible" });
+  await page.locator(`.system-subrail [data-systemtab="${tab}"]`).click();
+  await page.locator(`#systempanel-${tab}`).waitFor({ state: "visible" });
 };
 
 const scanLiveApp = async (page, label) => {
@@ -422,8 +437,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await page.setViewportSize(viewport);
       for (const theme of ["light", "dark"]) {
         await setTheme(theme);
-        await page.getByRole("button", { name: "Settings" }).click();
-        await page.getByRole("dialog").waitFor({ state: "visible" });
+        await openSystemTab(page, "settings");
         await scanLiveApp(page, `Settings (${viewport.label}, ${theme})`);
         const betaTools = page.locator("#settings-beta-tools-enabled");
         if (!(await betaTools.isChecked())) await betaTools.check();
@@ -449,21 +463,18 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await scanVariants("info popover");
     await infoButton.click();
 
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await openSystemTab(page, "settings");
     const codecCombobox = page.locator(".codec-combobox input").first();
     await codecCombobox.click();
     await page.locator(".codec-combobox-list").waitFor({ state: "visible" });
     await scanVariants("codec combobox");
     await page.locator(".codec-combobox-option").first().click();
     await page.getByRole("button", { exact: true, name: "Save" }).click();
-    await page.getByRole("dialog").waitFor({ state: "hidden" });
 
-    await page.getByRole("button", { name: "Log", exact: true }).click();
-    const logDialog = page.locator("dialog.log-dlg");
-    await logDialog.waitFor({ state: "visible" });
-    await scanVariants("log dialog");
-    await logDialog.getByRole("button", { name: "Close" }).click();
+    await openSystemTab(page, "logs");
+    await scanVariants("system logs");
+    await page.locator('[role="tab"][data-mode="patcher"]:visible').first().click();
+    await page.locator("#panel-patcher:not([hidden])").waitFor({ state: "visible" });
 
     await page.getByRole("button", { name: "Reset" }).click();
     await page.getByRole("dialog", { name: "Reset the page?" }).waitFor({ state: "visible" });
@@ -665,9 +676,11 @@ const createWorkerReuseCorpus = () => {
 };
 
 const configureUncompressedOutput = async (page) => {
-  await page.getByRole("button", { name: "Settings" }).click();
+  await openSystemTab(page, "settings");
   await page.locator("#settings-default-compression").selectOption("none");
   await page.getByRole("button", { name: "Save" }).click();
+  await page.locator('[role="tab"][data-mode="patcher"]:visible').first().click();
+  await page.locator("#panel-patcher:not([hidden])").waitFor({ state: "visible" });
 };
 
 const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {

@@ -1,5 +1,7 @@
 type WorkflowView = "patcher" | "creator" | "trim" | "tools";
-type WebappView = WorkflowView | "docs";
+// `docs` and `system` are routes without a workflow session behind them; only
+// `WorkflowView` members own session state and unsaved-work guards.
+type WebappView = WorkflowView | "docs" | "system";
 
 type ValidationState = {
   messages: string[];
