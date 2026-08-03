@@ -380,6 +380,7 @@ type UtilityMenuProps = {
   donateHref?: string;
   githubHref?: string;
   localizer: Localizer;
+  menuClassName?: string;
   onOpenChangelog: () => void;
   onOpenDocs: () => void;
   onOpenLog: () => void;
@@ -405,6 +406,7 @@ const UtilityMenu = ({
   onOpenTools,
   toolsEnabled,
   toolsLabel,
+  menuClassName,
   open,
   triggerRef,
 }: UtilityMenuProps & {
@@ -414,6 +416,11 @@ const UtilityMenu = ({
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const toolsButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (toolsButtonRef.current) toolsButtonRef.current.hidden = !(toolsEnabled && onOpenTools);
+  }, [onOpenTools, toolsEnabled]);
 
   useEffect(() => {
     if (!open) return;
@@ -421,7 +428,10 @@ const UtilityMenu = ({
     firstItem?.focus();
   }, [open]);
 
-  const menuItems = () => Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+  const menuItems = () =>
+    Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []).filter(
+      (item) => !item.hidden,
+    );
   const focusItem = (offset: number) => {
     const items = menuItems();
     if (items.length === 0) return;
@@ -438,7 +448,7 @@ const UtilityMenu = ({
   return (
     <div
       aria-label={localizer.message("ui.tools.more")}
-      className="more-menu"
+      className={`more-menu${menuClassName ? ` ${menuClassName}` : ""}`}
       hidden={!open}
       id={menuId}
       onKeyDown={(event) => {
@@ -486,12 +496,18 @@ const UtilityMenu = ({
         <Newspaper aria-hidden="true" />
         {localizer.message("ui.log.tabChangelog")}
       </button>
-      {toolsEnabled && onOpenTools ? (
-        <button onClick={() => select(onOpenTools)} role="menuitem" type="button">
-          <Wrench aria-hidden="true" />
-          {toolsLabel ?? "Tools"}
-        </button>
-      ) : null}
+      <button
+        hidden
+        onClick={() => {
+          if (onOpenTools) select(onOpenTools);
+        }}
+        ref={toolsButtonRef}
+        role="menuitem"
+        type="button"
+      >
+        <Wrench aria-hidden="true" />
+        {toolsLabel ?? "Tools"}
+      </button>
       <span aria-hidden="true" className="more-separator" />
       {githubHref ? (
         <a
@@ -538,6 +554,7 @@ const MoreMenu = ({
   onPreloadLog,
   onToggle,
   open,
+  renderMenu = true,
   triggerRef,
   ...menuProps
 }: UtilityMenuProps & {
@@ -549,6 +566,7 @@ const MoreMenu = ({
   onPreloadLog?: () => void;
   onToggle: () => void;
   open: boolean;
+  renderMenu?: boolean;
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => (
   <span className={className}>
@@ -573,7 +591,9 @@ const MoreMenu = ({
         </span>
       ) : null}
     </button>
-    <UtilityMenu menuId={menuId} onClose={onClose} open={open} triggerRef={triggerRef} {...menuProps} />
+    {renderMenu ? (
+      <UtilityMenu menuId={menuId} onClose={onClose} open={open} triggerRef={triggerRef} {...menuProps} />
+    ) : null}
   </span>
 );
 
@@ -1048,7 +1068,7 @@ const Masthead = ({
             donateHref={donateHref}
             githubHref={githubHref}
             localizer={localizer}
-            menuId="desktop-more-menu"
+            menuId="more-menu"
             moreLabel={moreLabel}
             onClose={closeUtility}
             onOpenChangelog={onOpenChangelog}
@@ -1060,10 +1080,32 @@ const Masthead = ({
             onPreloadLog={onPreloadLog}
             onToggle={() => toggleUtility("desktop")}
             open={utilityOpen && utilityPlacement === "desktop"}
+            renderMenu={false}
             toolsEnabled={betaToolsEnabled}
             toolsLabel={toolsLabel}
             triggerRef={desktopMoreRef}
           />
+          {utilityOpen ? (
+            <UtilityMenu
+              confirmExternalNavigation={confirmExternalNavigation}
+              donateHref={donateHref}
+              githubHref={githubHref}
+              localizer={localizer}
+              menuClassName="shared-more-menu"
+              menuId="more-menu"
+              onClose={closeUtility}
+              onOpenChangelog={onOpenChangelog}
+              onOpenDocs={() => onSelectTab("docs")}
+              onOpenLog={onOpenLog}
+              onOpenStatus={onOpenStatus}
+              onOpenStorage={onOpenStorage ?? onOpenLog}
+              onOpenTools={() => onSelectTab("tools")}
+              open
+              toolsEnabled={betaToolsEnabled}
+              toolsLabel={toolsLabel}
+              triggerRef={activeMoreRef}
+            />
+          ) : null}
         </div>
       </header>
       <PhoneDock
@@ -1092,7 +1134,7 @@ const Masthead = ({
               donateHref={donateHref}
               githubHref={githubHref}
               localizer={localizer}
-              menuId="mobile-more-menu"
+              menuId="more-menu"
               moreLabel={moreLabel}
               onClose={closeUtility}
               onOpenChangelog={onOpenChangelog}
@@ -1104,6 +1146,7 @@ const Masthead = ({
               onPreloadLog={onPreloadLog}
               onToggle={() => toggleUtility("mobile")}
               open={utilityOpen && utilityPlacement === "mobile"}
+              renderMenu={false}
               toolsEnabled={betaToolsEnabled}
               toolsLabel={toolsLabel}
               triggerRef={mobileMoreRef}

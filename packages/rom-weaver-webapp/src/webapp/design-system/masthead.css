@@ -277,7 +277,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 /* ── top-right actions ── */
 .rw-app .masthead-tools {
   grid-column: 3; justify-self: end;
-  display: inline-flex; gap: var(--sp-2xs); align-items: center;
+  position: relative; display: inline-flex; gap: var(--sp-2xs); align-items: center;
 }
 .rw-app .desktop-more { position: relative; display: inline-flex; }
 .rw-app .mobile-more { position: relative; display: none; }
@@ -287,6 +287,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
   padding: var(--sp-xs); border: 1px solid var(--seam-strong); border-radius: var(--r-m);
   background: var(--plate); box-shadow: var(--overlay-shadow); animation: drop-in .16s var(--ease);
 }
+.rw-app .shared-more-menu { inset-block-start: calc(100% + var(--sp-xs)); }
 .rw-app .more-menu[hidden] { display: none; }
 .rw-app .more-menu > button, .rw-app .more-link {
   display: flex; align-items: center; gap: var(--sp-s); min-block-size: 44px; padding: 7px 10px;
@@ -419,7 +420,10 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
   .rw-app .masthead-settings { display: none; }
   .rw-app .dock .mobile-more { display: flex; position: relative; }
   .rw-app .dock .mobile-more .dock-action { width: 100%; }
-  .rw-app .dock .more-menu { inset-block-start: auto; inset-block-end: calc(100% + var(--sp-xs)); }
+  .rw-app .shared-more-menu {
+    position: fixed; inset-block-start: auto; inset-block-end: calc(var(--dock-h) + var(--sp-xs));
+    inset-inline-end: max(var(--sp-s), var(--safe-r));
+  }
 }
 
 /* ── the dock (phone primary nav) ── */

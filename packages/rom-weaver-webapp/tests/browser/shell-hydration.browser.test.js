@@ -90,8 +90,8 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
     });
   });
 
-  // trim + tools, once in the mode rail and once in the phone dock
-  expect(host.querySelectorAll("[data-beta-tool]").length).toBe(4);
+  // trim, once in the mode rail and once in the phone dock; Tools lives in More
+  expect(host.querySelectorAll("[data-beta-tool]").length).toBe(2);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });

@@ -295,12 +295,14 @@ test("PWA side insets move dock content without shifting the shell", async () =>
   const readLayout = () => {
     const masthead = document.querySelector(".masthead")?.getBoundingClientRect();
     const dock = document.querySelector(".dock")?.getBoundingClientRect();
-    const tabs = [...document.querySelectorAll(".dock-tab")].filter((tab) => getComputedStyle(tab).display !== "none");
+    const controls = [...document.querySelectorAll(".dock-tab, .dock-action")].filter(
+      (control) => getComputedStyle(control).display !== "none",
+    );
     return {
       dockBottom: dock?.bottom ?? 0,
       dockTop: dock?.top ?? 0,
-      firstTabLeft: tabs[0]?.getBoundingClientRect().left ?? 0,
-      lastTabRight: tabs.at(-1)?.getBoundingClientRect().right ?? 0,
+      firstControlLeft: controls[0]?.getBoundingClientRect().left ?? 0,
+      lastControlRight: controls.at(-1)?.getBoundingClientRect().right ?? 0,
       mastheadTop: masthead?.top ?? 0,
     };
   };
@@ -313,8 +315,8 @@ test("PWA side insets move dock content without shifting the shell", async () =>
     expect(after.mastheadTop).toBe(before.mastheadTop);
     expect(after.dockTop).toBe(before.dockTop);
     expect(after.dockBottom).toBe(before.dockBottom);
-    expect(after.firstTabLeft).toBeGreaterThan(before.firstTabLeft);
-    expect(after.lastTabRight).toBeLessThan(before.lastTabRight);
+    expect(after.firstControlLeft).toBeGreaterThan(before.firstControlLeft);
+    expect(after.lastControlRight).toBeLessThan(before.lastControlRight);
   } finally {
     simulatedSafeArea.remove();
   }

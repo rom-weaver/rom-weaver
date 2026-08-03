@@ -93,11 +93,11 @@ describe("Masthead", () => {
       withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} />),
     );
     const more = container.querySelector(".desktop-more .tool") as HTMLButtonElement;
-    const menu = container.querySelector('[role="menu"]') as HTMLElement;
     expect(more.getAttribute("aria-expanded")).toBe("false");
-    expect(menu.hidden).toBe(true);
+    expect(container.querySelector('[role="menu"]')).toBeNull();
 
     fireEvent.click(more);
+    const menu = container.querySelector('[role="menu"]') as HTMLElement;
     expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(menu.hidden).toBe(false);
     expect(getByRole("menuitem", { name: "Docs" })).toBeTruthy();

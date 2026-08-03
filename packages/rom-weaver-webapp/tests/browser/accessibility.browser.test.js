@@ -1198,8 +1198,11 @@ describe("webapp responsive navigation", () => {
       expect(getComputedStyle(dock).display).toBe("grid");
       expect(getComputedStyle(dock).position).toBe("fixed");
       // same tablist semantics as the rail
-      expect(dock.getAttribute("role")).toBe("tablist");
-      const tabs = [...dock.querySelectorAll('[role="tab"]')].filter((tab) => getComputedStyle(tab).display !== "none");
+      const dockTabs = host.querySelector(".dock-tabs");
+      expect(dockTabs.getAttribute("role")).toBe("tablist");
+      const tabs = [...dockTabs.querySelectorAll('[role="tab"]')].filter(
+        (tab) => getComputedStyle(tab).display !== "none",
+      );
       expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0").length).toBe(1);
       // the masthead keeps its single row: brand and actions only
       const brand = host.querySelector(".brand").getBoundingClientRect();
