@@ -282,7 +282,7 @@ Fixture description.
 
 [Install](../reference/cli.md#install)
 [Maintainer notes](../development/mobile-safari-verification.md)
-![Sample](../../packages/rom-weaver-webapp/design/first-sample-modified-world.webp)
+![Sample](../screenshots/first-sample-modified-world.webp)
 `,
     );
 

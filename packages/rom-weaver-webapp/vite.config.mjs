@@ -25,7 +25,7 @@ const repoRoot = path.resolve(rootDir, "../..");
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
 const docsScreenshotSources = Object.fromEntries(
-  DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),
+  DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(repoRoot, "docs", "screenshots", name)]),
 );
 
 // A manifest's icons are read at install time, so an installed PWA's icon can

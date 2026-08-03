@@ -132,7 +132,7 @@ const rewriteDocImage = (href, sourceFile) => {
   if (/^(?:[a-z]+:|\/\/|data:)/i.test(href)) return href;
   const resolved = new URL(href, `https://repository.invalid/docs/${sourceFile}`);
   const repositoryPath = resolved.pathname.slice(1);
-  if (repositoryPath.startsWith("packages/rom-weaver-webapp/design/")) {
+  if (repositoryPath.startsWith("docs/screenshots/")) {
     return `/docs/screenshots/${repositoryPath.split("/").at(-1)}`;
   }
   return href;

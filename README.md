@@ -383,8 +383,8 @@ edits and corrections are welcome.
       <td>Desktop: ordered patch stack</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/apply-patches-desktop-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/apply-patches-desktop-light.webp" alt="Focused Apply patch stack with two ordered sample patches on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-patches-desktop-dark.webp">
+          <img src="docs/screenshots/apply-patches-desktop-light.webp" alt="Focused Apply patch stack with two ordered sample patches on desktop">
         </picture>
       </td>
     </tr>
@@ -392,8 +392,8 @@ edits and corrections are welcome.
       <td>Desktop: create output</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-output-desktop-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/create-output-desktop-light.webp" alt="Focused Create output card with BPS selected on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/create-output-desktop-dark.webp">
+          <img src="docs/screenshots/create-output-desktop-light.webp" alt="Focused Create output card with BPS selected on desktop">
         </picture>
       </td>
     </tr>
@@ -401,8 +401,8 @@ edits and corrections are welcome.
       <td>Mobile: Original and Modified</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-inputs-mobile-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/create-inputs-mobile-light.webp" alt="Focused Create Original and Modified cards on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/create-inputs-mobile-dark.webp">
+          <img src="docs/screenshots/create-inputs-mobile-light.webp" alt="Focused Create Original and Modified cards on mobile" width="390">
         </picture>
       </td>
     </tr>
@@ -410,8 +410,8 @@ edits and corrections are welcome.
       <td>Mobile: bundle output options</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/bundle-output-mobile-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/bundle-output-mobile-light.webp" alt="Focused patch-only bundle controls on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/bundle-output-mobile-dark.webp">
+          <img src="docs/screenshots/bundle-output-mobile-light.webp" alt="Focused patch-only bundle controls on mobile" width="390">
         </picture>
       </td>
     </tr>

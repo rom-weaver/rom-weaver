@@ -1,7 +1,8 @@
 # Screenshots and sample assets
 
-The documentation uses focused captures of real sample workflows. Each subject
-has desktop and mobile images in both light and dark themes.
+The documentation uses focused captures of real sample workflows. The committed
+images live in `docs/screenshots/`, with desktop and mobile versions in both
+light and dark themes.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -23,24 +24,24 @@ has desktop and mobile images in both light and dark themes.
 ### Ordered patch stack
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../../packages/rom-weaver-webapp/design/apply-patches-desktop-dark.avif">
-  <source type="image/avif" srcset="../../packages/rom-weaver-webapp/design/apply-patches-desktop-light.avif">
-  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../../packages/rom-weaver-webapp/design/apply-patches-desktop-dark.webp">
-  <img src="../../packages/rom-weaver-webapp/design/apply-patches-desktop-light.webp" width="2242" height="1045" alt="Focused Apply patch stack with two ordered practice patches on desktop">
+  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/apply-patches-desktop-dark.avif">
+  <source type="image/avif" srcset="../screenshots/apply-patches-desktop-light.avif">
+  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/apply-patches-desktop-dark.webp">
+  <img src="../screenshots/apply-patches-desktop-light.webp" width="2242" alt="Focused Apply patch stack with two ordered practice patches on desktop">
 </picture>
 
 ### Apply output
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../../packages/rom-weaver-webapp/design/apply-output-desktop-dark.avif">
-  <source type="image/avif" srcset="../../packages/rom-weaver-webapp/design/apply-output-desktop-light.avif">
-  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../../packages/rom-weaver-webapp/design/apply-output-desktop-dark.webp">
-  <img src="../../packages/rom-weaver-webapp/design/apply-output-desktop-light.webp" width="2242" height="560" alt="Focused Apply output card on desktop">
+  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/apply-output-desktop-dark.avif">
+  <source type="image/avif" srcset="../screenshots/apply-output-desktop-light.avif">
+  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/apply-output-desktop-dark.webp">
+  <img src="../screenshots/apply-output-desktop-light.webp" width="2242" alt="Focused Apply output card on desktop">
 </picture>
 
 Mobile versions:
-[patch stack](../../packages/rom-weaver-webapp/design/apply-patches-mobile-light.webp)
-and [Apply output](../../packages/rom-weaver-webapp/design/apply-output-mobile-light.webp).
+[patch stack](../screenshots/apply-patches-mobile-light.webp)
+and [Apply output](../screenshots/apply-output-mobile-light.webp).
 The web guide selects these automatically on narrow screens and switches to
 their dark variants with the site theme.
 
@@ -49,42 +50,42 @@ their dark variants with the site theme.
 ### Original and Modified
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../../packages/rom-weaver-webapp/design/create-inputs-desktop-dark.avif">
-  <source type="image/avif" srcset="../../packages/rom-weaver-webapp/design/create-inputs-desktop-light.avif">
-  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../../packages/rom-weaver-webapp/design/create-inputs-desktop-dark.webp">
-  <img src="../../packages/rom-weaver-webapp/design/create-inputs-desktop-light.webp" width="2242" height="837" alt="Focused Create Original and Modified cards on desktop">
+  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/create-inputs-desktop-dark.avif">
+  <source type="image/avif" srcset="../screenshots/create-inputs-desktop-light.avif">
+  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/create-inputs-desktop-dark.webp">
+  <img src="../screenshots/create-inputs-desktop-light.webp" width="2242" alt="Focused Create Original and Modified cards on desktop">
 </picture>
 
 ### Patch output
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../../packages/rom-weaver-webapp/design/create-output-desktop-dark.avif">
-  <source type="image/avif" srcset="../../packages/rom-weaver-webapp/design/create-output-desktop-light.avif">
-  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../../packages/rom-weaver-webapp/design/create-output-desktop-dark.webp">
-  <img src="../../packages/rom-weaver-webapp/design/create-output-desktop-light.webp" width="2242" height="568" alt="Focused Create patch output card on desktop">
+  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/create-output-desktop-dark.avif">
+  <source type="image/avif" srcset="../screenshots/create-output-desktop-light.avif">
+  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/create-output-desktop-dark.webp">
+  <img src="../screenshots/create-output-desktop-light.webp" width="2242" alt="Focused Create patch output card on desktop">
 </picture>
 
 Mobile versions:
-[Original and Modified](../../packages/rom-weaver-webapp/design/create-inputs-mobile-light.webp)
-and [patch output](../../packages/rom-weaver-webapp/design/create-output-mobile-light.webp).
+[Original and Modified](../screenshots/create-inputs-mobile-light.webp)
+and [patch output](../screenshots/create-output-mobile-light.webp).
 
 ## Create a bundle
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../../packages/rom-weaver-webapp/design/bundle-output-desktop-dark.avif">
-  <source type="image/avif" srcset="../../packages/rom-weaver-webapp/design/bundle-output-desktop-light.avif">
-  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../../packages/rom-weaver-webapp/design/bundle-output-desktop-dark.webp">
-  <img src="../../packages/rom-weaver-webapp/design/bundle-output-desktop-light.webp" width="2242" height="796" alt="Focused patch-only bundle options and Create ZIP Bundle action on desktop">
+  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/bundle-output-desktop-dark.avif">
+  <source type="image/avif" srcset="../screenshots/bundle-output-desktop-light.avif">
+  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/bundle-output-desktop-dark.webp">
+  <img src="../screenshots/bundle-output-desktop-light.webp" width="2242" alt="Focused patch-only bundle options and Create ZIP Bundle action on desktop">
 </picture>
 
-The [mobile capture](../../packages/rom-weaver-webapp/design/bundle-output-mobile-light.webp)
+The [mobile capture](../screenshots/bundle-output-mobile-light.webp)
 keeps the entire expanded Output Options card readable.
 
 ## Sample ROMs
 
 | Original ROM | After the first patch | After both patches |
 | :---: | :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../../packages/rom-weaver-webapp/design/first-sample-hello-world.webp) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../../packages/rom-weaver-webapp/design/first-sample-modified-world.webp) | ![The sample ROM displaying MODIFIED ROM after both patches](../../packages/rom-weaver-webapp/design/first-sample-modified-rom.webp) |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../screenshots/first-sample-hello-world.webp) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../screenshots/first-sample-modified-world.webp) | ![The sample ROM displaying MODIFIED ROM after both patches](../screenshots/first-sample-modified-rom.webp) |
 
 The webapp generates `first-weave.zip`, `first-create.zip`, and the loose
 homebrew ROMs from

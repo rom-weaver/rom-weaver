@@ -41,6 +41,8 @@ docs/*
 !docs/reference/**
 !docs/development
 !docs/development/**
+!docs/screenshots
+!docs/screenshots/**
 !docs/legal
 !docs/legal/**
 packages/rom-weaver-webapp/tests
