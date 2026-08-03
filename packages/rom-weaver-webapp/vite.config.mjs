@@ -944,7 +944,7 @@ export default defineConfig(({ command, mode }) => {
           // was ~8 kB brotli against a ~2 kB raw gain. One shared chunk for
           // everything two or more chunks reach restores the compression
           // context; the size floor keeps a future split from re-stranding it.
-          advancedChunks: {
+          codeSplitting: {
             groups: [
               { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerRuntimeGroup, priority: 2 },
               { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerSharedGroup, priority: 1 },

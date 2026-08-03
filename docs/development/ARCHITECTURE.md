@@ -445,7 +445,7 @@ entry checks-only. Create re-parses before writing, so it can never emit
   intercepts `?worker&url` during *builds only* and emits the worker as an extra
   entry chunk of the main graph, so one code-splitting pass covers app and
   workers together. The `wasm-runtime` group in
-  `build.rollupOptions.output.advancedChunks` then hoists the modules that only
+  `build.rollupOptions.output.codeSplitting` then hoists the modules that only
   worker entries reach into a single chunk both workers import. It groups by
   real entry reachability rather than by path, and keeps
   `includeDependenciesRecursively` off, because either shortcut sweeps in the
