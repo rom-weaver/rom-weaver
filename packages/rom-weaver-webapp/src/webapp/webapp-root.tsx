@@ -216,7 +216,6 @@ function WebappRoot({
   // flow actually clears `settingsDialogOpen`.
   const settingsCloseArmedRef = useRef(false);
   const pendingViewRef = useRef<WebappView | null>(null);
-  const [changelogOpen, setChangelogOpen] = useState(false);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
   // silently discard the user's work. Each form mounts on first visit and then
