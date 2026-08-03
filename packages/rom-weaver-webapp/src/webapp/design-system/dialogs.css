@@ -207,9 +207,14 @@
 /* About folded into the Status tab: licence, attribution, privacy - the build
    facts above it are the status rows, never repeated here. */
 .rw-app .status-about { margin-block-start: var(--sp-l); padding-block-start: var(--sp-m); border-block-start: 1px solid var(--seam); }
-.rw-app .status-about .about-line { font-size: .78rem; color: var(--ink-3); }
-.rw-app .status-about .about-line + .about-line { margin-block-start: 5px; }
-.rw-app .status-about .about-line a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.rw-app .status-about .about-link {
+  display: inline-flex; align-items: center; min-height: 24px;
+  font-size: .78rem; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px;
+}
+@media (hover: hover) {
+  .rw-app .status-about .about-link:hover { color: var(--ink); }
+}
+.rw-app .status-about .about-link:active { color: var(--ink); }
 /* Avoid forcing a 300px track into narrower viewports. */
 .rw-app .setcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--sp-m); }
 .rw-app .setcols .setgroup { margin: 0; }

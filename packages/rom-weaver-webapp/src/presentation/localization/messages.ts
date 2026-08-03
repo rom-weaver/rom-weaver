@@ -218,6 +218,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.status.environment": msg({ id: "ui.status.environment", message: "Environment" }),
   "ui.status.envPwa": msg({ id: "ui.status.envPwa", message: "Installed app (PWA)" }),
   "ui.status.envWeb": msg({ id: "ui.status.envWeb", message: "Browser tab" }),
+  "ui.status.about": msg({ id: "ui.status.about", message: "About rom-weaver, its licence and its privacy" }),
   "ui.status.offline": msg({ id: "ui.status.offline", message: "Offline" }),
   "ui.status.offlineLegend": msg({ id: "ui.status.offlineLegend", message: "What the offline states mean" }),
   "ui.status.pullRequest": msg({ id: "ui.status.pullRequest", message: "Pull request" }),

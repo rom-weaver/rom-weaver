@@ -26,9 +26,12 @@ describe("LogDialog", () => {
     expect(container.querySelector(".status-rows")).not.toBeNull();
     // the trace log belongs to the Logs tab, so it is not mounted on Status
     expect(container.querySelector(".tracelog")).toBeNull();
-    // About folded into Status - licence/attribution/privacy, no build facts repeated
-    const aboutLinks = Array.from(container.querySelectorAll(".status-about a"));
-    expect(aboutLinks.length).toBe(3);
+    // licence, attribution and privacy are written out on the About guide; the
+    // tab is a readout of the build, so it carries one line out to that page
+    const aboutLinks = Array.from(container.querySelectorAll<HTMLAnchorElement>(".status-about a"));
+    expect(aboutLinks.map((link) => link.getAttribute("href"))).toEqual(["/docs/about"]);
+    // every offline state is named, so the badge above reads against the rest
+    expect(container.querySelectorAll(".sw-legend-row").length).toBe(5);
     // the settings panel belongs to its own tab, so it is not mounted on Status
     expect(container.querySelector(".settings-panel-stub")).toBeNull();
   });

@@ -65,6 +65,11 @@ msgstr "Ein ROM- und Patch-Toolkit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.about"
+msgstr "Über rom-weaver, seine Lizenz und seinen Datenschutz"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Akzentfarbe"
 

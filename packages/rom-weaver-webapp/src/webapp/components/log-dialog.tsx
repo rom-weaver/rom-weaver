@@ -10,7 +10,7 @@ import type { BrowserOpfsEntry } from "../../workers/protocol/browser-opfs-worke
 import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
 import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "../build-version.ts";
 import { CHANNEL_BADGE } from "../build-channel.ts";
-import { GITHUB_URL, LICENSE_URL, NOTICE_URL, PRIVACY_URL } from "../project-links.ts";
+import { ABOUT_URL, GITHUB_URL } from "../project-links.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
 import {
@@ -243,33 +243,15 @@ const OfflineLegend = ({ current, localizer }: { current: RuntimeState; localize
 );
 
 /**
- * Licence, attribution and privacy - the part of the old settings About group
- * the status rows above do not already state. Build facts are never repeated
- * here; those are the `StatusRows` above.
+ * One line out to the About guide, which is where licence, attribution and
+ * privacy are now written in full. Three paragraphs of them under the status
+ * rows made the tab a page about the project rather than a readout of it.
  */
-const AboutLines = () => (
+const AboutLink = ({ localizer }: { localizer: Localizer }) => (
   <div className="status-about">
-    <div className="about-line">
-      © Brandon Casey. Free and open-source software under the{" "}
-      <a href={LICENSE_URL} rel="noreferrer" target="_blank">
-        GNU AGPL v3 (or later) license
-      </a>
-      .
-    </div>
-    <div className="about-line">
-      Built with open-source components (nod, libarchive, chd-rs, and others) used under their own licenses; see the{" "}
-      <a href={NOTICE_URL} rel="noreferrer" target="_blank">
-        notices and attribution
-      </a>
-      .
-    </div>
-    <div className="about-line">
-      Files are processed locally in your browser. Read the{" "}
-      <a href={PRIVACY_URL} rel="noreferrer" target="_blank">
-        privacy page
-      </a>{" "}
-      for storage and network details.
-    </div>
+    <a className="about-link" href={ABOUT_URL}>
+      {localizer.message("ui.status.about")}
+    </a>
   </div>
 );
 
@@ -578,7 +560,7 @@ const LogDialog = ({
               </div>
             ) : null}
             <OfflineLegend current={runtimeState} localizer={localizer} />
-            <AboutLines />
+            <AboutLink localizer={localizer} />
           </div>
         ) : null}
         {tab === "changelog" ? (

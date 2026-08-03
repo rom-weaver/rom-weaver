@@ -65,6 +65,11 @@ msgstr "A ROM & Patch toolkit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.about"
+msgstr "About rom-weaver, its licence and its privacy"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Accent"
 
@@ -581,7 +586,7 @@ msgstr "rom-weaver home"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.readyDesc"
-msgstr "rom-weaver is cached in this browser and works fully offline."
+msgstr "rom-weaver is cached in this browser. The next visit loads from that copy, with or without a network."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
