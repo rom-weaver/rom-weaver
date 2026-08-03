@@ -4,6 +4,7 @@ import {
   Info,
   Moon,
   MoreHorizontal,
+  Newspaper,
   Palette,
   ScrollText,
   Settings,
@@ -456,7 +457,7 @@ const MobileUtilityMenu = ({
         {localizer.message("ui.log.tabLogs")}
       </button>
       <button onClick={() => select(onOpenChangelog)} role="menuitem" type="button">
-        <ScrollText aria-hidden="true" />
+        <Newspaper aria-hidden="true" />
         {localizer.message("ui.log.tabChangelog")}
       </button>
       <span aria-hidden="true" className="mobile-more-separator" />
