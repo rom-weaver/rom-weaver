@@ -691,12 +691,12 @@ const guardFooterExternalClick = (
 
 /**
  * Version and channel merge into one build tag: a plain dotted link on stable
- * that opens the changelog, and a single coloured pill everywhere else. The
- * channel is carried by one letter (N/B/D) because the sub-line has no width to
- * spare; the full name rides the accessible name. A PR preview is the exception
- * - the number IS the useful identity, so it links straight to the pull request.
+ * that opens the changelog, and a compact channel label everywhere else. A PR
+ * preview is the exception - the number IS the useful identity, so it links
+ * straight to the pull request.
  */
 const CHANNEL_LETTERS: Record<string, string> = { beta: "B", dev: "D", nightly: "N", preview: "P" };
+const CHANNEL_PREFIXES: Record<string, string> = { beta: "beta", nightly: "nightly" };
 const CHANNEL_MESSAGES: Record<string, MessageId> = {
   beta: "ui.channel.beta",
   dev: "ui.channel.dev",
@@ -743,7 +743,9 @@ const BuildTag = ({
         >
           {`PR-#${prNumber}`}
           <span className="tag-extra">
-            {" · "}
+            <span aria-hidden="true" className="tag-separator">
+              {" / "}
+            </span>
             <span className="tag-version">{versionText}</span>
           </span>
         </a>
@@ -753,6 +755,7 @@ const BuildTag = ({
   if (channelBadge) {
     const key = channelBadge.toLowerCase();
     const letter = CHANNEL_LETTERS[key] ?? channelBadge.slice(0, 1).toUpperCase();
+    const prefix = CHANNEL_PREFIXES[key];
     const nameId = CHANNEL_MESSAGES[key];
     const name = nameId ? localizer.message(nameId) : channelBadge;
     return (
@@ -765,8 +768,10 @@ const BuildTag = ({
           onClick={onOpenChangelog}
           type="button"
         >
-          <b className="tag-letter">{letter}</b>
-          {" · "}
+          {prefix ? <span className="tag-channel">{prefix}</span> : <b className="tag-letter">{letter}</b>}
+          <span aria-hidden="true" className="tag-separator">
+            {" / "}
+          </span>
           <span className="tag-version">{versionText}</span>
         </button>
       </span>
@@ -946,6 +951,11 @@ const Masthead = ({
                   />
                 </span>
               ) : null}
+              {version && threads ? (
+                <span aria-hidden="true" className="sub-separator">
+                  /
+                </span>
+              ) : null}
               {threads ? (
                 <span className="sub-item">
                   <button
@@ -960,7 +970,10 @@ const Masthead = ({
                     type="button"
                   >
                     <span className="masthead-threads-count">{threads}</span>
-                    <span aria-hidden="true">T</span>
+                    <span aria-hidden="true" className="masthead-threads-space">
+                      {" "}
+                    </span>
+                    <span aria-hidden="true">Threads</span>
                   </button>
                 </span>
               ) : null}
