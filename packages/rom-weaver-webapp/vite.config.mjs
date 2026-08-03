@@ -761,6 +761,8 @@ const URL_IMPORT_PATTERN = /[?&]url(?:&|$)/;
 const workerEntryFiles = new Set();
 /** Memoized isWorkerOnlyModule answers; the module graph is rebuilt per build, so it resets there. */
 const workerOnlyModules = new Map();
+/** Memoized isWorkerReachableModule answers; cleared with the above. */
+const workerReachableModules = new Map();
 
 const shareWorkerRuntimeChunks = () => {
   const chunkRefs = new Map();
@@ -770,6 +772,7 @@ const shareWorkerRuntimeChunks = () => {
       chunkRefs.clear();
       workerEntryFiles.clear();
       workerOnlyModules.clear();
+      workerReachableModules.clear();
     },
     enforce: "pre",
     load(id) {
@@ -822,6 +825,39 @@ const isWorkerOnlyModule = (moduleId, ctx) => {
   workerOnlyModules.set(moduleId, workerOnly);
   return workerOnly;
 };
+
+// True when at least one import path reaching this module starts at a worker
+// entry. `isWorkerOnlyModule` above answers the stricter question; this one
+// catches the modules a worker and the document both use, which is what decides
+// whether a worker has to download the document's chunk to reach them.
+const isWorkerReachableModule = (moduleId, ctx) => {
+  const cached = workerReachableModules.get(moduleId);
+  if (cached !== undefined) return cached;
+  const visited = new Set([moduleId]);
+  const pending = [moduleId];
+  let reachable = false;
+  while (pending.length > 0 && !reachable) {
+    const id = pending.pop();
+    if (workerEntryFiles.has(id)) {
+      reachable = true;
+      break;
+    }
+    const info = ctx.getModuleInfo(id);
+    for (const importer of info ? [...info.importers, ...info.dynamicImporters] : []) {
+      if (visited.has(importer)) continue;
+      visited.add(importer);
+      pending.push(importer);
+    }
+  }
+  workerReachableModules.set(moduleId, reachable);
+  return reachable;
+};
+
+/** Everything a worker can reach that is not worker-only: the overlap between a
+ * worker's graph and the document's. Without a chunk of its own it lands in
+ * `shared`, and since a chunk is the unit of loading, an 8 kB thread worker then
+ * pulls the whole document chunk - React and all - into every worker realm. */
+const nameWorkerSharedGroup = (moduleId, ctx) => (isWorkerReachableModule(moduleId, ctx) ? "worker-shared" : null);
 
 /** Captures the worker-only runtime into one `wasm-runtime` chunk; everything else falls through
  * to the `shared` group below it. `includeDependenciesRecursively` has to stay off, or the group
@@ -910,7 +946,8 @@ export default defineConfig(({ command, mode }) => {
           // context; the size floor keeps a future split from re-stranding it.
           advancedChunks: {
             groups: [
-              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerRuntimeGroup, priority: 1 },
+              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerRuntimeGroup, priority: 2 },
+              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerSharedGroup, priority: 1 },
               { minShareCount: 2, name: "shared", priority: 0, test: /./ },
             ],
             minSize: SHARED_CHUNK_MIN_SIZE,
