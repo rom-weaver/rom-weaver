@@ -215,11 +215,14 @@ function WebappRoot({
   // discard-confirmation flow first; the dialog itself only closes once that
   // flow actually clears `settingsDialogOpen`.
   const settingsCloseArmedRef = useRef(false);
+  const pendingViewRef = useRef<WebappView | null>(null);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
   // silently discard the user's work. Each form mounts on first visit and then
   // stays mounted but hidden, which preserves state across tab switches.
   const [visitedViews, setVisitedViews] = useState<readonly WebappView[]>([state.currentView]);
+  const currentViewRef = useRef(state.currentView);
+  currentViewRef.current = state.currentView;
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
@@ -529,7 +532,21 @@ function WebappRoot({
                 if (href) window.location.assign(`/${href}`);
                 return;
               }
-              selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]));
+              const view = id as WebappRootProps["state"]["currentView"];
+              if (view === "docs") {
+                // Keep the current panel visible until the lazy Docs route is ready;
+                // switching first leaves its navigation bar absent for one frame.
+                const startingView = currentViewRef.current;
+                pendingViewRef.current = view;
+                void preloadWorkflowRoute(view).then(() => {
+                  if (pendingViewRef.current !== view || currentViewRef.current !== startingView) return;
+                  pendingViewRef.current = null;
+                  selectViewWithTransition(() => actions.onSelectView(view));
+                });
+                return;
+              }
+              pendingViewRef.current = null;
+              selectViewWithTransition(() => actions.onSelectView(view));
             }}
             settingsOpen={logOpen && logTab === "settings"}
             tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}

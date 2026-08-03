@@ -342,11 +342,24 @@ const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
 const PRERENDER_RUNTIME_SLOT = '<span class="shell-identity" hidden=""></span>';
 const PRERENDER_RUNTIME_RESOLVER =
   "<script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}finally{document.currentScript.remove()}</script>";
+const DOC_SHELF_STATE_KEY = "rom-weaver-docs-shelves";
+// Restore the reader's docs shelves while the parser is still handling the
+// prerendered shell. The first client render reads the same storage value, so
+// hydration never paints the server's default closed state first.
+const PRERENDER_DOC_SHELF_RESTORER = `<script>
+try {
+  const stored = JSON.parse(sessionStorage.getItem(${JSON.stringify(DOC_SHELF_STATE_KEY)}) || "{}");
+  for (const shelf of document.querySelectorAll(".guide-shelf, .docs-index-shelf")) {
+    const title = shelf.querySelector(".guide-shelf-title, .docs-index-title")?.textContent?.trim() || "";
+    if (typeof stored[title] === "boolean") shelf.open = stored[title];
+  }
+} catch {}
+</script>`;
 const PRERENDER_ROOT = (shell) =>
   `<div id="webapp-root" aria-busy="true">${shell.replace(
     PRERENDER_RUNTIME_SLOT,
     `${PRERENDER_RUNTIME_SLOT}${PRERENDER_RUNTIME_RESOLVER}`,
-  )}</div>`;
+  )}</div>${PRERENDER_DOC_SHELF_RESTORER}`;
 
 const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, routePreloadLinks) => {
   let outDir = "dist";

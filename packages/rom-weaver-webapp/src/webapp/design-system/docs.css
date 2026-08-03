@@ -237,8 +237,12 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   background: var(--thread);
   transform: scaleX(0);
   transform-origin: left center;
-  transition: transform .3s var(--ease);
+  transition: none;
 }
+/* The active section is measured during hydration. Do not animate that first
+   correction from the server's fallback marker; scroll-driven changes after
+   the shell settles should still glide between sections. */
+.rw-app .warp-rail:not(.is-initializing) .warp-pick { transition: transform .3s var(--ease); }
 .rw-app .warp-index {
   color: var(--ink-4);
   font-family: var(--mono);
@@ -671,6 +675,12 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 /* --- the trail ---
    Desktop keeps the sidebar and never shows this. */
 .rw-app .docs-trail { display: none; }
+
+/* The workflow body has a translate-based entrance animation. WebKit treats
+   an animated ancestor as the containing block for fixed descendants, which
+   sends the phone trail below the viewport during a docs reload. The article
+   owns its own page-turn animation, so keep this shell stationary. */
+.rw-app #panel-docs > .workflow-body { animation: none; }
 
 /* --- responsive --- */
 @media (max-width: 860px) {

@@ -416,6 +416,70 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (browserName === "chromium") await page.coverage.startCSSCoverage();
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+
+    // On a mobile Docs reload the trail is already in the prerendered shell.
+    // Its fixed position must be viewport-relative before hydration finishes;
+    // WebKit otherwise treats the workflow body's entrance translate as its
+    // containing block and leaves the bar below the article.
+    await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "mobile"));
+    const docsReloadResponse = await page.goto(new URL("docs/get-started/", baseUrl).href, { waitUntil: "commit" });
+    const docsReloadHtml = (await docsReloadResponse?.text()) ?? "";
+    if (!docsReloadHtml.includes('class="warp-rail is-initializing"')) {
+      throw new Error("Docs route response is missing the static rail initialization state");
+    }
+    if (!docsReloadHtml.includes('aria-current="true"')) {
+      throw new Error("Docs route response is missing the static initial rail marker");
+    }
+    const docsTrail = page.locator(".docs-trail");
+    await docsTrail.waitFor({ state: "attached" });
+    const trailGeometry = await docsTrail.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { bottom: rect.bottom, height: rect.height, viewportHeight: window.innerHeight };
+    });
+    if (Math.abs(trailGeometry.bottom - trailGeometry.viewportHeight) > 1 || trailGeometry.height <= 0) {
+      throw new Error(`Mobile Docs trail is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
+    }
+
+    // A cold Docs tab load must keep the current panel until the lazy route is
+    // ready; otherwise the first frame after the click has no docs navigation.
+    const docsNavigationContext = await createContext({ ignoreHTTPSErrors: true, serviceWorkers: "block" });
+    const docsNavigationPage = await docsNavigationContext.newPage();
+    try {
+      const docsChunkPattern = /\/assets\/docs-page-[^/]+\.js(?:\?.*)?$/;
+      let releaseDocsChunk;
+      let docsChunkRequest;
+      const docsChunkStarted = new Promise((resolve) => {
+        docsChunkRequest = resolve;
+      });
+      const docsChunkReleased = new Promise((resolve) => {
+        releaseDocsChunk = resolve;
+      });
+      await docsNavigationPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await docsNavigationPage.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+      await docsNavigationPage.route(docsChunkPattern, async (route) => {
+        docsChunkRequest();
+        await docsChunkReleased;
+        await route.continue();
+      });
+      await docsNavigationPage.locator('[role="tab"][data-mode="docs"]:visible').first().click();
+      await docsChunkStarted;
+      await docsNavigationPage
+        .locator('.mode[role="tab"][aria-selected="true"][data-mode="patcher"]')
+        .waitFor({ state: "visible" });
+      if ((await docsNavigationPage.locator(".docs-rails .guide-nav").count()) !== 0) {
+        throw new Error("Docs navigation mounted before its lazy route was ready");
+      }
+      releaseDocsChunk();
+      await docsNavigationPage.locator(".docs-rails .guide-nav").waitFor({ state: "visible" });
+      await docsNavigationPage
+        .locator('.mode[role="tab"][aria-selected="true"][data-mode="docs"]')
+        .waitFor({ state: "visible" });
+    } finally {
+      await docsNavigationContext.close();
+    }
+    await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "desktop"));
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await installAuditTools();
 
     for (const viewport of A11Y_VIEWPORTS) {

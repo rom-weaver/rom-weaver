@@ -81,6 +81,13 @@
   /* Prevent selection and iOS callouts from stealing header taps. */
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
+/* Initial hydration may restore an open drawer after the prerendered shell
+   paints. Keep that state correction invisible; later user toggles retain the
+   shared drawer motion below. */
+#webapp-root[aria-busy="true"] .rw-app .cks > .cks-head,
+#webapp-root[aria-busy="true"] .rw-app .cks > .cks-body,
+#webapp-root[aria-busy="true"] .rw-app .cks > .cks-body > .cks-inner,
+#webapp-root[aria-busy="true"] .rw-app .cks .chev { transition: none; }
 @media (hover: hover) {
   .rw-app .cks:not(.is-open) > .cks-head:hover { background: color-mix(in oklab, var(--thread) 6%, transparent); }
 }
