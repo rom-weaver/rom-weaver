@@ -839,6 +839,18 @@ jobs:
       - name: Rust doc tests
         run: cargo test --quiet --doc --workspace --locked
 
+      # nextest and the plain workspace test above never build these: both
+      # examples set `required-features`, which cargo only enables when the
+      # matching `--features ... --example ...` invocation asks for them
+      # explicitly. Kept as separate steps for the same reason `test-rust` in
+      # .config/mise.toml splits them out - this leg bypasses mise (see the
+      # job comment above) so it needs its own copy of the same two commands.
+      - name: Rust typegen example tests
+        run: cargo test -p rom-weaver-cli --locked --features typescript-types --example rom-weaver-typegen
+
+      - name: Rust wasm-app example tests
+        run: cargo test -p rom-weaver-cli --locked --features wasm-app --example rom-weaver-app
+
   # Presents one stable check name while the independent host and threaded-target
   # work runs in parallel, so branch protection has a single thing to require.
   # The `main protection` ruleset requires this context by name. It must fail
@@ -914,6 +926,9 @@ jobs:
       # .wasm and needs the artifact downloaded above.
       - name: Build script tests
         run: npm test
+
+      - name: Webapp script tests
+        run: npm --prefix packages/rom-weaver-webapp run test:scripts
 
       - name: Lint
         run: npm --prefix packages/rom-weaver-webapp run lint

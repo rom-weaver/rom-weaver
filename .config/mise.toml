@@ -219,10 +219,18 @@ run = "cargo semver-checks check-release --workspace"
 description = "Run the Rust workspace test suite"
 # nextest schedules the run phase (per-test processes, better parallelism);
 # it does not execute doctests, so those keep a plain `cargo test --doc` pass
-# - dropping them would silently shrink the suite.
+# - dropping them would silently shrink the suite. The two `cargo test`
+# invocations below cover the `rom-weaver-typegen` and `rom-weaver-app`
+# example targets in rom-weaver-cli: both set `required-features`, and
+# neither `cargo nextest run --workspace` nor a plain `cargo test --workspace`
+# builds an example whose required feature isn't already enabled, so their
+# tests silently never run unless invoked with the matching `--features
+# ... --example ...` flags explicitly, as done here.
 run = [
   "cargo nextest run --workspace",
   "cargo test --quiet --doc --workspace",
+  "cargo test -p rom-weaver-cli --features typescript-types --example rom-weaver-typegen",
+  "cargo test -p rom-weaver-cli --features wasm-app --example rom-weaver-app",
 ]
 
 [tasks.coverage-rust]
