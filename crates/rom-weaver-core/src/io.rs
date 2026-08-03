@@ -692,9 +692,11 @@ impl TempPathAllocator {
     pub fn new(root: PathBuf) -> Self {
         #[cfg(target_family = "wasm")]
         if let Some(run_id) = browser_opfs_run_id() {
+            let sequence = NEXT_TEMP_NAMESPACE_ID.fetch_add(1, Ordering::Relaxed);
+            let entropy = namespace_entropy();
             return Self {
                 root,
-                namespace: format!("rw-{run_id}"),
+                namespace: format!("rw-{run_id}-{sequence}-{entropy:016x}"),
                 counter: AtomicU64::new(0),
             };
         }
