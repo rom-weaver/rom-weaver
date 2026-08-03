@@ -217,8 +217,12 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
     expect(document.querySelector(`[role="tab"][data-mode="tools"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="tools"]`)).toBeNull();
     if (width >= 1000) {
-      expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).not.toBe("none");
-      expect(getComputedStyle(document.querySelector(".desktop-more .tool-text")).display).not.toBe("none");
+      expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");
+      expect(getComputedStyle(document.querySelector(".desktop-more .tool-text")).display).toBe("none");
+      expect(document.querySelector(".masthead-settings .tip")?.textContent).toBe("Settings");
+      expect(document.querySelector(".desktop-more .tip")?.textContent).toBe("More");
+      await page.getByRole("button", { name: "Settings" }).hover();
+      await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
     }
     await page.getByRole("button", { name: "More" }).click();
   }
@@ -254,6 +258,14 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
     const badged = Boolean(document.querySelector(".brand-sub-row .channel-badge"));
     const expected = badged || width <= 1159 ? "none" : "inline";
     await expect.poll(() => getComputedStyle(document.querySelector(".sub-status-text")).display).toBe(expected);
+    if (width >= 1160) {
+      expect(Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row")).fontSize)).toBeGreaterThan(
+        12,
+      );
+      expect(getComputedStyle(document.querySelector(".sub-status")).borderTopWidth).toBe("1px");
+      expect(getComputedStyle(document.querySelector(".sub-status svg")).width).toBe("16px");
+      expect(getComputedStyle(document.querySelector(".sub-status")).cursor).toBe("pointer");
+    }
   }
   page.viewport(1280, 900);
 });

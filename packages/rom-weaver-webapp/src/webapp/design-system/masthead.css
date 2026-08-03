@@ -186,6 +186,33 @@
   .rw-app .sub-status-rule:hover::before { opacity: 1; }
 }
 .rw-app .sub-status-rule:active::before { opacity: 1; }
+/* On the wide desktop layout the identity line has room to read as useful
+   context rather than footnote text. The status is the one action in that
+   line, so give it a quiet button shape while keeping the compact glyph-only
+   treatment below the rail threshold. */
+@media (min-width: 1160px) {
+  .rw-app .brand-sub-row {
+    block-size: 20px; column-gap: var(--sp-s); margin-block-start: 2px;
+    font-size: clamp(.78rem, .7rem + .15vw, .86rem); color: var(--ink-3);
+  }
+  .rw-app .brand-sub-row .sub-status {
+    --sub-glyph: 16px;
+    gap: var(--sp-xs); min-inline-size: 32px; block-size: 30px; padding-inline: var(--sp-s);
+    border: 1px solid color-mix(in oklab, currentColor 36%, var(--seam));
+    border-radius: var(--r-s); background: color-mix(in oklab, currentColor 7%, transparent);
+    text-decoration: none;
+  }
+  @media (hover: hover) {
+    .rw-app .brand-sub-row .sub-status:hover {
+      border-color: currentColor; background: color-mix(in oklab, currentColor 13%, transparent);
+    }
+  }
+  .rw-app .brand-sub-row .sub-status:active {
+    border-color: currentColor; background: color-mix(in oklab, currentColor 18%, transparent);
+  }
+  .rw-app .brand-sub-row .sub-status:focus-visible { outline: 2px solid var(--thread); outline-offset: 2px; }
+  .rw-app .brand-sub-row .sub-status-rule::before { display: none; }
+}
 /* when a channel badge is present the status yields to glyph-only at every
    width - the badge is the rarer, louder signal, and together they cannot fit
    inside the 1220px app column in long locales */
@@ -327,15 +354,10 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 .rw-app .tool:active { color: var(--ink); background: var(--plate-2); border-color: var(--seam); }
 .rw-app .tool svg { width: clamp(15px, 13.8px + .25vw, 17px); height: clamp(15px, 13.8px + .25vw, 17px); }
 .rw-app .tool[aria-expanded="true"] { color: var(--ink); background: var(--well); border-color: var(--seam); }
-/* Desktop keeps the two important destinations named; the remaining tools are
-   still icon-only and use the tooltip/aria-label. */
+/* Desktop keeps the important destinations compact; the tooltip and aria-label
+   carry their names without turning the actions cluster into another nav. */
 .rw-app .tool-text { display: none; }
 .rw-app .dock-action .tool-text { display: inline; }
-.rw-app .masthead-settings, .rw-app .desktop-more .tool {
-  display: inline-flex; align-items: center; gap: var(--sp-xs); width: auto; padding-inline: var(--sp-s);
-}
-.rw-app .masthead-settings .tool-text, .rw-app .desktop-more .tool-text { display: inline; }
-.rw-app .masthead-settings .tip, .rw-app .desktop-more .tip { display: none; }
 
 /* support wears the thread at rest - the one action that stays warm. The heart
    beats a soft double-thump at rest, filled and quickened under the pointer. */
