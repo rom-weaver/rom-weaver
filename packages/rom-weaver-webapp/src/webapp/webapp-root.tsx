@@ -535,7 +535,7 @@ function WebappRoot({
     patchStackState: { items: Array.from({ length: state.patcherSession.patchCount }) },
     patcherFormEdited: !!(state.patcherSession.outputName.trim() || state.patcherSession.outputCompression !== "none"),
     romFilePresent: state.patcherSession.romFilePresent,
-    toolsActive: state.toolsSession.active,
+    toolsActive: state.toolsSession?.active ?? false,
     trimState: state.trimSession,
     webappState: state,
   });
