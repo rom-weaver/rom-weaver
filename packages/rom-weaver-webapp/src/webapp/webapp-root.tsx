@@ -96,6 +96,35 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute("href", canonicalUrl);
 };
 
+// Dismissing the update banner is remembered per running build: the same
+// pending update never re-prompts on reload, while an actual update changes
+// APP_BUILD_VERSION and re-arms the banner for the next one.
+const UPDATE_DISMISSED_STORAGE_KEY = "rom-weaver-update-dismissed-build";
+
+const readUpdateDismissed = () => {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    return localStorage.getItem(UPDATE_DISMISSED_STORAGE_KEY) === APP_BUILD_VERSION;
+  } catch (error) {
+    logger.trace("Unable to read update banner dismissal", {
+      message: error instanceof Error ? error.message : String(error || ""),
+    });
+    return false;
+  }
+};
+
+const writeUpdateDismissed = () => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(UPDATE_DISMISSED_STORAGE_KEY, APP_BUILD_VERSION);
+    logger.debug("Update banner dismissed", { build: APP_BUILD_VERSION });
+  } catch (error) {
+    logger.trace("Unable to persist update banner dismissal", {
+      message: error instanceof Error ? error.message : String(error || ""),
+    });
+  }
+};
+
 type WebappRootPageDrop = {
   drop: PageFileDrop;
   view: WebappRootProps["state"]["currentView"];
@@ -210,6 +239,7 @@ function WebappRoot({
     if (notFound) return;
     setActiveSelectionForm(state.currentView === "docs" ? undefined : state.currentView);
   }, [notFound, state.currentView]);
+  const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
   const [logOpen, setLogOpen] = useState(false);
   const [logTab, setLogTab] = useState<LogDialogTab>("status");
   const [settingsFocusHint, setSettingsFocusHint] = useState<SettingsFocusHint | null>(null);
@@ -559,7 +589,16 @@ function WebappRoot({
             tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
             tabsControlPanels={!notFound}
           />
-          <UpdateBanner onOpenChangelog={openChangelogTab} open={pageUpdate.ready} />
+          <UpdateBanner
+            onDismiss={() => {
+              setUpdateDismissed(true);
+              writeUpdateDismissed();
+            }}
+            onOpenChangelog={openChangelogTab}
+            onReload={actions.onReloadUpdate}
+            open={pageUpdate.ready && !updateDismissed}
+            title={pageUpdate.title}
+          />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLockNotice />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
