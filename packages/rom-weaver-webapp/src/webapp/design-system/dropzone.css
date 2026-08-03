@@ -294,16 +294,21 @@
   .rw-app .sample-tutorial-start-chip:hover { border-color: var(--thread); color: var(--ink); }
 }
 .rw-app .sample-tutorial-start-chip:active { border-color: var(--thread); color: var(--ink); }
-/* The beacon breathes until it is engaged, so a first visit notices it. */
-.rw-app .sample-tutorial-start-chip[aria-expanded="false"] .sample-tutorial-start-beacon {
+/* The beacon breathes until it is engaged, so a first visit notices it. The
+   halo is a ring pseudo-element animated on scale/opacity rather than a
+   box-shadow spread, so the pulse runs on the compositor (Lighthouse's
+   non-composited-animations audit). */
+.rw-app .sample-tutorial-start-chip[aria-expanded="false"] .sample-tutorial-start-beacon::after {
+  content: ""; position: absolute; inset: -2px; border-radius: 50%;
+  border: 2px solid color-mix(in oklab, var(--thread) 45%, transparent);
   animation: onboarding-beacon-pulse 2.6s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .sample-tutorial-start-chip[aria-expanded="false"] .sample-tutorial-start-beacon { animation: none; }
+  .rw-app .sample-tutorial-start-chip[aria-expanded="false"] .sample-tutorial-start-beacon::after { content: none; }
 }
 @keyframes onboarding-beacon-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--thread) 45%, transparent); }
-  60% { box-shadow: 0 0 0 6px transparent; }
+  0%, 100% { opacity: 1; scale: 1; }
+  60% { opacity: 0; scale: 1.6; }
 }
 /* A drag gesture owns the hero - the chip yields until the files land. */
 .rw-app .step-body:has(.drop.dragging) .sample-tutorial-start-chip { opacity: 0; pointer-events: none; }
@@ -337,6 +342,7 @@
 /* The quest marker: a bold ! on a round badge, the way a game flags the NPC
    with something to offer. */
 .rw-app .sample-tutorial-start-beacon {
+  position: relative;
   display: inline-grid; place-items: center; width: 18px; height: 18px; flex: none;
   border: 1px solid color-mix(in oklab, var(--thread) 65%, var(--seam-strong)); border-radius: 50%;
   background: color-mix(in oklab, var(--thread) 12%, var(--plate)); color: var(--thread-text);

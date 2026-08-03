@@ -161,6 +161,11 @@
   .rw-app .sub-chip:hover { text-decoration-color: currentColor; }
 }
 .rw-app .sub-chip:active { text-decoration-color: currentColor; }
+/* The worker state lands after hydration and recolors the status chip, and a
+   colour transition firing during load is a main-thread animation Lighthouse's
+   non-composited-animations audit flags - so this one chip snaps. The other
+   two sub-chips never recolor at load and keep the fade. */
+.rw-app .sub-status.sub-chip { transition: none; }
 /* With no text there is nothing to underline, and a bare glyph beside two
    underlined controls stops reading as one of them. The rule is drawn inside the
    box rather than on its edge: the box is taller than the row it sits in, and
