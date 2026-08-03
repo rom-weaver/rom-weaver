@@ -5,7 +5,8 @@ name: PR Gates
 # because they share the same security boundary. Both post a commit status
 # against the pull request head rather than relying on their own check run,
 # both must work for a pull request from a fork, and both are required by the
-# `main protection` ruleset.
+# `main protection` ruleset. The title gate also removes comments left by its
+# retired reporting implementation once a title passes.
 #
 # `pull_request_target` runs from the base branch with a write token, which is
 # what lets a fork's pull request receive a status. Nothing from
@@ -104,6 +105,7 @@ jobs:
       cancel-in-progress: true
     permissions:
       contents: read
+      pull-requests: write
       statuses: write
     steps:
       - name: Mark title check pending
@@ -162,6 +164,13 @@ jobs:
             --field context="$STATUS_CONTEXT" \
             --field description="$description" \
             --field target_url="$STATUS_TARGET_URL"
+          if [ "$state" = success ]; then
+            gh api --paginate "repos/$GITHUB_REPOSITORY/issues/${{ github.event.pull_request.number }}/comments" \
+              --jq '.[] | select(.user.type == "Bot" and (.body | contains("<!-- rom-weaver-pr-title-gate -->"))) | .id' |
+              while read -r comment_id; do
+                [ -z "$comment_id" ] || gh api --method DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id"
+              done
+          fi
 
       - name: Mark broken title gate
         if: failure()
