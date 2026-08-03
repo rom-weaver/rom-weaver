@@ -27,7 +27,7 @@ light and dark themes.
   <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/apply-patches-desktop-dark.avif">
   <source type="image/avif" srcset="../screenshots/apply-patches-desktop-light.avif">
   <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/apply-patches-desktop-dark.webp">
-  <img src="../screenshots/apply-patches-desktop-light.webp" width="2242" height="1045" alt="Focused Apply patch stack with two ordered practice patches on desktop">
+  <img src="../screenshots/apply-patches-desktop-light.webp" alt="Focused Apply patch stack with two ordered practice patches on desktop">
 </picture>
 
 ### Apply output
@@ -36,7 +36,7 @@ light and dark themes.
   <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/apply-output-desktop-dark.avif">
   <source type="image/avif" srcset="../screenshots/apply-output-desktop-light.avif">
   <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/apply-output-desktop-dark.webp">
-  <img src="../screenshots/apply-output-desktop-light.webp" width="2242" height="560" alt="Focused Apply output card on desktop">
+  <img src="../screenshots/apply-output-desktop-light.webp" alt="Focused Apply output card on desktop">
 </picture>
 
 Mobile versions:
@@ -53,7 +53,7 @@ their dark variants with the site theme.
   <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/create-inputs-desktop-dark.avif">
   <source type="image/avif" srcset="../screenshots/create-inputs-desktop-light.avif">
   <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/create-inputs-desktop-dark.webp">
-  <img src="../screenshots/create-inputs-desktop-light.webp" width="2242" height="837" alt="Focused Create Original and Modified cards on desktop">
+  <img src="../screenshots/create-inputs-desktop-light.webp" alt="Focused Create Original and Modified cards on desktop">
 </picture>
 
 ### Patch output
@@ -62,7 +62,7 @@ their dark variants with the site theme.
   <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/create-output-desktop-dark.avif">
   <source type="image/avif" srcset="../screenshots/create-output-desktop-light.avif">
   <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/create-output-desktop-dark.webp">
-  <img src="../screenshots/create-output-desktop-light.webp" width="2242" height="568" alt="Focused Create patch output card on desktop">
+  <img src="../screenshots/create-output-desktop-light.webp" alt="Focused Create patch output card on desktop">
 </picture>
 
 Mobile versions:
@@ -75,7 +75,7 @@ and [patch output](../screenshots/create-output-mobile-light.webp).
   <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/bundle-output-desktop-dark.avif">
   <source type="image/avif" srcset="../screenshots/bundle-output-desktop-light.avif">
   <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/bundle-output-desktop-dark.webp">
-  <img src="../screenshots/bundle-output-desktop-light.webp" width="2242" height="796" alt="Focused patch-only bundle options and Create ZIP Bundle action on desktop">
+  <img src="../screenshots/bundle-output-desktop-light.webp" alt="Focused patch-only bundle options and Create ZIP Bundle action on desktop">
 </picture>
 
 The [mobile capture](../screenshots/bundle-output-mobile-light.webp)
