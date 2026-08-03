@@ -36,3 +36,9 @@ mod cheats;
 
 #[path = "cli_smoke/permissions.rs"]
 mod permissions;
+
+#[path = "cli_smoke/tools.rs"]
+mod tools;
+
+#[path = "cli_smoke/extract_batch_plan.rs"]
+mod extract_batch_plan;
