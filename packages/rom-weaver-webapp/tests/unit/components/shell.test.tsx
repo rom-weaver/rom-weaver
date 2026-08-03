@@ -9,7 +9,7 @@ import { Masthead, Reveal, UpdateBanner } from "../../../src/webapp/components/s
  * App-shell contract: the masthead tablist and the phone dock (both named
  * "Workflow" - the webapp browser test drives tabs by that role/name), the
  * brand's build/threads/runtime controls, the actions cluster, and the
- * mobile-only update banner.
+ * update banner.
  */
 
 // The suite runs without vitest globals, so RTL cannot auto-clean between tests.
@@ -140,7 +140,7 @@ describe("Masthead", () => {
     expect(onOpenChangelog).toHaveBeenCalledTimes(1);
 
     const threads = container.querySelector(".masthead-threads") as HTMLButtonElement;
-    expect(threads.textContent).toBe("8T");
+    expect(threads.textContent).toBe("8 Threads");
     expect(threads.getAttribute("aria-label")).toBe("8 threads");
     fireEvent.click(threads);
     // no deep-link handler supplied, so the thread count still just opens settings
@@ -182,14 +182,20 @@ describe("Masthead", () => {
     expect(badge.getAttribute("data-channel")).toBe("pr");
     expect(badge.getAttribute("href")).toBe("https://example.com/repo/pull/123");
     expect(badge.getAttribute("target")).toBe("_blank");
-    expect(badge.querySelector(".tag-extra")?.textContent).toBe(" · v1.2.3");
+    expect(badge.querySelector(".tag-extra")?.textContent).toBe(" / v1.2.3");
 
     rerender(withSettings(<Masthead {...mastheadProps} channelBadge="nightly" />));
     const channel = container.querySelector(".channel-badge") as HTMLButtonElement;
     expect(channel.tagName).toBe("BUTTON");
     expect(channel.getAttribute("data-channel")).toBe("nightly");
     expect(channel.getAttribute("aria-label")).toBe("Nightly build, v1.2.3");
-    expect(channel.querySelector(".tag-letter")?.textContent).toBe("N");
+    expect(channel.querySelector(".tag-channel")?.textContent).toBe("nightly");
+    expect(channel.textContent).toBe("nightly / v1.2.3");
+
+    rerender(withSettings(<Masthead {...mastheadProps} channelBadge="beta" />));
+    const beta = container.querySelector(".channel-badge") as HTMLButtonElement;
+    expect(beta.querySelector(".tag-channel")?.textContent).toBe("beta");
+    expect(beta.textContent).toBe("beta / v1.2.3");
   });
 
   it("preloads the Log dialog before interaction completes", () => {
@@ -258,19 +264,30 @@ describe("Reveal", () => {
 });
 
 describe("UpdateBanner", () => {
-  it("is a single action opening the changelog, and renders nothing when closed", () => {
+  it("offers reload, release notes, and dismissal", () => {
+    const onDismiss = vi.fn();
     const onOpenChangelog = vi.fn();
-    const { container, rerender } = render(
-      withSettings(<UpdateBanner onOpenChangelog={onOpenChangelog} open={false} />),
+    const onReload = vi.fn();
+    const { container } = render(
+      withSettings(
+        <UpdateBanner
+          onDismiss={onDismiss}
+          onOpenChangelog={onOpenChangelog}
+          onReload={onReload}
+          open
+          title="A newer app version is ready."
+        />,
+      ),
     );
-    expect(container.querySelector(".update-banner")).toBeNull();
-    rerender(withSettings(<UpdateBanner onOpenChangelog={onOpenChangelog} open />));
-    const banner = container.querySelector(".update-banner") as HTMLButtonElement;
-    expect(banner.textContent).toContain("Update available");
-    expect(banner.textContent).toContain("What’s new");
-    // no dismiss: the amber brand-line status is the persistent desktop notice
-    expect(container.querySelector(".banner-x")).toBeNull();
-    fireEvent.click(banner);
+
+    const changelogButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
+    expect(changelogButton.textContent).toBe("What’s new");
+    expect(changelogButton.getAttribute("aria-label")).toContain("A newer app version is ready.");
+    fireEvent.click(changelogButton);
     expect(onOpenChangelog).toHaveBeenCalledTimes(1);
+    fireEvent.click(container.querySelector(".updates .btn.primary") as HTMLButtonElement);
+    expect(onReload).toHaveBeenCalledTimes(1);
+    fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

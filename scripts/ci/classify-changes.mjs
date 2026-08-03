@@ -133,7 +133,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       /^packages\/rom-weaver-webapp\/(?:package(?:-lock)?\.json|vitest(?:\.config\.base|(?:\.wasm)?\.browser\.config)\.mjs)$/.test(
         path,
       ) ||
-      /^packages\/rom-weaver-webapp\/src\/(?:lib\/runtime|platform|storage|types|wasm|workers)(?:\/|$)/.test(
+      /^packages\/rom-weaver-webapp\/src\/(?:lib\/(?:logging\.ts|runtime)|platform|storage|types|wasm|workers)(?:\/|$)/.test(
         path,
       ) ||
       /^packages\/rom-weaver-webapp\/tests\/(?:fixtures|wasm)(?:\/|$)/.test(path)

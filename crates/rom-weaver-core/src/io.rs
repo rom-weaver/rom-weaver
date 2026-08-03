@@ -690,6 +690,17 @@ pub struct TempPathAllocator {
 
 impl TempPathAllocator {
     pub fn new(root: PathBuf) -> Self {
+        #[cfg(target_family = "wasm")]
+        if let Some(run_id) = browser_opfs_run_id() {
+            let sequence = NEXT_TEMP_NAMESPACE_ID.fetch_add(1, Ordering::Relaxed);
+            let entropy = namespace_entropy();
+            return Self {
+                root,
+                namespace: format!("rw-{run_id}-{sequence}-{entropy:016x}"),
+                counter: AtomicU64::new(0),
+            };
+        }
+
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|value| value.as_nanos())
@@ -742,6 +753,17 @@ impl TempPathAllocator {
         }
         self.root.join(&self.namespace).join(file_name)
     }
+}
+
+#[cfg(target_family = "wasm")]
+fn browser_opfs_run_id() -> Option<String> {
+    let value = std::env::var("ROM_WEAVER_OPFS_RUN_ID").ok()?;
+    let valid = !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'));
+    valid.then_some(value)
 }
 
 impl Drop for TempPathAllocator {

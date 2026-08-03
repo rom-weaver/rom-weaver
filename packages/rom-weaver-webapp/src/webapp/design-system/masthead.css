@@ -65,11 +65,12 @@
    in the masthead than a production build wearing none. Nothing is painted on
    that box, so the overflow never shows at the masthead's edge. */
 .rw-app .brand-sub-row {
-  display: flex; column-gap: var(--sp-xs); align-items: center; block-size: 16px;
+  display: flex; column-gap: 0; align-items: center; block-size: 16px;
   font-size: clamp(.64rem, .58rem + .25vw, .76rem); font-variant-numeric: tabular-nums; line-height: 1.2;
   color: var(--ink-4); white-space: nowrap;
 }
 .rw-app .sub-item { display: inline-flex; flex: none; gap: var(--sp-xs); align-items: center; }
+.rw-app .sub-separator { flex: none; margin-inline: .08em; color: var(--ink-4); }
 /* the version opens the changelog and the thread count opens settings; the
    underline in the `.sub-chip` block below is the affordance both wear */
 .rw-app .sub-link {
@@ -107,7 +108,9 @@
   .rw-app .build-tag .channel-badge:hover { background: transparent; }
 }
 .rw-app .build-tag .channel-badge:active { background: transparent; }
+.rw-app .build-tag .tag-separator { display: inline-block; margin-inline: .22em; }
 .rw-app .build-tag .tag-version { font-weight: 600; text-transform: none; letter-spacing: 0; }
+.rw-app .build-tag .tag-channel { font-weight: 800; text-transform: none; letter-spacing: 0; }
 .rw-app .build-tag .tag-letter { font-weight: 800; }
 @media (hover: hover) {
   .rw-app a.channel-badge:hover, .rw-app button.channel-badge:hover { background: color-mix(in oklab, currentColor 18%, transparent); }
@@ -153,13 +156,14 @@
   .rw-app .sub-chip:hover { text-decoration-color: currentColor; }
 }
 .rw-app .sub-chip:active { text-decoration-color: currentColor; }
+.rw-app .masthead-threads-space { flex: none; inline-size: .28em; font-size: inherit; }
 /* The worker state lands after hydration and recolors the status button. Its
    color transition is disabled in the action-group rule below because Lighthouse
    flags that load-time main-thread animation. */
 @media (min-width: 1160px) {
   .rw-app .brand-word { font-size: clamp(1.18rem, 1.08rem + .5vw, 1.75rem); }
   .rw-app .brand-sub-row {
-    block-size: 20px; column-gap: var(--sp-s); margin-block-start: 2px;
+    block-size: 20px; column-gap: 0; margin-block-start: 2px;
     font-size: clamp(.68rem, .62rem + .15vw, .8rem); color: var(--ink-3);
   }
   .rw-app .brand-sub-row .build-tag .channel-badge { font-size: inherit; }
@@ -452,27 +456,6 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 @media (prefers-reduced-motion: reduce) {
   .rw-app .dl-arrow { animation: none; }
 }
-/* the loud update path is mobile-only; on desktop the amber status glyph in the
-   brand line is the persistent notice */
-.rw-app .update-banner {
-  position: fixed; inset-block-end: calc(var(--dock-h) + var(--sp-s)); inset-inline: 0; z-index: 999;
-  display: none; gap: var(--sp-s); align-items: center; justify-content: center;
-  width: fit-content; max-width: calc(100% - var(--sp-m) * 2); min-height: 44px;
-  padding: var(--sp-s) var(--sp-l); margin-inline: auto;
-  font-family: inherit; font-size: .82rem; font-weight: 650; color: var(--ink); cursor: pointer;
-  background: color-mix(in oklab, var(--care) 14%, var(--plate));
-  border: 1px solid color-mix(in oklab, var(--care) 45%, transparent);
-  border-radius: var(--r-m); box-shadow: var(--overlay-shadow);
-}
-.rw-app .update-banner svg { width: 14px; height: 14px; color: var(--care); }
-@media (max-width: 999px) {
-  .rw-app .update-banner { display: flex; }
-}
-@media (hover: hover) {
-  .rw-app .update-banner:hover { background: color-mix(in oklab, var(--care) 20%, var(--plate)); }
-}
-.rw-app .update-banner:active { background: color-mix(in oklab, var(--care) 24%, var(--plate)); }
-
 /* Reset lives in the workflow panel head now: a labelled, contextual action
    instead of an anonymous icon in the global toolbar. It wears no box at all -
    see `.reset-btn` in workbench.css, beside the step head it rides. */
