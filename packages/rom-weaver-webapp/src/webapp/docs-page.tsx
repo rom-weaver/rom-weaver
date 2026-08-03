@@ -50,7 +50,7 @@ const readDocShelfState = (): DocShelfState => {
 };
 
 const useDocShelfState = () => {
-  const [openShelves, setOpenShelves] = useState(DEFAULT_DOC_SHELF_STATE);
+  const [openShelves, setOpenShelves] = useState(readDocShelfState);
   const [ready, setReady] = useState(false);
   useIsomorphicLayoutEffect(() => {
     setOpenShelves(readDocShelfState());
