@@ -81,10 +81,12 @@ const formatLine = (entry: LogStoreEntry) => renderLine(entry, formatDetails(ent
 const formatCopyLine = (entry: LogStoreEntry) => renderLine(entry, serializeDetails(entry.details));
 
 const formatOpfsSize = (size: number | undefined) => (size === undefined ? "—" : `${size.toLocaleString()} B`);
+const getOpfsLeafName = (path: string) => path.slice(path.lastIndexOf("/") + 1) || path;
 const formatOpfsEntry = (entry: BrowserOpfsEntry) =>
-  `${entry.kind.padEnd(9)} ${formatOpfsSize(entry.size).padStart(12)} ${entry.path}`;
-const getOpfsFileLeaves = (entries: readonly BrowserOpfsEntry[]) => entries.filter((entry) => entry.kind === "file");
-const formatOpfsFileCount = (count: number) => `${count.toLocaleString()} file${count === 1 ? "" : "s"}`;
+  `${entry.kind.padEnd(9)} ${formatOpfsSize(entry.size).padStart(12)} ${getOpfsLeafName(entry.path)}`;
+const getOpfsLeafEntries = (entries: readonly BrowserOpfsEntry[]) =>
+  entries.filter((entry) => !entries.some((candidate) => candidate.path.startsWith(`${entry.path}/`)));
+const formatOpfsEntryCount = (count: number) => `${count.toLocaleString()} entr${count === 1 ? "y" : "ies"}`;
 
 const EMPTY_ENTRIES: readonly LogStoreEntry[] = [];
 // While the dialog is closed there is nothing to show, so subscribe to a no-op
@@ -406,9 +408,9 @@ const LogDialog = ({
 
   const visibleOpfs = useMemo(() => {
     const query = filter.trim().toLowerCase();
-    const fileLeaves = getOpfsFileLeaves(opfsEntries);
-    if (!query) return fileLeaves;
-    return fileLeaves.filter((entry) => formatOpfsEntry(entry).toLowerCase().includes(query));
+    const leafEntries = getOpfsLeafEntries(opfsEntries);
+    if (!query) return leafEntries;
+    return leafEntries.filter((entry) => `${formatOpfsEntry(entry)} ${entry.path}`.toLowerCase().includes(query));
   }, [filter, opfsEntries]);
   const exportText = showingOpfs ? visibleOpfs.map(formatOpfsEntry).join("\n") : visible.map(formatCopyLine).join("\n");
 
@@ -704,18 +706,20 @@ const LogDialog = ({
               {showingOpfs ? (
                 <div aria-live="polite" className="opfs-inspector mono">
                   <div className="opfs-summary">
-                    {opfsLoading ? "Loading OPFS…" : formatOpfsFileCount(visibleOpfs.length)}
+                    {opfsLoading ? "Loading OPFS…" : formatOpfsEntryCount(visibleOpfs.length)}
                   </div>
                   {opfsError ? (
                     <div className="tracelog-empty">{opfsError}</div>
                   ) : visibleOpfs.length === 0 ? (
-                    <div className="tracelog-empty">{filter.trim() ? "No matching files" : "OPFS has no files"}</div>
+                    <div className="tracelog-empty">
+                      {filter.trim() ? "No matching entries" : "OPFS has no entries"}
+                    </div>
                   ) : (
                     <ul className="opfs-list">
                       {visibleOpfs.map((entry) => (
                         <li className="opfs-row" key={`${entry.kind}:${entry.path}`}>
                           <span className="opfs-kind">{entry.kind}</span>
-                          <span className="opfs-path">{entry.path}</span>
+                          <span className="opfs-path">{getOpfsLeafName(entry.path)}</span>
                           <span className="opfs-size">{formatOpfsSize(entry.size)}</span>
                         </li>
                       ))}
