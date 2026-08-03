@@ -70,6 +70,7 @@
   color: var(--ink-4); white-space: nowrap;
 }
 .rw-app .sub-item { display: inline-flex; flex: none; gap: var(--sp-xs); align-items: center; }
+.rw-app .sub-separator { flex: none; margin-inline: .22em; color: var(--ink-4); }
 /* the version opens the changelog and the thread count opens settings; the
    underline in the `.sub-chip` block below is the affordance both wear */
 .rw-app .sub-link {

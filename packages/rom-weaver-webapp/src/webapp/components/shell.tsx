@@ -951,6 +951,11 @@ const Masthead = ({
                   />
                 </span>
               ) : null}
+              {version && threads ? (
+                <span aria-hidden="true" className="sub-separator">
+                  /
+                </span>
+              ) : null}
               {threads ? (
                 <span className="sub-item">
                   <button
