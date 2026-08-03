@@ -1,13 +1,9 @@
-import { useEffect, useState } from "react";
-import { createLogger } from "../../lib/logging.ts";
-import { Modal } from "../../public/react/components/ds/index.ts";
-import { useUiLocalizer } from "../../public/react/settings-context.tsx";
+import type { Localizer } from "../../presentation/localization/index.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../build-version.ts";
 import {
   type ChangelogEntry,
   commitGroups,
   EntryGroups,
-  fetchChangelog,
   type ReleaseChangelog,
   type ReleaseNote,
   releaseTagUrl,
@@ -15,28 +11,26 @@ import {
 } from "./changelog-source.tsx";
 
 /**
- * The "What's new" dialog behind the update banner's version affordance. Fetches
- * the deploy-root `changelog.json` (emitted by the build from `git log`) with
- * cache: "no-store" so a pending update surfaces the INCOMING deploy's commits,
- * not the stale copy the running bundle shipped with. The list is sliced to the
- * commits newer than the running build so it reads as "what you're about to get".
- * Release builds replace that list with their embedded, user-facing release notes.
+ * The "what you're about to get" half of the Changelog tab, shown only while a
+ * pending deploy is waiting. It reads the same `changelog.json` the tab already
+ * fetched - the asset is loaded with cache: "no-store", so it describes the
+ * INCOMING deploy, not the stale copy the running bundle shipped with - and
+ * slices it to what is newer than the running build. Release builds replace
+ * that commit list with their embedded release notes.
  *
  * Both views render the same CHANGELOG.md shape - a header, then `### type`
  * groups of `**scope:** summary #ref` lines - so a nightly update and a release
  * update read alike. The only difference is where the entries come from: a
  * release parses them at build time out of CHANGELOG.md, a nightly parses the
  * raw commit subjects here.
+ *
+ * The rest of the tab, below this, answers the other question - what has
+ * already shipped - and lives in `changelog-panel.tsx`.
  */
-
-const logger = createLogger("changelog-dialog");
 
 const DEFAULT_BRANCH = "main";
 
-type FetchState =
-  | { status: "loading" }
-  | { status: "error" }
-  | { status: "loaded"; entries: ChangelogEntry[]; release?: ReleaseChangelog; truncated: boolean };
+type UpdateData = { entries: ChangelogEntry[]; release?: ReleaseChangelog };
 
 // Commits newer than the running build are everything before its hash in the
 // (newest-first) log. If the running hash isn't in the window the client is more
@@ -63,25 +57,23 @@ type TransitionRef = { href?: string; label: string; text: string };
 type HeaderMeta = { from: TransitionRef; moreUrl: string; to?: TransitionRef };
 
 // What you're moving from and to, plus the escape hatch to everything this
-// dialog could not fit. Both views share it, and it rides in the modal's title
-// bar next to "What's new" rather than at the top of the body.
+// section could not fit.
 //
 // Each side links to whatever describes it on GitHub - the release for a
 // version, the commit for a build - and "more" follows the same logic: a
 // release shows CHANGELOG.md entries, so it links CHANGELOG.md; a nightly shows
 // raw commits, which never reach that file, so it links the commit log.
-const headerMeta = (state: FetchState): HeaderMeta | undefined => {
-  if (state.status !== "loaded") return undefined;
-  const repositoryUrl = state.release?.repositoryUrl ?? REPOSITORY_URL;
-  if (state.release && state.release.version !== APP_VERSION) {
-    const incoming = state.release.version;
+const headerMeta = (data: UpdateData): HeaderMeta => {
+  const repositoryUrl = data.release?.repositoryUrl ?? REPOSITORY_URL;
+  if (data.release && data.release.version !== APP_VERSION) {
+    const incoming = data.release.version;
     return {
       from: {
         href: releaseTagUrl(repositoryUrl, APP_VERSION),
         label: `currently running version ${APP_VERSION}`,
         text: `v${APP_VERSION}`,
       },
-      moreUrl: state.release.changelogUrl,
+      moreUrl: data.release.changelogUrl,
       to: {
         href: releaseTagUrl(repositoryUrl, incoming),
         label: `updating to version ${incoming}`,
@@ -93,7 +85,7 @@ const headerMeta = (state: FetchState): HeaderMeta | undefined => {
   // No version bump, so the transition is between builds of the same version.
   // With nothing newer at all there is no transition either - fall back to the
   // build id, the one thing that differs between same-commit rebuilds.
-  const incoming = state.entries[0]?.hash;
+  const incoming = data.entries[0]?.hash;
   if (!incoming) {
     return { from: { label: `version ${APP_VERSION}, build ${APP_BUILD_VERSION}`, text: APP_BUILD_VERSION }, moreUrl };
   }
@@ -108,8 +100,8 @@ const headerMeta = (state: FetchState): HeaderMeta | undefined => {
   };
 };
 
-// The tail the dialog could not fit - the same escape hatch as the header's, put
-// where you run out of entries.
+// The tail the section could not fit - the same escape hatch as the header's,
+// put where you run out of entries.
 const TruncatedNote = ({ moreUrl }: { moreUrl: string }) => (
   <div className="changelog-note">
     <a className="changelog-more" href={moreUrl} rel="noreferrer" target="_blank">
@@ -131,18 +123,21 @@ const TransitionSide = ({ side }: { side: TransitionRef }) =>
     </span>
   );
 
-const ChangelogHeader = ({ meta }: { meta: HeaderMeta }) => (
-  <div className="changelog-head-meta">
-    <span className="changelog-head-transition mono">
-      <TransitionSide side={meta.from} />
-      {/* Hidden because each side already says which end it is; announcing the
-          glyph would only add "rightwards arrow" between them. */}
-      {meta.to ? <span aria-hidden="true"> → </span> : null}
-      {meta.to ? <TransitionSide side={meta.to} /> : null}
-    </span>
-    <a className="changelog-head-link" href={meta.moreUrl} rel="noreferrer" target="_blank">
-      Full changelog
-    </a>
+const UpdateHeader = ({ meta, title }: { meta: HeaderMeta; title: string }) => (
+  <div className="changelog-update-head">
+    <b className="changelog-update-title">{title}</b>
+    <div className="changelog-head-meta">
+      <span className="changelog-head-transition mono">
+        <TransitionSide side={meta.from} />
+        {/* Hidden because each side already says which end it is; announcing the
+            glyph would only add "rightwards arrow" between them. */}
+        {meta.to ? <span aria-hidden="true"> → </span> : null}
+        {meta.to ? <TransitionSide side={meta.to} /> : null}
+      </span>
+      <a className="changelog-head-link" href={meta.moreUrl} rel="noreferrer" target="_blank">
+        Full changelog
+      </a>
+    </div>
   </div>
 );
 
@@ -178,86 +173,52 @@ const CommitNotes = ({
   moreUrl: string;
   repositoryUrl: string;
   truncated: boolean;
+}) => (
+  <>
+    <EntryGroups groups={commitGroups(entries)} keyPrefix="commits" repositoryUrl={repositoryUrl} />
+    {truncated ? <TruncatedNote moreUrl={moreUrl} /> : null}
+  </>
+);
+
+const ChangelogUpdate = ({
+  entries: all,
+  localizer,
+  onReload,
+  release,
+}: {
+  entries: ChangelogEntry[];
+  localizer: Localizer;
+  onReload?: () => void;
+  release?: ReleaseChangelog;
 }) => {
+  const meta = headerMeta({ entries: all, release });
+  // A version bump renders the release notes and ignores the commits; the slice
+  // only matters for the same-version commit view.
+  const { entries, truncated } = commitsSinceCurrent(all);
   return (
-    <>
-      <EntryGroups groups={commitGroups(entries)} keyPrefix="commits" repositoryUrl={repositoryUrl} />
-      {truncated ? <TruncatedNote moreUrl={moreUrl} /> : null}
-    </>
-  );
-};
-
-const ChangelogDialog = ({ open, onClose, onReload }: { open: boolean; onClose: () => void; onReload: () => void }) => {
-  const localizer = useUiLocalizer();
-  const [state, setState] = useState<FetchState>({ status: "loading" });
-  const [_attempt, setAttempt] = useState(0);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Reload attempts intentionally trigger a fresh changelog request.
-  useEffect(() => {
-    if (!open) return undefined;
-    let active = true;
-    setState({ status: "loading" });
-    fetchChangelog()
-      .then(({ entries: all, release }) => {
-        if (!active) return;
-        // A version bump renders the release notes and ignores the commits; the
-        // slice only matters for the same-version commit view.
-        const { entries, truncated } = commitsSinceCurrent(all);
-        setState({ entries, release, status: "loaded", truncated });
-      })
-      .catch((error) => {
-        if (!active) return;
-        logger.warn("Changelog load failed", { message: String(error) });
-        setState({ status: "error" });
-      });
-    return () => {
-      active = false;
-    };
-  }, [open]);
-
-  const meta = headerMeta(state);
-
-  return (
-    <Modal
-      headerActions={meta ? <ChangelogHeader meta={meta} /> : undefined}
-      onClose={onClose}
-      open={open}
-      showCloseButton={false}
-      title={localizer.message("ui.update.whatsNew")}
-      variant="changelog-modal"
-    >
-      {state.status === "loading" ? <div className="changelog-note">…</div> : null}
-      {state.status === "error" ? (
-        <div className="changelog-note">
-          <button className="btn slim ghost" onClick={() => setAttempt((n) => n + 1)} type="button">
-            {localizer.message("ui.common.retry")}
+    <section className="changelog-update">
+      <UpdateHeader meta={meta} title={localizer.message("ui.update.whatsNew")} />
+      {release && release.version !== APP_VERSION ? (
+        <ReleaseNotes moreUrl={meta.moreUrl} release={release} />
+      ) : (
+        // A dev build has no embedded release payload, so fall back to the
+        // constants baked in here.
+        <CommitNotes
+          entries={entries}
+          moreUrl={meta.moreUrl}
+          repositoryUrl={release?.repositoryUrl ?? REPOSITORY_URL}
+          truncated={truncated}
+        />
+      )}
+      {onReload ? (
+        <div className="changelog-actions">
+          <button className="btn primary" onClick={onReload} type="button">
+            {localizer.message("ui.update.reloadNow")}
           </button>
         </div>
       ) : null}
-      {state.status === "loaded" && meta ? (
-        state.release && state.release.version !== APP_VERSION ? (
-          <ReleaseNotes moreUrl={meta.moreUrl} release={state.release} />
-        ) : (
-          // A dev build has no embedded release payload, so fall back to the
-          // constants baked in here.
-          <CommitNotes
-            entries={state.entries}
-            moreUrl={meta.moreUrl}
-            repositoryUrl={state.release?.repositoryUrl ?? REPOSITORY_URL}
-            truncated={state.truncated}
-          />
-        )
-      ) : null}
-      <div className="changelog-actions">
-        <button className="btn ghost" onClick={onClose} type="button">
-          {localizer.message("ui.update.later")}
-        </button>
-        <button className="btn primary" onClick={onReload} type="button">
-          {localizer.message("ui.update.reloadNow")}
-        </button>
-      </div>
-    </Modal>
+    </section>
   );
 };
 
-export { ChangelogDialog };
+export { ChangelogUpdate };

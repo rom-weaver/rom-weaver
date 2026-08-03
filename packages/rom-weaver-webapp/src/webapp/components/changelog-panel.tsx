@@ -11,12 +11,14 @@ import {
   releaseTagUrl,
   REPOSITORY_URL,
 } from "./changelog-source.tsx";
+import { ChangelogUpdate } from "./changelog-update.tsx";
 
 /**
- * The Changelog tab: what has shipped, newest first, from the same
- * `changelog.json` the update dialog reads. The two answer different questions -
- * the dialog says "what am I about to get", this says "what is in here" - so
- * this one never slices against the running build.
+ * The Changelog tab: what has shipped, newest first, from `changelog.json`.
+ * When a deploy is waiting, {@link ChangelogUpdate} leads the tab with the
+ * other question the same file answers - "what am I about to get" - so the
+ * update notification and the version chip both land here rather than on a
+ * dialog of their own. This half never slices against the running build.
  *
  * Releases are collapsed sections with the newest open, because the reason to
  * open this tab is almost always the newest one. Ahead of the last release
@@ -70,7 +72,18 @@ const ReleaseSection = ({
   </details>
 );
 
-const ChangelogPanel = ({ active, localizer }: { active: boolean; localizer: Localizer }) => {
+const ChangelogPanel = ({
+  active,
+  localizer,
+  onReload,
+  updateReady = false,
+}: {
+  active: boolean;
+  localizer: Localizer;
+  /** Reloads into the waiting deploy; only offered while one is waiting. */
+  onReload?: () => void;
+  updateReady?: boolean;
+}) => {
   const [state, setState] = useState<FetchState>({ status: "loading" });
   // Retry and re-open share one loader, so the newest request is the only one
   // allowed to land - a slow first fetch cannot overwrite a fast retry.
@@ -120,6 +133,9 @@ const ChangelogPanel = ({ active, localizer }: { active: boolean; localizer: Loc
 
   return (
     <div className="changelog-list">
+      {updateReady ? (
+        <ChangelogUpdate entries={state.entries} localizer={localizer} onReload={onReload} release={state.release} />
+      ) : null}
       {unreleased.length ? (
         <ReleaseSection
           defaultOpen

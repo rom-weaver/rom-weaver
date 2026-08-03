@@ -233,17 +233,19 @@ describe("Reveal", () => {
 });
 
 describe("UpdateBanner", () => {
-  it("is a single direct reload action, and renders nothing when closed", () => {
-    const onReload = vi.fn();
-    const { container, rerender } = render(withSettings(<UpdateBanner onReload={onReload} open={false} />));
+  it("is a single action opening the changelog, and renders nothing when closed", () => {
+    const onOpenChangelog = vi.fn();
+    const { container, rerender } = render(
+      withSettings(<UpdateBanner onOpenChangelog={onOpenChangelog} open={false} />),
+    );
     expect(container.querySelector(".update-banner")).toBeNull();
-    rerender(withSettings(<UpdateBanner onReload={onReload} open />));
+    rerender(withSettings(<UpdateBanner onOpenChangelog={onOpenChangelog} open />));
     const banner = container.querySelector(".update-banner") as HTMLButtonElement;
     expect(banner.textContent).toContain("Update available");
-    expect(banner.textContent).toContain("Reload now");
+    expect(banner.textContent).toContain("What’s new");
     // no dismiss: the amber brand-line status is the persistent desktop notice
     expect(container.querySelector(".banner-x")).toBeNull();
     fireEvent.click(banner);
-    expect(onReload).toHaveBeenCalledTimes(1);
+    expect(onOpenChangelog).toHaveBeenCalledTimes(1);
   });
 });

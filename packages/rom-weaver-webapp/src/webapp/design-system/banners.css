@@ -84,6 +84,25 @@
 .rw-app .release-changelog-ref { font-size: .78rem; color: var(--ink-2); white-space: nowrap; }
 .rw-app .changelog-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); padding-top: 8px; }
 
+/* ── the waiting deploy, at the head of the Changelog tab ──
+   Tinted and boxed so it reads as the one thing on the tab that asks for an
+   action, with the shipped list continuing underneath in plain chrome. */
+.rw-app .changelog-update {
+  border: 1px solid color-mix(in oklab, var(--care) 34%, var(--seam));
+  border-radius: var(--r-m);
+  background: color-mix(in oklab, var(--care) 7%, var(--plate));
+  padding: var(--sp-m);
+}
+/* The transition and full-changelog link sit on the title's baseline while they
+   fit, and drop to their own right-aligned row once the head runs out of
+   width - the auto margin survives the wrap. */
+.rw-app .changelog-update-head {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: var(--sp-xs) var(--sp-m); margin-block-end: var(--sp-s);
+}
+.rw-app .changelog-update-title { font-size: .95rem; font-weight: 700; letter-spacing: .01em; }
+.rw-app .changelog-update-head .changelog-head-meta { flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
+
 /* ── the Changelog tab's release list ──
    Collapsed sections rather than one long scroll: the tab is opened to read one
    release, almost always the newest, and every older one below it is a wall of

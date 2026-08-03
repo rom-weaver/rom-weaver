@@ -299,7 +299,6 @@ const LogDialog = ({
   level,
   onLevelChange,
   initialTab = "status",
-  onOpenChangelog,
   onReload,
   onRestoreDefaults,
   onSaveSettings,
@@ -314,7 +313,6 @@ const LogDialog = ({
   level?: string;
   onLevelChange: (level: string) => void;
   initialTab?: LogDialogTab;
-  onOpenChangelog?: () => void;
   onReload?: () => void;
   onRestoreDefaults?: () => void;
   onSaveSettings?: () => void;
@@ -570,17 +568,15 @@ const LogDialog = ({
             id="logpanel-changelog"
             role="tabpanel"
           >
-            <ChangelogPanel active={tab === "changelog"} localizer={localizer} />
-            {/* The tab lists what has shipped; this opens the update dialog,
-                which is the same data asked the other question - what the
-                pending deploy would bring. Only offered when there is one. */}
-            {onOpenChangelog && updateReady ? (
-              <div className="changelog-note">
-                <button className="btn ghost" onClick={onOpenChangelog} type="button">
-                  {localizer.message("ui.update.whatsNew")}
-                </button>
-              </div>
-            ) : null}
+            {/* The tab lists what has shipped, and - while a deploy is waiting -
+                leads with the same data asked the other question: what that
+                deploy would bring. */}
+            <ChangelogPanel
+              active={tab === "changelog"}
+              localizer={localizer}
+              onReload={onReload}
+              updateReady={updateReady}
+            />
           </div>
         ) : null}
         {tab === "logs" || tab === "storage" ? (

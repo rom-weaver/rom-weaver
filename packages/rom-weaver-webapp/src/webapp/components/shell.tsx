@@ -821,15 +821,17 @@ const Masthead = ({
 
 /**
  * The loud update path, phones only (masthead.css hides it above the dock
- * threshold): one direct action, no dismiss and no "what's new" detour - the
- * amber brand-line status is the desktop notice, and the changelog is one tap
- * away in the status dialog either way.
+ * threshold). It opens the Changelog tab rather than reloading outright: that
+ * tab leads with what the waiting deploy brings and carries the reload button
+ * under it, so the same tap both explains the update and offers it. The amber
+ * brand-line status is the desktop notice, and it, the version chip and this
+ * banner all reach the same tab.
  */
-const UpdateBanner = ({ open, onReload }: { open: boolean; onReload: () => void }) => {
+const UpdateBanner = ({ open, onOpenChangelog }: { open: boolean; onOpenChangelog: () => void }) => {
   const localizer = useUiLocalizer();
   if (!open) return null;
   return (
-    <button className="update-banner" onClick={onReload} type="button">
+    <button aria-haspopup="dialog" className="update-banner" onClick={onOpenChangelog} type="button">
       <svg aria-hidden="true" strokeWidth={2.4} viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="9" />
         <g className="dl-arrow">
@@ -839,7 +841,7 @@ const UpdateBanner = ({ open, onReload }: { open: boolean; onReload: () => void 
       </svg>
       <span>{localizer.message("ui.runtime.update")}</span>
       {" · "}
-      <b>{localizer.message("ui.update.reloadNow")}</b>
+      <b>{localizer.message("ui.update.whatsNew")}</b>
     </button>
   );
 };
