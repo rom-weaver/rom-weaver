@@ -439,47 +439,48 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (Math.abs(trailGeometry.bottom - trailGeometry.viewportHeight) > 1 || trailGeometry.height <= 0) {
       throw new Error(`Mobile Docs trail is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
     }
+
+    // A cold Docs tab load must keep the current panel until the lazy route is
+    // ready; otherwise the first frame after the click has no docs navigation.
+    const docsNavigationContext = await createContext({ ignoreHTTPSErrors: true, serviceWorkers: "block" });
+    const docsNavigationPage = await docsNavigationContext.newPage();
+    try {
+      const docsChunkPattern = /\/assets\/docs-page-[^/]+\.js(?:\?.*)?$/;
+      let releaseDocsChunk;
+      let docsChunkRequest;
+      const docsChunkStarted = new Promise((resolve) => {
+        docsChunkRequest = resolve;
+      });
+      const docsChunkReleased = new Promise((resolve) => {
+        releaseDocsChunk = resolve;
+      });
+      await docsNavigationPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await docsNavigationPage.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+      await docsNavigationPage.route(docsChunkPattern, async (route) => {
+        docsChunkRequest();
+        await docsChunkReleased;
+        await route.continue();
+      });
+      await docsNavigationPage.locator('[role="tab"][data-mode="docs"]:visible').first().click();
+      await docsChunkStarted;
+      await docsNavigationPage
+        .locator('.mode[role="tab"][aria-selected="true"][data-mode="patcher"]')
+        .waitFor({ state: "visible" });
+      if ((await docsNavigationPage.locator(".docs-rails .guide-nav").count()) !== 0) {
+        throw new Error("Docs navigation mounted before its lazy route was ready");
+      }
+      releaseDocsChunk();
+      await docsNavigationPage.locator(".docs-rails .guide-nav").waitFor({ state: "visible" });
+      await docsNavigationPage
+        .locator('.mode[role="tab"][aria-selected="true"][data-mode="docs"]')
+        .waitFor({ state: "visible" });
+    } finally {
+      await docsNavigationContext.close();
+    }
     await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "desktop"));
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await installAuditTools();
-
-    // A cold Docs tab load must keep the current panel until the lazy route is
-    // ready; otherwise the first frame after the click has no docs navigation.
-    const docsChunkPattern = /\/assets\/docs-page-[^/]+\.js(?:\?.*)?$/;
-    let releaseDocsChunk;
-    let docsChunkRequest;
-    const docsChunkStarted = new Promise((resolve) => {
-      docsChunkRequest = resolve;
-    });
-    const docsChunkReleased = new Promise((resolve) => {
-      releaseDocsChunk = resolve;
-    });
-    await page.route(docsChunkPattern, async (route) => {
-      docsChunkRequest();
-      await docsChunkReleased;
-      try {
-        await route.continue();
-      } catch (error) {
-        // The service-worker boot gate may replace the document while this
-        // request is paused; the route has then already been settled.
-        if (!String(error).includes("Route is already handled")) throw error;
-      }
-    });
-    try {
-      await page.locator('[role="tab"][data-mode="docs"]:visible').first().click();
-      await docsChunkStarted;
-      await page.locator('.mode[role="tab"][aria-selected="true"][data-mode="patcher"]').waitFor({ state: "visible" });
-      if ((await page.locator(".docs-rails .guide-nav").count()) !== 0) {
-        throw new Error("Docs navigation mounted before its lazy route was ready");
-      }
-      releaseDocsChunk();
-      await page.locator(".docs-rails .guide-nav").waitFor({ state: "visible" });
-      await page.locator('.mode[role="tab"][aria-selected="true"][data-mode="docs"]').waitFor({ state: "visible" });
-    } finally {
-      releaseDocsChunk();
-      await page.unroute(docsChunkPattern);
-    }
 
     for (const viewport of A11Y_VIEWPORTS) {
       await page.setViewportSize(viewport);
