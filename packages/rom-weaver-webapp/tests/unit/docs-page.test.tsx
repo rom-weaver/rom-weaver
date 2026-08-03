@@ -393,6 +393,31 @@ Fixture description.
     expect(document.querySelector(".guide-shelf")).toBeTruthy();
   });
 
+  it("plays the page turn only after the reader changes guide", () => {
+    // The first article is the prerendered document, so fading it in would push
+    // the largest paint back by the length of the animation.
+    const { rerender } = render(<DocsPage active slug="docs/cli" />);
+    expect(document.querySelector(".docs-article")?.getAttribute("data-page-turn")).toBeNull();
+
+    rerender(<DocsPage active slug="docs/faq" />);
+    expect(document.querySelector(".docs-article")?.getAttribute("data-page-turn")).toBe("true");
+  });
+
+  it("opens this guide's outline and every guide from the phone trail", () => {
+    render(<DocsPage active slug="docs/cli" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Contents" }));
+
+    const sheet = document.querySelector(".rw-modal.guide-sheet");
+    expect(sheet?.querySelector(".warp-rail")).toBeTruthy();
+    expect(sheet?.querySelectorAll(".guide-nav .guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+    expect(sheet?.querySelector('.guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
+
+    // Choosing a guide has to take the sheet with it - the reader asked to leave.
+    fireEvent.click(sheet?.querySelector(".guide-nav .guide-nav-list a") as HTMLElement);
+    expect(document.querySelector(".rw-modal.guide-sheet")).toBeNull();
+  });
+
   it("shares search state with the mobile search", () => {
     render(<DocsPage active slug="docs" />);
     const inputs = screen.getAllByRole("combobox", { name: "Search documentation" });
@@ -424,16 +449,28 @@ Fixture description.
     await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" }));
   });
 
-  it.each(["docs", "docs/apply-rom-patches"])("ends %s with nothing but the way back up", (slug) => {
-    // Every guide's own last paragraph already links onward, in prose, to whatever
-    // follows from what was just read. A generated previous/next pair underneath
-    // that repeated it - and on the first guide it repeated the very link the
-    // paragraph above had just made.
-    render(<DocsPage active slug={slug} />);
+  it("ends a guide with the steps either side of it, and the way back up", () => {
+    const index = DOC_ROUTES.findIndex((route) => route.slug === "docs/apply-rom-patches");
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
 
     const onward = document.querySelector(".docs-onward");
-    expect(onward?.children).toHaveLength(1);
+    const steps = Array.from(onward?.querySelectorAll<HTMLAnchorElement>(".docs-step") ?? []);
+    expect(steps.map((step) => step.getAttribute("href"))).toEqual([
+      `/${DOC_ROUTES[index - 1]?.slug}`,
+      `/${DOC_ROUTES[index + 1]?.slug}`,
+    ]);
     expect(onward?.querySelector(".docs-to-top")).toBeTruthy();
+  });
+
+  it("holds the previous step's place on the first page rather than sliding next into it", () => {
+    // The hub is route zero, so it has no previous. The empty span keeps Next
+    // where Next belongs instead of letting it take the left-hand slot.
+    render(<DocsPage active slug="docs" />);
+
+    const onward = document.querySelector(".docs-onward");
+    expect(onward?.firstElementChild?.className).toBe("docs-step-gap");
+    const steps = Array.from(onward?.querySelectorAll<HTMLAnchorElement>(".docs-step") ?? []);
+    expect(steps.map((step) => step.getAttribute("href"))).toEqual([`/${DOC_ROUTES[1]?.slug}`]);
   });
 
   it("tracks the reading position as the reader scrolls", () => {

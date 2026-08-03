@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createDocRoute, DOC_SOURCES } from "./docs-content.mjs";
-import { createDocsSeoMetadata, SITE_ORIGIN } from "./docs-routing.mjs";
+import { createDocsSeoMetadata, isLegalDocRoute, SITE_ORIGIN } from "./docs-routing.mjs";
 import { SITE_NAME } from "./workflow-seo.mjs";
 
 const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs");
@@ -45,7 +45,7 @@ const replaceMetaContent = (html, attribute, name, content) =>
  */
 const createDocsRouteHtml = (html, route, channel, channelLabel) => {
   const { canonicalUrl, metadata, title } = createDocsSeoMetadata(route, channel === "prod" ? "" : channelLabel);
-  const legalPage = route.slug === "docs/notices" || route.slug === "docs/privacy";
+  const legalPage = isLegalDocRoute(route.slug);
   const structuredData = {
     "@context": "https://schema.org",
     "@type": legalPage ? "WebPage" : "TechArticle",

@@ -118,7 +118,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       if (!audit.initialView && active) audit.initialView = active.getAttribute("data-mode") || "";
       if (!audit.identityResolved) return;
       const threads = document.querySelector(".masthead-threads");
-      const runtime = document.querySelector(".masthead-runtime");
+      const runtime = document.querySelector(".sub-status");
       if (!(threads && runtime)) return;
       if (!audit.threads) {
         audit.threads = threads;
@@ -188,9 +188,11 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           });
           const initialShell = await page.evaluate(() => {
             const root = document.getElementById("webapp-root");
-            const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
-            const links = document.querySelector(".site-footer-links")?.getBoundingClientRect();
-            const status = document.querySelector(".site-footer-status")?.getBoundingClientRect();
+            // The dock is the phone chrome the shell must paint inside the
+            // first viewport now that the footer is gone.
+            const footer = document.querySelector(".dock")?.getBoundingClientRect();
+            const links = document.querySelector(".dock-tab")?.getBoundingClientRect();
+            const status = [...document.querySelectorAll(".dock-tab")].at(-1)?.getBoundingClientRect();
             const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
             return {
               footerInFirstViewport:
@@ -208,7 +210,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           });
           initialShellLayout = initialShell;
           if (!(initialShell.prerendered && initialShell.footerInFirstViewport)) {
-            throw new Error(`initial shell footer is not visible: ${JSON.stringify(initialShell)}`);
+            throw new Error(`initial shell dock is not visible: ${JSON.stringify(initialShell)}`);
           }
           await settings.click();
           releaseScripts();
@@ -227,7 +229,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         const result = await page.evaluate((initialLayout) => {
           const audit = window.__romWeaverHydrationAudit;
           const root = document.getElementById("webapp-root");
-          const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
+          const footer = document.querySelector(".dock")?.getBoundingClientRect();
           const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
           const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
           return {
@@ -235,7 +237,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             finalView: document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") || "",
             initialTheme: audit.initialTheme,
             initialView: audit.initialView,
-            runtimeRetained: document.querySelector(".masthead-runtime") === audit.runtime,
+            runtimeRetained: document.querySelector(".sub-status") === audit.runtime,
             runtimeTexts: audit.runtimeTexts,
             threadRetained: document.querySelector(".masthead-threads") === audit.threads,
             threadTexts: audit.threadTexts,
@@ -250,9 +252,9 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         const problems = [];
         if (!result.threadRetained) problems.push("thread node was replaced");
         if (!result.runtimeRetained) problems.push("runtime node was replaced");
-        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3 threads"))
+        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3T"))
           problems.push(`thread text changed: ${JSON.stringify(result.threadTexts)}`);
-        if (result.runtimeTexts.length !== 1 || !result.runtimeTexts[0]?.includes("web · sw off"))
+        if (result.runtimeTexts.length !== 1)
           problems.push(`runtime text changed: ${JSON.stringify(result.runtimeTexts)}`);
         if (result.initialTheme !== "light" || result.finalTheme !== "light")
           problems.push(`theme changed: ${result.initialTheme} -> ${result.finalTheme}`);
@@ -311,7 +313,30 @@ const scanLiveApp = async (page, label) => {
     return results.violations.map((violation) => ({
       help: violation.help,
       id: violation.id,
-      nodes: violation.nodes.map((node) => node.target.join(" ")),
+      nodes: violation.nodes.map((node) => {
+        const target = node.target.join(" ");
+        const element = document.querySelector(target);
+        const rect = element?.getBoundingClientRect();
+        // Geometry rules (target size, contrast) are unreadable from a selector
+        // alone: what fails is where the box ended up and what is sitting on top
+        // of it, and neither survives into the CI log otherwise.
+        const covering = rect ? document.elementFromPoint(rect.left + rect.width / 2, rect.bottom - 1) : null;
+        return {
+          covering:
+            covering && covering !== element
+              ? `${covering.tagName.toLowerCase()}${covering.className ? `.${String(covering.className).trim().split(/\s+/).join(".")}` : ""}`
+              : null,
+          rect: rect && {
+            bottom: Math.round(rect.bottom),
+            height: Math.round(rect.height),
+            top: Math.round(rect.top),
+            width: Math.round(rect.width),
+          },
+          reason: node.failureSummary,
+          target,
+          viewport: { height: window.innerHeight, width: window.innerWidth },
+        };
+      }),
     }));
   }, A11Y_TAGS);
   if (violations.length) throw new Error(`${label} accessibility violations:\n${JSON.stringify(violations, null, 2)}`);
@@ -404,7 +429,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await page.getByRole("button", { exact: true, name: "Save" }).click();
       }
       for (const tab of ["patcher", "creator", "trim", "tools"]) {
-        await page.locator(`[role="tab"][data-mode="${tab}"]`).click();
+        await page.locator(`[role="tab"][data-mode="${tab}"]:visible`).first().click();
         await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
         for (const theme of ["light", "dark"]) {
           await setTheme(theme);
@@ -415,7 +440,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    await page.locator('[role="tab"][data-mode="patcher"]').click();
+    await page.locator('[role="tab"][data-mode="patcher"]:visible').first().click();
 
     const infoButton = page.locator(".info-btn").first();
     await infoButton.click();
@@ -431,8 +456,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await scanVariants("codec combobox");
     await page.locator(".codec-combobox-option").first().click();
     await page.getByRole("button", { exact: true, name: "Save" }).click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
 
-    await page.getByRole("button", { name: "Log" }).click();
+    await page.getByRole("button", { name: "Log", exact: true }).click();
     const logDialog = page.locator("dialog.log-dlg");
     await logDialog.waitFor({ state: "visible" });
     await scanVariants("log dialog");
@@ -528,7 +554,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    await page.locator('[role="tab"][data-mode="creator"]').click();
+    await page.locator('[role="tab"][data-mode="creator"]:visible').first().click();
     const createOnboardingChip = page.getByRole("button", { name: "New here?" });
     await createOnboardingChip.waitFor({ state: "visible" });
     await createOnboardingChip.click();

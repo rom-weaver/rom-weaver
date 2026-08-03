@@ -206,28 +206,38 @@ test("WebappRoot reports the configured thread count in the masthead, not the co
   // navigator.hardwareConcurrency and a user who dialled threads down to 1
   // still read the host core count in the header.
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
-  await expect.poll(() => document.querySelector(".masthead-threads-full")?.textContent || "").toContain("1 threads");
-  await expect.poll(() => document.querySelector(".masthead-threads-short")?.textContent || "").toContain("1T");
+  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1T");
+  await expect
+    .poll(() => document.querySelector(".masthead-threads")?.getAttribute("aria-label") || "")
+    .toContain("1 threads");
 });
 
-test("WebappRoot uses the compact thread label only on mobile", async () => {
+test("the runtime status keeps its glyph everywhere and sheds its words when the line is tight", async () => {
+  // The glyph is the signal that always survives; the words are what yields -
+  // through the compact rail band, on phones, and whenever a channel badge is
+  // present (this build carries one, so the words are gone at every width).
   page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
-  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-full")).display).toBe("inline");
-  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-short")).display).toBe("none");
-
-  page.viewport(390, 844);
-  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-full")).display).toBe("none");
-  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-short")).display).toBe("inline");
+  await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
+  for (const [width, height] of [
+    [1280, 900],
+    [1100, 900],
+    [390, 844],
+  ]) {
+    page.viewport(width, height);
+    await expect.poll(() => getComputedStyle(document.querySelector(".sub-status svg")).display).not.toBe("none");
+    const badged = Boolean(document.querySelector(".brand-sub-row .channel-badge"));
+    const expected = badged || width <= 1159 ? "none" : "inline";
+    await expect.poll(() => getComputedStyle(document.querySelector(".sub-status-text")).display).toBe(expected);
+  }
   page.viewport(1280, 900);
 });
 
-test("the site footer lands inside the first phone screen with an empty bench", async () => {
+test("the phone dock lands inside the first phone screen with an empty bench", async () => {
   // The empty hero is sized as `100svh - --hero-chrome`, so every band the page
-  // spends outside the hero has to be in that budget. The mobile scroll reserve
-  // under the form was not, and it pushed the footer ~85px under the fold on
-  // first paint. The narrowest phone is the tight case: the brand column wraps
-  // there and the masthead grows taller than it is at 390px.
+  // spends outside the hero has to be in that budget. The dock is fixed to the
+  // bottom edge, so it is always on screen - what has to hold is that the hero
+  // does not grow behind it.
   //
   // Only viewports tall enough to clear the hero's 300px min-height are checked.
   // Below roughly 575px of svh that floor wins over the budget on purpose - a
@@ -243,30 +253,30 @@ test("the site footer lands inside the first phone screen with an empty bench", 
     mountWebappRoot();
     await expect.poll(() => document.querySelector(".step.is-input.is-empty .drop.hero")).toBeTruthy();
     await expect
-      .poll(() => document.querySelector(".site-footer")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
-      .toBeLessThanOrEqual(height);
+      .poll(() => document.querySelector(".dock")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
+      .toBeLessThanOrEqual(height + 1);
+    await expect.poll(() => document.querySelector(".dock")?.getBoundingClientRect().top ?? 0).toBeGreaterThan(0);
   }
   page.viewport(1280, 900);
 });
 
-test("PWA side insets move footer content without shifting the shell", async () => {
+test("PWA side insets move dock content without shifting the shell", async () => {
   const safeLeft = 18;
   const safeRight = 18;
   const height = 852;
   page.viewport(393, height);
   mountWebappRoot();
-  await expect.poll(() => document.querySelector(".site-footer")).toBeTruthy();
+  await expect.poll(() => document.querySelector(".dock")).toBeTruthy();
   const readLayout = () => {
     const masthead = document.querySelector(".masthead")?.getBoundingClientRect();
-    const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
-    const links = document.querySelector(".site-footer-links")?.getBoundingClientRect();
-    const status = document.querySelector(".site-footer-status")?.getBoundingClientRect();
+    const dock = document.querySelector(".dock")?.getBoundingClientRect();
+    const tabs = [...document.querySelectorAll(".dock-tab")].filter((tab) => getComputedStyle(tab).display !== "none");
     return {
-      footerBottom: footer?.bottom ?? 0,
-      footerTop: footer?.top ?? 0,
-      linksLeft: links?.left ?? 0,
+      dockBottom: dock?.bottom ?? 0,
+      dockTop: dock?.top ?? 0,
+      firstTabLeft: tabs[0]?.getBoundingClientRect().left ?? 0,
+      lastTabRight: tabs.at(-1)?.getBoundingClientRect().right ?? 0,
       mastheadTop: masthead?.top ?? 0,
-      statusRight: status?.right ?? 0,
     };
   };
   const before = readLayout();
@@ -276,23 +286,23 @@ test("PWA side insets move footer content without shifting the shell", async () 
   try {
     const after = readLayout();
     expect(after.mastheadTop).toBe(before.mastheadTop);
-    expect(after.footerTop).toBe(before.footerTop);
-    expect(after.footerBottom).toBe(before.footerBottom);
-    expect(after.linksLeft).toBeGreaterThan(before.linksLeft);
-    expect(after.statusRight).toBeLessThan(before.statusRight);
+    expect(after.dockTop).toBe(before.dockTop);
+    expect(after.dockBottom).toBe(before.dockBottom);
+    expect(after.firstTabLeft).toBeGreaterThan(before.firstTabLeft);
+    expect(after.lastTabRight).toBeLessThan(before.lastTabRight);
   } finally {
     simulatedSafeArea.remove();
   }
   page.viewport(1280, 900);
 });
 
-test("PWA vertical insets keep the initial footer visible without moving it up", async () => {
+test("PWA vertical insets keep the dock clear of the home indicator", async () => {
   const safeTop = 59;
   const safeBottom = 34;
   const height = 852;
   page.viewport(393, height);
   mountWebappRoot();
-  await expect.poll(() => document.querySelector(".site-footer")).toBeTruthy();
+  await expect.poll(() => document.querySelector(".dock")).toBeTruthy();
   const simulatedSafeArea = document.createElement("style");
   simulatedSafeArea.textContent = `.rw-app { --safe-t: ${safeTop}px; --safe-b: ${safeBottom}px; }`;
   document.head.append(simulatedSafeArea);
@@ -301,8 +311,12 @@ test("PWA vertical insets keep the initial footer visible without moving it up",
       .poll(() => document.querySelector(".masthead")?.getBoundingClientRect().top ?? -1)
       .toBeGreaterThanOrEqual(safeTop);
     await expect
-      .poll(() => document.querySelector(".site-footer")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
-      .toBeLessThanOrEqual(height);
+      .poll(() => document.querySelector(".dock")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
+      .toBeLessThanOrEqual(height + 1);
+    // the last dock tab sits above the home indicator, not under it
+    await expect
+      .poll(() => document.querySelector(".dock-tab")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
+      .toBeLessThanOrEqual(height - safeBottom + 1);
   } finally {
     simulatedSafeArea.remove();
   }
@@ -378,7 +392,7 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
     expect(expected).not.toBe(2);
     mountWebappRoot({ settings: { ...getDefaultSettings(), threads: "auto" } });
     await expect
-      .poll(() => document.querySelector(".masthead-threads-full")?.textContent || "")
+      .poll(() => document.querySelector(".masthead-threads")?.getAttribute("aria-label") || "")
       .toContain(`${expected} threads`);
   } finally {
     Reflect.deleteProperty(navigator, "hardwareConcurrency");

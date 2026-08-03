@@ -271,6 +271,13 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   /* long-form opens up; the surrounding app chrome stays condensed */
   font-stretch: 100%;
 }
+/* The page turn. Switching guide swaps this element and nothing else, so its
+   entrance is the whole transition - the chrome around it never blinks, which
+   is the difference between turning a page and reloading one. Only ever set
+   after a turn: on the first render this article is the prerendered document
+   and fading it in would delay the largest paint. */
+@keyframes docs-page-in { from { opacity: 0; translate: 0 10px; } }
+.rw-app .docs-article[data-page-turn] { animation: docs-page-in .28s var(--ease) both; }
 .rw-app .docs-article > * { max-width: var(--measure); }
 .rw-app .docs-article h1,
 .rw-app .docs-article h2,
@@ -621,9 +628,45 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 }
 
 /* --- the end of the guide ---
-   Phone-only: the desktop sidebar is sticky, so the top of the document is never
-   more than a glance away there. */
-.rw-app .docs-onward { display: none; }
+   The pair of steps runs at every width; the way back up is phone-only, because
+   the desktop sidebar is sticky and the top of the document is never more than a
+   glance away there. The empty gap holds the far step's place on the first and
+   last page, so a lone Next never slides over to where Previous belongs. */
+.rw-app .docs-onward {
+  display: flex; gap: var(--sp-m); align-items: stretch; justify-content: space-between;
+  max-width: var(--measure); margin-block-start: var(--sp-xl);
+  padding-block-start: var(--sp-l); border-block-start: 1px solid var(--seam-soft);
+}
+/* The step and the way back up are the same object with different corners, so
+   the box, the press feedback and the weft-coloured mark are written once. Only
+   `display` stays in the phone block, which is where the button turns on. */
+.rw-app .docs-to-top { display: none; }
+.rw-app .docs-step, .rw-app .docs-step-gap { flex: 1 1 0; }
+.rw-app .docs-step, .rw-app .docs-to-top {
+  gap: var(--sp-s); align-items: center; min-height: 44px;
+  border: 1px solid var(--seam); background: var(--well); color: var(--ink-2);
+  font: inherit; cursor: pointer; text-decoration: none;
+  transition: border-color .18s, background .18s, color .18s;
+}
+.rw-app .docs-step {
+  display: inline-flex; min-width: 0;
+  padding: var(--sp-s) var(--sp-m); border-radius: var(--r-m);
+}
+.rw-app .docs-step:last-child { justify-content: flex-end; text-align: end; }
+.rw-app .docs-step svg, .rw-app .docs-to-top svg { flex: none; width: 16px; height: 16px; color: var(--weft); }
+.rw-app .docs-step-copy { display: grid; min-width: 0; gap: 1px; }
+/* --ink-4 is a hair under 4.5:1 on the light plate at this size, and the
+   direction label is the one word that has to be legible before the page name */
+.rw-app .docs-step-copy small {
+  font-size: .62rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
+}
+.rw-app .docs-step-copy b {
+  font-size: .84rem; font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (hover: hover) {
+  .rw-app .docs-step:hover, .rw-app .docs-to-top:hover { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
+}
+.rw-app .docs-step:active, .rw-app .docs-to-top:active { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
 
 /* --- the trail ---
    Desktop keeps the sidebar and never shows this. */
@@ -631,41 +674,83 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 
 /* --- responsive --- */
 @media (max-width: 860px) {
+  .rw-app { --docs-trail-h: 56px; }
   .rw-app .docs-layout { grid-template-columns: minmax(0, 1fr); }
   .rw-app .docs-rails { display: none; }
 
-  /* Sticky rather than fixed, and at the top rather than the bottom: the bottom
-     of a phone screen is where the browser parks its own collapsing toolbar, so
-     a dock there had to reserve scroll room to clear it. Nothing is fixed now,
-     so the guide just ends. */
+  /* Fixed to the bottom, riding directly on top of the app dock: the two ways
+     out of a guide - another guide, another mode - then sit under one thumb.
+     It clears the dock through the same `--dock-h` the dock pad uses, so the
+     phone browser's own collapsing toolbar is already accounted for. */
   .rw-app .docs-trail {
-    position: sticky;
-    top: 0;
-    z-index: 60;
+    position: fixed;
+    inset: auto 0 0;
+    /* under the dock (1000) and the update banner (999), over the article */
+    z-index: 998;
     display: block;
-    /* Chrome, not a card: full-bleed past the app column's gutter, which is an
-       exact inset (`.app` sets `padding: 0 var(--gutter)`) rather than a `vw`
-       guess that would overflow beside a classic scrollbar. */
-    margin-inline: calc(var(--gutter) * -1);
-    margin-block-end: var(--sp-m);
+    /* The row rides on top of the dock, but the surface runs all the way to the
+       floor: `--dock-h` is the height the column reserves, which is a few pixels
+       more than the dock actually draws, and a bar that stopped at it would leave
+       a strip of scrolling article showing between the two. */
+    padding-block-end: var(--dock-h, 0px);
     padding-inline: var(--gutter);
-    border-block-end: 1px solid var(--seam);
-    background: var(--chassis);
+    border-block-start: 1px solid var(--seam);
+    background: color-mix(in oklab, var(--plate) 88%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
   }
+  /* The guide has to end above the bar rather than under it. */
+  .rw-app .docs-workbench { padding-block-end: calc(var(--docs-trail-h) + var(--sp-m)); }
   .rw-app .docs-search-header { display: none; }
-  .rw-app .docs-trail-search {
-    padding-block: 0 8px;
+  .rw-app .docs-trail-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-s);
+    height: var(--docs-trail-h);
   }
+  .rw-app .docs-trail-menu {
+    display: inline-flex;
+    flex: none;
+    gap: 5px;
+    align-items: center;
+    /* the search beside it is a plain `.input`, which takes the shared control
+       height - a hardcoded 36px left the button a head shorter than the field
+       it shares a row with. Same token, so they track each other. */
+    height: var(--ctl);
+    padding-inline: 10px;
+    border: 1px solid var(--seam);
+    border-radius: var(--r-s);
+    background: var(--plate);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: .68rem;
+    font-weight: 700;
+    font-stretch: 88%;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .rw-app .docs-trail-menu svg { flex: none; width: 15px; height: 15px; color: var(--weft); }
+  .rw-app .docs-trail-menu[aria-expanded="true"] { border-color: var(--seam-strong); background: var(--well); color: var(--ink); }
+  @media (hover: hover) {
+    .rw-app .docs-trail-menu:hover { border-color: var(--seam-strong); color: var(--ink); }
+  }
+  .rw-app .docs-trail-menu:active { border-color: var(--seam-strong); background: var(--well); color: var(--ink); }
+  .rw-app .docs-trail-search { flex: 1 1 auto; min-width: 0; }
   .rw-app .docs-trail-search .docs-search input { background: var(--plate); }
+  /* Results open upward - the bar is the floor of the screen now - and against
+     the bar rather than the input, so a phone gets the full width to read them
+     in instead of the strip left over beside the Contents button. */
+  .rw-app .docs-trail .docs-search { position: static; }
+  .rw-app .docs-trail .docs-search-results { inset: auto var(--gutter) calc(100% + 5px); }
   /* The warp, woven: one tick per section, each as wide as its section is long,
      so the crossing weft is a plain scroll fraction that still lands inside the
      right tick. Ticks are divided by a border rather than a gap, which keeps
      them edge to edge and the boundaries exactly where the weft stops. It rides
-     the trail's bottom edge, which is the only place it lives now that nothing
-     holds the bottom of the screen. */
+     the trail's top edge, the seam between the guide and the chrome. */
   .rw-app .warp-gauge {
     position: absolute;
-    inset: auto 0 0;
+    inset: -1px 0 auto;
     z-index: 1;
     display: flex;
     height: 2px;
@@ -678,7 +763,8 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
     box-sizing: border-box;
     flex: 1 1 0;
     min-width: 2px;
-    border-right: 1px solid var(--chassis);
+    /* the divider reads as the bar's top seam continuing between ticks */
+    border-right: 1px solid var(--seam);
     background: var(--seam-soft);
   }
   .rw-app .warp-gauge i:last-of-type { border-right: 0; }
@@ -690,40 +776,23 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
   }
 
   /* --- the way back up ---
-     Just this. Onward links are the last paragraph of every guide already, written
-     by hand and pointing at whatever follows from what you just read. */
-  .rw-app .docs-onward {
-    display: flex;
-    justify-content: center;
-    margin-block-start: var(--sp-l);
-  }
+     Phone-only, and on its own row under the two steps: three controls abreast
+     leaves each step too narrow to read the page it names. The box it wears is
+     shared with the steps above; only its own shape is here. */
+  .rw-app .docs-onward { flex-wrap: wrap; }
   .rw-app .docs-to-top {
+    order: 1;
+    flex: 1 0 100%;
     display: inline-flex;
-    align-items: center;
-    gap: var(--sp-s);
-    min-height: 44px;
+    justify-content: center;
     padding-inline: var(--sp-l);
-    border: 1px solid var(--seam);
     border-radius: 999px;
-    background: var(--well);
-    color: var(--ink-2);
-    font: inherit;
     font-size: .7rem;
     font-weight: 750;
     font-stretch: 88%;
     letter-spacing: .08em;
     text-transform: uppercase;
-    cursor: pointer;
   }
-  .rw-app .docs-to-top svg { flex: none; width: 15px; height: 15px; color: var(--weft); }
-  .rw-app .docs-to-top:active { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
-
-  /* A narrow desktop window gets this layout too, so the phone button still
-     wants its hover half. */
-  @media (hover: hover) {
-    .rw-app .docs-to-top:hover { border-color: var(--seam-strong); background: var(--plate-2); color: var(--ink); }
-  }
-
 }
 
 @media (max-width: 520px) {
@@ -754,4 +823,5 @@ html:has(.docs-workbench) { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   html:has(.docs-workbench) { scroll-behavior: auto; }
   .rw-app .warp-pick { transition: none; }
+  .rw-app .docs-article[data-page-turn] { animation: none; }
 }

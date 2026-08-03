@@ -88,6 +88,7 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "development/ARCHITECTURE.md", label: "Architecture", slug: "docs/architecture" }),
   Object.freeze({ file: "development/development.md", label: "Development", slug: "docs/development" }),
   Object.freeze({ file: "development/references.md", label: "References", slug: "docs/references" }),
+  Object.freeze({ file: "legal/about.md", label: "About", slug: "docs/about" }),
   Object.freeze({ file: "wasm/notices.md", group: "Legal", label: "Notices", slug: "docs/notices" }),
   Object.freeze({ file: "legal/privacy.md", label: "Privacy", slug: "docs/privacy" }),
 ]);
@@ -177,4 +178,21 @@ const readDocsSlugFromPathname = (pathname) => {
   return DOC_SOURCES.some((source) => source.slug === slug) ? slug : "docs";
 };
 
-export { createDocsSeoMetadata, DOC_SOURCES, docGroupTitle, groupDocRoutes, readDocsSlugFromPathname, SITE_ORIGIN };
+/**
+ * The pages that are not guides. Schema.org calls these WebPage rather than
+ * TechArticle, and the prerender and its verifier have to agree on which is
+ * which - so they ask here rather than each keeping a list.
+ *
+ * @param {string} slug
+ */
+const isLegalDocRoute = (slug) => slug === "docs/about" || slug === "docs/notices" || slug === "docs/privacy";
+
+export {
+  createDocsSeoMetadata,
+  DOC_SOURCES,
+  docGroupTitle,
+  groupDocRoutes,
+  isLegalDocRoute,
+  readDocsSlugFromPathname,
+  SITE_ORIGIN,
+};

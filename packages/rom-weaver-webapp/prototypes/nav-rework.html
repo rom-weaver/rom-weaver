@@ -1,0 +1,3661 @@
+<!doctype html>
+<html data-accent="madder" data-theme="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport" />
+    <title>rom-weaver — nav rework prototype</title>
+  </head>
+  <body>
+    <style>
+      /* ═════════════════════════════════════════════════════════════════════════
+   rom-weaver nav rework prototype
+   One file, no dependencies. Everything below maps onto the real design
+   system (tokens.css names kept verbatim) so it can be ported piecewise.
+
+   The layout thesis:
+   - The masthead is a container-query grid. There is exactly ONE breakpoint
+     decision ("does the full rail fit?") and it lives in CSS only — no
+     ResizeObserver, no measureIntrinsicModeRailWidth, no data-masthead-layout.
+   - Below the dock threshold the primary nav moves to a fixed bottom dock
+     (thumb-reachable), so the masthead never wraps and --hero-chrome-style
+     height bookkeeping disappears.
+   - The wrap point no longer depends on label length: the mid range drops
+     tab labels (tooltips carry them), so any locale fits.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+      :root {
+        --thread: #d9690f;
+        --thread-ink: #1c1206;
+        --thread-hi: #fccb90;
+        --font: "Archivo", "Segoe UI", system-ui, sans-serif;
+        --r-s: 6px;
+        --r-m: 9px;
+        --r-l: 13px;
+        --sp-2xs: 2px;
+        --sp-xs: 4px;
+        --sp-s: clamp(6px, 2.5px + 0.625vw, 8px);
+        --sp-m: clamp(8px, 1px + 1.25vw, 12px);
+        --sp-l: clamp(11px, 2.25px + 1.5625vw, 16px);
+        --sp-xl: clamp(16px, 2px + 2.5vw, 24px);
+        --gutter: clamp(10px, 2.5vw, 28px);
+        --ease: cubic-bezier(0.2, 0.85, 0.3, 1);
+        --weave-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M9.5 2h10.5v6H9.5zM0 2h.5v6H0zM0 12h10.5v6H0zM19.5 12h.5v6h-.5zM2 0h6v10.5H2zM2 19.5h6v.5H2zM12 9.5h6v10.5h-6zM12 0h6v.5h-6z'/></svg>");
+        /* the ONLY piece of masthead/dock geometry the rest of the page consumes */
+        --dock-h: 0px;
+        /* viewport-fit=cover exposes the PWA's device insets; browser tabs resolve
+     these to zero (mirrors base.css from #351) */
+        --safe-t: env(safe-area-inset-top, 0px);
+        --safe-b: env(safe-area-inset-bottom, 0px);
+        --safe-l: env(safe-area-inset-left, 0px);
+        --safe-r: env(safe-area-inset-right, 0px);
+        transition: --thread 0.45s var(--ease);
+      }
+      :root[data-theme="dark"] {
+        --chassis: #0c0f13;
+        --plate: #161b21;
+        --plate-2: #1c222a;
+        --well: #0f1318;
+        --seam: #39414e;
+        --seam-soft: #2c333f;
+        --seam-strong: #4b5564;
+        --ink: #edf0f5;
+        --ink-2: #b3bbc8;
+        --ink-3: #9aa3b1;
+        --ink-4: #939cab;
+        --weft: #e7d3a8;
+        --thread-text: #ef8534;
+        --verified: #69aa84;
+        --fault: #e0606a;
+        --care: #d8a64f;
+        --overlay-shadow: 0 24px 64px -24px rgb(0 0 0 / 0.7), 0 4px 16px rgb(0 0 0 / 0.35);
+        --scrim: rgb(4 6 9 / 0.62);
+        color-scheme: dark;
+      }
+      :root[data-theme="light"] {
+        --chassis: #ece9e1;
+        --plate: #ffffff;
+        --plate-2: #f7f5ef;
+        --well: #efede6;
+        --seam: #d4d2ca;
+        --seam-soft: #e1dfd8;
+        --seam-strong: #b4b1a6;
+        --ink: #1a1d22;
+        --ink-2: #4b5159;
+        --ink-3: #62686f;
+        --ink-4: #686d76;
+        --weft: #92400e;
+        --thread-text: #b03a0a;
+        --verified: #04684e;
+        --fault: #b91c1c;
+        --care: #c4870f;
+        --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / 0.35), 0 4px 14px rgb(35 30 18 / 0.14);
+        --scrim: rgb(40 36 28 / 0.42);
+        color-scheme: light;
+      }
+      /* dye-lots — verbatim from accents.css */
+      :root[data-accent="woad"] {
+        --thread: #6d7ce8;
+        --thread-ink: #0b1030;
+        --thread-hi: #c5cbf6;
+      }
+      :root[data-accent="woad"][data-theme="dark"] {
+        --thread-text: #9aa6ff;
+      }
+      :root[data-accent="woad"][data-theme="light"] {
+        --thread-text: #4149c4;
+      }
+      :root[data-accent="violet"] {
+        --thread: #9a6ae0;
+        --thread-ink: #16092c;
+        --thread-hi: #d7c3f3;
+      }
+      :root[data-accent="violet"][data-theme="dark"] {
+        --thread-text: #c3a4ff;
+      }
+      :root[data-accent="violet"][data-theme="light"] {
+        --thread-text: #6b3fb5;
+      }
+      :root[data-accent="verdigris"] {
+        --thread: #3faa72;
+        --thread-ink: #04180e;
+        --thread-hi: #aee1c6;
+      }
+      :root[data-accent="verdigris"][data-theme="dark"] {
+        --thread-text: #58c795;
+      }
+      :root[data-accent="verdigris"][data-theme="light"] {
+        --thread-text: #0b6b46;
+      }
+      :root[data-accent="teal"] {
+        --thread: #2aa0a8;
+        --thread-ink: #03181a;
+        --thread-hi: #9fe2e7;
+      }
+      :root[data-accent="teal"][data-theme="dark"] {
+        --thread-text: #45c3cb;
+      }
+      :root[data-accent="teal"][data-theme="light"] {
+        --thread-text: #06696f;
+      }
+      :root[data-accent="plum"] {
+        --thread: #cb63a5;
+        --thread-ink: #2a0620;
+        --thread-hi: #eac1db;
+      }
+      :root[data-accent="plum"][data-theme="dark"] {
+        --thread-text: #e58ac0;
+      }
+      :root[data-accent="plum"][data-theme="light"] {
+        --thread-text: #a3266f;
+      }
+      @property --thread {
+        syntax: "<color>";
+        inherits: true;
+        initial-value: #d9690f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        padding: 0;
+        margin: 0;
+      }
+      /* hard guard: every surface manages its own overflow, so the page itself may
+   never grow a horizontal scrollbar (clip, not hidden - no scroll container) */
+      html {
+        overflow-x: clip;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
+        padding-block-start: var(--safe-t);
+        font: 500 clamp(15px, 13px + 0.42vw, 17px)/1.5 var(--font);
+        color: var(--ink);
+        background: var(--chassis);
+      }
+      svg {
+        display: block;
+      }
+      button {
+        font: inherit;
+      }
+      a {
+        color: var(--thread-text);
+      }
+      :focus-visible {
+        outline: 2px solid var(--thread);
+        outline-offset: 2px;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        white-space: nowrap;
+        border: 0;
+        clip-path: inset(50%);
+      }
+
+      /* ── prototype console (not part of the proposed UI) ─────────────────────── */
+      .proto-console {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--sp-s) var(--sp-l);
+        align-items: center;
+        min-width: 0;
+        padding: 4px var(--gutter);
+        margin: 0;
+        font-size: 0.72rem;
+        color: var(--ink-2);
+        background: repeating-linear-gradient(45deg, var(--well) 0 12px, var(--plate-2) 12px 24px);
+        border: 0;
+        border-block-end: 1px dashed var(--seam-strong);
+      }
+      .proto-console strong {
+        font-size: 0.66rem;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .proto-console label {
+        display: inline-flex;
+        gap: var(--sp-xs);
+        align-items: center;
+        white-space: nowrap;
+      }
+      .proto-console select {
+        padding: 2px 4px;
+        font: inherit;
+        color: var(--ink);
+        background: var(--plate);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+
+      /* ── app column ──────────────────────────────────────────────────────────── */
+      .app {
+        max-width: 1220px;
+        padding: 0 var(--gutter);
+        margin-inline: auto;
+      }
+      main:focus-visible {
+        outline: none;
+      }
+      main.app {
+        flex: 1 0 auto;
+        width: 100%;
+      }
+      .masthead-wrap,
+      .proto-console {
+        flex: none;
+        width: 100%;
+      }
+
+      .skip-link {
+        position: fixed;
+        inset-block-start: calc(var(--safe-t) + var(--sp-s));
+        inset-inline-start: var(--gutter);
+        z-index: 10001;
+        padding: var(--sp-s) var(--sp-m);
+        color: var(--ink);
+        text-decoration: none;
+        background: var(--plate);
+        border: 1px solid var(--thread);
+        border-radius: var(--r-s);
+        box-shadow: var(--overlay-shadow);
+        transform: translateY(calc(-100% - 24px));
+        transition: transform 0.18s var(--ease);
+      }
+      .skip-link:focus-visible {
+        transform: none;
+      }
+
+      /* ═══ masthead ═══
+   The container. Every layout decision below is a @container query on it.
+   To change the dock threshold, edit ONE number (560px, marked ▼). */
+      /* every layout threshold for the nav lives in the media queries marked ▼
+   below — nothing else, and no JS, decides wide vs dock */
+      .masthead {
+        display: grid;
+        /* brand and actions always keep their intrinsic width; the rail gets the
+     leftover, centers itself, and scrolls when squeezed - collision-free at
+     every width and locale */
+        /* the brand can never be squeezed below its own content - the wordmark
+     always renders whole */
+        grid-template-columns: minmax(min-content, max-content) minmax(0, 1fr) auto;
+        column-gap: var(--sp-l);
+        align-items: center;
+        padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px);
+      }
+      /* stretch, not start: the brand's box IS its track, so it can never paint
+   into the rail or actions, and its text ellipsizes inside */
+      /* clip, not hidden, with a margin: a plain `overflow: hidden` here also clips
+   the sub-line's invisible touch halos (below), cutting those targets in half.
+   14px is under the column gap, so the guard against painting into the rail
+   still holds. */
+      .brand {
+        grid-column: 1;
+        justify-self: stretch;
+        display: flex;
+        align-items: center;
+        gap: var(--sp-m);
+        min-width: 0;
+        overflow: clip;
+        overflow-clip-margin: 14px;
+      }
+      .brand-mark {
+        position: relative;
+        flex: none;
+        width: clamp(32px, 2.6vw + 21px, 46px);
+        aspect-ratio: 1;
+        overflow: hidden;
+        background: linear-gradient(140deg, var(--thread-hi), transparent 55%), var(--thread);
+        border-radius: 8px;
+      }
+      .brand-mark::after {
+        position: absolute;
+        inset: 0;
+        content: "";
+        background: var(--thread-ink);
+        opacity: 0.5;
+        mask: var(--weave-mask) 0 0 / 10px 10px;
+      }
+      .brand-copy {
+        display: block;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .brand-word-row {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .brand-word {
+        display: inline;
+        margin: 0;
+        font-size: clamp(1.18rem, 1.02rem + 0.8vw, 1.5rem);
+        font-weight: 650;
+        line-height: 1.15;
+        vertical-align: middle;
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+      }
+      .brand-word b {
+        font-weight: 650;
+        color: var(--thread-text);
+      }
+      .brand-hy {
+        font-weight: 400;
+        color: var(--ink-4);
+      }
+      #build-tag .channel-badge {
+        padding: 0 6px;
+        font-size: 0.6rem;
+        letter-spacing: 0.04em;
+      }
+      #build-tag .channel-badge .tag-version {
+        font-weight: 600;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      #build-tag .tag-letter {
+        font-weight: 800;
+      }
+      /* the sub-line never clips: every piece has a compact form, chosen by
+   breakpoint - threads reads "8T", the status keeps its glyph, and the build
+   tag sheds its secondary half on phones */
+      .brand-sub-row {
+        display: flex;
+        column-gap: var(--sp-xs);
+        align-items: center;
+        font-size: clamp(0.64rem, 0.58rem + 0.25vw, 0.76rem);
+        font-variant-numeric: tabular-nums;
+        line-height: 1.2;
+        color: var(--ink-4);
+        white-space: nowrap;
+      }
+      .sub-item {
+        display: inline-flex;
+        flex: none;
+        gap: var(--sp-xs);
+        align-items: center;
+      }
+      .sub-dot {
+        color: var(--ink-4);
+      }
+      @media (max-width: 719px) {
+        #build-tag .tag-extra {
+          display: none;
+        }
+      }
+      /* the version opens its release; the thread count opens settings - both keep
+   the muted look with the real app's dotted underline affordance */
+      .sub-link {
+        display: inline;
+        padding: 0;
+        font: inherit;
+        font-variant-numeric: tabular-nums;
+        color: inherit;
+        white-space: nowrap;
+        text-decoration: underline dotted var(--ink-4);
+        text-underline-offset: 2px;
+        appearance: none;
+        cursor: pointer;
+        background: transparent;
+        border: 0;
+      }
+      @media (hover: hover) {
+        .sub-link:hover {
+          color: var(--ink-2);
+        }
+      }
+      .sub-link:active {
+        color: var(--ink-2);
+      }
+      .channel-badge {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        padding: 1px 7px;
+        font-size: 0.56rem;
+        font-weight: 750;
+        font-variant-numeric: tabular-nums;
+        vertical-align: middle;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        white-space: nowrap;
+        text-decoration: none;
+        background: color-mix(in oklab, currentColor 10%, transparent);
+        border: 1px solid color-mix(in oklab, currentColor 45%, transparent);
+        border-radius: 999px;
+      }
+      .channel-badge[data-channel="nightly"] {
+        color: var(--weft);
+      }
+      .channel-badge[data-channel="beta"] {
+        color: var(--care);
+      }
+      .channel-badge[data-channel="dev"] {
+        color: var(--verified);
+      }
+      .channel-badge[data-channel="pr"] {
+        color: var(--thread-text);
+      }
+      a.channel-badge,
+      button.channel-badge {
+        font-family: inherit;
+        cursor: pointer;
+      }
+      button.channel-badge {
+        appearance: none;
+      }
+      @media (hover: hover) {
+        a.channel-badge:hover,
+        button.channel-badge:hover {
+          background: color-mix(in oklab, currentColor 18%, transparent);
+        }
+      }
+      a.channel-badge:active,
+      button.channel-badge:active {
+        background: color-mix(in oklab, currentColor 22%, transparent);
+      }
+      .brand-link {
+        display: flex;
+        flex: none;
+        color: inherit;
+        text-decoration: none;
+        border-radius: 8px;
+      }
+      .brand-word-link {
+        color: inherit;
+        text-decoration: none;
+        border-radius: var(--r-s);
+      }
+
+      /* ── primary rail ── */
+      /* the rail can never collide with its neighbours: the center column is allowed
+   to shrink and the rail scrolls (scrollbar hidden) as the floor. In the snug
+   1000-1159px band a long locale with all five tabs really does overflow -
+   measured ~48px for de - so selecting a tab always scrolls it into view. */
+      .modes {
+        grid-column: 2;
+        justify-self: center;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .modes::-webkit-scrollbar {
+        display: none;
+      }
+      .mode-rail {
+        position: relative;
+        display: inline-flex;
+        gap: var(--sp-2xs);
+        padding: 3px;
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-m);
+      }
+      .mode {
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        gap: var(--sp-s);
+        align-items: center;
+        padding: var(--sp-s) var(--sp-l);
+        font-size: 0.8rem;
+        font-weight: 650;
+        color: var(--ink-2);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+        text-decoration: none;
+        border-radius: var(--r-s);
+        transition: color 0.25s var(--ease);
+      }
+      .mode svg {
+        flex: none;
+        width: 17px;
+        height: 17px;
+      }
+      .mode[aria-selected="true"] {
+        color: var(--thread-ink);
+      }
+      @media (hover: hover) {
+        .mode:not([aria-selected="true"]):hover {
+          color: var(--ink);
+        }
+      }
+      .mode:not([aria-selected="true"]):active {
+        color: var(--ink);
+      }
+      html:not([data-beta-tools]) [data-beta-tool] {
+        display: none;
+      }
+
+      /* CSS anchors pin the thumb to the selected tab — no JS measurement, ever.
+   Without anchor support the thumb hides and the selected tab paints its own
+   pill (same look, no slide). */
+      .mode-thumb {
+        position: absolute;
+        top: 3px;
+        bottom: 3px;
+        left: 0;
+        display: none;
+        width: 0;
+        background: var(--thread);
+        border-radius: var(--r-s);
+        transition:
+          left 0.3s var(--ease),
+          width 0.3s var(--ease);
+      }
+      @supports (anchor-name: --rw-tab) {
+        .mode[aria-selected="true"] {
+          anchor-name: --rw-tab;
+        }
+        .mode-thumb {
+          display: block;
+          position-anchor: --rw-tab;
+          left: anchor(left);
+          width: anchor-size(width);
+        }
+      }
+      @supports not (anchor-name: --rw-tab) {
+        .mode[aria-selected="true"] {
+          background: var(--thread);
+        }
+      }
+      @media (forced-colors: active) {
+        .mode[aria-selected="true"] {
+          color: SelectedItemText;
+          background: SelectedItem;
+        }
+        .mode-thumb {
+          display: none;
+        }
+      }
+
+      /* ── top-right actions ── */
+      .actions {
+        display: inline-flex;
+        grid-column: 3;
+        gap: var(--sp-2xs);
+        align-items: center;
+        justify-self: end;
+      }
+      /* external links (github/support) sit apart from the app's own controls */
+      .actions-sep {
+        flex: none;
+        width: 1px;
+        height: 20px;
+        margin-inline: var(--sp-s);
+        background: var(--seam);
+      }
+      @media (max-width: 719px) {
+        .actions-sep {
+          margin-inline: var(--sp-xs);
+        }
+      }
+      .tool {
+        position: relative;
+        display: grid;
+        place-items: center;
+        /* fluid: the cluster cedes width smoothly as the viewport tightens */
+        width: clamp(30px, 22px + 1.2vw, 38px);
+        height: clamp(32px, 26px + 1vw, 38px);
+        color: var(--ink-2);
+        appearance: none;
+        cursor: pointer;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--r-s);
+        transition:
+          color 0.18s,
+          border-color 0.18s,
+          background 0.18s;
+      }
+      @media (hover: hover) {
+        .tool:hover {
+          color: var(--ink);
+          background: var(--well);
+          border-color: var(--seam);
+        }
+      }
+      .tool:active {
+        color: var(--ink);
+        background: var(--plate-2);
+        border-color: var(--seam);
+      }
+      .tool svg {
+        width: clamp(15px, 13.8px + 0.25vw, 17px);
+        height: clamp(15px, 13.8px + 0.25vw, 17px);
+      }
+      .tool[aria-expanded="true"] {
+        color: var(--ink);
+        background: var(--well);
+        border-color: var(--seam);
+      }
+      /* the runtime status rides the brand info line: state-colored icon + text,
+   opening the status popover */
+      .sub-status {
+        position: relative;
+        display: inline-flex;
+        gap: 3px;
+        align-items: center;
+        padding: 0;
+        font: inherit;
+        font-size: 0.9em;
+        font-weight: 600;
+        text-decoration: underline dotted;
+        text-underline-offset: 2px;
+        appearance: none;
+        cursor: pointer;
+        background: transparent;
+        border: 0;
+      }
+      /* touch: a generous invisible hit halo around the tiny inline controls,
+   with no layout shift (WCAG 2.5.8 via spacing exception handled by size) */
+      @media (pointer: coarse) {
+        .sub-link {
+          position: relative;
+        }
+        .sub-status::after,
+        .sub-link::after {
+          position: absolute;
+          inset: -14px -12px;
+          content: "";
+        }
+      }
+      .sub-status svg {
+        flex: none;
+        width: 12px;
+        height: 12px;
+      }
+      .sub-status[data-sw="ready"] {
+        color: var(--verified);
+      }
+      .sub-status[data-sw="update"] {
+        color: var(--care);
+      }
+      .sub-status[data-sw="installing"] {
+        color: var(--ink-3);
+      }
+      .sub-status[data-sw="installing"] svg {
+        animation: sw-spin 1.1s linear infinite;
+      }
+      .sub-status[data-sw="disabled"] {
+        color: var(--ink-4);
+      }
+      /* when a channel badge is present the status yields to glyph-only at every
+   width - the badge is the rarer, louder signal, and together with it the
+   full status text cannot fit inside the 1220px app column in long locales */
+      .brand-sub-row:has(.channel-badge) #status-text {
+        display: none;
+      }
+      /* through the compact rail band the status keeps just its glyph, which also
+   keeps the brand's min-content narrow enough that nothing can collide */
+      @media (max-width: 1159px) {
+        .sub-status #status-text {
+          display: none;
+        }
+      }
+      @media (max-width: 719px) {
+        .sub-status svg {
+          width: 16px;
+          height: 16px;
+        }
+        .sub-status::after {
+          inset: -16px -14px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .sub-status svg {
+          animation: none;
+        }
+      }
+
+      /* support wears the thread at rest — the one action that stays warm.
+   The heart beats: a soft double-thump every few seconds at rest, filled and
+   quickened under the pointer. Stilled entirely for reduced motion. */
+      .tool-support {
+        color: var(--thread-text);
+      }
+      .tool-support svg {
+        transform-origin: center;
+        animation: heartbeat 6s var(--ease) infinite 2s;
+      }
+      @keyframes heartbeat {
+        0%,
+        12%,
+        100% {
+          scale: 1;
+        }
+        3% {
+          scale: 1.22;
+        }
+        6% {
+          scale: 0.95;
+        }
+        9% {
+          scale: 1.12;
+        }
+      }
+      @keyframes heartbeat-fast {
+        0%,
+        100% {
+          scale: 1;
+        }
+        25% {
+          scale: 1.22;
+        }
+        50% {
+          scale: 0.95;
+        }
+        75% {
+          scale: 1.12;
+        }
+      }
+      @media (hover: hover) {
+        .tool-support:hover {
+          color: var(--thread-text);
+        }
+        .tool-support:hover svg {
+          fill: currentColor;
+          animation: heartbeat-fast 0.9s ease-in-out infinite;
+        }
+      }
+      .tool-support:active {
+        color: var(--thread-text);
+      }
+      .tool-support:active svg {
+        fill: currentColor;
+      }
+      .tool-support:focus-visible svg {
+        fill: currentColor;
+        animation: heartbeat-fast 0.9s ease-in-out infinite;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .tool-support svg {
+          animation: none;
+        }
+      }
+
+      /* real tooltips (localizable text, not title="") */
+      .tip {
+        position: absolute;
+        inset-block-start: calc(100% + 6px);
+        inset-inline-end: 0;
+        z-index: 40;
+        padding: 3px 8px;
+        font-size: 0.72rem;
+        font-weight: 550;
+        color: var(--ink);
+        white-space: nowrap;
+        pointer-events: none;
+        background: var(--plate);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+        box-shadow: var(--overlay-shadow);
+        opacity: 0;
+        translate: 0 -2px;
+        transition:
+          opacity 0.15s var(--ease),
+          translate 0.15s var(--ease);
+      }
+      @media (hover: hover) {
+        .tool:hover .tip {
+          opacity: 1;
+          translate: none;
+          transition-delay: 0.35s;
+        }
+      }
+      .tool:focus-visible .tip {
+        opacity: 1;
+        translate: none;
+      }
+      .tool[aria-expanded="true"] .tip {
+        opacity: 0;
+      }
+
+      /* theme cross-morph */
+      .tool .ico-sun,
+      .tool .ico-moon {
+        grid-area: 1 / 1;
+        transition:
+          transform 0.4s var(--ease),
+          opacity 0.3s;
+      }
+      :root[data-theme="dark"] .ico-sun {
+        opacity: 0;
+        transform: rotate(90deg) scale(0.5);
+      }
+      :root[data-theme="dark"] .ico-moon {
+        opacity: 1;
+        transform: none;
+      }
+      :root[data-theme="light"] .ico-sun {
+        opacity: 1;
+        transform: none;
+      }
+      :root[data-theme="light"] .ico-moon {
+        opacity: 0;
+        transform: rotate(-90deg) scale(0.5);
+      }
+
+      .accent-tool-dot {
+        position: absolute;
+        inset-block-end: 5px;
+        inset-inline-end: 5px;
+        width: 8px;
+        height: 8px;
+        background: var(--thread);
+        border-radius: 50%;
+        box-shadow: 0 0 0 1.5px var(--chassis);
+      }
+
+      /* popovers (native Popover API: top layer + light dismiss + Esc for free) */
+      [popover] {
+        position: fixed;
+        inset: auto;
+        padding: var(--sp-m);
+        margin: 0;
+        color: var(--ink);
+        background: var(--plate);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-m);
+        box-shadow: var(--overlay-shadow);
+      }
+      [popover]::backdrop {
+        background: transparent;
+      }
+      .accent-tray {
+        display: flex;
+        gap: var(--sp-s);
+      }
+      .accent-chip {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        cursor: pointer;
+        border-radius: var(--r-s);
+      }
+      .accent-chip input {
+        position: absolute;
+        inset: 0;
+        cursor: pointer;
+        opacity: 0;
+      }
+      .accent-chip-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        transition: scale 0.18s var(--ease);
+      }
+      .accent-chip input:checked + .accent-chip-dot {
+        box-shadow:
+          0 0 0 2px var(--plate),
+          0 0 0 4px var(--ink-3);
+      }
+      .accent-chip input:focus-visible + .accent-chip-dot {
+        box-shadow:
+          0 0 0 2px var(--plate),
+          0 0 0 4px var(--thread);
+      }
+      @media (hover: hover) {
+        .accent-chip:hover .accent-chip-dot {
+          scale: 1.12;
+        }
+      }
+      .accent-chip:active .accent-chip-dot {
+        scale: 1.12;
+      }
+
+      /* ── the responsive story: three ranges, one threshold each ──────────────── */
+      /* the nav is top row or dock, never a second row. One threshold, no
+   measuring; the tabs keep their icon + label pairing at every rail width,
+   tightening (not shedding) in the snug band above the dock handoff. */
+      @media (min-width: 1000px) and (max-width: 1159px) {
+        .mode {
+          gap: var(--sp-xs);
+          padding: var(--sp-s) var(--sp-m);
+        }
+        .mode .mode-label {
+          max-width: 9ch;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      }
+      /* ▼ dock threshold: the single number that replaces data-masthead-layout */
+      @media (max-width: 999px) {
+        .modes {
+          display: none;
+        }
+        .dock {
+          display: grid;
+        }
+      }
+      /* every action keeps its own button on phones - the cluster just tightens */
+      @media (max-width: 719px) {
+        .actions {
+          gap: 0;
+        }
+        .brand {
+          gap: var(--sp-s);
+        }
+        .brand-word {
+          font-size: 1.1rem;
+        }
+        .brand-mark {
+          width: 30px;
+        }
+      }
+      @media (min-width: 1000px) {
+        .dock {
+          display: none;
+        }
+      }
+
+      /* ── the dock (phone primary nav) ────────────────────────────────────────── */
+      .dock {
+        position: fixed;
+        inset-block-end: 0;
+        inset-inline: 0;
+        z-index: 1000;
+        grid-auto-columns: 1fr;
+        grid-auto-flow: column;
+        padding: 4px max(var(--sp-s), var(--safe-r)) max(4px, var(--safe-b)) max(var(--sp-s), var(--safe-l));
+        background: color-mix(in oklab, var(--plate) 88%, transparent);
+        border-block-start: 1px solid var(--seam-soft);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+      }
+      .dock-tab {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: center;
+        min-height: 48px;
+        padding: 6px 2px 4px;
+        font-size: 0.62rem;
+        font-weight: 650;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        text-decoration: none;
+        border-radius: var(--r-s);
+      }
+      .dock-tab svg {
+        width: 20px;
+        height: 20px;
+      }
+      .dock-tab span {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .dock-tab[aria-selected="true"] {
+        color: var(--thread-text);
+      }
+      .dock-tab:active {
+        color: var(--ink);
+      }
+      /* the shuttle stitch: a thread carried along the dock's top seam */
+      .dock-thumb {
+        display: none;
+      }
+      @supports (anchor-name: --rw-dock) {
+        .dock-tab[aria-selected="true"] {
+          anchor-name: --rw-dock;
+        }
+        .dock-thumb {
+          display: block;
+          position: absolute;
+          top: -1px;
+          height: 2px;
+          border-radius: 1px;
+          background: var(--thread);
+          position-anchor: --rw-dock;
+          left: anchor(left);
+          width: anchor-size(width);
+          transition:
+            left 0.3s var(--ease),
+            width 0.3s var(--ease);
+        }
+      }
+      @supports not (anchor-name: --rw-dock) {
+        .dock-tab[aria-selected="true"]::before {
+          position: absolute;
+          inset-inline: 8px;
+          top: -1px;
+          height: 2px;
+          content: "";
+          background: var(--thread);
+          border-radius: 1px;
+        }
+      }
+      @media (forced-colors: active) {
+        .dock-tab[aria-selected="true"] {
+          color: SelectedItemText;
+          background: SelectedItem;
+        }
+      }
+      /* content clears the dock through exactly one variable */
+      @media (max-width: 999px) {
+        :root {
+          --dock-h: calc(64px + var(--safe-b));
+        }
+      }
+      .dock-pad {
+        height: var(--dock-h);
+      }
+
+      /* ═══ workflow surface ═══ */
+      .panel {
+        margin-block-end: var(--sp-xl);
+        overflow: clip;
+        background: var(--plate);
+        border: 1px solid var(--seam-soft);
+        border-radius: var(--r-l);
+      }
+      .panel-head {
+        display: flex;
+        gap: var(--sp-m);
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--sp-l) var(--sp-xl);
+        border-block-end: 1px solid var(--seam-soft);
+      }
+      .panel-title {
+        display: flex;
+        gap: var(--sp-m);
+        align-items: center;
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+      }
+      .panel-title svg {
+        width: 19px;
+        height: 19px;
+        color: var(--thread-text);
+      }
+      .panel-body {
+        padding: var(--sp-xl);
+      }
+      .panel-note {
+        max-width: 60ch;
+        font-size: 0.85rem;
+        color: var(--ink-3);
+      }
+      /* Reset lives here now: a labelled, contextual action instead of an
+   anonymous icon in the global toolbar */
+      .reset-btn {
+        display: inline-flex;
+        gap: var(--sp-s);
+        align-items: center;
+        padding: 7px 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--ink-2);
+        white-space: nowrap;
+        cursor: pointer;
+        background: transparent;
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      .reset-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+      @media (hover: hover) {
+        .reset-btn:hover {
+          color: var(--fault);
+          border-color: color-mix(in oklab, var(--fault) 45%, transparent);
+        }
+      }
+      .reset-btn:active {
+        color: var(--fault);
+        border-color: color-mix(in oklab, var(--fault) 45%, transparent);
+      }
+
+      .hero-lead {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-xs);
+        margin-block-end: var(--sp-xl);
+        text-align: center;
+      }
+      .lead-title {
+        font-size: clamp(1.2rem, 1rem + 1.2vw, 1.7rem);
+        font-weight: 650;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+      .lead-accent {
+        color: var(--thread-text);
+      }
+      .lead-sub {
+        font:
+          500 0.76rem ui-monospace,
+          monospace;
+        color: var(--ink-3);
+        letter-spacing: 0.04em;
+      }
+      .step {
+        border-block-start: 1px solid var(--seam-soft);
+      }
+      .step-head {
+        display: flex;
+        gap: var(--sp-m);
+        align-items: baseline;
+        padding-block: var(--sp-l) var(--sp-m);
+      }
+      .step-num {
+        font:
+          650 0.78rem ui-monospace,
+          monospace;
+        color: var(--thread-text);
+      }
+      .step-title {
+        margin: 0;
+        font-size: 0.98rem;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+      }
+      .step-ghost {
+        opacity: 0.45;
+      }
+      .step-ghost .step-num {
+        color: var(--ink-4);
+      }
+      .drop-bead {
+        display: grid;
+        place-items: center;
+        width: 46px;
+        height: 46px;
+        margin-block-end: var(--sp-xs);
+        color: var(--thread-text);
+        background: color-mix(in oklab, var(--thread) 16%, var(--well));
+        border-radius: 50%;
+      }
+      .drop-bead svg {
+        width: 20px;
+        height: 20px;
+      }
+      .formats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--sp-xs);
+        justify-content: center;
+        margin-block-start: var(--sp-m);
+      }
+      .fmt {
+        padding: 1px 8px;
+        font:
+          550 0.68rem ui-monospace,
+          monospace;
+        color: var(--ink-3);
+        background: var(--plate-2);
+        border: 1px solid var(--seam-soft);
+        border-radius: 999px;
+      }
+      .dropzone {
+        display: grid;
+        gap: var(--sp-s);
+        place-content: center;
+        justify-items: center;
+        min-height: 200px;
+        padding: var(--sp-xl);
+        color: var(--ink-3);
+        text-align: center;
+        background: var(--well);
+        border: 2px dashed var(--seam-strong);
+        border-radius: var(--r-m);
+      }
+      .dropzone strong {
+        font-size: 1rem;
+        color: var(--ink);
+      }
+
+      /* ═══ sub-navigation: the weft rail ═══
+   One pattern for every second-level nav with ≤ ~7 peers (Tools today).
+   Visually subordinate to the mode rail: underline weft, not a filled pill.
+   Scrolls horizontally when cramped — never wraps, never vanishes. */
+      .subrail-nav {
+        background: var(--plate-2);
+        border-block-end: 1px solid var(--seam-soft);
+      }
+      .subrail {
+        position: relative;
+        display: flex;
+        gap: var(--sp-xs);
+        padding: 6px var(--sp-xl) 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+        mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+      }
+      .subrail::-webkit-scrollbar {
+        display: none;
+      }
+      .subtab {
+        display: inline-flex;
+        gap: var(--sp-s);
+        align-items: center;
+        min-height: 40px;
+        padding: 6px 12px 9px;
+        font-size: 0.8rem;
+        font-weight: 650;
+        color: var(--ink-3);
+        white-space: nowrap;
+        appearance: none;
+        cursor: pointer;
+        background: transparent;
+        border: 0;
+        border-block-end: 2px solid transparent;
+        border-radius: var(--r-s) var(--r-s) 0 0;
+      }
+      .subtab svg {
+        width: 15px;
+        height: 15px;
+      }
+      .dialog-subrail {
+        padding: 0;
+        margin-block-end: var(--sp-l);
+        background: transparent;
+        border-block-end: 1px solid var(--seam-soft);
+        mask-image: none;
+      }
+      .subtab[aria-selected="true"] {
+        color: var(--thread-text);
+        border-block-end-color: var(--thread);
+      }
+      @media (hover: hover) {
+        .subtab:not([aria-selected="true"]):hover {
+          color: var(--ink);
+        }
+      }
+      .subtab:not([aria-selected="true"]):active {
+        color: var(--ink);
+      }
+      @media (forced-colors: active) {
+        .subtab[aria-selected="true"] {
+          border-block-end-color: SelectedItem;
+        }
+      }
+
+      /* ═══ docs ═══ */
+      .docs-layout {
+        display: grid;
+        grid-template-columns: 15rem minmax(0, 1fr);
+        gap: var(--sp-xl);
+        align-items: start;
+        padding: var(--sp-xl);
+      }
+      .docs-rails {
+        position: sticky;
+        top: var(--sp-l);
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-xl);
+      }
+      .docs-search {
+        position: relative;
+      }
+      .docs-search input {
+        width: 100%;
+        min-height: 36px;
+        padding: 6px 10px 6px 32px;
+        font: inherit;
+        font-size: 0.84rem;
+        color: var(--ink);
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      [dir="rtl"] .docs-search input {
+        padding: 6px 32px 6px 10px;
+      }
+      .docs-search .search-ico {
+        position: absolute;
+        inset-block-start: 50%;
+        inset-inline-start: 10px;
+        width: 15px;
+        height: 15px;
+        color: var(--ink-4);
+        pointer-events: none;
+        translate: 0 -50%;
+      }
+      .docs-search-results {
+        position: absolute;
+        inset-block-start: calc(100% + 4px);
+        inset-inline: 0;
+        z-index: 20;
+        padding: var(--sp-xs);
+        margin: 0;
+        list-style: none;
+        background: var(--plate);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-m);
+        box-shadow: var(--overlay-shadow);
+      }
+      .docs-search-results:empty {
+        display: none;
+      }
+      .docs-search-empty {
+        display: block;
+        padding: 7px 9px;
+        font-size: 0.8rem;
+        color: var(--ink-3);
+      }
+      .docs-search-results a {
+        display: block;
+        padding: 7px 9px;
+        font-size: 0.82rem;
+        color: var(--ink);
+        text-decoration: none;
+        border-radius: var(--r-s);
+      }
+      .docs-search-results a .crumb {
+        display: block;
+        font-size: 0.68rem;
+        color: var(--ink-4);
+      }
+      .docs-search-results a[aria-selected="true"],
+      .docs-search-results a:focus-visible {
+        background: var(--well);
+      }
+      @media (hover: hover) {
+        .docs-search-results a:hover {
+          background: var(--well);
+        }
+      }
+      .docs-search-results a:active {
+        background: var(--plate-2);
+      }
+
+      .docs-tree {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-s);
+      }
+      .shelf summary {
+        display: flex;
+        gap: var(--sp-s);
+        align-items: center;
+        padding: 5px 7px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        cursor: pointer;
+        list-style: none;
+        border-radius: var(--r-s);
+      }
+      .shelf summary::-webkit-details-marker {
+        display: none;
+      }
+      .shelf summary::before {
+        flex: none;
+        width: 9px;
+        height: 9px;
+        content: "";
+        background: currentColor;
+        clip-path: polygon(20% 10%, 90% 50%, 20% 90%, 20% 70%, 60% 50%, 20% 30%);
+        transition: rotate 0.2s var(--ease);
+      }
+      .shelf[open] summary::before {
+        rotate: 90deg;
+      }
+      @media (hover: hover) {
+        .shelf summary:hover {
+          color: var(--ink);
+        }
+      }
+      .shelf summary:active {
+        color: var(--ink);
+      }
+      [dir="rtl"] .shelf summary::before {
+        scale: -1 1;
+      }
+      [dir="rtl"] .shelf[open] summary::before {
+        rotate: -90deg;
+        scale: -1 1;
+      }
+      .shelf ul {
+        display: flex;
+        flex-direction: column;
+        padding: 0 0 0 14px;
+        margin: 0;
+        list-style: none;
+      }
+      [dir="rtl"] .shelf ul {
+        padding: 0 14px 0 0;
+      }
+      .shelf a {
+        display: block;
+        padding: 5px 9px;
+        font-size: 0.84rem;
+        color: var(--ink-2);
+        text-decoration: none;
+        border-inline-start: 2px solid var(--seam-soft);
+        border-radius: var(--r-s);
+      }
+      .shelf a[aria-current="page"] {
+        font-weight: 650;
+        color: var(--thread-text);
+        background: color-mix(in oklab, var(--thread) 7%, transparent);
+        border-inline-start-color: var(--thread);
+      }
+      @media (hover: hover) {
+        .shelf a:hover {
+          color: var(--ink);
+          background: var(--well);
+        }
+      }
+      .shelf a:active {
+        color: var(--ink);
+        background: var(--well);
+      }
+
+      .onpage h3 {
+        margin: 0 0 var(--sp-s);
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+      }
+      .onpage ol {
+        padding: 0;
+        margin: 0;
+        list-style: none;
+        counter-reset: sec;
+      }
+      .onpage a {
+        display: flex;
+        gap: var(--sp-s);
+        padding: 4px 9px;
+        font-size: 0.8rem;
+        color: var(--ink-3);
+        text-decoration: none;
+        border-inline-start: 2px solid var(--seam-soft);
+      }
+      .onpage a::before {
+        padding-block-start: 2px;
+        font-size: 0.7rem;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink-4);
+        content: counter(sec, decimal-leading-zero);
+        counter-increment: sec;
+      }
+      .onpage a[aria-current="true"] {
+        font-weight: 650;
+        color: var(--thread-text);
+        border-inline-start-color: var(--thread);
+      }
+      .onpage a[aria-current="true"]::before {
+        color: var(--thread-text);
+      }
+      @media (hover: hover) {
+        .onpage a:hover {
+          color: var(--ink);
+        }
+      }
+      .onpage a:active {
+        color: var(--ink);
+      }
+
+      .docs-article {
+        min-width: 0;
+        max-width: 68ch;
+      }
+      .docs-article h1 {
+        margin: 0 0 var(--sp-s);
+        font-size: 1.5rem;
+        letter-spacing: -0.02em;
+      }
+      .docs-article h2 {
+        margin: var(--sp-xl) 0 var(--sp-s);
+        font-size: 1.08rem;
+        letter-spacing: -0.01em;
+        scroll-margin-block-start: 64px;
+      }
+      .docs-article p {
+        margin: 0 0 var(--sp-m);
+        color: var(--ink-2);
+      }
+      .docs-article code {
+        padding: 1px 5px;
+        font-size: 0.85em;
+        background: var(--well);
+        border: 1px solid var(--seam-soft);
+        border-radius: 4px;
+      }
+
+      /* docs on phone: sticky trail bar + bottom-sheet tree (sidebar never just
+   disappears any more) */
+      .docs-trail {
+        display: none;
+      }
+      @media (max-width: 719px) {
+        .docs-rails {
+          display: none;
+        }
+        .docs-layout {
+          grid-template-columns: minmax(0, 1fr);
+          padding: var(--sp-l);
+        }
+        .docs-trail {
+          position: sticky;
+          top: 0;
+          z-index: 30;
+          display: flex;
+          gap: var(--sp-s);
+          align-items: center;
+          padding: var(--sp-s) var(--sp-l);
+          margin: calc(var(--sp-l) * -1) calc(var(--sp-l) * -1) var(--sp-l);
+          background: color-mix(in oklab, var(--plate) 92%, transparent);
+          border-block-end: 1px solid var(--seam-soft);
+          -webkit-backdrop-filter: blur(10px);
+          backdrop-filter: blur(10px);
+        }
+        .docs-trail::after {
+          position: absolute;
+          inset-block-end: -1px;
+          inset-inline-start: 0;
+          width: calc(var(--read-progress, 0) * 100%);
+          height: 2px;
+          content: "";
+          background: var(--thread);
+          transition: width 0.11s linear;
+        }
+      }
+      .trail-btn {
+        display: inline-flex;
+        gap: var(--sp-s);
+        align-items: center;
+        min-width: 0;
+        min-height: 40px;
+        padding: 6px 10px;
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: var(--ink);
+        cursor: pointer;
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      .trail-btn .crumb {
+        font-weight: 500;
+        color: var(--ink-4);
+      }
+      .trail-btn span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .trail-btn svg {
+        flex: none;
+        width: 14px;
+        height: 14px;
+        color: var(--ink-3);
+      }
+      .trail-search {
+        margin-inline-start: auto;
+      }
+      @media (hover: hover) {
+        .trail-btn:hover {
+          background: var(--plate-2);
+          border-color: var(--seam-strong);
+        }
+      }
+      .trail-btn:active {
+        background: var(--plate-2);
+        border-color: var(--seam-strong);
+      }
+
+      /* the docs sheet */
+      dialog.sheet {
+        width: min(100%, 440px);
+        max-height: 78dvh;
+        padding: var(--sp-l);
+        margin: auto auto 0;
+        color: var(--ink);
+        background: var(--plate);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-l) var(--r-l) 0 0;
+        box-shadow: var(--overlay-shadow);
+      }
+      dialog.sheet::backdrop {
+        background: var(--scrim);
+      }
+      .sheet-grip {
+        width: 40px;
+        height: 4px;
+        margin: 0 auto var(--sp-l);
+        background: var(--seam-strong);
+        border-radius: 2px;
+      }
+      .sheet-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-block-end: var(--sp-m);
+      }
+      .sheet-head h2 {
+        margin: 0;
+        font-size: 0.95rem;
+      }
+      .sheet-close {
+        display: grid;
+        place-items: center;
+        padding: 8px;
+        color: var(--ink-3);
+        cursor: pointer;
+        background: transparent;
+        border: 0;
+        border-radius: var(--r-s);
+      }
+      .sheet-close svg {
+        width: 16px;
+        height: 16px;
+      }
+      .sheet-close:active {
+        background: var(--well);
+      }
+      @media (hover: hover) {
+        .sheet-close:hover {
+          color: var(--ink);
+          background: var(--well);
+        }
+      }
+
+      /* dialogs (settings / log mocks) */
+      dialog.modal {
+        width: min(92vw, 480px);
+        padding: var(--sp-xl);
+        margin: auto;
+        color: var(--ink);
+        background: var(--plate);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-l);
+        box-shadow: var(--overlay-shadow);
+      }
+      /* the status/log inspector sizes like the live log dialog */
+      dialog.log-modal {
+        width: min(1280px, calc(100vw - 32px));
+        height: min(88dvh, 900px);
+        padding: var(--sp-l) var(--sp-xl) var(--sp-xl);
+      }
+      /* phones: the inspector and settings take the full screen */
+      @media (max-width: 719px) {
+        dialog.log-modal,
+        dialog#settings-dialog {
+          width: 100vw;
+          max-width: 100vw;
+          height: 100dvh;
+          max-height: 100dvh;
+          padding: max(var(--sp-l), var(--safe-t)) max(var(--sp-l), var(--safe-r)) max(var(--sp-l), var(--safe-b))
+            max(var(--sp-l), var(--safe-l));
+          margin: 0;
+          border: 0;
+          border-radius: 0;
+        }
+      }
+      dialog.log-modal[open] {
+        display: flex;
+        flex-direction: column;
+      }
+      .log-head {
+        display: flex;
+        flex: none;
+        gap: var(--sp-m);
+        align-items: center;
+      }
+      .log-head .dialog-subrail {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-block-end: 0;
+        overflow-x: auto;
+      }
+      .log-head .sheet-close {
+        flex: none;
+      }
+      dialog.log-modal [role="tabpanel"] {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        padding-block-start: var(--sp-l);
+        overflow: auto;
+      }
+      dialog.log-modal [role="tabpanel"][hidden] {
+        display: none;
+      }
+      .log-filter-bar {
+        display: flex;
+        flex: none;
+        gap: var(--sp-s);
+        margin-block-end: var(--sp-s);
+      }
+      .log-filter {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 30px;
+        padding: 0 10px;
+        font:
+          500 0.76rem ui-monospace,
+          monospace;
+        color: var(--ink);
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      .log-level {
+        height: 30px;
+        padding: 0 6px;
+        font:
+          500 0.76rem ui-monospace,
+          monospace;
+        color: var(--ink);
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      .tracelog {
+        flex: 1 1 auto;
+        min-height: 0;
+        padding: var(--sp-s) var(--sp-m);
+        overflow: auto;
+        overscroll-behavior: contain;
+        font:
+          500 0.72rem/1.65 ui-monospace,
+          monospace;
+        color: var(--ink-2);
+        scrollbar-width: thin;
+        background: var(--well);
+        border-radius: var(--r-s);
+      }
+      .tracelog .ln {
+        display: flex;
+        gap: var(--sp-s);
+        width: max-content;
+        min-width: 100%;
+        padding: 2px 0;
+        font: inherit;
+        color: inherit;
+        text-align: start;
+        white-space: nowrap;
+        appearance: none;
+        cursor: pointer;
+        background: transparent;
+        border: 0;
+        border-block-end: 1px solid color-mix(in oklab, var(--seam-soft) 70%, transparent);
+        transition: background 0.12s;
+      }
+      .tracelog .ln:last-child {
+        border-block-end: 0;
+      }
+      @media (hover: hover) {
+        .tracelog .ln:hover {
+          background: color-mix(in oklab, var(--thread) 8%, transparent);
+        }
+      }
+      .tracelog .ln:active {
+        background: color-mix(in oklab, var(--thread) 8%, transparent);
+      }
+      .tracelog .ts {
+        flex: none;
+        color: #6aa8c0;
+      }
+      :root[data-theme="light"] .tracelog .ts {
+        color: #2a6f8a;
+      }
+      .tracelog .caller {
+        flex: none;
+        font-stretch: 90%;
+        color: #b594d6;
+      }
+      :root[data-theme="light"] .tracelog .caller {
+        color: #7a4fb0;
+      }
+      .tracelog .lv {
+        flex: none;
+        width: 6ch;
+        font-size: 0.92em;
+        font-weight: 650;
+        text-transform: uppercase;
+      }
+      .tracelog .lv.trace {
+        color: var(--ink-4);
+      }
+      .tracelog .lv.debug {
+        color: var(--ink-3);
+      }
+      .tracelog .lv.info {
+        color: var(--verified);
+      }
+      .tracelog .lv.warn {
+        color: var(--care);
+      }
+      .tracelog .lv.error {
+        color: var(--fault);
+      }
+      dialog.modal::backdrop {
+        background: var(--scrim);
+      }
+      /* the close button is a sibling of the heading, never inside it - nesting a
+   button in an <h2> folds "Close" into the heading's accessible name */
+      .modal-head {
+        display: flex;
+        gap: var(--sp-m);
+        align-items: center;
+        justify-content: space-between;
+        margin-block-end: var(--sp-l);
+      }
+      dialog.modal h2 {
+        margin: 0;
+        font-size: 1.05rem;
+      }
+      .modal-row {
+        display: flex;
+        gap: var(--sp-l);
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--sp-m) 0;
+        font-size: 0.88rem;
+        border-block-end: 1px solid var(--seam-soft);
+      }
+      .modal-row select {
+        padding: 5px 8px;
+        font: inherit;
+        color: var(--ink);
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      /* the status a tap on the masthead icon lands on: state chip plus a plain
+   sentence, so the current condition is never ambiguous */
+      .sw-summary {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-s);
+        align-items: flex-start;
+        padding: var(--sp-m);
+        margin-block-end: var(--sp-l);
+        background: var(--well);
+        border: 1px solid var(--seam-soft);
+        border-radius: var(--r-m);
+      }
+      .sw-summary .panel-note {
+        margin: 0;
+        font-size: 0.82rem;
+      }
+      .status-rows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-s);
+        margin: var(--sp-l) 0 0;
+      }
+      .status-row {
+        display: grid;
+        grid-template-columns: 7.5rem minmax(0, 1fr);
+        gap: var(--sp-m);
+        align-items: baseline;
+      }
+      .status-row dt {
+        font-size: 0.74rem;
+        font-weight: 650;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .status-row dd {
+        min-width: 0;
+        margin: 0;
+        font-size: 0.84rem;
+        overflow-wrap: anywhere;
+      }
+      .status-row code {
+        padding: 1px 6px;
+        font-size: 0.78rem;
+        background: var(--well);
+        border: 1px solid var(--seam-soft);
+        border-radius: 4px;
+      }
+      .status-row a {
+        color: var(--thread-text);
+        text-decoration: underline dotted;
+        text-underline-offset: 2px;
+      }
+      .log-line {
+        padding: 3px 0;
+        font:
+          500 0.78rem/1.7 ui-monospace,
+          monospace;
+        color: var(--ink-2);
+        overflow-wrap: anywhere;
+        border-block-end: 1px solid var(--seam-soft);
+      }
+      .rel {
+        border-block-end: 1px solid var(--seam-soft);
+      }
+      .rel summary {
+        display: flex;
+        gap: var(--sp-s);
+        align-items: baseline;
+        padding: 8px 0;
+        font:
+          500 0.8rem/1.5 ui-monospace,
+          monospace;
+        color: var(--ink-2);
+        cursor: pointer;
+        list-style: none;
+      }
+      .rel summary::-webkit-details-marker {
+        display: none;
+      }
+      .rel summary::before {
+        flex: none;
+        align-self: center;
+        width: 8px;
+        height: 8px;
+        content: "";
+        background: currentColor;
+        clip-path: polygon(20% 10%, 90% 50%, 20% 90%, 20% 70%, 60% 50%, 20% 30%);
+        transition: rotate 0.2s var(--ease);
+      }
+      .rel[open] summary::before {
+        rotate: 90deg;
+      }
+      [dir="rtl"] .rel summary::before {
+        scale: -1 1;
+      }
+      [dir="rtl"] .rel[open] summary::before {
+        rotate: -90deg;
+        scale: -1 1;
+      }
+      @media (hover: hover) {
+        .rel summary:hover {
+          color: var(--ink);
+        }
+      }
+      .rel summary:active {
+        color: var(--ink);
+      }
+      .rel summary b {
+        font-weight: 650;
+        color: var(--verified);
+      }
+      .rel summary .rel-summary-text {
+        color: var(--ink-3);
+      }
+      .rel-body {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-block-end: var(--sp-m);
+        padding-inline-start: 16px;
+      }
+      .rel-commit {
+        font:
+          500 0.76rem/1.6 ui-monospace,
+          monospace;
+        color: var(--ink-2);
+        overflow-wrap: anywhere;
+      }
+      .rel-link {
+        align-self: flex-start;
+        margin-block-start: var(--sp-xs);
+        font-size: 0.76rem;
+        color: var(--thread-text);
+        text-decoration: underline dotted;
+        text-underline-offset: 2px;
+      }
+      .log-line b {
+        font-weight: 650;
+        color: var(--verified);
+      }
+
+      /* pwa / service-worker state, mirrored from the real BuildStatus */
+      .sw-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 20px;
+        padding: 1px 8px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: var(--ink-3);
+        white-space: nowrap;
+        border: 1px solid var(--seam-soft);
+        border-radius: 999px;
+      }
+      .sw-chip[data-sw="ready"] {
+        color: var(--verified);
+        border-color: color-mix(in oklab, var(--verified) 35%, transparent);
+      }
+      .sw-chip[data-sw="update"] {
+        color: var(--care);
+        border-color: color-mix(in oklab, var(--care) 40%, transparent);
+      }
+      .sw-chip[data-sw="installing"] {
+        color: var(--ink-3);
+      }
+      .sw-chip[data-sw="disabled"] {
+        color: var(--ink-4);
+      }
+      .modal-actions {
+        display: flex;
+        gap: var(--sp-s);
+        justify-content: flex-end;
+        margin-block-start: var(--sp-xl);
+      }
+      .btn-primary {
+        padding: 9px 16px;
+        font: inherit;
+        font-weight: 650;
+        color: var(--thread-ink);
+        appearance: none;
+        cursor: pointer;
+        background: var(--thread);
+        border: 0;
+        border-radius: var(--r-s);
+      }
+      .btn-ghost {
+        padding: 9px 14px;
+        font: inherit;
+        font-weight: 600;
+        color: var(--ink-2);
+        appearance: none;
+        cursor: pointer;
+        background: transparent;
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      @media (hover: hover) {
+        .btn-primary:hover {
+          filter: brightness(1.08);
+        }
+        .btn-ghost:hover {
+          color: var(--ink);
+          background: var(--well);
+        }
+      }
+      .btn-primary:active {
+        filter: brightness(0.95);
+      }
+      .btn-ghost:active {
+        background: var(--plate-2);
+      }
+      @keyframes sw-spin {
+        to {
+          rotate: 360deg;
+        }
+      }
+      /* the update arrow taps twice every few seconds - enough to catch the eye
+   without nagging */
+      .dl-arrow {
+        animation: dl-bob 3.2s var(--ease) infinite 1s;
+      }
+      @keyframes dl-bob {
+        0%,
+        16%,
+        100% {
+          transform: translateY(0);
+        }
+        4% {
+          transform: translateY(2.4px);
+        }
+        8% {
+          transform: translateY(-0.6px);
+        }
+        12% {
+          transform: translateY(1.6px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .dl-arrow {
+          animation: none;
+        }
+      }
+      .update-banner {
+        position: fixed;
+        inset-block-end: calc(var(--dock-h) + var(--sp-s));
+        inset-inline: 0;
+        z-index: 999;
+        display: none;
+        gap: var(--sp-s);
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        max-width: calc(100% - var(--sp-m) * 2);
+        min-height: 44px;
+        padding: var(--sp-s) var(--sp-l);
+        margin-inline: auto;
+        font-family: inherit;
+        font-size: 0.82rem;
+        font-weight: 650;
+        color: var(--care);
+        cursor: pointer;
+        background: color-mix(in oklab, var(--care) 14%, var(--plate));
+        border: 1px solid color-mix(in oklab, var(--care) 45%, transparent);
+        border-radius: var(--r-m);
+        box-shadow: var(--overlay-shadow);
+      }
+      .update-banner svg {
+        width: 14px;
+        height: 14px;
+      }
+      /* the loud path is mobile-only; on desktop the amber status text in the
+   brand line is the persistent notice */
+      @media (max-width: 999px) {
+        .update-banner[data-show] {
+          display: flex;
+        }
+      }
+      @media (hover: hover) {
+        .update-banner:hover {
+          background: color-mix(in oklab, var(--care) 20%, var(--plate));
+        }
+      }
+      .update-banner:active {
+        background: color-mix(in oklab, var(--care) 24%, var(--plate));
+      }
+
+      /* theme wipe + tab-switch view transitions */
+      ::view-transition-old(root),
+      ::view-transition-new(root) {
+        animation-duration: 0.35s;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 0.01ms;
+          animation-duration: 0.01ms;
+        }
+      }
+    </style>
+
+    <a class="skip-link" data-i18n="skip" href="#main-content">Skip to content</a>
+
+    <fieldset class="proto-console">
+      <legend class="sr-only">Prototype controls</legend>
+      <strong>Prototype rig</strong>
+      <label
+        >Locale
+        <select id="proto-locale">
+          <option selected value="en">English</option>
+          <option value="de">Deutsch (long words)</option>
+          <option value="pseudo">⟦Ƥśéûðö⟧ (+40% stress)</option>
+        </select>
+      </label>
+      <label
+        >Direction
+        <select id="proto-dir">
+          <option selected value="ltr">LTR</option>
+          <option value="rtl">RTL</option>
+        </select>
+      </label>
+      <label><input checked id="proto-beta" type="checkbox" /> Beta tabs (Trim/Tools)</label>
+      <label
+        >Version
+        <select id="proto-version">
+          <option selected value="v0.9.3">v0.9.3</option>
+          <option value="v0.9.3*">v0.9.3* (dirty)</option>
+          <option value="v0.9.3+4">v0.9.3+4 (ahead)</option>
+          <option value="v0.9.3+4*">v0.9.3+4* (both)</option>
+        </select>
+      </label>
+      <label
+        >Channel
+        <select id="proto-channel">
+          <option selected value="">Stable</option>
+          <option value="nightly">Nightly</option>
+          <option value="beta">Beta</option>
+          <option value="dev">Dev</option>
+          <option value="pr">PR preview</option>
+        </select>
+      </label>
+      <label
+        >Service worker
+        <select id="proto-sw">
+          <option selected value="ready">Offline ready</option>
+          <option value="update">Update available</option>
+          <option value="installing">Installing</option>
+          <option value="disabled">Disabled</option>
+        </select>
+      </label>
+    </fieldset>
+
+    <div class="masthead-wrap">
+      <div class="app">
+        <header class="masthead">
+          <div class="brand">
+            <!-- interactive content cannot nest inside an anchor, so the home link
+             wraps only the mark and the wordmark is its own link; the version
+             and thread controls live beside them, not inside them -->
+            <a aria-label="rom-weaver home" class="brand-link" data-i18n-aria="home" data-nav="patcher" href="#/apply">
+              <span aria-hidden="true" class="brand-mark"></span>
+            </a>
+            <span class="brand-copy">
+              <span class="brand-word-row">
+                <a class="brand-word-link" data-nav="patcher" href="#/apply"
+                  ><span class="brand-word">rom<span class="brand-hy">-</span><b>weaver</b></span></a
+                >
+              </span>
+              <span class="brand-sub-row">
+                <span class="sub-item"><span id="build-tag"></span></span>
+                <span class="sub-item"
+                  ><span aria-hidden="true" class="sub-dot">·</span
+                  ><button
+                    aria-haspopup="dialog"
+                    class="sub-link"
+                    data-i18n-aria="threadsAria"
+                    id="threads-btn"
+                    type="button"
+                  >
+                    8<span aria-hidden="true">T</span>
+                  </button></span
+                >
+                <span class="sub-item"
+                  ><span aria-hidden="true" class="sub-dot">·</span
+                  ><button aria-haspopup="dialog" class="sub-status" data-sw="ready" id="sub-status" type="button">
+                    <svg
+                      aria-hidden="true"
+                      fill="none"
+                      id="status-ico"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2.4"
+                      viewBox="0 0 24 24"
+                    ></svg
+                    ><span id="status-text"></span></button
+                ></span>
+              </span>
+            </span>
+          </div>
+
+          <nav aria-label="Workflow" class="modes" data-i18n-aria="navPrimary">
+            <div aria-orientation="horizontal" class="mode-rail" data-i18n-aria="navPrimary" id="rail" role="tablist">
+              <span aria-hidden="true" class="mode-thumb"></span>
+              <!-- tabs injected -->
+            </div>
+          </nav>
+
+          <div class="actions">
+            <a
+              class="tool"
+              href="https://github.com/rom-weaver/rom-weaver"
+              id="github-btn"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+                <path
+                  d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+                />
+              </svg>
+              <span aria-hidden="true" class="tip" data-tipkey="github"></span>
+              <span class="sr-only" data-i18n="github">View source on GitHub</span>
+            </a>
+            <a
+              class="tool tool-support"
+              href="https://github.com/sponsors/brandonocasey"
+              id="support-btn"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <svg
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"
+                />
+              </svg>
+              <span aria-hidden="true" class="tip" data-tipkey="support"></span>
+              <span class="sr-only" data-i18n="support">Support rom-weaver</span>
+            </a>
+
+            <span aria-hidden="true" class="actions-sep"></span>
+
+            <button class="tool" id="theme-btn" type="button">
+              <svg
+                aria-hidden="true"
+                class="ico-sun"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <circle cx="12" cy="12" r="4" />
+                <path
+                  d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
+                />
+              </svg>
+              <svg
+                aria-hidden="true"
+                class="ico-moon"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+              </svg>
+              <span aria-hidden="true" class="tip" data-tipkey="theme"></span>
+              <span class="sr-only" data-i18n="theme">Switch theme</span>
+            </button>
+
+            <button aria-expanded="false" class="tool" id="accent-btn" popovertarget="accent-pop" type="button">
+              <svg
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M12 2a10 10 0 0 0 0 20 1.8 1.8 0 0 0 1.4-2.9 1.8 1.8 0 0 1 1.4-2.9H17a5 5 0 0 0 5-5c0-5-4.5-9.2-10-9.2Z"
+                />
+                <circle cx="7.5" cy="11.5" r=".8" />
+                <circle cx="10.5" cy="7" r=".8" />
+                <circle cx="15" cy="6.5" r=".8" />
+              </svg>
+              <span aria-hidden="true" class="accent-tool-dot"></span>
+              <span aria-hidden="true" class="tip" data-tipkey="accent"></span>
+              <span class="sr-only" data-i18n="accent">Accent color</span>
+            </button>
+
+            <button aria-haspopup="dialog" class="tool" id="log-btn" type="button">
+              <svg
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path d="M15 12h-5M15 8h-5M19 17V5a2 2 0 0 0-2-2H4" />
+                <path
+                  d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"
+                />
+              </svg>
+              <span aria-hidden="true" class="tip" data-tipkey="log"></span>
+              <span class="sr-only" data-i18n="log">Activity log</span>
+            </button>
+
+            <button aria-haspopup="dialog" class="tool" id="settings-btn" type="button">
+              <svg
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path
+                  d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.14.34.44.6.8.7l.29.05a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+                />
+              </svg>
+              <span aria-hidden="true" class="tip" data-tipkey="settings"></span>
+              <span class="sr-only" data-i18n="settings">Settings</span>
+            </button>
+          </div>
+        </header>
+      </div>
+
+      <!-- phone dock: primary nav within thumb reach; shown by the same container
+       query that hides the top rail, so the two can never disagree -->
+      <nav aria-label="Workflow" class="dock-nav" data-i18n-aria="navPrimary">
+        <div aria-orientation="horizontal" class="dock" data-i18n-aria="navPrimary" id="dock" role="tablist">
+          <span aria-hidden="true" class="dock-thumb"></span>
+          <!-- tabs injected -->
+        </div>
+      </nav>
+    </div>
+
+    <div id="accent-pop" popover>
+      <div aria-label="Accent color" class="accent-tray" data-i18n-aria="accent" role="radiogroup"></div>
+    </div>
+
+    <main class="app" id="main-content" tabindex="-1">
+      <!-- panels (and the live-region announcer) injected -->
+    </main>
+
+    <div aria-hidden="true" class="dock-pad"></div>
+
+    <button class="update-banner" data-reload-now id="update-banner" type="button">
+      <svg
+        aria-hidden="true"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2.4"
+        viewBox="0 0 24 24"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <g class="dl-arrow">
+          <path d="M12 8v7" />
+          <path d="m9 12.6 3 2.9 3-2.9" />
+        </g>
+      </svg>
+      <span data-i18n="swUpdate">Update available</span> — <b data-i18n="reloadNow">Reload now</b>
+    </button>
+
+    <dialog aria-labelledby="settings-dialog-title" class="modal" id="settings-dialog">
+      <div class="modal-head">
+        <h2 data-i18n="settings" id="settings-dialog-title">Settings</h2>
+        <button class="sheet-close" data-close type="button">
+          <svg
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+          >
+            <path d="M18 6 6 18M6 6l12 12" /></svg
+          ><span class="sr-only" data-i18n="close">Close</span>
+        </button>
+      </div>
+      <div class="modal-row">
+        <span data-i18n="language">Language</span>
+        <select data-i18n-aria="language" name="language">
+          <option>English</option>
+          <option>Deutsch</option>
+          <option>Español</option>
+        </select>
+      </div>
+      <div class="modal-row">
+        <span data-i18n="threads">Threads</span
+        ><select data-i18n-aria="threads" name="threads">
+          <option>Auto (8)</option>
+          <option>4</option>
+          <option>2</option>
+        </select>
+      </div>
+      <div class="modal-row">
+        <span data-i18n="checksums">Verify checksums</span
+        ><select data-i18n-aria="checksums" name="checksums">
+          <option data-i18n="always">Always</option>
+          <option>Off</option>
+        </select>
+      </div>
+    </dialog>
+
+    <dialog aria-label="Status &amp; logs" class="modal log-modal" data-i18n-aria="logDialogTitle" id="log-dialog">
+      <div class="log-head">
+        <div
+          aria-label="Status &amp; logs"
+          class="subrail dialog-subrail"
+          data-i18n-aria="logDialogTitle"
+          role="tablist"
+        >
+          <button
+            aria-controls="logpanel-status"
+            aria-selected="true"
+            class="subtab"
+            data-logtab="status"
+            id="logtab-status"
+            role="tab"
+            type="button"
+          >
+            <span data-i18n="logTabStatus">Status</span>
+          </button>
+          <button
+            aria-controls="logpanel-activity"
+            aria-selected="false"
+            class="subtab"
+            data-logtab="activity"
+            id="logtab-activity"
+            role="tab"
+            type="button"
+          >
+            <span data-i18n="logTabActivity">Activity</span>
+          </button>
+          <button
+            aria-controls="logpanel-storage"
+            aria-selected="false"
+            class="subtab"
+            data-logtab="storage"
+            id="logtab-storage"
+            role="tab"
+            type="button"
+          >
+            <span data-i18n="logTabStorage">Storage</span>
+          </button>
+          <button
+            aria-controls="logpanel-changelog"
+            aria-selected="false"
+            class="subtab"
+            data-logtab="changelog"
+            id="logtab-changelog"
+            role="tab"
+            type="button"
+          >
+            <span data-i18n="logTabChangelog">Changelog</span>
+          </button>
+        </div>
+        <button class="sheet-close" data-close type="button">
+          <svg
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+          >
+            <path d="M18 6 6 18M6 6l12 12" /></svg
+          ><span class="sr-only" data-i18n="close">Close</span>
+        </button>
+      </div>
+      <div aria-labelledby="logtab-status" id="logpanel-status" role="tabpanel">
+        <div class="sw-summary">
+          <span class="sw-slot" role="status"></span>
+          <p class="panel-note sw-desc"></p>
+          <button class="btn-primary status-reload" data-i18n="reloadNow" data-reload-now hidden type="button">
+            Reload now
+          </button>
+        </div>
+        <dl class="status-rows" id="status-rows"></dl>
+      </div>
+      <div aria-labelledby="logtab-activity" hidden id="logpanel-activity" role="tabpanel">
+        <div class="log-filter-bar">
+          <input
+            class="log-filter"
+            data-i18n-aria="filterLogs"
+            data-i18n-ph="filterLogs"
+            name="log-filter"
+            placeholder="Filter logs"
+            type="search"
+          />
+          <select aria-label="Log level" class="log-level" data-i18n-aria="logLevel" name="log-level">
+            <option>warn</option>
+            <option selected>info</option>
+            <option>debug</option>
+            <option>trace</option>
+          </select>
+        </div>
+        <div class="tracelog">
+          <button class="ln" type="button">
+            <span class="ts">12:04:11.201</span><span class="lv info">info</span><span class="caller">wasm-host:</span
+            ><span class="msg">runtime online · 8 workers</span>
+          </button>
+          <button class="ln" type="button">
+            <span class="ts">12:04:11.204</span><span class="lv debug">debug</span
+            ><span class="caller">opfs-proxy:</span><span class="msg">worker port attached</span>
+          </button>
+          <button class="ln" type="button">
+            <span class="ts">12:04:19.480</span><span class="lv info">info</span><span class="caller">patcher:</span
+            ><span class="msg">loaded chrono-trigger.sfc (4.0 MiB)</span>
+          </button>
+          <button class="ln" type="button">
+            <span class="ts">12:04:19.502</span><span class="lv trace">trace</span><span class="caller">hasher:</span
+            ><span class="msg">chunk 0..1048576 crc32 partial 8f21bc09</span>
+          </button>
+          <button class="ln" type="button">
+            <span class="ts">12:04:20.118</span><span class="lv info">info</span><span class="caller">hasher:</span
+            ><span class="msg">crc32 2d206bf7 verified against manifest</span>
+          </button>
+          <button class="ln" type="button">
+            <span class="ts">12:04:20.240</span><span class="lv debug">debug</span><span class="caller">registry:</span
+            ><span class="msg">detected format bps from magic bytes</span>
+          </button>
+          <button class="ln" type="button">
+            <span class="ts">12:04:31.077</span><span class="lv info">info</span><span class="caller">patcher:</span
+            ><span class="msg">applied ct-retranslation.bps in 210 ms</span>
+          </button>
+          <button class="ln" type="button">
+            <span class="ts">12:04:31.081</span><span class="lv warn">warn</span><span class="caller">opfs-proxy:</span
+            ><span class="msg">transient file kept: weave-output.tmp (12.3 MiB)</span>
+          </button>
+        </div>
+      </div>
+      <div aria-labelledby="logtab-storage" hidden id="logpanel-storage" role="tabpanel">
+        <p class="panel-note" data-i18n="storageSummary">2 files · 12.3 MiB stored in this browser (OPFS)</p>
+        <p class="log-line">chrono-trigger.sfc · 4.0 MiB</p>
+        <p class="log-line">ct-retranslation.bps · 312 KiB</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" data-i18n="clearStorage" type="button">Clear stored files</button>
+        </div>
+      </div>
+      <div aria-labelledby="logtab-changelog" hidden id="logpanel-changelog" role="tabpanel">
+        <p class="panel-note">
+          <a data-i18n="allReleases" href="https://github.com/rom-weaver/rom-weaver/releases" rel="noopener"
+            >All releases on GitHub</a
+          >
+        </p>
+        <div id="changelog-unreleased"></div>
+        <div id="changelog-releases"></div>
+      </div>
+    </dialog>
+
+    <dialog aria-labelledby="docs-sheet-title" class="sheet" id="docs-sheet">
+      <div aria-hidden="true" class="sheet-grip"></div>
+      <div class="sheet-head">
+        <h2 data-i18n="docsTitle" id="docs-sheet-title">Documentation</h2>
+        <button class="sheet-close" data-close type="button">
+          <svg
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+          >
+            <path d="M18 6 6 18M6 6l12 12" /></svg
+          ><span class="sr-only" data-i18n="close">Close</span>
+        </button>
+      </div>
+      <div class="docs-search" style="margin-block-end: var(--sp-l)">
+        <svg
+          aria-hidden="true"
+          class="search-ico"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+        >
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <input
+          aria-autocomplete="list"
+          aria-expanded="false"
+          data-docsearch
+          data-i18n-aria="searchDocs"
+          data-i18n-ph="searchDocs"
+          name="docs-search"
+          placeholder="Search docs"
+          role="combobox"
+          type="search"
+        />
+        <div class="docs-search-results" data-i18n-aria="searchDocs" role="listbox"></div>
+      </div>
+      <nav aria-label="Docs" class="docs-tree" data-docstree></nav>
+    </dialog>
+
+    <script>
+      /* ────────────────────────────────────────────────────────────────────────── */
+      "use strict";
+
+      /* every user-facing string routes through this dictionary — the prototype's
+   proof that nothing in the new chrome depends on English string widths */
+      const M = {
+        de: {
+          accent: "Akzentfarbe",
+          allReleases: "Alle Releases auf GitHub",
+          always: "Immer",
+          announced: "Ansicht geladen",
+          branchLabel: "Branch",
+          channelBeta: "Beta-Build",
+          channelDev: "Dev-Build",
+          channelLabel: "Kanal",
+          channelNightly: "Nightly-Build",
+          checksum: "Prüfsumme",
+          checksumNote: "CRC32 / MD5 / SHA-1 für beliebige Dateien berechnen.",
+          checksums: "Prüfsummen verifizieren",
+          clearStorage: "Gespeicherte Dateien löschen",
+          close: "Schließen",
+          commitLabel: "Commit",
+          create: "Erstellen",
+          createNote: "Vergleiche Original und modifiziertes ROM, um einen teilbaren Patch zu erzeugen.",
+          createTitle: "Patch erstellen",
+          docs: "Doku",
+          docsOf: "Doku",
+          docsTitle: "Dokumentation",
+          dropHint: "oder tippen zum Durchsuchen — Dateien verlassen dieses Gerät nie",
+          dropRom: "ROM und Patch hier ablegen",
+          envLabel: "Umgebung",
+          envPwa: "Installierte App (PWA)",
+          envWeb: "Browser-Tab",
+          filterLogs: "Protokoll filtern…",
+          github: "Quelltext auf GitHub",
+          headerNote: "Copier-Header vor dem Patchen entfernen.",
+          headerStrip: "Header entfernen",
+          heroAccent: "Browser",
+          heroLine1: "Patche jedes ROM",
+          heroLine2: "komplett in deinem",
+          heroLocal: "Dateien verlassen dieses Gerät nie",
+          home: "rom-weaver Startseite",
+          language: "Sprache",
+          log: "Aktivitätsprotokoll",
+          logDialogTitle: "Status & Protokolle",
+          logLevel: "Protokollstufe",
+          logTabActivity: "Protokoll",
+          logTabChangelog: "Änderungen",
+          logTabStatus: "Status",
+          logTabStorage: "Speicher",
+          navPrimary: "Arbeitsablauf",
+          noResults: "Keine passende Dokumentation.",
+          onPage: "Auf dieser Seite",
+          ppfNote: "Einen zuvor angewendeten PPF-Patch rückgängig machen.",
+          ppfUndo: "PPF rückgängig",
+          prLabel: "Pull Request",
+          prPreview: "Pull-Request-Vorschau",
+          reloadNow: "Jetzt neu laden",
+          reset: "Zurücksetzen",
+          searchDocs: "Doku durchsuchen",
+          settings: "Einstellungen",
+          skip: "Zum Inhalt springen",
+          stepNext: "Weben & speichern",
+          stepPick: "ROM und Patch laden",
+          storageSummary: "2 Dateien · 12,3 MiB in diesem Browser gespeichert (OPFS)",
+          support: "rom-weaver unterstützen",
+          swDisabled: "Offline-Modus aus",
+          swDisabledDesc:
+            "Der Service Worker ist aus — rom-weaver braucht bei jedem Besuch das Netz. Das Patchen läuft trotzdem komplett auf diesem Gerät.",
+          swInstalling: "Offline-Kopie wird installiert",
+          swInstallingDesc: "Die App wird für die Offline-Nutzung zwischengespeichert…",
+          swReady: "Offline bereit",
+          swReadyDesc: "rom-weaver ist in diesem Browser zwischengespeichert und läuft komplett offline.",
+          swUpdate: "Update verfügbar",
+          swUpdateDesc: "Eine neue Version wurde im Hintergrund geladen. Zum Wechseln neu laden.",
+          theme: "Farbschema wechseln",
+          threads: "Threads",
+          threadsAria: "8 Threads",
+          toolCommands: "Werkzeugbefehle",
+          tools: "Werkzeuge",
+          toolsTitle: "Werkzeuge",
+          trim: "Kürzen",
+          trimNote: "Entferne Füllbytes aus einem überdimensionierten Dump.",
+          trimTitle: "ROM kürzen",
+          unreleased: "Unveröffentlicht",
+          versionLabel: "Version",
+          viewRelease: "Release auf GitHub ansehen",
+          weave: "Anwenden",
+          weaveTitle: "Patch anwenden",
+        },
+        en: {
+          accent: "Accent color",
+          allReleases: "All releases on GitHub",
+          always: "Always",
+          announced: "view loaded",
+          branchLabel: "Branch",
+          channelBeta: "Beta build",
+          channelDev: "Dev build",
+          channelLabel: "Channel",
+          channelNightly: "Nightly build",
+          checksum: "Checksum",
+          checksumNote: "Compute CRC32 / MD5 / SHA-1 for any file.",
+          checksums: "Verify checksums",
+          clearStorage: "Clear stored files",
+          close: "Close",
+          commitLabel: "Commit",
+          create: "Create",
+          createNote: "Compare an original and a modified ROM to produce a patch you can share.",
+          createTitle: "Create a patch",
+          docs: "Docs",
+          docsOf: "Docs",
+          docsTitle: "Documentation",
+          dropHint: "or tap to browse — files never leave this device",
+          dropRom: "Drop a ROM and a patch",
+          envLabel: "Environment",
+          envPwa: "Installed app (PWA)",
+          envWeb: "Browser tab",
+          filterLogs: "Filter logs…",
+          github: "View source on GitHub",
+          headerNote: "Remove a copier header before patching.",
+          headerStrip: "Header strip",
+          heroAccent: "browser",
+          heroLine1: "Patch any ROM",
+          heroLine2: "entirely in your",
+          heroLocal: "files never leave this device",
+          home: "rom-weaver home",
+          language: "Language",
+          log: "Activity log",
+          logDialogTitle: "Status & logs",
+          logLevel: "Log level",
+          logTabActivity: "Logs",
+          logTabChangelog: "Changelog",
+          logTabStatus: "Status",
+          logTabStorage: "Storage",
+          navPrimary: "Workflow",
+          noResults: "No matching documentation.",
+          onPage: "On this page",
+          ppfNote: "Reverse a previously applied PPF patch.",
+          ppfUndo: "PPF undo",
+          prLabel: "Pull request",
+          prPreview: "Pull request preview",
+          reloadNow: "Reload now",
+          reset: "Reset",
+          searchDocs: "Search docs",
+          settings: "Settings",
+          skip: "Skip to content",
+          stepNext: "Weave & save",
+          stepPick: "Load a ROM and a patch",
+          storageSummary: "2 files · 12.3 MiB stored in this browser (OPFS)",
+          support: "Support rom-weaver",
+          swDisabled: "Offline support off",
+          swDisabledDesc:
+            "The service worker is off, so rom-weaver needs the network each visit. Patching still runs entirely on this device.",
+          swInstalling: "Installing offline copy",
+          swInstallingDesc: "Caching the app so it can run offline…",
+          swReady: "Offline ready",
+          swReadyDesc: "rom-weaver is cached in this browser and works fully offline.",
+          swUpdate: "Update available",
+          swUpdateDesc: "A new version downloaded in the background. Reload to switch.",
+          theme: "Switch theme",
+          threads: "Threads",
+          threadsAria: "8 threads",
+          toolCommands: "Tool commands",
+          tools: "Tools",
+          toolsTitle: "Tools",
+          trim: "Trim",
+          trimNote: "Strip padding from an oversized dump so it archives smaller.",
+          trimTitle: "Trim a ROM",
+          unreleased: "Unreleased",
+          versionLabel: "Version",
+          viewRelease: "View release on GitHub",
+          weave: "Apply",
+          weaveTitle: "Apply a patch",
+        },
+      };
+      /* pseudo-locale: accent every vowel and pad 40% — the classic layout fuzzer */
+      function pseudoize(s) {
+        const map = { A: "Å", a: "á", E: "Ë", e: "é", I: "Ï", i: "í", O: "Ø", o: "ö", U: "Ü", u: "û" };
+        const core = String(s).replace(/[aeiouAEIOU]/g, (c) => map[c] || c);
+        const pad = "~".repeat(Math.max(1, Math.round(core.length * 0.4)));
+        return `⟦${core}${pad}⟧`;
+      }
+      M.pseudo = Object.fromEntries(Object.entries(M.en).map(([k, v]) => [k, pseudoize(v)]));
+
+      const state = {
+        docSlug: "getting-started",
+        locale: "en",
+        tool: "ppf-undo",
+        view: "patcher",
+      };
+      const t = (key) => (M[state.locale] && M[state.locale][key]) || M.en[key] || key;
+      /* one motion gate for every animated affordance, JS side: view transitions,
+   the theme wipe, and every programmatic scroll */
+      const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const scrollBehavior = () => (reduceMotion() ? "auto" : "smooth");
+
+      /* ── icons ── */
+      const ICONS = {
+        chevD: '<path d="m6 9 6 6 6-6"/>',
+        create:
+          '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7M11 18H8a2 2 0 0 1-2-2V9"/>',
+        docs: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
+        hash: '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
+        search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+        strip:
+          '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+        tools:
+          '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+        trim: '<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>',
+        undo: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+        weave: '<path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
+      };
+      const icon = (name, size) =>
+        `<svg viewBox="0 0 24 24" width="${size || 17}" height="${size || 17}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+
+      const TABS = [
+        { beta: false, icon: "weave", id: "patcher", key: "weave" },
+        { beta: false, icon: "create", id: "creator", key: "create" },
+        { beta: false, icon: "docs", id: "docs", key: "docs" },
+        { beta: true, icon: "trim", id: "trim", key: "trim" },
+        { beta: true, icon: "tools", id: "tools", key: "tools" },
+      ];
+      const ACCENTS = [
+        ["madder", "#d9690f"],
+        ["woad", "#6d7ce8"],
+        ["violet", "#9a6ae0"],
+        ["verdigris", "#3faa72"],
+        ["teal", "#2aa0a8"],
+        ["plum", "#cb63a5"],
+      ];
+      const SUBTOOLS = [
+        { icon: "undo", id: "ppf-undo", key: "ppfUndo", note: "ppfNote" },
+        { icon: "strip", id: "header-strip", key: "headerStrip", note: "headerNote" },
+        { icon: "hash", id: "checksum", key: "checksum", note: "checksumNote" },
+      ];
+      const DOC_TREE = [
+        {
+          open: true,
+          pages: [
+            ["getting-started", "Getting started"],
+            ["applying-patches", "Applying patches"],
+            ["creating-patches", "Creating patches"],
+            ["supported-formats", "Supported formats"],
+          ],
+          shelf: "Browser usage",
+        },
+        {
+          open: false,
+          pages: [
+            ["cli-install", "Installation"],
+            ["cli-usage", "Usage"],
+            ["cli-completions", "Shell completions"],
+          ],
+          shelf: "CLI",
+        },
+        {
+          open: false,
+          pages: [
+            ["self-hosting", "Self-hosting"],
+            ["docker", "Docker"],
+          ],
+          shelf: "Hosting",
+        },
+        {
+          open: false,
+          pages: [
+            ["formats", "Format matrix"],
+            ["faq", "FAQ"],
+          ],
+          shelf: "Reference",
+        },
+        {
+          open: false,
+          pages: [
+            ["privacy", "Privacy"],
+            ["legal", "Legal"],
+          ],
+          shelf: "Legal",
+        },
+      ];
+      const DOC_SECTIONS = [
+        ["pick-files", "Pick your files"],
+        ["verify", "Verify the source"],
+        ["weave", "Weave the patch"],
+        ["save", "Save the result"],
+        ["troubleshoot", "Troubleshooting"],
+      ];
+
+      /* ── rendering ── */
+      const $ = (sel, root) => (root || document).querySelector(sel);
+      const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+
+      function renderTabs() {
+        for (const [railId, cls] of [
+          ["rail", "mode"],
+          ["dock", "dock-tab"],
+        ]) {
+          const rail = $(`#${railId}`);
+          for (const stale of $$("a", rail)) stale.remove();
+          const isDock = railId === "dock";
+          for (const tab of TABS) {
+            const a = document.createElement("a");
+            a.className = cls;
+            a.href = `#/${tab.id}`;
+            a.setAttribute("role", "tab");
+            a.id = (isDock ? "docktab-" : "tab-") + tab.id;
+            a.dataset.nav = tab.id;
+            if (tab.beta) a.dataset.betaTool = "";
+            a.setAttribute("aria-selected", String(tab.id === state.view));
+            a.setAttribute("aria-controls", `panel-${tab.id}`);
+            a.innerHTML =
+              icon(tab.icon, isDock ? 20 : 17) +
+              `<span${isDock ? "" : ' class="mode-label"'} data-i18n="${tab.key}"></span>`;
+            rail.appendChild(a);
+          }
+        }
+        syncRovingTabindex();
+      }
+
+      function panelShell(id, key, inner) {
+        return `<section id="panel-${id}" role="tabpanel" data-i18n-aria="${key}" tabindex="0" ${state.view === id ? "" : "hidden"}>${inner}</section>`;
+      }
+
+      function renderPanels() {
+        const main = $("#main-content");
+        const simple = (id, titleKey, iconName, body) =>
+          panelShell(
+            id,
+            titleKey,
+            `
+    <div class="panel">
+      <div class="panel-head">
+        <h1 class="panel-title">${icon(iconName, 19)}<span data-i18n="${titleKey}"></span></h1>
+        <button class="reset-btn" type="button">${icon("undo", 14)}<span data-i18n="reset"></span></button>
+      </div>
+      <div class="panel-body">${body}</div>
+    </div>`,
+          );
+
+        const drop = `<div class="dropzone"><strong data-i18n="dropRom"></strong><span data-i18n="dropHint"></span></div>`;
+        const heroStep = `
+    <div class="hero-lead">
+      <span class="lead-title"><span data-i18n="heroLine1">Patch any ROM</span> <span data-i18n="heroLine2">entirely in your</span> <span class="lead-accent" data-i18n="heroAccent">browser</span>.</span>
+      <span class="lead-sub" data-i18n="heroLocal">files never leave this device</span>
+    </div>
+    <section class="step">
+      <div class="step-head"><span class="step-num">0x01</span><h2 class="step-title" data-i18n="stepPick">Load a ROM and a patch</h2></div>
+      <div class="step-body">
+        <div class="dropzone hero-drop">
+          <span class="drop-bead" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></span>
+          <strong data-i18n="dropRom">Drop a ROM and a patch</strong>
+          <span data-i18n="dropHint">or tap to browse — files never leave this device</span>
+          <span class="formats" aria-hidden="true">${[".bps", ".ips", ".ppf", ".ups", ".xdelta", ".vcdiff", ".zip", ".7z"].map((f) => `<span class="fmt">${f}</span>`).join("")}</span>
+        </div>
+      </div>
+    </section>
+    <section class="step step-ghost" aria-hidden="true">
+      <div class="step-head"><span class="step-num">0x02</span><h2 class="step-title" data-i18n="stepNext">Weave &amp; save</h2></div>
+    </section>`;
+
+        const toolsSub = `
+    <div class="panel">
+      <div class="panel-head">
+        <h1 class="panel-title">${icon("tools", 19)}<span data-i18n="toolsTitle"></span></h1>
+        <button class="reset-btn" type="button">${icon("undo", 14)}<span data-i18n="reset"></span></button>
+      </div>
+      <nav class="subrail-nav" aria-label="Tool commands" data-i18n-aria="toolCommands">
+        <div class="subrail" role="tablist" id="subrail">
+          ${SUBTOOLS.map(
+            (s) => `
+            <button class="subtab" role="tab" type="button" id="subtab-${s.id}"
+              aria-selected="${String(s.id === state.tool)}" aria-controls="subpanel-${s.id}"
+              data-subtool="${s.id}">${icon(s.icon, 15)}<span data-i18n="${s.key}"></span></button>`,
+          ).join("")}
+        </div>
+      </nav>
+      ${SUBTOOLS.map(
+        (s) => `
+        <div class="panel-body" id="subpanel-${s.id}" role="tabpanel" aria-labelledby="subtab-${s.id}" tabindex="0" ${s.id === state.tool ? "" : "hidden"}>
+          <p class="panel-note" data-i18n="${s.note}"></p>
+          ${drop}
+        </div>`,
+      ).join("")}
+    </div>`;
+
+        const docsBody = `
+    <div class="panel">
+      <div class="docs-layout">
+        <div class="docs-trail">
+          <button class="trail-btn" type="button" id="trail-btn" aria-haspopup="dialog">
+            ${icon("docs", 14)}<span><span class="crumb" data-i18n="docsOf"></span> / Getting started</span>${icon("chevD", 14)}
+          </button>
+          <button class="trail-btn trail-search" type="button" id="trail-search" aria-haspopup="dialog">
+            ${icon("search", 14)}<span class="sr-only" data-i18n="searchDocs"></span>
+          </button>
+        </div>
+        <div class="docs-rails">
+          <div class="docs-search">
+            <svg class="search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">${ICONS.search}</svg>
+            <input type="search" name="docs-search" data-docsearch data-i18n-ph="searchDocs" data-i18n-aria="searchDocs" placeholder="" role="combobox" aria-expanded="false" aria-autocomplete="list">
+            <div class="docs-search-results" role="listbox" data-i18n-aria="searchDocs"></div>
+          </div>
+          <nav class="docs-tree" data-docstree aria-label="Docs" data-i18n-aria="docsOf"></nav>
+          <nav class="onpage" aria-label="On this page" data-i18n-aria="onPage">
+            <h3 data-i18n="onPage"></h3>
+            <ol>${DOC_SECTIONS.map(([id, label], i) => `<li><a href="#s-${id}" ${i === 0 ? 'aria-current="true"' : ""}>${label}</a></li>`).join("")}</ol>
+          </nav>
+        </div>
+        <article class="docs-article" id="docs-article">
+          <h1>Getting started</h1>
+          <p>rom-weaver applies and creates ROM patches entirely in your browser. Nothing uploads; the loom runs on WebAssembly threads spun up on your own machine.</p>
+          ${DOC_SECTIONS.map(
+            ([id, label]) => `
+            <h2 id="s-${id}">${label}</h2>
+            <p>Drop the original ROM and the patch onto the weave surface. Formats like <code>.bps</code>, <code>.ips</code>, <code>.ppf</code>, <code>.xdelta</code> are detected from the bytes, not the extension.</p>
+            <p>The checksum of the source is compared against the patch manifest before a single byte is written, so a mismatched dump fails fast with a clear reason.</p>`,
+          ).join("")}
+        </article>
+      </div>
+    </div>`;
+
+        main.innerHTML =
+          `<span class="sr-only" role="status" aria-live="polite" id="announcer"></span>` +
+          simple("patcher", "weaveTitle", "weave", heroStep) +
+          simple("creator", "createTitle", "create", `<p class="panel-note" data-i18n="createNote"></p>${drop}`) +
+          panelShell("docs", "docsTitle", docsBody) +
+          simple("trim", "trimTitle", "trim", `<p class="panel-note" data-i18n="trimNote"></p>${drop}`) +
+          panelShell("tools", "toolsTitle", toolsSub);
+
+        renderDocsTrees();
+        applyI18n();
+      }
+
+      function renderDocsTrees() {
+        for (const tree of $$("[data-docstree]")) {
+          tree.innerHTML = DOC_TREE.map(
+            (g) => `
+      <details class="shelf" ${g.open ? "open" : ""}>
+        <summary>${g.shelf}</summary>
+        <ul>${g.pages
+          .map(
+            ([slug, label]) => `
+          <li><a href="#/docs/${slug}" ${slug === state.docSlug ? 'aria-current="page"' : ""}>${label}</a></li>`,
+          )
+          .join("")}
+        </ul>
+      </details>`,
+          ).join("");
+        }
+      }
+
+      function renderAccents() {
+        for (const tray of $$(".accent-tray")) {
+          tray.innerHTML = ACCENTS.map(
+            ([name, hex]) => `
+      <label class="accent-chip">
+        <input type="radio" name="accent" value="${name}"
+          ${document.documentElement.dataset.accent === name ? "checked" : ""}>
+        <span class="accent-chip-dot" style="background:${hex}"></span>
+        <span class="sr-only">${name}</span>
+      </label>`,
+          ).join("");
+        }
+      }
+
+      /* ── i18n pass ── */
+      function applyI18n() {
+        document.documentElement.lang = state.locale === "pseudo" ? "en-XA" : state.locale;
+        for (const el of $$("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+        for (const el of $$("[data-i18n-aria]")) el.setAttribute("aria-label", t(el.dataset.i18nAria));
+        for (const el of $$("[data-i18n-ph]")) el.setAttribute("placeholder", t(el.dataset.i18nPh));
+        for (const el of $$("[data-tipkey]")) el.textContent = t(el.dataset.tipkey);
+      }
+
+      /* ── navigation ── */
+      function selectView(view, focusTab) {
+        if (!TABS.some((tab) => tab.id === view)) return;
+        const run = () => {
+          state.view = view;
+          for (const a of $$('[role="tab"][data-nav]')) a.setAttribute("aria-selected", String(a.dataset.nav === view));
+          for (const tab of TABS) {
+            const panel = $(`#panel-${tab.id}`);
+            if (panel) panel.hidden = tab.id !== view;
+          }
+          syncRovingTabindex();
+          /* the rail can be scrolled past its column in the snug band, so the tab
+       that just became current must never be left off-screen */
+          const railTab = $(`#rail [data-nav="${view}"]`);
+          if (railTab?.offsetParent)
+            railTab.scrollIntoView({ behavior: scrollBehavior(), block: "nearest", inline: "nearest" });
+          const key = TABS.find((tab) => tab.id === view).key;
+          $("#announcer").textContent = `${t(key)} — ${t("announced")}`;
+        };
+        if (document.startViewTransition && !reduceMotion()) {
+          document.startViewTransition(run);
+        } else {
+          run();
+        }
+        if (focusTab) {
+          const target = $(`#rail [data-nav="${view}"]`) || $(`#dock [data-nav="${view}"]`);
+          if (target && target.offsetParent !== null) target.focus();
+        }
+      }
+
+      function syncRovingTabindex() {
+        for (const rail of [$("#rail"), $("#dock")]) {
+          const tabs = $$('[role="tab"]', rail);
+          const selected = tabs.find((a) => a.getAttribute("aria-selected") === "true") || tabs[0];
+          for (const a of tabs) a.tabIndex = a === selected ? 0 : -1;
+        }
+      }
+
+      /* tablist keyboard: arrows/Home/End roam, Space AND Enter activate */
+      function railKeydown(event) {
+        const rail = event.currentTarget;
+        const tabs = $$('[role="tab"]', rail).filter((a) => getComputedStyle(a).display !== "none");
+        const index = tabs.indexOf(document.activeElement);
+        if (index === -1) return;
+        const rtl = document.documentElement.dir === "rtl";
+        let next = null;
+        const fwd = rtl ? "ArrowLeft" : "ArrowRight";
+        const back = rtl ? "ArrowRight" : "ArrowLeft";
+        if (event.key === fwd) next = (index + 1) % tabs.length;
+        else if (event.key === back) next = (index - 1 + tabs.length) % tabs.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = tabs.length - 1;
+        else if (event.key === " " || event.key === "Spacebar") {
+          event.preventDefault();
+          document.activeElement.click();
+          return;
+        } else return;
+        event.preventDefault();
+        tabs[next].focus();
+      }
+
+      /* ── sub-rail (tools) ── */
+      function selectTool(id, focus) {
+        state.tool = id;
+        for (const b of $$("#subrail [role=tab]")) {
+          const on = b.dataset.subtool === id;
+          b.setAttribute("aria-selected", String(on));
+          b.tabIndex = on ? 0 : -1;
+          if (on && focus) b.focus();
+          if (on) b.scrollIntoView({ behavior: scrollBehavior(), block: "nearest", inline: "nearest" });
+        }
+        for (const s of SUBTOOLS) $(`#subpanel-${s.id}`).hidden = s.id !== id;
+      }
+
+      /* ── docs search (mini index over tree + sections) ── */
+      function buildSearchIndex() {
+        const idx = [];
+        for (const g of DOC_TREE) for (const [slug, label] of g.pages) idx.push({ crumb: g.shelf, label, slug });
+        for (const [id, label] of DOC_SECTIONS)
+          idx.push({ crumb: "Getting started", label, slug: `getting-started#s-${id}` });
+        return idx;
+      }
+      const SEARCH_INDEX = buildSearchIndex();
+      let searchListSeq = 0;
+      function wireSearch(input) {
+        const list = input.parentElement.querySelector(".docs-search-results");
+        /* the combobox has to point at the listbox it drives, and each search field
+     owns its own list, so the id is minted here rather than in the markup */
+        if (!list.id) list.id = `docs-search-results-${++searchListSeq}`;
+        input.setAttribute("aria-controls", list.id);
+        input.addEventListener("input", () => {
+          const q = input.value.trim().toLowerCase();
+          if (!q) {
+            list.innerHTML = "";
+            input.setAttribute("aria-expanded", "false");
+            return;
+          }
+          const hits = SEARCH_INDEX.filter(
+            (e) => e.label.toLowerCase().includes(q) || e.crumb.toLowerCase().includes(q),
+          ).slice(0, 8);
+          /* role=option cannot wrap a link, so the anchor IS the option and the li
+       drops out of the accessibility tree */
+          list.innerHTML = hits.length
+            ? hits
+                .map(
+                  (h) => `<a role="option" href="#/docs/${h.slug}">${h.label}<span class="crumb">${h.crumb}</span></a>`,
+                )
+                .join("")
+            : `<span class="docs-search-empty">${t("noResults")}</span>`;
+          input.setAttribute("aria-expanded", "true");
+        });
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") {
+            list.innerHTML = "";
+            input.setAttribute("aria-expanded", "false");
+          }
+          if (event.key === "ArrowDown") {
+            const first = list.querySelector("a");
+            if (first) {
+              event.preventDefault();
+              first.focus();
+            }
+          }
+        });
+      }
+
+      /* ── reading progress (docs trail thread) ── */
+      function wireReadingProgress() {
+        const article = $("#docs-article");
+        if (!article) return;
+        addEventListener(
+          "scroll",
+          () => {
+            const rect = article.getBoundingClientRect();
+            const total = rect.height - innerHeight;
+            const done = Math.min(1, Math.max(0, -rect.top / Math.max(1, total)));
+            document.documentElement.style.setProperty("--read-progress", done.toFixed(3));
+            const links = $$(".onpage a");
+            const sections = DOC_SECTIONS.map(([id]) => $(`#s-${id}`)).filter(Boolean);
+            let active = 0;
+            sections.forEach((sec, i) => {
+              if (sec.getBoundingClientRect().top < 120) active = i;
+            });
+            links.forEach((a, i) => {
+              if (i === active) a.setAttribute("aria-current", "true");
+              else a.removeAttribute("aria-current");
+            });
+          },
+          { passive: true },
+        );
+      }
+
+      /* ── theme wipe ── */
+      function toggleTheme(event) {
+        const root = document.documentElement;
+        const next = root.dataset.theme === "dark" ? "light" : "dark";
+        const apply = () => {
+          root.dataset.theme = next;
+        };
+        if (!document.startViewTransition || reduceMotion()) {
+          apply();
+          return;
+        }
+        const rect = event.currentTarget.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+        const vt = document.startViewTransition(apply);
+        vt.ready.then(() => {
+          document.documentElement.animate(
+            { clipPath: [`circle(0 at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+            { duration: 420, easing: "cubic-bezier(.2,.85,.3,1)", pseudoElement: "::view-transition-new(root)" },
+          );
+        });
+      }
+
+      /* ── boot & wiring ── */
+      renderTabs();
+      renderPanels();
+      renderAccents();
+      applyI18n();
+
+      for (const rail of [$("#rail"), $("#dock")]) rail.addEventListener("keydown", railKeydown);
+
+      document.addEventListener("click", (event) => {
+        const nav = event.target.closest("[data-nav]");
+        if (nav) {
+          event.preventDefault();
+          selectView(nav.dataset.nav);
+          return;
+        }
+        const sub = event.target.closest("[data-subtool]");
+        if (sub) {
+          selectTool(sub.dataset.subtool);
+          return;
+        }
+        const docLink = event.target.closest('[href^="#/docs/"]');
+        if (docLink) {
+          event.preventDefault();
+          const ref = docLink.getAttribute("href").slice("#/docs/".length);
+          state.docSlug = ref.split("#")[0];
+          renderDocsTrees();
+          const sheet = $("#docs-sheet");
+          if (sheet.open) sheet.close();
+          const anchor = ref.includes("#") ? $(`#${ref.split("#")[1]}`) : null;
+          if (anchor) anchor.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+          return;
+        }
+        const close = event.target.closest("[data-close]");
+        if (close) close.closest("dialog").close();
+      });
+
+      /* subrail keyboard */
+      document.addEventListener("keydown", (event) => {
+        const rail = event.target.closest(".subrail");
+        if (!rail) return;
+        const tabs = $$('[role="tab"]', rail);
+        const index = tabs.indexOf(document.activeElement);
+        if (index === -1) return;
+        const rtl = document.documentElement.dir === "rtl";
+        let next = null;
+        if (event.key === (rtl ? "ArrowLeft" : "ArrowRight")) next = (index + 1) % tabs.length;
+        else if (event.key === (rtl ? "ArrowRight" : "ArrowLeft")) next = (index - 1 + tabs.length) % tabs.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        tabs[next].focus();
+        tabs[next].click();
+      });
+
+      $("#theme-btn").addEventListener("click", toggleTheme);
+      $("#threads-btn").addEventListener("click", () => $("#settings-dialog").showModal());
+      $("#log-btn").addEventListener("click", () => openLogTab("activity"));
+      $("#sub-status").addEventListener("click", () => openLogTab("status"));
+      function selectLogTab(tabName) {
+        for (const b of $$("[data-logtab]")) {
+          const on = b.dataset.logtab === tabName;
+          b.setAttribute("aria-selected", String(on));
+          b.tabIndex = on ? 0 : -1;
+        }
+        for (const panel of $$("[id^=logpanel-]")) panel.hidden = panel.id !== `logpanel-${tabName}`;
+      }
+      function openLogTab(tabName) {
+        const dialog = $("#log-dialog");
+        if (!dialog.open) dialog.showModal();
+        selectLogTab(tabName);
+      }
+      selectLogTab("status");
+      document.addEventListener("click", (event) => {
+        if (event.target.closest("[data-open-changelog]")) {
+          openLogTab("changelog");
+          return;
+        }
+        const logTab = event.target.closest("[data-logtab]");
+        if (logTab) selectLogTab(logTab.dataset.logtab);
+
+        if (event.target.closest("[data-reload-now]")) {
+          setSwState("ready");
+          $("#proto-sw").value = "ready";
+          $("#announcer").textContent = t("swReady");
+        }
+      });
+      $("#settings-btn").addEventListener("click", () => $("#settings-dialog").showModal());
+
+      for (const id of ["accent-btn"]) {
+        const btn = $(`#${id}`);
+        const pop = $(`#${btn.getAttribute("popovertarget")}`);
+        pop.addEventListener("toggle", (event) => {
+          btn.setAttribute("aria-expanded", String(event.newState === "open"));
+          if (event.newState === "open") {
+            const rect = btn.getBoundingClientRect();
+            pop.style.top = `${rect.bottom + 6}px`;
+            const onStartHalf = rect.left + rect.width / 2 < innerWidth / 2;
+            if (onStartHalf) pop.style.left = `${Math.max(8, rect.left)}px`;
+            else pop.style.right = `${Math.max(8, innerWidth - rect.right)}px`;
+            const checked = pop.querySelector("input:checked") || pop.querySelector("input,button");
+            if (checked) checked.focus();
+          } else {
+            pop.style.top = pop.style.left = pop.style.right = "";
+          }
+        });
+      }
+
+      /* no re-render here: the radio group already reflects the new choice, and
+   replacing it mid-keyboard-selection would drop focus on the floor */
+      document.addEventListener("change", (event) => {
+        if (event.target.matches(".accent-chip input")) document.documentElement.dataset.accent = event.target.value;
+      });
+
+      /* docs trail (phone) */
+      document.addEventListener("click", (event) => {
+        if (event.target.closest("#trail-btn") || event.target.closest("#trail-search")) {
+          const sheet = $("#docs-sheet");
+          sheet.showModal();
+          if (event.target.closest("#trail-search")) sheet.querySelector("input").focus();
+        }
+      });
+
+      for (const input of $$("[data-docsearch]")) wireSearch(input);
+      wireReadingProgress();
+
+      /* brand version line + channel badge */
+      /* version and channel merge into one build tag: a plain dotted link on
+   stable, a single colored pill (channel · version) on any other channel.
+   Stable and prereleases link to their release; a PR build links to its PR. */
+      const PR_URL = "https://github.com/rom-weaver/rom-weaver/pull/361";
+      const build = { channel: "", version: "v0.9.3" };
+      function renderBuildTag() {
+        const slot = $("#build-tag");
+        if (!build.channel) {
+          slot.innerHTML = `<button class="sub-link" type="button" data-open-changelog aria-haspopup="dialog">${build.version}</button>`;
+          return;
+        }
+        if (build.channel === "pr") {
+          slot.innerHTML = `<a class="channel-badge" data-channel="pr" href="${PR_URL}" rel="noopener" aria-label="${t("prPreview")} — PR #361, ${build.version}">PR-#361<span class="tag-extra"> · <span class="tag-version">${build.version}</span></span></a>`;
+          return;
+        }
+        /* one-letter channel signifiers; the full name rides the aria-label */
+        const letter = { beta: "B", dev: "D", nightly: "N" }[build.channel];
+        const channelName = { beta: t("channelBeta"), dev: t("channelDev"), nightly: t("channelNightly") }[
+          build.channel
+        ];
+        slot.innerHTML = `<button class="channel-badge" type="button" data-channel="${build.channel}" data-open-changelog aria-haspopup="dialog" aria-label="${channelName} — ${build.version}"><b class="tag-letter">${letter}</b> · <span class="tag-version">${build.version}</span></button>`;
+      }
+      /* commits past the release surface at the top of the changelog when the
+   version carries a +x marker */
+      const UNRELEASED_POOL = [
+        "fix(webapp): keep the dock stitch aligned in RTL",
+        "feat(cli): stream xdelta output",
+        "docs: clarify OPFS storage limits",
+        "perf(wasm): reuse the thread pool between weaves",
+        "fix(webapp): debounce docs search input",
+      ];
+      const RELEASES = [
+        {
+          commits: [
+            "feat(docs): add fuzzy documentation search",
+            "style(webapp): show PR badges as links",
+            "fix(webapp): center masthead mode rail",
+          ],
+          summary: "fuzzy docs search, PR preview badges",
+          version: "v0.9.3",
+        },
+        {
+          commits: ["feat(webapp): trim workflow behind the beta flag", "ci(docker): publish nightly channel images"],
+          summary: "trim workflow beta, docker nightly channel",
+          version: "v0.9.2",
+        },
+        {
+          commits: ["feat(tools): PPF undo command", "perf(patches): stream xdelta windows"],
+          summary: "PPF undo tool, faster xdelta weave",
+          version: "v0.9.1",
+        },
+      ];
+      function renderReleases() {
+        $("#changelog-releases").innerHTML = RELEASES.map(
+          (rel, index) => `
+    <details class="rel" ${index === 0 ? "open" : ""}>
+      <summary><b>${rel.version}</b><span class="rel-summary-text">${rel.summary}</span></summary>
+      <div class="rel-body">
+        ${rel.commits.map((c) => `<span class="rel-commit">${c}</span>`).join("")}
+        <a class="rel-link" href="https://github.com/rom-weaver/rom-weaver/releases/tag/${rel.version}" rel="noopener">${t("viewRelease")} ↗</a>
+      </div>
+    </details>`,
+        ).join("");
+      }
+      function renderChangelog() {
+        const ahead = Number((build.version.match(/\+(\d+)/) || [])[1] || 0);
+        const box = $("#changelog-unreleased");
+        if (!ahead) {
+          box.innerHTML = "";
+          return;
+        }
+        const commits = UNRELEASED_POOL.slice(0, ahead);
+        box.innerHTML =
+          `<p class="log-line"><b>${t("unreleased")}</b> · +${ahead}</p>` +
+          commits.map((c) => `<p class="log-line">${c}</p>`).join("");
+      }
+      function renderStatusRows() {
+        const dirty = build.version.includes("*");
+        const commit = `5932eef3${dirty ? "*" : ""}`;
+        const pr = build.channel === "pr";
+        const branch = pr ? "fix/masthead-center" : "main";
+        const isPwa = matchMedia("(display-mode: standalone)").matches;
+        const rows = [
+          [t("versionLabel"), build.version],
+          [t("commitLabel"), `<code>${commit}</code>`],
+          [t("branchLabel"), `<code>${branch}</code>`],
+        ];
+        if (pr) rows.push([t("prLabel"), `<a href="${PR_URL}" rel="noopener">#361 — fix: center the masthead</a>`]);
+        if (build.channel && !pr)
+          rows.push([
+            t("channelLabel"),
+            `<span class="channel-badge" data-channel="${build.channel}">${build.channel}</span>`,
+          ]);
+        rows.push([t("envLabel"), t(isPwa ? "envPwa" : "envWeb")]);
+        $("#status-rows").innerHTML = rows
+          .map(([k, v]) => `<div class="status-row"><dt>${k}</dt><dd>${v}</dd></div>`)
+          .join("");
+      }
+      function renderBuild() {
+        renderBuildTag();
+        renderChangelog();
+        renderReleases();
+        renderStatusRows();
+      }
+      renderBuild();
+      $("#proto-version").addEventListener("change", (event) => {
+        build.version = event.target.value;
+        renderBuild();
+      });
+      $("#proto-channel").addEventListener("change", (event) => {
+        build.channel = event.target.value;
+        renderBuild();
+      });
+
+      /* pwa / service-worker chip */
+      const CLOUD = "M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 2 8.5";
+      const SW_ICONS = {
+        disabled: `<path d="${CLOUD}"/><path d="m4 4 16 16"/>`,
+        installing: '<path d="M21 12a9 9 0 1 1-6.2-8.56"/>',
+        ready: `<path d="${CLOUD}"/><path d="m9 13.5 2.2 2.2L15 12"/>`,
+        update: `<path d="${CLOUD}"/><g class="dl-arrow"><path d="M12 12v6"/><path d="m9.5 15.5 2.5 2.5 2.5-2.5"/></g>`,
+      };
+      let currentSw = "ready";
+      function setSwState(swState) {
+        currentSw = swState;
+        const key = { disabled: "swDisabled", installing: "swInstalling", ready: "swReady", update: "swUpdate" }[
+          swState
+        ];
+        const inner = `<span data-i18n="${key}">${t(key)}</span>`;
+        for (const slot of $$(".sw-slot")) {
+          slot.innerHTML = `<span class="sw-chip" data-sw="${swState}">${inner}</span>`;
+        }
+        const banner = $("#update-banner");
+        if (swState === "update") banner.dataset.show = "";
+        else delete banner.dataset.show;
+        const sub = $("#sub-status");
+        sub.dataset.sw = swState;
+        sub.setAttribute("aria-label", t(key));
+        $("#status-ico").innerHTML = SW_ICONS[swState];
+        $("#status-text").textContent = t(key);
+        for (const desc of $$(".sw-desc")) {
+          desc.dataset.i18n = `${key}Desc`;
+          desc.textContent = t(`${key}Desc`);
+        }
+        for (const btn of $$(".status-reload")) btn.hidden = swState !== "update";
+      }
+      setSwState("ready");
+      $("#proto-sw").addEventListener("change", (event) => setSwState(event.target.value));
+
+      /* prototype rig */
+      /* a locale switch has to repaint every JS-built string too - the build tag's
+   aria-label, the status rows, the changelog links and the sw sentence are all
+   template output, not data-i18n nodes */
+      $("#proto-locale").addEventListener("change", (event) => {
+        state.locale = event.target.value;
+        renderBuild();
+        setSwState(currentSw);
+        applyI18n();
+      });
+      $("#proto-dir").addEventListener("change", (event) => {
+        document.documentElement.dir = event.target.value;
+      });
+      $("#proto-beta").addEventListener("change", (event) => {
+        if (event.target.checked) document.documentElement.dataset.betaTools = "true";
+        else delete document.documentElement.dataset.betaTools;
+        if (!event.target.checked && (state.view === "trim" || state.view === "tools")) selectView("patcher");
+      });
+      document.documentElement.dataset.betaTools = "true";
+
+      /* honor system theme on load */
+      if (matchMedia("(prefers-color-scheme: light)").matches) document.documentElement.dataset.theme = "light";
+    </script>
+  </body>
+</html>

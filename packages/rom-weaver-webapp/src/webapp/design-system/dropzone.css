@@ -408,9 +408,15 @@
 .rw-app .sample-tutorial-ring[data-glide="true"] {
   transition: top .34s var(--ease), left .34s var(--ease), width .34s var(--ease), height .34s var(--ease);
 }
+/* The card stands on the dock rather than over it. Below the anchor query it is
+   a full-width bar pinned to the bottom of the screen, which is where the dock
+   already is - and its action row spans that bar, covering the tabs beneath it,
+   so the guided reader could not leave the workbench by the one control that
+   does it. `--dock-h` already carries the safe-area inset and is unset above the
+   dock threshold, where the plain inset is what applies. */
 .rw-app .sample-tutorial-dialog {
   position: fixed; z-index: 1003; inset-inline: var(--gutter);
-  bottom: max(18px, env(safe-area-inset-bottom)); display: grid;
+  bottom: calc(var(--dock-h, max(0px, env(safe-area-inset-bottom))) + 18px); display: grid;
   grid-template-columns: 48px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto;
   align-items: start; gap: var(--sp-l);
   width: min(720px, calc(100vw - 2 * var(--gutter))); max-height: min(320px, calc(100dvh - 36px));
@@ -556,7 +562,7 @@
   .rw-app .sample-tutorial-dialog {
     grid-template-columns: 38px minmax(0, 1fr); gap: var(--sp-m);
     width: calc(100vw - 20px); max-height: min(360px, calc(100dvh - 20px));
-    inset-inline: 10px; bottom: max(10px, env(safe-area-inset-bottom));
+    inset-inline: 10px; bottom: calc(var(--dock-h, max(0px, env(safe-area-inset-bottom))) + 10px);
     padding: calc(var(--sp-m) + 18px) var(--sp-m) var(--sp-m);
   }
   .rw-app .sample-tutorial-dialog[data-placement="top"] {

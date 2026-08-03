@@ -45,6 +45,7 @@
   --verified: #69aa84;
   --fault: #e0606a;
   --care: #d8a64f;
+  --care-text: #d8a64f;         /* amber already clears 4.5:1 on every dark surface */
   --overlay-shadow: 0 24px 64px -24px rgb(0 0 0 / .7), 0 4px 16px rgb(0 0 0 / .35);
   --scrim: rgb(4 6 9 / .62);
 }
@@ -62,6 +63,9 @@
   --verified: #04684e;
   --fault: #b91c1c;
   --care: #c4870f;
+  /* `--care` is a fill colour on paper: 3.1:1 as text on the plate. Amber words
+     take this one instead - 5.6:1 on the plate, 4.8:1 in a well. */
+  --care-text: #8d5e00;
   --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / .35), 0 4px 14px rgb(35 30 18 / .14);
   --scrim: rgb(40 36 28 / .42);
 }

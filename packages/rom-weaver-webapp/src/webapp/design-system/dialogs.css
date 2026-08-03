@@ -37,9 +37,19 @@
 /* Log dialog */
 .rw-app .log-dlg { max-width: min(1280px, calc(100vw - 32px)); }
 .rw-app .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
-.rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
+/* One row, never two. The rail is a scroller by design, so when the head runs
+   out of width the tabs are what should give - wrapping instead sent the close
+   button down to a line of its own, adrift at the far side of the dialog from
+   the rail it belongs to. */
+/* The tabs ARE the title here, so the rail rides the head's own bottom rule
+   rather than floating above it - the selected tab's weft then reads as a mark
+   on a rail instead of a stray underline in open space. */
+.rw-app .log-dlg .dlg-head { flex-wrap: nowrap; row-gap: var(--sp-m); align-items: flex-end; padding-block-end: 0; }
 .rw-app .log-dlg .dlg-title { flex: 0 1 auto; }
-.rw-app .log-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: var(--sp-s); align-items: center; margin-inline-start: auto; min-inline-size: 0; }
+/* Close shares the rail's row but not its baseline - sitting it on the rule
+   would read as one more tab. Every other control moved to the bar below. */
+.rw-app .log-dlg .dlg-head > .dlg-x { flex: none; margin-block-end: var(--sp-s); }
+.rw-app .log-actions { display: flex; flex: none; gap: var(--sp-s); align-items: center; min-inline-size: 0; }
 .rw-app .log-actions > * { flex: 0 1 auto; min-inline-size: max-content; }
 .rw-app .log-actions .log-icon-btn { flex: 0 0 30px; inline-size: 30px; padding-inline: 0; }
 .rw-app .log-actions .btn.copied { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 55%, transparent); }
@@ -70,13 +80,32 @@
   .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
 }
 .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:active { color: var(--thread-ink); }
-.rw-app .log-filter-bar {
-  display: flex; align-items: center; gap: var(--sp-s); padding: var(--sp-s) var(--sp-l);
-  border-block-end: 1px solid var(--seam-soft); flex: none;
+/* Every tab's own controls live in a bar under the head rather than in it, so
+   the head carries nothing but the tab rail and the close button at any width.
+   Rows stack: the controls own the first, and a filter (logs, storage) the one
+   below. Sharing one row made the filter and the view toggle compete for the
+   same width, and a phone left both unusable - ellipsed toggle labels above a
+   filter too narrow to read back what you had typed. */
+.rw-app .dlg-subhead {
+  display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-s);
+  padding: var(--sp-s) var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none;
 }
-.rw-app .log-filter-bar .log-filter { flex: 1 1 auto; min-inline-size: 0; height: 30px; width: auto; font-size: .76rem; padding-block: 0; }
-.rw-app .log-filter-bar .loglevel { display: flex; flex: 0 0 auto; }
-.rw-app .log-filter-bar .loglevel .select { width: max-content; height: 30px; font-size: var(--dropdown-fs, .76rem); padding-block: 0; }
+.rw-app .dlg-subhead .log-controls { display: flex; align-items: center; gap: var(--sp-s); min-inline-size: 0; }
+/* Everything after the view toggle parks at the far end, so the row reads
+   left-to-right as "which log", then what to do with it. The break is named
+   rather than positional: the view toggle is conditional, and a `:last-child`
+   rule would strand the group mid-row on the tabs that lack it. */
+.rw-app .dlg-subhead .log-controls > .loglevel,
+.rw-app .dlg-subhead .log-controls > .log-refresh { margin-inline-start: auto; }
+/* copy/download trail the picker they belong with - the head's auto margin
+   would otherwise split the free space between the two groups */
+.rw-app .dlg-subhead .log-controls > .log-actions { margin-inline-start: 0; }
+/* Settings has no left-hand control, so its pair carries the auto margin and
+   lands under the close button - where the head used to hold it. */
+.rw-app .dlg-subhead .settings-actions { margin-inline-start: auto; }
+.rw-app .dlg-subhead .log-filter { inline-size: 100%; height: 30px; font-size: .76rem; padding-block: 0; }
+.rw-app .dlg-subhead .loglevel { display: flex; flex: 0 0 auto; }
+.rw-app .dlg-subhead .loglevel .select { width: max-content; height: 30px; font-size: var(--dropdown-fs, .76rem); padding-block: 0; }
 .rw-app .log-body { padding: 0; flex: 1 1 auto; display: flex; min-height: 0; }
 .rw-app .log-dlg .tracelog {
   flex: 1 1 auto; max-height: none; height: auto; min-height: 0;
@@ -99,6 +128,28 @@
 .rw-app .log-refresh svg { width: 15px; height: 15px; }
 .rw-app .log-refresh .spin { animation: log-refresh-spin .8s linear infinite; }
 @keyframes log-refresh-spin { to { transform: rotate(360deg); } }
+
+/* Settings tab of the unified dialog. Viewport units avoid a cyclic width under
+   inline-size containment, and the named container is the same one the settings
+   rows already query. */
+.rw-app .log-dlg .settings-body { container: settings-card / inline-size; padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom)); }
+.rw-app .log-dlg .settings-actions { flex: 0 0 auto; }
+.rw-app .log-dlg .settings-actions .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
+@container settings-card (min-width: 688px) {
+  .rw-app .settings-panel { columns: 2; column-gap: var(--sp-m); }
+  .rw-app .settings-panel .setcols { display: contents; }
+  .rw-app .settings-panel .setcols .setgroup { margin-block-end: 11px; }
+  .rw-app .settings-panel .validation { column-span: all; }
+}
+/* Deep link landing cue: the focus ring says where, this says "here". */
+.rw-app .field-flash { animation: settings-field-flash .9s ease-out 1; border-radius: var(--r-s); }
+@keyframes settings-field-flash {
+  from { background: color-mix(in oklab, var(--thread) 26%, transparent); }
+  to { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .field-flash { animation: none; }
+}
 
 /* Archive candidate picker */
 .rw-app .picklist { display: flex; flex-direction: column; gap: var(--sp-xs); margin-block-start: var(--sp-s); }
@@ -153,9 +204,17 @@
 .rw-app .setrow .input { height: 34px; font-size: .85rem; }
 .rw-app .setchecks { display: flex; flex-direction: column; gap: var(--sp-s); padding-block-start: 4px; }
 .rw-app .setchecks .popt { font-size: .82rem; }
-.rw-app .set-about .about-line { font-size: .78rem; color: var(--ink-3); }
-.rw-app .set-about .about-line + .about-line { margin-block-start: 5px; }
-.rw-app .set-about .about-line a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+/* About folded into the Status tab: licence, attribution, privacy - the build
+   facts above it are the status rows, never repeated here. */
+.rw-app .status-about { margin-block-start: var(--sp-l); padding-block-start: var(--sp-m); border-block-start: 1px solid var(--seam); }
+.rw-app .status-about .about-link {
+  display: inline-flex; align-items: center; min-height: 24px;
+  font-size: .78rem; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px;
+}
+@media (hover: hover) {
+  .rw-app .status-about .about-link:hover { color: var(--ink); }
+}
+.rw-app .status-about .about-link:active { color: var(--ink); }
 /* Avoid forcing a 300px track into narrower viewports. */
 .rw-app .setcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--sp-m); }
 .rw-app .setcols .setgroup { margin: 0; }
@@ -235,3 +294,95 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 @keyframes vt-input-head-in { from { opacity: 0; } }
 /* Avoid replaying entry animations beneath a view transition. */
 .vt-quiet .card:not(.pending-card), .vt-quiet .workflow-body, .vt-quiet .notice, .vt-quiet .result, .vt-quiet .prog-panel { animation: none !important; }
+
+/* ── the weft sub-rail ──
+   One pattern for every second-level nav: visually subordinate to the mode rail
+   (an underline weft, not a filled pill), scrolling horizontally when cramped so
+   it never wraps and never vanishes. The status/logs dialog wears it as its
+   header - the tabs are the title. */
+.rw-app .subrail {
+  position: relative; display: flex; flex: 1 1 0; gap: var(--sp-xs); min-inline-size: 0;
+  overflow-x: auto; scrollbar-width: none;
+  /* Keeps a part-scrolled tab from resting half-cut, so the rail always reads as
+     whole tabs and the cut edge is never mistaken for the end of the list. */
+  scroll-snap-type: inline proximity;
+}
+.rw-app .subrail::-webkit-scrollbar { display: none; }
+.rw-app .dialog-subrail { padding: 0; background: transparent; }
+.rw-app .subtab {
+  scroll-snap-align: start;
+  display: inline-flex; gap: var(--sp-s); align-items: center; min-height: 36px; padding: 4px 12px 7px;
+  font-size: .8rem; font-weight: 650; color: var(--ink-3); white-space: nowrap;
+  appearance: none; cursor: pointer; background: transparent; border: 0;
+  border-block-end: 3px solid transparent; border-radius: var(--r-s) var(--r-s) 0 0;
+  transition: color .18s, background-color .18s;
+}
+/* The weft, doubled: a tinted riser standing on a thicker rule. A bare label
+   with a hairline under it left the tabs reading as running text - at a glance
+   there was no telling the rail from the sentence above it. The riser gives the
+   selected tab a body without turning the rail into filled pills, which would
+   put it in competition with the masthead's mode rail. */
+.rw-app .subtab[aria-selected="true"] {
+  color: var(--thread-text); border-block-end-color: var(--thread);
+  background: color-mix(in oklab, var(--thread) 15%, transparent);
+}
+@media (hover: hover) {
+  .rw-app .subtab:not([aria-selected="true"]):hover { color: var(--ink); }
+}
+.rw-app .subtab:not([aria-selected="true"]):active { color: var(--ink); }
+@media (forced-colors: active) {
+  .rw-app .subtab[aria-selected="true"] { border-block-end-color: SelectedItem; }
+}
+
+/* ── status tab ── */
+.rw-app .status-panel { display: block; flex: 1 1 auto; min-height: 0; }
+/* the one action the status tab can offer: reload onto a downloaded update. The
+   sentence that used to sit here is in the legend below, beside its own state. */
+.rw-app .sw-summary { margin-block-start: var(--sp-m); }
+.rw-app .sw-chip {
+  display: inline-flex; gap: var(--sp-xs); align-items: center; min-height: 22px; padding: 1px 8px;
+  font-size: .7rem; font-weight: 600; color: var(--ink-3); white-space: nowrap;
+  border: 1px solid var(--seam-soft); border-radius: 999px;
+}
+.rw-app .sw-chip svg { width: 13px; height: 13px; }
+.rw-app .sw-chip[data-sw="active"] { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 35%, transparent); }
+/* A cache standing by is not a cache in use, and one tint of green apart was not
+   telling anyone that. Stored, not serving: no colour of its own, and the glyph
+   is a box rather than a cloud. */
+.rw-app .sw-chip[data-sw="ready"] { color: var(--ink-2); }
+.rw-app .sw-chip[data-sw="update"] { color: var(--care-text); border-color: color-mix(in oklab, var(--care) 40%, transparent); }
+.rw-app .sw-chip[data-sw="disabled"] { color: var(--ink-4); }
+/* ── offline legend ──
+   Label-and-value rows, the same shape the build facts above use, so the two
+   lists share their layout and differ only in how wide the label column has to
+   be for the widest state name. */
+.rw-app .sw-legend { margin-block-start: var(--sp-l); padding-block-start: var(--sp-m); border-block-start: 1px solid var(--seam); }
+.rw-app .sw-legend-title, .rw-app .status-row dt {
+  font-size: .74rem; font-weight: 650; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em;
+}
+.rw-app .sw-legend-title { margin: 0 0 var(--sp-s); }
+.rw-app .status-rows, .rw-app .sw-legend dl { display: flex; flex-direction: column; gap: var(--sp-s); margin: 0; }
+.rw-app .status-row, .rw-app .sw-legend-row { display: grid; gap: var(--sp-m); align-items: baseline; }
+.rw-app .status-row { grid-template-columns: 7.5rem minmax(0, 1fr); }
+.rw-app .sw-legend-row { grid-template-columns: 10.5rem minmax(0, 1fr); }
+.rw-app .status-row dd, .rw-app .sw-legend-row dd { min-width: 0; margin: 0; }
+.rw-app .sw-legend-row dd { font-size: .78rem; color: var(--ink-3); }
+/* the one you have, named in the same list as the four you could have */
+.rw-app .sw-legend-row[data-current] dd { color: var(--ink-2); }
+.rw-app .sw-legend-row[data-current] .sw-chip { background: color-mix(in oklab, currentColor 12%, transparent); }
+@media (max-width: 519px) {
+  .rw-app .sw-legend-row { grid-template-columns: minmax(0, 1fr); gap: var(--sp-2xs); }
+}
+.rw-app .status-row dd { font-size: .84rem; overflow-wrap: anywhere; }
+.rw-app .status-row code { padding: 1px 6px; font-size: .78rem; background: var(--well); border: 1px solid var(--seam-soft); border-radius: 4px; }
+.rw-app .status-row a { color: var(--thread-text); text-decoration: underline dotted; text-underline-offset: 2px; }
+
+/* phones: the inspector and settings take the whole screen */
+@media (max-width: 719px) {
+  .rw-app .log-dlg { max-width: 100vw; }
+  .rw-app .log-dlg .dlg-frame {
+    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
+    border: 0; border-radius: 0;
+    padding-block-start: var(--safe-t); padding-block-end: var(--safe-b);
+  }
+}

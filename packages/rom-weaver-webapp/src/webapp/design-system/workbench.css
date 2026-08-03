@@ -59,3 +59,50 @@
 .rw-app .step-meta .rb.time { color: var(--thread-text); }
 /* Balance the seam between adjacent headings. */
 .rw-app .step-body { padding: clamp(4px, 1vw, 6px) var(--pad) var(--step-pb); }
+
+/* Reset used to be an anonymous icon in the global toolbar; it belongs to the
+   workflow it resets, so it rides that panel's head instead. It reads as part of
+   the first step's heading row: right edge on the step column, centred on the
+   `0x01` line. It resets the whole panel rather than that one step, so it stays
+   a sibling of the body and is placed over the row instead of being threaded
+   through every form's first step. */
+.rw-app .panel.workflow { position: relative; }
+.rw-app .workflow-panel-head {
+  position: absolute; z-index: 5; display: flex; align-items: center;
+  /* the step column runs edge to edge inside a workflow panel (webapp-modals.css
+     zeroes the head's gutter), so the control's right edge is the panel's */
+  inset-block-start: calc(var(--step-lead, 0px) + var(--tools-rail-h, 0px) + var(--step-pt));
+  inset-inline-end: 0;
+  /* The box is the heading's own line: the step type's `1lh`, plus the 2px the
+     number block pads above and below. Centring in it lands reset on the
+     heading's optical line whatever the type scales to - the old top-alignment
+     only looked centred because the button happened to be the same height, and
+     stopped once it was not. */
+  font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem);
+  block-size: calc(1lh + 4px);
+}
+/* No box: the heading band stays type, and the control says what it is by
+   turning fault-coloured under the finger - it throws the bench away. Wearing
+   the shared `.btn` box made it the one framed thing in the band, reading as a
+   form control dropped into a headline. */
+.rw-app .reset-btn {
+  position: relative; display: inline-flex; gap: 5px; align-items: center; padding: 0;
+  font: inherit; font-size: .74rem; font-weight: 650; letter-spacing: .02em; color: var(--ink-3);
+  white-space: nowrap; appearance: none; cursor: pointer; background: transparent; border: 0;
+  transition: color .18s;
+  /* With no box to see, the target-size floor costs nothing to meet on the box
+     itself - and axe measures the element, not a halo drawn over it. */
+  min-block-size: 24px;
+}
+.rw-app .reset-btn svg { flex: none; width: 13px; height: 13px; }
+/* the halo is on top of that floor, for the finger rather than the audit */
+.rw-app .reset-btn::after { position: absolute; inset: -4px -8px; content: ""; }
+@media (hover: hover) {
+  .rw-app .reset-btn:hover { color: var(--fault); }
+}
+.rw-app .reset-btn:active { color: var(--fault); }
+/* Tools puts its command rail above the first step, so `0x01` starts one rail
+   lower. The rail is a fixed box: 34px tab + 10px padding either side + 1px seam
+   (masthead.css `.tools-subnav`); phone-dock.css restates both of these for the
+   phone rail and the margin the steps grow there. */
+.rw-app .panel.workflow:has(.tools-subnav) { --tools-rail-h: 55px; }

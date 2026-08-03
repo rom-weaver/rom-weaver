@@ -338,7 +338,7 @@ const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
   },
 });
 
-const PRERENDER_RUNTIME_SLOT = '<span class="masthead-runtime">· web · sw</span>';
+const PRERENDER_RUNTIME_SLOT = '<span class="shell-identity" hidden=""></span>';
 const PRERENDER_RUNTIME_RESOLVER =
   "<script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}finally{document.currentScript.remove()}</script>";
 const PRERENDER_ROOT = (shell) =>

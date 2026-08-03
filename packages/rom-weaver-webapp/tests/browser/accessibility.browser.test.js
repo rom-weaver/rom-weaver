@@ -430,9 +430,10 @@ const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
         createElement(Masthead, {
           ...mastheadProps,
           currentTab,
+          onOpenChangelog: noop,
           onOpenLog: noop,
           onOpenSettings: noop,
-          onReset: noop,
+          onOpenStatus: noop,
           onSelectTab: noop,
           tabs: PAGE_TABS,
           threads: 8,
@@ -748,7 +749,7 @@ const Banners = () =>
     createElement(
       "div",
       { className: "rw-app" },
-      createElement(UpdateBanner, { onDismiss: noop, onReload: noop, open: true, title: "v0.2.0" }),
+      createElement(UpdateBanner, { onReload: noop, open: true }),
       createElement(WakeLockBanner, { onDismiss: noop, open: true }, "Keeping the screen awake while this job runs."),
     ),
   );
@@ -803,21 +804,23 @@ const DIALOGS = {
       title: "Reload and lose changes?",
     }),
   "update changelog": () => createElement(ChangelogDialog, { onClose: noop, onReload: noop, open: true }),
-  log: () => createElement(LogDialog, { onClose: noop, open: true }),
+  log: () => createElement(LogDialog, { onClose: noop, onLevelChange: noop, open: true }),
+  // Settings is the unified dialog's first tab now, not a Modal of its own.
   settings: () =>
-    createElement(
-      Modal,
-      { onClose: noop, open: true, title: "Settings", variant: "settings-modal" },
-      createElement(SettingsPanel, {
+    createElement(LogDialog, {
+      initialTab: "settings",
+      onClose: noop,
+      onLevelChange: noop,
+      onRestoreDefaults: noop,
+      onSaveSettings: noop,
+      open: true,
+      settingsPanel: createElement(SettingsPanel, {
         draftSettings: settingsDraft,
-        onClose: noop,
         onDraftChange: noop,
-        onRestoreDefaults: noop,
-        onSaveClose: noop,
         uiState: getSettingsUiState(settingsDraft),
         validation: validateSettingsDraft(settingsDraft),
       }),
-    ),
+    }),
 };
 
 const ModalHost = (node) =>
@@ -892,9 +895,10 @@ describe("webapp keyboard navigation", () => {
           { className: "rw-app" },
           createElement(Masthead, {
             currentTab: "patcher",
+            onOpenChangelog: noop,
             onOpenLog: noop,
             onOpenSettings: noop,
-            onReset: noop,
+            onOpenStatus: noop,
             onSelectTab,
             tabs: PAGE_TABS,
           }),
@@ -917,7 +921,7 @@ describe("webapp keyboard navigation", () => {
   test("mode rail: arrow / Home / End move roving focus and select the tab", async () => {
     const selected = [];
     await renderMasthead((id) => selected.push(id));
-    const tablist = host.querySelector('[role="tablist"]');
+    const tablist = host.querySelector(".mode-rail");
     const tabAt = (id) => host.querySelector(`.mode[data-mode="${id}"]`);
 
     // roving tabindex: only the current tab is in the tab order
@@ -1058,7 +1062,7 @@ describe("accent dye-lot accessibility", () => {
 
             // The badge surface must really render the re-dyed inline SVG.
             if (badge) {
-              expect(host.querySelector(".channel-badge")?.textContent).toBe("nightly");
+              expect(host.querySelector(".channel-badge")?.getAttribute("data-channel")).toBe("nightly");
               // The logo is an <img> of an inlined, re-dyed SVG. If the ?raw import ever
               // resolved to a URL or an empty string instead of the file's text, the mark
               // would silently render blank and every scan above would pass on nothing.
@@ -1083,45 +1087,121 @@ describe("accent dye-lot accessibility", () => {
 });
 
 describe("webapp responsive navigation", () => {
-  test("phone keeps the workflow rail in the masthead second row", async () => {
-    await setViewport(VIEWPORTS[0]);
-    await renderNode(
+  // The ladder is three fixed breakpoints and nothing else: single row >= 1000px
+  // (compact tab padding and a 9ch label clamp in the 1000-1159px band), bottom
+  // dock below 1000px. No measurement, no data-masthead-layout, and never a
+  // second masthead row.
+  const ALL_TABS = [
+    ...PAGE_TABS,
+    { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
+    { href: "tools", icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
+  ];
+
+  const renderMastheadOnly = async (tabs) =>
+    renderNode(
       createElement(
         RomWeaverSettingsProvider,
         { settings: {} },
         createElement(
           "div",
           { className: "rw-app" },
-          createElement(Masthead, {
-            currentTab: "patcher",
-            onOpenLog: noop,
-            onOpenSettings: noop,
-            onReset: noop,
-            onSelectTab: noop,
-            tabs: [
-              ...PAGE_TABS,
-              { href: "tools", icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
-            ],
-          }),
+          createElement(
+            "div",
+            { className: "app" },
+            createElement(Masthead, {
+              currentTab: "patcher",
+              onOpenChangelog: noop,
+              onOpenLog: noop,
+              onOpenSettings: noop,
+              onOpenStatus: noop,
+              onSelectTab: noop,
+              tabs,
+              threads: 8,
+              version: "0.1.0",
+            }),
+          ),
         ),
       ),
       "light",
     );
 
-    const masthead = host.querySelector(".masthead");
-    const brand = host.querySelector(".brand");
-    const tools = host.querySelector(".masthead-tools");
-    const modes = host.querySelector(".modes");
-    const rail = host.querySelector(".mode-rail");
-    const firstRowBottom = Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom);
-    const modesRect = modes.getBoundingClientRect();
-    const railRect = rail.getBoundingClientRect();
+  test("the masthead is one row at every width it keeps the rail", async () => {
+    for (const width of [1000, 1100, 1280, 1600]) {
+      await setViewport({ height: 900, width });
+      for (const tabs of [PAGE_TABS, ALL_TABS]) {
+        await renderMastheadOnly(tabs);
 
-    expect(getComputedStyle(modes).position).toBe("static");
-    expect(modesRect.top).toBeGreaterThanOrEqual(firstRowBottom);
-    expect(modesRect.bottom).toBeLessThanOrEqual(masthead.getBoundingClientRect().bottom);
-    expect(railRect.width).toBeGreaterThanOrEqual(modesRect.width - 2);
-    expect(rail.scrollWidth).toBeLessThanOrEqual(rail.clientWidth);
+        const brand = host.querySelector(".brand").getBoundingClientRect();
+        const tools = host.querySelector(".masthead-tools").getBoundingClientRect();
+        const modes = host.querySelector(".modes").getBoundingClientRect();
+
+        // brand | rail | actions, all sharing one row and never overlapping
+        expect(modes.left).toBeGreaterThanOrEqual(brand.right - 1);
+        expect(modes.right).toBeLessThanOrEqual(tools.left + 1);
+        expect(modes.top).toBeGreaterThanOrEqual(brand.top - 1);
+        expect(modes.bottom).toBeLessThanOrEqual(Math.max(brand.bottom, tools.bottom) + 1);
+        // the dock never shares the screen with the rail
+        expect(getComputedStyle(host.querySelector(".dock-nav")).display).toBe("none");
+      }
+    }
+  });
+
+  test("the rail tightens rather than sheds labels in the snug band", async () => {
+    await setViewport({ height: 900, width: 1100 });
+    await renderMastheadOnly(ALL_TABS);
+    const snugPadding = Number.parseFloat(getComputedStyle(host.querySelector(".mode")).paddingInlineStart);
+    const label = host.querySelector(".mode .mode-label");
+    // icons AND labels at every rail width - the labels only clamp
+    expect(getComputedStyle(label).display).not.toBe("none");
+    expect(getComputedStyle(label).textOverflow).toBe("ellipsis");
+
+    await setViewport({ height: 900, width: 1280 });
+    await renderMastheadOnly(ALL_TABS);
+    const roomyPadding = Number.parseFloat(getComputedStyle(host.querySelector(".mode")).paddingInlineStart);
+    expect(roomyPadding).toBeGreaterThan(snugPadding);
+    expect(getComputedStyle(host.querySelector(".mode .mode-label")).maxWidth).toBe("none");
+  });
+
+  test("the rail is never clipped: it scrolls instead of colliding", async () => {
+    await setViewport({ height: 900, width: 1000 });
+    await renderMastheadOnly(ALL_TABS);
+    const modes = host.querySelector(".modes");
+    expect(getComputedStyle(modes).overflowX).toBe("auto");
+    expect(modes.getBoundingClientRect().width).toBeLessThanOrEqual(
+      host.querySelector(".masthead").getBoundingClientRect().width,
+    );
+  });
+
+  test("below the dock threshold the primary nav is the bottom dock", async () => {
+    for (const viewport of [VIEWPORTS[0], { height: 900, width: 999 }]) {
+      await setViewport(viewport);
+      await renderMastheadOnly(ALL_TABS);
+
+      expect(getComputedStyle(host.querySelector(".modes")).display).toBe("none");
+      const dock = host.querySelector(".dock");
+      expect(getComputedStyle(dock).display).toBe("grid");
+      expect(getComputedStyle(dock).position).toBe("fixed");
+      // same tablist semantics as the rail
+      expect(dock.getAttribute("role")).toBe("tablist");
+      const tabs = [...dock.querySelectorAll('[role="tab"]')].filter((tab) => getComputedStyle(tab).display !== "none");
+      expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0").length).toBe(1);
+      // the masthead keeps its single row: brand and actions only
+      const brand = host.querySelector(".brand").getBoundingClientRect();
+      const tools = host.querySelector(".masthead-tools").getBoundingClientRect();
+      expect(brand.right).toBeLessThanOrEqual(tools.left + 1);
+      expect(host.querySelector(".masthead").getBoundingClientRect().height).toBeLessThanOrEqual(
+        Math.max(brand.height, tools.height) + 24,
+      );
+    }
+  });
+
+  test("the wordmark is never truncated by the brand's min-content floor", async () => {
+    for (const width of [320, 360, 500, 999, 1000, 1280]) {
+      await setViewport({ height: 900, width });
+      await renderMastheadOnly(ALL_TABS);
+      const word = host.querySelector(".brand-word");
+      expect(word.scrollWidth).toBeLessThanOrEqual(word.getBoundingClientRect().width + 1);
+    }
   });
 
   test("phone hero gives back the in-flow navigation height", async () => {
@@ -1129,27 +1209,6 @@ describe("webapp responsive navigation", () => {
     await renderPage(emptyApplyPage(), "light");
 
     expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("485px");
-  });
-
-  test("short phone layouts keep the brand clear of the navigation rail", async () => {
-    for (const viewport of [
-      { height: 67, width: 703 },
-      { height: 105, width: 527 },
-      { height: 135, width: 742 },
-    ]) {
-      await setViewport(viewport);
-      await renderPage(emptyApplyPage(), "dark");
-
-      const masthead = host.querySelector(".masthead");
-      const brand = host.querySelector(".brand");
-      const tools = host.querySelector(".masthead-tools");
-      const modes = host.querySelector(".modes");
-
-      expect(masthead.dataset.mastheadLayout).toBe("stacked");
-      expect(modes.getBoundingClientRect().top).toBeGreaterThanOrEqual(brand.getBoundingClientRect().bottom);
-      expect(brand.getBoundingClientRect().right).toBeLessThanOrEqual(tools.getBoundingClientRect().left);
-      expect(tools.getBoundingClientRect().right).toBeCloseTo(masthead.getBoundingClientRect().right, 0);
-    }
   });
 
   test("keeps the workflow gutter fluid without a narrow desktop cap", async () => {
@@ -1171,166 +1230,5 @@ describe("webapp responsive navigation", () => {
       expect(gutter).toBeLessThanOrEqual(28);
       previousGutter = gutter;
     }
-  });
-
-  test("centers navigation whenever the measured rail fits", async () => {
-    for (const viewport of [
-      { height: 900, width: 360 },
-      { height: 900, width: 1270 },
-    ]) {
-      await setViewport(viewport);
-      for (const tabs of [
-        PAGE_TABS,
-        [
-          ...PAGE_TABS,
-          { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
-          { href: "tools", icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
-        ],
-      ]) {
-        await renderNode(
-          createElement(
-            RomWeaverSettingsProvider,
-            { settings: {} },
-            createElement(
-              "div",
-              { className: "rw-app" },
-              createElement(Masthead, {
-                currentTab: "patcher",
-                onOpenLog: noop,
-                onOpenSettings: noop,
-                onReset: noop,
-                onSelectTab: noop,
-                tabs,
-              }),
-            ),
-          ),
-          "light",
-        );
-
-        const masthead = host.querySelector(".masthead");
-        const brand = host.querySelector(".brand");
-        const tools = host.querySelector(".masthead-tools");
-        const modes = host.querySelector(".modes");
-        const rail = host.querySelector(".mode-rail");
-        const firstRowBottom = Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom);
-
-        if (viewport.width > 720 && masthead.dataset.mastheadLayout === "stacked") {
-          expect(Number.parseFloat(getComputedStyle(rail.querySelector(".mode")).paddingInlineStart)).toBeGreaterThan(
-            15,
-          );
-          expect(modes.getBoundingClientRect().top).toBeGreaterThanOrEqual(firstRowBottom);
-        }
-        if (viewport.width > 720 && masthead.dataset.mastheadLayout === "wide") {
-          expect(Number.parseFloat(getComputedStyle(rail.querySelector(".mode")).paddingInlineStart)).toBeLessThan(15);
-          expect(modes.getBoundingClientRect().bottom).toBeLessThanOrEqual(firstRowBottom);
-        }
-        const modesRect = rail.getBoundingClientRect();
-        const mastheadRect = masthead.getBoundingClientRect();
-        expect(
-          Math.abs(modesRect.left + modesRect.width / 2 - (mastheadRect.left + mastheadRect.width / 2)),
-        ).toBeLessThanOrEqual(1);
-      }
-    }
-  });
-
-  test("puts the complete navigation rail between the brand and tools when it fits", async () => {
-    const cases = [
-      { tabs: PAGE_TABS, viewport: { height: 900, width: 1096 } },
-      { tabs: PAGE_TABS, viewport: { height: 900, width: 1366 } },
-      {
-        tabs: [
-          ...PAGE_TABS,
-          { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
-          { href: "tools", icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
-        ],
-        viewport: { height: 900, width: 2200 },
-      },
-    ];
-
-    for (const { tabs, viewport } of cases) {
-      await setViewport(viewport);
-      await renderNode(
-        createElement(
-          RomWeaverSettingsProvider,
-          { settings: {} },
-          createElement(
-            "div",
-            { className: "rw-app" },
-            createElement(Masthead, {
-              currentTab: "patcher",
-              onOpenLog: noop,
-              onOpenSettings: noop,
-              onReset: noop,
-              onSelectTab: noop,
-              tabs,
-            }),
-          ),
-        ),
-        "light",
-      );
-
-      const masthead = host.querySelector(".masthead");
-      const brand = host.querySelector(".brand");
-      const tools = host.querySelector(".masthead-tools");
-      const modes = host.querySelector(".modes");
-      const mastheadRect = masthead.getBoundingClientRect();
-      const modesRect = modes.getBoundingClientRect();
-
-      expect(masthead.dataset.mastheadLayout).toBe("wide");
-      expect(Number.parseFloat(getComputedStyle(modes.querySelector(".mode")).paddingInlineStart)).toBeLessThan(15);
-      const utilityButton = tools.querySelector(".tool");
-      expect(utilityButton.getBoundingClientRect().width).toBeGreaterThanOrEqual(36);
-      expect(Number.parseFloat(getComputedStyle(tools).gap)).toBeGreaterThan(4);
-      expect(modesRect.top).toBeGreaterThanOrEqual(brand.getBoundingClientRect().top);
-      expect(modesRect.bottom).toBeLessThanOrEqual(
-        Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom),
-      );
-      expect(modesRect.right).toBeLessThanOrEqual(tools.getBoundingClientRect().left);
-      expect(
-        Math.abs(modesRect.left + modesRect.width / 2 - (mastheadRect.left + mastheadRect.width / 2)),
-      ).toBeLessThanOrEqual(1);
-    }
-  });
-
-  test("moves beta navigation below the masthead when the full rail does not fit", async () => {
-    await setViewport({ height: 233, width: 2048 });
-    document.documentElement.dataset.betaToolsEnabled = "true";
-    await renderNode(
-      createElement(
-        RomWeaverSettingsProvider,
-        { settings: { betaToolsEnabled: true } },
-        createElement(
-          "div",
-          { className: "rw-app" },
-          createElement(
-            "div",
-            { className: "app", style: { maxWidth: "500px", width: "500px" } },
-            createElement(Masthead, {
-              currentTab: "patcher",
-              onOpenLog: noop,
-              onOpenSettings: noop,
-              onReset: noop,
-              onSelectTab: noop,
-              tabs: [
-                ...PAGE_TABS,
-                { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
-                { href: "tools", icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
-              ],
-            }),
-          ),
-        ),
-      ),
-      "light",
-    );
-
-    const masthead = host.querySelector(".masthead");
-    const brand = host.querySelector(".brand");
-    const tools = host.querySelector(".masthead-tools");
-    const modes = host.querySelector(".modes");
-
-    expect(masthead.dataset.mastheadLayout).toBe("stacked");
-    expect(modes.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-      Math.max(brand.getBoundingClientRect().bottom, tools.getBoundingClientRect().bottom),
-    );
   });
 });

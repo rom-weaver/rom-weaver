@@ -533,16 +533,35 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   // settings so the Settings panel checkbox can bring it back.
   window.addEventListener(ONBOARDING_DISMISS_EVENT, () => webappController.setOnboardingEnabled(false));
   if (!isNotFoundPage) {
-    const syncRouteFromUrl = () => {
+    const syncRouteFromUrl = (scrollTo?: () => void) => {
       const view = readWorkflowViewFromPath();
       if (!view) return;
-      selectViewWithTransition(() => {
+      const applyRoute = () => {
         const selectedView = webappController.selectView(view, { historyMode: "none" });
         if (selectedView !== view) webappController.selectView(selectedView, { historyMode: "replace" });
-      });
+      };
+      // Guide to guide is a page turn inside one route, not a mode switch. The
+      // masthead, trail, and dock are identical either side of it while the
+      // reader's scroll position is not, so a root crossfade dissolves the whole
+      // screen and reads as a reload. The article carries the transition on its
+      // own instead (`docs-page-in` in docs.css), and the scroll lands in the
+      // same synchronous render, so the new guide is never painted at the old
+      // guide's offset first.
+      const withinDocs = view === "docs" && webappController.getState().currentView === "docs";
+      if (withinDocs) {
+        applyRoute();
+        scrollTo?.();
+        return;
+      }
+      selectViewWithTransition(applyRoute);
+      // A mode switch updates inside a view transition, so the DOM the scroll
+      // target lives in only exists on the next frame.
+      if (scrollTo) window.requestAnimationFrame(scrollTo);
     };
 
-    window.addEventListener("popstate", syncRouteFromUrl);
+    // Back/forward carries the browser's own scroll restoration; only a click
+    // decides where the reader lands.
+    window.addEventListener("popstate", () => syncRouteFromUrl());
     document.addEventListener("click", (event) => {
       if (!(event.target instanceof Element)) return;
       const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
@@ -551,8 +570,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
       if (!url) return;
       event.preventDefault();
       window.history.pushState(window.history.state, "", url);
-      syncRouteFromUrl();
-      window.requestAnimationFrame(() => {
+      syncRouteFromUrl(() => {
         if (url.hash) {
           document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" });
         } else {

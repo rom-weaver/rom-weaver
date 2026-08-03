@@ -143,12 +143,12 @@
       // the prerendered masthead metadata. It resolves both slots before the
       // rest of the shell can paint, and produces the exact text React hydrates.
       window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY = function () {
-        const slot = document.querySelector(".masthead-threads");
-        const full = slot?.querySelector(".masthead-threads-full");
-        const short = slot?.querySelector(".masthead-threads-short");
-        const accessible = slot?.querySelector(".sr-only");
-        const runtimeSlot = document.querySelector(".masthead-runtime");
-        if (!(slot && full && short && accessible && runtimeSlot)) return;
+        const threadSlot = document.querySelector(".masthead-threads");
+        const threadCount = threadSlot?.querySelector(".masthead-threads-count");
+        const statusSlot = document.querySelector(".sub-status");
+        const statusIcon = statusSlot?.querySelector("svg");
+        const statusText = statusSlot?.querySelector(".sub-status-text");
+        if (!(threadSlot && threadCount && statusSlot && statusIcon && statusText)) return;
 
         const hardwareConcurrency = navigator.hardwareConcurrency;
         const hardwareThreads =
@@ -179,38 +179,47 @@
           // Fall back to the browser default; the app does the same for bad storage.
         }
 
-        const label = slot.dataset.threadLabel || "threads";
-        full.textContent = `· ${threads} ${label}`;
-        short.textContent = `· ${threads}T`;
-        accessible.textContent = `${threads} ${label}`;
-        slot.title = `${threads} ${label}`;
+        const label = threadSlot.dataset.threadLabel || "threads";
+        threadCount.textContent = String(threads);
+        threadSlot.setAttribute("aria-label", `${threads} ${label}`);
 
-        const displayModes = ["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"];
-        const displayModeMatches =
-          typeof window.matchMedia === "function" &&
-          displayModes.some((mode) => window.matchMedia(`(display-mode: ${mode})`).matches);
-        const iosStandalone = navigator.standalone === true;
-        const launchSurface = displayModeMatches || iosStandalone ? "pwa" : "web";
+        // Same glyphs and wording as RuntimeGlyph/RUNTIME_MESSAGES in shell.tsx -
+        // React hydrates against exactly what is written here.
+        const cloud = "M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 2 8.5";
+        const store = "M4 8.5h16v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z";
+        const check = "m9 13.5 2.2 2.2L15 12";
+        const glyphs = {
+          active: `<path d="${cloud}"></path><path d="${check}"></path>`,
+          disabled: `<path d="${cloud}"></path><path d="m4 4 16 16"></path>`,
+          installing: '<path d="M21 12a9 9 0 1 1-6.2-8.56"></path>',
+          ready: `<path d="M6.5 5h11l2 3.5h-15Z"></path><path d="${store}"></path><path d="${check}"></path>`,
+        };
+        const wording = {
+          active: "Offline active",
+          disabled: "Offline support off",
+          installing: "Installing offline copy",
+          ready: "Offline ready",
+        };
         const serviceWorkerEnabled = document.documentElement.dataset.serviceWorkerEnabled === "true";
-        const setRuntimeStatus = (status) => {
-          const label = status === "off" ? "sw off" : "sw";
-          runtimeSlot.textContent = `· ${launchSurface} · ${label}`;
-          const title =
-            status === "active"
-              ? "This page is controlled by the service worker and its offline cache is available."
-              : status === "ready"
-                ? "A service worker is installed and ready to take control."
-                : status === "off"
-                  ? "Service-worker offline support is unavailable."
-                  : "";
-          if (title) runtimeSlot.title = title;
-          else runtimeSlot.removeAttribute("title");
+        // The wording above is the English source. In another locale React owns
+        // the strings, so only the glyph and the state attribute are resolved
+        // early - both are locale-independent.
+        const english = (document.documentElement.lang || "en").indexOf("en") === 0;
+        const setRuntimeStatus = (state) => {
+          statusSlot.dataset.sw = state;
+          statusIcon.innerHTML = glyphs[state];
+          if (!english) return;
+          statusSlot.setAttribute("aria-label", wording[state]);
+          statusText.textContent = wording[state];
         };
 
-        if (!(serviceWorkerEnabled && navigator.serviceWorker)) setRuntimeStatus("off");
+        // A controller means this page came out of the cache; without
+        // MessageChannel the client cannot ask it anything, which is the same
+        // "cached, not answering" the app calls ready.
+        if (!(serviceWorkerEnabled && navigator.serviceWorker)) setRuntimeStatus("disabled");
         else if (navigator.serviceWorker.controller)
           setRuntimeStatus(typeof MessageChannel === "function" ? "active" : "ready");
-        else setRuntimeStatus(null);
+        else setRuntimeStatus("installing");
       };
     </script>
     <script type="module" src="./src/webapp/main.tsx"></script>

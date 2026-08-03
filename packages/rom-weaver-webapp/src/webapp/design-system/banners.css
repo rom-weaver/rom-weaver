@@ -83,6 +83,37 @@
 .rw-app .release-changelog-entries li + li { margin-block-start: var(--sp-xs); }
 .rw-app .release-changelog-ref { font-size: .78rem; color: var(--ink-2); white-space: nowrap; }
 .rw-app .changelog-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); padding-top: 8px; }
+
+/* ── the Changelog tab's release list ──
+   Collapsed sections rather than one long scroll: the tab is opened to read one
+   release, almost always the newest, and every older one below it is a wall of
+   entries between you and the "full changelog" link. The newest stands open so
+   the tab is never a row of shut doors. */
+.rw-app .changelog-list { display: flex; flex-direction: column; gap: var(--sp-s); }
+.rw-app .rel { border: 1px solid var(--seam-soft); border-radius: var(--r-s); background: var(--well); }
+.rw-app .rel-summary {
+  display: flex; gap: var(--sp-s); align-items: baseline; padding: var(--sp-s) var(--sp-m);
+  font-size: .84rem; font-weight: 650; color: var(--ink); cursor: pointer; list-style: none;
+  border-radius: var(--r-s);
+}
+/* the disclosure triangle is drawn by the marker, so Safari's default one goes */
+.rw-app .rel-summary::-webkit-details-marker { display: none; }
+.rw-app .rel-summary::before {
+  content: "▸"; flex: none; font-size: .7rem; color: var(--ink-3);
+  transition: transform .18s var(--ease);
+}
+.rw-app .rel[open] > .rel-summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .rel-summary::before { transition: none; }
+}
+.rw-app .rel-summary b { color: var(--thread-text); }
+.rw-app .rel-summary-count { margin-inline-start: auto; font-size: .74rem; font-weight: 500; color: var(--ink-3); }
+@media (hover: hover) {
+  .rw-app .rel-summary:hover { background: color-mix(in oklab, var(--ink) 5%, transparent); }
+}
+.rw-app .rel-summary:active { background: color-mix(in oklab, var(--ink) 5%, transparent); }
+.rw-app .rel-body { padding: 0 var(--sp-m) var(--sp-m); border-block-start: 1px solid var(--seam-soft); padding-block-start: var(--sp-s); }
+.rw-app .rel-link { display: inline-block; margin-block-start: var(--sp-m); font-size: .8rem; color: var(--thread-text); }
 /* banner dismiss (update + wake-lock) - sized to --ctrl-h so it reads as a
    sibling of the other row controls, not a stray small glyph */
 .rw-app .banner-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); flex: none; display: grid; place-items: center; border-radius: var(--r-s); color: var(--ink-3); }

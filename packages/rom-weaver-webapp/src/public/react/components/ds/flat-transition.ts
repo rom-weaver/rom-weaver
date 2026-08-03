@@ -132,4 +132,10 @@ const useFlatTransitionFlag = (actual: boolean): boolean => {
   return displayed;
 };
 
-export { holdTransitionClasses, runFlatViewTransition, useFlatTransitionFlag, viewTransitionsUnsupported };
+export {
+  holdTransitionClasses,
+  prefersReducedMotion,
+  runFlatViewTransition,
+  useFlatTransitionFlag,
+  viewTransitionsUnsupported,
+};
