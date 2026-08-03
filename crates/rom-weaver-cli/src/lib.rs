@@ -1450,3 +1450,7 @@ mod tests;
 
 #[cfg(test)]
 mod header_repair_tests;
+
+#[cfg(test)]
+#[path = "../tests/unit/cli.rs"]
+mod cli_tests;
