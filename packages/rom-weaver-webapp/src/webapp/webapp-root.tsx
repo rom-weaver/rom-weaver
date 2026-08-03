@@ -517,6 +517,11 @@ function WebappRoot({
               setLogOpen(true);
             }}
             onOpenStatus={openStatusTab}
+            onOpenStorage={() => {
+              preloadLogDialog();
+              setLogTab("storage");
+              setLogOpen(true);
+            }}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}

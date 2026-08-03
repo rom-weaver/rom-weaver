@@ -1,6 +1,17 @@
-import { createLucideIcon, Heart, Moon, Palette, ScrollText, Settings, SunMedium, X } from "lucide-react";
+import {
+  createLucideIcon,
+  Heart,
+  Info,
+  Moon,
+  MoreHorizontal,
+  Palette,
+  ScrollText,
+  Settings,
+  SunMedium,
+  X,
+} from "lucide-react";
 import type { IconNode } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
@@ -354,6 +365,137 @@ const AccentPicker = ({
   );
 };
 
+const MobileUtilityMenu = ({
+  confirmExternalNavigation,
+  donateHref,
+  githubHref,
+  localizer,
+  onClose,
+  onOpenChangelog,
+  onOpenLog,
+  onOpenStatus,
+  onOpenStorage,
+  open,
+  triggerRef,
+}: {
+  confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  donateHref?: string;
+  githubHref?: string;
+  localizer: Localizer;
+  onClose: () => void;
+  onOpenChangelog: () => void;
+  onOpenLog: () => void;
+  onOpenStatus: () => void;
+  onOpenStorage?: () => void;
+  open: boolean;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+}) => {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const firstItem = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    firstItem?.focus();
+  }, [open]);
+
+  const menuItems = () => Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+  const focusItem = (offset: number) => {
+    const items = menuItems();
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    const next = current < 0 ? 0 : (current + offset + items.length) % items.length;
+    items[next]?.focus();
+  };
+
+  const select = (action: () => void) => {
+    onClose();
+    action();
+  };
+
+  return (
+    <div
+      aria-label={localizer.message("ui.tools.more")}
+      className="mobile-more-menu"
+      hidden={!open}
+      id="mobile-more-menu"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
+          triggerRef.current?.focus();
+        } else if (event.key === "ArrowDown") {
+          event.preventDefault();
+          focusItem(1);
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          focusItem(-1);
+        } else if (event.key === "Home") {
+          event.preventDefault();
+          menuItems()[0]?.focus();
+        } else if (event.key === "End") {
+          event.preventDefault();
+          menuItems().at(-1)?.focus();
+        }
+      }}
+      ref={menuRef}
+      role="menu"
+    >
+      <button onClick={() => select(onOpenStatus)} role="menuitem" type="button">
+        <Info aria-hidden="true" />
+        {localizer.message("ui.log.tabStatus")}
+      </button>
+      <button onClick={() => select(onOpenStorage ?? onOpenLog)} role="menuitem" type="button">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M4 8.5h16v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z" />
+          <path d="M6.5 5h11l2 3.5h-15Z" />
+        </svg>
+        {localizer.message("ui.log.tabStorage")}
+      </button>
+      <button onClick={() => select(onOpenLog)} role="menuitem" type="button">
+        <ScrollText aria-hidden="true" />
+        {localizer.message("ui.log.tabLogs")}
+      </button>
+      <button onClick={() => select(onOpenChangelog)} role="menuitem" type="button">
+        <ScrollText aria-hidden="true" />
+        {localizer.message("ui.log.tabChangelog")}
+      </button>
+      <span aria-hidden="true" className="mobile-more-separator" />
+      {githubHref ? (
+        <a
+          className="mobile-more-link"
+          href={githubHref}
+          onClick={(event) => {
+            onClose();
+            guardFooterExternalClick(event, githubHref, confirmExternalNavigation);
+          }}
+          rel="noreferrer"
+          role="menuitem"
+          target="_blank"
+        >
+          <Github aria-hidden="true" />
+          {localizer.message("ui.tools.github")}
+        </a>
+      ) : null}
+      {donateHref ? (
+        <a
+          className="mobile-more-link"
+          href={donateHref}
+          onClick={(event) => {
+            onClose();
+            guardFooterExternalClick(event, donateHref, confirmExternalNavigation);
+          }}
+          rel="noreferrer"
+          role="menuitem"
+          target="_blank"
+        >
+          <Heart aria-hidden="true" />
+          {localizer.message("ui.footer.donate")}
+        </a>
+      ) : null}
+    </div>
+  );
+};
+
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
  * resolver in `index.html` rewrites before React loads - that is what stops the
@@ -564,6 +706,7 @@ const Masthead = ({
   onOpenChangelog,
   onOpenLog,
   onOpenStatus,
+  onOpenStorage,
   onPreloadLog,
   onOpenSettings,
   onOpenThreads,
@@ -592,6 +735,7 @@ const Masthead = ({
   onOpenChangelog: () => void;
   onOpenLog: () => void;
   onOpenStatus: () => void;
+  onOpenStorage?: () => void;
   onPreloadLog?: () => void;
   onOpenSettings: () => void;
   /** Deep link from the thread count into the Threads setting; falls back to plain Settings. */
@@ -611,6 +755,8 @@ const Masthead = ({
   const localizer = useUiLocalizer();
   const betaToolsEnabled = settings.betaToolsEnabled !== false;
   const [accentOpen, setAccentOpen] = useState(false);
+  const [utilityOpen, setUtilityOpen] = useState(false);
+  const moreRef = useRef<HTMLButtonElement | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const logLabel = localizer.message("ui.tools.log");
@@ -626,16 +772,22 @@ const Masthead = ({
   // Pointer-down rather than click so a press that starts outside dismisses
   // before the target's own handler runs.
   useEffect(() => {
-    if (!accentOpen) return undefined;
+    if (!(accentOpen || utilityOpen)) return undefined;
     const dismiss = (event: Event) => {
       const tools = toolsRef.current;
       if (tools && event.target instanceof Node && tools.contains(event.target)) return;
       setAccentOpen(false);
+      setUtilityOpen(false);
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      setAccentOpen(false);
-      toolsRef.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
+      if (utilityOpen) {
+        setUtilityOpen(false);
+        moreRef.current?.focus();
+      } else {
+        setAccentOpen(false);
+        toolsRef.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
+      }
     };
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("keydown", dismissOnEscape);
@@ -643,7 +795,7 @@ const Masthead = ({
       document.removeEventListener("pointerdown", dismiss);
       document.removeEventListener("keydown", dismissOnEscape);
     };
-  }, [accentOpen]);
+  }, [accentOpen, utilityOpen]);
 
   const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
   const commitDistance =
@@ -736,7 +888,7 @@ const Masthead = ({
         <div className="masthead-tools" ref={toolsRef}>
           {githubHref ? (
             <a
-              className="tool"
+              className="tool mobile-utility-source"
               href={githubHref}
               onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
               rel="noreferrer"
@@ -751,7 +903,7 @@ const Masthead = ({
           ) : null}
           {donateHref ? (
             <a
-              className="tool tool-support"
+              className="tool tool-support mobile-utility-support"
               href={donateHref}
               onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
               rel="noreferrer"
@@ -777,7 +929,7 @@ const Masthead = ({
           <button
             aria-haspopup="dialog"
             aria-label={logLabel}
-            className="tool"
+            className="tool mobile-utility-log"
             onClick={onOpenLog}
             onFocus={onPreloadLog}
             onPointerDown={onPreloadLog}
@@ -789,6 +941,36 @@ const Masthead = ({
               {logLabel}
             </span>
           </button>
+          <span className="mobile-more">
+            <button
+              aria-controls="mobile-more-menu"
+              aria-expanded={utilityOpen}
+              aria-haspopup="menu"
+              aria-label={localizer.message("ui.tools.more")}
+              className="tool"
+              onClick={() => setUtilityOpen((open) => !open)}
+              ref={moreRef}
+              type="button"
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </button>
+            <MobileUtilityMenu
+              confirmExternalNavigation={confirmExternalNavigation}
+              donateHref={donateHref}
+              githubHref={githubHref}
+              localizer={localizer}
+              onClose={() => {
+                setUtilityOpen(false);
+                moreRef.current?.focus();
+              }}
+              onOpenChangelog={onOpenChangelog}
+              onOpenLog={onOpenLog}
+              onOpenStatus={onOpenStatus}
+              onOpenStorage={onOpenStorage ?? onOpenLog}
+              open={utilityOpen}
+              triggerRef={moreRef}
+            />
+          </span>
           <button
             aria-expanded={settingsOpen}
             aria-haspopup="dialog"

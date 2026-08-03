@@ -34,6 +34,7 @@ const mastheadProps = {
   onOpenLog: () => undefined,
   onOpenSettings: () => undefined,
   onOpenStatus: () => undefined,
+  onOpenStorage: () => undefined,
   onSelectTab: () => undefined,
   tabs: TABS,
   threads: 8,
@@ -73,14 +74,32 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // github + support | theme, accent, log, settings - and Reset is gone: it
-    // lives in the workflow panel head now
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
+    // github + support | theme, accent, log, more, settings - and Reset is
+    // gone: it lives in the workflow panel head now
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
     expect(container.querySelector(".actions-sep")).toBeTruthy();
     expect(container.querySelector(".tool-support")).toBeTruthy();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     expect(container.querySelector('[aria-label="Reset"]')).toBeNull();
     expect(getByRole("button", { name: "Log" })).toBeTruthy();
+  });
+
+  it("keeps mobile utility destinations behind More", () => {
+    const onOpenStorage = vi.fn();
+    const { container, getByRole } = render(
+      withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} />),
+    );
+    const more = getByRole("button", { name: "More" });
+    const menu = container.querySelector('[role="menu"]') as HTMLElement;
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(menu.hidden).toBe(true);
+
+    fireEvent.click(more);
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(menu.hidden).toBe(false);
+    fireEvent.click(getByRole("menuitem", { name: "Storage" }));
+    expect(onOpenStorage).toHaveBeenCalledTimes(1);
+    expect(more.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("activates a tab with Space as well as Enter", () => {

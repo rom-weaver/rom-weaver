@@ -395,6 +395,11 @@ msgstr "Modifiziert"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.more"
+msgstr "Mehr"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.AMBIGUOUS_SELECTION"
 msgstr "Mehrere passende Dateien wurden gefunden."
 

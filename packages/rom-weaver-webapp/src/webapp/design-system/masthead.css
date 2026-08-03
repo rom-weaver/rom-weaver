@@ -280,6 +280,28 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
   grid-column: 3; justify-self: end;
   display: inline-flex; gap: var(--sp-2xs); align-items: center;
 }
+.rw-app .mobile-more { position: relative; display: none; }
+.rw-app .mobile-more-menu {
+  position: absolute; z-index: 2000; inset-block-start: calc(100% + var(--sp-xs)); inset-inline-end: 0;
+  display: flex; flex-direction: column; min-inline-size: 224px; max-inline-size: calc(100vw - 24px);
+  padding: var(--sp-xs); border: 1px solid var(--seam-strong); border-radius: var(--r-m);
+  background: var(--plate); box-shadow: var(--overlay-shadow); animation: drop-in .16s var(--ease);
+}
+.rw-app .mobile-more-menu[hidden] { display: none; }
+.rw-app .mobile-more-menu > button, .rw-app .mobile-more-link {
+  display: flex; align-items: center; gap: var(--sp-s); min-block-size: 44px; padding: 7px 10px;
+  border: 0; border-radius: var(--r-s); background: transparent; color: var(--ink-2);
+  font: inherit; font-size: .8rem; font-weight: 600; text-align: start; text-decoration: none; white-space: nowrap;
+}
+.rw-app .mobile-more-menu svg { flex: none; width: 17px; height: 17px; color: var(--thread-text); }
+@media (hover: hover) {
+  .rw-app .mobile-more-menu > button:hover, .rw-app .mobile-more-link:hover { background: var(--well); color: var(--ink); }
+}
+.rw-app .mobile-more-menu > button:active, .rw-app .mobile-more-link:active { background: var(--plate-2); color: var(--ink); }
+.rw-app .mobile-more-separator { block-size: 1px; margin: var(--sp-xs) 6px; background: var(--seam); }
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .mobile-more-menu { animation: none; }
+}
 /* external links (github/support) sit apart from the app's own controls */
 .rw-app .actions-sep { flex: none; width: 1px; height: 20px; margin-inline: var(--sp-s); background: var(--seam); }
 @media (max-width: 719px) {
@@ -383,6 +405,10 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 }
 @media (min-width: 1000px) {
   .rw-app .dock-nav { display: none; }
+}
+@media (max-width: 999px) {
+  .rw-app .mobile-more { display: inline-flex; }
+  .rw-app .mobile-utility-source, .rw-app .mobile-utility-support, .rw-app .mobile-utility-log { display: none; }
 }
 
 /* ── the dock (phone primary nav) ── */
