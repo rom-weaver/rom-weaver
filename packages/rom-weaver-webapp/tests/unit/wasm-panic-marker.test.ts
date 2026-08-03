@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { resolveWorkerErrorKind } from "../../src/wasm/workers/worker-error-utils.ts";
 
@@ -6,10 +8,20 @@ import { resolveWorkerErrorKind } from "../../src/wasm/workers/worker-error-util
 // `crates/rom-weaver-cli/src/wasm_main.rs`'s `WASM_PANIC_MARKER` const (pinned
 // by the Rust-side contract test in
 // `crates/rom-weaver-cli/tests/unit/wasm_main.rs`). There is no single source
-// of truth shared across the Rust/JS boundary for this string - both sides
-// hard-code it, so this assertion is what catches the two silently drifting
-// apart if either one changes.
-const WASM_PANIC_MARKER = "[rom-weaver-panic]";
+// of truth shared across the Rust/JS boundary for this string, so this test
+// reads the Rust source directly rather than duplicating the literal here -
+// comparing two hard-coded copies of the same string can never catch either
+// side drifting.
+const WASM_MAIN_SOURCE = readFileSync(
+  fileURLToPath(new URL("../../../../crates/rom-weaver-cli/src/wasm_main.rs", import.meta.url)),
+  "utf8",
+);
+
+const markerMatch = WASM_MAIN_SOURCE.match(/const WASM_PANIC_MARKER:\s*&str\s*=\s*"([^"]*)";/);
+if (!markerMatch) {
+  throw new Error("Could not find WASM_PANIC_MARKER const in crates/rom-weaver-cli/src/wasm_main.rs");
+}
+const WASM_PANIC_MARKER = markerMatch[1] as string;
 
 describe("wasm panic marker contract", () => {
   it("pins the exact marker string the Rust panic hook emits", () => {
