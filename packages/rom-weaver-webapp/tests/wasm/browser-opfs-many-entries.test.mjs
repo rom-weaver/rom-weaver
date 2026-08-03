@@ -56,14 +56,13 @@ async function measureManyEntryExtract({ entryCount, entrySize, extraArgs = [] }
       const durationMs = performance.now() - startedAtMs;
       assertRunJsonSucceeded(result);
       const names = await listDirectoryEntries(opfsHandle, "out");
-      // The extract transaction leaves its empty `.rom-weaver-extract-*` staging directory behind,
-      // so count the real outputs rather than every directory entry.
       measurement = {
         ...parseHandleStats(traceLines),
         ...parseThreadWorkerStats(traceLines),
         durationMs,
         extractedFiles: names.filter((name) => /^entry-\d+\.bin$/.test(name)).length,
       };
+      expect(names.filter((name) => name.startsWith(".rom-weaver-extract-"))).toEqual([]);
     },
     { prefix: "rom-weaver-many-entries-" },
   );
