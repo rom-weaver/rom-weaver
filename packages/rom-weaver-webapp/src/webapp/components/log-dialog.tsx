@@ -6,6 +6,7 @@ import { triggerBrowserDownload } from "../../platform/browser/browser-download.
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { listBrowserOpfs } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
+import { getActiveBrowserVirtualFiles, type BrowserVirtualFile } from "../../workers/protocol/browser-virtual-files.ts";
 import type { BrowserOpfsEntry } from "../../workers/protocol/browser-opfs-worker-client.ts";
 import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
 import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "../build-version.ts";
@@ -81,11 +82,32 @@ const formatLine = (entry: LogStoreEntry) => renderLine(entry, formatDetails(ent
 const formatCopyLine = (entry: LogStoreEntry) => renderLine(entry, serializeDetails(entry.details));
 
 const formatOpfsSize = (size: number | undefined) => (size === undefined ? "—" : `${size.toLocaleString()} B`);
-const formatOpfsEntry = (entry: BrowserOpfsEntry) =>
-  `${entry.kind.padEnd(9)} ${formatOpfsSize(entry.size).padStart(12)} ${entry.path}`;
+type StorageEntry = BrowserOpfsEntry & { virtual?: boolean };
+const formatStorageEntryKind = (entry: StorageEntry) => (entry.virtual ? "virtual" : entry.kind);
+const formatOpfsEntry = (entry: StorageEntry) =>
+  `${formatStorageEntryKind(entry).padEnd(9)} ${formatOpfsSize(entry.size).padStart(12)} ${entry.path}`;
+const OPFS_CONTAINER_PATHS = new Set(["/operations", "/rom-weaver-out"]);
 const getOpfsLeafEntries = (entries: readonly BrowserOpfsEntry[]) =>
-  entries.filter((entry) => !entries.some((candidate) => candidate.path.startsWith(`${entry.path}/`)));
+  entries.filter(
+    (entry) =>
+      !(
+        OPFS_CONTAINER_PATHS.has(entry.path) || entries.some((candidate) => candidate.path.startsWith(`${entry.path}/`))
+      ),
+  );
 const formatOpfsEntryCount = (count: number) => `${count.toLocaleString()} entr${count === 1 ? "y" : "ies"}`;
+
+const getVirtualFileSize = (source: BrowserVirtualFile["source"]) => {
+  if (!source) return undefined;
+  return source instanceof Uint8Array || source instanceof ArrayBuffer ? source.byteLength : source.size;
+};
+
+const getActiveVirtualStorageEntries = (): StorageEntry[] =>
+  getActiveBrowserVirtualFiles().map(({ path, source }) => ({
+    kind: "file",
+    path,
+    size: getVirtualFileSize(source),
+    virtual: true,
+  }));
 
 const EMPTY_ENTRIES: readonly LogStoreEntry[] = [];
 // While the dialog is closed there is nothing to show, so subscribe to a no-op
@@ -351,7 +373,7 @@ const LogDialog = ({
   );
   useSettingsFieldFocus(open && tab === "settings", settingsFocusHint);
   const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady);
-  const [opfsEntries, setOpfsEntries] = useState<BrowserOpfsEntry[]>([]);
+  const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
   const [opfsError, setOpfsError] = useState<string | null>(null);
   // Previous session's entries (promoted from localStorage at boot); the "previous" view shows a run that
@@ -364,7 +386,7 @@ const LogDialog = ({
     setOpfsLoading(true);
     setOpfsError(null);
     try {
-      setOpfsEntries(await listBrowserOpfs());
+      setOpfsEntries([...(await listBrowserOpfs()), ...getActiveVirtualStorageEntries()]);
     } catch (error) {
       setOpfsError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -717,7 +739,7 @@ const LogDialog = ({
                     <ul className="opfs-list">
                       {visibleOpfs.map((entry) => (
                         <li className="opfs-row" key={`${entry.kind}:${entry.path}`}>
-                          <span className="opfs-kind">{entry.kind}</span>
+                          <span className="opfs-kind">{formatStorageEntryKind(entry)}</span>
                           <span className="opfs-path">{entry.path}</span>
                           <span className="opfs-size">{formatOpfsSize(entry.size)}</span>
                         </li>
