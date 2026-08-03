@@ -73,7 +73,7 @@
 .rw-app .tracelog .ln.copy-failed { background: color-mix(in oklab, var(--fault) 16%, transparent); }
 .rw-app .tracelog .ts { color: #6aa8c0; flex: none; }
 .rw-app .tracelog .caller { color: #b594d6; flex: none; font-stretch: 90%; }
-:root[data-theme="light"] .tracelog .ts { color: #2a6f8a; }
+:root[data-theme="light"] .tracelog .ts { color: #25677e; }
 :root[data-theme="light"] .tracelog .caller { color: #7a4fb0; }
 .rw-app .tracelog .lv { flex: none; width: 6ch; font-weight: 650; text-transform: uppercase; font-size: .92em; }
 .rw-app .tracelog .lv.trace { color: var(--ink-4); } .rw-app .tracelog .lv.debug { color: var(--ink-3); }

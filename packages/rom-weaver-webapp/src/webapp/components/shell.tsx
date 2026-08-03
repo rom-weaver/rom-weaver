@@ -1,6 +1,19 @@
-import { createLucideIcon, Heart, Moon, Palette, ScrollText, Settings, SunMedium, X } from "lucide-react";
+import {
+  createLucideIcon,
+  Heart,
+  Info,
+  Moon,
+  MoreHorizontal,
+  Newspaper,
+  Palette,
+  ScrollText,
+  Settings,
+  SunMedium,
+  Wrench,
+  X,
+} from "lucide-react";
 import type { IconNode } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
@@ -152,7 +165,8 @@ const ModeRail = ({
   // A tablist needs exactly one tabIndex 0 to stay keyboard reachable, and the
   // current view is not always one of these tabs - the 404 shell renders the
   // rail with nothing selected. Roving focus falls back to the first tab.
-  const interactiveTabs = betaToolsEnabled ? tabs : tabs.filter((tab) => !isBetaWorkflowTab(tab));
+  const railTabs = tabs.filter((tab) => tab.id !== "tools");
+  const interactiveTabs = betaToolsEnabled ? railTabs : railTabs.filter((tab) => !isBetaWorkflowTab(tab));
   const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
   const focusedId = interactiveTabs[focusIndex]?.id ?? "";
@@ -181,7 +195,7 @@ const ModeRail = ({
         role="tablist"
       >
         <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
-        {tabs.map((tab) => (
+        {railTabs.map((tab) => (
           <a
             aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
             aria-selected={tab.id === current}
@@ -215,6 +229,7 @@ const PhoneDock = ({
   betaToolsEnabled = true,
   controlsPanels = true,
   current,
+  mobileActions,
   navLabel,
   onSelect,
   tabs,
@@ -222,12 +237,14 @@ const PhoneDock = ({
   betaToolsEnabled?: boolean;
   controlsPanels?: boolean;
   current: string;
+  mobileActions?: ReactNode;
   navLabel: string;
   onSelect: (id: string) => void;
   tabs: WorkflowTab[];
 }) => {
   const dockRef = useRef<HTMLDivElement | null>(null);
-  const interactiveTabs = betaToolsEnabled ? tabs : tabs.filter((tab) => !isBetaWorkflowTab(tab));
+  const dockTabs = tabs.filter((tab) => tab.id !== "tools");
+  const interactiveTabs = betaToolsEnabled ? dockTabs : dockTabs.filter((tab) => !isBetaWorkflowTab(tab));
   const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusedId = interactiveTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
   const handleKeyDown = createTabListKeyDown(
@@ -238,33 +255,36 @@ const PhoneDock = ({
   );
   return (
     <nav aria-label={navLabel} className="dock-nav">
-      <div
-        aria-label={navLabel}
-        aria-orientation="horizontal"
-        className="dock"
-        onKeyDown={handleKeyDown}
-        ref={dockRef}
-        role="tablist"
-      >
-        <span aria-hidden="true" className="dock-thumb" />
-        {tabs.map((tab) => (
-          <a
-            aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
-            aria-selected={tab.id === current}
-            className="dock-tab"
-            data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
-            data-mode={tab.id}
-            href={tab.href}
-            id={`docktab-${tab.id}`}
-            key={tab.id}
-            onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
-            role="tab"
-            tabIndex={tab.id === focusedId ? 0 : -1}
-          >
-            {tab.icon}
-            <span>{tab.label}</span>
-          </a>
-        ))}
+      <div className="dock">
+        <div
+          aria-label={navLabel}
+          aria-orientation="horizontal"
+          className="dock-tabs"
+          onKeyDown={handleKeyDown}
+          ref={dockRef}
+          role="tablist"
+        >
+          <span aria-hidden="true" className="dock-thumb" />
+          {dockTabs.map((tab) => (
+            <a
+              aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
+              aria-selected={tab.id === current}
+              className="dock-tab"
+              data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
+              data-mode={tab.id}
+              href={tab.href}
+              id={`docktab-${tab.id}`}
+              key={tab.id}
+              onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
+              role="tab"
+              tabIndex={tab.id === focusedId ? 0 : -1}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </a>
+          ))}
+        </div>
+        {mobileActions}
       </div>
     </nav>
   );
@@ -353,6 +373,222 @@ const AccentPicker = ({
     </div>
   );
 };
+
+type UtilityMenuProps = {
+  confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  donateHref?: string;
+  githubHref?: string;
+  localizer: Localizer;
+  menuClassName?: string;
+  onOpenChangelog: () => void;
+  onOpenLog: () => void;
+  onOpenStatus: () => void;
+  onOpenStorage?: () => void;
+  onOpenTools?: () => void;
+  toolsEnabled?: boolean;
+  toolsLabel?: string;
+};
+
+const UtilityMenu = ({
+  confirmExternalNavigation,
+  donateHref,
+  githubHref,
+  localizer,
+  menuId,
+  onClose,
+  onOpenChangelog,
+  onOpenLog,
+  onOpenStatus,
+  onOpenStorage,
+  onOpenTools,
+  toolsEnabled,
+  toolsLabel,
+  menuClassName,
+  open,
+  triggerRef,
+}: UtilityMenuProps & {
+  menuId: string;
+  onClose: () => void;
+  open: boolean;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+}) => {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const toolsButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (toolsButtonRef.current) toolsButtonRef.current.hidden = !(toolsEnabled && onOpenTools);
+  }, [onOpenTools, toolsEnabled]);
+
+  useEffect(() => {
+    if (!open) return;
+    const firstItem = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    firstItem?.focus();
+  }, [open]);
+
+  const menuItems = () =>
+    Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []).filter(
+      (item) => !item.hidden,
+    );
+  const focusItem = (offset: number) => {
+    const items = menuItems();
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    const next = current < 0 ? 0 : (current + offset + items.length) % items.length;
+    items[next]?.focus();
+  };
+
+  const select = (action: () => void) => {
+    onClose();
+    action();
+  };
+
+  return (
+    <div
+      aria-label={localizer.message("ui.tools.more")}
+      className={`more-menu${menuClassName ? ` ${menuClassName}` : ""}`}
+      hidden={!open}
+      id={menuId}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
+          triggerRef.current?.focus();
+        } else if (event.key === "ArrowDown") {
+          event.preventDefault();
+          focusItem(1);
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          focusItem(-1);
+        } else if (event.key === "Home") {
+          event.preventDefault();
+          menuItems()[0]?.focus();
+        } else if (event.key === "End") {
+          event.preventDefault();
+          menuItems().at(-1)?.focus();
+        }
+      }}
+      ref={menuRef}
+      role="menu"
+    >
+      <button onClick={() => select(onOpenStatus)} role="menuitem" type="button">
+        <Info aria-hidden="true" />
+        {localizer.message("ui.log.tabStatus")}
+      </button>
+      <button onClick={() => select(onOpenStorage ?? onOpenLog)} role="menuitem" type="button">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M4 8.5h16v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z" />
+          <path d="M6.5 5h11l2 3.5h-15Z" />
+        </svg>
+        {localizer.message("ui.log.tabStorage")}
+      </button>
+      <button onClick={() => select(onOpenLog)} role="menuitem" type="button">
+        <ScrollText aria-hidden="true" />
+        {localizer.message("ui.log.tabLogs")}
+      </button>
+      <button onClick={() => select(onOpenChangelog)} role="menuitem" type="button">
+        <Newspaper aria-hidden="true" />
+        {localizer.message("ui.log.tabChangelog")}
+      </button>
+      <button
+        hidden
+        onClick={() => {
+          if (onOpenTools) select(onOpenTools);
+        }}
+        ref={toolsButtonRef}
+        role="menuitem"
+        type="button"
+      >
+        <Wrench aria-hidden="true" />
+        {toolsLabel ?? "Tools"}
+      </button>
+      <span aria-hidden="true" className="more-separator" />
+      {githubHref ? (
+        <a
+          className="more-link"
+          href={githubHref}
+          onClick={(event) => {
+            onClose();
+            guardFooterExternalClick(event, githubHref, confirmExternalNavigation);
+          }}
+          rel="noreferrer"
+          role="menuitem"
+          target="_blank"
+        >
+          <Github aria-hidden="true" />
+          {localizer.message("ui.tools.github")}
+        </a>
+      ) : null}
+      {donateHref ? (
+        <a
+          className="more-link"
+          href={donateHref}
+          onClick={(event) => {
+            onClose();
+            guardFooterExternalClick(event, donateHref, confirmExternalNavigation);
+          }}
+          rel="noreferrer"
+          role="menuitem"
+          target="_blank"
+        >
+          <Heart aria-hidden="true" />
+          {localizer.message("ui.footer.donate")}
+        </a>
+      ) : null}
+    </div>
+  );
+};
+
+const MoreMenu = ({
+  buttonClassName,
+  className,
+  menuId,
+  moreLabel,
+  onClose,
+  onPreloadLog,
+  onToggle,
+  open,
+  renderMenu = true,
+  triggerRef,
+  ...menuProps
+}: UtilityMenuProps & {
+  buttonClassName: string;
+  className: string;
+  menuId: string;
+  moreLabel: string;
+  onClose: () => void;
+  onPreloadLog?: () => void;
+  onToggle: () => void;
+  open: boolean;
+  renderMenu?: boolean;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+}) => (
+  <span className={className}>
+    <button
+      aria-controls={menuId}
+      aria-expanded={open}
+      aria-haspopup="menu"
+      aria-label={moreLabel}
+      className={buttonClassName}
+      onClick={onToggle}
+      onFocus={onPreloadLog}
+      onPointerDown={onPreloadLog}
+      onPointerEnter={onPreloadLog}
+      ref={triggerRef}
+      type="button"
+    >
+      <MoreHorizontal aria-hidden="true" />
+      <span className="tool-text">{moreLabel}</span>
+      {buttonClassName === "tool" ? (
+        <span aria-hidden="true" className="tip">
+          {moreLabel}
+        </span>
+      ) : null}
+    </button>
+    {renderMenu ? (
+      <UtilityMenu menuId={menuId} onClose={onClose} open={open} triggerRef={triggerRef} {...menuProps} />
+    ) : null}
+  </span>
+);
 
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
@@ -564,6 +800,7 @@ const Masthead = ({
   onOpenChangelog,
   onOpenLog,
   onOpenStatus,
+  onOpenStorage,
   onPreloadLog,
   onOpenSettings,
   onOpenThreads,
@@ -592,6 +829,7 @@ const Masthead = ({
   onOpenChangelog: () => void;
   onOpenLog: () => void;
   onOpenStatus: () => void;
+  onOpenStorage?: () => void;
   onPreloadLog?: () => void;
   onOpenSettings: () => void;
   /** Deep link from the thread count into the Threads setting; falls back to plain Settings. */
@@ -611,9 +849,14 @@ const Masthead = ({
   const localizer = useUiLocalizer();
   const betaToolsEnabled = settings.betaToolsEnabled !== false;
   const [accentOpen, setAccentOpen] = useState(false);
+  const [utilityOpen, setUtilityOpen] = useState(false);
+  const [utilityPlacement, setUtilityPlacement] = useState<"desktop" | "mobile">("desktop");
+  const desktopMoreRef = useRef<HTMLButtonElement | null>(null);
+  const mobileMoreRef = useRef<HTMLButtonElement | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
-  const logLabel = localizer.message("ui.tools.log");
+  const moreLabel = localizer.message("ui.tools.more");
+  const toolsLabel = tabs.find((tab) => tab.id === "tools")?.label ?? "Tools";
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
@@ -622,20 +865,38 @@ const Masthead = ({
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
   const runtimeState = resolveRuntimeState(hydratedStatus, updateReady);
   const runtimeLabel = localizer.message(RUNTIME_MESSAGES[runtimeState].label);
+  const activeMoreRef = utilityPlacement === "mobile" ? mobileMoreRef : desktopMoreRef;
+  const toggleUtility = (placement: "desktop" | "mobile") => {
+    setUtilityPlacement(placement);
+    setUtilityOpen((open) => !open);
+  };
+  const closeUtility = () => {
+    setUtilityOpen(false);
+    activeMoreRef.current?.focus();
+  };
 
   // Pointer-down rather than click so a press that starts outside dismisses
   // before the target's own handler runs.
   useEffect(() => {
-    if (!accentOpen) return undefined;
+    if (!(accentOpen || utilityOpen)) return undefined;
     const dismiss = (event: Event) => {
       const tools = toolsRef.current;
-      if (tools && event.target instanceof Node && tools.contains(event.target)) return;
+      const target = event.target;
+      const moreAnchors = [desktopMoreRef.current?.parentElement, mobileMoreRef.current?.parentElement];
+      if (target instanceof Node && (tools?.contains(target) || moreAnchors.some((anchor) => anchor?.contains(target))))
+        return;
       setAccentOpen(false);
+      setUtilityOpen(false);
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      setAccentOpen(false);
-      toolsRef.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
+      if (utilityOpen) {
+        setUtilityOpen(false);
+        activeMoreRef.current?.focus();
+      } else {
+        setAccentOpen(false);
+        toolsRef.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
+      }
     };
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("keydown", dismissOnEscape);
@@ -643,7 +904,7 @@ const Masthead = ({
       document.removeEventListener("pointerdown", dismiss);
       document.removeEventListener("keydown", dismissOnEscape);
     };
-  }, [accentOpen]);
+  }, [accentOpen, activeMoreRef, utilityOpen]);
 
   const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
   const commitDistance =
@@ -703,26 +964,7 @@ const Masthead = ({
                   </button>
                 </span>
               ) : null}
-              <span className="sub-item">
-                <button
-                  aria-haspopup="dialog"
-                  aria-label={runtimeLabel}
-                  className="sub-chip sub-status sub-status-rule"
-                  data-sw={runtimeState}
-                  onClick={onOpenStatus}
-                  type="button"
-                >
-                  <RuntimeGlyph state={runtimeState} />
-                  <span aria-hidden="true" className="sub-status-text">
-                    {runtimeLabel}
-                  </span>
-                </button>
-              </span>
             </span>
-            {/* the parser-time resolver in index.html rewrites the thread count
-                and runtime status before the shell paints, and removes itself;
-                this empty marker is the only stable place to inject it */}
-            <span className="shell-identity" hidden />
           </span>
         </span>
         <ModeRail
@@ -736,7 +978,7 @@ const Masthead = ({
         <div className="masthead-tools" ref={toolsRef}>
           {githubHref ? (
             <a
-              className="tool"
+              className="tool mobile-utility-source"
               href={githubHref}
               onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
               rel="noreferrer"
@@ -751,7 +993,7 @@ const Masthead = ({
           ) : null}
           {donateHref ? (
             <a
-              className="tool tool-support"
+              className="tool tool-support mobile-utility-support"
               href={donateHref}
               onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
               rel="noreferrer"
@@ -765,6 +1007,17 @@ const Masthead = ({
             </a>
           ) : null}
           <span aria-hidden="true" className="actions-sep" />
+          <button
+            aria-haspopup="dialog"
+            aria-label={runtimeLabel}
+            className="tool masthead-status sub-status"
+            data-sw={runtimeState}
+            onClick={onOpenStatus}
+            type="button"
+          >
+            <RuntimeGlyph state={runtimeState} />
+            <span className="sr-only sub-status-text">{runtimeLabel}</span>
+          </button>
           <ThemeToggle localizer={localizer} />
           {/* stays open on pick: arrow keys walk the radio group, and comparing
               two lots should not cost a reopen */}
@@ -775,25 +1028,10 @@ const Masthead = ({
             open={accentOpen}
           />
           <button
-            aria-haspopup="dialog"
-            aria-label={logLabel}
-            className="tool"
-            onClick={onOpenLog}
-            onFocus={onPreloadLog}
-            onPointerDown={onPreloadLog}
-            onPointerEnter={onPreloadLog}
-            type="button"
-          >
-            <ScrollText aria-hidden="true" />
-            <span aria-hidden="true" className="tip">
-              {logLabel}
-            </span>
-          </button>
-          <button
             aria-expanded={settingsOpen}
             aria-haspopup="dialog"
             aria-label={settingsLabel}
-            className="tool"
+            className="tool masthead-settings"
             onClick={onOpenSettings}
             onFocus={onPreloadSettings}
             onPointerDown={onPreloadSettings}
@@ -801,16 +1039,106 @@ const Masthead = ({
             type="button"
           >
             <Settings aria-hidden="true" />
+            <span aria-hidden="true" className="tool-text">
+              {settingsLabel}
+            </span>
             <span aria-hidden="true" className="tip">
               {settingsLabel}
             </span>
           </button>
+          <MoreMenu
+            buttonClassName="tool"
+            className="desktop-more"
+            confirmExternalNavigation={confirmExternalNavigation}
+            donateHref={donateHref}
+            githubHref={githubHref}
+            localizer={localizer}
+            menuId="more-menu"
+            moreLabel={moreLabel}
+            onClose={closeUtility}
+            onOpenChangelog={onOpenChangelog}
+            onOpenLog={onOpenLog}
+            onOpenStatus={onOpenStatus}
+            onOpenStorage={onOpenStorage ?? onOpenLog}
+            onOpenTools={() => onSelectTab("tools")}
+            onPreloadLog={onPreloadLog}
+            onToggle={() => toggleUtility("desktop")}
+            open={utilityOpen && utilityPlacement === "desktop"}
+            renderMenu={false}
+            toolsEnabled={betaToolsEnabled}
+            toolsLabel={toolsLabel}
+            triggerRef={desktopMoreRef}
+          />
+          {utilityOpen ? (
+            <UtilityMenu
+              confirmExternalNavigation={confirmExternalNavigation}
+              donateHref={donateHref}
+              githubHref={githubHref}
+              localizer={localizer}
+              menuClassName="shared-more-menu"
+              menuId="more-menu"
+              onClose={closeUtility}
+              onOpenChangelog={onOpenChangelog}
+              onOpenLog={onOpenLog}
+              onOpenStatus={onOpenStatus}
+              onOpenStorage={onOpenStorage ?? onOpenLog}
+              onOpenTools={() => onSelectTab("tools")}
+              open
+              toolsEnabled={betaToolsEnabled}
+              toolsLabel={toolsLabel}
+              triggerRef={activeMoreRef}
+            />
+          ) : null}
         </div>
+        {/* The parser-time resolver in index.html rewrites the thread count and
+            runtime status before the shell paints, and removes itself. Keep its
+            marker after the action group so both slots exist when it runs. */}
+        <span className="shell-identity" hidden />
       </header>
       <PhoneDock
         betaToolsEnabled={betaToolsEnabled}
         controlsPanels={tabsControlPanels}
         current={currentTab}
+        mobileActions={
+          <>
+            <button
+              aria-expanded={settingsOpen}
+              aria-haspopup="dialog"
+              className="dock-action dock-settings"
+              onClick={onOpenSettings}
+              onFocus={onPreloadSettings}
+              onPointerDown={onPreloadSettings}
+              onPointerEnter={onPreloadSettings}
+              type="button"
+            >
+              <Settings aria-hidden="true" />
+              <span>{settingsLabel}</span>
+            </button>
+            <MoreMenu
+              buttonClassName="dock-action"
+              className="mobile-more"
+              confirmExternalNavigation={confirmExternalNavigation}
+              donateHref={donateHref}
+              githubHref={githubHref}
+              localizer={localizer}
+              menuId="more-menu"
+              moreLabel={moreLabel}
+              onClose={closeUtility}
+              onOpenChangelog={onOpenChangelog}
+              onOpenLog={onOpenLog}
+              onOpenStatus={onOpenStatus}
+              onOpenStorage={onOpenStorage ?? onOpenLog}
+              onOpenTools={() => onSelectTab("tools")}
+              onPreloadLog={onPreloadLog}
+              onToggle={() => toggleUtility("mobile")}
+              open={utilityOpen && utilityPlacement === "mobile"}
+              renderMenu={false}
+              toolsEnabled={betaToolsEnabled}
+              toolsLabel={toolsLabel}
+              triggerRef={mobileMoreRef}
+            />
+          </>
+        }
         navLabel={navLabel}
         onSelect={onSelectTab}
         tabs={tabs}

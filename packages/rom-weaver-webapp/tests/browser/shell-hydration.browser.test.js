@@ -58,7 +58,6 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
   threads.setAttribute("aria-label", "8 threads");
   runtime.dataset.sw = "disabled";
   runtime.setAttribute("aria-label", "Offline support off");
-  runtime.querySelector(".sub-status-text").textContent = "Offline support off";
   runtime.querySelector("svg").innerHTML =
     '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 2 8.5"></path><path d="m4 4 16 16"></path>';
 
@@ -90,8 +89,8 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
     });
   });
 
-  // trim + tools, once in the mode rail and once in the phone dock
-  expect(host.querySelectorAll("[data-beta-tool]").length).toBe(4);
+  // trim, once in the mode rail and once in the phone dock; Tools lives in More
+  expect(host.querySelectorAll("[data-beta-tool]").length).toBe(2);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });

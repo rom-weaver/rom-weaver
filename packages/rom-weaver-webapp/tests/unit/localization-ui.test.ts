@@ -14,6 +14,7 @@ const LOAD_BEARING_UI_IDS = [
   "ui.theme.toLight",
   "ui.theme.toDark",
   "ui.tools.log",
+  "ui.tools.more",
   "ui.settings.title",
   "ui.common.copy",
   "ui.common.close",

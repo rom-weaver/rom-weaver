@@ -22,7 +22,9 @@ const withSettings = (children: ReactNode) => (
 const TABS = [
   { href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
+  { href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
+  { href: "tools", icon: <svg aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
 
 const mastheadProps = {
@@ -34,6 +36,7 @@ const mastheadProps = {
   onOpenLog: () => undefined,
   onOpenSettings: () => undefined,
   onOpenStatus: () => undefined,
+  onOpenStorage: () => undefined,
   onSelectTab: () => undefined,
   tabs: TABS,
   threads: 8,
@@ -48,7 +51,7 @@ describe("Masthead", () => {
     );
     const [rail, dock] = getAllByRole("tablist", { name: "Workflow" });
     expect(rail?.classList.contains("mode-rail")).toBe(true);
-    expect(dock?.classList.contains("dock")).toBe(true);
+    expect(dock?.classList.contains("dock-tabs")).toBe(true);
     expect(rail?.querySelector(".mode-thumb")).toBeTruthy();
     expect(dock?.querySelector(".dock-thumb")).toBeTruthy();
     // "/" maps to no route, so the brand has to name one or the browser
@@ -58,12 +61,13 @@ describe("Masthead", () => {
     expect(logoHome.querySelector(".brand-mark")).toBeTruthy();
     expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
 
-    for (const [list, selectedClass] of [
-      [rail, "mode"],
-      [dock, "dock-tab"],
+    for (const [list, selectedClass, labels] of [
+      [rail, "mode", ["Apply", "Create", "Docs", "Trim"]],
+      [dock, "dock-tab", ["Apply", "Create", "Docs", "Trim"]],
     ] as const) {
       const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);
-      expect(tabs.map((tab) => tab.textContent)).toEqual(["Apply", "Create", "Trim"]);
+      expect(tabs.map((tab) => tab.textContent)).toEqual(labels);
+      expect(list?.querySelector('[data-mode="tools"]')).toBeNull();
       expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
       expect(tabs[0]?.classList.contains(selectedClass)).toBe(true);
       // roving tabindex: exactly one reachable tab per list
@@ -73,14 +77,34 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // github + support | theme, accent, log, settings - and Reset is gone: it
-    // lives in the workflow panel head now
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
+    // github + support | status, theme, accent, settings, more - and Reset is
+    // gone: it lives in the workflow panel head now
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
     expect(container.querySelector(".actions-sep")).toBeTruthy();
     expect(container.querySelector(".tool-support")).toBeTruthy();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     expect(container.querySelector('[aria-label="Reset"]')).toBeNull();
-    expect(getByRole("button", { name: "Log" })).toBeTruthy();
+    expect(container.querySelector(".desktop-more .tool")).toBeTruthy();
+  });
+
+  it("keeps utility destinations behind More on both layouts", () => {
+    const onOpenStorage = vi.fn();
+    const { container, getByRole, queryByRole } = render(
+      withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} />),
+    );
+    const more = container.querySelector(".desktop-more .tool") as HTMLButtonElement;
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector('[role="menu"]')).toBeNull();
+
+    fireEvent.click(more);
+    const menu = container.querySelector('[role="menu"]') as HTMLElement;
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(menu.hidden).toBe(false);
+    expect(queryByRole("menuitem", { name: "Docs" })).toBeNull();
+    expect(getByRole("menuitem", { name: "Tools" })).toBeTruthy();
+    fireEvent.click(getByRole("menuitem", { name: "Storage" }));
+    expect(onOpenStorage).toHaveBeenCalledTimes(1);
+    expect(more.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("activates a tab with Space as well as Enter", () => {
@@ -158,6 +182,7 @@ describe("Masthead", () => {
     expect(badge.getAttribute("data-channel")).toBe("pr");
     expect(badge.getAttribute("href")).toBe("https://example.com/repo/pull/123");
     expect(badge.getAttribute("target")).toBe("_blank");
+    expect(badge.querySelector(".tag-extra")?.textContent).toBe(" · v1.2.3");
 
     rerender(withSettings(<Masthead {...mastheadProps} channelBadge="nightly" />));
     const channel = container.querySelector(".channel-badge") as HTMLButtonElement;
@@ -169,11 +194,11 @@ describe("Masthead", () => {
 
   it("preloads the Log dialog before interaction completes", () => {
     const onPreloadLog = vi.fn();
-    const { getByRole } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
-    const log = getByRole("button", { name: "Log" });
-    fireEvent.pointerEnter(log);
-    fireEvent.focus(log);
-    fireEvent.pointerDown(log);
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
+    const more = container.querySelector(".desktop-more .tool") as HTMLButtonElement;
+    fireEvent.pointerEnter(more);
+    fireEvent.focus(more);
+    fireEvent.pointerDown(more);
     expect(onPreloadLog).toHaveBeenCalledTimes(3);
   });
 
@@ -211,8 +236,8 @@ describe("Masthead", () => {
 
   it("preloads Settings before interaction completes", () => {
     const onPreloadSettings = vi.fn();
-    const { getByRole } = render(withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />));
-    const settings = getByRole("button", { name: "Settings" });
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />));
+    const settings = container.querySelector(".dock-settings") as HTMLButtonElement;
     fireEvent.pointerEnter(settings);
     fireEvent.focus(settings);
     fireEvent.pointerDown(settings);

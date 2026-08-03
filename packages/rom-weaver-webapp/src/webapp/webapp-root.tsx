@@ -46,11 +46,13 @@ const WORKFLOW_TABS = [
   // "Apply": the tab both applies patch chains and edits/exports them as bundles.
   { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
-  // Reference rather than a workflow, but it earns a slot because the people it
-  // is written for are the least likely to go looking in an icon tray. It is
-  // still never persisted as the tab to resume - see `isResumableWorkflowView`.
+  // Reference rather than a workflow. It stays direct in the desktop rail and
+  // moves into More on the phone dock; it is never persisted as the tab to
+  // resume - see `isResumableWorkflowView`.
   { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
+  // Beta-only utility route. The shell keeps it out of both primary navs and
+  // exposes it from More when the beta-tools setting is enabled.
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
 
@@ -517,6 +519,11 @@ function WebappRoot({
               setLogOpen(true);
             }}
             onOpenStatus={openStatusTab}
+            onOpenStorage={() => {
+              preloadLogDialog();
+              setLogTab("storage");
+              setLogOpen(true);
+            }}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
