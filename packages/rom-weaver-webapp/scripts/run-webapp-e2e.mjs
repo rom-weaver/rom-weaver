@@ -523,7 +523,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.getByRole("button", { exact: true, name: "Save" }).click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
 
-    await page.getByRole("button", { name: "Log", exact: true }).click();
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Logs", exact: true }).click();
     const logDialog = page.locator("dialog.log-dlg");
     await logDialog.waitFor({ state: "visible" });
     await scanVariants("log dialog");

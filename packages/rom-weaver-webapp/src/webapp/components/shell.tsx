@@ -373,11 +373,24 @@ const AccentPicker = ({
   );
 };
 
-const MobileUtilityMenu = ({
+type UtilityMenuProps = {
+  confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  donateHref?: string;
+  githubHref?: string;
+  localizer: Localizer;
+  onOpenChangelog: () => void;
+  onOpenDocs: () => void;
+  onOpenLog: () => void;
+  onOpenStatus: () => void;
+  onOpenStorage?: () => void;
+};
+
+const UtilityMenu = ({
   confirmExternalNavigation,
   donateHref,
   githubHref,
   localizer,
+  menuId,
   onClose,
   onOpenChangelog,
   onOpenDocs,
@@ -386,17 +399,9 @@ const MobileUtilityMenu = ({
   onOpenStorage,
   open,
   triggerRef,
-}: {
-  confirmExternalNavigation?: (href: string) => Promise<boolean>;
-  donateHref?: string;
-  githubHref?: string;
-  localizer: Localizer;
+}: UtilityMenuProps & {
+  menuId: string;
   onClose: () => void;
-  onOpenChangelog: () => void;
-  onOpenDocs: () => void;
-  onOpenLog: () => void;
-  onOpenStatus: () => void;
-  onOpenStorage?: () => void;
   open: boolean;
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => {
@@ -425,9 +430,9 @@ const MobileUtilityMenu = ({
   return (
     <div
       aria-label={localizer.message("ui.tools.more")}
-      className="mobile-more-menu"
+      className="more-menu"
       hidden={!open}
-      id="mobile-more-menu"
+      id={menuId}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
@@ -473,10 +478,10 @@ const MobileUtilityMenu = ({
         <Newspaper aria-hidden="true" />
         {localizer.message("ui.log.tabChangelog")}
       </button>
-      <span aria-hidden="true" className="mobile-more-separator" />
+      <span aria-hidden="true" className="more-separator" />
       {githubHref ? (
         <a
-          className="mobile-more-link"
+          className="more-link"
           href={githubHref}
           onClick={(event) => {
             onClose();
@@ -492,7 +497,7 @@ const MobileUtilityMenu = ({
       ) : null}
       {donateHref ? (
         <a
-          className="mobile-more-link"
+          className="more-link"
           href={donateHref}
           onClick={(event) => {
             onClose();
@@ -509,6 +514,54 @@ const MobileUtilityMenu = ({
     </div>
   );
 };
+
+const MoreMenu = ({
+  buttonClassName,
+  className,
+  menuId,
+  moreLabel,
+  onClose,
+  onPreloadLog,
+  onToggle,
+  open,
+  triggerRef,
+  ...menuProps
+}: UtilityMenuProps & {
+  buttonClassName: string;
+  className: string;
+  menuId: string;
+  moreLabel: string;
+  onClose: () => void;
+  onPreloadLog?: () => void;
+  onToggle: () => void;
+  open: boolean;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+}) => (
+  <span className={className}>
+    <button
+      aria-controls={menuId}
+      aria-expanded={open}
+      aria-haspopup="menu"
+      aria-label={moreLabel}
+      className={buttonClassName}
+      onClick={onToggle}
+      onFocus={onPreloadLog}
+      onPointerDown={onPreloadLog}
+      onPointerEnter={onPreloadLog}
+      ref={triggerRef}
+      type="button"
+    >
+      <MoreHorizontal aria-hidden="true" />
+      <span className="tool-text">{moreLabel}</span>
+      {buttonClassName === "tool" ? (
+        <span aria-hidden="true" className="tip">
+          {moreLabel}
+        </span>
+      ) : null}
+    </button>
+    <UtilityMenu menuId={menuId} onClose={onClose} open={open} triggerRef={triggerRef} {...menuProps} />
+  </span>
+);
 
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
@@ -770,10 +823,11 @@ const Masthead = ({
   const betaToolsEnabled = settings.betaToolsEnabled !== false;
   const [accentOpen, setAccentOpen] = useState(false);
   const [utilityOpen, setUtilityOpen] = useState(false);
-  const moreRef = useRef<HTMLButtonElement | null>(null);
+  const [utilityPlacement, setUtilityPlacement] = useState<"desktop" | "mobile">("desktop");
+  const desktopMoreRef = useRef<HTMLButtonElement | null>(null);
+  const mobileMoreRef = useRef<HTMLButtonElement | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
-  const logLabel = localizer.message("ui.tools.log");
   const moreLabel = localizer.message("ui.tools.more");
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
@@ -783,6 +837,15 @@ const Masthead = ({
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
   const runtimeState = resolveRuntimeState(hydratedStatus, updateReady);
   const runtimeLabel = localizer.message(RUNTIME_MESSAGES[runtimeState].label);
+  const activeMoreRef = utilityPlacement === "mobile" ? mobileMoreRef : desktopMoreRef;
+  const toggleUtility = (placement: "desktop" | "mobile") => {
+    setUtilityPlacement(placement);
+    setUtilityOpen((open) => !open);
+  };
+  const closeUtility = () => {
+    setUtilityOpen(false);
+    activeMoreRef.current?.focus();
+  };
 
   // Pointer-down rather than click so a press that starts outside dismisses
   // before the target's own handler runs.
@@ -791,7 +854,8 @@ const Masthead = ({
     const dismiss = (event: Event) => {
       const tools = toolsRef.current;
       const target = event.target;
-      if (target instanceof Node && (tools?.contains(target) || moreRef.current?.parentElement?.contains(target)))
+      const moreAnchors = [desktopMoreRef.current?.parentElement, mobileMoreRef.current?.parentElement];
+      if (target instanceof Node && (tools?.contains(target) || moreAnchors.some((anchor) => anchor?.contains(target))))
         return;
       setAccentOpen(false);
       setUtilityOpen(false);
@@ -800,7 +864,7 @@ const Masthead = ({
       if (event.key !== "Escape") return;
       if (utilityOpen) {
         setUtilityOpen(false);
-        moreRef.current?.focus();
+        activeMoreRef.current?.focus();
       } else {
         setAccentOpen(false);
         toolsRef.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
@@ -812,7 +876,7 @@ const Masthead = ({
       document.removeEventListener("pointerdown", dismiss);
       document.removeEventListener("keydown", dismissOnEscape);
     };
-  }, [accentOpen, utilityOpen]);
+  }, [accentOpen, activeMoreRef, utilityOpen]);
 
   const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
   const commitDistance =
@@ -944,21 +1008,6 @@ const Masthead = ({
             open={accentOpen}
           />
           <button
-            aria-haspopup="dialog"
-            aria-label={logLabel}
-            className="tool mobile-utility-log"
-            onClick={onOpenLog}
-            onFocus={onPreloadLog}
-            onPointerDown={onPreloadLog}
-            onPointerEnter={onPreloadLog}
-            type="button"
-          >
-            <ScrollText aria-hidden="true" />
-            <span aria-hidden="true" className="tip">
-              {logLabel}
-            </span>
-          </button>
-          <button
             aria-expanded={settingsOpen}
             aria-haspopup="dialog"
             aria-label={settingsLabel}
@@ -974,6 +1023,26 @@ const Masthead = ({
               {settingsLabel}
             </span>
           </button>
+          <MoreMenu
+            buttonClassName="tool"
+            className="desktop-more"
+            confirmExternalNavigation={confirmExternalNavigation}
+            donateHref={donateHref}
+            githubHref={githubHref}
+            localizer={localizer}
+            menuId="desktop-more-menu"
+            moreLabel={moreLabel}
+            onClose={closeUtility}
+            onOpenChangelog={onOpenChangelog}
+            onOpenDocs={() => onSelectTab("docs")}
+            onOpenLog={onOpenLog}
+            onOpenStatus={onOpenStatus}
+            onOpenStorage={onOpenStorage ?? onOpenLog}
+            onPreloadLog={onPreloadLog}
+            onToggle={() => toggleUtility("desktop")}
+            open={utilityOpen && utilityPlacement === "desktop"}
+            triggerRef={desktopMoreRef}
+          />
         </div>
       </header>
       <PhoneDock
@@ -995,37 +1064,26 @@ const Masthead = ({
               <Settings aria-hidden="true" />
               <span>{settingsLabel}</span>
             </button>
-            <span className="mobile-more">
-              <button
-                aria-controls="mobile-more-menu"
-                aria-expanded={utilityOpen}
-                aria-haspopup="menu"
-                className="dock-action"
-                onClick={() => setUtilityOpen((open) => !open)}
-                ref={moreRef}
-                type="button"
-              >
-                <MoreHorizontal aria-hidden="true" />
-                <span>{moreLabel}</span>
-              </button>
-              <MobileUtilityMenu
-                confirmExternalNavigation={confirmExternalNavigation}
-                donateHref={donateHref}
-                githubHref={githubHref}
-                localizer={localizer}
-                onClose={() => {
-                  setUtilityOpen(false);
-                  moreRef.current?.focus();
-                }}
-                onOpenChangelog={onOpenChangelog}
-                onOpenDocs={() => onSelectTab("docs")}
-                onOpenLog={onOpenLog}
-                onOpenStatus={onOpenStatus}
-                onOpenStorage={onOpenStorage ?? onOpenLog}
-                open={utilityOpen}
-                triggerRef={moreRef}
-              />
-            </span>
+            <MoreMenu
+              buttonClassName="dock-action"
+              className="mobile-more"
+              confirmExternalNavigation={confirmExternalNavigation}
+              donateHref={donateHref}
+              githubHref={githubHref}
+              localizer={localizer}
+              menuId="mobile-more-menu"
+              moreLabel={moreLabel}
+              onClose={closeUtility}
+              onOpenChangelog={onOpenChangelog}
+              onOpenDocs={() => onSelectTab("docs")}
+              onOpenLog={onOpenLog}
+              onOpenStatus={onOpenStatus}
+              onOpenStorage={onOpenStorage ?? onOpenLog}
+              onPreloadLog={onPreloadLog}
+              onToggle={() => toggleUtility("mobile")}
+              open={utilityOpen && utilityPlacement === "mobile"}
+              triggerRef={mobileMoreRef}
+            />
           </>
         }
         navLabel={navLabel}

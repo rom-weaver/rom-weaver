@@ -280,27 +280,28 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
   grid-column: 3; justify-self: end;
   display: inline-flex; gap: var(--sp-2xs); align-items: center;
 }
+.rw-app .desktop-more { position: relative; display: inline-flex; }
 .rw-app .mobile-more { position: relative; display: none; }
-.rw-app .mobile-more-menu {
+.rw-app .more-menu {
   position: absolute; z-index: 2000; inset-block-start: calc(100% + var(--sp-xs)); inset-inline-end: 0;
   display: flex; flex-direction: column; min-inline-size: 224px; max-inline-size: calc(100vw - 24px);
   padding: var(--sp-xs); border: 1px solid var(--seam-strong); border-radius: var(--r-m);
   background: var(--plate); box-shadow: var(--overlay-shadow); animation: drop-in .16s var(--ease);
 }
-.rw-app .mobile-more-menu[hidden] { display: none; }
-.rw-app .mobile-more-menu > button, .rw-app .mobile-more-link {
+.rw-app .more-menu[hidden] { display: none; }
+.rw-app .more-menu > button, .rw-app .more-link {
   display: flex; align-items: center; gap: var(--sp-s); min-block-size: 44px; padding: 7px 10px;
   border: 0; border-radius: var(--r-s); background: transparent; color: var(--ink-2);
   font: inherit; font-size: .8rem; font-weight: 600; text-align: start; text-decoration: none; white-space: nowrap;
 }
-.rw-app .mobile-more-menu svg { flex: none; width: 17px; height: 17px; color: var(--thread-text); }
+.rw-app .more-menu svg { flex: none; width: 17px; height: 17px; color: var(--thread-text); }
 @media (hover: hover) {
-  .rw-app .mobile-more-menu > button:hover, .rw-app .mobile-more-link:hover { background: var(--well); color: var(--ink); }
+  .rw-app .more-menu > button:hover, .rw-app .more-link:hover { background: var(--well); color: var(--ink); }
 }
-.rw-app .mobile-more-menu > button:active, .rw-app .mobile-more-link:active { background: var(--plate-2); color: var(--ink); }
-.rw-app .mobile-more-separator { block-size: 1px; margin: var(--sp-xs) 6px; background: var(--seam); }
+.rw-app .more-menu > button:active, .rw-app .more-link:active { background: var(--plate-2); color: var(--ink); }
+.rw-app .more-separator { block-size: 1px; margin: var(--sp-xs) 6px; background: var(--seam); }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .mobile-more-menu { animation: none; }
+  .rw-app .more-menu { animation: none; }
 }
 /* external links (github/support) sit apart from the app's own controls */
 .rw-app .actions-sep { flex: none; width: 1px; height: 20px; margin-inline: var(--sp-s); background: var(--seam); }
@@ -328,6 +329,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 .rw-app .tool[aria-expanded="true"] { color: var(--ink); background: var(--well); border-color: var(--seam); }
 /* The tools are icon-only; the tooltip/aria-label carries the name. */
 .rw-app .tool-text { display: none; }
+.rw-app .dock-action .tool-text { display: inline; }
 
 /* support wears the thread at rest - the one action that stays warm. The heart
    beats a soft double-thump at rest, filled and quickened under the pointer. */
@@ -407,12 +409,13 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
   .rw-app .dock-nav { display: none; }
 }
 @media (max-width: 999px) {
+  .rw-app .desktop-more { display: none; }
   .rw-app .mobile-more { display: inline-flex; }
-  .rw-app .mobile-utility-source, .rw-app .mobile-utility-support, .rw-app .mobile-utility-log { display: none; }
+  .rw-app .mobile-utility-source, .rw-app .mobile-utility-support { display: none; }
   .rw-app .masthead-settings { display: none; }
   .rw-app .dock .mobile-more { display: flex; position: relative; }
   .rw-app .dock .mobile-more .dock-action { width: 100%; }
-  .rw-app .dock .mobile-more-menu { inset-block-start: auto; inset-block-end: calc(100% + var(--sp-xs)); }
+  .rw-app .dock .more-menu { inset-block-start: auto; inset-block-end: calc(100% + var(--sp-xs)); }
 }
 
 /* ── the dock (phone primary nav) ── */

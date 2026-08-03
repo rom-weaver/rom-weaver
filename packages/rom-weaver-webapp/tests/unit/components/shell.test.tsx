@@ -75,22 +75,22 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // github + support | theme, accent, log, settings - and Reset is
+    // github + support | theme, accent, settings, more - and Reset is
     // gone: it lives in the workflow panel head now
     expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(6);
     expect(container.querySelector(".actions-sep")).toBeTruthy();
     expect(container.querySelector(".tool-support")).toBeTruthy();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     expect(container.querySelector('[aria-label="Reset"]')).toBeNull();
-    expect(getByRole("button", { name: "Log" })).toBeTruthy();
+    expect(container.querySelector(".desktop-more .tool")).toBeTruthy();
   });
 
-  it("keeps mobile utility destinations behind More", () => {
+  it("keeps utility destinations behind More on both layouts", () => {
     const onOpenStorage = vi.fn();
     const { container, getByRole } = render(
       withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} />),
     );
-    const more = getByRole("button", { name: "More" });
+    const more = container.querySelector(".desktop-more .tool") as HTMLButtonElement;
     const menu = container.querySelector('[role="menu"]') as HTMLElement;
     expect(more.getAttribute("aria-expanded")).toBe("false");
     expect(menu.hidden).toBe(true);
@@ -190,11 +190,11 @@ describe("Masthead", () => {
 
   it("preloads the Log dialog before interaction completes", () => {
     const onPreloadLog = vi.fn();
-    const { getByRole } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
-    const log = getByRole("button", { name: "Log" });
-    fireEvent.pointerEnter(log);
-    fireEvent.focus(log);
-    fireEvent.pointerDown(log);
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
+    const more = container.querySelector(".desktop-more .tool") as HTMLButtonElement;
+    fireEvent.pointerEnter(more);
+    fireEvent.focus(more);
+    fireEvent.pointerDown(more);
     expect(onPreloadLog).toHaveBeenCalledTimes(3);
   });
 

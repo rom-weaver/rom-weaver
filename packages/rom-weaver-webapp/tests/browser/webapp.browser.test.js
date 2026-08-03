@@ -400,11 +400,12 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
   }
 });
 
-test("WebappRoot keeps diagnostics out of the masthead - the Log dialog owns them", async () => {
-  // The header stays theme / log / settings; the console-copy and mobile dev
-  // tools toggles were folded into the Log dialog surface.
+test("WebappRoot keeps diagnostics behind More - the Log dialog owns them", async () => {
+  // Settings stays direct; Docs and diagnostics share the responsive More menu.
   mountWebappRoot();
-  await expect.element(page.getByRole("button", { name: "Log" })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
+  await page.getByRole("button", { name: "More" }).click();
+  await expect.element(page.getByRole("menuitem", { name: "Logs" })).toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });
