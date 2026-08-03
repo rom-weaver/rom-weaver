@@ -222,6 +222,8 @@ function WebappRoot({
   // silently discard the user's work. Each form mounts on first visit and then
   // stays mounted but hidden, which preserves state across tab switches.
   const [visitedViews, setVisitedViews] = useState<readonly WebappView[]>([state.currentView]);
+  const currentViewRef = useRef(state.currentView);
+  currentViewRef.current = state.currentView;
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
@@ -535,9 +537,10 @@ function WebappRoot({
               if (view === "docs") {
                 // Keep the current panel visible until the lazy Docs route is ready;
                 // switching first leaves its navigation bar absent for one frame.
+                const startingView = currentViewRef.current;
                 pendingViewRef.current = view;
                 void preloadWorkflowRoute(view).then(() => {
-                  if (pendingViewRef.current !== view) return;
+                  if (pendingViewRef.current !== view || currentViewRef.current !== startingView) return;
                   pendingViewRef.current = null;
                   selectViewWithTransition(() => actions.onSelectView(view));
                 });

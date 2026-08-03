@@ -147,7 +147,7 @@ const warmDocsHtml = (slug: string) => {
   void preloadDocsHtml(slug).catch(() => undefined);
 };
 
-const useDocsHtml = (slug: string): string | undefined => {
+const useDocsHtml = (slug: string, active: boolean): string | undefined => {
   const cached = docsHtmlCache.get(slug);
   const [, forceRender] = useReducer((count: number) => count + 1, 0);
   useEffect(() => {
@@ -157,12 +157,18 @@ const useDocsHtml = (slug: string): string | undefined => {
       () => {
         if (live) forceRender();
       },
-      () => undefined,
+      () => {
+        // A visible guide can recover from a stale chunk manifest by asking
+        // the server for its prerendered route, which carries current assets.
+        if (live && active && readDocsSlugFromPathname(window.location.pathname) === slug) {
+          window.location.assign(window.location.href);
+        }
+      },
     );
     return () => {
       live = false;
     };
-  }, [cached, slug]);
+  }, [active, cached, slug]);
   return cached;
 };
 
@@ -705,7 +711,7 @@ const DocsPage = ({
   slug: string;
 }) => {
   const targetRoute = findDocsRoute(slug);
-  const targetHtml = useDocsHtml(targetRoute.slug);
+  const targetHtml = useDocsHtml(targetRoute.slug, active);
   // The reader stays on the guide they can see: a navigation to a page whose
   // HTML chunk is still downloading keeps the current article (and its rails,
   // outline, and metadata) until the new one is ready to paint whole.
@@ -768,6 +774,13 @@ const DocsPage = ({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [active, highlightQuery, highlightSection, html]);
+  useEffect(() => {
+    if (!(active && html && window.location.hash)) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, html]);
   const onSearchSelect = useCallback((result: DocSearchResult, query: string) => {
     setHighlightQuery(query);
     setHighlightSection(result.entry.id);

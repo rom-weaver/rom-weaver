@@ -53,7 +53,10 @@ describe("DocsPage", () => {
       <link rel="canonical" href="">
     `;
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    window.history.replaceState({}, "", "/");
+    vi.restoreAllMocks();
+  });
 
   it("restores docs metadata when its kept-alive panel becomes active again", () => {
     const { rerender } = render(<DocsPage active slug="docs" />);
@@ -484,6 +487,17 @@ Fixture description.
 
     await vi.waitFor(() => expect(document.querySelector("mark.docs-search-highlight")?.textContent).toBe("Nintendo"));
     await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" }));
+  });
+
+  it("scrolls to a guide anchor after its article is ready", async () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    const sectionId = routeFor("docs/patch-formats").sections[0]?.id;
+    window.history.replaceState({}, "", `/docs/patch-formats#${sectionId}`);
+
+    render(<DocsPage active slug="docs/patch-formats" />);
+
+    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" }));
   });
 
   it("ends a guide with the steps either side of it, and the way back up", () => {
