@@ -116,12 +116,15 @@
 
 /* the runtime status rides the brand info line: a state-coloured glyph that
    opens the status dialog */
+/* The glyph size is a variable because the rule under it has to be exactly as
+   wide as the glyph, and the target box it sits in is twice that. */
 .rw-app .sub-status {
-  position: relative; display: inline-flex; gap: 3px; align-items: center;
+  --sub-glyph: 12px;
+  position: relative; display: inline-flex; gap: 3px; align-items: center; justify-content: center;
   font: inherit; font-size: .9em; font-weight: 600;
   appearance: none; cursor: pointer;
 }
-.rw-app .sub-status svg { flex: none; width: 12px; height: 12px; }
+.rw-app .sub-status svg { flex: none; width: var(--sub-glyph); height: var(--sub-glyph); }
 .rw-app .sub-status[data-sw="active"] { color: var(--verified); }
 .rw-app .sub-status[data-sw="ready"] { color: var(--ink-2); }
 .rw-app .sub-status[data-sw="update"] { color: var(--care-text); }
@@ -163,9 +166,12 @@
    box rather than on its edge: the box is taller than the row it sits in, and
    anything painted at its bottom shows past the masthead. */
 /* No `content` here, so it draws nothing until one of the glyph-only rules below
-   turns it on. */
+   turns it on. It is the width of the glyph, not of the box: the box is a 24px
+   target with a 12px mark centred in it, and a rule spanning the target reads as
+   an underline belonging to something twice the size of what is above it. */
 .rw-app .sub-status-rule::before {
-  position: absolute; inset-inline: 1px; inset-block-start: 19px; block-size: 1px;
+  position: absolute; inset-block-start: 19px; block-size: 1px;
+  inset-inline-start: 50%; inline-size: var(--sub-glyph); translate: -50% 0;
   background: repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 3px);
   opacity: .45; transition: opacity .18s;
 }
@@ -187,7 +193,7 @@
 @media (max-width: 719px) {
   .rw-app .build-tag .tag-extra { display: none; }
   /* the glyph is the whole control here, so it takes the room the label had */
-  .rw-app .sub-status svg { width: 13px; height: 13px; }
+  .rw-app .sub-status { --sub-glyph: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .rw-app .sub-status svg { animation: none; }
