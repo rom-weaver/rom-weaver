@@ -6,7 +6,7 @@ import { getWorkerErrorMessage, postCloneSafeWorkerMessage } from "../shared/wor
 // browser-opfs-source-ref). The "stage-error" response action is kept as the generic failure reply.
 
 type StorageRequest = {
-  action: "list" | "remove" | "truncate" | "write";
+  action: "list" | "list-metadata" | "remove" | "truncate" | "write";
   bytes?: Uint8Array;
   filePath?: string;
   position?: number;
@@ -188,6 +188,7 @@ const removeOpfsPath = async (request: StorageRequest): Promise<StorageResponse>
 
 const listOpfsPaths = async (request: StorageRequest): Promise<StorageResponse> => {
   const root = await navigator.storage.getDirectory();
+  const includeFileSizes = request.action === "list";
   const entries: Array<{ kind: "directory" | "file"; path: string; size?: number }> = [];
   const walk = async (directory: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
     for await (const [name, handle] of directory.entries()) {
@@ -196,7 +197,7 @@ const listOpfsPaths = async (request: StorageRequest): Promise<StorageResponse> 
         entries.push({ kind: "directory", path });
         await walk(handle, path);
       } else {
-        entries.push({ kind: "file", path, size: (await handle.getFile()).size });
+        entries.push({ kind: "file", path, ...(includeFileSizes ? { size: (await handle.getFile()).size } : {}) });
       }
     }
   };
@@ -213,7 +214,7 @@ const listOpfsPaths = async (request: StorageRequest): Promise<StorageResponse> 
 workerScope.onmessage = (event: MessageEvent<StorageRequest>) => {
   const request = event.data || ({} as StorageRequest);
   let run: Promise<StorageResponse>;
-  if (request.action === "list") run = listOpfsPaths(request);
+  if (request.action === "list" || request.action === "list-metadata") run = listOpfsPaths(request);
   else if (request.action === "remove") run = removeOpfsPath(request);
   else if (request.action === "truncate") run = truncateOpfsPath(request);
   else if (request.action === "write") run = writeBytesToOpfsPath(request);

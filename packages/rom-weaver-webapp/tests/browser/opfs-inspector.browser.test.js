@@ -20,6 +20,16 @@ test("lists nested OPFS paths through the storage worker", async () => {
         { kind: "file", path: `/${rootName}/nested/path.bin`, size: 4 },
       ]),
     );
+
+    const { requestBrowserOpfsStorage } = await import("../../src/workers/protocol/browser-opfs-worker-client.ts");
+    const metadataResponse = await requestBrowserOpfsStorage({ action: "list-metadata" });
+    expect(metadataResponse.success).toBe(true);
+    expect(metadataResponse.entries).toEqual(
+      expect.arrayContaining([{ kind: "file", path: `/${rootName}/nested/path.bin` }]),
+    );
+    expect(metadataResponse.entries?.find((entry) => entry.path === `/${rootName}/nested/path.bin`)).not.toHaveProperty(
+      "size",
+    );
   } finally {
     await root.removeEntry(rootName, { recursive: true }).catch(() => undefined);
   }

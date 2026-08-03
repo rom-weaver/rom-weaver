@@ -7,25 +7,44 @@ type ListedOpfsEntry = {
 };
 
 const EXTRACT_STAGING_PREFIX = ".rom-weaver-extract-";
+const TEMP_NAMESPACE_PREFIX = "rw-";
 
 const entryName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
-const hasFileDescendant = (entries: readonly ListedOpfsEntry[], path: string) => {
-  const prefix = `${path}/`;
-  return entries.some((entry) => entry.kind === "file" && entry.path.startsWith(prefix));
+const getFileDescendantPaths = (entries: readonly ListedOpfsEntry[]) => {
+  const descendants = new Set<string>();
+  for (const entry of entries) {
+    if (entry.kind !== "file") continue;
+    let separator = entry.path.lastIndexOf("/");
+    while (separator > 0) {
+      descendants.add(entry.path.slice(0, separator));
+      separator = entry.path.lastIndexOf("/", separator - 1);
+    }
+  }
+  return descendants;
+};
+
+const findRunTempNamespacePaths = (entries: readonly ListedOpfsEntry[], runId: string): string[] => {
+  const namespace = `${TEMP_NAMESPACE_PREFIX}${runId}`;
+  const prefix = `${namespace}-`;
+  return entries
+    .filter((entry) => {
+      if (entry.kind !== "directory") return false;
+      const name = entryName(entry.path);
+      return name === namespace || name.startsWith(prefix);
+    })
+    .map((entry) => entry.path);
 };
 
 const findEmptyExtractStagingPaths = (entries: readonly ListedOpfsEntry[], runId: string): string[] => {
   const prefix = `${EXTRACT_STAGING_PREFIX}${runId}-`;
+  const fileDescendantPaths = getFileDescendantPaths(entries);
   return entries
     .filter(
       (entry) =>
-        entry.kind === "directory" &&
-        entryName(entry.path).startsWith(prefix) &&
-        !hasFileDescendant(entries, entry.path),
+        entry.kind === "directory" && entryName(entry.path).startsWith(prefix) && !fileDescendantPaths.has(entry.path),
     )
-    .map((entry) => entry.path)
-    .sort((left, right) => right.length - left.length);
+    .map((entry) => entry.path);
 };
 
 const removeOpfsPath = async (path: string): Promise<void> => {
@@ -45,13 +64,15 @@ export const cleanupBrowserOpfsRunScratch = async ({
   trace?: (message: string) => void;
   workGuestPath: string;
 }): Promise<void> => {
-  const tempNamespacePath = joinGuestPath(workGuestPath, "rom-weaver-out", `rw-${runId}`);
-  const listResponse = await requestBrowserOpfsStorage({ action: "list" });
+  const listResponse = await requestBrowserOpfsStorage({ action: "list-metadata" });
   if (!listResponse.success) throw new Error(listResponse.error?.message || "Unable to list OPFS scratch paths");
 
   const entries = (listResponse.entries || []) as ListedOpfsEntry[];
+  const tempNamespacePaths = findRunTempNamespacePaths(entries, runId);
   const emptyExtractPaths = findEmptyExtractStagingPaths(entries, runId);
-  const paths = [tempNamespacePath, ...emptyExtractPaths.map((path) => joinGuestPath(workGuestPath, path))];
+  // Keep extract trees containing files. A failed extract may have staged user data, so cleanup
+  // removes only the empty transaction directories it can prove are disposable.
+  const paths = [...tempNamespacePaths, ...emptyExtractPaths].map((path) => joinGuestPath(workGuestPath, path));
   await Promise.all(
     paths.map(async (path) => {
       await removeOpfsPath(path);
@@ -60,4 +81,4 @@ export const cleanupBrowserOpfsRunScratch = async ({
   );
 };
 
-export { findEmptyExtractStagingPaths };
+export { findEmptyExtractStagingPaths, findRunTempNamespacePaths };

@@ -56,6 +56,7 @@ async function measureManyEntryExtract({ entryCount, entrySize, extraArgs = [] }
       const durationMs = performance.now() - startedAtMs;
       assertRunJsonSucceeded(result);
       const names = await listDirectoryEntries(opfsHandle, "out");
+      const scratchNames = await listDirectoryEntries(opfsHandle, "rom-weaver-out").catch(() => []);
       measurement = {
         ...parseHandleStats(traceLines),
         ...parseThreadWorkerStats(traceLines),
@@ -63,6 +64,7 @@ async function measureManyEntryExtract({ entryCount, entrySize, extraArgs = [] }
         extractedFiles: names.filter((name) => /^entry-\d+\.bin$/.test(name)).length,
       };
       expect(names.filter((name) => name.startsWith(".rom-weaver-extract-"))).toEqual([]);
+      expect(scratchNames.filter((name) => name.startsWith("rw-"))).toEqual([]);
     },
     { prefix: "rom-weaver-many-entries-" },
   );

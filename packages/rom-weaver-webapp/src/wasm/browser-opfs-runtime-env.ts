@@ -6,6 +6,8 @@ declare const FileSystemSyncAccessHandle: unknown;
 
 const DEFAULT_BROWSER_WASM_URLS = [new URL("./rom-weaver-app.wasm", import.meta.url).href];
 const PROBE_REMOVE_RETRY_DELAYS_MS = [25, 50, 100, 200, 400, 800];
+const STALE_WRITABLE_PROBE_AGE_MS = 60_000;
+const WRITABLE_PROBE_TIMESTAMP = /^\.rw-probe-(\d+)-/;
 
 type ResolvedBrowserModule = {
   module: WebAssembly.Module;
@@ -44,10 +46,17 @@ export async function verifyWritableOpfsRoot(rootHandle: FileSystemDirectoryHand
 
 async function removeStaleWritableProbes(rootHandle: FileSystemDirectoryHandleLike): Promise<void> {
   if (typeof rootHandle.entries !== "function") return;
+  const now = Date.now();
   for await (const [name, handle] of rootHandle.entries()) {
     if ((handle as { kind?: string } | null)?.kind !== "file" || !name.startsWith(".rw-probe-")) continue;
+    if (!isStaleWritableProbe(name, now)) continue;
     await removeWritableProbe(rootHandle, name);
   }
+}
+
+export function isStaleWritableProbe(name: string, now = Date.now()): boolean {
+  const timestamp = Number(WRITABLE_PROBE_TIMESTAMP.exec(name)?.[1]);
+  return Number.isFinite(timestamp) && now - timestamp >= STALE_WRITABLE_PROBE_AGE_MS;
 }
 
 async function removeWritableProbe(rootHandle: FileSystemDirectoryHandleLike, probeName: string): Promise<void> {
