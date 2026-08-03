@@ -960,8 +960,7 @@ const Masthead = ({
                     onPointerEnter={onPreloadSettings}
                     type="button"
                   >
-                    <span className="masthead-threads-count">{threads}</span>
-                    <span aria-hidden="true"> Threads</span>
+                    <span className="masthead-threads-count">{threads}</span> <span aria-hidden="true">Threads</span>
                   </button>
                 </span>
               ) : null}
