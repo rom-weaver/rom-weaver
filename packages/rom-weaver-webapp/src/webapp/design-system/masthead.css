@@ -102,6 +102,7 @@
   padding: 0 2px; font-size: .6rem; letter-spacing: .04em;
   background: transparent; border: 0; border-radius: 0;
 }
+.rw-app .brand-sub-row .build-tag .channel-badge { color: inherit; }
 @media (hover: hover) {
   .rw-app .build-tag .channel-badge:hover { background: transparent; }
 }
@@ -167,7 +168,6 @@
    same top-right action target and accessible name at every width. */
 @media (max-width: 1159px) {
   .rw-app .masthead-status { width: clamp(30px, 22px + 1.2vw, 38px); padding-inline: 0; }
-  .rw-app .masthead-status-text { display: none; }
 }
 @media (max-width: 719px) {
   .rw-app .masthead-status svg { width: 13px; height: 13px; }
@@ -300,10 +300,9 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 .rw-app .tool[aria-expanded="true"] { color: var(--ink); background: var(--well); border-color: var(--seam); }
 .rw-app .masthead-status {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-xs);
-  width: auto; padding-inline: var(--sp-s); font-size: .78rem; font-weight: 650; transition: none;
+  width: clamp(30px, 22px + 1.2vw, 38px); padding-inline: 0; font-size: .78rem; font-weight: 650; transition: none;
 }
 .rw-app .masthead-status svg { flex: none; width: 16px; height: 16px; }
-.rw-app .masthead-status-text { white-space: nowrap; }
 /* Desktop keeps the important destinations compact; the tooltip and aria-label
    carry their names without turning the actions cluster into another nav. */
 .rw-app .tool-text { display: none; }

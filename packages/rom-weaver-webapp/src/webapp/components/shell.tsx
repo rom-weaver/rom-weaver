@@ -1016,12 +1016,7 @@ const Masthead = ({
             type="button"
           >
             <RuntimeGlyph state={runtimeState} />
-            <span aria-hidden="true" className="masthead-status-text sub-status-text">
-              {runtimeLabel}
-            </span>
-            <span aria-hidden="true" className="tip">
-              {runtimeLabel}
-            </span>
+            <span className="sr-only sub-status-text">{runtimeLabel}</span>
           </button>
           <ThemeToggle localizer={localizer} />
           {/* stays open on pick: arrow keys walk the radio group, and comparing

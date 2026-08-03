@@ -252,6 +252,7 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
   await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
   expect(document.querySelector(".brand-sub-row .sub-status")).toBeNull();
   expect(document.querySelector(".masthead-tools .sub-status")).toBeTruthy();
+  expect(document.querySelector(".masthead-status-text")).toBeNull();
   for (const [width, height] of [
     [1280, 900],
     [1100, 900],
@@ -259,10 +260,6 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
   ]) {
     page.viewport(width, height);
     await expect.poll(() => getComputedStyle(document.querySelector(".sub-status svg")).display).not.toBe("none");
-    const expectedVisible = width > 1159;
-    await expect
-      .poll(() => getComputedStyle(document.querySelector(".sub-status-text")).display !== "none")
-      .toBe(expectedVisible);
     if (width >= 1160) {
       expect(Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row")).fontSize)).toBeGreaterThan(
         12,
