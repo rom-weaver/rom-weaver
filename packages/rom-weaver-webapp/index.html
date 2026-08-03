@@ -186,11 +186,13 @@
         // Same glyphs and wording as RuntimeGlyph/RUNTIME_MESSAGES in shell.tsx -
         // React hydrates against exactly what is written here.
         const cloud = "M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 2 8.5";
+        const store = "M4 8.5h16v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z";
+        const check = "m9 13.5 2.2 2.2L15 12";
         const glyphs = {
-          active: `<path d="${cloud}"></path><path d="m9 13.5 2.2 2.2L15 12"></path>`,
+          active: `<path d="${cloud}"></path><path d="${check}"></path>`,
           disabled: `<path d="${cloud}"></path><path d="m4 4 16 16"></path>`,
           installing: '<path d="M21 12a9 9 0 1 1-6.2-8.56"></path>',
-          ready: `<path d="${cloud}"></path><circle cx="12" cy="14" r="1.4"></circle>`,
+          ready: `<path d="M6.5 5h11l2 3.5h-15Z"></path><path d="${store}"></path><path d="${check}"></path>`,
         };
         const wording = {
           active: "Offline active",

@@ -350,9 +350,11 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 }
 .rw-app .sw-chip svg { width: 13px; height: 13px; }
 .rw-app .sw-chip[data-sw="active"] { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 35%, transparent); }
-/* a cache standing by, not one in use: the same colour, quieter */
-.rw-app .sw-chip[data-sw="ready"] { color: color-mix(in oklab, var(--verified) 72%, var(--ink-3)); border-color: color-mix(in oklab, var(--verified) 24%, transparent); }
-.rw-app .sw-chip[data-sw="update"] { color: var(--care); border-color: color-mix(in oklab, var(--care) 40%, transparent); }
+/* A cache standing by is not a cache in use, and one tint of green apart was not
+   telling anyone that. Stored, not serving: no colour of its own, and the glyph
+   is a box rather than a cloud. */
+.rw-app .sw-chip[data-sw="ready"] { color: var(--ink-2); }
+.rw-app .sw-chip[data-sw="update"] { color: var(--care-text); border-color: color-mix(in oklab, var(--care) 40%, transparent); }
 .rw-app .sw-chip[data-sw="disabled"] { color: var(--ink-4); }
 /* ── offline legend ── */
 .rw-app .sw-legend { margin-block-start: var(--sp-l); padding-block-start: var(--sp-m); border-block-start: 1px solid var(--seam); }
