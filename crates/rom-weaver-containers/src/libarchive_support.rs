@@ -1012,6 +1012,16 @@ fn wasm_extract_transaction_owner_id(now: SystemTime) -> String {
 
 #[cfg(target_family = "wasm")]
 fn extract_transaction_owner_id() -> String {
+    if let Ok(value) = std::env::var("ROM_WEAVER_OPFS_RUN_ID")
+        && !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return value;
+    }
+
     // WASI preview1 does not implement std::process::id(). A time-based module nonce prevents a
     // fresh worker from exhausting its create-new collision loop on staging directories left by a
     // killed predecessor. Unknown directories are never removed because another tab may own them.

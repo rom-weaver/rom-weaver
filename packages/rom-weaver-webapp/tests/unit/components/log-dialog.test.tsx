@@ -1,11 +1,24 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
+import { listBrowserOpfs } from "../../../src/storage/browser/browser-opfs-cleanup.ts";
+import { getActiveBrowserVirtualFiles } from "../../../src/workers/protocol/browser-virtual-files.ts";
 import { LogDialog } from "../../../src/webapp/components/log-dialog.tsx";
 
+vi.mock("../../../src/storage/browser/browser-opfs-cleanup.ts", () => ({
+  listBrowserOpfs: vi.fn(),
+}));
+
+vi.mock("../../../src/workers/protocol/browser-virtual-files.ts", () => ({
+  getActiveBrowserVirtualFiles: vi.fn(() => []),
+}));
+
 // The suite runs without vitest globals, so RTL cannot auto-clean between tests.
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.mocked(getActiveBrowserVirtualFiles).mockReturnValue([]);
+});
 
 describe("LogDialog", () => {
   it("wears the weft sub-rail as its header, opening on the tab it was asked for", () => {
@@ -95,5 +108,64 @@ describe("LogDialog", () => {
     select.value = "trace";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     expect(onLevelChange).toHaveBeenCalledWith("trace");
+  });
+
+  it("shows bottom-most OPFS entries with their full parent paths", async () => {
+    vi.mocked(listBrowserOpfs).mockResolvedValue([
+      { kind: "directory", path: "/operations" },
+      { kind: "directory", path: "/operations/run" },
+      { kind: "directory", path: "/operations/run/nested" },
+      { kind: "file", path: "/operations/run/nested/input.iso", size: 123 },
+      { kind: "directory", path: "/rom-weaver-out" },
+      { kind: "directory", path: "/rom-weaver-out/run" },
+    ]);
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog initialTab="storage" onClose={() => undefined} onLevelChange={() => undefined} open />
+      </RomWeaverSettingsProvider>,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".opfs-row")).toHaveLength(2));
+    expect(container.querySelector(".opfs-summary")?.textContent).toBe("2 entries");
+    const rows = Array.from(container.querySelectorAll(".opfs-row"), (row) => row.textContent);
+    expect(rows).toEqual([
+      expect.stringContaining("/operations/run/nested/input.iso"),
+      expect.stringContaining("/rom-weaver-out/run"),
+    ]);
+    expect(rows.join("\n")).toContain("/operations/run/nested/");
+    expect(rows.join("\n")).not.toContain("directory /operations");
+  });
+
+  it("hides empty internal OPFS containers", async () => {
+    vi.mocked(listBrowserOpfs).mockResolvedValue([
+      { kind: "directory", path: "/operations" },
+      { kind: "directory", path: "/rom-weaver-out" },
+      { kind: "directory", path: "/user-files" },
+    ]);
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog initialTab="storage" onClose={() => undefined} onLevelChange={() => undefined} open />
+      </RomWeaverSettingsProvider>,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".opfs-row")).toHaveLength(1));
+    expect(container.querySelector(".opfs-row")?.textContent).toContain("/user-files");
+  });
+
+  it("shows active virtual input files with their size", async () => {
+    vi.mocked(listBrowserOpfs).mockResolvedValue([]);
+    vi.mocked(getActiveBrowserVirtualFiles).mockReturnValue([
+      { path: "/work/input/game.iso", source: new Uint8Array(123) },
+    ]);
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog initialTab="storage" onClose={() => undefined} onLevelChange={() => undefined} open />
+      </RomWeaverSettingsProvider>,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".opfs-row")).toHaveLength(1));
+    expect(container.querySelector(".opfs-row")?.textContent).toEqual(expect.stringContaining("virtual"));
+    expect(container.querySelector(".opfs-row")?.textContent).toEqual(expect.stringContaining("123 B"));
+    expect(container.querySelector(".opfs-row")?.textContent).toEqual(expect.stringContaining("/work/input/game.iso"));
   });
 });
