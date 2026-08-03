@@ -215,6 +215,8 @@ function WebappRoot({
   // discard-confirmation flow first; the dialog itself only closes once that
   // flow actually clears `settingsDialogOpen`.
   const settingsCloseArmedRef = useRef(false);
+  const pendingViewRef = useRef<WebappView | null>(null);
+  const [changelogOpen, setChangelogOpen] = useState(false);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
   // silently discard the user's work. Each form mounts on first visit and then
@@ -529,7 +531,20 @@ function WebappRoot({
                 if (href) window.location.assign(`/${href}`);
                 return;
               }
-              selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]));
+              const view = id as WebappRootProps["state"]["currentView"];
+              if (view === "docs") {
+                // Keep the current panel visible until the lazy Docs route is ready;
+                // switching first leaves its navigation bar absent for one frame.
+                pendingViewRef.current = view;
+                void preloadWorkflowRoute(view).then(() => {
+                  if (pendingViewRef.current !== view) return;
+                  pendingViewRef.current = null;
+                  selectViewWithTransition(() => actions.onSelectView(view));
+                });
+                return;
+              }
+              pendingViewRef.current = null;
+              selectViewWithTransition(() => actions.onSelectView(view));
             }}
             settingsOpen={logOpen && logTab === "settings"}
             tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
