@@ -743,7 +743,9 @@ const BuildTag = ({
         >
           {`PR-#${prNumber}`}
           <span className="tag-extra">
-            {" / "}
+            <span aria-hidden="true" className="tag-separator">
+              {" / "}
+            </span>
             <span className="tag-version">{versionText}</span>
           </span>
         </a>
@@ -767,7 +769,9 @@ const BuildTag = ({
           type="button"
         >
           {prefix ? <span className="tag-channel">{prefix}</span> : <b className="tag-letter">{letter}</b>}
-          {" / "}
+          <span aria-hidden="true" className="tag-separator">
+            {" / "}
+          </span>
           <span className="tag-version">{versionText}</span>
         </button>
       </span>
@@ -960,7 +964,11 @@ const Masthead = ({
                     onPointerEnter={onPreloadSettings}
                     type="button"
                   >
-                    <span className="masthead-threads-count">{threads}</span> <span aria-hidden="true">Threads</span>
+                    <span className="masthead-threads-count">{threads}</span>
+                    <span aria-hidden="true" className="masthead-threads-space">
+                      {" "}
+                    </span>
+                    <span aria-hidden="true">Threads</span>
                   </button>
                 </span>
               ) : null}

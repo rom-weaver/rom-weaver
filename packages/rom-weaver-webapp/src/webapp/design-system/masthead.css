@@ -65,7 +65,7 @@
    in the masthead than a production build wearing none. Nothing is painted on
    that box, so the overflow never shows at the masthead's edge. */
 .rw-app .brand-sub-row {
-  display: flex; column-gap: var(--sp-xs); align-items: center; block-size: 16px;
+  display: flex; column-gap: 2px; align-items: center; block-size: 16px;
   font-size: clamp(.64rem, .58rem + .25vw, .76rem); font-variant-numeric: tabular-nums; line-height: 1.2;
   color: var(--ink-4); white-space: nowrap;
 }
@@ -107,6 +107,7 @@
   .rw-app .build-tag .channel-badge:hover { background: transparent; }
 }
 .rw-app .build-tag .channel-badge:active { background: transparent; }
+.rw-app .build-tag .tag-separator { display: inline-block; margin-inline: .22em; }
 .rw-app .build-tag .tag-version { font-weight: 600; text-transform: none; letter-spacing: 0; }
 .rw-app .build-tag .tag-channel { font-weight: 800; text-transform: none; letter-spacing: 0; }
 .rw-app .build-tag .tag-letter { font-weight: 800; }
@@ -154,13 +155,14 @@
   .rw-app .sub-chip:hover { text-decoration-color: currentColor; }
 }
 .rw-app .sub-chip:active { text-decoration-color: currentColor; }
+.rw-app .masthead-threads-space { flex: none; inline-size: .28em; font-size: 0; }
 /* The worker state lands after hydration and recolors the status button. Its
    color transition is disabled in the action-group rule below because Lighthouse
    flags that load-time main-thread animation. */
 @media (min-width: 1160px) {
   .rw-app .brand-word { font-size: clamp(1.18rem, 1.08rem + .5vw, 1.75rem); }
   .rw-app .brand-sub-row {
-    block-size: 20px; column-gap: var(--sp-s); margin-block-start: 2px;
+    block-size: 20px; column-gap: 2px; margin-block-start: 2px;
     font-size: clamp(.68rem, .62rem + .15vw, .8rem); color: var(--ink-3);
   }
   .rw-app .brand-sub-row .build-tag .channel-badge { font-size: inherit; }
