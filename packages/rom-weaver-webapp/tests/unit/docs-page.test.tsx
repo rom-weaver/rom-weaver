@@ -386,7 +386,12 @@ Fixture description.
 
     const index = document.querySelector(".docs-index");
     expect(screen.getAllByRole("combobox", { name: "Search documentation" })).toHaveLength(2);
-    expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain("Your first patch");
+    expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain(
+      "Apply your first patch (browser)",
+    );
+    expect(index?.querySelector('a[href="/docs/cli-get-started"]')?.textContent).toContain(
+      "Apply your first patch (CLI)",
+    );
     expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("CLI reference");
     expect(index?.querySelector('a[href="/docs/install"]')?.textContent).toContain("Install the CLI");
     expect(index?.querySelector('a[href="/docs/self-hosting"]')?.textContent).toContain("Self-hosting");
