@@ -775,6 +775,7 @@ html:has(.docs-workbench) {
   align-items: stretch;
   justify-content: space-between;
   padding-block-start: var(--sp-l);
+  padding-block-end: var(--sp-l);
   padding-inline: var(--sp-l);
   margin-block-start: var(--sp-xl);
   border-block-start: 1px solid var(--seam-soft);
@@ -782,7 +783,18 @@ html:has(.docs-workbench) {
 /* The step and the way back up share one woven surface. Directional edge marks
    keep the pair readable as navigation instead of two unrelated cards. */
 .rw-app .docs-to-top {
-  display: none;
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  padding-inline: var(--sp-l);
+  font-size: 0.7rem;
+  font-weight: 750;
+  font-stretch: 88%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: color-mix(in oklab, var(--thread) 4%, transparent);
+  border-style: dashed;
+  border-radius: var(--r-l);
 }
 .rw-app .docs-step,
 .rw-app .docs-step-gap {
@@ -1046,27 +1058,15 @@ html:has(.docs-workbench) {
   }
 
   /* --- the way back up ---
-     Phone-only, and on its own row under the two steps: three controls abreast
-     leaves each step too narrow to read the page it names. The box it wears is
-     shared with the steps above; only its own shape is here. */
+     On its own row under the two steps: three controls abreast leaves each step
+     too narrow to read the page it names. */
   .rw-app .docs-onward {
     flex-wrap: wrap;
   }
   .rw-app .docs-to-top {
-    display: inline-flex;
     flex: 1 0 100%;
-    justify-content: center;
     order: 1;
     min-height: 44px;
-    padding-inline: var(--sp-l);
-    font-size: 0.7rem;
-    font-weight: 750;
-    font-stretch: 88%;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    background: color-mix(in oklab, var(--thread) 4%, transparent);
-    border-style: dashed;
-    border-radius: var(--r-l);
   }
 }
 
