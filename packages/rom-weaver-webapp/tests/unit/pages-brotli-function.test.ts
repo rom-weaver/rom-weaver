@@ -38,6 +38,13 @@ const makeContext = ({
           },
         },
       },
+      fetch: (target: URL | RequestInfo, init?: RequestInit) => {
+        const targetUrl = target instanceof Request ? target.url : String(target);
+        fetchLog.push({ method: init?.method ?? "GET", url: targetUrl });
+        if (target instanceof Request) forwardedRequests.push(targetUrl);
+        const response = typeof sidecarResponse === "function" ? sidecarResponse(targetUrl) : sidecarResponse;
+        return Promise.resolve(response ?? spaFallback());
+      },
       next: () => Promise.resolve(NEXT_SENTINEL),
       request: new Request(url, { headers }),
     },
