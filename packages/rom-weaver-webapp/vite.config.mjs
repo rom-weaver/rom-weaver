@@ -488,7 +488,10 @@ const writeCloudflareHeadersAsset = (channel) => {
         outputPath,
         `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
-      fs.appendFileSync(outputPath, "\n/*.html.br\n  Content-Encoding: br\n\n/*.q11.br\n  Content-Encoding: br\n");
+      fs.appendFileSync(
+        outputPath,
+        "\n/*.html.br\n  Content-Encoding: br\n\n/assets/html/*.br\n  Content-Encoding: br\n",
+      );
     },
     configResolved(config) {
       outDir = config.build.outDir;
@@ -580,7 +583,10 @@ const writeBrotliSidecars = () => {
           fs.rmSync(sidecarPath);
           continue;
         }
-        fs.copyFileSync(sidecarPath, `${htmlPath.slice(0, -".html".length)}.q11.br`);
+        const relativeHtmlPath = path.relative(distDir, htmlPath).replaceAll(path.sep, "/");
+        const internalSidecarPath = path.join(assetsDir, "html", `${relativeHtmlPath.slice(0, -".html".length)}.br`);
+        fs.mkdirSync(path.dirname(internalSidecarPath), { recursive: true });
+        fs.copyFileSync(sidecarPath, internalSidecarPath);
         const assetUrl = `/${path.relative(distDir, htmlPath).replaceAll(path.sep, "/")}`;
         assertSidecarTypeIsKnown(assetUrl);
       }

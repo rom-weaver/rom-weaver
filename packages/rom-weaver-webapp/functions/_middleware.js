@@ -56,7 +56,7 @@ export const onRequest = async ({ request, env, next }) => {
   const sidecarPaths = documentSidecarPaths(new URL(request.url).pathname);
   for (const sidecarPath of sidecarPaths) {
     // Pages' asset binding resolves direct HTML filenames through the pretty-path
-    // fallback, so documentSidecarPaths tries the non-HTML .q11.br alias first.
+    // fallback, so documentSidecarPaths points at a copy in the asset namespace.
     // Request Brotli explicitly so Cloudflare passes the encoded bytes through.
     const sidecar = await env.ASSETS.fetch(new URL(sidecarPath, request.url), {
       headers: { "Accept-Encoding": "br" },

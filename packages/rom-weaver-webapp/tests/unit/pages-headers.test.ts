@@ -13,7 +13,7 @@ const headersFile = `/*
 /*.html.br
   Content-Encoding: br
 
-/*.q11.br
+/assets/html/*.br
   Content-Encoding: br
 
 /cache-service-worker.js
@@ -43,7 +43,7 @@ describe("pages _headers matching", () => {
   it("marks HTML sidecars as already Brotli encoded", () => {
     const matched = matchPagesHeaders(rules, "/apply/index.html.br");
     expect(matched["Content-Encoding"]).toBe("br");
-    expect(matchPagesHeaders(rules, "/apply/index.q11.br")["Content-Encoding"]).toBe("br");
+    expect(matchPagesHeaders(rules, "/assets/html/apply/index.br")["Content-Encoding"]).toBe("br");
   });
 
   it("lets a later exact rule win over an earlier wildcard", () => {

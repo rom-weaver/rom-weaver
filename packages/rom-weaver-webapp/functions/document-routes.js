@@ -14,8 +14,7 @@ export const DOCUMENT_ROUTE_INCLUDES = [
 export const DOCUMENT_ROUTE_EXCLUDES = ["/docs/screenshots/*"];
 
 const htmlSidecarPaths = (htmlPath) => {
-  const aliasPath = `${htmlPath.slice(0, -".html".length)}.q11.br`;
-  return [aliasPath, `${htmlPath}.br`];
+  return [`/assets/html${htmlPath.slice(0, -".html".length)}.br`];
 };
 
 export const documentSidecarPaths = (pathname) => {
