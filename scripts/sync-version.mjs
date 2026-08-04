@@ -32,7 +32,7 @@ async function fileExists(filePath) {
   try {
     await access(filePath);
     return true;
-  } catch (_error) {
+  } catch {
     return false;
   }
 }
@@ -180,7 +180,7 @@ function updatePackageLock(packageDir) {
     });
     const lockfileName = packageDir === "." ? "package-lock.json" : `${packageDir}/package-lock.json`;
     console.log(`Updated ${lockfileName}`);
-  } catch (_error) {
+  } catch {
     const lockfileName = packageDir === "." ? "package-lock.json" : `${packageDir}/package-lock.json`;
     console.warn(`Warning: Could not update ${lockfileName} (npm may not be available)`);
   }
@@ -246,7 +246,7 @@ function stageAllChanges() {
       cwd: rootDir,
       stdio: "inherit",
     });
-  } catch (_error) {
+  } catch {
     console.warn("Warning: Could not stage changes (git may not be available)");
   }
 }
@@ -261,7 +261,7 @@ async function main() {
         cwd: rootDir,
         stdio: "inherit",
       });
-    } catch (_error) {
+    } catch {
       throw new Error(`npm version ${bumpType} failed`);
     }
   }
