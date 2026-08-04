@@ -304,14 +304,7 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
     runThemeWipe(toggleTheme, buttonRef.current);
   };
   return (
-    <button
-      aria-label={label}
-      className="tool mobile-utility-theme"
-      onClick={handleClick}
-      ref={buttonRef}
-      title={label}
-      type="button"
-    >
+    <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">
       <Moon aria-hidden="true" className="ico-moon" />
       <SunMedium aria-hidden="true" className="ico-sun" />
       <span aria-hidden="true" className="tool-text">
@@ -1087,7 +1080,9 @@ const Masthead = ({
             <RuntimeGlyph state={runtimeState} />
             <span className="sr-only sub-status-text">{runtimeLabel}</span>
           </button>
-          <ThemeToggle localizer={localizer} />
+          <span className="mobile-utility-theme">
+            <ThemeToggle localizer={localizer} />
+          </span>
           {/* stays open on pick: arrow keys walk the radio group, and comparing
               two lots should not cost a reopen */}
           <AccentPicker
