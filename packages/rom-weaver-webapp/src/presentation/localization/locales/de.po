@@ -615,8 +615,18 @@ msgstr "Speichern"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.tabsLabel"
+msgstr "Bereiche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Einstellungen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.dialogLabel"
+msgstr "Einstellungen und Status"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
