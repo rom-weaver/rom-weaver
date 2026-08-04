@@ -38,7 +38,13 @@ const makeContext = ({
           },
         },
       },
-      next: () => Promise.resolve(NEXT_SENTINEL),
+      next: (input?: RequestInfo | URL, init?: RequestInit) => {
+        if (input === undefined) return Promise.resolve(NEXT_SENTINEL);
+        const targetUrl = input instanceof Request ? input.url : String(input);
+        fetchLog.push({ method: init?.method ?? "GET", url: targetUrl });
+        const response = typeof sidecarResponse === "function" ? sidecarResponse(targetUrl) : sidecarResponse;
+        return Promise.resolve(response ?? spaFallback());
+      },
       request: new Request(url, { headers }),
     },
     fetchLog,
@@ -124,7 +130,7 @@ describe("pages brotli sidecar function", () => {
       sidecarResponse: brSidecar(),
     });
     const response = await onRequest(context);
-    expect(fetchLog).toEqual([{ method: "GET", url: "https://rom-weaver.com/assets/html/docs/faq/index.br" }]);
+    expect(fetchLog).toEqual([{ method: "GET", url: "/assets/html/docs/faq/index.br" }]);
     expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(response.headers.get("Content-Encoding")).toBe("br");
     expect(response.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate, no-transform");
@@ -161,8 +167,8 @@ describe("pages brotli sidecar function", () => {
     });
     const response = await onRequest(context);
     expect(fetchLog).toEqual([
-      { method: "GET", url: "https://rom-weaver.com/assets/html/trim/index.br" },
-      { method: "GET", url: "https://rom-weaver.com/assets/html/trim.br" },
+      { method: "GET", url: "/assets/html/trim/index.br" },
+      { method: "GET", url: "/assets/html/trim.br" },
     ]);
     expect(response.headers.get("Content-Encoding")).toBe("br");
   });
@@ -177,7 +183,7 @@ describe("pages brotli sidecar function", () => {
     expect(response.status).toBe(304);
     expect(response.headers.get("ETag")).toBe('"document"');
     expect(response.headers.get("Content-Encoding")).toBe("br");
-    expect(fetchLog).toEqual([{ method: "GET", url: "https://rom-weaver.com/assets/html/apply/index.br" }]);
+    expect(fetchLog).toEqual([{ method: "GET", url: "/assets/html/apply/index.br" }]);
     expect(forwardedRequests).toEqual([]);
   });
 
