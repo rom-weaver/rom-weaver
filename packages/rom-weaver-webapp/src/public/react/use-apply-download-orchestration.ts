@@ -115,6 +115,7 @@ interface ApplyRunLifecycle {
 interface ApplyRunRefs {
   activeAbortControllerRef: MutableRefObject<AbortController | null>;
   applyExecutionTimingRef: MutableRefObject<ApplyExecutionTimingTracker>;
+  patchChangePendingRef: MutableRefObject<boolean>;
   pendingDownloadFileNameRef: MutableRefObject<string | null>;
   pendingDownloadResultRef: MutableRefObject<ApplyWorkflowResult | null>;
 }
@@ -360,8 +361,13 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           applyExecutionTimingRef,
           pendingDownloadFileNameRef,
           pendingDownloadResultRef,
+          patchChangePendingRef,
         } = refs;
         const pendingDownloadResult = pendingDownloadResultRef.current;
+        if (patchChangePendingRef.current && !busy) {
+          setApplyQueued(true);
+          return;
+        }
         if (
           await handleApplyPrimaryGate({
             activeSettings,

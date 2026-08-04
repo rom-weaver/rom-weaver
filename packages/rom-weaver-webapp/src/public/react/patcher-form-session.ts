@@ -152,11 +152,13 @@ const useLocalApplyPatchFormSession = ({
     romInputs,
   } = localState;
   const [applyQueued, setApplyQueued] = useState(false);
+  const [patchChangePending, setPatchChangePending] = useState(false);
   const { disposeActiveCleanup: disposeActiveOutputCleanup, rememberActiveCleanup: rememberActiveOutputCleanup } =
     useDisposableCleanup();
   const { abortActiveOperation, activeAbortControllerRef, rememberAbortController } = useActiveAbortController();
   const pendingDownloadFileNameRef = useRef<string | null>(null);
   const pendingDownloadResultRef = useRef<ApplyWorkflowResult | null>(null);
+  const patchChangePendingRef = useRef(false);
   const previousPatchEnablementRef = useRef<ReadonlySet<string> | null>(null);
   const applyExecutionTimingRef = useRef<ApplyExecutionTimingTracker>({
     applyStartedAt: null,
@@ -601,7 +603,13 @@ const useLocalApplyPatchFormSession = ({
   const updatePatches = useCallback(
     (nextPatches: BinarySource[]) => {
       setChecksumOverrideChecked(false);
+      patchChangePendingRef.current = true;
+      setPatchChangePending(true);
+      const previousPatchIds = new Set(getBinarySourceListStableIds(activePatches));
+      const hasNewPatch = getBinarySourceListStableIds(nextPatches).some((id) => !previousPatchIds.has(id));
+      if (stagePatches && hasNewPatch) setPatchStaging(true);
       emitSessionTrace("patch list updated; retiring output", {
+        hasNewPatch,
         nextPatchCount: nextPatches.length,
         previousPatchCount: activePatches.length,
         sources: getTraceSourceSummaries(nextPatches, "Patch"),
@@ -620,7 +628,7 @@ const useLocalApplyPatchFormSession = ({
       onPatchesChange?.(nextPatches);
     },
     [
-      activePatches.length,
+      activePatches,
       clearDismissibleErrors,
       emitSessionTrace,
       getPatchKey,
@@ -628,6 +636,8 @@ const useLocalApplyPatchFormSession = ({
       onPatchesChange,
       patches,
       setPatchInfoByKey,
+      setPatchStaging,
+      stagePatches,
     ],
   );
   const getStableInputInfo = useCallback(
@@ -865,6 +875,8 @@ const useLocalApplyPatchFormSession = ({
     previousPatchEnablementRef.current = current;
     if (!previous || sameStringSet(previous, current) || !activePatches.length) return;
 
+    patchChangePendingRef.current = true;
+    setPatchChangePending(true);
     invalidatePatchDependentOutput("enablement changed", {
       disabledPatchCount: current.size,
     });
@@ -907,6 +919,8 @@ const useLocalApplyPatchFormSession = ({
     const previous = previousPatchOrderRef.current;
     previousPatchOrderRef.current = order;
     if (!previous || previous === order) return;
+    patchChangePendingRef.current = true;
+    setPatchChangePending(true);
     invalidatePatchDependentOutput("list changed", {
       currentPatchCount: activePatches.length,
       previousPatchCount: previous.split("|").length,
@@ -936,6 +950,12 @@ const useLocalApplyPatchFormSession = ({
     validatePatches,
     validatePatchesDeferred,
   ]);
+
+  useEffect(() => {
+    if (!patchChangePending || busy || hasPendingDownload || patchStaging) return;
+    patchChangePendingRef.current = false;
+    setPatchChangePending(false);
+  }, [busy, hasPendingDownload, patchChangePending, patchStaging]);
 
   // One short debounce coalesces ROM and patch changes into a concurrent staging
   // pass. Read the latest snapshot at fire time and enqueue input first so patch
@@ -1180,6 +1200,7 @@ const useLocalApplyPatchFormSession = ({
       applyExecutionTimingRef,
       pendingDownloadFileNameRef,
       pendingDownloadResultRef,
+      patchChangePendingRef,
     },
     request: {
       activePatches,
