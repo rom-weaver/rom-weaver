@@ -23,6 +23,18 @@ const RESOLVED_PREFIX = "\0";
 const VIRTUAL_ID_FILTER = /^virtual:rom-weaver-docs(?:$|-search$|-page\/)/;
 const RESOLVED_ID_FILTER = new RegExp(`^${RESOLVED_PREFIX}virtual:rom-weaver-docs(?:$|-search$|-page/)`);
 
+// A slug becomes both an object key and an `import()` specifier in the module
+// source generated below. `JSON.stringify` produces a valid string literal but
+// is not a code-injection barrier, so a slug is held to the characters a
+// published route can actually use before any of it reaches generated code.
+const SAFE_SLUG = /^[a-z0-9]+(?:[-/][a-z0-9]+)*$/;
+
+/** @param {string} slug */
+const assertSafeSlug = (slug) => {
+  if (!SAFE_SLUG.test(slug)) throw new Error(`docs virtual module: docs slug '${slug}' is not a safe route slug`);
+  return slug;
+};
+
 /** @param {string} id */
 const isDocsVirtualId = (id) => id === VIRTUAL_ID || id === SEARCH_VIRTUAL_ID || id.startsWith(PAGE_VIRTUAL_PREFIX);
 
@@ -47,10 +59,8 @@ const invalidateDocsModules = (server) => {
 const createMetadataModuleSource = (routes) => {
   const metadata = routes.map(({ html: _html, ...route }) => route);
   const loaders = routes
-    .map(
-      (route) =>
-        `  ${JSON.stringify(route.slug)}: () => import(${JSON.stringify(`${PAGE_VIRTUAL_PREFIX}${route.slug}`)}),`,
-    )
+    .map((route) => assertSafeSlug(route.slug))
+    .map((slug) => `  ${JSON.stringify(slug)}: () => import(${JSON.stringify(`${PAGE_VIRTUAL_PREFIX}${slug}`)}),`)
     .join("\n");
   return [
     `export const DOC_ROUTES = ${JSON.stringify(metadata)};`,
