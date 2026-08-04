@@ -91,6 +91,7 @@ runs:
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
         PROJECT: ${{ inputs.project }}
         BRANCH: ${{ inputs.branch }}
+        PAGES_COMMIT_HASH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         PAGES_REUSE: "true"
       run: node scripts/ci/deploy-pages.mjs
 
