@@ -51,6 +51,7 @@ export const onRequest = async ({ request, env, next }) => {
   if (!acceptsBrotli(request.headers.get("Accept-Encoding"))) return next();
 
   const sidecarPaths = documentSidecarPaths(new URL(request.url).pathname);
+  const debug = new URL(request.url).searchParams.get("rw-debug") === "1";
   for (const sidecarPath of sidecarPaths) {
     // Pages' asset binding resolves direct HTML filenames through the pretty-path
     // fallback. The build stores Brotli bytes as index.html in a private asset
@@ -58,6 +59,19 @@ export const onRequest = async ({ request, env, next }) => {
     const sidecar = await env.ASSETS.fetch(new URL(sidecarPath, request.url), {
       headers: { "Accept-Encoding": "br" },
     });
+    if (debug) {
+      return new Response(
+        JSON.stringify({
+          sidecarPath,
+          status: sidecar.status,
+          ok: sidecar.ok,
+          contentType: sidecar.headers.get("Content-Type"),
+          contentEncoding: sidecar.headers.get("Content-Encoding"),
+          contentLength: sidecar.headers.get("Content-Length"),
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    }
     if (sidecar.status === 304) {
       const headers = documentHeaders(sidecar);
       headers.delete("Content-Length");
