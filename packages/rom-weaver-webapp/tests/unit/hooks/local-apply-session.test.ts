@@ -255,6 +255,56 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
     expect(downloadOutput).toHaveBeenCalledTimes(2);
   });
 
+  it("queues apply until a patch enablement validation pass settles", async () => {
+    const patches = [source("a.ips"), source("b.ips")];
+    const initialDisabledPatchIds = new Set<string>();
+    let resolveValidation = () => undefined;
+    let validationCall = 0;
+    const validatePatches = vi.fn(async () => {
+      validationCall += 1;
+      if (validationCall === 1) return [];
+      await new Promise<void>((resolve) => {
+        resolveValidation = resolve;
+      });
+      return [];
+    });
+    const stagePatches = vi.fn(async (snapshot) =>
+      snapshot.patches.map((patch, index) => ({
+        fileName: patch.name || `patch-${index + 1}.ips`,
+        id: `patch-${index + 1}`,
+        order: index,
+        size: 1024,
+      })),
+    );
+    const { result, applyPatches, options, rerender } = renderSession({
+      defaultSettings: { output: { outputName: "same-bundle-output" } },
+      disabledPatchIds: initialDisabledPatchIds,
+      patches,
+      stagePatches,
+      validatePatches,
+    } as Partial<LocalApplyPatchFormSessionOptions>);
+
+    await waitFor(() => expect(validatePatches).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    expect(applyPatches).toHaveBeenCalledTimes(1);
+
+    const disabledPatchIds = new Set([getBinarySourceListStableIds(patches)[1]]);
+    await act(async () => {
+      rerender({ ...options, disabledPatchIds, stagePatches, validatePatches });
+    });
+    await waitFor(() => expect(validatePatches).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    expect(applyPatches).toHaveBeenCalledTimes(1);
+
+    await act(async () => resolveValidation());
+    await waitFor(() => expect(applyPatches).toHaveBeenCalledTimes(2));
+  });
+
   it("rechecks and retires output for patch reorder, add, remove, and enablement changes", async () => {
     const patches = [source("a.ips"), source("b.ips")];
     const addedPatch = source("c.ips");

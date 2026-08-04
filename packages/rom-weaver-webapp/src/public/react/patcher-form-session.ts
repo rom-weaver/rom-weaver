@@ -152,6 +152,7 @@ const useLocalApplyPatchFormSession = ({
     romInputs,
   } = localState;
   const [applyQueued, setApplyQueued] = useState(false);
+  const [patchValidationPending, setPatchValidationPending] = useState(false);
   const [patchChangePending, setPatchChangePending] = useState(false);
   const { disposeActiveCleanup: disposeActiveOutputCleanup, rememberActiveCleanup: rememberActiveOutputCleanup } =
     useDisposableCleanup();
@@ -376,9 +377,12 @@ const useLocalApplyPatchFormSession = ({
   const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
   const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");
   const effectiveOutputNoticeMessage = outputRuntimeNoticeMessage || multiInputOutputError;
+  // Deferred patch validation has no staging progress, but its verdict still controls whether the
+  // next run is safe. Keep a queued Apply behind that silent pass.
   const applyPreparationPending =
     inputStaging ||
     patchStaging ||
+    patchValidationPending ||
     !!patchProgress ||
     Object.keys(patchProgressByKey).length > 0 ||
     romInputs.some((entry) => entry.loading || !!entry.progress);
@@ -823,6 +827,7 @@ const useLocalApplyPatchFormSession = ({
       setPatchInfoByKey,
       setPatchProgress,
       setPatchProgressByKey,
+      setPatchValidationPending,
       setPatchStaging,
       setRomInputs,
     },
@@ -952,10 +957,10 @@ const useLocalApplyPatchFormSession = ({
   ]);
 
   useEffect(() => {
-    if (!patchChangePending || busy || hasPendingDownload || patchStaging) return;
+    if (!patchChangePending || busy || hasPendingDownload || patchStaging || patchValidationPending) return;
     patchChangePendingRef.current = false;
     setPatchChangePending(false);
-  }, [busy, hasPendingDownload, patchChangePending, patchStaging]);
+  }, [busy, hasPendingDownload, patchChangePending, patchStaging, patchValidationPending]);
 
   // One short debounce coalesces ROM and patch changes into a concurrent staging
   // pass. Read the latest snapshot at fire time and enqueue input first so patch

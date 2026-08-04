@@ -555,11 +555,23 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       snapshot: ApplyWorkflowSessionInput,
       baseSettings: ReturnType<typeof createBaseApplyWorkflowSettings>,
       baseSettingsChanged: boolean,
-      options: { baseSettingsApplied?: boolean } = {},
+      options: { baseSettingsApplied?: boolean; force?: boolean } = {},
     ) => {
       const outputOverridesKey = createWorkflowOutputOverridesKey(snapshot);
       const outputOverridesChanged = workflowOutputOverridesKeyRef.current !== outputOverridesKey;
-      if (!(baseSettingsChanged || outputOverridesChanged)) return;
+      if (!(baseSettingsChanged || outputOverridesChanged || options.force)) {
+        emitApplyWorkflowTrace(snapshot.options, "workflow output overrides unchanged", {
+          compression: snapshot.options.output?.compression || "auto",
+          outputName: snapshot.options.output?.outputName || "",
+        });
+        return;
+      }
+      emitApplyWorkflowTrace(snapshot.options, "workflow output overrides applying", {
+        baseSettingsChanged,
+        force: options.force === true,
+        outputOverridesChanged,
+        outputName: snapshot.options.output?.outputName || "",
+      });
       if (!options.baseSettingsApplied) await workflow.setSettings(baseSettings);
       await applyOutputOverrides(workflow, snapshot);
       workflowOutputOverridesKeyRef.current = outputOverridesKey;
@@ -767,6 +779,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
         await syncWorkflowOutputOverrides(workflow, snapshot, baseSettings, executionSettingsChanged, {
           baseSettingsApplied: executionSettingsChanged,
+          force: patchesChanged,
         });
         workflowSyncRef.current = {
           executionSettingsKey,
@@ -799,6 +812,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow finish", {
           hasChecksums: !!input?.checksums,
           inputStatus: input?.status,
+          outputName: resolvedOutput.outputName,
+          ready: workflow.getSnapshot().ready,
           patchCount: patches.length,
         });
 
