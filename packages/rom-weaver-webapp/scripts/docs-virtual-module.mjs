@@ -23,12 +23,21 @@ const RESOLVED_PREFIX = "\0";
 const VIRTUAL_ID_FILTER = /^virtual:rom-weaver-docs(?:$|-search$|-page\/)/;
 const RESOLVED_ID_FILTER = new RegExp(`^${RESOLVED_PREFIX}virtual:rom-weaver-docs(?:$|-search$|-page/)`);
 
-// A slug becomes both an object key and an `import()` specifier in the module
-// source generated below. `JSON.stringify` produces a valid string literal but
-// is not a code-injection barrier, so a slug is held to the characters a
-// published route can actually use before any of it reaches generated code.
-// The test stays inline at the point of use - a check behind a helper call is
-// not a barrier CodeQL can follow (js/bad-code-sanitization).
+// Route data is interpolated into the module source generated below.
+// `JSON.stringify` alone is not a code-injection barrier: it leaves `<` and the
+// two Unicode line separators intact, so its output can still close a `<script>`
+// tag or break a string literal. Every value written into generated code goes
+// through this instead (js/bad-code-sanitization). The other escapes the rule
+// names - \b \f \n \r \t \0 - `JSON.stringify` already handles.
+const UNSAFE_IN_CODE = { "<": "\\u003C", ">": "\\u003E", "\u2028": "\\u2028", "\u2029": "\\u2029" };
+
+/** @param {unknown} value */
+const serializeIntoCode = (value) =>
+  JSON.stringify(value).replace(/[<>\u2028\u2029]/g, (character) => UNSAFE_IN_CODE[character]);
+
+// A slug is also the shape of a published URL, so anything outside that shape is
+// an authoring mistake rather than something to encode around. Failing the build
+// beats generating a route that can never resolve.
 const SAFE_SLUG = /^[a-z0-9]+(?:[-/][a-z0-9]+)*$/;
 
 /** @param {string} id */
@@ -57,11 +66,11 @@ const createMetadataModuleSource = (routes) => {
   const loaders = routes
     .map(({ slug }) => {
       if (!SAFE_SLUG.test(slug)) throw new Error(`docs virtual module: docs slug '${slug}' is not a safe route slug`);
-      return `  ${JSON.stringify(slug)}: () => import(${JSON.stringify(`${PAGE_VIRTUAL_PREFIX}${slug}`)}),`;
+      return `  ${serializeIntoCode(slug)}: () => import(${serializeIntoCode(`${PAGE_VIRTUAL_PREFIX}${slug}`)}),`;
     })
     .join("\n");
   return [
-    `export const DOC_ROUTES = ${JSON.stringify(metadata)};`,
+    `export const DOC_ROUTES = ${serializeIntoCode(metadata)};`,
     "export const DOC_PAGE_LOADERS = {",
     loaders,
     "};",
@@ -72,7 +81,7 @@ const createMetadataModuleSource = (routes) => {
 /** @param {readonly import("../src/webapp/docs-content.mjs").DocRoute[]} routes */
 const createSearchModuleSource = (routes) => {
   const entries = Object.fromEntries(createDocsSearchIndex(routes).map((route) => [route.slug, route.searchEntries]));
-  return `export const SEARCH_ENTRIES = ${JSON.stringify(entries)};\n`;
+  return `export const SEARCH_ENTRIES = ${serializeIntoCode(entries)};\n`;
 };
 
 /** Serves the rendered guides to the app as `virtual:rom-weaver-docs*` modules. */
@@ -115,7 +124,7 @@ const docsVirtualModule = (initialRoutes = null) => {
         const slug = virtualId.slice(PAGE_VIRTUAL_PREFIX.length);
         const route = getRoutes().find((entry) => entry.slug === slug);
         if (!route) throw new Error(`docs virtual module: no docs route for slug '${slug}'`);
-        return `export const html = ${JSON.stringify(route.html)};\n`;
+        return `export const html = ${serializeIntoCode(route.html)};\n`;
       },
     },
     name: "rom-weaver-docs-virtual-module",
