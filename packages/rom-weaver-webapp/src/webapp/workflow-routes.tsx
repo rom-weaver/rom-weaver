@@ -1,6 +1,5 @@
 import { type ComponentType, lazy } from "react";
 import { createLogger } from "../lib/logging.ts";
-import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
 import type { ToolsFormProps } from "./components/tools-form.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
@@ -25,8 +24,6 @@ type WorkflowRouteProps = {
   creator: CreatePatchFormProps;
   docs: {
     active: boolean;
-    onGuideIntent: (guide: GuidedSample) => void;
-    onStartGuide: (guide: GuidedSample) => boolean | void;
     slug: string;
   };
   patcher: ApplyPatchFormProps;

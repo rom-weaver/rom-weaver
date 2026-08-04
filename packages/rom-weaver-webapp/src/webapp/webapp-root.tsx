@@ -10,7 +10,7 @@ import { getDefaultBrowserThreadCount } from "../platform/shared/compression-opt
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
 import { ConfirmDialog } from "../public/react/components/ds/index.ts";
-import { type GuidedSample, notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
+import { notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
 import type { PageFileDrop } from "../public/react/public-types.ts";
 // Deliberately NOT the ../public/react/index.tsx barrel: that barrel re-exports
 // every workflow form, so a static import of it pulls all four route chunks
@@ -56,8 +56,6 @@ const WORKFLOW_TABS = [
   // exposes it from More when the beta-tools setting is enabled.
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
-
-const getGuideView = (guide: GuidedSample): WebappView => (guide === "create" ? "creator" : "patcher");
 
 // Keep the trace inspector out of the initial bundle, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
@@ -265,33 +263,6 @@ function WebappRoot({
   useLayoutEffect(() => {
     document.documentElement.dataset.betaToolsEnabled = state.settings.betaToolsEnabled ? "true" : "false";
   }, [state.settings.betaToolsEnabled]);
-  const preloadGuide = useCallback(
-    (guide: GuidedSample) => {
-      void preloadWorkflowRoute(getGuideView(guide));
-      void preloadBrowserRuntime({ threads });
-    },
-    [threads],
-  );
-  const startGuide = useCallback(
-    (guide: GuidedSample) => {
-      const targetHasFiles =
-        guide === "create"
-          ? state.creatorSession.originalFilePresent || state.creatorSession.modifiedFilePresent
-          : state.patcherSession.romFilePresent || state.patcherSession.patchCount > 0;
-      if (targetHasFiles) return false;
-      preloadGuide(guide);
-      selectViewWithTransition(() => actions.onStartGuide(guide));
-      return true;
-    },
-    [
-      actions,
-      preloadGuide,
-      state.creatorSession.modifiedFilePresent,
-      state.creatorSession.originalFilePresent,
-      state.patcherSession.patchCount,
-      state.patcherSession.romFilePresent,
-    ],
-  );
   useEffect(() => {
     if (notFound) return;
     let cancelled = false;
@@ -662,15 +633,7 @@ function WebappRoot({
                     pageDrop={activePageDrop}
                   />,
                 )}
-                {workflowPanel(
-                  "docs",
-                  <DocsPageRoute
-                    active={state.currentView === "docs"}
-                    onGuideIntent={preloadGuide}
-                    onStartGuide={startGuide}
-                    slug={docsSlug}
-                  />,
-                )}
+                {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute
