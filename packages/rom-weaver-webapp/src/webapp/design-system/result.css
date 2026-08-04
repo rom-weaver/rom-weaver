@@ -77,6 +77,6 @@
 :root[data-theme="light"] .tracelog .caller { color: #7a4fb0; }
 .rw-app .tracelog .lv { flex: none; width: 6ch; font-weight: 650; text-transform: uppercase; font-size: .92em; }
 .rw-app .tracelog .lv.trace { color: var(--ink-4); } .rw-app .tracelog .lv.debug { color: var(--ink-3); }
-.rw-app .tracelog .lv.info { color: var(--verified); } .rw-app .tracelog .lv.warn { color: var(--care); } .rw-app .tracelog .lv.error { color: var(--fault); }
+.rw-app .tracelog .lv.info { color: var(--verified); } .rw-app .tracelog .lv.warn { color: var(--care-text); } .rw-app .tracelog .lv.error { color: var(--fault); }
 .rw-app .tracelog .msg { color: var(--ink-2); }
 .rw-app .tracelog:empty::after { content: "-"; color: var(--ink-4); }
