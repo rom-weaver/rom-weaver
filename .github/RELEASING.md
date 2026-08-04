@@ -33,7 +33,6 @@ release.
 - [Cargo trusted publishing](#cargo-trusted-publishing)
 - [npm trusted publishing](#npm-trusted-publishing)
 - [Webapp hosting and the channel domains](#webapp-hosting-and-the-channel-domains)
-  - [One-time Cloudflare cache setup](#one-time-cloudflare-cache-setup)
 - [Normal release flow](#normal-release-flow)
   - [How a prerelease differs](#how-a-prerelease-differs)
 - [Retry a failed publication](#retry-a-failed-publication)
@@ -159,29 +158,8 @@ Required repository secrets: `CLOUDFLARE_API_TOKEN` (needs **Account -
 Cloudflare Pages - Edit**, plus **Zone - DNS - Edit** to attach custom domains)
 and `CLOUDFLARE_ACCOUNT_ID`.
 
-The optional `CLOUDFLARE_ZONE_ID` secret enables the asset and document zone
-Cache Rules and deployment-time HTML purges. When it is set, the API token also
-needs **Zone - Cache Rules - Edit** and **Zone - Cache Purge - Purge**.
-
-### One-time Cloudflare cache setup
-
-1. Open Cloudflare Dashboard -> My Profile -> API Tokens -> Create Token.
-2. Create a custom token with these permissions:
-   - Account -> Cloudflare Pages -> Edit.
-   - Zone -> DNS -> Edit.
-   - Zone -> Cache Rules -> Edit.
-   - Zone -> Cache Purge -> Purge.
-3. Restrict the zone resources to the `rom-weaver.com` zone.
-4. Copy the token. Cloudflare shows it only once.
-5. Open the zone Overview page and copy its Zone ID.
-6. Open the GitHub repository Settings -> Secrets and variables -> Actions.
-7. Replace `CLOUDFLARE_API_TOKEN` and add `CLOUDFLARE_ZONE_ID`.
-
-Keep `CLOUDFLARE_ACCOUNT_ID` unchanged unless the Pages projects move to a
-different Cloudflare account. The cache rule and purge workflow skip with a
-notice until `CLOUDFLARE_ZONE_ID` exists.
-
-Cloudflare token documentation: [account-owned API tokens](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/).
+The optional `CLOUDFLARE_ZONE_ID` secret enables the `/assets/*` zone Cache
+Rule. When it is set, the API token also needs **Zone - Cache Rules - Edit**.
 
 The workflow creates its own Pages project on first run for a channel, so there
 is no manual bootstrap and no local `wrangler login` - which matters because
