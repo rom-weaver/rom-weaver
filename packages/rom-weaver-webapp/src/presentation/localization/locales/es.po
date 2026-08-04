@@ -615,8 +615,18 @@ msgstr "Guardar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.tabsLabel"
+msgstr "Secciones"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Ajustes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.dialogLabel"
+msgstr "Ajustes y estado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

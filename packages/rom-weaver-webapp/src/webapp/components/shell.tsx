@@ -1,10 +1,11 @@
 import {
+  Activity,
   CloudCheck,
   CloudDownload,
   CloudOff,
   createLucideIcon,
+  HardDrive,
   Heart,
-  Info,
   LoaderCircle,
   Moon,
   MoreHorizontal,
@@ -538,15 +539,13 @@ const UtilityMenu = ({
           <AccentMenuItem localizer={localizer} onChange={onAccentChange} />
         </>
       ) : null}
+      {/* Each item wears the icon its tab wears inside the dialog it opens. */}
       <button onClick={() => select(onOpenStatus)} role="menuitem" type="button">
-        <Info aria-hidden="true" />
+        <Activity aria-hidden="true" />
         {localizer.message("ui.log.tabStatus")}
       </button>
       <button onClick={() => select(onOpenStorage ?? onOpenLog)} role="menuitem" type="button">
-        <svg aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M4 8.5h16v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z" />
-          <path d="M6.5 5h11l2 3.5h-15Z" />
-        </svg>
+        <HardDrive aria-hidden="true" />
         {localizer.message("ui.log.tabStorage")}
       </button>
       <button onClick={() => select(onOpenLog)} role="menuitem" type="button">
