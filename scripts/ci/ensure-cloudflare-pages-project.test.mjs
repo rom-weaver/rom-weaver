@@ -28,15 +28,15 @@ const makeFetch = (responses) => {
   };
 };
 
-test("keeps an existing Pages project unchanged when Brotli is configured", async () => {
+test("keeps an existing Pages project unchanged without the obsolete Brotli flag", async () => {
   const { calls, fetchImpl } = makeFetch([
     duplicateResponse(),
     response({
       success: true,
       result: {
         deployment_configs: {
-          preview: { compatibility_flags: ["nodejs_compat", "brotli_content_encoding"] },
-          production: { compatibility_flags: ["brotli_content_encoding"] },
+          preview: { compatibility_flags: ["nodejs_compat"] },
+          production: { compatibility_flags: [] },
         },
       },
     }),
@@ -48,15 +48,15 @@ test("keeps an existing Pages project unchanged when Brotli is configured", asyn
   assert.equal(calls[1].init.method, undefined);
 });
 
-test("adds Brotli to missing preview and production configs without dropping existing flags", async () => {
+test("removes the obsolete Brotli flag without dropping existing flags", async () => {
   const { calls, fetchImpl } = makeFetch([
     duplicateResponse(),
     response({
       success: true,
       result: {
         deployment_configs: {
-          preview: { compatibility_flags: ["nodejs_compat"] },
-          production: {},
+          preview: { compatibility_flags: ["nodejs_compat", "brotli_content_encoding"] },
+          production: { compatibility_flags: ["brotli_content_encoding"] },
         },
       },
     }),
@@ -67,21 +67,19 @@ test("adds Brotli to missing preview and production configs without dropping exi
   assert.equal(calls.length, 3);
   assert.deepEqual(JSON.parse(calls[2].init.body), {
     deployment_configs: {
-      preview: { compatibility_flags: ["nodejs_compat", "brotli_content_encoding"] },
-      production: { compatibility_flags: ["brotli_content_encoding"] },
+      preview: { compatibility_flags: ["nodejs_compat"] },
+      production: { compatibility_flags: [] },
     },
   });
 });
 
-test("creates a Pages project and configures Brotli before deployment", async () => {
+test("creates a Pages project without adding the obsolete Brotli flag", async () => {
   const { calls, fetchImpl } = makeFetch([
     response({ success: true, result: {} }),
     response({ success: true, result: { deployment_configs: {} } }),
-    response({ success: true, result: {} }),
   ]);
 
   assert.equal(await ensurePagesProject({ accountId, token, project, fetchImpl }), "created");
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
   assert.equal(calls[0].init.method, "POST");
-  assert.equal(calls[2].init.method, "PATCH");
 });

@@ -16,7 +16,7 @@ const projectUrl = (accountId, project) => `${API_ROOT}/accounts/${accountId}/pa
 const compatibilityFlags = (config) =>
   Array.isArray(config?.compatibility_flags) ? config.compatibility_flags : [];
 
-const ensureBrotliCompatibility = async ({ accountId, token, project, fetchImpl }) => {
+const removeObsoleteBrotliCompatibility = async ({ accountId, token, project, fetchImpl }) => {
   const url = projectUrl(accountId, project);
   const response = await fetchImpl(url, {
     headers: authorizationHeaders(token),
@@ -30,9 +30,10 @@ const ensureBrotliCompatibility = async ({ accountId, token, project, fetchImpl 
   const deploymentConfigs = {};
   for (const environment of ["preview", "production"]) {
     const flags = compatibilityFlags(configs[environment]);
-    if (!flags.includes(BROTLI_COMPATIBILITY_FLAG)) {
+    const remainingFlags = flags.filter((flag) => flag !== BROTLI_COMPATIBILITY_FLAG);
+    if (remainingFlags.length !== flags.length) {
       deploymentConfigs[environment] = {
-        compatibility_flags: [...flags, BROTLI_COMPATIBILITY_FLAG],
+        compatibility_flags: remainingFlags,
       };
     }
   }
@@ -67,7 +68,7 @@ export async function ensurePagesProject({ accountId, token, project, fetchImpl 
     throw new Error(`unexpected response creating '${project}':\n${JSON.stringify(body, null, 2)}`);
   }
 
-  if (await ensureBrotliCompatibility({ accountId, token, project, fetchImpl })) {
+  if (await removeObsoleteBrotliCompatibility({ accountId, token, project, fetchImpl })) {
     return result === "created" ? "created" : "updated";
   }
   return result;
