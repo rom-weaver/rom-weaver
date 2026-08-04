@@ -66,7 +66,11 @@ export const onRequest = async ({ request, env, next }) => {
       headers.delete("Content-Length");
       return new Response(null, { status: 304, headers });
     }
-    return new Response(sidecar.body, { encodeBody: "manual", headers });
+    // HTML responses are recompressed when the runtime receives them as a stream.
+    // Materialize this small document as a fixed-length body so the precompressed
+    // bytes and their Content-Length reach the client unchanged.
+    const body = new Uint8Array(await sidecar.arrayBuffer());
+    return new Response(body, { encodeBody: "manual", headers });
   }
   return next();
 };
