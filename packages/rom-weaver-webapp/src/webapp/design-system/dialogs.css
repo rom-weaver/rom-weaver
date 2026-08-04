@@ -21,6 +21,7 @@
   box-shadow: var(--overlay-shadow); overflow: clip;
 }
 .dlg-head { display: flex; align-items: center; gap: var(--sp-m); padding: var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
+.dlg-mobile-title { display: none; }
 .dlg-title { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .01em; flex: 1 1 auto; min-width: 0; }
 .dlg-actions { display: inline-flex; gap: var(--sp-s); align-items: center; }
 .dlg-x {
@@ -318,6 +319,7 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
   border-block-end: 3px solid transparent; border-radius: var(--r-s) var(--r-s) 0 0;
   transition: color .18s, background-color .18s;
 }
+.rw-app .subtab svg { width: 15px; height: 15px; flex: none; }
 /* The weft, doubled: a tinted riser standing on a thicker rule. A bare label
    with a hairline under it left the tabs reading as running text - at a glance
    there was no telling the rail from the sentence above it. The riser gives the

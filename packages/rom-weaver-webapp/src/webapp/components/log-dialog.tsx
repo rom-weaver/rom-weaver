@@ -1,4 +1,17 @@
-import { Check, Copy, Download, RefreshCw, RotateCcw, Save, X } from "lucide-react";
+import {
+  Activity,
+  Check,
+  Copy,
+  Download,
+  HardDrive,
+  Newspaper,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  ScrollText,
+  Settings,
+  X,
+} from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { copyToClipboard } from "../../lib/clipboard.ts";
 import { createLogger } from "../../lib/logging.ts";
@@ -174,6 +187,13 @@ const TAB_MESSAGES: Record<
   status: "ui.log.tabStatus",
   storage: "ui.log.tabStorage",
 };
+const TAB_ICONS = {
+  changelog: Newspaper,
+  logs: ScrollText,
+  settings: Settings,
+  status: Activity,
+  storage: HardDrive,
+} as const;
 
 /** How long to keep looking for a deep-linked field while its lazy panel loads. */
 const FOCUS_HINT_MAX_FRAMES = 90;
@@ -492,6 +512,9 @@ const LogDialog = ({
     >
       <div className="dlg-frame">
         <header className="dlg-head">
+          <span aria-live="polite" className="dlg-mobile-title">
+            {localizer.message(TAB_MESSAGES[tab])}
+          </span>
           {/* the weft sub-rail IS the header: no title competing with it, and the
               close button parks at the rail's end */}
           <div
@@ -515,22 +538,26 @@ const LogDialog = ({
             ref={tabsRef}
             role="tablist"
           >
-            {DIALOG_TABS.map((entry) => (
-              <button
-                aria-controls={`logpanel-${entry}`}
-                aria-selected={entry === tab}
-                className="subtab"
-                data-logtab={entry}
-                id={`logtab-${entry}`}
-                key={entry}
-                onClick={() => selectTab(entry)}
-                role="tab"
-                tabIndex={entry === tab ? 0 : -1}
-                type="button"
-              >
-                {localizer.message(TAB_MESSAGES[entry])}
-              </button>
-            ))}
+            {DIALOG_TABS.map((entry) => {
+              const TabIcon = TAB_ICONS[entry];
+              return (
+                <button
+                  aria-controls={`logpanel-${entry}`}
+                  aria-selected={entry === tab}
+                  className="subtab"
+                  data-logtab={entry}
+                  id={`logtab-${entry}`}
+                  key={entry}
+                  onClick={() => selectTab(entry)}
+                  role="tab"
+                  tabIndex={entry === tab ? 0 : -1}
+                  type="button"
+                >
+                  <TabIcon aria-hidden="true" />
+                  {localizer.message(TAB_MESSAGES[entry])}
+                </button>
+              );
+            })}
           </div>
           <button
             aria-label={localizer.message("ui.common.close")}
