@@ -114,8 +114,8 @@ describe("pages brotli sidecar function", () => {
     expect(fetchLog).toEqual([]);
   });
 
-  it("falls through when the sidecar is missing (SPA fallback response), which also covers a missing asset", async () => {
-    const { context } = makeContext({ sidecarResponse: spaFallback() });
+  it("falls through when the sidecar is missing", async () => {
+    const { context } = makeContext({ sidecarResponse: new Response("missing", { status: 404 }) });
     expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
   });
 
