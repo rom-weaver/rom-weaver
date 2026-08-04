@@ -775,6 +775,7 @@ html:has(.docs-workbench) {
   align-items: stretch;
   justify-content: space-between;
   padding-block-start: var(--sp-l);
+  padding-inline: var(--sp-l);
   margin-block-start: var(--sp-xl);
   border-block-start: 1px solid var(--seam-soft);
 }
