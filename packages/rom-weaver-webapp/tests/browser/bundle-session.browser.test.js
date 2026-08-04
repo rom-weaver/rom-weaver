@@ -138,13 +138,16 @@ test("local without-rom bundle drop seeds optional patches off", async () => {
   await clickApplyButton();
   expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
 
-  // Reusing the same bundle output name must not leave the apply action tied to
-  // the previous optional-patch selection after a second toggle.
-  getPatchToggles()[1]?.click();
-  await expect.poll(() => getPatchToggles()[1]?.checked, { timeout: 30000 }).toBe(false);
-  await waitForApplyButtonEnabled();
-  await clickApplyButton();
-  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+  // Reusing the same bundle output name must remain valid across repeated
+  // invalidation, validation, and apply cycles.
+  for (let cycle = 0; cycle < 8; cycle += 1) {
+    getPatchToggles()[1]?.click();
+    await expect.poll(() => getPatchToggles()[1]?.checked, { timeout: 30000 }).toBe(cycle % 2 === 1);
+    await waitForApplyButtonEnabled();
+    expect(document.getElementById("rom-weaver-error-message")?.textContent || "").toBe("");
+    await clickApplyButton();
+    expect(await waitForApplyOutcome(), `cycle ${cycle}`).toEqual({ kind: "download" });
+  }
 });
 
 test("bundle keeps same-name apply usable after enabling several optional patches", async () => {

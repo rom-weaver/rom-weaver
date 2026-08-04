@@ -38,8 +38,10 @@ test("concurrent stages of the same source coalesce onto one bare-named copy (no
     // Coalesced, not double-staged: exactly one virtual file is registered for the source.
     expect(getActiveBrowserVirtualFiles().map((entry) => entry.path)).toEqual(["/work/game.bin"]);
   } finally {
-    // releaseSources cleans the shared staged copy immediately (bypassing the retention timer) so no
-    // virtual file or pending timer leaks into sibling tests.
+    await first.cleanup();
+    await second.cleanup();
+    // releaseSources bypasses the retention timer so no virtual file or pending timer leaks into
+    // sibling tests.
     await io.releaseSources([file]);
   }
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
@@ -63,6 +65,8 @@ test("distinct Files with identical metadata keep their own staged bytes", async
     await expect(active[0]?.source?.arrayBuffer()).resolves.toEqual(new Uint8Array([1, 2, 3, 4]).buffer);
     await expect(active[1]?.source?.arrayBuffer()).resolves.toEqual(new Uint8Array([5, 6, 7, 8]).buffer);
   } finally {
+    await first.cleanup();
+    await second.cleanup();
     await io.releaseSources([firstFile, secondFile]);
   }
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
@@ -139,6 +143,20 @@ test("a release during an in-flight stage defers to the staging consumer (path s
     await staged.cleanup();
   }
   // Once the consumer releases, the deferred cleanup runs.
+  expect(getActiveBrowserVirtualFiles()).toEqual([]);
+});
+
+// A queued validation can keep a cached staged reader live while the workflow releases the previous
+// patch stage. The release must wait for that reader instead of deleting its path mid-command.
+test("a release with a live cached reader defers cleanup until the reader releases", async () => {
+  const io = createBrowserRuntimeVfsIo({ mountPoint: "/work", vfs: stubVfs });
+  const file = gameFile();
+  const staged = await io.stageSource(stageRequest(file));
+
+  await io.releaseSources([file]);
+  expect(getActiveBrowserVirtualFiles().map((entry) => entry.path)).toEqual(["/work/game.bin"]);
+
+  await staged.cleanup();
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
 });
 
