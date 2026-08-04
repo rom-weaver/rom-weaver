@@ -13,16 +13,18 @@ const spaFallback = () => new Response("<!doctype html>", { headers: { "Content-
 const makeContext = ({
   url = WASM_URL,
   acceptEncoding = "gzip, br, zstd",
+  requestHeaders = {},
   sidecarResponse,
 }: {
   url?: string;
   acceptEncoding?: string | null;
+  requestHeaders?: Record<string, string>;
   sidecarResponse?: SidecarResponse;
 }) => {
-  const headers = new Headers();
+  const headers = new Headers(requestHeaders);
   if (acceptEncoding !== null) headers.set("Accept-Encoding", acceptEncoding);
   const fetchLog: FetchLogEntry[] = [];
-  const forwardedAcceptEncodings: Array<string | null> = [];
+  const forwardedRequests: string[] = [];
   return {
     context: {
       env: {
@@ -30,7 +32,7 @@ const makeContext = ({
           fetch: (target: URL | RequestInfo, init?: RequestInit) => {
             const targetUrl = target instanceof Request ? target.url : String(target);
             fetchLog.push({ method: init?.method ?? "GET", url: targetUrl });
-            if (target instanceof Request) forwardedAcceptEncodings.push(target.headers.get("Accept-Encoding"));
+            if (target instanceof Request) forwardedRequests.push(targetUrl);
             const response = typeof sidecarResponse === "function" ? sidecarResponse(targetUrl) : sidecarResponse;
             return Promise.resolve(response ?? spaFallback());
           },
@@ -40,7 +42,7 @@ const makeContext = ({
       request: new Request(url, { headers }),
     },
     fetchLog,
-    forwardedAcceptEncodings,
+    forwardedRequests,
   };
 };
 
@@ -150,16 +152,29 @@ describe("pages brotli sidecar function", () => {
     expect(response.headers.get("Content-Encoding")).toBe("br");
   });
 
-  it("forwards conditional headers and preserves a document 304", async () => {
-    const { context, forwardedAcceptEncodings } = makeContext({
+  it("matches a document validator without forwarding the full browser request", async () => {
+    const { context, fetchLog, forwardedRequests } = makeContext({
       url: "https://rom-weaver.com/apply",
-      sidecarResponse: () => new Response(null, { status: 304, headers: { ETag: '"document"' } }),
+      requestHeaders: { "If-None-Match": 'W/"document"' },
+      sidecarResponse: () => new Response("brotli-bytes", { headers: { ETag: '"document"' } }),
     });
     const response = await onRequest(context);
     expect(response.status).toBe(304);
     expect(response.headers.get("ETag")).toBe('"document"');
     expect(response.headers.get("Content-Encoding")).toBe("br");
-    expect(forwardedAcceptEncodings).toEqual(["gzip, br, zstd"]);
+    expect(fetchLog).toEqual([{ method: "GET", url: "https://rom-weaver.com/apply/index.html.br" }]);
+    expect(forwardedRequests).toEqual([]);
+  });
+
+  it("matches If-Modified-Since when the sidecar has no entity tag", async () => {
+    const { context } = makeContext({
+      url: "https://rom-weaver.com/apply",
+      requestHeaders: { "If-Modified-Since": "Tue, 04 Aug 2026 21:00:00 GMT" },
+      sidecarResponse: () =>
+        new Response("brotli-bytes", { headers: { "Last-Modified": "Tue, 04 Aug 2026 20:00:00 GMT" } }),
+    });
+    const response = await onRequest(context);
+    expect(response.status).toBe(304);
   });
 
   it("falls through document requests without Brotli support", async () => {

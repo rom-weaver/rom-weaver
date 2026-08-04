@@ -4,37 +4,68 @@ import { documentSidecarPaths } from "./document-routes.js";
 const isMissingSidecar = (response) =>
   !response.ok || (response.headers.get("Content-Type") ?? "").includes("text/html");
 
+const weakEntityTag = (value) => value.trim().replace(/^W\//, "");
+
+const matchesIfNoneMatch = (value, etag) => {
+  const normalizedEtag = weakEntityTag(etag);
+  return value.split(",").some((candidate) => {
+    const normalizedCandidate = candidate.trim();
+    return normalizedCandidate === "*" || weakEntityTag(normalizedCandidate) === normalizedEtag;
+  });
+};
+
+const isNotModified = (request, response) => {
+  const ifNoneMatch = request.headers.get("If-None-Match");
+  if (ifNoneMatch !== null) {
+    const etag = response.headers.get("ETag");
+    return etag !== null && matchesIfNoneMatch(ifNoneMatch, etag);
+  }
+
+  const ifModifiedSince = request.headers.get("If-Modified-Since");
+  const lastModified = response.headers.get("Last-Modified");
+  if (ifModifiedSince === null || lastModified === null) return false;
+
+  const modifiedAt = Date.parse(lastModified);
+  const requestedAt = Date.parse(ifModifiedSince);
+  return Number.isFinite(modifiedAt) && Number.isFinite(requestedAt) && modifiedAt <= requestedAt;
+};
+
+const documentHeaders = (sidecar) => {
+  const headers = new Headers(sidecar.headers);
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.set("Content-Encoding", "br");
+  headers.set("Vary", "Accept-Encoding");
+  // Browsers must revalidate documents. The zone Cache Rule overrides the edge
+  // TTL to five minutes, while the browser still checks for a new release.
+  headers.set("Cache-Control", "public, max-age=0, must-revalidate");
+  headers.set("Cross-Origin-Embedder-Policy", "require-corp");
+  headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  return headers;
+};
+
 export const onRequest = async ({ request, env, next }) => {
   if (request.method !== "GET" && request.method !== "HEAD") return next();
   if (!acceptsBrotli(request.headers.get("Accept-Encoding"))) return next();
 
   const sidecarPaths = documentSidecarPaths(new URL(request.url).pathname);
   for (const sidecarPath of sidecarPaths) {
-    const sidecar = await env.ASSETS.fetch(new Request(new URL(sidecarPath, request.url), request));
+    // Fetch by URL, matching the asset Function. Forwarding the complete document
+    // request makes Pages treat this subrequest differently and drops the sidecar's
+    // response metadata. Browser validators are checked against that metadata below.
+    const sidecar = await env.ASSETS.fetch(new URL(sidecarPath, request.url));
     if (sidecar.status === 304) {
-      const headers = new Headers(sidecar.headers);
+      const headers = documentHeaders(sidecar);
       headers.delete("Content-Length");
-      headers.set("Content-Type", "text/html; charset=utf-8");
-      headers.set("Content-Encoding", "br");
-      headers.set("Vary", "Accept-Encoding");
-      headers.set("Cache-Control", "public, max-age=0, must-revalidate");
-      headers.set("Cross-Origin-Embedder-Policy", "require-corp");
-      headers.set("Cross-Origin-Opener-Policy", "same-origin");
-      headers.set("Cross-Origin-Resource-Policy", "same-origin");
       return new Response(null, { status: 304, headers });
     }
     if (isMissingSidecar(sidecar)) continue;
 
-    const headers = new Headers(sidecar.headers);
-    headers.set("Content-Type", "text/html; charset=utf-8");
-    headers.set("Content-Encoding", "br");
-    headers.set("Vary", "Accept-Encoding");
-    // Browsers must revalidate documents. The zone Cache Rule overrides the edge
-    // TTL to five minutes, while the browser still checks for a new release.
-    headers.set("Cache-Control", "public, max-age=0, must-revalidate");
-    headers.set("Cross-Origin-Embedder-Policy", "require-corp");
-    headers.set("Cross-Origin-Opener-Policy", "same-origin");
-    headers.set("Cross-Origin-Resource-Policy", "same-origin");
+    const headers = documentHeaders(sidecar);
+    if (isNotModified(request, sidecar)) {
+      headers.delete("Content-Length");
+      return new Response(null, { status: 304, headers });
+    }
     return new Response(sidecar.body, { encodeBody: "manual", headers });
   }
   return next();
