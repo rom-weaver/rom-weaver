@@ -63,16 +63,56 @@ const useBundleApplySession = ({
   // replays the match against this mirror.
   const lastPatchesRef = useRef<BinarySource[]>([]);
   const [bundleMetaById, setBundleMetaById] = useState<ReadonlyMap<string, BundlePatchMeta>>(new Map());
+  const [bundleDefaultsPending, setBundleDefaultsPending] = useState(false);
+  const seedGenerationRef = useRef(0);
+  const activeSeedPatchNamesRef = useRef<readonly string[] | null>(null);
+
+  useEffect(
+    () => () => {
+      seedGenerationRef.current += 1;
+      activeSeedPatchNamesRef.current = null;
+    },
+    [],
+  );
 
   const handleBundlePatchesChange = useCallback(
     (patches: BinarySource[]) => {
       lastPatchesRef.current = patches;
       const session = bundleSession;
-      if (!session?.entries.length || appliedKeyRef.current === session.key) return;
+      if (!session?.entries.length) {
+        if (activeSeedPatchNamesRef.current) {
+          seedGenerationRef.current += 1;
+          activeSeedPatchNamesRef.current = null;
+          appliedKeyRef.current = null;
+          setBundleDefaultsPending(false);
+          logger.debug("bundle session seed cancelled after patch-list change", {
+            patchCount: patches.length,
+          });
+        }
+        return;
+      }
       const names = patches.map((patch, index) => getReactBinarySourceFileName(patch, `Patch ${index + 1}`));
       const expected = session.entries.map((entry) => entry.fileName);
-      if (names.length !== expected.length || expected.some((name, index) => names[index] !== name)) return;
+      const matchesSession = names.length === expected.length && expected.every((name, index) => names[index] === name);
+      if (!matchesSession) {
+        if (activeSeedPatchNamesRef.current) {
+          seedGenerationRef.current += 1;
+          activeSeedPatchNamesRef.current = null;
+          appliedKeyRef.current = null;
+          setBundleDefaultsPending(false);
+          logger.debug("bundle session seed cancelled after patch-list change", {
+            key: session.key,
+            patchCount: names.length,
+          });
+        }
+        return;
+      }
+      if (appliedKeyRef.current === session.key) return;
       appliedKeyRef.current = session.key;
+      const generation = seedGenerationRef.current + 1;
+      seedGenerationRef.current = generation;
+      activeSeedPatchNamesRef.current = expected;
+      setBundleDefaultsPending(true);
       logger.debug("bundle session matched patch list; seeding enablement + defaults", {
         key: session.key,
         patchCount: patches.length,
@@ -108,42 +148,59 @@ const useBundleApplySession = ({
       // patches are still staging - well before the apply button arms. Deferring longer would race a
       // fast apply click: any settings commit cancels a queued apply (by design for real user edits).
       void (async () => {
-        // Let the patch-list state commit so the option mutations snapshot the new list.
-        await nextTask();
-        for (let attempt = 0; attempt < 100; attempt += 1) {
-          const items = controllersRef.current.patchStack?.getState().items || [];
-          if (
-            items.length === session.entries.length &&
-            items.every((item) => !(item.progress || item.optionsDisabled))
-          ) {
-            break;
-          }
-          await new Promise<void>((resolve) => setTimeout(resolve, 20));
-        }
-        // Seed header modes through normal options. The bundle's ROM checksum
-        // belongs only to the chain input; reactive sync owns the chain output
-        // because it applies only while the full bundle chain remains intact.
-        for (const [index, entry] of session.entries.entries()) {
-          const inputChecks = index === 0 ? session.chainEndpointChecks.input?.checksums : undefined;
-          const validateInputChecksum = inputChecks?.sha1 || inputChecks?.md5 || inputChecks?.crc32;
-          await controllersRef.current.patchStack?.setPatchOption?.(index, {
-            ...(entry.basis ? { basis: entry.basis } : {}),
-            ...(entry.header === "keep" || entry.header === "strip" ? { header: entry.header } : {}),
-            ...(validateInputChecksum ? { validateInputChecksum } : {}),
-            // A local bundle can finish staging before its session metadata lands. Its option update
-            // clears the earlier verdict, so revalidate once after the final seeded entry.
-            revalidate: index === session.entries.length - 1,
-          });
-        }
-        // Output defaults emulate user edits so later real edits win. Each setter merges into the
-        // settings snapshot captured at ITS render, so consecutive same-tick calls would clobber one
-        // another - yield a task between calls so each reads the committed result of the previous.
-        const defaults = session.outputDefaults;
-        if (defaults.name) {
-          controllersRef.current.output?.setDisplayFileName(stripOutputNameExtension(defaults.name));
+        const isCurrent = () => seedGenerationRef.current === generation;
+        try {
+          // Let the patch-list state commit so the option mutations snapshot the new list.
           await nextTask();
+          if (!isCurrent()) return;
+          for (let attempt = 0; attempt < 100; attempt += 1) {
+            if (!isCurrent()) return;
+            const items = controllersRef.current.patchStack?.getState().items || [];
+            if (
+              items.length === session.entries.length &&
+              items.every((item) => !(item.progress || item.optionsDisabled))
+            ) {
+              break;
+            }
+            await new Promise<void>((resolve) => setTimeout(resolve, 20));
+          }
+          // Seed header modes through normal options. The bundle's ROM checksum
+          // belongs only to the chain input; reactive sync owns the chain output
+          // because it applies only while the full bundle chain remains intact.
+          for (const [index, entry] of session.entries.entries()) {
+            if (!isCurrent()) return;
+            const inputChecks = index === 0 ? session.chainEndpointChecks.input?.checksums : undefined;
+            const validateInputChecksum = inputChecks?.sha1 || inputChecks?.md5 || inputChecks?.crc32;
+            await controllersRef.current.patchStack?.setPatchOption?.(index, {
+              ...(entry.basis ? { basis: entry.basis } : {}),
+              ...(entry.header === "keep" || entry.header === "strip" ? { header: entry.header } : {}),
+              ...(validateInputChecksum ? { validateInputChecksum } : {}),
+              // A local bundle can finish staging before its session metadata lands. Its option update
+              // clears the earlier verdict, so revalidate once after the final seeded entry.
+              revalidate: index === session.entries.length - 1,
+            });
+          }
+          if (!isCurrent()) return;
+          // Output defaults emulate user edits so later real edits win. Each setter merges into the
+          // settings snapshot captured at ITS render, so consecutive same-tick calls would clobber one
+          // another - yield a task between calls so each reads the committed result of the previous.
+          const defaults = session.outputDefaults;
+          if (defaults.name) {
+            controllersRef.current.output?.setDisplayFileName(stripOutputNameExtension(defaults.name));
+            await nextTask();
+          }
+          if (!isCurrent()) return;
+          if (defaults.header) controllersRef.current.output?.setOutputHeader?.(defaults.header);
+        } finally {
+          if (isCurrent()) {
+            activeSeedPatchNamesRef.current = null;
+            setBundleDefaultsPending(false);
+            logger.debug("bundle session defaults applied", {
+              key: session.key,
+              patchCount: session.entries.length,
+            });
+          }
         }
-        if (defaults.header) controllersRef.current.output?.setOutputHeader?.(defaults.header);
       })();
     },
     [controllersRef, bundleSession, getPatchIds, seedPatchEnablement],
@@ -166,7 +223,7 @@ const useBundleApplySession = ({
     });
   }, []);
 
-  return { bundleMetaById, handleBundlePatchesChange, updateBundleMeta };
+  return { bundleDefaultsPending, bundleMetaById, handleBundlePatchesChange, updateBundleMeta };
 };
 
 export type { BundlePatchMeta, BundleSessionControllers };

@@ -157,7 +157,6 @@ const useLocalApplyPatchFormSession = ({
   const { abortActiveOperation, activeAbortControllerRef, rememberAbortController } = useActiveAbortController();
   const pendingDownloadFileNameRef = useRef<string | null>(null);
   const pendingDownloadResultRef = useRef<ApplyWorkflowResult | null>(null);
-  const autoApplyAfterPatchToggleRef = useRef(false);
   const previousPatchEnablementRef = useRef<ReadonlySet<string> | null>(null);
   const applyExecutionTimingRef = useRef<ApplyExecutionTimingTracker>({
     applyStartedAt: null,
@@ -570,7 +569,6 @@ const useLocalApplyPatchFormSession = ({
 
   const updateSettings = useCallback(
     (nextSettings: ApplyPatchFormSettings) => {
-      autoApplyAfterPatchToggleRef.current = false;
       setChecksumOverrideChecked(false);
       setApplyQueued(false);
       clearDismissibleErrors();
@@ -602,8 +600,12 @@ const useLocalApplyPatchFormSession = ({
   }, [activeCompression, activeSettings, effectiveActiveCompression, outputCompressionEdited, updateSettings]);
   const updatePatches = useCallback(
     (nextPatches: BinarySource[]) => {
-      autoApplyAfterPatchToggleRef.current = false;
       setChecksumOverrideChecked(false);
+      emitSessionTrace("patch list updated; retiring output", {
+        nextPatchCount: nextPatches.length,
+        previousPatchCount: activePatches.length,
+        sources: getTraceSourceSummaries(nextPatches, "Patch"),
+      });
       clearDismissibleErrors();
       invalidateCompletedOutputState();
       setPatchInfoByKey((current) => {
@@ -617,7 +619,16 @@ const useLocalApplyPatchFormSession = ({
       if (patches === undefined) setInternalPatches(nextPatches);
       onPatchesChange?.(nextPatches);
     },
-    [clearDismissibleErrors, getPatchKey, invalidateCompletedOutputState, onPatchesChange, patches, setPatchInfoByKey],
+    [
+      activePatches.length,
+      clearDismissibleErrors,
+      emitSessionTrace,
+      getPatchKey,
+      invalidateCompletedOutputState,
+      onPatchesChange,
+      patches,
+      setPatchInfoByKey,
+    ],
   );
   const getStableInputInfo = useCallback(
     (info: StagedInputInfo, sources: BinarySource[]) => {
@@ -697,7 +708,6 @@ const useLocalApplyPatchFormSession = ({
   );
   const updateInputs = useCallback(
     (nextInputs: BinarySource[]) => {
-      autoApplyAfterPatchToggleRef.current = false;
       setChecksumOverrideChecked(false);
       invalidateCompletedOutputState();
       setPatchInfoByKey((current) =>
@@ -809,94 +819,123 @@ const useLocalApplyPatchFormSession = ({
     stage: { stageInput, stagePatches, validatePatches },
   });
 
+  const invalidatePatchDependentOutput = useCallback(
+    (reason: string, details: Record<string, unknown> = {}) => {
+      const hasExistingOutput = hasPendingDownload || pendingDownloadResultRef.current !== null;
+      const invalidationNeeded = hasExistingOutput || busy;
+      emitSessionTrace(
+        invalidationNeeded
+          ? `patch change; invalidating output (${reason})`
+          : `patch change; output already clear (${reason})`,
+        {
+          hasExistingOutput,
+          busy,
+          hadPendingDownload: hasPendingDownload,
+          ...details,
+        },
+      );
+      if (!invalidationNeeded) return false;
+
+      clearDismissibleErrors();
+      setApplyQueued(false);
+      if (busy) {
+        cancelActiveOperation();
+        clearActiveApplyProgress();
+      }
+      invalidateCompletedOutputState();
+      return true;
+    },
+    [
+      busy,
+      cancelActiveOperation,
+      clearActiveApplyProgress,
+      clearDismissibleErrors,
+      emitSessionTrace,
+      hasPendingDownload,
+      invalidateCompletedOutputState,
+    ],
+  );
+
   // Toggling a patch changes the bytes that an existing output represents. Retire that output and
-  // queue one fresh apply so the next download always matches the visible On/Off state. A first
-  // toggle before any output exists only changes the future run; it must not start work by itself.
+  // leave the form ready for the user to apply the new On/Off state. A first toggle before any
+  // output exists only changes the future run.
   useEffect(() => {
     const previous = previousPatchEnablementRef.current;
     const current = disabledPatchIds ?? new Set<string>();
     previousPatchEnablementRef.current = current;
     if (!previous || sameStringSet(previous, current) || !activePatches.length) return;
 
-    const hasExistingOutput = hasPendingDownload || pendingDownloadResultRef.current !== null;
-    if (!(hasExistingOutput || busy)) return;
-
-    autoApplyAfterPatchToggleRef.current = true;
-    emitSessionTrace("patch enablement changed; invalidating output", {
-      busy,
+    invalidatePatchDependentOutput("enablement changed", {
       disabledPatchCount: current.size,
-      hadPendingDownload: hasPendingDownload,
     });
-    clearDismissibleErrors();
-    if (busy) {
-      cancelActiveOperation();
-      clearActiveApplyProgress();
-    }
-    invalidateCompletedOutputState();
-  }, [
-    activePatches.length,
-    busy,
-    cancelActiveOperation,
-    clearActiveApplyProgress,
-    clearDismissibleErrors,
-    disabledPatchIds,
-    emitSessionTrace,
-    hasPendingDownload,
-    invalidateCompletedOutputState,
-  ]);
+  }, [activePatches.length, disabledPatchIds, invalidatePatchDependentOutput]);
 
-  // Keep the automatic rerun behind the normal readiness gates. This matters when re-enabling a
-  // patch also starts deferred validation, and when every patch is temporarily toggled off.
-  useEffect(() => {
-    if (!autoApplyAfterPatchToggleRef.current || busy || applyQueued || hasPendingDownload) return;
-    if (!canStartApply) return;
-    autoApplyAfterPatchToggleRef.current = false;
-    emitSessionTrace("patch enablement changed; reapplying output", {
-      enabledPatchCount: outputPatches.length,
-    });
-    setApplyQueued(true);
-  }, [applyQueued, busy, canStartApply, emitSessionTrace, hasPendingDownload, outputPatches.length]);
-
-  // A disabled patch is excluded from the deep dry-run pass, so a patch toggled back ON has no
-  // verdict yet: rerun the deferred validation when an id leaves the disabled set. Patches already
-  // verified short-circuit inside the controller, so the pass only validates the re-enabled ones.
-  const previousDisabledPatchIdsRef = useRef<ReadonlySet<string>>(disabledPatchIds ?? new Set());
+  // Enablement changes alter the chain plan. Recheck both directions: disabled patches are skipped
+  // from the run, while re-enabled patches need a fresh verdict before the next manual Apply.
+  const previousDisabledPatchIdsRef = useRef<ReadonlySet<string> | null>(null);
   useEffect(() => {
     const previous = previousDisabledPatchIdsRef.current;
     const current = disabledPatchIds ?? new Set<string>();
     previousDisabledPatchIdsRef.current = current;
+    // Bundle bootstrapping may seed its initial optional state after the first patch stage. That is
+    // initial configuration, not a user edit, so it must not launch a competing validation pass.
+    if (!previous) return;
     if (!(validatePatches && activePatches.length)) return;
-    const reenabled = [...previous].filter((id) => !current.has(id));
-    if (!reenabled.length) return;
-    // An id also leaves the set when its patch is removed; only a still-present patch revalidates.
-    const currentIds = new Set(getBinarySourceListStableIds(activePatches));
-    if (!reenabled.some((id) => currentIds.has(id))) return;
-    emitSessionTrace("patch re-enabled; running deferred validation", { reenabledCount: reenabled.length });
-    validatePatchesDeferred(createStageSnapshot());
+    if (sameStringSet(previous, current)) return;
+    const generation = patchStageMachine.invalidateStage();
+    emitSessionTrace("patch enablement changed; running deferred validation", {
+      disabledPatchCount: current.size,
+      generation,
+      previousDisabledPatchCount: previous.size,
+    });
+    validatePatchesDeferred(createStageSnapshot(), generation);
   }, [
     activePatches,
     createStageSnapshot,
     disabledPatchIds,
     emitSessionTrace,
+    patchStageMachine,
     validatePatches,
     validatePatchesDeferred,
   ]);
 
-  // Chain verdicts depend on order: a reorder changes every member's chain fingerprint, so the
-  // plan-mode pass must rerun (cached per-patch dry-runs still short-circuit engine-side work).
+  // Chain verdicts depend on order and membership. Reorders and removals skip the normal staging
+  // pass when their existing sources are already prepared, so explicitly rerun the plan validation.
   const previousPatchOrderRef = useRef("");
   useEffect(() => {
     const order = getBinarySourceListStableIds(activePatches).join("|");
     const previous = previousPatchOrderRef.current;
     previousPatchOrderRef.current = order;
-    if (!(validatePatches && activePatches.length && previous)) return;
-    // Same ids, different order: a pure reorder (adds/removals restage and revalidate on their own).
+    if (!previous || previous === order) return;
+    invalidatePatchDependentOutput("list changed", {
+      currentPatchCount: activePatches.length,
+      previousPatchCount: previous.split("|").length,
+    });
+    const generation = patchStageMachine.invalidateStage();
+    if (!(validatePatches && activePatches.length)) return;
+    const previousIds = previous.split("|");
+    const currentIds = order.split("|");
     const sameMembers =
-      previous.split("|").sort().join("|") === order.split("|").sort().join("|") && previous !== order;
-    if (!sameMembers) return;
-    emitSessionTrace("patch order changed; re-planning chain validation", {});
-    validatePatchesDeferred(createStageSnapshot());
-  }, [activePatches, createStageSnapshot, emitSessionTrace, validatePatches, validatePatchesDeferred]);
+      previousIds.slice().sort().join("|") === currentIds.slice().sort().join("|") && previous !== order;
+    const removedPatch = currentIds.length < previousIds.length && previousIds.some((id) => !currentIds.includes(id));
+    if (!(sameMembers || removedPatch)) return;
+    const reason = sameMembers ? "order changed" : "patch removed";
+    emitSessionTrace("patch list changed; re-planning chain validation", {
+      currentPatchCount: currentIds.length,
+      generation,
+      previousPatchCount: previousIds.length,
+      reason,
+    });
+    validatePatchesDeferred(createStageSnapshot(), generation);
+  }, [
+    activePatches,
+    createStageSnapshot,
+    emitSessionTrace,
+    invalidatePatchDependentOutput,
+    patchStageMachine,
+    validatePatches,
+    validatePatchesDeferred,
+  ]);
 
   // One short debounce coalesces ROM and patch changes into a concurrent staging
   // pass. Read the latest snapshot at fire time and enqueue input first so patch

@@ -446,7 +446,13 @@ const useInputStaging = (context: InputStagingContext) => {
           );
           // The card now shows info + cheap preflight; run the deferred deep validation silently in
           // the background so it no longer makes the patch look like it is hanging.
-          if (!expandedPatchSources) validatePatchesDeferred(snapshot, generation);
+          if (!expandedPatchSources) {
+            contextRef.current.report.emitSessionTrace("patch staging complete; deferred validation dispatched", {
+              generation,
+              patchCount: snapshot.patches.length,
+            });
+            validatePatchesDeferred(snapshot, generation);
+          }
         })
         .catch((error) => {
           if (patchStageGenerationRef.current !== generation) return;

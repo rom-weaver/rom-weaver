@@ -210,7 +210,7 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
     });
   });
 
-  it("invalidates and reapplies a completed output when patch enablement changes", async () => {
+  it("invalidates a completed output without applying when patch enablement changes", async () => {
     const patches = [source("a.ips"), source("b.ips")];
     const initialDisabledPatchIds = new Set<string>();
     const { result, applyPatches, downloadOutput, options, rerender } = renderSession({
@@ -229,21 +229,121 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
       rerender({ ...options, disabledPatchIds });
     });
 
-    await waitFor(() => expect(applyPatches).toHaveBeenCalledTimes(2));
-    expect(downloadOutput).toHaveBeenCalledTimes(2);
-    expect(result.current.localOutputController.getState().pendingDownloadFileName).toBe("rom.patched.zip");
+    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull());
+    expect(applyPatches).toHaveBeenCalledTimes(1);
+    expect(downloadOutput).toHaveBeenCalledTimes(1);
+    expect(result.current.localOutputController.getState().applyButton.label).toBe("Apply & download");
 
     await act(async () => {
       rerender({ ...options, disabledPatchIds: new Set(getBinarySourceListStableIds(patches)) });
     });
-    await waitFor(() => expect(applyPatches).toHaveBeenCalledTimes(3));
-    expect(downloadOutput).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull());
+    expect(applyPatches).toHaveBeenCalledTimes(1);
+    expect(downloadOutput).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       rerender({ ...options, disabledPatchIds: new Set<string>() });
     });
-    await waitFor(() => expect(applyPatches).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull());
+    expect(applyPatches).toHaveBeenCalledTimes(1);
+    expect(downloadOutput).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    expect(applyPatches).toHaveBeenCalledTimes(2);
+    expect(downloadOutput).toHaveBeenCalledTimes(2);
+  });
+
+  it("rechecks and retires output for patch reorder, add, remove, and enablement changes", async () => {
+    const patches = [source("a.ips"), source("b.ips")];
+    const addedPatch = source("c.ips");
+    const stagePatches = vi.fn(async (snapshot) =>
+      snapshot.patches.map((_, index) => ({
+        fileName: `patch-${index + 1}.ips`,
+        id: `patch-${index + 1}`,
+        order: index,
+        size: 1024,
+      })),
+    );
+    const validatePatches = vi.fn(async (snapshot) =>
+      snapshot.patches.map((_, index) => ({
+        fileName: `patch-${index + 1}.ips`,
+        id: `patch-${index + 1}`,
+        order: index,
+        size: 1024,
+      })),
+    );
+    const { result, applyPatches, downloadOutput, options, rerender } = renderSession({
+      patches,
+      stagePatches,
+      validatePatches,
+    } as Partial<LocalApplyPatchFormSessionOptions>);
+
+    await waitFor(() => expect(stagePatches).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(validatePatches).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.localOutputController.getState().applyButton.disabled).toBe(false));
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    expect(applyPatches).toHaveBeenCalledTimes(1);
+    expect(downloadOutput).toHaveBeenCalledTimes(1);
+
+    const reordered = [patches[1], patches[0]];
+    await act(async () => {
+      rerender({ ...options, patches: reordered, stagePatches, validatePatches });
+    });
+    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull());
+    await waitFor(() => expect(validatePatches).toHaveBeenCalledTimes(2));
+    expect(applyPatches).toHaveBeenCalledTimes(1);
+    expect(downloadOutput).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    expect(applyPatches).toHaveBeenCalledTimes(2);
+    expect(downloadOutput).toHaveBeenCalledTimes(2);
+
+    const withAddedPatch = [...reordered, addedPatch];
+    await act(async () => {
+      rerender({ ...options, patches: withAddedPatch, stagePatches, validatePatches });
+    });
+    await waitFor(() => expect(stagePatches).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(validatePatches).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull());
+    expect(applyPatches).toHaveBeenCalledTimes(2);
+    expect(downloadOutput).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    expect(applyPatches).toHaveBeenCalledTimes(3);
+    expect(downloadOutput).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      rerender({ ...options, patches: reordered, stagePatches, validatePatches });
+    });
+    await waitFor(() => expect(validatePatches).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull());
+    expect(applyPatches).toHaveBeenCalledTimes(3);
+    expect(downloadOutput).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    expect(applyPatches).toHaveBeenCalledTimes(4);
     expect(downloadOutput).toHaveBeenCalledTimes(4);
+
+    const disabledPatchIds = new Set([getBinarySourceListStableIds(reordered)[0]]);
+    await act(async () => {
+      rerender({ ...options, disabledPatchIds, patches: reordered, stagePatches, validatePatches });
+    });
+    await waitFor(() => expect(validatePatches).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull());
+    expect(applyPatches).toHaveBeenCalledTimes(4);
+    expect(downloadOutput).toHaveBeenCalledTimes(4);
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    expect(applyPatches).toHaveBeenCalledTimes(5);
+    expect(downloadOutput).toHaveBeenCalledTimes(5);
   });
 
   it("starts only one workflow for concurrent run requests", async () => {
