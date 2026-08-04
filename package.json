@@ -82,6 +82,7 @@
     "hooks:install": "node scripts/lefthook-install.mjs",
     "hooks:run": "lefthook run pre-commit --force",
     "hooks:validate": "lefthook validate",
+    "lint:code": "oxlint scripts packages/rom-weaver-alias/bin --deny-warnings",
     "prepack": "mise run manpages",
     "test": "node --test scripts/*.test.mjs scripts/ci/*.test.mjs scripts/wasm/*.test.mjs",
     "audit:deps": "npm audit --audit-level=high",
@@ -95,6 +96,7 @@
     "cross-spawn": "7.0.6",
     "doctoc": "2.5.0",
     "lefthook": "2.1.10",
-    "markdownlint-cli2": "0.23.2"
+    "markdownlint-cli2": "0.23.2",
+    "oxlint": "1.76.0"
   }
 }

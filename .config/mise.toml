@@ -154,7 +154,7 @@ run = "cargo fmt --package rom-weaver-checksum --package rom-weaver-cli --packag
 
 [tasks.clippy]
 description = "Lint the workspace with clippy (warnings are errors)"
-run = "cargo clippy --workspace --all-targets --no-deps -- -D warnings"
+run = "cargo clippy --workspace --all-targets --all-features --no-deps -- -D warnings"
 
 [tasks.typegen]
 description = "Regenerate TypeScript bindings from Rust"

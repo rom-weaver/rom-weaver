@@ -129,6 +129,9 @@ jobs:
       - name: Shell scripts
         run: mise run shellcheck
 
+      - name: Node.js scripts
+        run: npm run lint:code
+
       - name: Dockerfiles
         run: mise run hadolint
 

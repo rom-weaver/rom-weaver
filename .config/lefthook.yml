@@ -94,6 +94,14 @@ pre-commit:
     react-i18n:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run lint:i18n
+    root-node-lint:
+      glob:
+        - "scripts/**/*.{mjs,cjs,js}"
+        - "packages/rom-weaver-alias/**/*.{mjs,cjs,js}"
+        - ".oxlintrc.json"
+        - "package.json"
+        - "package-lock.json"
+      run: npm run lint:code
     react-audit-strings:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run audit:strings

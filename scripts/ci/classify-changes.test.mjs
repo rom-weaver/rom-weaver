@@ -227,9 +227,15 @@ test("plumbing lint runs only for the file kinds it lints", () => {
     ".github/ISSUE_TEMPLATE/config.yml",
     ".github/actions/wasm-cache/action.yml",
     "scripts/setup-worktree.sh",
+    "scripts/example.cjs",
+    "scripts/example.js",
     "scripts/warn-only.mjs",
     "packages/rom-weaver-webapp/Dockerfile",
     ".config/hadolint.yaml",
+    ".config/lefthook.yml",
+    ".oxlintrc.json",
+    "package.json",
+    "package-lock.json",
   ]) {
     assert.equal(classify(path).repo_lint, "true", path);
   }
