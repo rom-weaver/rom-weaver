@@ -119,6 +119,17 @@ test("local without-rom bundle drop seeds optional patches off", async () => {
   await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(2);
   // The optional patch must seed OFF; the core patch stays on.
   await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 }).toEqual([true, false]);
+
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  // A completed run must remain recoverable when an optional bundle patch is turned back on. The
+  // patch file stays in the stack, so its extracted source cannot be released with the first run.
+  getPatchToggles()[1]?.click();
+  await expect.poll(() => getPatchToggles()[1]?.checked, { timeout: 30000 }).toBe(true);
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+  expect(document.getElementById("rom-weaver-error-message")?.textContent || "").toBe("");
 });
 
 test("archive whose index is named rw.json (not canonical) is content-probed and seeds enablement", async () => {

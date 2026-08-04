@@ -54,6 +54,7 @@ import { useCompressionResolver } from "./use-compression-resolver.ts";
 import { useInputStaging } from "./use-input-staging.ts";
 import { useInputUiController, usePatchStackController } from "./use-patcher-controllers.ts";
 import { useActiveAbortController, useDisposableCleanup } from "./workflow-run-hooks.ts";
+import { retainBrowserSource, releaseBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
 
 const createSettingsIdentityKey = (settings: ApplyPatchFormSettings) =>
   JSON.stringify(settings, (_key, value) => (typeof value === "function" ? "[function]" : value));
@@ -192,6 +193,16 @@ const useLocalApplyPatchFormSession = ({
     const ids = getBinarySourceListStableIds(activePatches);
     return activePatches.filter((_, index) => !disabledPatchIds.has(ids[index] || ""));
   }, [activePatches, disabledPatchIds]);
+  const retainedSources = useMemo(
+    () => new Set<BinarySource>([...effectiveInputs, ...activePatches]),
+    [activePatches, effectiveInputs],
+  );
+  useEffect(() => {
+    for (const source of retainedSources) retainBrowserSource(source);
+    return () => {
+      for (const source of retainedSources) void releaseBrowserSource(source).catch(() => undefined);
+    };
+  }, [retainedSources]);
   const activeSettings = settings === undefined ? internalSettings : settings;
   const emitSessionTrace = useCallback(
     (message: string, details?: Record<string, unknown>) =>
