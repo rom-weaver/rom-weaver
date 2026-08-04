@@ -51,7 +51,6 @@ export const onRequest = async ({ request, env, next }) => {
   if (!acceptsBrotli(request.headers.get("Accept-Encoding"))) return next();
 
   const sidecarPaths = documentSidecarPaths(new URL(request.url).pathname);
-  const debug = new URL(request.url).searchParams.get("rw-debug") === "1";
   for (const sidecarPath of sidecarPaths) {
     // Pages' asset binding resolves direct HTML filenames through the pretty-path
     // fallback. The build stores Brotli bytes as index.html in a private asset
@@ -59,19 +58,6 @@ export const onRequest = async ({ request, env, next }) => {
     const sidecar = await env.ASSETS.fetch(new URL(sidecarPath, request.url), {
       headers: { "Accept-Encoding": "br" },
     });
-    if (debug) {
-      return new Response(
-        JSON.stringify({
-          sidecarPath,
-          status: sidecar.status,
-          ok: sidecar.ok,
-          contentType: sidecar.headers.get("Content-Type"),
-          contentEncoding: sidecar.headers.get("Content-Encoding"),
-          contentLength: sidecar.headers.get("Content-Length"),
-        }),
-        { headers: { "Content-Type": "application/json" } },
-      );
-    }
     if (sidecar.status === 304) {
       const headers = documentHeaders(sidecar);
       headers.delete("Content-Length");
@@ -84,9 +70,11 @@ export const onRequest = async ({ request, env, next }) => {
       headers.delete("Content-Length");
       return new Response(null, { status: 304, headers });
     }
-    // The sidecar carries Content-Encoding: br in _headers. Keep its stream unread
-    // so Cloudflare passes the already-compressed bytes through unchanged.
-    return new Response(sidecar.body, { encodeBody: "manual", headers });
+    // ASSETS.fetch does not expose Content-Length for a pretty-path response.
+    // Buffer the small HTML document so Cloudflare keeps Content-Encoding: br.
+    const body = await sidecar.arrayBuffer();
+    headers.set("Content-Length", String(body.byteLength));
+    return new Response(body, { encodeBody: "manual", headers });
   }
   return next();
 };
