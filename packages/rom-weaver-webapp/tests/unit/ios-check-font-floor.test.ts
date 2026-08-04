@@ -88,7 +88,11 @@ describe("iOS check font floor", () => {
     // fields.css for both states of an editable one - and a hash overflows its row the
     // moment they disagree.
     for (const css of [DRAWERS_CSS, FIELDS_CSS]) {
-      const clamps = [...css.matchAll(/font-size: clamp\(\.46rem,.*/g)].map(([line]) => line);
+      // Matched across newlines and re-spaced: the clamp is wider than the CSS
+      // formatter's line budget, so it is wrapped over several lines.
+      const clamps = [...css.matchAll(/font-size:\s*clamp\(\s*0?\.46rem,[\s\S]*?\);/g)].map(([line]) =>
+        line.replace(/\s+/g, " "),
+      );
       expect(clamps.length).toBe(1);
       expect(clamps[0]).toContain("/ var(--ck-v-divisor");
     }

@@ -1,7 +1,14 @@
 /* React modal framework */
 /* Above the guided-sample layer (1000-1003): a real modal must never end up
    dimmed underneath the non-modal coach mark. */
-.rw-modal { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: var(--sp-l); }
+.rw-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-l);
+}
 /* The page behind a modal must not scroll: a wheel or a swipe that misses the
    card would otherwise move the document under it, and the reader comes back to
    somewhere they never chose. Declarative rather than a JS lock so nesting is
@@ -9,26 +16,84 @@
    none of this; it is a native `<dialog>` and `showModal()` locks for it.
    `overflow: hidden` on the root keeps the scroll offset, so closing lands the
    reader exactly where they left. */
-html:has(.rw-modal) { overflow: hidden; }
-.rw-modal-backdrop { position: absolute; inset: 0; border: 0; background: var(--scrim); backdrop-filter: blur(3px); }
+html:has(.rw-modal) {
+  overflow: hidden;
+}
+.rw-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  border: 0;
+  backdrop-filter: blur(3px);
+}
 .rw-modal-card {
   /* Viewport cap contains long unbroken filenames. */
-  position: relative; width: min(640px, 100%); max-width: calc(100vw - 32px); max-height: min(82dvh, 760px);
-  display: flex; flex-direction: column;
-  background: var(--plate); border: 1px solid var(--seam-strong); border-radius: var(--r-l);
-  box-shadow: var(--overlay-shadow); overflow: clip;
-  transition: transform .26s var(--ease), opacity .22s ease;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100%);
+  max-width: calc(100vw - 32px);
+  max-height: min(82dvh, 760px);
+  overflow: clip;
+  background: var(--plate);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-l);
+  box-shadow: var(--overlay-shadow);
+  transition:
+    transform 0.26s var(--ease),
+    opacity 0.22s ease;
 }
-@starting-style { .rw-modal-card { transform: translateY(10px) scale(.97); opacity: 0; } }
-.rw-modal .modal-head { display: flex; align-items: flex-start; gap: var(--sp-m); padding: var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
-.rw-modal .modal-head > div:first-child { flex: 1 1 auto; min-width: 0; }
-.rw-modal .modal-title { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .01em; min-width: 0; overflow-wrap: anywhere; }
-.rw-modal .modal-sub { font-size: .78rem; color: var(--ink-3); margin-top: 2px; }
-.rw-app .mh-sp { flex: 1 1 auto; }
-.rw-modal .modal-head .dlg-x { align-self: flex-start; margin-inline-end: calc(-1 * var(--sp-2xs)); }
-.rw-modal .modal-head .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
-.rw-modal .modal-body { padding: var(--sp-l); overflow-y: auto; overscroll-behavior: contain; }
-.rw-modal.select-modal .rw-modal-card { width: 100%; }
+@starting-style {
+  .rw-modal-card {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+.rw-modal .modal-head {
+  display: flex;
+  flex: none;
+  gap: var(--sp-m);
+  align-items: flex-start;
+  padding: var(--sp-l);
+  border-block-end: 1px solid var(--seam-soft);
+}
+.rw-modal .modal-head > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rw-modal .modal-title {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+.rw-modal .modal-sub {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+.rw-app .mh-sp {
+  flex: 1 1 auto;
+}
+.rw-modal .modal-head .dlg-x {
+  align-self: flex-start;
+  margin-inline-end: calc(-1 * var(--sp-2xs));
+}
+.rw-modal .modal-head .btn {
+  height: 30px;
+  padding-inline: 12px;
+  font-size: 0.76rem;
+}
+.rw-modal .modal-body {
+  padding: var(--sp-l);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.rw-modal.select-modal .rw-modal-card {
+  width: 100%;
+}
 /* The guide sheet rises from the bottom edge instead of sitting centred - it
    belongs to the trail that opens it, and the trail holds the bottom of the
    guide above the dock. The rest of its styling is in docs.css with the guide;
@@ -37,10 +102,17 @@ html:has(.rw-modal) { overflow: hidden; }
 /* The sheet's head is one line of title and the close button, so the two share a
    centre line. `flex-start` is for the heads that carry a subtitle under the
    title, where the button belongs beside the first line, not beside the pair. */
-.rw-modal.guide-sheet .modal-head { align-items: center; }
-.rw-modal.guide-sheet .modal-head .dlg-x { align-self: center; }
+.rw-modal.guide-sheet .modal-head {
+  align-items: center;
+}
+.rw-modal.guide-sheet .modal-head .dlg-x {
+  align-self: center;
+}
 @media (max-width: 860px) {
-  .rw-modal.guide-sheet { place-items: end stretch; padding: 0; }
+  .rw-modal.guide-sheet {
+    place-items: end stretch;
+    padding: 0;
+  }
   .rw-modal.guide-sheet .rw-modal-card {
     width: 100%;
     max-width: none;
@@ -51,51 +123,188 @@ html:has(.rw-modal) { overflow: hidden; }
     border-radius: var(--r-l) var(--r-l) 0 0;
   }
   @starting-style {
-    .rw-modal.guide-sheet .rw-modal-card { transform: translateY(100%); opacity: 1; }
+    .rw-modal.guide-sheet .rw-modal-card {
+      opacity: 1;
+      transform: translateY(100%);
+    }
   }
   /* this guide's outline, then every guide */
-  .rw-modal.guide-sheet .modal-body { display: grid; gap: var(--sp-l); align-content: start; }
+  .rw-modal.guide-sheet .modal-body {
+    display: grid;
+    gap: var(--sp-l);
+    align-content: start;
+  }
 }
-.rw-modal.select-modal .modal-body { padding-block-start: var(--sp-s); }
+.rw-modal.select-modal .modal-body {
+  padding-block-start: var(--sp-s);
+}
 /* Stack labels when the card, not the viewport, runs narrow. */
 @container settings-card (max-width: 560px) {
-  .rw-app .setgroup .setrow { grid-template-columns: minmax(0, 1fr); gap: var(--sp-xs); }
+  .rw-app .setgroup .setrow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-xs);
+  }
 }
-.rw-app .setrow .sctl { min-width: 0; width: 100%; display: flex; flex-direction: column; gap: var(--sp-xs); }
-.rw-app .setrow .sctl .select { height: 34px; font-size: var(--dropdown-fs, .85rem); }
-.rw-app .setrow .sctl .input { height: 34px; font-size: .85rem; }
-.rw-app .setrow .slabel label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rw-app .setrow .slabel small { flex-basis: 100%; font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
-.rw-app .settings-placeholder-value { color: var(--ink-3); font-style: italic; font-weight: 450; }
-.rw-app .setrow .sctl .input::placeholder { color: var(--ink-3); font-style: italic; opacity: .78; }
-.rw-app .setrow .sctl .select option[value=""] { color: var(--ink-3); font-style: italic; }
+.rw-app .setrow .sctl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  width: 100%;
+  min-width: 0;
+}
+.rw-app .setrow .sctl .select {
+  height: 34px;
+  font-size: var(--dropdown-fs, 0.85rem);
+}
+.rw-app .setrow .sctl .input {
+  height: 34px;
+  font-size: 0.85rem;
+}
+.rw-app .setrow .slabel label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-app .setrow .slabel small {
+  flex-basis: 100%;
+  margin-top: 1px;
+  font-size: 0.72rem;
+  color: var(--ink-4);
+}
+.rw-app .settings-placeholder-value {
+  font-style: italic;
+  font-weight: 450;
+  color: var(--ink-3);
+}
+.rw-app .setrow .sctl .input::placeholder {
+  font-style: italic;
+  color: var(--ink-3);
+  opacity: 0.78;
+}
+.rw-app .setrow .sctl .select option[value=""] {
+  font-style: italic;
+  color: var(--ink-3);
+}
 
 /* Archive and disc selection tree */
-.rw-app .seltree { display: flex; flex-direction: column; gap: var(--sp-s); }
-.rw-app .selnode { appearance: none; width: 100%; text-align: start; font: inherit; color: inherit; min-width: 0; }
-@media (hover: hover) {
-  .rw-app .pick-row.off:hover { border-color: var(--seam); }
+.rw-app .seltree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
 }
-.rw-app .pick-row .pick-note { min-width: 0; font-size: .74rem; color: var(--ink-4); overflow-wrap: anywhere; }
-.rw-app .selcount { font-size: .76rem; color: var(--ink-3); }
-.rw-app .selfoot { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-m); margin-top: var(--sp-s); }
-.rw-app .selfoot .selcount { margin-inline-end: auto; }
-.rw-app .selfoot .btn { height: 34px; padding-inline: 14px; font-size: .8rem; }
+.rw-app .selnode {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  appearance: none;
+}
+@media (hover: hover) {
+  .rw-app .pick-row.off:hover {
+    border-color: var(--seam);
+  }
+}
+.rw-app .pick-row .pick-note {
+  min-width: 0;
+  font-size: 0.74rem;
+  color: var(--ink-4);
+  overflow-wrap: anywhere;
+}
+.rw-app .selcount {
+  font-size: 0.76rem;
+  color: var(--ink-3);
+}
+.rw-app .selfoot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-m);
+  align-items: center;
+  margin-top: var(--sp-s);
+}
+.rw-app .selfoot .selcount {
+  margin-inline-end: auto;
+}
+.rw-app .selfoot .btn {
+  height: 34px;
+  padding-inline: 14px;
+  font-size: 0.8rem;
+}
 /* Match .tag.fmt specificity so verified color wins. */
-.rw-app .tag.matches { color: var(--verified); }
+.rw-app .tag.matches {
+  color: var(--verified);
+}
 @media (forced-colors: active) {
-  .rw-app .selcheck:has(input:checked) { outline: 3px solid Highlight; outline-offset: -1px; }
+  .rw-app .selcheck:has(input:checked) {
+    outline: 3px solid Highlight;
+    outline-offset: -1px;
+  }
 }
 
 /* Codec combobox */
-.rw-app .codec-combobox { position: relative; width: 100%; z-index: 1; }
-.rw-app .ofld:focus-within, .rw-app .setrow:focus-within { position: relative; z-index: 90; }
-.rw-app .codec-combobox::after { content: ""; position: absolute; inset-inline-end: 10px; top: 50%; width: 12px; height: 12px; pointer-events: none; transform: translateY(-50%); background: no-repeat center / 12px 12px var(--chevron); }
-.rw-app .codec-combobox .input { padding-inline-end: 30px; font-size: var(--dropdown-fs, .82rem); }
-.rw-app .setrow .sctl .codec-combobox .input { font-size: var(--dropdown-fs, .85rem); }
-.codec-combobox-list { box-sizing: border-box; position: fixed; z-index: 10000; left: 0; top: 0; overflow: auto; padding: 4px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--plate); box-shadow: var(--overlay-shadow); }
-.codec-combobox-option { min-height: 28px; display: flex; align-items: center; padding: 0 8px; border-radius: 4px; color: var(--ink); cursor: pointer; font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-stretch: 86%; font-size: var(--dropdown-fs, .8rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.codec-combobox-option.active { background: var(--plate-2); color: var(--thread-text); }
+.rw-app .codec-combobox {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+.rw-app .ofld:focus-within,
+.rw-app .setrow:focus-within {
+  position: relative;
+  z-index: 90;
+}
+.rw-app .codec-combobox::after {
+  position: absolute;
+  inset-inline-end: 10px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+  content: "";
+  background: no-repeat center / 12px 12px var(--chevron);
+  transform: translateY(-50%);
+}
+.rw-app .codec-combobox .input {
+  padding-inline-end: 30px;
+  font-size: var(--dropdown-fs, 0.82rem);
+}
+.rw-app .setrow .sctl .codec-combobox .input {
+  font-size: var(--dropdown-fs, 0.85rem);
+}
+.codec-combobox-list {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10000;
+  box-sizing: border-box;
+  padding: 4px;
+  overflow: auto;
+  background: var(--plate);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-s);
+  box-shadow: var(--overlay-shadow);
+}
+.codec-combobox-option {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font);
+  font-size: var(--dropdown-fs, 0.8rem);
+  font-stretch: 86%;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.codec-combobox-option.active {
+  color: var(--thread-text);
+  background: var(--plate-2);
+}
 
 /* Prevent iOS focus zoom without disabling pinch zoom.
    Two dropdown families opt out, and both are defined by sizing themselves to the
@@ -110,125 +319,271 @@ html:has(.rw-modal) { overflow: hidden; }
    which is exactly why it is not a field at rest. */
 @supports (-webkit-touch-callout: none) {
   @media (pointer: coarse) {
-    .rw-app .input, .rw-app .select,
+    .rw-app .input,
+    .rw-app .select,
     .rw-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
     .rw-app textarea,
-    .rw-app select:not(.meta-target-select):not(.ck-add-select) { font-size: max(16px, 1em); }
+    .rw-app select:not(.meta-target-select):not(.ck-add-select) {
+      font-size: max(16px, 1em);
+    }
     /* Reassert the 16px floor against more specific field rules. */
     .rw-app .ofld .select,
-    .rw-app .fname .select, .rw-app .fname .outname { font-size: max(16px, 1em); }
+    .rw-app .fname .select,
+    .rw-app .fname .outname {
+      font-size: max(16px, 1em);
+    }
   }
 }
 /* Enlarge touch targets without changing visual layout.
    The drawer copy buttons get the same treatment in drawers.css - it owns them, and
    from here this layer would outrank the placement rules that live with them. */
 @media (pointer: coarse) {
-  .rw-app .info-btn { position: relative; }
+  .rw-app .info-btn {
+    position: relative;
+  }
   /* Expand masthead targets vertically to avoid overlapping neighbors. */
-  .rw-app .masthead-tools .tool { position: relative; }
-  .rw-app .masthead-tools .tool::after { content: ""; position: absolute; inset-inline: 0; top: 50%; height: 44px; transform: translateY(-50%); }
+  .rw-app .masthead-tools .tool {
+    position: relative;
+  }
+  .rw-app .masthead-tools .tool::after {
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    height: 44px;
+    content: "";
+    transform: translateY(-50%);
+  }
 }
 
-.rw-app .notice.error { color: var(--ink); background: color-mix(in oklab, var(--fault) 9%, var(--plate-2)); border: 1px solid color-mix(in oklab, var(--fault) 40%, var(--seam)); }
-.rw-app .notice.error svg, .rw-app .notice.error b { color: var(--fault); }
+.rw-app .notice.error {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--fault) 9%, var(--plate-2));
+  border: 1px solid color-mix(in oklab, var(--fault) 40%, var(--seam));
+}
+.rw-app .notice.error svg,
+.rw-app .notice.error b {
+  color: var(--fault);
+}
 
-.rw-modal .confirm-card { width: min(440px, 100%); padding: var(--sp-l); }
-.rw-modal .confirm-card .c-title { display: flex; align-items: center; gap: var(--sp-m); font-size: .95rem; font-weight: 700; color: var(--ink); }
-.rw-modal .confirm-card .c-title svg { width: 19px; height: 19px; color: var(--care); flex: none; }
-.rw-modal .confirm-card .c-body { margin: 10px 0 16px; font-size: .9rem; line-height: 1.55; color: var(--ink-2); }
-.rw-modal .confirm-card .c-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); }
+.rw-modal .confirm-card {
+  width: min(440px, 100%);
+  padding: var(--sp-l);
+}
+.rw-modal .confirm-card .c-title {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.rw-modal .confirm-card .c-title svg {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  color: var(--care);
+}
+.rw-modal .confirm-card .c-body {
+  margin: 10px 0 16px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.rw-modal .confirm-card .c-actions {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  justify-content: flex-end;
+}
 
-.rw-app .pdesc { margin: 0 0 4px; font-size: .8rem; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
-.rw-app .workflow-step-after-items:not(:empty) { margin-top: 13px; }
-.rw-app .cards:not(:empty) + .drop, .rw-app .workflow-file-list:not(:empty) + .drop { margin-top: 13px; }
-.rw-app .iprog-wrap { min-width: 0; }
+.rw-app .pdesc {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.rw-app .workflow-step-after-items:not(:empty) {
+  margin-top: 13px;
+}
+.rw-app .cards:not(:empty) + .drop,
+.rw-app .workflow-file-list:not(:empty) + .drop {
+  margin-top: 13px;
+}
+.rw-app .iprog-wrap {
+  min-width: 0;
+}
 
 /* Scale progress on the compositor; counter-scale its texture and shuttle. */
-.rw-app .meter:not(.indet) .fill { width: 100%; transform-origin: 0 50%; transform: scaleX(var(--scale, 0)); transition: transform .4s var(--ease); }
+.rw-app .meter:not(.indet) .fill {
+  width: 100%;
+  transform: scaleX(var(--scale, 0));
+  transform-origin: 0 50%;
+  transition: transform 0.4s var(--ease);
+}
 /* Live ticks arrive per frame, so the settle tween becomes pure lag - swap it
    for the short linear one that smooths the steps and still lands on time. */
-.rw-app .meter.live:not(.indet) .fill { transition: transform var(--prog-tween); }
+.rw-app .meter.live:not(.indet) .fill {
+  transition: transform var(--prog-tween);
+}
 .rw-app .meter:not(.indet) .fill::before {
+  transform: scaleX(calc(1 / max(var(--scale, 1), 0.001)));
   transform-origin: 100% 50%;
-  transform: scaleX(calc(1 / max(var(--scale, 1), .001)));
   /* Tween alongside the fill; snapping the counter-scale would fatten the
      shuttle for the length of the fill's transition. */
   transition: transform var(--prog-tween);
 }
 /* Isolate per-tick layout and paint invalidation. */
-.rw-app .card, .rw-app .prog-panel { contain: layout paint style; }
+.rw-app .card,
+.rw-app .prog-panel {
+  contain: layout paint style;
+}
 /* Patch menus extend below compact cards. Paint containment would clip their
    lower actions before they can be reached. */
-.rw-app .card.patch { contain: layout style; }
+.rw-app .card.patch {
+  contain: layout style;
+}
 
 /* Keep meter animation on the compositor during main-thread stalls. */
-.rw-app .meter.indet .fill { width: 32%; margin-inline-start: 0; animation: indet-slide 1.8s ease-in-out infinite; }
-@keyframes indet-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(412%); } }
-.rw-app .meter .fill { overflow: clip; }
+.rw-app .meter.indet .fill {
+  width: 32%;
+  margin-inline-start: 0;
+  animation: indet-slide 1.8s ease-in-out infinite;
+}
+@keyframes indet-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(412%);
+  }
+}
+.rw-app .meter .fill {
+  overflow: clip;
+}
 /* Counter-scale the texture and oversize it to cover its 6px drift. */
 .rw-app .meter:not(.indet) .fill::after {
-  inset: 0 auto 0 -12px; width: calc(100% + 12px);
+  inset: 0 auto 0 -12px;
+  width: calc(100% + 12px);
+  transform: translateX(0) scaleX(calc(1 / max(var(--scale, 1), 0.001)));
   transform-origin: 0 50%;
-  transform: translateX(0) scaleX(calc(1 / max(var(--scale, 1), .001)));
   animation: none;
 }
-.rw-app .running .meter:not(.indet) .fill::after, .rw-app .meter.live:not(.indet) .fill::after { animation: weft-slide .5s linear infinite; }
+.rw-app .running .meter:not(.indet) .fill::after,
+.rw-app .meter.live:not(.indet) .fill::after {
+  animation: weft-slide 0.5s linear infinite;
+}
 @keyframes weft-slide {
-  from { transform: translateX(-6px) scaleX(calc(1 / max(var(--scale, 1), .001))); }
-  to { transform: translateX(0) scaleX(calc(1 / max(var(--scale, 1), .001))); }
+  from {
+    transform: translateX(-6px) scaleX(calc(1 / max(var(--scale, 1), 0.001)));
+  }
+  to {
+    transform: translateX(0) scaleX(calc(1 / max(var(--scale, 1), 0.001)));
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .meter.indet .fill { animation: none; transform: none; width: 100%; opacity: .55; }
-  .rw-app .meter:not(.indet) .fill::after { animation: none; }
+  .rw-app .meter.indet .fill {
+    width: 100%;
+    opacity: 0.55;
+    transform: none;
+    animation: none;
+  }
+  .rw-app .meter:not(.indet) .fill::after {
+    animation: none;
+  }
 }
 
 /* Float patch actions so full names can wrap beneath them. */
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-top { display: flow-root; }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-actions {
-  float: right; display: flex; margin: 0 0 var(--sp-xs) var(--sp-m);
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-top {
+  display: flow-root;
 }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-btns { display: flex; align-items: center; gap: var(--sp-s); }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name { display: block; min-width: 0; }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline { display: block; }
-.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > :is(.patch-desc, .patch-desc-line, .card-meta) { margin-block-start: var(--sp-xs); }
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-actions {
+  float: right;
+  display: flex;
+  margin: 0 0 var(--sp-xs) var(--sp-m);
+}
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-btns {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+}
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name {
+  display: block;
+  min-width: 0;
+}
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline {
+  display: block;
+}
+.rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > :is(.patch-desc, .patch-desc-line, .card-meta) {
+  margin-block-start: var(--sp-xs);
+}
 .rw-app #rom-weaver-list-patch-stack > .card.patch .phandle {
-  width: var(--ctrl-h); height: var(--ctrl-h); min-height: 0;
-  display: flex; align-items: center; justify-content: center; padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctrl-h);
+  height: var(--ctrl-h);
+  min-height: 0;
+  padding: 2px;
 }
 /* Pair patch cards on wide screens while keeping workflow stages linear. */
 @media (min-width: 1100px) {
-  .rw-app #panel-trim, .rw-app #panel-tools { width: 100%; max-width: 880px; margin-inline: auto; }
-  .rw-app #rom-weaver-container > * { min-width: 0; }
-  .rw-app #rom-weaver-container > #rom-weaver-row-patch-stack { border-block-start: 1px solid var(--seam-soft); }
-  .rw-app #rom-weaver-list-patch-stack.patch-cards {
-    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start;
+  .rw-app #panel-trim,
+  .rw-app #panel-tools {
+    width: 100%;
+    max-width: 880px;
+    margin-inline: auto;
   }
-  .rw-app #rom-weaver-list-patch-stack > .card.patch:only-child { grid-column: 1 / -1; }
+  .rw-app #rom-weaver-container > * {
+    min-width: 0;
+  }
+  .rw-app #rom-weaver-container > #rom-weaver-row-patch-stack {
+    border-block-start: 1px solid var(--seam-soft);
+  }
+  .rw-app #rom-weaver-list-patch-stack.patch-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .rw-app #rom-weaver-list-patch-stack > .card.patch:only-child {
+    grid-column: 1 / -1;
+  }
 }
 
-.rw-app .panel.workflow .step:last-child { padding-block-end: 4px; }
+.rw-app .panel.workflow .step:last-child {
+  padding-block-end: 4px;
+}
 /* Keep workflow rails consistent across breakpoints. */
 .rw-app .panel.workflow .step {
-  border: 0;
   background: transparent;
+  border: 0;
 }
 
 /* Status seams span the same inset as their cards. */
 .rw-app .panel.workflow .step:not(.is-woven):not(.is-fault)::before,
 .rw-app .panel.workflow .step ~ .ghost-steps::before {
-  content: ""; position: absolute; top: 0; inset-inline: 0; height: 3px; pointer-events: none;
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 3px;
+  pointer-events: none;
+  content: "";
   background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--seam-strong) 2px 5px, transparent 5px 7px);
 }
-.rw-app .panel.workflow .ghost-steps { position: relative; }
+.rw-app .panel.workflow .ghost-steps {
+  position: relative;
+}
 .rw-app .panel.workflow .step > .step-head {
+  gap: var(--sp-s);
+  align-items: center;
   min-height: 38px;
   padding: var(--step-pt) 0 2px;
-  align-items: center;
-  gap: var(--sp-s);
   border: 0;
   border-radius: 0;
 }
-.rw-app .panel.workflow .step > .step-body { padding-inline: 0; }
+.rw-app .panel.workflow .step > .step-body {
+  padding-inline: 0;
+}
 
 .rw-app .panel.workflow .unified-drop-step .drop:not(.hero) {
   min-height: 64px;

@@ -6,75 +6,78 @@
 }
 
 .rw-app .not-found-page {
-  width: min(100%, 720px);
   display: grid;
   place-items: center;
-  overflow: hidden;
+  width: min(100%, 720px);
   padding: clamp(34px, 7vw, 64px) var(--pad);
+  overflow: hidden;
+  text-align: center;
+  background: var(--warp-lines) var(--empty-fill);
   border: 1px solid var(--seam);
   border-radius: var(--r-l);
-  background: var(--warp-lines) var(--empty-fill);
-  text-align: center;
 }
 
 .rw-app .not-found-content {
   display: grid;
-  justify-items: center;
   gap: var(--sp-l);
+  justify-items: center;
   max-width: 34rem;
 }
 
 .rw-app .not-found-title {
   display: grid;
-  justify-items: center;
   gap: var(--sp-m);
+  justify-items: center;
   margin: 0;
 }
 
 .rw-app .not-found-code {
-  background:
-    linear-gradient(color-mix(in oklab, var(--thread-text) 75%, transparent), color-mix(in oklab, var(--thread-text) 75%, transparent)),
-    var(--weave-mask) 0 0 / 20px 20px,
-    var(--thread-text);
-  background-blend-mode: normal, soft-light;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
   font-size: clamp(5.5rem, 18vw, 9rem);
   font-weight: 800;
   font-stretch: 82%;
-  letter-spacing: -.09em;
-  line-height: .78;
+  line-height: 0.78;
+  color: transparent;
+  letter-spacing: -0.09em;
+  background:
+    linear-gradient(
+      color-mix(in oklab, var(--thread-text) 75%, transparent),
+      color-mix(in oklab, var(--thread-text) 75%, transparent)
+    ),
+    var(--weave-mask) 0 0 / 20px 20px,
+    var(--thread-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-blend-mode: normal, soft-light;
 }
 
 @media (forced-colors: active) {
   .rw-app .not-found-code {
-    background: none;
     color: CanvasText;
+    background: none;
   }
 }
 
 .rw-app .not-found-label {
-  color: var(--ink);
-  font-size: clamp(1.45rem, 2vw + .8rem, 2.1rem);
+  font-size: clamp(1.45rem, 2vw + 0.8rem, 2.1rem);
   font-weight: 760;
-  letter-spacing: -.018em;
   line-height: 1.1;
+  color: var(--ink);
+  letter-spacing: -0.018em;
 }
 
 .rw-app .not-found-copy {
   max-width: 31rem;
   margin: 0;
-  color: var(--ink-2);
-  font-size: clamp(.9rem, .84rem + .3vw, 1rem);
+  font-size: clamp(0.9rem, 0.84rem + 0.3vw, 1rem);
   line-height: 1.55;
+  color: var(--ink-2);
 }
 
 .rw-app .not-found-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: var(--sp-s);
+  justify-content: center;
   margin-block-start: var(--sp-s);
 }
 

@@ -36,7 +36,7 @@ mise run deny                                      # dep advisories + licenses +
 mise run machete                                   # unused Rust dependencies
 mise run build-wasm                                # wasm build (needs WASI SDK v33+)
 npm --prefix packages/rom-weaver-webapp run dev     # webapp dev server
-npm --prefix packages/rom-weaver-webapp run lint    # oxfmt + oxlint + biome + tsc + browser-compat + knip
+npm --prefix packages/rom-weaver-webapp run lint    # oxfmt + biome (CSS) + oxlint + tsc + browser-compat + knip
 npm --prefix packages/rom-weaver-webapp run test:browser:wasm  # wasm-layer browser tests
 ```
 
@@ -88,6 +88,16 @@ shared actions, caching, and the release fan-out.
   belongs in the file that owns the component it modifies; reaching across a
   boundary cannot be fixed by adding specificity. Enforced by
   `npm run lint:css-layers`, with exceptions in that script's `EXEMPT` map.
+- **CSS belongs to Biome; everything else to oxfmt.** oxfmt does not read CSS,
+  so `npm run format:css` runs Biome's formatter plus its property sort, and
+  `biome.jsonc` turns the JS/TS/JSON formatters off to keep Biome off oxfmt's
+  territory. Biome ignores glob arguments, so that scope lives in the config,
+  not the command line. Two of Biome's CSS rules are deliberately `off` with
+  the reason written at each rule: `noImportantStyles`, because every
+  `!important` here escapes an inline style, a later cascade layer, or a
+  reduced-motion reset, and `noDescendingSpecificity`, because it pairs rules
+  by their rightmost selector and reports every icon rule ending in `svg`
+  against every other one. Real ordering hazards are `lint:css-layers`'s job.
 - Relative imports only in TypeScript (no path aliases).
 
 ## Documentation
