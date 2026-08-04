@@ -453,17 +453,29 @@ test("WebappRoot keeps diagnostics behind More - the Log dialog owns them", asyn
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });
 
-test("mobile masthead keeps external links and complete build identity visible", async () => {
+test("mobile More contains every masthead utility action", async () => {
   page.viewport(390, 844);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".masthead-tools")).toBeTruthy();
-  for (const selector of [".mobile-utility-source", ".mobile-utility-support"]) {
+  for (const selector of [
+    ".mobile-utility-source",
+    ".mobile-utility-support",
+    ".masthead-status",
+    ".mobile-utility-theme",
+    ".mobile-utility-accent",
+  ]) {
     const link = document.querySelector(selector);
     expect(link).not.toBeNull();
-    expect(getComputedStyle(link).display).not.toBe("none");
-    expect(link.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(getComputedStyle(link).display).toBe("none");
   }
+
+  await page.getByRole("button", { name: "More" }).click();
+  for (const label of ["View source on GitHub", "Support", "Status", "Theme", "Accent"]) {
+    await expect.element(page.getByRole("menuitem", { name: label })).toBeInTheDocument();
+  }
+  await page.getByRole("menuitem", { name: "Accent" }).click();
+  await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
 
   const buildTag = document.querySelector(".build-tag");
   expect(buildTag?.textContent).toMatch(/v\d/);

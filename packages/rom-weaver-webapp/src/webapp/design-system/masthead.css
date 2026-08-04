@@ -265,16 +265,25 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
 }
 .rw-app .shared-more-menu { inset-block-start: calc(100% + var(--sp-xs)); }
 .rw-app .more-menu[hidden] { display: none; }
-.rw-app .more-menu > button, .rw-app .more-link {
+.rw-app .more-menu > button, .rw-app .more-accent > button, .rw-app .more-link {
   display: flex; align-items: center; gap: var(--sp-s); min-block-size: 44px; padding: 7px 10px;
   border: 0; border-radius: var(--r-s); background: transparent; color: var(--ink-2);
   font: inherit; font-size: .8rem; font-weight: 600; text-align: start; text-decoration: none; white-space: nowrap;
 }
+.rw-app .more-accent { display: flex; flex-direction: column; }
 .rw-app .more-menu svg { flex: none; width: 17px; height: 17px; color: var(--thread-text); }
 @media (hover: hover) {
-  .rw-app .more-menu > button:hover, .rw-app .more-link:hover { background: var(--well); color: var(--ink); }
+  .rw-app .more-menu > button:hover, .rw-app .more-accent > button:hover, .rw-app .more-link:hover {
+    background: var(--well); color: var(--ink);
+  }
 }
-.rw-app .more-menu > button:active, .rw-app .more-link:active { background: var(--plate-2); color: var(--ink); }
+.rw-app .more-menu > button:active, .rw-app .more-accent > button:active, .rw-app .more-link:active {
+  background: var(--plate-2); color: var(--ink);
+}
+.rw-app .more-accent-tray {
+  display: flex; gap: var(--sp-s); margin: 0 10px 6px; padding: var(--sp-s) var(--sp-xs);
+  border: 1px solid var(--seam); border-radius: var(--r-s); background: var(--well);
+}
 .rw-app .more-separator { block-size: 1px; margin: var(--sp-xs) 6px; background: var(--seam); }
 @media (prefers-reduced-motion: reduce) {
   .rw-app .more-menu { animation: none; }
@@ -394,6 +403,12 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] { d
   .rw-app .desktop-more { display: none; }
   .rw-app .mobile-more { display: inline-flex; }
   .rw-app .masthead-settings { display: none; }
+  .rw-app .masthead-tools .mobile-utility-source,
+  .rw-app .masthead-tools .mobile-utility-support,
+  .rw-app .masthead-tools .masthead-status,
+  .rw-app .masthead-tools .mobile-utility-theme,
+  .rw-app .masthead-tools .mobile-utility-accent,
+  .rw-app .masthead-tools .actions-sep { display: none; }
   .rw-app .dock .mobile-more { display: flex; position: relative; }
   .rw-app .dock .mobile-more .dock-action { width: 100%; }
   .rw-app .shared-more-menu {
