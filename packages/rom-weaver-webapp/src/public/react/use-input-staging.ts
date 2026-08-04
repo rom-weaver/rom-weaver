@@ -1,4 +1,4 @@
-import { type MutableRefObject, useMemo } from "react";
+import { type MutableRefObject, useMemo, useRef } from "react";
 import {
   createRomInputRow,
   getChecksumProgressInfoPatch,
@@ -261,7 +261,9 @@ interface InputStagingContext {
     | "setPatchProgressByKey"
     | "setPatchStaging"
     | "setRomInputs"
-  >;
+  > & {
+    setPatchValidationPending?: (pending: boolean) => void;
+  };
   stage: {
     stageInput?: LocalApplyPatchFormSessionOptions["stageInput"];
     stagePatches?: LocalApplyPatchFormSessionOptions["stagePatches"];
@@ -274,6 +276,7 @@ interface InputStagingContext {
 // Returns stable functions driven by the parent's input/patch/settings effects.
 const useInputStaging = (context: InputStagingContext) => {
   const contextRef = useLatestRef(context);
+  const validationRunRef = useRef(0);
   return useMemo(() => {
     const failVerifyingPatches = (snapshot: ApplyWorkflowStageSnapshot, error: Error) => {
       const { getPatchKey } = contextRef.current.rows;
@@ -294,13 +297,23 @@ const useInputStaging = (context: InputStagingContext) => {
     // its info + cheap preflight verdict instantly) and merge the refreshed verdicts back onto the
     // already-visible patch rows, showing a "Validating…" indicator per row while it runs.
     const validatePatchesDeferred = (snapshot: ApplyWorkflowStageSnapshot, generationArg?: number) => {
-      const { machines, rows, session, stage } = contextRef.current;
+      const { machines, report, rows, session, stage } = contextRef.current;
       const patchStageGenerationRef = machines.patchStageMachine.stageGenerationRef;
       const generation = generationArg ?? patchStageGenerationRef.current;
       const { getPatchKey } = rows;
       const { setPatchInfoByKey } = session;
+      const { setPatchValidationPending } = session;
       const { validatePatches } = stage;
-      if (!(validatePatches && snapshot.patches.length)) return;
+      const validationRun = ++validationRunRef.current;
+      if (!(validatePatches && snapshot.patches.length)) {
+        setPatchValidationPending?.(false);
+        return;
+      }
+      setPatchValidationPending?.(true);
+      report.emitSessionTrace("patch validation pending", {
+        generation,
+        patchCount: snapshot.patches.length,
+      });
       const mergeInfos = (infos: Array<StagedInputInfo | null | undefined>) => {
         if (patchStageGenerationRef.current !== generation) return;
         setPatchInfoByKey((current) => {
@@ -325,6 +338,14 @@ const useInputStaging = (context: InputStagingContext) => {
           if (isWorkflowDisposedError(normalized)) return;
           failVerifyingPatches(snapshot, normalized);
           logUiError("Patch validation failed", normalized);
+        })
+        .finally(() => {
+          if (validationRunRef.current !== validationRun) return;
+          setPatchValidationPending?.(false);
+          report.emitSessionTrace("patch validation settled", {
+            generation,
+            patchCount: snapshot.patches.length,
+          });
         });
     };
 
@@ -446,7 +467,13 @@ const useInputStaging = (context: InputStagingContext) => {
           );
           // The card now shows info + cheap preflight; run the deferred deep validation silently in
           // the background so it no longer makes the patch look like it is hanging.
-          if (!expandedPatchSources) validatePatchesDeferred(snapshot, generation);
+          if (!expandedPatchSources) {
+            contextRef.current.report.emitSessionTrace("patch staging complete; deferred validation dispatched", {
+              generation,
+              patchCount: snapshot.patches.length,
+            });
+            validatePatchesDeferred(snapshot, generation);
+          }
         })
         .catch((error) => {
           if (patchStageGenerationRef.current !== generation) return;

@@ -119,6 +119,106 @@ test("local without-rom bundle drop seeds optional patches off", async () => {
   await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(2);
   // The optional patch must seed OFF; the core patch stays on.
   await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 }).toEqual([true, false]);
+
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  // A completed run must be invalidated without starting another run when an optional bundle patch
+  // is turned back on. The patch file stays in the stack, so its extracted source cannot be released
+  // with the first run.
+  getPatchToggles()[1]?.click();
+  await expect.poll(() => getPatchToggles()[1]?.checked, { timeout: 30000 }).toBe(true);
+  await waitForApplyButtonEnabled();
+  await expect
+    .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
+    .toContain("Apply");
+  expect(document.getElementById("rom-weaver-error-message")?.textContent || "").toBe("");
+
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  // Reusing the same bundle output name must remain valid across repeated
+  // invalidation, validation, and apply cycles.
+  for (let cycle = 0; cycle < 8; cycle += 1) {
+    getPatchToggles()[1]?.click();
+    await expect.poll(() => getPatchToggles()[1]?.checked, { timeout: 30000 }).toBe(cycle % 2 === 1);
+    await waitForApplyButtonEnabled();
+    expect(document.getElementById("rom-weaver-error-message")?.textContent || "").toBe("");
+    await clickApplyButton();
+    expect(await waitForApplyOutcome(), `cycle ${cycle}`).toEqual({ kind: "download" });
+  }
+});
+
+test("bundle keeps same-name apply usable after enabling several optional patches", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const patchEntries = Array.from({ length: 8 }, (_, index) => ({
+    name: `Patch ${index + 1}`,
+    optional: index > 1,
+    path: `patch-${index + 1}.ips`,
+  }));
+  const patchFiles = await Promise.all(
+    patchEntries.map(async (entry) => new File([await patchFile.arrayBuffer()], entry.path)),
+  );
+  const bundleFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "same-output-name" },
+        patches: patchEntries,
+        rom: { path: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-bundle.json",
+    { type: "application/json" },
+  );
+  const bundleArchive = await buildZip(
+    [
+      { file: bundleFile, fileName: "rom-weaver-bundle.json" },
+      { file: romFile, fileName: "game.bin" },
+      ...patchFiles.map((file) => ({ file, fileName: file.name })),
+    ],
+    "many-optional.zip",
+  );
+
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive], id: 1 } }));
+  await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(8);
+  await expect
+    .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+    .toEqual([true, true, false, false, false, false, false, false]);
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("same-output-name");
+
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  for (const toggle of getPatchToggles().slice(2)) toggle.click();
+  await expect
+    .poll(
+      () =>
+        getPatchToggles()
+          .slice(2)
+          .every((toggle) => toggle.checked),
+      { timeout: 30000 },
+    )
+    .toBe(true);
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  for (const toggle of getPatchToggles().slice(2)) toggle.click();
+  await expect
+    .poll(
+      () =>
+        getPatchToggles()
+          .slice(2)
+          .every((toggle) => !toggle.checked),
+      { timeout: 30000 },
+    )
+    .toBe(true);
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
 });
 
 test("archive whose index is named rw.json (not canonical) is content-probed and seeds enablement", async () => {

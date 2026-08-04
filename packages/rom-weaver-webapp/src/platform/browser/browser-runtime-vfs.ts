@@ -1,5 +1,5 @@
 import { emitTraceLog } from "../../lib/logging.ts";
-import { releaseBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
+import { releaseBrowserSource, retainBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
 import { getNamedSource } from "../../storage/shared/binary/source-file-utils.ts";
 import { createRuntimeOutputFromVfs } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
@@ -23,10 +23,6 @@ type CachedStagedSource = {
   cleanupTimer?: ReturnType<typeof setTimeout>;
   cleanupWhenIdle?: boolean;
   refCount: number;
-  // Set when a consumer picks this entry up while it had no live refs (idle under the retention timer):
-  // that is a cross-drop re-stage, so a stale releaseSources from the earlier drop must defer to this
-  // live reader instead of force-cleaning the copy out from under its in-flight command.
-  reusedWhileIdle?: boolean;
   staged: StagedBrowserSource;
 };
 
@@ -141,11 +137,20 @@ const createBrowserRuntimeVfsIo = ({
       return undefined;
     }
     cached.cleanupWhenIdle = true;
-    if (cached.refCount > 0 && cached.reusedWhileIdle) return undefined;
+    // A workflow can release an old source while a queued validation or apply still owns a live
+    // staged reader. Cleaning here would delete the OPFS path under that reader. Let the last reader
+    // cleanup perform the release; this also covers re-stages that began before the old release ran.
+    if (cached.refCount > 0) return undefined;
     return cleanupCachedStagedSource(key, cached);
   };
   const releaseSources: RuntimeWorkerIo["releaseSources"] = async (sources) => {
     await Promise.all(sources.map(releaseStagedSource));
+  };
+  const retainOwnedSources: RuntimeWorkerIo["retainOwnedSources"] = (sources) => {
+    for (const source of sources) {
+      const directSource = getNamedSource(source as Parameters<typeof getNamedSource>[0]);
+      retainBrowserSource(directSource || source);
+    }
   };
   const releaseOwnedSources: RuntimeWorkerIo["releaseOwnedSources"] = async (sources) => {
     await Promise.all(
@@ -227,9 +232,6 @@ const createBrowserRuntimeVfsIo = ({
         clearTimeout(entry.cleanupTimer);
         entry.cleanupTimer = undefined;
       }
-      // A consumer picking up an entry with no live refs (kept alive only by the retention timer) is a
-      // cross-drop re-stage; flag it so a stale releaseSources from the prior drop defers to this reader.
-      if (entry.refCount === 0) entry.reusedWhileIdle = true;
       entry.refCount += 1;
       emitBrowserRuntimeVfsTrace(trace, "stageSource reusing cached staged source ref", {
         fileName: entry.staged.fileName,
@@ -386,6 +388,7 @@ const createBrowserRuntimeVfsIo = ({
       }
       throw new Error(failureMessage || "Worker did not return browser output");
     },
+    retainOwnedSources,
     releaseOwnedSources,
     releaseSources,
     runPathWorkerToOutput: async ({

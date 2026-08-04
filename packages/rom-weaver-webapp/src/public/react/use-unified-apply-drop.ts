@@ -61,6 +61,7 @@ type ActiveDropKind = "bundle" | "patch" | "rom" | "unknown";
 type DropRouteLifecycle = {
   beforeNonBundleDelivery?: () => Promise<void>;
   onBundleDetected?: () => void;
+  rememberBundleSourceCleanup?: (cleanup: () => Promise<void>) => void;
 };
 
 const getDropKind = (files: File[], classification: ReturnType<typeof classifyDroppedFiles>): ActiveDropKind => {
@@ -154,6 +155,11 @@ const routeUnifiedDrop = async (
       const romFile = loaded.romFile || companionRoms[0];
       if (romFile) controller.provideRomInputFiles?.([romFile]);
       controller.providePatchInputFiles?.(loaded.patchFiles);
+      lifecycle?.rememberBundleSourceCleanup?.(loaded.cleanup);
+      logger.debug("bundle source cleanup registered with form owner", {
+        hasRom: !!romFile,
+        patchCount: loaded.patchFiles.length,
+      });
     } catch (error) {
       await loaded.cleanup();
       throw error;
@@ -229,6 +235,7 @@ const useUnifiedApplyDrop = (
   const [pendingDrops, setPendingDrops] = useState<PendingDrop[]>([]);
   const nextIdRef = useRef(0);
   const activeDropsRef = useRef(new Map<AbortController, ActiveDropKind>());
+  const bundleSourceCleanupsRef = useRef(new Set<() => Promise<void>>());
   const dropQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pendingTimersRef = useRef(new Set<ReturnType<typeof setTimeout>>());
   const mountedRef = useRef(true);
@@ -240,16 +247,29 @@ const useUnifiedApplyDrop = (
     // Captured at setup so the cleanup does not read `.current` later; both refs hold a
     // collection that is only ever mutated, never reassigned, so these are the same objects.
     const activeDrops = activeDropsRef.current;
+    const bundleSourceCleanups = bundleSourceCleanupsRef.current;
     const pendingTimers = pendingTimersRef.current;
     return () => {
       mountedRef.current = false;
       for (const controller of activeDrops.keys()) controller.abort();
       activeDrops.clear();
+      const cleanups = [...bundleSourceCleanups];
+      bundleSourceCleanups.clear();
+      void Promise.all(
+        cleanups.map((cleanup) =>
+          cleanup().catch((error: unknown) => {
+            logger.warn("bundle source cleanup failed", { error: String(error) });
+          }),
+        ),
+      );
       // The minimum-display timers below outlive the drop that scheduled them, so an unmount
       // between scheduling and firing would otherwise setState on a dead root.
       for (const timer of pendingTimers) clearTimeout(timer);
       pendingTimers.clear();
     };
+  }, []);
+  const rememberBundleSourceCleanup = useCallback((cleanup: () => Promise<void>) => {
+    bundleSourceCleanupsRef.current.add(cleanup);
   }, []);
   const onDrop = useCallback(
     (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal) => {
@@ -342,6 +362,7 @@ const useUnifiedApplyDrop = (
       const runRoute = () =>
         routeUnifiedDrop(files, controller, onBundleSession, isCancelled, updatePending, dropController.signal, {
           ...(mayContainBundle ? { beforeNonBundleDelivery: () => previousRoute } : {}),
+          rememberBundleSourceCleanup,
           onBundleDetected: promoteToBundle,
         });
       // Input callbacks mutate ordered ROM/patch stacks. Serialize delivery so a small later patch cannot
@@ -365,7 +386,7 @@ const useUnifiedApplyDrop = (
           clearPending();
         });
     },
-    [controller, onError, onBundleSession],
+    [controller, onError, onBundleSession, rememberBundleSourceCleanup],
   );
 
   return { onDrop, pendingDrops };

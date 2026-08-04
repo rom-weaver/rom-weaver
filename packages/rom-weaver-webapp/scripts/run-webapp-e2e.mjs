@@ -892,19 +892,29 @@ const runArchiveStressSmoke = async (createContext, baseUrl) => {
 
 const createBrowserContextFactory = async (browserType, browserName) => {
   const persistentContextDirs = [];
+  // This suite audits the app and workflows, not PWA caching. Blocking workers
+  // avoids a WebKit service-worker certificate race across the preview ports.
+  const createContextOptions = (options) => ({ serviceWorkers: "block", ...options });
   if (browserName === "webkit") {
     return {
       browser: null,
       createContext: async (options) => {
         const userDataDir = fs.mkdtempSync(path.join(process.env.TMPDIR || "/tmp", "rom-weaver-webkit-e2e-"));
         persistentContextDirs.push(userDataDir);
-        return browserType.launchPersistentContext(userDataDir, { ...options, headless: true });
+        return browserType.launchPersistentContext(userDataDir, {
+          ...createContextOptions(options),
+          headless: true,
+        });
       },
       persistentContextDirs,
     };
   }
   const browser = await browserType.launch({ headless: true });
-  return { browser, createContext: (options) => browser.newContext(options), persistentContextDirs };
+  return {
+    browser,
+    createContext: (options) => browser.newContext(createContextOptions(options)),
+    persistentContextDirs,
+  };
 };
 
 const startServer = (mode, port, corpusDir) => {
