@@ -79,18 +79,11 @@ describe("DocsPage", () => {
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://rom-weaver.com/docs");
   });
 
-  it("opens guided samples inside the running webapp", () => {
-    const onGuideIntent = vi.fn();
-    const onStartGuide = vi.fn(() => true);
-    render(<DocsPage active onGuideIntent={onGuideIntent} onStartGuide={onStartGuide} slug="docs" />);
+  it("does not render the guided sample CTA", () => {
+    render(<DocsPage active slug="docs" />);
 
-    const guidedApply = screen.getByRole("link", { name: "Guided Apply" });
-    fireEvent.focus(guidedApply);
-    fireEvent.click(guidedApply);
-
-    expect(onGuideIntent).toHaveBeenCalledWith("apply");
-    expect(onStartGuide).toHaveBeenCalledWith("apply");
-    expect(guidedApply.getAttribute("href")).toBe("/apply?guide=apply");
+    expect(document.querySelector(".docs-cta")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Guided Apply" })).toBeNull();
   });
 
   it("builds the section rail from the guide's own headings and drops the generated outline", () => {
@@ -371,17 +364,6 @@ Fixture description.
     fireEvent.click(screen.getByRole("button", { name: "Back to top" }));
     expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
     vi.unstubAllGlobals();
-  });
-
-  it("pitches the guided samples on the hub only", () => {
-    // Every guide closing on the same three buttons made the offer read as
-    // furniture, and every guide already ends on a link its own author chose.
-    const { unmount } = render(<DocsPage active slug="docs" />);
-    expect(document.querySelector(".docs-cta")).toBeTruthy();
-
-    unmount();
-    render(<DocsPage active slug="docs/apply-rom-patches" />);
-    expect(document.querySelector(".docs-cta")).toBeNull();
   });
 
   it("lists browser, CLI, installation, and self-hosting paths, and previews the FAQ", () => {

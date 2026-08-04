@@ -1,13 +1,12 @@
 import "./design-system/docs-route.css";
 import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { KeyboardEvent } from "react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import type { DocSearchEntry } from "virtual:rom-weaver-docs-search";
 import { createLogger } from "../lib/logging.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { Modal } from "../public/react/components/ds/modal.tsx";
-import { GUIDED_SAMPLE_HREFS, type GuidedSample } from "../public/react/guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { findSearchToken, searchDocs } from "./docs-search.mjs";
@@ -594,6 +593,7 @@ const OnwardLink = ({ direction, route }: { direction: "next" | "previous"; rout
   <a
     aria-label={`${direction === "next" ? "Next" : "Previous"}: ${route.title}`}
     className="docs-step"
+    data-direction={direction}
     href={`/${route.slug}`}
     onFocus={() => warmDocsHtml(route.slug)}
     onPointerEnter={() => warmDocsHtml(route.slug)}
@@ -632,10 +632,6 @@ const ArticleEnd = ({ slug }: { slug: string }) => {
     </nav>
   );
 };
-
-const isPlainLeftClick = (event: MouseEvent<HTMLAnchorElement>) =>
-  event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
-const ignoreGuide = (_guide: GuidedSample) => undefined;
 
 const readDocsHighlight = (routeSlug?: string) => {
   if (typeof window === "undefined") return { query: "", sectionId: null };
@@ -699,17 +695,7 @@ const highlightDocsTerm = (article: HTMLElement, query: string, sectionId: strin
   return null;
 };
 
-const DocsPage = ({
-  active,
-  onGuideIntent = ignoreGuide,
-  onStartGuide = ignoreGuide,
-  slug,
-}: {
-  active: boolean;
-  onGuideIntent?: (guide: GuidedSample) => void;
-  onStartGuide?: (guide: GuidedSample) => boolean | void;
-  slug: string;
-}) => {
+const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
   const targetRoute = findDocsRoute(slug);
   const targetHtml = useDocsHtml(targetRoute.slug, active);
   // The reader stays on the guide they can see: a navigation to a page whose
@@ -831,56 +817,6 @@ const DocsPage = ({
             // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source
             dangerouslySetInnerHTML={{ __html: html }}
           />
-          {/* Hub only, and above the index rather than below it. Every guide
-              each ending in the same three buttons made the pitch furniture
-              rather than an offer, and every guide already closes on a link its
-              author chose. */}
-          {hub ? (
-            <aside className="docs-cta">
-              <div>
-                <h2>Try rom-weaver</h2>
-                <p>Learn Apply, Create, or Bundle with included homebrew files.</p>
-              </div>
-              <div className="docs-cta-actions">
-                <a
-                  className="btn primary"
-                  href={GUIDED_SAMPLE_HREFS.apply}
-                  onClick={(event) => {
-                    if (!isPlainLeftClick(event)) return;
-                    if (onStartGuide("apply") !== false) event.preventDefault();
-                  }}
-                  onFocus={() => onGuideIntent("apply")}
-                  onPointerEnter={() => onGuideIntent("apply")}
-                >
-                  Guided Apply
-                </a>
-                <a
-                  className="btn"
-                  href={GUIDED_SAMPLE_HREFS.create}
-                  onClick={(event) => {
-                    if (!isPlainLeftClick(event)) return;
-                    if (onStartGuide("create") !== false) event.preventDefault();
-                  }}
-                  onFocus={() => onGuideIntent("create")}
-                  onPointerEnter={() => onGuideIntent("create")}
-                >
-                  Guided Create
-                </a>
-                <a
-                  className="btn"
-                  href={GUIDED_SAMPLE_HREFS.bundle}
-                  onClick={(event) => {
-                    if (!isPlainLeftClick(event)) return;
-                    if (onStartGuide("bundle") !== false) event.preventDefault();
-                  }}
-                  onFocus={() => onGuideIntent("bundle")}
-                  onPointerEnter={() => onGuideIntent("bundle")}
-                >
-                  Guided Bundle
-                </a>
-              </div>
-            </aside>
-          ) : null}
           {hub ? <DocsFaqPreview /> : null}
           {hub ? <DocsIndex currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} /> : null}
           <ArticleEnd slug={route.slug} />

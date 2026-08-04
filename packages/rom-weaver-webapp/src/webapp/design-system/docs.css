@@ -12,10 +12,8 @@ html:has(.docs-workbench) {
 }
 
 .rw-app .docs-workbench {
-  /* Prose sits at a comfortable measure; code and screenshots may run wider,
-     because a wrapped command line and a squinting screenshot both cost more
-     than the extra width does. */
-  --measure: 35rem;
+  /* The document uses the full panel; code and screenshots keep their own
+     wider limits where their content benefits from them. */
   --measure-wide: 39rem;
   --article-pad: clamp(18px, 3vw, 32px);
   max-width: 62rem;
@@ -344,7 +342,7 @@ html:has(.docs-workbench) {
   animation: docs-page-in 0.28s var(--ease) both;
 }
 .rw-app .docs-article > * {
-  max-width: var(--measure);
+  max-width: none;
 }
 .rw-app .docs-article h1,
 .rw-app .docs-article h2,
@@ -611,9 +609,10 @@ html:has(.docs-workbench) {
 }
 
 /* --- hub index ---
-   Browser usage opens by default. The longer reference shelves stay one tap away. */
+   The desktop rail already lists every page. Keep this expanded hub index for
+   narrow screens, where that rail is hidden. */
 .rw-app .docs-index {
-  display: grid;
+  display: none;
   gap: var(--sp-s);
   padding: var(--sp-xl) var(--article-pad) clamp(28px, 5vw, 44px);
   border-top: 1px solid var(--seam);
@@ -720,39 +719,6 @@ html:has(.docs-workbench) {
   color: var(--ink-3);
 }
 
-/* --- closing call to action --- */
-.rw-app .docs-cta {
-  display: flex;
-  gap: var(--sp-l);
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--sp-l) clamp(24px, 4.5vw, 46px);
-  background: var(--warp-lines), color-mix(in oklab, var(--thread) 4%, var(--plate-2));
-  border-top: 1px solid var(--seam);
-}
-.rw-app .docs-cta h2 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-.rw-app .docs-cta p {
-  margin: 3px 0 0;
-  font-size: 0.78rem;
-  color: var(--ink-3);
-}
-.rw-app .docs-cta-actions {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  gap: var(--sp-s);
-  justify-content: flex-end;
-}
-.rw-app .docs-cta .btn {
-  text-decoration: none;
-}
-
 .rw-app .docs-faq-preview {
   padding: var(--sp-xl) var(--article-pad) clamp(28px, 5vw, 44px);
   border-top: 1px solid var(--seam);
@@ -808,16 +774,27 @@ html:has(.docs-workbench) {
   gap: var(--sp-m);
   align-items: stretch;
   justify-content: space-between;
-  max-width: var(--measure);
   padding-block-start: var(--sp-l);
+  padding-block-end: var(--sp-l);
+  padding-inline: var(--sp-l);
   margin-block-start: var(--sp-xl);
   border-block-start: 1px solid var(--seam-soft);
 }
-/* The step and the way back up are the same object with different corners, so
-   the box, the press feedback and the weft-coloured mark are written once. Only
-   `display` stays in the phone block, which is where the button turns on. */
+/* The step and the way back up share one woven surface. Directional edge marks
+   keep the pair readable as navigation instead of two unrelated cards. */
 .rw-app .docs-to-top {
-  display: none;
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  padding-inline: var(--sp-l);
+  font-size: 0.7rem;
+  font-weight: 750;
+  font-stretch: 88%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: color-mix(in oklab, var(--thread) 4%, transparent);
+  border-style: dashed;
+  border-radius: var(--r-l);
 }
 .rw-app .docs-step,
 .rw-app .docs-step-gap {
@@ -825,15 +802,18 @@ html:has(.docs-workbench) {
 }
 .rw-app .docs-step,
 .rw-app .docs-to-top {
+  position: relative;
   gap: var(--sp-s);
   align-items: center;
-  min-height: 44px;
+  min-height: 56px;
+  overflow: hidden;
   font: inherit;
   color: var(--ink-2);
   text-decoration: none;
   cursor: pointer;
-  background: var(--well);
+  background: linear-gradient(135deg, color-mix(in oklab, var(--thread) 7%, var(--plate-2)), var(--well));
   border: 1px solid var(--seam);
+  box-shadow: 0 12px 28px -24px rgb(0 0 0 / 0.9);
   transition:
     border-color 0.18s,
     background 0.18s,
@@ -842,18 +822,33 @@ html:has(.docs-workbench) {
 .rw-app .docs-step {
   display: inline-flex;
   min-width: 0;
-  padding: var(--sp-s) var(--sp-m);
-  border-radius: var(--r-m);
+  padding: var(--sp-m) var(--sp-l);
+  border-radius: var(--r-l);
 }
-.rw-app .docs-step:last-child {
+.rw-app .docs-step[data-direction="next"] {
   justify-content: flex-end;
   text-align: end;
+}
+.rw-app .docs-step::before {
+  position: absolute;
+  inset-block: 0;
+  width: 3px;
+  content: "";
+  background: var(--thread);
+  opacity: 0.45;
+  transition: opacity 0.18s;
+}
+.rw-app .docs-step[data-direction="previous"]::before {
+  inset-inline-start: 0;
+}
+.rw-app .docs-step[data-direction="next"]::before {
+  inset-inline-end: 0;
 }
 .rw-app .docs-step svg,
 .rw-app .docs-to-top svg {
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   color: var(--weft);
 }
 .rw-app .docs-step-copy {
@@ -866,31 +861,43 @@ html:has(.docs-workbench) {
 .rw-app .docs-step-copy small {
   font-size: 0.62rem;
   font-weight: 750;
-  color: var(--ink-3);
+  color: var(--thread-text);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 .rw-app .docs-step-copy b {
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.84rem;
-  font-weight: 650;
+  font-size: 0.9rem;
+  font-weight: 700;
   color: var(--ink);
   white-space: nowrap;
+}
+.rw-app .docs-step:focus-visible,
+.rw-app .docs-to-top:focus-visible {
+  outline: 2px solid var(--thread);
+  outline-offset: 3px;
 }
 @media (hover: hover) {
   .rw-app .docs-step:hover,
   .rw-app .docs-to-top:hover {
     color: var(--ink);
-    background: var(--plate-2);
+    background: linear-gradient(135deg, color-mix(in oklab, var(--thread) 12%, var(--plate-2)), var(--well));
     border-color: var(--seam-strong);
+    box-shadow: 0 16px 30px -22px rgb(0 0 0 / 0.95);
+  }
+  .rw-app .docs-step:hover::before {
+    opacity: 1;
   }
 }
 .rw-app .docs-step:active,
 .rw-app .docs-to-top:active {
   color: var(--ink);
-  background: var(--plate-2);
+  background: var(--well);
   border-color: var(--seam-strong);
+}
+.rw-app .docs-step:active::before {
+  opacity: 1;
 }
 
 /* --- the trail ---
@@ -917,6 +924,9 @@ html:has(.docs-workbench) {
   }
   .rw-app .docs-rails {
     display: none;
+  }
+  .rw-app .docs-index {
+    display: grid;
   }
 
   /* Fixed to the bottom, riding directly on top of the app dock: the two ways
@@ -1048,24 +1058,15 @@ html:has(.docs-workbench) {
   }
 
   /* --- the way back up ---
-     Phone-only, and on its own row under the two steps: three controls abreast
-     leaves each step too narrow to read the page it names. The box it wears is
-     shared with the steps above; only its own shape is here. */
+     On its own row under the two steps: three controls abreast leaves each step
+     too narrow to read the page it names. */
   .rw-app .docs-onward {
     flex-wrap: wrap;
   }
   .rw-app .docs-to-top {
-    display: inline-flex;
     flex: 1 0 100%;
-    justify-content: center;
     order: 1;
-    padding-inline: var(--sp-l);
-    font-size: 0.7rem;
-    font-weight: 750;
-    font-stretch: 88%;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    border-radius: 999px;
+    min-height: 44px;
   }
 }
 
@@ -1075,15 +1076,6 @@ html:has(.docs-workbench) {
   }
   .rw-app .docs-article {
     padding: 22px 18px 26px;
-  }
-  .rw-app .docs-cta {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 18px;
-  }
-  .rw-app .docs-cta-actions {
-    display: grid;
-    grid-template-columns: 1fr;
   }
   /* Commands wrap rather than scroll at this width. Scrolled sideways they cut
      off mid-flag with nothing to say so - and these guides exist to be copied,
