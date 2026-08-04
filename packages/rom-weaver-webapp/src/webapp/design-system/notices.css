@@ -3,37 +3,96 @@
   /* spans the full form width so it lines up with the cards below it.
      icon + dismiss stay vertically centered against the body, even when the
      body wraps to multiple lines */
-  display: flex; gap: var(--sp-m); align-items: center; margin-block: 4px 12px;
-  padding: var(--sp-m); border-radius: var(--r-m); font-size: .85rem; line-height: 1.45;
-  animation: drop-in .3s var(--ease);
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  padding: var(--sp-m);
+  margin-block: 4px 12px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  border-radius: var(--r-m);
+  animation: drop-in 0.3s var(--ease);
 }
-.rw-app .notice svg { width: 16px; height: 16px; flex: none; }
-.rw-app .notice .body { flex: 1 1 auto; min-width: 0; }
-.rw-app .notice.warn { color: var(--ink); background: color-mix(in oklab, var(--care) 12%, var(--plate-2)); border: 1px solid color-mix(in oklab, var(--care) 40%, var(--seam)); }
-.rw-app .notice.warn svg, .rw-app .notice.warn b { color: var(--care); }
+.rw-app .notice svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.rw-app .notice .body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rw-app .notice.warn {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--care) 12%, var(--plate-2));
+  border: 1px solid color-mix(in oklab, var(--care) 40%, var(--seam));
+}
+.rw-app .notice.warn svg,
+.rw-app .notice.warn b {
+  color: var(--care);
+}
 /* light mode: the golden --care is too light for bold body text on the cream
    notice (2.5:1) - darken the emphasised word to a deep amber that clears 4.5:1 */
-:root[data-theme="light"] .notice.warn b { color: #7a5300; }
+:root[data-theme="light"] .notice.warn b {
+  color: #7a5300;
+}
 /* notice dismiss matches the row-control size (--ctrl-h) like the card buttons */
-.rw-app .notice .x { appearance: none; border: 0; border-radius: var(--r-s); background: transparent; color: currentColor; cursor: pointer; width: var(--ctrl-h); height: var(--ctrl-h); display: grid; place-items: center; flex: none; opacity: .6; }
+.rw-app .notice .x {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--ctrl-h);
+  height: var(--ctrl-h);
+  color: currentColor;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-s);
+  opacity: 0.6;
+}
 @media (hover: hover) {
-  .rw-app .notice .x:hover { opacity: 1; background: color-mix(in oklab, currentColor 12%, transparent); }
+  .rw-app .notice .x:hover {
+    background: color-mix(in oklab, currentColor 12%, transparent);
+    opacity: 1;
+  }
 }
 /* Touch devices need active feedback because they lack hover. */
-.rw-app .notice .x:active { opacity: 1; background: color-mix(in oklab, currentColor 12%, transparent); }
-.rw-app .notice .x svg { width: 14px; height: 14px; margin: 0; }
+.rw-app .notice .x:active {
+  background: color-mix(in oklab, currentColor 12%, transparent);
+  opacity: 1;
+}
+.rw-app .notice .x svg {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
 
 /* `.fault` itself is kept: it is referenced by the entry-animation lock selector in
    components/ds/flat-transition.ts. The `.fault-*` child rules had zero references and were removed. */
 .rw-app .fault {
-  margin-block: 4px 12px; border: 1px solid color-mix(in oklab, var(--fault) 42%, var(--seam));
-  border-radius: var(--r-m); background: color-mix(in oklab, var(--fault) 7%, var(--plate));
-  overflow: clip; animation: fault-in .4s var(--ease);
+  margin-block: 4px 12px;
+  overflow: clip;
+  background: color-mix(in oklab, var(--fault) 7%, var(--plate));
+  border: 1px solid color-mix(in oklab, var(--fault) 42%, var(--seam));
+  border-radius: var(--r-m);
+  animation: fault-in 0.4s var(--ease);
 }
 
-.rw-app .checkrow { display: flex; align-items: center; gap: var(--sp-s); margin-block: 2px 10px; font-size: .82rem; color: var(--ink-2); }
-.rw-app .checkrow.warn { color: var(--care); }
+.rw-app .checkrow {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+  margin-block: 2px 10px;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+.rw-app .checkrow.warn {
+  color: var(--care);
+}
 /* Lives here with the base rule, not in file-cards.css: notices is the later cascade
    layer, so an override left there loses to the base rule above (light-theme axe
    contrast caught exactly that). */
-:root[data-theme="light"] .checkrow.warn { color: #7a5300; }
+:root[data-theme="light"] .checkrow.warn {
+  color: #7a5300;
+}

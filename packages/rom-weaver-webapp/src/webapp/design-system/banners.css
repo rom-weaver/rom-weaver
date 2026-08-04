@@ -4,83 +4,192 @@
    transition-delay, and display none↔grid rides allow-discrete so [hidden]
    still removes it from the page at rest. JS only flips hidden + .is-open. */
 .rw-app .reveal {
-  display: grid; grid-template-rows: 0fr; opacity: 0; translate: 0 -6px;
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  translate: 0 -6px;
   transition:
-    grid-template-rows .26s cubic-bezier(.22, .9, .26, 1) .14s, margin-block .26s cubic-bezier(.22, .9, .26, 1) .14s,
-    opacity .14s, translate .16s, display .42s allow-discrete;
+    grid-template-rows 0.26s cubic-bezier(0.22, 0.9, 0.26, 1) 0.14s,
+    margin-block 0.26s cubic-bezier(0.22, 0.9, 0.26, 1) 0.14s,
+    opacity 0.14s,
+    translate 0.16s,
+    display 0.42s allow-discrete;
 }
-.rw-app .reveal > * { min-height: 0; overflow: clip; }
+.rw-app .reveal > * {
+  min-height: 0;
+  overflow: clip;
+}
 .rw-app .reveal.is-open {
-  grid-template-rows: 1fr; opacity: 1; translate: 0 0;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  translate: 0 0;
   transition:
-    grid-template-rows .26s cubic-bezier(.22, .9, .26, 1), margin-block .26s cubic-bezier(.22, .9, .26, 1),
-    opacity .18s .16s, translate .2s .16s cubic-bezier(.22, .9, .26, 1), display .42s allow-discrete;
+    grid-template-rows 0.26s cubic-bezier(0.22, 0.9, 0.26, 1),
+    margin-block 0.26s cubic-bezier(0.22, 0.9, 0.26, 1),
+    opacity 0.18s 0.16s,
+    translate 0.2s 0.16s cubic-bezier(0.22, 0.9, 0.26, 1),
+    display 0.42s allow-discrete;
 }
 /* only the page-level banners carry margins; in-card reveals (the patch-off
    note) rely on the card's own grid gap. 6px on top matches the workflow
    plate's margin-block-start so the gaps above and below the banner are equal
    (masthead pad 10 + 6 = reveal 10 + plate 6). */
-.rw-app .app > .reveal.is-open { margin-block: 6px 10px; }
+.rw-app .app > .reveal.is-open {
+  margin-block: 6px 10px;
+}
 @starting-style {
-  .rw-app .reveal.is-open { grid-template-rows: 0fr; margin-block: 0; opacity: 0; translate: 0 -6px; }
+  .rw-app .reveal.is-open {
+    grid-template-rows: 0fr;
+    margin-block: 0;
+    opacity: 0;
+    translate: 0 -6px;
+  }
 }
 .rw-app .updates {
-  display: flex; align-items: center; gap: var(--sp-m);
-  padding: var(--sp-s) var(--sp-m); border: 1px solid color-mix(in oklab, var(--thread) 36%, var(--seam));
-  border-radius: var(--r-m); background: color-mix(in oklab, var(--thread) 8%, var(--plate));
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  padding: var(--sp-s) var(--sp-m);
+  background: color-mix(in oklab, var(--thread) 8%, var(--plate));
+  border: 1px solid color-mix(in oklab, var(--thread) 36%, var(--seam));
+  border-radius: var(--r-m);
 }
 .rw-app .updates.update-ready {
   width: 100%;
   border-color: color-mix(in oklab, var(--care) 45%, var(--seam));
 }
-.rw-app .updates.update-ready .updates-pulse { background: var(--care); }
-.rw-app .updates-pulse { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--thread); animation: pulse 2.2s ease-in-out infinite; }
-.rw-app .updates-text { flex: 1 1 auto; min-width: 0; font-size: .88rem; }
-.rw-app .updates-text b { font-weight: 650; }
-.rw-app .banner-x {
-  position: relative; appearance: none; cursor: pointer; display: grid; place-items: center; flex: none;
-  width: 30px; height: 30px; padding: 0;
-  border: 1px solid transparent; border-radius: var(--r-m); background: transparent; color: var(--ink-2);
-  transition: background .18s, border-color .18s, color .18s, transform .15s var(--ease);
+.rw-app .updates.update-ready .updates-pulse {
+  background: var(--care);
 }
-.rw-app .banner-x::after { content: ""; position: absolute; inset: -7px; }
+.rw-app .updates-pulse {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--thread);
+  border-radius: 50%;
+  animation: pulse 2.2s ease-in-out infinite;
+}
+.rw-app .updates-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.88rem;
+}
+.rw-app .updates-text b {
+  font-weight: 650;
+}
+.rw-app .banner-x {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--ink-2);
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-m);
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    color 0.18s,
+    transform 0.15s var(--ease);
+}
+.rw-app .banner-x::after {
+  position: absolute;
+  inset: -7px;
+  content: "";
+}
 @media (hover: hover) {
   .rw-app .banner-x:hover {
-    color: var(--ink); border-color: var(--seam-strong);
-    background: color-mix(in oklab, currentColor 10%, transparent); transform: translateY(-1px);
+    color: var(--ink);
+    background: color-mix(in oklab, currentColor 10%, transparent);
+    border-color: var(--seam-strong);
+    transform: translateY(-1px);
   }
 }
 /* Touch devices need active feedback because they lack hover. */
 .rw-app .banner-x:active {
-  color: var(--ink); border-color: var(--seam-strong); background: color-mix(in oklab, currentColor 10%, transparent);
-  transform: translateY(0) scale(.98);
+  color: var(--ink);
+  background: color-mix(in oklab, currentColor 10%, transparent);
+  border-color: var(--seam-strong);
+  transform: translateY(0) scale(0.98);
 }
-.rw-app .banner-x svg { width: 18px; height: 18px; }
+.rw-app .banner-x svg {
+  width: 18px;
+  height: 18px;
+}
 /* the version IS the "what's new" affordance - a quiet dotted-underline link
    that opens the changelog, instead of a second button crowding the banner */
 .rw-app .updates-ver {
-  appearance: none; display: inline-flex; align-items: center; justify-content: center;
-  height: 30px; padding-inline: 12px; border: 0; background: none; cursor: pointer;
-  color: var(--ink-2); font-size: .8rem; margin-inline-start: 6px;
-  text-decoration: underline dotted; text-underline-offset: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding-inline: 12px;
+  margin-inline-start: 6px;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  appearance: none;
+  cursor: pointer;
+  background: none;
+  border: 0;
 }
 @media (hover: hover) {
-  .rw-app .updates-ver:hover { color: var(--thread-text); }
+  .rw-app .updates-ver:hover {
+    color: var(--thread-text);
+  }
 }
 /* Touch devices need active feedback because they lack hover. */
-.rw-app .updates-ver:active { color: var(--thread-text); }
-.rw-app .changelog-note { color: var(--ink-3); text-align: center; padding: var(--sp-s) 0; }
-.rw-app .changelog-head-meta { display: flex; align-items: baseline; justify-content: flex-end; gap: var(--sp-xs) var(--sp-m); flex-wrap: wrap; }
-.rw-app .changelog-head-transition { font-size: .78rem; color: var(--ink-3); overflow-wrap: anywhere; }
-.rw-app .changelog-head-link { font-size: .78rem; white-space: nowrap; }
-.rw-app .release-changelog-section + .release-changelog-section { margin-block-start: var(--sp-l); border-block-start: 1px solid var(--seam-soft); padding-block-start: var(--sp-l); }
+.rw-app .updates-ver:active {
+  color: var(--thread-text);
+}
+.rw-app .changelog-note {
+  padding: var(--sp-s) 0;
+  color: var(--ink-3);
+  text-align: center;
+}
+.rw-app .changelog-head-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs) var(--sp-m);
+  align-items: baseline;
+  justify-content: flex-end;
+}
+.rw-app .changelog-head-transition {
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.rw-app .changelog-head-link {
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.rw-app .release-changelog-section + .release-changelog-section {
+  padding-block-start: var(--sp-l);
+  margin-block-start: var(--sp-l);
+  border-block-start: 1px solid var(--seam-soft);
+}
 /* The version is the anchor for everything under it, so it outranks the group
    headings rather than sitting a shade below them. */
-.rw-app .release-changelog-heading { margin-block: 0 var(--sp-s); font-size: 1.02rem; font-weight: 700; letter-spacing: .01em; }
-.rw-app .release-changelog-heading a { color: var(--ink); }
+.rw-app .release-changelog-heading {
+  margin-block: 0 var(--sp-s);
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.rw-app .release-changelog-heading a {
+  color: var(--ink);
+}
 .rw-app .changelog-more {
-  display: inline-flex; align-items: center; min-height: 24px;
-  font-size: .82rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-size: 0.82rem;
 }
 /* Every link in this dialog sits inside running text with no other affordance -
    no button chrome, no icon - so an underline is the only thing marking it as a
@@ -92,107 +201,234 @@
 .rw-app .changelog-more {
   text-decoration: underline;
   text-decoration-thickness: 1px;
-  text-underline-offset: .18em;
   text-decoration-color: color-mix(in srgb, currentcolor 40%, transparent);
+  text-underline-offset: 0.18em;
 }
 /* The two standalone "go read the rest" links, which are the ones a reader is
    actually looking for. */
-.rw-app .changelog-head-link, .rw-app .changelog-more { color: var(--thread-text); }
+.rw-app .changelog-head-link,
+.rw-app .changelog-more {
+  color: var(--thread-text);
+}
 .rw-app .release-changelog-entries a:active,
-.rw-app .changelog-head-transition a:active { text-decoration-color: currentcolor; }
+.rw-app .changelog-head-transition a:active {
+  text-decoration-color: currentcolor;
+}
 @media (hover: hover) {
   .rw-app .release-changelog-entries a:hover,
-  .rw-app .changelog-head-transition a:hover { text-decoration-color: currentcolor; }
+  .rw-app .changelog-head-transition a:hover {
+    text-decoration-color: currentcolor;
+  }
 }
-.rw-app .release-changelog { font-size: .88rem; line-height: 1.5; }
-.rw-app .release-changelog + .release-changelog { margin-block-start: var(--sp-m); }
-.rw-app .release-changelog-group { margin-block: 0 var(--sp-xs); font-size: .82rem; font-weight: 650; color: var(--ink-2); }
-.rw-app .release-changelog-entries { margin: 0; padding-inline-start: 1.25rem; }
-.rw-app .release-changelog-entries li + li { margin-block-start: var(--sp-xs); }
-.rw-app .release-changelog-ref { font-size: .78rem; color: var(--ink-2); white-space: nowrap; }
-.rw-app .changelog-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-m); padding-top: 8px; }
+.rw-app .release-changelog {
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.rw-app .release-changelog + .release-changelog {
+  margin-block-start: var(--sp-m);
+}
+.rw-app .release-changelog-group {
+  margin-block: 0 var(--sp-xs);
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--ink-2);
+}
+.rw-app .release-changelog-entries {
+  padding-inline-start: 1.25rem;
+  margin: 0;
+}
+.rw-app .release-changelog-entries li + li {
+  margin-block-start: var(--sp-xs);
+}
+.rw-app .release-changelog-ref {
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.rw-app .changelog-actions {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
 
 /* ── the waiting deploy, at the head of the Changelog tab ──
    Tinted and boxed so it reads as the one thing on the tab that asks for an
    action, with the shipped list continuing underneath in plain chrome. */
 .rw-app .changelog-update {
+  padding: var(--sp-m);
+  background: color-mix(in oklab, var(--care) 7%, var(--plate));
   border: 1px solid color-mix(in oklab, var(--care) 34%, var(--seam));
   border-radius: var(--r-m);
-  background: color-mix(in oklab, var(--care) 7%, var(--plate));
-  padding: var(--sp-m);
 }
 /* The transition and full-changelog link sit on the title's baseline while they
    fit, and drop to their own right-aligned row once the head runs out of
    width - the auto margin survives the wrap. */
 .rw-app .changelog-update-head {
-  display: flex; flex-wrap: wrap; align-items: baseline;
-  gap: var(--sp-xs) var(--sp-m); margin-block-end: var(--sp-s);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs) var(--sp-m);
+  align-items: baseline;
+  margin-block-end: var(--sp-s);
 }
-.rw-app .changelog-update-title { font-size: .95rem; font-weight: 700; letter-spacing: .01em; }
-.rw-app .changelog-update-head .changelog-head-meta { flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
+.rw-app .changelog-update-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.rw-app .changelog-update-head .changelog-head-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-inline-start: auto;
+}
 
 /* ── the Changelog tab's release list ──
    Collapsed sections rather than one long scroll: the tab is opened to read one
    release, almost always the newest, and every older one below it is a wall of
    entries between you and the "full changelog" link. The newest stands open so
    the tab is never a row of shut doors. */
-.rw-app .changelog-list { display: flex; flex-direction: column; gap: var(--sp-s); }
-.rw-app .rel { border: 1px solid var(--seam-soft); border-radius: var(--r-s); background: var(--well); }
+.rw-app .changelog-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+}
+.rw-app .rel {
+  background: var(--well);
+  border: 1px solid var(--seam-soft);
+  border-radius: var(--r-s);
+}
 .rw-app .rel-summary {
-  display: flex; gap: var(--sp-s); align-items: baseline; padding: var(--sp-s) var(--sp-m);
-  font-size: .84rem; font-weight: 650; color: var(--ink); cursor: pointer; list-style: none;
+  display: flex;
+  gap: var(--sp-s);
+  align-items: baseline;
+  padding: var(--sp-s) var(--sp-m);
+  font-size: 0.84rem;
+  font-weight: 650;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
   border-radius: var(--r-s);
 }
 /* the disclosure triangle is drawn by the marker, so Safari's default one goes */
-.rw-app .rel-summary::-webkit-details-marker { display: none; }
+.rw-app .rel-summary::-webkit-details-marker {
+  display: none;
+}
 .rw-app .rel-summary::before {
-  content: "▸"; flex: none; font-size: .7rem; color: var(--ink-3);
-  transition: transform .18s var(--ease);
+  flex: none;
+  font-size: 0.7rem;
+  color: var(--ink-3);
+  content: "▸";
+  transition: transform 0.18s var(--ease);
 }
-.rw-app .rel[open] > .rel-summary::before { transform: rotate(90deg); }
+.rw-app .rel[open] > .rel-summary::before {
+  transform: rotate(90deg);
+}
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .rel-summary::before { transition: none; }
+  .rw-app .rel-summary::before {
+    transition: none;
+  }
 }
-.rw-app .rel-summary b { color: var(--thread-text); }
-.rw-app .rel-summary-count { margin-inline-start: auto; font-size: .74rem; font-weight: 500; color: var(--ink-3); }
+.rw-app .rel-summary b {
+  color: var(--thread-text);
+}
+.rw-app .rel-summary-count {
+  margin-inline-start: auto;
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--ink-3);
+}
 @media (hover: hover) {
-  .rw-app .rel-summary:hover { background: color-mix(in oklab, var(--ink) 5%, transparent); }
+  .rw-app .rel-summary:hover {
+    background: color-mix(in oklab, var(--ink) 5%, transparent);
+  }
 }
-.rw-app .rel-summary:active { background: color-mix(in oklab, var(--ink) 5%, transparent); }
-.rw-app .rel-body { padding: 0 var(--sp-m) var(--sp-m); border-block-start: 1px solid var(--seam-soft); padding-block-start: var(--sp-s); }
-.rw-app .rel-link { display: inline-block; margin-block-start: var(--sp-m); font-size: .8rem; color: var(--thread-text); }
+.rw-app .rel-summary:active {
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+}
+.rw-app .rel-body {
+  padding: 0 var(--sp-m) var(--sp-m);
+  padding-block-start: var(--sp-s);
+  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .rel-link {
+  display: inline-block;
+  margin-block-start: var(--sp-m);
+  font-size: 0.8rem;
+  color: var(--thread-text);
+}
 /* page-wide drop veil */
 /* the veil overlays only the active form panel (same grid cell), not the whole
    tall workbench / empty page below it */
-.rw-app .workbench > .panel, .rw-app .workbench > .dropveil { grid-area: 1 / 1; }
+.rw-app .workbench > .panel,
+.rw-app .workbench > .dropveil {
+  grid-area: 1 / 1;
+}
 .rw-app .dropveil {
-  position: relative; align-self: stretch; z-index: 30; display: grid; place-items: center;
-  border: 2px dashed color-mix(in oklab, var(--thread) 80%, transparent); border-radius: var(--r-l);
-  background: color-mix(in srgb, var(--chassis) 58%, transparent); backdrop-filter: blur(3px);
-  opacity: 0; visibility: hidden; pointer-events: none; overflow: clip;
-  transition: opacity .18s, visibility .18s;
+  position: relative;
+  z-index: 30;
+  display: grid;
+  visibility: hidden;
+  place-items: center;
+  align-self: stretch;
+  overflow: clip;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--chassis) 58%, transparent);
+  border: 2px dashed color-mix(in oklab, var(--thread) 80%, transparent);
+  border-radius: var(--r-l);
+  opacity: 0;
+  backdrop-filter: blur(3px);
+  transition:
+    opacity 0.18s,
+    visibility 0.18s;
 }
 .rw-app .dropveil::before {
   /* cloth forming across the page while a file hovers - the plain-weave tile
      drifting downward as the loom takes up new rows */
-  content: ""; position: absolute; inset: 0;
-  background: var(--thread);
-  mask-image: var(--weave-mask); mask-size: 28px 28px;
-  opacity: .07;
   --drift: 0 28px;
+  position: absolute;
+  inset: 0;
+  /* cloth forming across the page while a file hovers - the plain-weave tile
+     drifting downward as the loom takes up new rows */
+  content: "";
+  background: var(--thread);
+  opacity: 0.07;
+  mask-image: var(--weave-mask);
+  mask-size: 28px 28px;
   animation: weave-drift 1.6s linear infinite paused;
 }
-.rw-app.rw-page-dragging .dropveil { opacity: 1; visibility: visible; }
-.rw-app.rw-page-dragging .dropveil::before { animation-play-state: running; }
-.rw-app .dropveil-text {
-  position: relative; display: inline-flex; align-items: center; gap: var(--sp-m);
-  font-size: 1.05rem; font-weight: 700; color: var(--ink);
-  padding: 12px 24px; border-radius: 99px;
-  background: var(--plate); border: 1px solid color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
-  box-shadow: var(--overlay-shadow);
-  animation: pop .35s var(--ease);
+.rw-app.rw-page-dragging .dropveil {
+  visibility: visible;
+  opacity: 1;
 }
-.rw-app .dropveil-text svg { width: 19px; height: 19px; color: var(--thread-text); flex: none; }
+.rw-app.rw-page-dragging .dropveil::before {
+  animation-play-state: running;
+}
+.rw-app .dropveil-text {
+  position: relative;
+  display: inline-flex;
+  gap: var(--sp-m);
+  align-items: center;
+  padding: 12px 24px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--plate);
+  border: 1px solid color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
+  border-radius: 99px;
+  box-shadow: var(--overlay-shadow);
+  animation: pop 0.35s var(--ease);
+}
+.rw-app .dropveil-text svg {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  color: var(--thread-text);
+}
 /* one drift keyframe for every woven surface: each sets --drift to a multiple
    of its own mask-size so the loop is seamless */
-@keyframes weave-drift { to { mask-position: var(--drift, 0 20px); } }
+@keyframes weave-drift {
+  to {
+    mask-position: var(--drift, 0 20px);
+  }
+}

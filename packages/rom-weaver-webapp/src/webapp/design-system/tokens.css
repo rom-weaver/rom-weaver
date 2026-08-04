@@ -1,8 +1,8 @@
 /* Tokens and themes */
 :root {
   --thread: #d9690f;
-  --thread-ink: #1c1206;        /* text on a thread-colored surface */
-  --thread-hi: #fccb90;         /* specular tint in the logo mark */
+  --thread-ink: #1c1206; /* text on a thread-colored surface */
+  --thread-hi: #fccb90; /* specular tint in the logo mark */
   /* Reusable 20px plain-weave alpha mask. */
   --weave-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M9.5 2h10.5v6H9.5zM0 2h.5v6H0zM0 12h10.5v6H0zM19.5 12h.5v6h-.5zM2 0h6v10.5H2zM2 19.5h6v.5H2zM12 9.5h6v10.5h-6zM12 0h6v.5h-6z'/></svg>");
   --shuttle: #f6ead0;
@@ -13,17 +13,19 @@
   --badge-fs: clamp(0.7rem, 0.684rem + 0.1vw, 0.72rem);
   --pad: clamp(12px, 2.5vw - 2px, 20px); /* section gutter */
   --gutter: clamp(10px, 2.5vw, 28px); /* shared app-column inset */
-  --step-pt: clamp(16px, 4vw - 8px, 22px);   /* shared step-head inset */
+  --step-pt: clamp(16px, 4vw - 8px, 22px); /* shared step-head inset */
   --step-pb: clamp(10px, 4.4vw - 14.6px, 24px); /* step-body bottom padding */
-  --r-s: 6px; --r-m: 9px; --r-l: 13px;
+  --r-s: 6px;
+  --r-m: 9px;
+  --r-l: 13px;
   /* Static hairlines and fluid spacing replace per-breakpoint overrides. */
-  --sp-2xs: 2px;                                /* micro seams (2/3px) - static */
-  --sp-xs:  4px;                                /* tight gaps (4/5px) - static */
-  --sp-s:   clamp(6px, 2.5px + .625vw,  8px);   /* small-gap cluster (6/7/8px) */
-  --sp-m:   clamp(8px, 1px + 1.25vw, 12px);     /* medium gap/pad (9/10/11/12px) */
-  --sp-l:   clamp(11px, 2.25px + 1.5625vw, 16px); /* card-list / block gaps (13/14/16) */
-  --sp-xl:  clamp(16px, 2px + 2.5vw, 24px);     /* section-scale (18/20/24px) */
-  --ease: cubic-bezier(.2, .85, .3, 1);
+  --sp-2xs: 2px; /* micro seams (2/3px) - static */
+  --sp-xs: 4px; /* tight gaps (4/5px) - static */
+  --sp-s: clamp(6px, 2.5px + 0.625vw, 8px); /* small-gap cluster (6/7/8px) */
+  --sp-m: clamp(8px, 1px + 1.25vw, 12px); /* medium gap/pad (9/10/11/12px) */
+  --sp-l: clamp(11px, 2.25px + 1.5625vw, 16px); /* card-list / block gaps (13/14/16) */
+  --sp-xl: clamp(16px, 2px + 2.5vw, 24px); /* section-scale (18/20/24px) */
+  --ease: cubic-bezier(0.2, 0.85, 0.3, 1);
   /* Progress tween: short and linear so per-frame ticks smooth out without the
      bar trailing the readout. Restarted every tick, so the duration is also the
      worst-case lag - keep it under ~2 frames' worth of perceptible delay. */
@@ -33,31 +35,40 @@
 }
 
 :root[data-theme="dark"] {
-  color-scheme: dark;
-  --chassis: #0c0f13;           /* console shell */
-  --plate: #161b21;             /* mounted plate */
-  --plate-2: #1c222a;           /* raised plate */
-  --well: #0f1318;              /* inset controls */
-  --seam: #39414e; --seam-soft: #2c333f; --seam-strong: #4b5564;
-  --ink: #edf0f5; --ink-2: #b3bbc8; --ink-3: #9aa3b1; --ink-4: #939cab;
-  --weft: #e7d3a8;              /* hash readouts */
-  --thread-text: #ef8534;       /* contrast-safe accent text */
+  --chassis: #0c0f13; /* console shell */
+  --plate: #161b21; /* mounted plate */
+  --plate-2: #1c222a; /* raised plate */
+  --well: #0f1318; /* inset controls */
+  --seam: #39414e;
+  --seam-soft: #2c333f;
+  --seam-strong: #4b5564;
+  --ink: #edf0f5;
+  --ink-2: #b3bbc8;
+  --ink-3: #9aa3b1;
+  --ink-4: #939cab;
+  --weft: #e7d3a8; /* hash readouts */
+  --thread-text: #ef8534; /* contrast-safe accent text */
   --verified: #69aa84;
   --fault: #e0606a;
   --care: #d8a64f;
-  --care-text: #d8a64f;         /* amber already clears 4.5:1 on every dark surface */
-  --overlay-shadow: 0 24px 64px -24px rgb(0 0 0 / .7), 0 4px 16px rgb(0 0 0 / .35);
-  --scrim: rgb(4 6 9 / .62);
+  --care-text: #d8a64f; /* amber already clears 4.5:1 on every dark surface */
+  --overlay-shadow: 0 24px 64px -24px rgb(0 0 0 / 0.7), 0 4px 16px rgb(0 0 0 / 0.35);
+  --scrim: rgb(4 6 9 / 0.62);
+  color-scheme: dark;
 }
 :root[data-theme="light"] {
-  color-scheme: light;
-  --chassis: #ece9e1;           /* warm gallery paper */
+  --chassis: #ece9e1; /* warm gallery paper */
   --plate: #ffffff;
   --plate-2: #f7f5ef;
   --well: #efede6;
-  --seam: #d4d2ca; --seam-soft: #e1dfd8; --seam-strong: #b4b1a6;
-  --ink: #1a1d22; --ink-2: #4b5159; --ink-3: #62686f; --ink-4: #686d76;
-  --weft: #92400e;              /* cream goes rich amber on paper */
+  --seam: #d4d2ca;
+  --seam-soft: #e1dfd8;
+  --seam-strong: #b4b1a6;
+  --ink: #1a1d22;
+  --ink-2: #4b5159;
+  --ink-3: #62686f;
+  --ink-4: #686d76;
+  --weft: #92400e; /* cream goes rich amber on paper */
   /* Light-theme status text must clear 4.5:1 on tinted surfaces. */
   --thread-text: #b03a0a;
   --verified: #04684e;
@@ -66,6 +77,7 @@
   /* `--care` is a fill colour on paper: 3.1:1 as text on the plate. Amber words
      take this one instead - 5.6:1 on the plate, 4.8:1 in a well. */
   --care-text: #8d5e00;
-  --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / .35), 0 4px 14px rgb(35 30 18 / .14);
-  --scrim: rgb(40 36 28 / .42);
+  --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / 0.35), 0 4px 14px rgb(35 30 18 / 0.14);
+  --scrim: rgb(40 36 28 / 0.42);
+  color-scheme: light;
 }

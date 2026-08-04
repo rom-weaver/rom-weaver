@@ -1,64 +1,159 @@
 /* Keep short forms from stretching to fill the viewport. */
-.rw-app .workbench { position: relative; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; padding-block-end: clamp(8px, 2.9vw - 8px, 16px); }
+.rw-app .workbench {
+  position: relative;
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  padding-block-end: clamp(8px, 2.9vw - 8px, 16px);
+}
 
 /* Form sections */
-.rw-app .panel { overflow: clip; }
+.rw-app .panel {
+  overflow: clip;
+}
 /* Breathing room below the form so the bottom action (run/progress/download)
    isn't hugging the edge. Mobile adds much more (phone-dock.css) so the last
    card can scroll clear of the browser's collapsing bottom toolbar. */
-.rw-app .workflow-body { min-width: 0; padding-block-end: clamp(16px, 3vw, 28px); animation: panel-in .3s var(--ease); }
+.rw-app .workflow-body {
+  min-width: 0;
+  padding-block-end: clamp(16px, 3vw, 28px);
+  animation: panel-in 0.3s var(--ease);
+}
 /* Reveal form sections after identification finishes. */
-.rw-app .form-ready > .step:not(.unified-drop-step) { animation: form-ready-in .22s var(--ease) both; }
+.rw-app .form-ready > .step:not(.unified-drop-step) {
+  animation: form-ready-in 0.22s var(--ease) both;
+}
 
-.rw-app .step { position: relative; border-block-start: 1px solid var(--seam-soft); }
-.rw-app .step:first-child { border-block-start: 0; }
+.rw-app .step {
+  position: relative;
+  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .step:first-child {
+  border-block-start: 0;
+}
 /* Completed and failed steps animate a full-width status seam. */
-.rw-app .step.is-woven::before, .rw-app .step.is-fault::before {
-  content: ""; position: absolute; top: 0; inset-inline: 0; height: 3px; pointer-events: none;
+.rw-app .step.is-woven::before,
+.rw-app .step.is-fault::before {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 3px;
+  pointer-events: none;
+  content: "";
   background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--thread) 2px 5px, transparent 5px 7px);
-  animation: weft-throw .8s var(--ease) both;
+  animation: weft-throw 0.8s var(--ease) both;
 }
 /* A broken seam distinguishes failure from completion without relying on color. */
 .rw-app .step.is-fault::before {
   background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--fault) 2px 5px, transparent 5px 7px);
   mask-image: linear-gradient(90deg, #000 0 34%, transparent 34% 39%, #000 39% 42%, transparent 42%);
 }
-@keyframes weft-throw { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes weft-throw {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
 /* Leave room for controls that straddle sections. */
-.rw-app .step-head { display: flex; align-items: baseline; gap: var(--sp-m); padding: var(--step-pt) var(--pad) 2px; position: relative; }
-.rw-app .step-head-action { display: none; }
+.rw-app .step-head {
+  position: relative;
+  display: flex;
+  gap: var(--sp-m);
+  align-items: baseline;
+  padding: var(--step-pt) var(--pad) 2px;
+}
+.rw-app .step-head-action {
+  display: none;
+}
 /* Match step headings to card-name scaling. */
 .rw-app .step-num {
-  position: relative; isolation: isolate;
+  position: relative;
   padding: 2px 18px 2px 9px;
-  font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem); font-weight: 650;
-  color: var(--thread-text); letter-spacing: .06em; transition: color .3s;
+  font-size: clamp(0.9rem, 1.1vw + 0.55rem, 1.06rem);
+  font-weight: 650;
+  color: var(--thread-text);
+  letter-spacing: 0.06em;
+  isolation: isolate;
+  transition: color 0.3s;
 }
 .rw-app .step-num::before {
-  content: ""; position: absolute; inset: 0; z-index: -1;
-  border-radius: 3px 0 0 3px;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
   background: linear-gradient(90deg, var(--thread) 52%, transparent 96%);
-  opacity: .2;
-  mask-image: var(--weave-mask); mask-size: 9px 9px;
-  transition: opacity .3s, background-color .3s;
+  border-radius: 3px 0 0 3px;
+  opacity: 0.2;
+  mask-image: var(--weave-mask);
+  mask-size: 9px 9px;
+  transition:
+    opacity 0.3s,
+    background-color 0.3s;
 }
-.rw-app .step.is-woven .step-num { color: var(--thread-text); }
-.rw-app .step.is-woven .step-num::before { opacity: .42; }
-.rw-app .step.is-fault .step-num { color: var(--fault); }
-.rw-app .step.is-fault .step-num::before { background: linear-gradient(90deg, var(--fault) 52%, transparent 96%); opacity: .28; }
-.rw-app .step-title { margin: 0; font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem); font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--ink); }
-.rw-app .step-meta { margin-inline-start: auto; font-size: .74rem; color: var(--ink-3); display: inline-flex; flex-wrap: wrap; gap: var(--sp-2xs) var(--sp-s); align-items: baseline; justify-content: flex-end; }
-.rw-app .step-meta .t { color: var(--thread-text); }
-.rw-app .step-meta:has(.rb) { align-items: center; gap: var(--sp-s); }
+.rw-app .step.is-woven .step-num {
+  color: var(--thread-text);
+}
+.rw-app .step.is-woven .step-num::before {
+  opacity: 0.42;
+}
+.rw-app .step.is-fault .step-num {
+  color: var(--fault);
+}
+.rw-app .step.is-fault .step-num::before {
+  background: linear-gradient(90deg, var(--fault) 52%, transparent 96%);
+  opacity: 0.28;
+}
+.rw-app .step-title {
+  margin: 0;
+  font-size: clamp(0.9rem, 1.1vw + 0.55rem, 1.06rem);
+  font-weight: 650;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.rw-app .step-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2xs) var(--sp-s);
+  align-items: baseline;
+  justify-content: flex-end;
+  margin-inline-start: auto;
+  font-size: 0.74rem;
+  color: var(--ink-3);
+}
+.rw-app .step-meta .t {
+  color: var(--thread-text);
+}
+.rw-app .step-meta:has(.rb) {
+  gap: var(--sp-s);
+  align-items: center;
+}
 .rw-app .step-meta .rb {
-  display: inline-flex; align-items: center; white-space: nowrap;
-  padding: 2px 8px; border-radius: 6px; background: var(--well); border: 1px solid var(--seam-soft);
-  font-size: var(--badge-fs); font-stretch: 86%; letter-spacing: .01em; color: var(--weft);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: var(--badge-fs);
+  font-stretch: 86%;
+  color: var(--weft);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--well);
+  border: 1px solid var(--seam-soft);
+  border-radius: 6px;
 }
-.rw-app .step-meta .rb.muted { color: var(--ink-3); }
-.rw-app .step-meta .rb.time { color: var(--thread-text); }
+.rw-app .step-meta .rb.muted {
+  color: var(--ink-3);
+}
+.rw-app .step-meta .rb.time {
+  color: var(--thread-text);
+}
 /* Balance the seam between adjacent headings. */
-.rw-app .step-body { padding: clamp(4px, 1vw, 6px) var(--pad) var(--step-pb); }
+.rw-app .step-body {
+  padding: clamp(4px, 1vw, 6px) var(--pad) var(--step-pb);
+}
 
 /* Reset used to be an anonymous icon in the global toolbar; it belongs to the
    workflow it resets, so it rides that panel's head instead. It reads as part of
@@ -66,43 +161,74 @@
    `0x01` line. It resets the whole panel rather than that one step, so it stays
    a sibling of the body and is placed over the row instead of being threaded
    through every form's first step. */
-.rw-app .panel.workflow { position: relative; }
+.rw-app .panel.workflow {
+  position: relative;
+}
 .rw-app .workflow-panel-head {
-  position: absolute; z-index: 5; display: flex; align-items: center;
+  position: absolute;
   /* the step column runs edge to edge inside a workflow panel (webapp-modals.css
      zeroes the head's gutter), so the control's right edge is the panel's */
   inset-block-start: calc(var(--step-lead, 0px) + var(--tools-rail-h, 0px) + var(--step-pt));
   inset-inline-end: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  block-size: calc(1lh + 4px);
   /* The box is the heading's own line: the step type's `1lh`, plus the 2px the
      number block pads above and below. Centring in it lands reset on the
      heading's optical line whatever the type scales to - the old top-alignment
      only looked centred because the button happened to be the same height, and
      stopped once it was not. */
-  font-size: clamp(.9rem, 1.1vw + .55rem, 1.06rem);
-  block-size: calc(1lh + 4px);
+  font-size: clamp(0.9rem, 1.1vw + 0.55rem, 1.06rem);
 }
 /* No box: the heading band stays type, and the control says what it is by
    turning fault-coloured under the finger - it throws the bench away. Wearing
    the shared `.btn` box made it the one framed thing in the band, reading as a
    form control dropped into a headline. */
 .rw-app .reset-btn {
-  position: relative; display: inline-flex; gap: 5px; align-items: center; padding: 0;
-  font: inherit; font-size: .74rem; font-weight: 650; letter-spacing: .02em; color: var(--ink-3);
-  white-space: nowrap; appearance: none; cursor: pointer; background: transparent; border: 0;
-  transition: color .18s;
+  position: relative;
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
   /* With no box to see, the target-size floor costs nothing to meet on the box
      itself - and axe measures the element, not a halo drawn over it. */
   min-block-size: 24px;
+  padding: 0;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: color 0.18s;
 }
-.rw-app .reset-btn svg { flex: none; width: 13px; height: 13px; }
+.rw-app .reset-btn svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
 /* the halo is on top of that floor, for the finger rather than the audit */
-.rw-app .reset-btn::after { position: absolute; inset: -4px -8px; content: ""; }
-@media (hover: hover) {
-  .rw-app .reset-btn:hover { color: var(--fault); }
+.rw-app .reset-btn::after {
+  position: absolute;
+  inset: -4px -8px;
+  content: "";
 }
-.rw-app .reset-btn:active { color: var(--fault); }
+@media (hover: hover) {
+  .rw-app .reset-btn:hover {
+    color: var(--fault);
+  }
+}
+.rw-app .reset-btn:active {
+  color: var(--fault);
+}
 /* Tools puts its command rail above the first step, so `0x01` starts one rail
    lower. The rail is a fixed box: 34px tab + 10px padding either side + 1px seam
    (masthead.css `.tools-subnav`); phone-dock.css restates both of these for the
    phone rail and the margin the steps grow there. */
-.rw-app .panel.workflow:has(.tools-subnav) { --tools-rail-h: 55px; }
+.rw-app .panel.workflow:has(.tools-subnav) {
+  --tools-rail-h: 55px;
+}

@@ -12,16 +12,22 @@
      download slot) clears the mobile browser's collapsing bottom toolbar - it
      overlaps the bottom of the viewport, so at max scroll the final card would
      otherwise stay hidden behind it. */
-  .rw-app .workflow-body { padding-block-end: max(96px, env(safe-area-inset-bottom, 0px) + 72px); }
+  .rw-app .workflow-body {
+    padding-block-end: max(96px, env(safe-area-inset-bottom, 0px) + 72px);
+  }
   /* An empty bench has no last card to clear, so the reserve is pure dead
      height - and it was exactly what pushed the footer under the fold on a
      phone's first paint. The hero already budgets `--hero-chrome` for the rest
      of the page, footer included. */
-  .rw-app .workflow-body:has(.step.is-input.is-empty) { padding-block-end: 0; }
+  .rw-app .workflow-body:has(.step.is-input.is-empty) {
+    padding-block-end: 0;
+  }
 
   /* the sun/moon pair still shares one grid cell so they can cross-morph */
   .rw-app .tool .ico-sun,
-  .rw-app .tool .ico-moon { grid-area: 1 / 1; }
+  .rw-app .tool .ico-moon {
+    grid-area: 1 / 1;
+  }
 
   .rw-app .updates {
     gap: var(--sp-s);
@@ -29,18 +35,32 @@
     padding: var(--sp-s);
   }
 
-  .rw-app .updates-pulse { width: 6px; height: 6px; }
+  .rw-app .updates-pulse {
+    width: 6px;
+    height: 6px;
+  }
   .rw-app .updates-text {
     display: flex;
-    align-items: center;
     gap: var(--sp-s);
+    align-items: center;
+    font-size: 0.78rem;
     white-space: nowrap;
-    font-size: .78rem;
   }
 
-  .rw-app .updates-ver { height: 32px; margin-inline-start: 0; padding-inline: 9px; font-size: .7rem; }
-  .rw-app .updates .btn.slim { height: 32px; padding-inline: 9px; }
-  .rw-app .updates .banner-x { width: 32px; height: 32px; }
+  .rw-app .updates-ver {
+    height: 32px;
+    padding-inline: 9px;
+    margin-inline-start: 0;
+    font-size: 0.7rem;
+  }
+  .rw-app .updates .btn.slim {
+    height: 32px;
+    padding-inline: 9px;
+  }
+  .rw-app .updates .banner-x {
+    width: 32px;
+    height: 32px;
+  }
 
   .rw-app .update-ready {
     min-height: 38px;
@@ -58,11 +78,17 @@
   }
 
   /* the tools sub-picker becomes a full-width segmented control */
-  .rw-app .tools-subnav { padding: var(--sp-s) var(--sp-m); }
+  .rw-app .tools-subnav {
+    padding: var(--sp-s) var(--sp-m);
+  }
   /* taller tab, tighter padding, same 1px seam - reset rides `0x01`, so it has
      to skip the rail's phone height (workbench.css `.workflow-panel-head`) */
-  .rw-app .panel.workflow:has(.tools-subnav) { --tools-rail-h: calc(44px + 2 * var(--sp-s) + 1px); }
-  .rw-app .tools-subnav-rail { width: 100%; }
+  .rw-app .panel.workflow:has(.tools-subnav) {
+    --tools-rail-h: calc(44px + 2 * var(--sp-s) + 1px);
+  }
+  .rw-app .tools-subnav-rail {
+    width: 100%;
+  }
   .rw-app .tools-subnav-tab {
     flex: 1 1 0;
     justify-content: center;
@@ -71,8 +97,8 @@
 
   .rw-app .info-btn::after {
     inset: auto;
-    left: 50%;
     top: 50%;
+    left: 50%;
     width: 44px;
     height: 44px;
     transform: translate(-50%, -50%);
@@ -86,12 +112,18 @@
     overflow: visible;
   }
   /* the margin above pushes `0x01` down; reset rides that row, so it follows */
-  .rw-app .panel.workflow { --step-lead: 8px; }
+  .rw-app .panel.workflow {
+    --step-lead: 8px;
+  }
   /* The last stage keeps the scroll room webapp-modals.css gives it - this layer
      is later, so a blanket `padding-block-end: 0` here would erase it. */
-  .rw-app .panel.workflow .step:not(:last-child) { padding-block-end: 0; }
+  .rw-app .panel.workflow .step:not(:last-child) {
+    padding-block-end: 0;
+  }
 
-  .rw-app .panel.workflow .swap-row + .step { margin-block-start: 0; }
+  .rw-app .panel.workflow .swap-row + .step {
+    margin-block-start: 0;
+  }
 
   .rw-app .panel.workflow .step > .step-body {
     padding: 7px 0 0;
@@ -106,16 +138,16 @@
 
   .rw-app .unified-drop-step > .step-head > .step-head-action {
     position: absolute;
-    z-index: 1;
     inset: 50% 0 auto;
+    z-index: 1;
     display: block;
     width: 100%;
     height: 48px;
     padding: 0;
+    cursor: pointer;
+    background: transparent;
     border: 0;
     border-radius: inherit;
-    background: transparent;
-    cursor: pointer;
     transform: translateY(-50%);
   }
 
@@ -124,7 +156,9 @@
     outline-offset: -3px;
   }
 
-  .rw-app .unified-drop-step > .step-head > .step-head-action:disabled { cursor: default; }
+  .rw-app .unified-drop-step > .step-head > .step-head-action:disabled {
+    cursor: default;
+  }
   .rw-app .unified-drop-step > .step-head:has(> .step-head-action) > .step-num,
   .rw-app .unified-drop-step > .step-head:has(> .step-head-action) > .step-title,
   .rw-app .unified-drop-step > .step-head:has(> .step-head-action) > .step-meta {
@@ -144,8 +178,12 @@
   }
 
   /* Below the title rather than beside it - the head has no width left to share. */
-  .rw-app .changelog-update-head { display: block; }
-  .rw-app .changelog-update-head .changelog-head-meta { justify-content: space-between; }
+  .rw-app .changelog-update-head {
+    display: block;
+  }
+  .rw-app .changelog-update-head .changelog-head-meta {
+    justify-content: space-between;
+  }
   .rw-app .changelog-actions .btn {
     width: 100%;
     height: 44px;
