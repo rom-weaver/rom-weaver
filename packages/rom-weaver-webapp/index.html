@@ -180,8 +180,11 @@
         }
 
         const label = threadSlot.dataset.threadLabel || "threads";
-        threadCount.textContent = String(threads);
-        threadSlot.setAttribute("aria-label", `${threads} ${label}`);
+        const threadValue = String(threads);
+        const threadAriaLabel = `${threads} ${label}`;
+        if (threadCount.textContent !== threadValue) threadCount.textContent = threadValue;
+        if (threadSlot.getAttribute("aria-label") !== threadAriaLabel)
+          threadSlot.setAttribute("aria-label", threadAriaLabel);
 
         // Same glyphs and wording as RuntimeGlyph/RUNTIME_MESSAGES in shell.tsx -
         // React hydrates against exactly what is written here.
@@ -208,11 +211,12 @@
         // early - both are locale-independent.
         const english = (document.documentElement.lang || "en").indexOf("en") === 0;
         const setRuntimeStatus = (state) => {
-          statusSlot.dataset.sw = state;
-          statusIcon.innerHTML = glyphs[state];
+          if (statusSlot.dataset.sw !== state) statusSlot.dataset.sw = state;
+          if (statusIcon.innerHTML !== glyphs[state]) statusIcon.innerHTML = glyphs[state];
           if (!english) return;
-          statusSlot.setAttribute("aria-label", wording[state]);
-          statusText.textContent = wording[state];
+          if (statusSlot.getAttribute("aria-label") !== wording[state])
+            statusSlot.setAttribute("aria-label", wording[state]);
+          if (statusText.textContent !== wording[state]) statusText.textContent = wording[state];
         };
 
         // A controller means this page came out of the cache; without
@@ -224,7 +228,7 @@
         else setRuntimeStatus("installing");
       };
     </script>
-    <script type="module" src="./src/webapp/main.tsx"></script>
+    <script type="module" src="./src/webapp/boot.ts"></script>
   </head>
   <body>
     <div id="webapp-root" aria-busy="true"></div>

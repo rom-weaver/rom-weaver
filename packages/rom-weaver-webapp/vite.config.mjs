@@ -698,16 +698,13 @@ const prerenderWebappShell = (prerenderedShells) => ({
   },
 });
 
-// Workflow forms are lazy route chunks (src/webapp/workflow-routes.tsx), so
-// without help the landing tab's chunk is only requested once the entry bundle
-// has downloaded, parsed and evaluated - one serialized round trip added to the
-// exact path the prerendered shell exists to speed up. Each emitted route page
-// therefore carries modulepreload links for its own route chunks, so they
-// download alongside the entry instead of after it.
+// Workflow forms are lazy route chunks (src/webapp/workflow-routes.tsx). The
+// prerendered shell can paint before the client requests its route chunk, then
+// webapp.ts starts that request at entry evaluation and waits before hydration.
+// Keep only route stylesheets in the document head because they are render-critical.
 //
 // The links live between markers so writeWebappStaticAssets can swap the
-// patcher set baked into index.html for the set belonging to the route page it
-// is deriving.
+// stylesheet set baked into index.html for the route page it is deriving.
 const ROUTE_PRELOAD_MARKER_START = "<!--rw-route-preload-->";
 const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
 
@@ -740,12 +737,9 @@ const collectStaticImportClosure = (bundle, entryFileNames) => {
   return seen;
 };
 
-const renderRoutePreloadLinks = (fileNames) =>
-  fileNames.map((fileName) => `  <link rel="modulepreload" crossorigin href="./${fileName}" />`).join("\n");
-
 // CSS carried by a route's chunks (docs.css rides the docs chunk) is render-critical on
 // that route's prerendered document: without a render-blocking link the shell paints
-// unstyled until the chunk loads. Emitted before the modulepreloads. When the chunk later
+// unstyled until the chunk loads. When the chunk later
 // lazy-loads on an in-app navigation, cascade layers make the runtime-injected duplicate
 // link harmless.
 const renderRouteStylesheetLinks = (fileNames) =>
@@ -887,26 +881,8 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
         const routeCss = [...collectChunkCss(bundle, routeFiles)]
           .filter((fileName) => !entryCss.has(fileName))
           .sort((left, right) => Number(left > right) - Number(left < right));
-        const links = [renderRouteStylesheetLinks(routeCss), renderRoutePreloadLinks(routeFiles)]
-          .filter(Boolean)
-          .join("\n");
+        const links = renderRouteStylesheetLinks(routeCss);
         routePreloadLinks.set(view, links);
-      }
-      // Guide HTML is one chunk per docs page (scripts/docs-virtual-module.mjs),
-      // so each docs document also preloads its own guide's chunk alongside the
-      // docs route chunks - hydration needs it, and without the link it would
-      // only be requested after the route chunk evaluates.
-      const docsChunk = findChunkForModule(bundle, WORKFLOW_ROUTE_MODULES.docs);
-      const docsFiles = collectStaticImportClosure(bundle, [docsChunk]);
-      for (const route of DOC_ROUTES) {
-        const pageChunk = findChunkForModule(bundle, `rom-weaver-docs-page/${route.slug}`);
-        if (!pageChunk)
-          throw new Error(`rom-weaver-preload-workflow-route-chunks: no chunk emitted for docs page ${route.slug}`);
-        const pageFiles = [...collectStaticImportClosure(bundle, [pageChunk])]
-          .filter((fileName) => !(alreadyLoaded.has(fileName) || docsFiles.has(fileName)))
-          .sort((left, right) => Number(left > right) - Number(left < right));
-        const links = [routePreloadLinks.get("docs"), renderRoutePreloadLinks(pageFiles)].filter(Boolean).join("\n");
-        routePreloadLinks.set(`docs:${route.slug}`, links);
       }
       return html.replace(
         "</head>",
@@ -954,6 +930,10 @@ export default defineConfig(({ command, mode }) => {
       assetsInlineLimit: 0,
       cssMinify: "lightningcss",
       emptyOutDir: true,
+      // boot.ts loads the React entry after the prerendered shell gets a paint.
+      // Automatic modulepreload would pull that entry's shared graph back into
+      // the first-paint task, undoing the split.
+      modulePreload: false,
       outDir: "dist",
       rollupOptions: {
         input: path.resolve(rootDir, "index.html"),
