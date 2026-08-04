@@ -132,6 +132,19 @@ describe("pages brotli sidecar function", () => {
     expect(await response.text()).toBe("brotli-bytes");
   });
 
+  it("accepts an HTML-typed sidecar when it is already Brotli encoded", async () => {
+    const { context } = makeContext({
+      url: "https://rom-weaver.com/apply",
+      sidecarResponse: () =>
+        new Response("brotli-bytes", {
+          headers: { "Content-Type": "text/html; charset=utf-8", "Content-Encoding": "br" },
+        }),
+    });
+    const response = await onRequest(context);
+    expect(response.headers.get("Content-Encoding")).toBe("br");
+    expect(await response.text()).toBe("brotli-bytes");
+  });
+
   it("does not probe an HTML sidecar for an asset request", async () => {
     const { context, fetchLog } = makeContext({ sidecarResponse: brSidecar() });
     expect(await onRequest(context)).toBe(NEXT_SENTINEL);

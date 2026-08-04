@@ -2,7 +2,9 @@ import { acceptsBrotli } from "./accept-encoding.js";
 import { documentSidecarPaths } from "./document-routes.js";
 
 const isMissingSidecar = (response) =>
-  !response.ok || (response.headers.get("Content-Type") ?? "").includes("text/html");
+  !response.ok ||
+  ((response.headers.get("Content-Type") ?? "").includes("text/html") &&
+    response.headers.get("Content-Encoding") !== "br");
 
 const weakEntityTag = (value) => value.trim().replace(/^W\//, "");
 
