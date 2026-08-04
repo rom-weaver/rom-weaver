@@ -24,8 +24,8 @@ test("selectShard: every file lands in exactly one shard across the full range",
   const combined = perShard.flat();
 
   assert.deepEqual(
-    combined.slice().sort((left, right) => left.localeCompare(right)),
-    files.slice().sort((left, right) => left.localeCompare(right)),
+    combined.slice().sort((left, right) => Number(left > right) - Number(left < right)),
+    files.slice().sort((left, right) => Number(left > right) - Number(left < right)),
     "every file appears, no duplicates",
   );
   assert.equal(new Set(combined).size, files.length, "no file appears in more than one shard");

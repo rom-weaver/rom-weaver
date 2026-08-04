@@ -72,7 +72,7 @@ describe("browser OPFS run scratch cleanup", () => {
       requestStorage.mock.calls
         .slice(1)
         .map(([request]) => request.filePath)
-        .sort((left, right) => left.localeCompare(right)),
+        .sort((left, right) => Number(left > right) - Number(left < right)),
     ).toEqual(["/work/fixture/operations/op/.rom-weaver-extract-run-1-0", "/work/fixture/rom-weaver-out/rw-run-1-1-a"]);
   });
 });

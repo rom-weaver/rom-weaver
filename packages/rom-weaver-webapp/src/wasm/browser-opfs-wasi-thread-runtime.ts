@@ -213,7 +213,7 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
   } finally {
     trace(`[browser-opfs-thread] cleanup start tid=${tid ?? "unknown"} succeeded=${runSucceeded}`);
     closeSyncFiles(closeables);
-    // Yield before invalidating the thread mount so proxy close messages can settle.
+    // Preserve the existing microtask boundary before invalidating the thread mount.
     // oxlint-disable-next-line typescript/await-thenable
     await cleanupBrowserOpfsMounts(mounts);
     if (!runSucceeded || runtime?.invalidateMountCacheAfterRun)

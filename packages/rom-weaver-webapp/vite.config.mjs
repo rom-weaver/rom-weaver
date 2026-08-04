@@ -883,10 +883,10 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
           throw new Error(`rom-weaver-preload-workflow-route-chunks: no chunk emitted for ${moduleSuffix}`);
         const routeFiles = [...collectStaticImportClosure(bundle, [routeChunk])]
           .filter((fileName) => !alreadyLoaded.has(fileName))
-          .sort((left, right) => left.localeCompare(right));
+          .sort((left, right) => Number(left > right) - Number(left < right));
         const routeCss = [...collectChunkCss(bundle, routeFiles)]
           .filter((fileName) => !entryCss.has(fileName))
-          .sort((left, right) => left.localeCompare(right));
+          .sort((left, right) => Number(left > right) - Number(left < right));
         const links = [renderRouteStylesheetLinks(routeCss), renderRoutePreloadLinks(routeFiles)]
           .filter(Boolean)
           .join("\n");
@@ -904,7 +904,7 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
           throw new Error(`rom-weaver-preload-workflow-route-chunks: no chunk emitted for docs page ${route.slug}`);
         const pageFiles = [...collectStaticImportClosure(bundle, [pageChunk])]
           .filter((fileName) => !(alreadyLoaded.has(fileName) || docsFiles.has(fileName)))
-          .sort((left, right) => left.localeCompare(right));
+          .sort((left, right) => Number(left > right) - Number(left < right));
         const links = [routePreloadLinks.get("docs"), renderRoutePreloadLinks(pageFiles)].filter(Boolean).join("\n");
         routePreloadLinks.set(`docs:${route.slug}`, links);
       }

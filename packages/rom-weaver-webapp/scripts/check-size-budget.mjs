@@ -97,7 +97,7 @@ export function checkWorkerRuntimeChunk(distDir = DIST_DIR) {
   if (documentChunks.has(runtimeChunk)) {
     const importers = [...documentChunks]
       .filter((name) => name !== runtimeChunk && staticImportsOf(assetsDir, name).has(runtimeChunk))
-      .sort((left, right) => left.localeCompare(right));
+      .sort((left, right) => Number(left > right) - Number(left < right));
     problems.push(
       `${runtimeChunk} is on the first-paint critical path; ${
         importers.length > 0 ? `imported by ${importers.join(", ")}` : "reached from index.html directly"

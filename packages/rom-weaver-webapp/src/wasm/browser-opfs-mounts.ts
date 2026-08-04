@@ -49,7 +49,7 @@ export function createBrowserOpfsMountCache() {
       }
       if (current) {
         mountsByPath.delete(mountPath);
-        // Yield between closing a cached mount and rebuilding its path.
+        // Preserve the existing microtask boundary; mount disposal is synchronous by design.
         // oxlint-disable-next-line typescript/await-thenable
         await current.dispose();
       }
@@ -70,7 +70,7 @@ export function createBrowserOpfsMountCache() {
       const mounts = [...mountsByPath.values()];
       mountsByPath.clear();
       for (const mount of mounts) {
-        // Yield between mount closes so proxy cleanup can progress.
+        // Preserve the existing microtask boundary between synchronous mount disposals.
         // oxlint-disable-next-line typescript/await-thenable
         await mount.dispose();
       }
@@ -81,7 +81,7 @@ export function createBrowserOpfsMountCache() {
       for (const [mountPath, mount] of mountsByPath) {
         if (!lookup.has(mountPath)) continue;
         mountsByPath.delete(mountPath);
-        // Yield between mount closes so proxy cleanup can progress.
+        // Preserve the existing microtask boundary between synchronous mount disposals.
         // oxlint-disable-next-line typescript/await-thenable
         await mount.dispose();
       }
@@ -94,7 +94,7 @@ export function createBrowserOpfsMountCache() {
         const current = mountsByPath.get(mount.mountPath);
         if (current !== mount) continue;
         mountsByPath.delete(mount.mountPath);
-        // Yield between mount closes so proxy cleanup can progress.
+        // Preserve the existing microtask boundary between synchronous mount disposals.
         // oxlint-disable-next-line typescript/await-thenable
         await mount.dispose();
       }

@@ -252,7 +252,7 @@ const main = () => {
     process.stderr.write("usage: optimize-png.mjs [--verify] <file-or-directory...>\n");
     process.exit(2);
   }
-  const files = targets.flatMap(collectPngs).sort((left, right) => left.localeCompare(right));
+  const files = targets.flatMap(collectPngs).sort((left, right) => Number(left > right) - Number(left < right));
   let saved = 0;
   for (const file of files) {
     const source = fs.readFileSync(file);
