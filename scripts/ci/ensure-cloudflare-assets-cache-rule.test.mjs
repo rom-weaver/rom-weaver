@@ -4,11 +4,20 @@ import test from "node:test";
 import {
   CACHE_RULE_DESCRIPTION,
   CACHE_RULE_EXPRESSION,
+  DOCUMENT_CACHE_RULE_EXPRESSION,
   DOCUMENT_CACHE_RULE_DESCRIPTION,
   cacheRule,
   documentCacheRule,
   ensureCacheRule,
 } from "./ensure-cloudflare-assets-cache-rule.mjs";
+import { WORKFLOW_DOCUMENT_NAMES } from "../../packages/rom-weaver-webapp/functions/document-routes.js";
+
+test("builds the document cache expression from the generated workflow route list", () => {
+  for (const name of WORKFLOW_DOCUMENT_NAMES) {
+    assert.match(DOCUMENT_CACHE_RULE_EXPRESSION, new RegExp(`\\"/${name}\\"`));
+  }
+  assert.match(DOCUMENT_CACHE_RULE_EXPRESSION, /not starts_with\(http\.request\.uri\.path, "\/docs\/screenshots\/"\)/);
+});
 
 test("does not cache asset errors and replaces the old rule", async () => {
   const oldRule = {

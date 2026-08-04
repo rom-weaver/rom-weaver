@@ -3,6 +3,7 @@
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { DOC_SOURCES } from "../../packages/rom-weaver-webapp/src/webapp/docs-routing.mjs";
+import { WORKFLOW_DOCUMENT_NAMES } from "../../packages/rom-weaver-webapp/functions/document-routes.js";
 
 const PURGE_BATCH_SIZE = 30;
 const PURGEABLE_HOSTS = new Set([
@@ -10,8 +11,6 @@ const PURGEABLE_HOSTS = new Set([
   "beta.rom-weaver.com",
   "nightly.rom-weaver.com",
 ]);
-const WORKFLOW_DOCUMENT_NAMES = ["apply", "create", "trim", "tools"];
-
 const routeAliases = (slug) => [`/${slug}`, `/${slug}/`, `/${slug}.html`, `/${slug}/index.html`];
 
 export const DOCUMENT_PURGE_PATHS = Object.freeze(

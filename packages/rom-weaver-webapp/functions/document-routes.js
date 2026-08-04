@@ -1,4 +1,4 @@
-const WORKFLOW_DOCUMENT_NAMES = ["apply", "create", "trim", "tools"];
+export const WORKFLOW_DOCUMENT_NAMES = ["apply", "create", "trim", "tools"];
 
 // These patterns are deliberately compact. Cloudflare Pages limits the total
 // number of _routes.json include and exclude entries to 100.

@@ -22,13 +22,16 @@ const makeContext = ({
   const headers = new Headers();
   if (acceptEncoding !== null) headers.set("Accept-Encoding", acceptEncoding);
   const fetchLog: FetchLogEntry[] = [];
+  const forwardedAcceptEncodings: Array<string | null> = [];
   return {
     context: {
       env: {
         ASSETS: {
           fetch: (target: URL | RequestInfo, init?: RequestInit) => {
-            fetchLog.push({ method: init?.method ?? "GET", url: String(target) });
-            const response = typeof sidecarResponse === "function" ? sidecarResponse(String(target)) : sidecarResponse;
+            const targetUrl = target instanceof Request ? target.url : String(target);
+            fetchLog.push({ method: init?.method ?? "GET", url: targetUrl });
+            if (target instanceof Request) forwardedAcceptEncodings.push(target.headers.get("Accept-Encoding"));
+            const response = typeof sidecarResponse === "function" ? sidecarResponse(targetUrl) : sidecarResponse;
             return Promise.resolve(response ?? spaFallback());
           },
         },
@@ -37,6 +40,7 @@ const makeContext = ({
       request: new Request(url, { headers }),
     },
     fetchLog,
+    forwardedAcceptEncodings,
   };
 };
 
@@ -144,6 +148,18 @@ describe("pages brotli sidecar function", () => {
       { method: "GET", url: "https://rom-weaver.com/trim.html.br" },
     ]);
     expect(response.headers.get("Content-Encoding")).toBe("br");
+  });
+
+  it("forwards conditional headers and preserves a document 304", async () => {
+    const { context, forwardedAcceptEncodings } = makeContext({
+      url: "https://rom-weaver.com/apply",
+      sidecarResponse: () => new Response(null, { status: 304, headers: { ETag: '"document"' } }),
+    });
+    const response = await onRequest(context);
+    expect(response.status).toBe(304);
+    expect(response.headers.get("ETag")).toBe('"document"');
+    expect(response.headers.get("Content-Encoding")).toBe("br");
+    expect(forwardedAcceptEncodings).toEqual(["gzip, br, zstd"]);
   });
 
   it("falls through document requests without Brotli support", async () => {

@@ -3,16 +3,35 @@
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import {
+  DOCUMENT_ROUTE_EXCLUDES,
+  DOCUMENT_ROUTE_INCLUDES,
+} from "../../packages/rom-weaver-webapp/functions/document-routes.js";
 
 const CUSTOM_HOSTS = '{"rom-weaver.com" "beta.rom-weaver.com" "nightly.rom-weaver.com"}';
 const ERROR_STATUS_TTL = [{ status_code_range: { from: 300, to: 599 }, value: -1 }];
+const cloudflareStringSet = (values) => `{${values.map((value) => JSON.stringify(value)).join(" ")}}`;
+const cloudflarePathExpression = () => {
+  const exactPaths = DOCUMENT_ROUTE_INCLUDES.filter((path) => !path.endsWith("*"));
+  const wildcardPaths = DOCUMENT_ROUTE_INCLUDES.filter((path) => path.endsWith("*")).map((path) =>
+    path.slice(0, -1),
+  );
+  const exactExpression = `http.request.uri.path in ${cloudflareStringSet(exactPaths)}`;
+  const wildcardExpressions = wildcardPaths.map((path) => {
+    const exclusions = DOCUMENT_ROUTE_EXCLUDES.filter((exclude) =>
+      exclude.slice(0, -1).startsWith(path),
+    ).map((exclude) => `not starts_with(http.request.uri.path, ${JSON.stringify(exclude.slice(0, -1))})`);
+    return [`starts_with(http.request.uri.path, ${JSON.stringify(path)})`, ...exclusions].join(" and ");
+  });
+  return [exactExpression, ...wildcardExpressions].map((expression) => `(${expression})`).join(" or ");
+};
 
 export const CACHE_RULE_DESCRIPTION = "rom-weaver: cache immutable /assets (managed by ci.yml)";
 export const CACHE_RULE_EXPRESSION = `(http.host in ${CUSTOM_HOSTS}) and starts_with(http.request.uri.path, "/assets/")`;
 export const DOCUMENT_CACHE_RULE_DESCRIPTION =
   "rom-weaver: cache HTML documents (managed by ci.yml)";
-export const DOCUMENT_CACHE_RULE_EXPRESSION = `(http.host in ${CUSTOM_HOSTS}) and (http.request.uri.path in {"/" "/index.html" "/404.html" "/apply" "/apply/" "/apply.html" "/apply/index.html" "/create" "/create/" "/create.html" "/create/index.html" "/trim" "/trim/" "/trim.html" "/trim/index.html" "/tools" "/tools/" "/tools.html" "/tools/index.html" "/docs"} or (starts_with(http.request.uri.path, "/docs/") and not starts_with(http.request.uri.path, "/docs/screenshots/")))`;
-export const DOCUMENT_CACHE_TTL_SECONDS = 2 * 60 * 60;
+export const DOCUMENT_CACHE_RULE_EXPRESSION = `(http.host in ${CUSTOM_HOSTS}) and (${cloudflarePathExpression()})`;
+export const DOCUMENT_CACHE_TTL_SECONDS = 5 * 60;
 
 export function cacheRule() {
   return {

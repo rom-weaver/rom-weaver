@@ -653,10 +653,10 @@ Cost model: sidecar-backed URLs invoke the function, everything else stays
 on the unmetered static path. The nightly deploy leg idempotently installs two
 zone Cache Rules ("Ensure zone cache rules for assets and HTML" in `ci.yml`).
 The `/assets/*` rule respects the immutable response TTL. The document rule
-keeps browser TTL at `no-cache` but gives Cloudflare's edge a two-hour TTL.
+keeps browser TTL at `no-cache` but gives Cloudflare's edge a five-minute TTL.
 The function then runs roughly once per URL per PoP instead of per request.
 The deploy leg purges every generated HTML URL after each prod, beta, or
-nightly deployment, so that two-hour bound is a safety net rather than the
+nightly deployment, so that five-minute bound is a safety net rather than the
 normal release delay. Safe because HTML is purged after deployment and every
 asset URL is content-hashed and immutable. The step skips with a notice until
 three pieces of one-time setup exist: a `CLOUDFLARE_ZONE_ID` repository secret
