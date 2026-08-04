@@ -77,6 +77,26 @@ describe("LogDialog", () => {
     expect(onSaveSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps update reload in the banner instead of duplicating it on Status", () => {
+    const onReload = vi.fn();
+    const { container, queryByRole } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog
+          onClose={() => undefined}
+          onLevelChange={() => undefined}
+          onReload={onReload}
+          open
+          serviceWorkerStatus="active"
+          updateReady
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    expect(container.querySelector(".sw-summary")).toBeNull();
+    expect(queryByRole("button", { name: "Reload now" })).toBeNull();
+    expect(onReload).not.toHaveBeenCalled();
+  });
+
   it("reports every tab change so the host can stage a settings draft", () => {
     const onTabChange = vi.fn();
     const { container } = render(

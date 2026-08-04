@@ -576,13 +576,6 @@ const LogDialog = ({
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
             <StatusRows localizer={localizer} runtimeState={runtimeState} />
-            {runtimeState === "update" && onReload ? (
-              <div className="sw-summary">
-                <button className="btn primary" onClick={onReload} type="button">
-                  {localizer.message("ui.update.reloadNow")}
-                </button>
-              </div>
-            ) : null}
             <OfflineLegend current={runtimeState} localizer={localizer} />
             <AboutLink localizer={localizer} />
           </div>

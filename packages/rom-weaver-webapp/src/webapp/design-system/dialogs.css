@@ -337,9 +337,6 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 
 /* ── status tab ── */
 .rw-app .status-panel { display: block; flex: 1 1 auto; min-height: 0; }
-/* the one action the status tab can offer: reload onto a downloaded update. The
-   sentence that used to sit here is in the legend below, beside its own state. */
-.rw-app .sw-summary { margin-block-start: var(--sp-m); }
 .rw-app .sw-chip {
   display: inline-flex; gap: var(--sp-xs); align-items: center; min-height: 22px; padding: 1px 8px;
   font-size: .7rem; font-weight: 600; color: var(--ink-3); white-space: nowrap;
