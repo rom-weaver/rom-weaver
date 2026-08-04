@@ -458,19 +458,17 @@ test("mobile More contains every masthead utility action", async () => {
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".masthead-tools")).toBeTruthy();
-  for (const selector of [
-    ".mobile-utility-source",
-    ".mobile-utility-support",
-    ".mobile-utility-theme",
-    ".mobile-utility-accent",
-  ]) {
+  for (const selector of [".mobile-utility-source", ".mobile-utility-support"]) {
     const link = document.querySelector(selector);
     expect(link).not.toBeNull();
     expect(getComputedStyle(link).display).toBe("none");
   }
   const mastheadStatus = document.querySelector(".masthead-status");
-  expect(mastheadStatus).not.toBeNull();
-  expect(getComputedStyle(mastheadStatus).display).not.toBe("none");
+  for (const selector of [".masthead-status", ".mobile-utility-theme", ".mobile-utility-accent"]) {
+    const control = document.querySelector(selector);
+    expect(control).not.toBeNull();
+    expect(getComputedStyle(control).display).not.toBe("none");
+  }
 
   await page.getByRole("button", { name: "More" }).click();
   for (const label of ["View source on GitHub", "Support", "Status", "Theme", "Accent"]) {
@@ -479,6 +477,12 @@ test("mobile More contains every masthead utility action", async () => {
   expect(document.querySelector('.more-menu [role="menuitem"][data-sw] svg')?.outerHTML).toBe(
     document.querySelector(".masthead-status svg")?.outerHTML,
   );
+  const menuStatus = document.querySelector(".more-menu .more-status");
+  expect(menuStatus).not.toBeNull();
+  expect(getComputedStyle(menuStatus).color).toBe(
+    getComputedStyle(document.querySelector('.more-menu [role="menuitem"]:not(.more-status)')).color,
+  );
+  expect(getComputedStyle(menuStatus.querySelector("svg")).color).toBe(getComputedStyle(mastheadStatus).color);
   await page.getByRole("menuitem", { name: "Accent" }).click();
   await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
 

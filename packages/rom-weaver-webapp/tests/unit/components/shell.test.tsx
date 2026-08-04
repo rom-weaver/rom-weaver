@@ -101,6 +101,7 @@ describe("Masthead", () => {
     expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(menu.hidden).toBe(false);
     const menuStatus = getByRole("menuitem", { name: "Status" });
+    expect(menuStatus.classList.contains("more-status")).toBe(true);
     expect(menuStatus.getAttribute("data-sw")).toBe("active");
     expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
     expect(queryByRole("menuitem", { name: "Docs" })).toBeNull();

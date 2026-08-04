@@ -541,7 +541,13 @@ const UtilityMenu = ({
         </>
       ) : null}
       {/* Each item wears the icon its tab wears inside the dialog it opens. */}
-      <button data-sw={runtimeState} onClick={() => select(onOpenStatus)} role="menuitem" type="button">
+      <button
+        className="more-status"
+        data-sw={runtimeState}
+        onClick={() => select(onOpenStatus)}
+        role="menuitem"
+        type="button"
+      >
         <RuntimeGlyph state={runtimeState} />
         {localizer.message("ui.log.tabStatus")}
       </button>

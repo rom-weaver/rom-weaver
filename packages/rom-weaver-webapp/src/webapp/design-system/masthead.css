@@ -264,6 +264,25 @@
 .rw-app .sub-status[data-sw="disabled"] {
   color: var(--ink-4);
 }
+.rw-app .more-status[data-sw] {
+  color: var(--ink-2);
+}
+.rw-app .more-status[data-sw="active"] svg {
+  color: var(--verified);
+}
+.rw-app .more-status[data-sw="ready"] svg {
+  color: var(--ink-2);
+}
+.rw-app .more-status[data-sw="update"] svg {
+  color: var(--care-text);
+}
+.rw-app .more-status[data-sw="installing"] svg {
+  color: var(--ink-3);
+  animation: sw-spin 1.1s linear infinite;
+}
+.rw-app .more-status[data-sw="disabled"] svg {
+  color: var(--ink-4);
+}
 /* ── the sub-line control ──
    These are links under a wordmark, not badges on it: two pills stacked under
    the brand read as decoration on the logo rather than as three places to go.
@@ -898,8 +917,6 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   }
   .rw-app .masthead-tools .mobile-utility-source,
   .rw-app .masthead-tools .mobile-utility-support,
-  .rw-app .masthead-tools .mobile-utility-theme,
-  .rw-app .masthead-tools .mobile-utility-accent,
   .rw-app .masthead-tools .actions-sep {
     display: none;
   }
