@@ -479,10 +479,20 @@ test("mobile More contains every masthead utility action", async () => {
   );
   const menuStatus = document.querySelector(".more-menu .more-status");
   expect(menuStatus).not.toBeNull();
-  expect(getComputedStyle(menuStatus).color).toBe(
-    getComputedStyle(document.querySelector('.more-menu [role="menuitem"]:not(.more-status)')).color,
-  );
+  expect(getComputedStyle(menuStatus).color).toBe(getComputedStyle(mastheadStatus).color);
   expect(getComputedStyle(menuStatus.querySelector("svg")).color).toBe(getComputedStyle(mastheadStatus).color);
+  const neutralItem = document.querySelector('.more-menu [role="menuitem"]:not(.more-status):not(.more-support)');
+  const neutralColor = getComputedStyle(neutralItem).color;
+  for (const item of document.querySelectorAll('.more-menu [role="menuitem"]')) {
+    if (item.classList.contains("more-status") || item.classList.contains("more-support")) continue;
+    expect(getComputedStyle(item).color).toBe(neutralColor);
+    expect(getComputedStyle(item.querySelector("svg")).color).toBe(neutralColor);
+  }
+  const supportItem = document.querySelector(".more-menu .more-support");
+  expect(getComputedStyle(supportItem).color).toBe(getComputedStyle(document.querySelector(".tool-support")).color);
+  expect(getComputedStyle(supportItem.querySelector("svg")).color).toBe(
+    getComputedStyle(document.querySelector(".tool-support svg")).color,
+  );
   await page.getByRole("menuitem", { name: "Accent" }).click();
   await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
 
