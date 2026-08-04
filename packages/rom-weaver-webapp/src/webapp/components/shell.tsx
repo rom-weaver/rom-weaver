@@ -1,5 +1,4 @@
 import {
-  Activity,
   CloudCheck,
   CloudDownload,
   CloudOff,
@@ -446,6 +445,7 @@ type UtilityMenuProps = {
   onOpenStatus: () => void;
   onOpenStorage?: () => void;
   onOpenTools?: () => void;
+  runtimeState: RuntimeState;
   toolsEnabled?: boolean;
   toolsLabel?: string;
 };
@@ -464,6 +464,7 @@ const UtilityMenu = ({
   onOpenStatus,
   onOpenStorage,
   onOpenTools,
+  runtimeState,
   toolsEnabled,
   toolsLabel,
   menuClassName,
@@ -540,8 +541,8 @@ const UtilityMenu = ({
         </>
       ) : null}
       {/* Each item wears the icon its tab wears inside the dialog it opens. */}
-      <button onClick={() => select(onOpenStatus)} role="menuitem" type="button">
-        <Activity aria-hidden="true" />
+      <button data-sw={runtimeState} onClick={() => select(onOpenStatus)} role="menuitem" type="button">
+        <RuntimeGlyph state={runtimeState} />
         {localizer.message("ui.log.tabStatus")}
       </button>
       <button onClick={() => select(onOpenStorage ?? onOpenLog)} role="menuitem" type="button">
@@ -1128,6 +1129,7 @@ const Masthead = ({
             onToggle={() => toggleUtility("desktop")}
             open={utilityOpen && utilityPlacement === "desktop"}
             renderMenu={false}
+            runtimeState={runtimeState}
             toolsEnabled={betaToolsEnabled}
             toolsLabel={toolsLabel}
             triggerRef={desktopMoreRef}
@@ -1149,6 +1151,7 @@ const Masthead = ({
               onOpenStorage={onOpenStorage ?? onOpenLog}
               onOpenTools={() => onSelectTab("tools")}
               open
+              runtimeState={runtimeState}
               toolsEnabled={betaToolsEnabled}
               toolsLabel={toolsLabel}
               triggerRef={activeMoreRef}
@@ -1198,6 +1201,7 @@ const Masthead = ({
               onToggle={() => toggleUtility("mobile")}
               open={utilityOpen && utilityPlacement === "mobile"}
               renderMenu={false}
+              runtimeState={runtimeState}
               toolsEnabled={betaToolsEnabled}
               toolsLabel={toolsLabel}
               triggerRef={mobileMoreRef}

@@ -461,7 +461,6 @@ test("mobile More contains every masthead utility action", async () => {
   for (const selector of [
     ".mobile-utility-source",
     ".mobile-utility-support",
-    ".masthead-status",
     ".mobile-utility-theme",
     ".mobile-utility-accent",
   ]) {
@@ -469,11 +468,17 @@ test("mobile More contains every masthead utility action", async () => {
     expect(link).not.toBeNull();
     expect(getComputedStyle(link).display).toBe("none");
   }
+  const mastheadStatus = document.querySelector(".masthead-status");
+  expect(mastheadStatus).not.toBeNull();
+  expect(getComputedStyle(mastheadStatus).display).not.toBe("none");
 
   await page.getByRole("button", { name: "More" }).click();
   for (const label of ["View source on GitHub", "Support", "Status", "Theme", "Accent"]) {
     await expect.element(page.getByRole("menuitem", { name: label })).toBeInTheDocument();
   }
+  expect(document.querySelector('.more-menu [role="menuitem"][data-sw] svg')?.outerHTML).toBe(
+    document.querySelector(".masthead-status svg")?.outerHTML,
+  );
   await page.getByRole("menuitem", { name: "Accent" }).click();
   await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
 
