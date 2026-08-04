@@ -10,6 +10,9 @@ const headersFile = `/*
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
+/*.html.br
+  Content-Encoding: br
+
 /cache-service-worker.js
   Cache-Control: no-cache
 `;
@@ -32,6 +35,11 @@ describe("pages _headers matching", () => {
     const matched = matchPagesHeaders(rules, "/assets/index-abc.css");
     expect(matched["Cache-Control"]).toBe("public, max-age=31536000, immutable");
     expect(matched["Cross-Origin-Embedder-Policy"]).toBe("require-corp");
+  });
+
+  it("marks HTML sidecars as already Brotli encoded", () => {
+    const matched = matchPagesHeaders(rules, "/apply/index.html.br");
+    expect(matched["Content-Encoding"]).toBe("br");
   });
 
   it("lets a later exact rule win over an earlier wildcard", () => {

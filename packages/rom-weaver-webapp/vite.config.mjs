@@ -488,6 +488,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         outputPath,
         `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
+      fs.appendFileSync(outputPath, "\n/*.html.br\n  Content-Encoding: br\n");
     },
     configResolved(config) {
       outDir = config.build.outDir;
