@@ -61,12 +61,92 @@
   .rw-app .workflow-file-list:not(:empty) + .drop { margin-top: 9px; }
   .rw-app .bundle-rom-expectation { margin-block-start: 9px; }
   .rw-app .updates { gap: var(--sp-s); }
-  /* Override user-agent dialog limits with an edge-to-edge sheet on phones. */
+  /* Override user-agent dialog limits with an edge-to-edge sheet on phones.
+     The sheet itself - size, safe-area padding, square corners - is set once in
+     dialogs.css beside the desktop frame it overrides. */
   .rw-app .log-dlg { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; }
-  .rw-app .log-dlg .dlg-frame { max-height: 100dvh; height: 100dvh; border: 0; border-radius: 0; }
-  /* The phone is where the head runs out of width first, so this is where the
-     rail has to be the thing that scrolls rather than the head that wraps. */
-  .rw-app .log-dlg .dlg-head { flex-wrap: nowrap; gap: var(--sp-s); padding: var(--sp-m) var(--sp-m) 0; }
+  /* Everything the sheet steers by drops to its foot, in thumb reach: the tab
+     bar last, a tab's own controls just above it. Both stay in flow - the sheet
+     is a fixed-height column, so the body between them is the only part that
+     scrolls, no bar needs a guessed reserve under it, and none can drift over
+     another when 100dvh and the visual viewport disagree. Order moves them;
+     source order still reads rail, then controls, then content. */
+  /* The tab bar wears the app dock's own measurements. Two docks a few pixels
+     apart would read as a near-miss; one shape doing duty for whichever
+     navigation is in front reads as the same control. */
+  .rw-app .log-dlg .dlg-head {
+    order: 2;
+    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0;
+    /* Height comes from the same padding and column minimum the dock uses, not
+       from --dock-h: that variable is the reserve the page leaves for the dock,
+       which is taller than the dock actually renders. Built from the parts, the
+       two bars match without either having to name a number. The frame already
+       pays the bottom safe area. */
+    padding: 4px max(var(--sp-s), var(--safe-r)) 4px max(var(--sp-s), var(--safe-l));
+    border-block-start: 1px solid var(--seam-soft); border-block-end: 0;
+  }
+  .rw-app .log-dlg .dialog-subrail {
+    grid-column: span 5;
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0;
+    overflow: visible;
+  }
+  /* One column apiece: five tabs and the way out. */
+  .rw-app .log-dlg .dialog-subrail .subtab,
+  .rw-app .log-dlg .dlg-head > .dlg-x {
+    position: relative;
+    display: flex; flex-direction: column; gap: 2px; align-items: center; justify-content: center;
+    inline-size: auto; block-size: auto; min-inline-size: 0; min-block-size: 48px;
+    margin: 0; padding: 6px 2px 4px;
+    border: 0; border-radius: var(--r-s); background: transparent; color: var(--ink-3);
+    /* the one measurement that parts from the app dock, and only because this
+       bar splits the same width six ways instead of five: at the dock's
+       .62rem/.04em "Changelog" needs 61px of a 59px column and truncates */
+    font-size: .58rem; font-weight: 650; letter-spacing: .02em; text-transform: uppercase;
+  }
+  .rw-app .log-dlg .dialog-subrail .subtab svg,
+  .rw-app .log-dlg .dlg-head > .dlg-x svg { inline-size: 20px; block-size: 20px; }
+  .rw-app .log-dlg .dialog-subrail .subtab span,
+  .rw-app .log-dlg .dlg-x-label {
+    display: block; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* The dock's stitch: a thread on the bar's own top seam, not a rule under a
+     label - an underline down here would read as a stray mark rather than a
+     mark on a rail. */
+  .rw-app .log-dlg .dialog-subrail .subtab[aria-selected="true"] {
+    color: var(--thread-text); background: transparent; border: 0;
+  }
+  .rw-app .log-dlg .dialog-subrail .subtab[aria-selected="true"]::before {
+    position: absolute; inset-inline: 8px; inset-block-start: -5px; block-size: 2px; content: "";
+    background: var(--thread); border-radius: 1px;
+  }
+  /* The close column is a column like any other, so it needs no halo of its
+     own - it is already past 48px in both directions. */
+  .rw-app .log-dlg .dlg-head > .dlg-x::after { content: none; }
+  .rw-app .log-dlg .dlg-subhead {
+    order: 1;
+    padding-block: var(--sp-s);
+    padding-inline: max(var(--sp-m), var(--safe-l)) max(var(--sp-m), var(--safe-r));
+    border-block-start: 1px solid var(--seam-soft); border-block-end: 0;
+  }
+  .rw-app .log-dlg .settings-actions { width: 100%; gap: var(--sp-s); }
+  .rw-app .log-dlg .settings-actions .btn { flex: 1 1 0; min-height: 44px; }
+  /* Two rows: the level (or refresh) and the copy/download pair share the
+     first, the view toggle and the filter each take one of their own. */
+  .rw-app .log-dlg .dlg-subhead .log-controls {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-s);
+  }
+  .rw-app .log-dlg .dlg-subhead .logview { grid-column: 1 / -1; width: 100%; min-height: 44px; }
+  .rw-app .log-dlg .dlg-subhead .logview .seg-btn { height: 38px; }
+  .rw-app .log-dlg .dlg-subhead .loglevel { margin-inline-start: 0; }
+  /* Refresh takes the level select's slot on the storage tab, so it auto-places
+     into the first column - pinning it to the second instead pushed the copy
+     and download pair onto a row of its own. */
+  .rw-app .log-dlg .dlg-subhead .log-refresh {
+    inline-size: 44px; height: 44px; margin-inline-start: 0; justify-self: start;
+  }
+  .rw-app .log-dlg .dlg-subhead .loglevel .select,
+  .rw-app .log-dlg .dlg-subhead .log-filter { height: 44px; }
+  .rw-app .log-dlg .log-actions .log-icon-btn { flex-basis: 44px; inline-size: 44px; height: 44px; }
   .rw-app .log-actions { order: 0; flex: none; }
   .rw-app .log-dlg .tracelog { height: auto; flex: 1 1 auto; }
   .rw-app .ck {

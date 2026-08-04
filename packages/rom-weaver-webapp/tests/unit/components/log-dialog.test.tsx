@@ -43,6 +43,9 @@ describe("LogDialog", () => {
     // tab is a readout of the build, so it carries one line out to that page
     const aboutLinks = Array.from(container.querySelectorAll<HTMLAnchorElement>(".status-about a"));
     expect(aboutLinks.map((link) => link.getAttribute("href"))).toEqual(["/docs/about"]);
+    const branchLink = container.querySelector<HTMLAnchorElement>('.status-row a[href$="/tree/dev"]');
+    expect(branchLink?.textContent).toBe("dev");
+    expect(branchLink?.target).toBe("_blank");
     // every offline state is named, so the badge above reads against the rest
     expect(container.querySelectorAll(".sw-legend-row").length).toBe(5);
     // the settings panel belongs to its own tab, so it is not mounted on Status

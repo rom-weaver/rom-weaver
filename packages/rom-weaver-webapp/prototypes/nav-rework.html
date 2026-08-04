@@ -3608,14 +3608,17 @@
         update: `<path d="${CLOUD}"/><g class="dl-arrow"><path d="M12 12v6"/><path d="m9.5 15.5 2.5 2.5 2.5-2.5"/></g>`,
       };
       let currentSw = "ready";
+      const SW_KEYS = { disabled: "swDisabled", installing: "swInstalling", ready: "swReady", update: "swUpdate" };
       function setSwState(swState) {
+        // The state name arrives from a control's value, so it never reaches an
+        // HTML string - unknown names stop here and `data-sw` is set as a property.
+        const key = SW_KEYS[swState];
+        if (!key) return;
         currentSw = swState;
-        const key = { disabled: "swDisabled", installing: "swInstalling", ready: "swReady", update: "swUpdate" }[
-          swState
-        ];
         const inner = `<span data-i18n="${key}">${t(key)}</span>`;
         for (const slot of $$(".sw-slot")) {
-          slot.innerHTML = `<span class="sw-chip" data-sw="${swState}">${inner}</span>`;
+          slot.innerHTML = `<span class="sw-chip">${inner}</span>`;
+          slot.firstElementChild.dataset.sw = swState;
         }
         const banner = $("#update-banner");
         if (swState === "update") banner.dataset.show = "";
