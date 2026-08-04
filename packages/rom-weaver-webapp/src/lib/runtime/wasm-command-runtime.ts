@@ -340,6 +340,62 @@ const isPatchValidationChecksumIgnored = (options: unknown) => {
   return Boolean(record?.ignoreChecksumValidation || record?.ignore_checksum_validation);
 };
 
+/** Output naming and header choice; "auto" is the CLI default, so it is omitted. */
+const bundleOutputNamingArgs = (input: { outputHeader?: BundleHeaderMode; outputName?: string; romName?: string }) => ({
+  ...(input.outputName ? { output_name: input.outputName } : {}),
+  ...(input.romName === undefined ? {} : { rom_name: input.romName.trim() }),
+  ...(input.outputHeader && input.outputHeader !== "auto" ? { output_header: input.outputHeader } : {}),
+});
+
+/** The bundle's declared base-ROM identity, as the CLI's `assume_in` tokens. */
+const bundleRomExpectationArgs = (romChecksums: string | undefined, romSize: number | undefined) => {
+  const tokens = [
+    ...(romChecksums
+      ? romChecksums
+          .split(",")
+          .map((token) => token.trim())
+          .filter(Boolean)
+      : []),
+    ...(typeof romSize === "number" ? [`size=${romSize}`] : []),
+  ];
+  return tokens.length ? { assume_in: tokens } : {};
+};
+
+/**
+ * Index-aligned per-patch metadata. `createAlignedBundleMetadata` returns
+ * undefined for a field nothing declared, and an absent flag is what tells Rust
+ * to skip that array entirely.
+ */
+const perPatchMetadataArgs = (fields: {
+  patchAuthors?: string[];
+  patchBases?: PatchBasisMode[];
+  patchDescriptions?: string[];
+  patchHeaders?: BundleHeaderMode[];
+  patchIds?: string[];
+  patchInputChecks?: string[];
+  patchLabels?: string[];
+  patchNames?: string[];
+  patchOptionals?: boolean[];
+  patchOutputChecks?: string[];
+  patchVersions?: string[];
+}) => ({
+  ...(fields.patchNames ? { patch_name: fields.patchNames } : {}),
+  ...(fields.patchIds ? { patch_id: fields.patchIds } : {}),
+  ...(fields.patchDescriptions ? { patch_description: fields.patchDescriptions } : {}),
+  ...(fields.patchVersions ? { patch_version: fields.patchVersions } : {}),
+  ...(fields.patchAuthors ? { patch_author: fields.patchAuthors } : {}),
+  ...(fields.patchLabels ? { patch_label: fields.patchLabels } : {}),
+  ...(fields.patchOptionals ? { patch_optional: fields.patchOptionals } : {}),
+  ...(fields.patchHeaders ? { patch_header: fields.patchHeaders } : {}),
+  ...(fields.patchBases ? { patch_basis: fields.patchBases } : {}),
+  ...(fields.patchInputChecks ? { patch_input_check: fields.patchInputChecks } : {}),
+  ...(fields.patchOutputChecks ? { patch_output_check: fields.patchOutputChecks } : {}),
+});
+
+/** Trimmed, non-empty strings from an unknown list; anything else drops out. */
+const toTrimmedList = (value: unknown): string[] =>
+  (Array.isArray(value) ? value : []).map((entry) => String(entry || "").trim()).filter(Boolean);
+
 /** Only the flags the caller actually set reach the CLI command. */
 const buildPatchValidateCommand = (args: {
   checksumCache: string[];
@@ -1001,18 +1057,8 @@ const invokeRomWeaverIngestWorker = async (
   if (!sourcePath) throw new Error("Ingest source path is required");
   const outDirPath = String(input.outDirPath || "").trim();
   if (!outDirPath) throw new Error("Ingest output directory is required");
-  const select: string[] = [];
-  for (const selected of Array.isArray(input.select) ? input.select : []) {
-    const value = String(selected || "").trim();
-    if (value) select.push(value);
-  }
-  const checksum: string[] = [];
-  for (const algorithm of Array.isArray(input.checksumAlgorithms) ? input.checksumAlgorithms : []) {
-    const value = String(algorithm || "")
-      .trim()
-      .toLowerCase();
-    if (value) checksum.push(value);
-  }
+  const select = toTrimmedList(input.select);
+  const checksum = toTrimmedList(input.checksumAlgorithms).map((value) => value.toLowerCase());
   const threadArg = toThreadBudget(input.threads);
   const command = createRomWeaverCommand("ingest", {
     output: outDirPath,
@@ -1198,11 +1244,11 @@ const invokeRomWeaverBundleCreateWorker = async (
 ): Promise<ParsedBundleCreateResult> => {
   const outputPath = String(input.outputPath || "").trim();
   if (!outputPath) throw new Error("Bundle create output path is required");
-  const patchPaths = (input.patchPaths || []).map((path) => String(path || "").trim()).filter((path) => !!path);
+  const patchPaths = toTrimmedList(input.patchPaths);
   if (!patchPaths.length) throw new Error("Bundle create requires at least one patch path");
-  const romPath = String(input.romPath || "").trim();
-  const bundlePath = String(input.bundlePath || "").trim();
-  const bundleRomPath = String(input.bundleRomPath || "").trim();
+  const [romPath, bundlePath, bundleRomPath] = [input.romPath, input.bundlePath, input.bundleRomPath].map((value) =>
+    String(value || "").trim(),
+  ) as [string, string, string];
   // The Rust side requires each metadata array to match the patch count exactly (or be empty), so a
   // partially-filled array is padded with empty strings; empty values round-trip as absent metadata.
   const {
@@ -1225,34 +1271,22 @@ const invokeRomWeaverBundleCreateWorker = async (
     ...(romPath ? { rom: romPath } : {}),
     ...(bundlePath ? { bundle: bundlePath } : {}),
     ...(bundleRomPath ? { bundle_rom: bundleRomPath } : {}),
-    ...(input.outputName ? { output_name: input.outputName } : {}),
-    ...(input.romName === undefined ? {} : { rom_name: input.romName.trim() }),
-    ...(input.outputHeader && input.outputHeader !== "auto" ? { output_header: input.outputHeader } : {}),
-    ...(input.romChecksums || typeof input.romSize === "number"
-      ? {
-          assume_in: [
-            ...(input.romChecksums
-              ? input.romChecksums
-                  .split(",")
-                  .map((token) => token.trim())
-                  .filter(Boolean)
-              : []),
-            ...(typeof input.romSize === "number" ? [`size=${input.romSize}`] : []),
-          ],
-        }
-      : {}),
+    ...bundleOutputNamingArgs(input),
+    ...bundleRomExpectationArgs(input.romChecksums, input.romSize),
     ...(outputCheck ? { output_check: [outputCheck] } : {}),
-    ...(patchNames ? { patch_name: patchNames } : {}),
-    ...(patchIds ? { patch_id: patchIds } : {}),
-    ...(patchDescriptions ? { patch_description: patchDescriptions } : {}),
-    ...(patchVersions ? { patch_version: patchVersions } : {}),
-    ...(patchAuthors ? { patch_author: patchAuthors } : {}),
-    ...(patchLabels ? { patch_label: patchLabels } : {}),
-    ...(patchOptionals ? { patch_optional: patchOptionals } : {}),
-    ...(patchHeaders ? { patch_header: patchHeaders } : {}),
-    ...(patchBases ? { patch_basis: patchBases } : {}),
-    ...(patchInputChecks ? { patch_input_check: patchInputChecks } : {}),
-    ...(patchOutputChecks ? { patch_output_check: patchOutputChecks } : {}),
+    ...perPatchMetadataArgs({
+      patchAuthors,
+      patchBases,
+      patchDescriptions,
+      patchHeaders,
+      patchIds,
+      patchInputChecks,
+      patchLabels,
+      patchNames,
+      patchOptionals,
+      patchOutputChecks,
+      patchVersions,
+    }),
     ...(input.noBundleRom ? { no_bundle_rom: true } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson bundle-create dispatch", {
