@@ -1492,34 +1492,24 @@ jobs:
           STATUS_CONTEXT: Webapp Deploy / ${{ matrix.target.channel }}
         run: node scripts/ci/deployment-status.mjs
 
-      # Every sidecar-backed request invokes the Pages Function, so zone Cache
-      # Rules make the edge cache those responses and the function run roughly
-      # once per URL per PoP instead of per request. The managed rules cover
-      # immutable hashed assets and HTML documents separately. Zone rules only
-      # exist on custom domains; pages.dev previews stay per-request.
+      # Every sidecar-backed /assets/* request invokes the Pages Function, so
+      # a zone Cache Rule makes the edge cache those responses and the
+      # function run roughly once per URL per PoP instead of per request.
+      # Safe because everything under /assets/ is content-hashed and
+      # immutable; respect_origin keeps the function's own Cache-Control
+      # authoritative. Zone rules only exist on the custom domains - pages.dev
+      # previews stay per-request, which is fine (preview traffic is internal).
       #
-      # The rules cover all custom domains, but this runs only on the nightly
+      # The rule covers all custom domains, but this runs only on the nightly
       # matrix leg so release-channel deploys cannot race the ruleset
       # read-merge-write. It skips with a notice until CLOUDFLARE_ZONE_ID is
       # set and the API token carries Zone -> Cache Rules -> Edit.
-      - name: Ensure zone cache rules for assets and HTML
+      - name: Ensure zone cache rule for /assets
         if: matrix.target.channel == 'nightly'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: node scripts/ci/ensure-cloudflare-assets-cache-rule.mjs
-
-      # HTML is edge-cached for a bounded TTL so the Pages Function does not
-      # run on every navigation. Purge every generated document alias after a
-      # successful custom-domain deployment, so the next navigation fetches
-      # the new HTML and its new hashed asset references.
-      - name: Purge deployed HTML at the edge
-        if: matrix.target.channel != 'preview' && steps.pages.outputs.url != ''
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_HOST: ${{ matrix.target.env }}
-          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-        run: node scripts/ci/purge-cloudflare-html-cache.mjs
 
   # Both preview paths create explicit transient GitHub Deployment records. The
   # cleanup removes superseded repository objects so their timeline entries
