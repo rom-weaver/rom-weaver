@@ -14,7 +14,10 @@ export const DOCUMENT_ROUTE_INCLUDES = [
 export const DOCUMENT_ROUTE_EXCLUDES = ["/docs/screenshots/*"];
 
 const htmlSidecarPaths = (htmlPath) => {
-  return [`/assets/html${htmlPath.slice(0, -".html".length)}.br`];
+  if (htmlPath.endsWith("/index.html")) {
+    return [`/assets/html/routes${htmlPath.slice(0, -"/index.html".length)}/`];
+  }
+  return [`/assets/html/files${htmlPath.slice(0, -".html".length)}/`];
 };
 
 export const documentSidecarPaths = (pathname) => {
