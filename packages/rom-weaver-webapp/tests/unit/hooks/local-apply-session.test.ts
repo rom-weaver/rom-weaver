@@ -210,6 +210,42 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
     });
   });
 
+  it("invalidates and reapplies a completed output when patch enablement changes", async () => {
+    const patches = [source("a.ips"), source("b.ips")];
+    const initialDisabledPatchIds = new Set<string>();
+    const { result, applyPatches, downloadOutput, options, rerender } = renderSession({
+      disabledPatchIds: initialDisabledPatchIds,
+      patches,
+    });
+
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    expect(applyPatches).toHaveBeenCalledTimes(1);
+    expect(result.current.localOutputController.getState().pendingDownloadFileName).toBe("rom.patched.zip");
+
+    const disabledPatchIds = new Set([getBinarySourceListStableIds(patches)[1]]);
+    await act(async () => {
+      rerender({ ...options, disabledPatchIds });
+    });
+
+    await waitFor(() => expect(applyPatches).toHaveBeenCalledTimes(2));
+    expect(downloadOutput).toHaveBeenCalledTimes(2);
+    expect(result.current.localOutputController.getState().pendingDownloadFileName).toBe("rom.patched.zip");
+
+    await act(async () => {
+      rerender({ ...options, disabledPatchIds: new Set(getBinarySourceListStableIds(patches)) });
+    });
+    await waitFor(() => expect(applyPatches).toHaveBeenCalledTimes(3));
+    expect(downloadOutput).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      rerender({ ...options, disabledPatchIds: new Set<string>() });
+    });
+    await waitFor(() => expect(applyPatches).toHaveBeenCalledTimes(4));
+    expect(downloadOutput).toHaveBeenCalledTimes(4);
+  });
+
   it("starts only one workflow for concurrent run requests", async () => {
     let finishApply = (_result: ApplyWorkflowResult) => undefined;
     const applyPatches = vi.fn(

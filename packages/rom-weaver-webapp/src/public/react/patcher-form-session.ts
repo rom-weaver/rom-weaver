@@ -58,6 +58,9 @@ import { useActiveAbortController, useDisposableCleanup } from "./workflow-run-h
 const createSettingsIdentityKey = (settings: ApplyPatchFormSettings) =>
   JSON.stringify(settings, (_key, value) => (typeof value === "function" ? "[function]" : value));
 
+const sameStringSet = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
+  left.size === right.size && [...left].every((value) => right.has(value));
+
 const DEFAULT_COMPRESSION_OPTIONS = [
   "none",
   ...CREATE_ARCHIVE_COMPRESSION_FORMATS,
@@ -153,6 +156,8 @@ const useLocalApplyPatchFormSession = ({
   const { abortActiveOperation, activeAbortControllerRef, rememberAbortController } = useActiveAbortController();
   const pendingDownloadFileNameRef = useRef<string | null>(null);
   const pendingDownloadResultRef = useRef<ApplyWorkflowResult | null>(null);
+  const autoApplyAfterPatchToggleRef = useRef(false);
+  const previousPatchEnablementRef = useRef<ReadonlySet<string> | null>(null);
   const applyExecutionTimingRef = useRef<ApplyExecutionTimingTracker>({
     applyStartedAt: null,
     compressionStartedAt: null,
@@ -327,7 +332,7 @@ const useLocalApplyPatchFormSession = ({
       resolvedThreads,
     ],
   );
-  const stagedPatchInfos = activePatches
+  const stagedPatchInfos = outputPatches
     .map((patch) => patchInfoByKey[getPatchKey(patch)])
     .filter((info): info is StagedInputInfo => !!info);
   // Per-patch run options, index-aligned with activePatches: a filtered run
@@ -554,6 +559,7 @@ const useLocalApplyPatchFormSession = ({
 
   const updateSettings = useCallback(
     (nextSettings: ApplyPatchFormSettings) => {
+      autoApplyAfterPatchToggleRef.current = false;
       setChecksumOverrideChecked(false);
       setApplyQueued(false);
       clearDismissibleErrors();
@@ -585,6 +591,7 @@ const useLocalApplyPatchFormSession = ({
   }, [activeCompression, activeSettings, effectiveActiveCompression, outputCompressionEdited, updateSettings]);
   const updatePatches = useCallback(
     (nextPatches: BinarySource[]) => {
+      autoApplyAfterPatchToggleRef.current = false;
       setChecksumOverrideChecked(false);
       clearDismissibleErrors();
       invalidateCompletedOutputState();
@@ -679,6 +686,7 @@ const useLocalApplyPatchFormSession = ({
   );
   const updateInputs = useCallback(
     (nextInputs: BinarySource[]) => {
+      autoApplyAfterPatchToggleRef.current = false;
       setChecksumOverrideChecked(false);
       invalidateCompletedOutputState();
       setPatchInfoByKey((current) =>
@@ -789,6 +797,54 @@ const useLocalApplyPatchFormSession = ({
     },
     stage: { stageInput, stagePatches, validatePatches },
   });
+
+  // Toggling a patch changes the bytes that an existing output represents. Retire that output and
+  // queue one fresh apply so the next download always matches the visible On/Off state. A first
+  // toggle before any output exists only changes the future run; it must not start work by itself.
+  useEffect(() => {
+    const previous = previousPatchEnablementRef.current;
+    const current = disabledPatchIds ?? new Set<string>();
+    previousPatchEnablementRef.current = current;
+    if (!previous || sameStringSet(previous, current) || !activePatches.length) return;
+
+    const hasExistingOutput = hasPendingDownload || pendingDownloadResultRef.current !== null;
+    if (!(hasExistingOutput || busy)) return;
+
+    autoApplyAfterPatchToggleRef.current = true;
+    emitSessionTrace("patch enablement changed; invalidating output", {
+      busy,
+      disabledPatchCount: current.size,
+      hadPendingDownload: hasPendingDownload,
+    });
+    clearDismissibleErrors();
+    if (busy) {
+      cancelActiveOperation();
+      clearActiveApplyProgress();
+    }
+    invalidateCompletedOutputState();
+  }, [
+    activePatches.length,
+    busy,
+    cancelActiveOperation,
+    clearActiveApplyProgress,
+    clearDismissibleErrors,
+    disabledPatchIds,
+    emitSessionTrace,
+    hasPendingDownload,
+    invalidateCompletedOutputState,
+  ]);
+
+  // Keep the automatic rerun behind the normal readiness gates. This matters when re-enabling a
+  // patch also starts deferred validation, and when every patch is temporarily toggled off.
+  useEffect(() => {
+    if (!autoApplyAfterPatchToggleRef.current || busy || applyQueued || hasPendingDownload) return;
+    if (!canStartApply) return;
+    autoApplyAfterPatchToggleRef.current = false;
+    emitSessionTrace("patch enablement changed; reapplying output", {
+      enabledPatchCount: outputPatches.length,
+    });
+    setApplyQueued(true);
+  }, [applyQueued, busy, canStartApply, emitSessionTrace, hasPendingDownload, outputPatches.length]);
 
   // A disabled patch is excluded from the deep dry-run pass, so a patch toggled back ON has no
   // verdict yet: rerun the deferred validation when an id leaves the disabled set. Patches already
