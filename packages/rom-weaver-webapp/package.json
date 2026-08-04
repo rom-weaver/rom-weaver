@@ -52,7 +52,7 @@
     "format:check": "run-s format:code:check format:css:check",
     "format:code": "oxfmt .",
     "format:code:check": "oxfmt --check .",
-    "format:css": "biome check --write --only=assist/source/useSortedProperties .",
+    "format:css": "biome format --write . && biome check --write --only=assist/source/useSortedProperties .",
     "format:css:check": "biome check --only=assist/source/useSortedProperties .",
     "i18n:compile": "lingui compile --typescript --output-prefix \"\"",
     "i18n:extract": "lingui extract",
