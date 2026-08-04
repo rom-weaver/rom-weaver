@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { collectBrowserInfo } from "../../src/lib/browser-info.ts";
+import { navigatorWith } from "./navigator-test-utils.ts";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -17,22 +18,22 @@ describe("collectBrowserInfo", () => {
   });
 
   it("reports clipboardApi=writeText when the async API is available", () => {
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: () => Promise.resolve() } });
+    vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText: () => Promise.resolve() } }));
     expect(collectBrowserInfo().clipboardApi).toBe("writeText");
   });
 
   it("reports clipboardApi=absent when navigator.clipboard is missing (non-secure context)", () => {
-    vi.stubGlobal("navigator", { ...navigator, clipboard: undefined });
+    vi.stubGlobal("navigator", navigatorWith({ clipboard: undefined }));
     expect(collectBrowserInfo().clipboardApi).toBe("absent");
   });
 
   it("reports clipboardApi=present-no-writeText when clipboard exists without writeText", () => {
-    vi.stubGlobal("navigator", { ...navigator, clipboard: {} });
+    vi.stubGlobal("navigator", navigatorWith({ clipboard: {} }));
     expect(collectBrowserInfo().clipboardApi).toBe("present-no-writeText");
   });
 
   it("joins multiple languages", () => {
-    vi.stubGlobal("navigator", { ...navigator, language: "en-US", languages: ["en-US", "en"] });
+    vi.stubGlobal("navigator", navigatorWith({ language: "en-US", languages: ["en-US", "en"] }));
     expect(collectBrowserInfo().languages).toBe("en-US,en");
   });
 });

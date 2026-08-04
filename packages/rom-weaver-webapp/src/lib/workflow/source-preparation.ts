@@ -23,7 +23,8 @@ const createClassificationSource = (source: SourceRef) => {
   const fileName = getNamedSourceFileName(source);
   if (!fileName || directSource === source) return source;
   if (typeof Blob !== "undefined" && directSource instanceof Blob) return { _file: directSource, fileName };
-  if (directSource && typeof directSource === "object") return { ...directSource, fileName };
+  if (directSource && typeof directSource === "object")
+    return Object.assign(Object.create(Object.getPrototypeOf(directSource)), directSource, { fileName });
   return directSource;
 };
 

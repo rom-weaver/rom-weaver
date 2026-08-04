@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { copyToClipboard } from "../../src/lib/clipboard.ts";
+import { navigatorWith } from "./navigator-test-utils.ts";
 
 /**
  * The execCommand fallback (used when navigator.clipboard is unavailable, e.g.
@@ -10,12 +11,12 @@ import { copyToClipboard } from "../../src/lib/clipboard.ts";
  */
 
 const stubNoAsyncClipboard = () => {
-  vi.stubGlobal("navigator", { ...navigator, clipboard: undefined });
+  vi.stubGlobal("navigator", navigatorWith({ clipboard: undefined }));
 };
 
 const stubAsyncClipboard = (impl: (text: string) => Promise<void>) => {
   const writeText = vi.fn(impl);
-  vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+  vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
   return writeText;
 };
 
