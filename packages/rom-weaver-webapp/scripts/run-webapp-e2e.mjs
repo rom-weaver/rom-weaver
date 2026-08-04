@@ -389,7 +389,13 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   watchPageErrors();
   const setTheme = async (theme) => {
     if ((await page.locator("html").getAttribute("data-theme")) !== theme) {
-      await page.locator('button[aria-label^="Switch to "]').click();
+      const mastheadTheme = page.locator('button[aria-label^="Switch to "]:visible').first();
+      if (await mastheadTheme.count()) {
+        await mastheadTheme.click();
+      } else {
+        await page.getByRole("button", { exact: true, name: "More" }).click();
+        await page.getByRole("menuitem", { exact: true, name: "Theme" }).click();
+      }
       await page.waitForFunction((expected) => document.documentElement.dataset.theme === expected, theme);
     }
   };
