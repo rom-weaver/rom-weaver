@@ -13,7 +13,8 @@ const headersFile = `/*
 /*.html.br
   Content-Encoding: br
 
-/assets/html/*.br
+/assets/html/*
+  Content-Type: application/octet-stream
   Content-Encoding: br
 
 /cache-service-worker.js
@@ -43,7 +44,9 @@ describe("pages _headers matching", () => {
   it("marks HTML sidecars as already Brotli encoded", () => {
     const matched = matchPagesHeaders(rules, "/apply/index.html.br");
     expect(matched["Content-Encoding"]).toBe("br");
-    expect(matchPagesHeaders(rules, "/assets/html/apply/index.br")["Content-Encoding"]).toBe("br");
+    const htmlAsset = matchPagesHeaders(rules, "/assets/html/routes/apply/");
+    expect(htmlAsset["Content-Type"]).toBe("application/octet-stream");
+    expect(htmlAsset["Content-Encoding"]).toBe("br");
   });
 
   it("lets a later exact rule win over an earlier wildcard", () => {
