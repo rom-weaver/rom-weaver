@@ -999,7 +999,7 @@ function benchmarkCacheProfileName() {
       `codecs-${SELECTED_CODEC_LABELS === null ? "all" : [...SELECTED_CODEC_LABELS].sort().join("+")}`,
       `patch-${SELECTED_PATCH_FORMATS.join("+")}`,
       `checksums-${SELECTED_CHECKSUM_ALGORITHMS.join("+")}`,
-      `modes-${[...SELECTED_CHECKSUM_MODES].sort().join("+")}`,
+      `modes-${[...SELECTED_CHECKSUM_MODES].sort((left, right) => left.localeCompare(right)).join("+")}`,
       `combo-${CHECKSUM_COMBO_ALGORITHMS.join("+") || "none"}`,
       `source-${SOURCE_SIZE_BYTES}`,
       `patch-size-${PATCH_SIZE_BYTES}`,

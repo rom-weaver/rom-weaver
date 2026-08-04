@@ -49,6 +49,8 @@ export function createBrowserOpfsMountCache() {
       }
       if (current) {
         mountsByPath.delete(mountPath);
+        // Yield between closing a cached mount and rebuilding its path.
+        // oxlint-disable-next-line typescript/await-thenable
         await current.dispose();
       }
       const mount = await BrowserOpfsMount.create({
@@ -68,6 +70,8 @@ export function createBrowserOpfsMountCache() {
       const mounts = [...mountsByPath.values()];
       mountsByPath.clear();
       for (const mount of mounts) {
+        // Yield between mount closes so proxy cleanup can progress.
+        // oxlint-disable-next-line typescript/await-thenable
         await mount.dispose();
       }
     },
@@ -77,6 +81,8 @@ export function createBrowserOpfsMountCache() {
       for (const [mountPath, mount] of mountsByPath) {
         if (!lookup.has(mountPath)) continue;
         mountsByPath.delete(mountPath);
+        // Yield between mount closes so proxy cleanup can progress.
+        // oxlint-disable-next-line typescript/await-thenable
         await mount.dispose();
       }
     },
@@ -88,6 +94,8 @@ export function createBrowserOpfsMountCache() {
         const current = mountsByPath.get(mount.mountPath);
         if (current !== mount) continue;
         mountsByPath.delete(mount.mountPath);
+        // Yield between mount closes so proxy cleanup can progress.
+        // oxlint-disable-next-line typescript/await-thenable
         await mount.dispose();
       }
     },

@@ -163,7 +163,7 @@ test("rom-weaver runner lazily creates selected archive extract outputs", async 
     const outputStat = await browserRuntime.vfs.stat(outputPath);
     expect(outputStat?.size || 0).toBeGreaterThan(0);
   } catch (error) {
-    throw new Error(`${error instanceof Error ? error.message : error}\n${traceLines.join("\n")}`);
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${traceLines.join("\n")}`);
   } finally {
     await archive.cleanup().catch(() => undefined);
     await browserRuntime.vfs.remove(outputPath).catch(() => undefined);

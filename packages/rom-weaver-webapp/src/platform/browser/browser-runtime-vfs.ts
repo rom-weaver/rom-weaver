@@ -144,7 +144,7 @@ const createBrowserRuntimeVfsIo = ({
     return cleanupCachedStagedSource(key, cached);
   };
   const releaseSources: RuntimeWorkerIo["releaseSources"] = async (sources) => {
-    await Promise.all(sources.map(releaseStagedSource));
+    await Promise.all(sources.map((source) => Promise.resolve(releaseStagedSource(source))));
   };
   const retainOwnedSources: RuntimeWorkerIo["retainOwnedSources"] = (sources) => {
     for (const source of sources) {

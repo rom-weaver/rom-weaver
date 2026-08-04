@@ -338,7 +338,7 @@ export function createBrowserWasiThreadWorkerPool({
         `[browser-opfs] thread pool ensureSize pass=${pass} starting=${batch.length}` +
           ` created=[${created.join(",")}] replaced=[${replaced.join(",")}] replacements=${replacementCount}/${maxReplacementCount}`,
       );
-      const results = await Promise.allSettled(batch.map((slot) => slot.ready));
+      const results = await Promise.allSettled(batch.map((slot) => Promise.resolve(slot.ready)));
       let failedThisPass = 0;
       for (const result of results) {
         if (result.status === "rejected") {
@@ -428,7 +428,7 @@ export function createBrowserWasiThreadWorkerPool({
           Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_SHUTDOWN);
           Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
         }
-        await Promise.allSettled(command.slots.map((slot) => slot.done));
+        await Promise.allSettled(command.slots.map((slot) => Promise.resolve(slot.done)));
         trace?.(
           `[browser-opfs] thread pool command shutdown done id=${commandId} ms=${(monotonicNowMs() - shutdownStartMs).toFixed(1)}`,
         );
@@ -523,7 +523,7 @@ export function createBrowserWasiThreadWorkerPool({
         }
       }
       const postMs = monotonicNowMs() - postStartMs;
-      await Promise.all(command.slots.map((slot) => slot.ready));
+      await Promise.all(command.slots.map((slot) => Promise.resolve(slot.ready)));
       trace?.(
         `[perf] thread pool command ready id=${commandId} slots=${command.slots.length}` +
           ` ensureMs=${ensureMs.toFixed(1)} selectMs=${selectMs.toFixed(1)} postMs=${postMs.toFixed(1)}` +

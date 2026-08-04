@@ -670,7 +670,7 @@ async function runBspApplyFixture({
 async function runPatchApplyNoCompress(
   runCommand: BrowserFormatMatrixRunCommand,
   { inputPath, patchPath, outputPath }: { inputPath: string; outputPath: string; patchPath: string },
-  runOptions: BrowserFormatMatrixRunOptions | undefined = undefined,
+  runOptions?: BrowserFormatMatrixRunOptions,
 ) {
   return runCommand(
     `patch-apply ${pathBasename(patchPath)}`,

@@ -270,7 +270,7 @@ abstract class BaseWorkflowController<
     );
     this.mutationQueue = queued;
     this.emitChange();
-    queued.finally(() => {
+    void queued.finally(() => {
       if (this.mutationQueue === queued) {
         this.mutationQueue = null;
         this.emitChange();

@@ -326,6 +326,8 @@ test("compress panel shows codec level overrides and clears them when level chan
   await expect.poll(() => document.querySelector('select[aria-label="Level"]')).not.toBeNull();
   const levelSelect = document.querySelector('select[aria-label="Level"]');
   expect(levelSelect).not.toBeNull();
+  // The descriptor setter is called with the selected element as its receiver.
+  // oxlint-disable-next-line typescript/unbound-method
   const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
   setter?.call(levelSelect, "high");
   levelSelect?.dispatchEvent(new Event("change", { bubbles: true }));
@@ -376,6 +378,8 @@ test("chd accepts a level override for one codec and clears it when level change
   await expect.poll(() => document.querySelector('select[aria-label="Level"]')).not.toBeNull();
   const levelSelect = document.querySelector('select[aria-label="Level"]');
   expect(levelSelect).not.toBeNull();
+  // The descriptor setter is called with the selected element as its receiver.
+  // oxlint-disable-next-line typescript/unbound-method
   const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
   setter?.call(levelSelect, "high");
   levelSelect?.dispatchEvent(new Event("change", { bubbles: true }));

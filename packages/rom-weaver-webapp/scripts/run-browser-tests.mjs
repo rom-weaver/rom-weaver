@@ -103,7 +103,7 @@ export const selectShard = (files, shard) => {
     target.files.push(file);
     target.weight += weight;
   }
-  return buckets[shard.index - 1].files.sort();
+  return buckets[shard.index - 1].files.sort((left, right) => left.localeCompare(right));
 };
 
 const partitionRunnerArgs = (argv) => {
