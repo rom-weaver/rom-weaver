@@ -448,12 +448,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       const carrierIndex = items.findIndex((item) => (item.validateOutputChecksum || "") === bundleOutputChecksum);
       if (desired) {
         if (carrierIndex === targetIndex) return;
-        if (carrierIndex >= 0) await stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" });
+        if (carrierIndex >= 0)
+          await Promise.resolve(stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" }));
         if (targetIndex >= 0 && targetIndex < items.length)
-          await stack?.setPatchOption?.(targetIndex, { validateOutputChecksum: bundleOutputChecksum });
+          await Promise.resolve(stack?.setPatchOption?.(targetIndex, { validateOutputChecksum: bundleOutputChecksum }));
         return;
       }
-      if (carrierIndex >= 0) await stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" });
+      if (carrierIndex >= 0)
+        await Promise.resolve(stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" }));
     })();
     return () => {
       cancelled = true;

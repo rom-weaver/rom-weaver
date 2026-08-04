@@ -140,11 +140,12 @@ export function waitForAtomicsStateChange(
  * SHUTDOWN, entered an unexpected state, or did not ack within THREAD_START_ACK_TIMEOUT_MS.
  */
 const getThreadStartStateError = (state: number, tid: unknown): Error | null => {
-  if (state === THREAD_SLOT_STATE_FAILED) return new Error(`wasi thread ${tid} failed before start acknowledgement`);
+  if (state === THREAD_SLOT_STATE_FAILED)
+    return new Error(`wasi thread ${String(tid)} failed before start acknowledgement`);
   if (state === THREAD_SLOT_STATE_SHUTDOWN)
-    return new Error(`wasi thread ${tid} was shut down before start acknowledgement`);
+    return new Error(`wasi thread ${String(tid)} was shut down before start acknowledgement`);
   if (state !== THREAD_SLOT_STATE_REQUESTED && state !== THREAD_SLOT_STATE_STARTING)
-    return new Error(`wasi thread ${tid} entered unexpected start state ${state}`);
+    return new Error(`wasi thread ${String(tid)} entered unexpected start state ${String(state)}`);
   return null;
 };
 
@@ -158,12 +159,12 @@ export function waitForThreadStartAck(control: ThreadStartControl, tid: unknown)
     if (state === THREAD_SLOT_STATE_RUNNING || state === THREAD_SLOT_STATE_IDLE) return null;
     if (state === THREAD_SLOT_STATE_STARTING) {
       const waitResult = waitForThreadStartTransition(control, state, deadline);
-      if (waitResult === "timed-out") return new Error(`wasi thread ${tid} start acknowledgement timed out`);
+      if (waitResult === "timed-out") return new Error(`wasi thread ${String(tid)} start acknowledgement timed out`);
       continue;
     }
     const stateError = getThreadStartStateError(state, tid);
     if (stateError) return stateError;
     const waitResult = waitForThreadStartTransition(control, state, deadline);
-    if (waitResult === "timed-out") return new Error(`wasi thread ${tid} start acknowledgement timed out`);
+    if (waitResult === "timed-out") return new Error(`wasi thread ${String(tid)} start acknowledgement timed out`);
   }
 }

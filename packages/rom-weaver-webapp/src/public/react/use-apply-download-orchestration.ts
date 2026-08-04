@@ -468,7 +468,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           rememberActiveOutputCleanup(
             result.outputs.length > 0
               ? async () => {
-                  await Promise.all(result.outputs.map((output) => output.cleanup?.()));
+                  await Promise.all(result.outputs.map((output) => Promise.resolve(output.cleanup?.())));
                 }
               : result.output.cleanup || null,
           );

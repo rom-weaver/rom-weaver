@@ -59,7 +59,8 @@
 /* the version IS the "what's new" affordance - a quiet dotted-underline link
    that opens the changelog, instead of a second button crowding the banner */
 .rw-app .updates-ver {
-  appearance: none; border: 0; background: none; padding: 0; cursor: pointer;
+  appearance: none; display: inline-flex; align-items: center; justify-content: center;
+  height: 30px; padding-inline: 12px; border: 0; background: none; cursor: pointer;
   color: var(--ink-2); font-size: .8rem; margin-inline-start: 6px;
   text-decoration: underline dotted; text-underline-offset: 3px;
 }

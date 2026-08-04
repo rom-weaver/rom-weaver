@@ -210,7 +210,7 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
     [1280, 900],
     [390, 844],
   ]) {
-    page.viewport(width, height);
+    await page.viewport(width, height);
     mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
     await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
@@ -228,7 +228,7 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
     await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
   }
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });
 
 test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {
@@ -247,7 +247,7 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
   // The glyph is the signal that always survives; the words are what yields -
   // through the compact rail band, on phones, and whenever a channel badge is
   // present (this build carries one, so the words are gone at every width).
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
   await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
   expect(document.querySelector(".brand-sub-row .sub-status")).toBeNull();
@@ -258,7 +258,7 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
     [1100, 900],
     [390, 844],
   ]) {
-    page.viewport(width, height);
+    await page.viewport(width, height);
     await expect.poll(() => getComputedStyle(document.querySelector(".sub-status svg")).display).not.toBe("none");
     if (width >= 1160) {
       const titleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-word")).fontSize);
@@ -271,7 +271,7 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
       expect(getComputedStyle(document.querySelector(".sub-status")).cursor).toBe("pointer");
     }
   }
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });
 
 test("the phone dock lands inside the first phone screen with an empty bench", async () => {
@@ -290,7 +290,7 @@ test("the phone dock lands inside the first phone screen with an empty bench", a
     [390, 844],
     [430, 932],
   ]) {
-    page.viewport(width, height);
+    await page.viewport(width, height);
     mountWebappRoot();
     await expect.poll(() => document.querySelector(".step.is-input.is-empty .drop.hero")).toBeTruthy();
     await expect
@@ -298,14 +298,14 @@ test("the phone dock lands inside the first phone screen with an empty bench", a
       .toBeLessThanOrEqual(height + 1);
     await expect.poll(() => document.querySelector(".dock")?.getBoundingClientRect().top ?? 0).toBeGreaterThan(0);
   }
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });
 
 test("PWA side insets move dock content without shifting the shell", async () => {
   const safeLeft = 18;
   const safeRight = 18;
   const height = 852;
-  page.viewport(393, height);
+  await page.viewport(393, height);
   mountWebappRoot();
   await expect.poll(() => document.querySelector(".dock")).toBeTruthy();
   const readLayout = () => {
@@ -336,14 +336,14 @@ test("PWA side insets move dock content without shifting the shell", async () =>
   } finally {
     simulatedSafeArea.remove();
   }
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });
 
 test("PWA vertical insets keep the dock clear of the home indicator", async () => {
   const safeTop = 59;
   const safeBottom = 34;
   const height = 852;
-  page.viewport(393, height);
+  await page.viewport(393, height);
   mountWebappRoot();
   await expect.poll(() => document.querySelector(".dock")).toBeTruthy();
   const simulatedSafeArea = document.createElement("style");
@@ -363,14 +363,14 @@ test("PWA vertical insets keep the dock clear of the home indicator", async () =
   } finally {
     simulatedSafeArea.remove();
   }
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });
 
 test("the mobile scroll reserve returns once the bench holds a card", async () => {
   // The reserve keeps the last card clear of the phone browser's collapsing
   // bottom toolbar. It is only suppressed while the bench is empty; dropping
   // the suppression on a staged bench would hide the run/download slot again.
-  page.viewport(390, 844);
+  await page.viewport(390, 844);
   mountWebappRoot();
   const workflowBody = await waitForState(() => document.querySelector(".workflow-body"));
   expect(workflowBody).not.toBeNull();
@@ -381,11 +381,11 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
 
   document.querySelector(".step.is-input.is-empty").classList.remove("is-empty");
   expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("96px");
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });
 
 test("the New here? beacon stays compact and its popover carries every start action", async () => {
-  page.viewport(1024, 900);
+  await page.viewport(1024, 900);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
@@ -406,7 +406,7 @@ test("the New here? beacon stays compact and its popover carries every start act
   expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(pop.top).toBeGreaterThanOrEqual(0);
 
-  page.viewport(360, 740);
+  await page.viewport(360, 740);
   await expect
     .poll(() => document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().right)
     .toBeLessThanOrEqual(document.documentElement.clientWidth);
@@ -454,7 +454,7 @@ test("WebappRoot keeps diagnostics behind More - the Log dialog owns them", asyn
 });
 
 test("mobile More contains every masthead utility action", async () => {
-  page.viewport(390, 844);
+  await page.viewport(390, 844);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".masthead-tools")).toBeTruthy();
@@ -487,5 +487,5 @@ test("mobile More contains every masthead utility action", async () => {
   const previewVersion = buildTag?.querySelector(".tag-extra");
   if (previewVersion) expect(getComputedStyle(previewVersion).display).not.toBe("none");
 
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });

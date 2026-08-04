@@ -474,6 +474,8 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         // pool workers release their OPFS handles before the mount handles are closed.
         await drainThreadSpawnerOnce();
         closeSyncFiles(closeables);
+        // Preserve the existing microtask boundary before listing scratch paths.
+        // oxlint-disable-next-line typescript/await-thenable
         await cleanupBrowserOpfsMounts(mounts);
         for (const file of proxyBlobInputs) opfsProxy.unregisterBlobSource(file.path);
         if (!runSucceeded || runOptions.invalidateMountCacheAfterRun) await mountCache.invalidateMounts(mounts);

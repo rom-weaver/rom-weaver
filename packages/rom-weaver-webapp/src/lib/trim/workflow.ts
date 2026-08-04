@@ -150,7 +150,7 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
       if (!compressedFile) throw new Error("Runtime disc compression create capability is unavailable");
       return toPublicOutput(compressedFile, runtime);
     }
-    throw new Error(`Unsupported trim output compression: ${compression}`);
+    throw new Error(`Unsupported trim output compression: ${String(compression)}`);
   };
 
   const trimCapability = runtime.trim.trim;

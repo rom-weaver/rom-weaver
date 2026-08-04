@@ -121,8 +121,8 @@ describe("createOperationScheduler", () => {
     const scheduler = createOperationScheduler({ maxConcurrency: 4, totalThreadBudget: 16 });
     const a = deferred<string>();
     const b = deferred<string>();
-    scheduler.schedule({ paths: new Set(["/work/a.iso"]), threads: 1 }, () => a.promise);
-    scheduler.schedule({ paths: new Set(["/work/b.iso"]), threads: 1 }, () => b.promise);
+    void scheduler.schedule({ paths: new Set(["/work/a.iso"]), threads: 1 }, () => a.promise);
+    void scheduler.schedule({ paths: new Set(["/work/b.iso"]), threads: 1 }, () => b.promise);
     expect(scheduler.inFlightCount).toBe(2);
     a.resolve("a");
     b.resolve("b");
@@ -144,8 +144,8 @@ describe("createOperationScheduler", () => {
     const a = deferred<string>();
     const big = deferred<string>();
     let smallStarted = false;
-    scheduler.schedule({ paths: new Set(), threads: 3 }, () => a.promise);
-    scheduler.schedule({ paths: new Set(), threads: 4 }, () => big.promise);
+    void scheduler.schedule({ paths: new Set(), threads: 3 }, () => a.promise);
+    void scheduler.schedule({ paths: new Set(), threads: 4 }, () => big.promise);
     const pSmall = scheduler.schedule({ paths: new Set(), threads: 1 }, async () => {
       smallStarted = true;
       return "s";
@@ -214,7 +214,7 @@ describe("createOperationScheduler", () => {
     const scheduler = createOperationScheduler({ maxConcurrency: 1, totalThreadBudget: 16 });
     const a = deferred<string>();
     let bStarted = false;
-    scheduler.schedule({ paths: new Set(), threads: 1 }, () => a.promise);
+    void scheduler.schedule({ paths: new Set(), threads: 1 }, () => a.promise);
     const pb = scheduler.schedule({ paths: new Set(), threads: 1 }, async () => {
       bStarted = true;
       return "b";
@@ -248,8 +248,8 @@ describe("createOperationScheduler", () => {
     const scheduler = createOperationScheduler({ maxConcurrency: 4, memoryCeiling: 1000, totalThreadBudget: 16 });
     const a = deferred<string>();
     const b = deferred<string>();
-    scheduler.schedule({ bytes: 400, paths: new Set(), threads: 1 }, () => a.promise);
-    scheduler.schedule({ bytes: 400, paths: new Set(), threads: 1 }, () => b.promise);
+    void scheduler.schedule({ bytes: 400, paths: new Set(), threads: 1 }, () => a.promise);
+    void scheduler.schedule({ bytes: 400, paths: new Set(), threads: 1 }, () => b.promise);
     expect(scheduler.inFlightCount).toBe(2);
     a.resolve("a");
     b.resolve("b");

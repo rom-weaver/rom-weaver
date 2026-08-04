@@ -94,7 +94,7 @@ describe("createRunnerPool", () => {
     const lease2 = await tracked.pool.acquire(); // entry 2 -> busy (idle empty, so a fresh runner)
     lease1.release(); // entry 1 -> idle
     await tracked.pool.disposeAll({ terminate: true });
-    expect(tracked.terminated.slice().sort()).toEqual([1, 2]);
+    expect(tracked.terminated.slice().sort((left, right) => left - right)).toEqual([1, 2]);
     expect(tracked.pool.idleCount).toBe(0);
     expect(tracked.pool.busyCount).toBe(0);
     lease2.release(); // late release after terminate is a no-op

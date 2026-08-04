@@ -12,7 +12,7 @@ import {
 } from "../../src/wasm/generated/rom-weaver-format-metadata.ts";
 
 const unique = (values) => [...new Set(values)];
-const sorted = (values) => [...values].sort((left, right) => left.localeCompare(right));
+const sorted = (values) => [...values].sort((left, right) => String(left).localeCompare(String(right)));
 
 describe("generated format metadata parity", () => {
   it("keeps file filters derived from format registries", () => {
@@ -43,10 +43,10 @@ describe("generated format metadata parity", () => {
 
   it("keeps the exhaustive matrix covering every compression profile and thread mode", () => {
     const cases = createExhaustiveContainerCases();
-    expect(unique(cases.map((entry) => entry.format)).sort()).toEqual(["7z", "chd", "z3ds", "zip"]);
-    expect(unique(cases.map((entry) => entry.threads)).sort()).toEqual([1, 2, "auto"]);
-    expect(unique(cases.map((entry) => entry.level).filter(Boolean)).sort()).toEqual(
-      ROM_WEAVER_COMPRESSION_METADATA.profiles.map((profile) => profile.name).sort(),
+    expect(sorted(unique(cases.map((entry) => entry.format)))).toEqual(["7z", "chd", "z3ds", "zip"]);
+    expect(sorted(unique(cases.map((entry) => entry.threads)))).toEqual([1, 2, "auto"]);
+    expect(sorted(unique(cases.map((entry) => entry.level).filter(Boolean)))).toEqual(
+      sorted(ROM_WEAVER_COMPRESSION_METADATA.profiles.map((profile) => profile.name)),
     );
     expect(
       unique(cases.map((entry) => `${entry.format}:${entry.codec}:${entry.level || "none"}:${entry.threads}`)),

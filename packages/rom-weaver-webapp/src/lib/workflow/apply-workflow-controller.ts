@@ -695,7 +695,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   async setOutputFormat(format: CompressionFormat): Promise<void> {
     return this.mutate("setOutputFormat", async () => {
       if (!isCompressionFormat(format))
-        throw new RomWeaverError("INVALID_SETTINGS", `Unsupported output format: ${format}`);
+        throw new RomWeaverError("INVALID_SETTINGS", `Unsupported output format: ${String(format)}`);
       setApplyOutputFormat(this.outputState, this.settings, format);
       this.recomputeOutputState();
     });

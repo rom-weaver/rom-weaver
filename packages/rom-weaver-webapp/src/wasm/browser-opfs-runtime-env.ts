@@ -31,7 +31,7 @@ export async function verifyWritableOpfsRoot(rootHandle: FileSystemDirectoryHand
     accessHandle.write(new Uint8Array([0x52, 0x57]), { at: 0 });
     accessHandle.flush();
   } catch (error) {
-    throw new Error(`OPFS root is not writable with sync access handles: ${error}`);
+    throw new Error(`OPFS root is not writable with sync access handles: ${String(error)}`);
   } finally {
     if (accessHandle) {
       try {

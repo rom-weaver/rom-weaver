@@ -102,6 +102,6 @@ workerScope.onmessage = (event: MessageEvent<ProxyWorkerMessage>) => {
       return;
     }
     server.stop();
-    server.done.then(() => workerScope.postMessage({ type: "stopped" }));
+    void server.done.then(() => workerScope.postMessage({ type: "stopped" }));
   }
 };

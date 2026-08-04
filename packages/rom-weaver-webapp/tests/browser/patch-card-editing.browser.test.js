@@ -247,6 +247,8 @@ test("two freshly added checks hand off focus once each instead of trading it fo
      renders again. The cap keeps a regression a failed assertion instead of a
      hung browser. */
   const FOCUS_CAP = 25;
+  // The saved method is called with each element as its receiver.
+  // oxlint-disable-next-line typescript/unbound-method
   const realFocus = HTMLElement.prototype.focus;
   let focusCalls = 0;
   HTMLElement.prototype.focus = function countedFocus(...args) {

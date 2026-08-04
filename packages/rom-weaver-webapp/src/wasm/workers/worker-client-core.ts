@@ -72,6 +72,10 @@ export class RomWeaverWorkerClientCore {
   protected _disposed: boolean;
   protected _onSelect?: (request: string) => Promise<number[]> | number[];
   protected _openSelectResponders: Set<(indices: number[]) => void>;
+  protected _boundOnMessage: (event: Event) => void;
+  protected _boundOnError: (event: Event) => void;
+  protected _boundOnMessageError: (event: Event) => void;
+  protected _boundOnExit: (code: unknown) => void;
 
   constructor(worker: Worker, transport: WorkerTransport) {
     this.worker = worker;
@@ -81,15 +85,15 @@ export class RomWeaverWorkerClientCore {
     this._disposed = false;
     this._openSelectResponders = new Set();
 
-    this._onMessage = this._onMessage.bind(this);
-    this._onError = this._onError.bind(this);
-    this._onMessageError = this._onMessageError.bind(this);
-    this._onExit = this._onExit.bind(this);
+    this._boundOnMessage = (event) => this._onMessage(event);
+    this._boundOnError = (event) => this._onError(event);
+    this._boundOnMessageError = (event) => this._onMessageError(event);
+    this._boundOnExit = (code) => this._onExit(code);
 
-    this._transport.onMessage(this.worker, this._onMessage);
-    this._transport.onError(this.worker, this._onError);
-    this._transport.onMessageError?.(this.worker, this._onMessageError);
-    this._transport.onExit?.(this.worker, this._onExit);
+    this._transport.onMessage(this.worker, this._boundOnMessage);
+    this._transport.onError(this.worker, this._boundOnError);
+    this._transport.onMessageError?.(this.worker, this._boundOnMessageError);
+    this._transport.onExit?.(this.worker, this._boundOnExit);
   }
 
   /**
@@ -329,10 +333,10 @@ export class RomWeaverWorkerClientCore {
   }
 
   _detachListeners() {
-    this._transport.offMessage(this.worker, this._onMessage);
-    this._transport.offError(this.worker, this._onError);
-    this._transport.offMessageError?.(this.worker, this._onMessageError);
-    this._transport.offExit?.(this.worker, this._onExit);
+    this._transport.offMessage(this.worker, this._boundOnMessage);
+    this._transport.offError(this.worker, this._boundOnError);
+    this._transport.offMessageError?.(this.worker, this._boundOnMessageError);
+    this._transport.offExit?.(this.worker, this._boundOnExit);
   }
 
   _terminateWorker() {
