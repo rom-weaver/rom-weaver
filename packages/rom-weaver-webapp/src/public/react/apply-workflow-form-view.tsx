@@ -834,6 +834,23 @@ const discGroupDisplayName = (
   );
 };
 
+/**
+ * Bytes one track contributes to the disc's overall bar: all of them once it has
+ * hashed, none while it waits its turn, and a share of them mid-run. Null means
+ * the track cannot be scored, which makes the whole bar indeterminate.
+ */
+const trackCompletedBytes = (
+  row: RomInputRowState,
+  progress: ReturnType<typeof toWorkflowChecksumProgressProps> | undefined,
+): number | null => {
+  const bytes = row.size ?? row.sourceSize;
+  if (!(typeof bytes === "number" && Number.isFinite(bytes))) return null;
+  if (!row.progress && (row.info.crc32 || row.info.md5 || row.info.sha1)) return bytes;
+  if (row.progress?.value === "waiting") return 0;
+  if (typeof progress?.percent === "number") return bytes * (progress.percent / 100);
+  return null;
+};
+
 const getDiscOverallPercent = (
   staging: boolean,
   totalBytes: number,
@@ -843,15 +860,53 @@ const getDiscOverallPercent = (
   if (!staging || totalBytes <= 0) return null;
   let completedBytes = 0;
   for (const [index, row] of trackRows.entries()) {
-    const bytes = row.size ?? row.sourceSize;
-    if (!(typeof bytes === "number" && Number.isFinite(bytes))) return null;
-    const progress = tracks[index]?.progress;
-    if (!row.progress && (row.info.crc32 || row.info.md5 || row.info.sha1)) completedBytes += bytes;
-    else if (row.progress?.value === "waiting") continue;
-    else if (typeof progress?.percent === "number") completedBytes += bytes * (progress.percent / 100);
-    else return null;
+    const done = trackCompletedBytes(row, tracks[index]?.progress);
+    if (done === null) return null;
+    completedBytes += done;
   }
   return (completedBytes / totalBytes) * 100;
+};
+
+/** A sheet that arrived as text rather than its own row still lists as a file. */
+const buildDiscSheetEntries = (input: {
+  cueRow: RomInputRowState | undefined;
+  cueText: string | undefined;
+  discName: string;
+  firstTrackName: string | undefined;
+  gdiRow: RomInputRowState | undefined;
+  gdiText: string | undefined;
+  trackDecompressionTimeMs: number | undefined;
+}) => {
+  const { cueText, discName, firstTrackName, gdiText } = input;
+  const entries: Array<{ fileName: string; fileSize?: number; decompressionTimeMs?: number }> = [];
+  if (cueText && !input.cueRow) {
+    entries.push({
+      decompressionTimeMs: input.trackDecompressionTimeMs,
+      fileName: firstTrackName?.replace(/\.[^.]+$/, ".cue") || `${discName}.cue`,
+      fileSize: new TextEncoder().encode(cueText).byteLength,
+    });
+  }
+  if (gdiText && !input.gdiRow) {
+    entries.push({
+      fileName: firstTrackName?.replace(/\.[^.]+$/, ".gdi") || `${discName}.gdi`,
+      fileSize: new TextEncoder().encode(gdiText).byteLength,
+    });
+  }
+  return entries;
+};
+
+/** Any verified-bad track marks the disc bad; otherwise ok once any track verifies. */
+const resolveDiscVerdict = (
+  groupRows: RomInputRowState[],
+  verificationStates: RomRowDeps["verificationStates"],
+): "bad" | "ok" | undefined => {
+  let state: "bad" | "ok" | undefined;
+  for (const row of groupRows) {
+    const verdict = verificationStates.get(row.id);
+    if (verdict === "bad") return "bad";
+    if (verdict === "ok") state = "ok";
+  }
+  return state;
 };
 
 /** Render a multi-track disc as one card with per-track checksums + cue view. */
@@ -872,25 +927,15 @@ const renderDiscGroup = (
   const discRomTypeTag = formatRomTypeTag(discRomType);
   const firstTrackName = trackRows[0]?.info.fileName;
   const discName = discGroupDisplayName(groupRows, cueRow, firstTrackName);
-  const sheetEntries: Array<{ fileName: string; fileSize?: number; decompressionTimeMs?: number }> = [
-    ...(cueText && !cueRow
-      ? [
-          {
-            decompressionTimeMs: trackRows[0]?.decompressionTimeMs,
-            fileName: firstTrackName?.replace(/\.[^.]+$/, ".cue") || `${discName}.cue`,
-            fileSize: new TextEncoder().encode(cueText).byteLength,
-          },
-        ]
-      : []),
-    ...(gdiText && !gdiRow
-      ? [
-          {
-            fileName: firstTrackName?.replace(/\.[^.]+$/, ".gdi") || `${discName}.gdi`,
-            fileSize: new TextEncoder().encode(gdiText).byteLength,
-          },
-        ]
-      : []),
-  ];
+  const sheetEntries = buildDiscSheetEntries({
+    cueRow,
+    cueText,
+    discName,
+    firstTrackName,
+    gdiRow,
+    gdiText,
+    trackDecompressionTimeMs: trackRows[0]?.decompressionTimeMs,
+  });
   const fileEntries = [
     ...sheetEntries,
     ...groupRows.map((row) => ({
@@ -900,16 +945,7 @@ const renderDiscGroup = (
     })),
   ];
   const totalFileBytes = fileEntries.reduce((sum, entry) => sum + (entry.fileSize ?? 0), 0);
-  // Any verified-bad track marks the disc bad; otherwise ok once any track verifies.
-  let state: "bad" | "ok" | undefined;
-  for (const row of groupRows) {
-    const verdict = verificationStates.get(row.id);
-    if (verdict === "bad") {
-      state = "bad";
-      break;
-    }
-    if (verdict === "ok") state = "ok";
-  }
+  const state = resolveDiscVerdict(groupRows, verificationStates);
   const removeDisc = () => {
     if (romInputs.length === rows.length && ui.clearRomInput) ui.clearRomInput();
     else for (const row of groupRows) ui.removeRomInput?.(row.id);
@@ -934,16 +970,14 @@ const renderDiscGroup = (
         fileSize: totalFileBytes || totalBytes || undefined,
         parentCompressions: groupRows.find((row) => row.archivePathEntries?.length)?.archivePathEntries,
       },
-      meta:
-        totalBytes || discRomTypeTag || staging ? (
-          <>
-            {totalBytes ? <span className="fsize mono">{formatByteSize(totalBytes)}</span> : null}
-            {discRomTypeTag ? <span className="meta-fmt mono">{discRomTypeTag}</span> : null}
-            {staging ? (
-              <StageStatus id={`rom-weaver-progress-disc-${groupId}`} label="Checksumming…" percent={overallPercent} />
-            ) : null}
-          </>
-        ) : undefined,
+      meta: renderRomCardMeta({
+        percent: overallPercent,
+        romBytes: totalBytes || undefined,
+        romTypeTag: discRomTypeTag,
+        stageLabel: "Checksumming…",
+        staging,
+        statusId: `rom-weaver-progress-disc-${groupId}`,
+      }),
       onRemove: removeDisc,
       panels: {
         info: { timing: CHECKSUM_TIMING_LABEL(trackRows[0]?.info.checksumTiming) },
@@ -973,32 +1007,57 @@ const APPLY_ACTIVITY_KEY = "react-apply-view";
 // path breaks any deployment that is not served from the domain root.
 const FIRST_WEAVE_ASSET = "first-weave.zip";
 
+const CHECKSUM_HEX_LENGTHS: Record<string, number> = { crc32: 8, md5: 32, sha1: 40 };
+
+/** The patch's own "in <algo>=" / "out <algo>=" row for this side, if it has one. */
+const readEmbeddedCheck = (
+  patch: PatchStackItemState | undefined,
+  side: "input" | "output",
+  normalizedAlgorithm: string,
+) => {
+  const prefix = side === "input" ? "in " : "out ";
+  return patch?.validationValues
+    .map((entry) => entry.split("=", 2))
+    .find(([label]) => label?.trim().toLowerCase().replace("sha-1", "sha1") === `${prefix}${normalizedAlgorithm}`)?.[1]
+    ?.trim()
+    .toLowerCase();
+};
+
+/**
+ * Check one declared checksum against its expected hex shape and against what the
+ * patch itself embeds. Returns "" when the value is fine.
+ */
+const checkDeclaredChecksum = (input: {
+  algorithm: string;
+  index: number;
+  patch: PatchStackItemState | undefined;
+  rawValue: string;
+  side: "input" | "output";
+}): string => {
+  const { algorithm, index, side } = input;
+  const normalizedAlgorithm = algorithm.toLowerCase().replace("sha-1", "sha1");
+  const value = input.rawValue.trim().toLowerCase();
+  if (!value) return "";
+  const length = CHECKSUM_HEX_LENGTHS[normalizedAlgorithm];
+  if (!(length && new RegExp(`^[0-9a-f]{${length}}$`).test(value))) {
+    return `Patch ${index + 1} ${side} ${algorithm.toUpperCase()} is malformed`;
+  }
+  const embedded = readEmbeddedCheck(input.patch, side, normalizedAlgorithm);
+  if (embedded && embedded !== value) {
+    return `Patch ${index + 1} ${side} ${algorithm.toUpperCase()} conflicts with the checksum built into the patch`;
+  }
+  return "";
+};
+
 const getBundleVerificationError = (bundleMeta: Array<BundlePatchMeta | undefined>, patches: PatchStackItemState[]) => {
-  const lengths: Record<string, number> = { crc32: 8, md5: 32, sha1: 40 };
   for (const [index, meta] of bundleMeta.entries()) {
     for (const [side, checks] of [
       ["input", meta?.inputChecks?.checksums],
       ["output", meta?.outputChecks?.checksums],
     ] as const) {
       for (const [algorithm, rawValue] of Object.entries(checks || {})) {
-        const normalizedAlgorithm = algorithm.toLowerCase().replace("sha-1", "sha1");
-        const value = rawValue.trim().toLowerCase();
-        if (!value) continue;
-        const length = lengths[normalizedAlgorithm];
-        if (!(length && new RegExp(`^[0-9a-f]{${length}}$`).test(value))) {
-          return `Patch ${index + 1} ${side} ${algorithm.toUpperCase()} is malformed`;
-        }
-        const prefix = side === "input" ? "in " : "out ";
-        const embedded = patches[index]?.validationValues
-          .map((entry) => entry.split("=", 2))
-          .find(
-            ([label]) => label?.trim().toLowerCase().replace("sha-1", "sha1") === `${prefix}${normalizedAlgorithm}`,
-          )?.[1]
-          ?.trim()
-          .toLowerCase();
-        if (embedded && embedded !== value) {
-          return `Patch ${index + 1} ${side} ${algorithm.toUpperCase()} conflicts with the checksum built into the patch`;
-        }
+        const error = checkDeclaredChecksum({ algorithm, index, patch: patches[index], rawValue, side });
+        if (error) return error;
       }
     }
   }
@@ -1057,6 +1116,84 @@ const OutputHeaderField = ({
   );
 };
 
+/** Export while running shows the live bar; otherwise the create/download button. */
+const BundleExportAction = ({
+  bundleActionLabel,
+  bundleExport,
+  disabled,
+}: {
+  bundleActionLabel: string;
+  bundleExport: BundleExportState;
+  disabled: boolean;
+}) => {
+  if (bundleExport.busy) {
+    return (
+      <ProgressActionButton
+        cancelLabel="Cancel bundle export"
+        disabled
+        label={bundleActionLabel}
+        onCancel={bundleExport.cancelExport}
+        onClick={() => undefined}
+        progress={bundleExport.progress}
+        progressId="rom-weaver-bundle-export-progress"
+      />
+    );
+  }
+  return (
+    <button
+      className="btn ghost slim bundle-dl"
+      disabled={disabled}
+      id="rom-weaver-button-export-bundle"
+      onClick={() => void bundleExport.runExport()}
+      type="button"
+    >
+      {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Package aria-hidden="true" />}
+      {bundleActionLabel}
+    </button>
+  );
+};
+
+const ApplyErrorNotice = ({
+  notice,
+  noticeController,
+}: {
+  notice: NoticeState | null;
+  noticeController?: NoticeController;
+}) => {
+  if (!notice?.visible) return null;
+  return (
+    <Notice
+      id="rom-weaver-row-error-message"
+      level={notice.level === "warning" ? "warn" : "error"}
+      onDismiss={notice.dismissible ? () => noticeController?.dismiss?.() : undefined}
+    >
+      {notice.message}
+    </Notice>
+  );
+};
+
+const ChecksumOverrideRow = ({
+  state,
+  uiController,
+}: {
+  state: ReturnType<PatcherUiController["getState"]>["checksumOverride"];
+  uiController: PatcherUiController;
+}) => {
+  if (!state.visible) return null;
+  return (
+    <label className="checkrow warn">
+      <input
+        checked={state.checked}
+        disabled={state.disabled}
+        id="rom-weaver-checkbox-checksum-override"
+        onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
+        type="checkbox"
+      />
+      <span>{state.label}</span>
+    </label>
+  );
+};
+
 const ApplyOutputAction = ({
   applyTotalTime,
   bundleActionLabel,
@@ -1093,27 +1230,8 @@ const ApplyOutputAction = ({
   uiState: ReturnType<PatcherUiController["getState"]>;
 }) => (
   <>
-    {errorNotice?.visible ? (
-      <Notice
-        id="rom-weaver-row-error-message"
-        level={errorNotice.level === "warning" ? "warn" : "error"}
-        onDismiss={errorNotice.dismissible ? () => noticeController?.dismiss?.() : undefined}
-      >
-        {errorNotice.message}
-      </Notice>
-    ) : null}
-    {uiState.checksumOverride.visible ? (
-      <label className="checkrow warn">
-        <input
-          checked={uiState.checksumOverride.checked}
-          disabled={uiState.checksumOverride.disabled}
-          id="rom-weaver-checkbox-checksum-override"
-          onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
-          type="checkbox"
-        />
-        <span>{uiState.checksumOverride.label}</span>
-      </label>
-    ) : null}
+    <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
+    <ChecksumOverrideRow state={uiState.checksumOverride} uiController={uiController} />
     <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
       <p aria-live="polite" className="patch-off-note">
         <TriangleAlert aria-hidden="true" />
@@ -1133,28 +1251,11 @@ const ApplyOutputAction = ({
       </p>
     ) : null}
     {bundleExport && bundleTools?.exportVisible ? (
-      bundleExport.busy ? (
-        <ProgressActionButton
-          cancelLabel="Cancel bundle export"
-          disabled
-          label={bundleActionLabel}
-          onCancel={bundleExport.cancelExport}
-          onClick={() => undefined}
-          progress={bundleExport.progress}
-          progressId="rom-weaver-bundle-export-progress"
-        />
-      ) : (
-        <button
-          className="btn ghost slim bundle-dl"
-          disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
-          id="rom-weaver-button-export-bundle"
-          onClick={() => void bundleExport.runExport()}
-          type="button"
-        >
-          {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Package aria-hidden="true" />}
-          {bundleActionLabel}
-        </button>
-      )
+      <BundleExportAction
+        bundleActionLabel={bundleActionLabel}
+        bundleExport={bundleExport}
+        disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+      />
     ) : null}
     {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
   </>
@@ -1297,6 +1398,107 @@ const renderApplyTimingMeta = (applyDone: boolean, applyTiming?: string, compres
   );
 };
 
+/**
+ * The "ROM header" select only exists when the staged ROM has a strippable copier
+ * header (the checksum variants carry the detection). Auto follows the engine's
+ * rule: re-add emulator-required headers, drop junk copier headers.
+ */
+const resolveOutputHeaderOptions = (romInputs: RomInputRowState[]) => {
+  const variant = romInputs
+    .flatMap((row) => row.info.checksumVariants || [])
+    .find(
+      (candidate) =>
+        candidate.applyCompatibility?.removeHeader === true || candidate.applyCompatibility?.strip_header === true,
+    );
+  const transform = variant?.transforms?.removeHeader as
+    | { headeredExtension?: string; headerlessExtension?: string; retainOnOutput?: boolean }
+    | undefined;
+  return {
+    headeredExtension: transform?.headeredExtension,
+    headerlessExtension: transform?.headerlessExtension,
+    retained: transform?.retainOnOutput !== false,
+    visible: !!variant,
+  };
+};
+
+/** Fetches the bundled sample and hands it to the drop path, for both guided tutorials. */
+const useGuidedSampleLoader = (input: {
+  assetBaseUrl: string | undefined;
+  onDrop: (files: File[]) => void;
+  onStartBundle: () => void;
+}) => {
+  const [sampleLoading, setSampleLoading] = useState(false);
+  const [sampleError, setSampleError] = useState("");
+  const [sampleTutorial, setSampleTutorial] = useState<"apply" | "bundle" | null>(null);
+  const loadFirstWeave = async () => {
+    setSampleLoading(true);
+    setSampleError("");
+    try {
+      const response = await fetch(resolveAssetUrl(input.assetBaseUrl, FIRST_WEAVE_ASSET));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      input.onDrop([new File([blob], "first-weave.zip", { type: "application/zip" })]);
+    } catch {
+      setSampleTutorial(null);
+      setSampleError("Could not load the sample. Try again.");
+    } finally {
+      setSampleLoading(false);
+    }
+  };
+  const startApplySample = () => {
+    setSampleTutorial("apply");
+    void loadFirstWeave();
+  };
+  const startBundleSample = () => {
+    input.onStartBundle();
+    setSampleTutorial("bundle");
+    void loadFirstWeave();
+  };
+  useGuidedSampleStart("apply", startApplySample, () => setSampleTutorial(null));
+  useGuidedSampleStart("bundle", startBundleSample, () => setSampleTutorial(null));
+  const closeSampleTutorial = () => setSampleTutorial(null);
+  return { closeSampleTutorial, sampleError, sampleLoading, sampleTutorial, startApplySample, startBundleSample };
+};
+
+/** The selvage status strip mirrors the apply job's lifecycle, newest state first. */
+const resolveApplyActivity = (input: {
+  applyDone: boolean;
+  applyFailed: boolean;
+  applyStage: string;
+  doneStage: string;
+  inputsStaging: boolean;
+  running: boolean;
+  stagingStage: string;
+}) => {
+  if (input.running) return { stage: input.applyStage, state: "running" as const };
+  if (input.applyFailed) return { state: "failed" as const };
+  if (input.applyDone) return { stage: input.doneStage, state: "done" as const };
+  if (input.inputsStaging) return { stage: input.stagingStage, state: "staging" as const };
+  return { state: "idle" as const };
+};
+
+/**
+ * The expected-ROM group describes THE base ROM, so it only travels to the rows on
+ * an unambiguous single-ROM bench.
+ */
+const buildRomRowDeps = (input: {
+  bundleRomExpectation: BundleRomExpectation | undefined;
+  expectedRomChecks: ParsedBundleChecks | undefined;
+  romInputs: RomInputRowState[];
+  romVerificationStates: RomRowDeps["verificationStates"];
+  singleRom: boolean;
+  uiController: PatcherUiController;
+}): RomRowDeps => {
+  const { expectedRomChecks, singleRom } = input;
+  return {
+    romInputs: input.romInputs,
+    ui: input.uiController,
+    verificationStates: input.romVerificationStates,
+    ...(singleRom && expectedRomChecks ? { expectedChecks: expectedRomChecks } : {}),
+    ...(singleRom && input.bundleRomExpectation?.name ? { expectedName: input.bundleRomExpectation.name } : {}),
+  };
+};
+
 function ApplyWorkflowFormView({
   controllers,
   bundleExpectedRomChecks,
@@ -1387,11 +1589,18 @@ function ApplyWorkflowFormView({
   const stagingStage = localizer.message("ui.drop.staging");
   const doneStage = applyTotalTime ? localizer.message("ui.status.doneMsg", { t: applyTotalTime }) : "";
   useEffect(() => {
-    if (applyProgress) setWorkbenchActivity(APPLY_ACTIVITY_KEY, { stage: applyStage, state: "running" });
-    else if (applyFailed) setWorkbenchActivity(APPLY_ACTIVITY_KEY, { state: "failed" });
-    else if (applyDone) setWorkbenchActivity(APPLY_ACTIVITY_KEY, { stage: doneStage, state: "done" });
-    else if (inputsStaging) setWorkbenchActivity(APPLY_ACTIVITY_KEY, { stage: stagingStage, state: "staging" });
-    else setWorkbenchActivity(APPLY_ACTIVITY_KEY, { state: "idle" });
+    setWorkbenchActivity(
+      APPLY_ACTIVITY_KEY,
+      resolveApplyActivity({
+        applyDone,
+        applyFailed,
+        applyStage,
+        doneStage,
+        inputsStaging,
+        running: !!applyProgress,
+        stagingStage,
+      }),
+    );
   }, [applyProgress, applyStage, applyFailed, applyDone, doneStage, inputsStaging, stagingStage]);
   const running = !!applyProgress;
   const wovenSteps = running || applyDone;
@@ -1411,39 +1620,26 @@ function ApplyWorkflowFormView({
   const expectedRomChecks =
     planBaseExpectation?.expected ?? bundleExpectedRomChecks ?? parseChainInputExpectation(patches, disabledPatchFlags);
   const baseConflict = !!planBaseExpectation?.conflict;
-  const romRowDeps: RomRowDeps = {
+  const romRowDeps = buildRomRowDeps({
+    bundleRomExpectation,
+    expectedRomChecks,
     romInputs,
-    ui: uiController,
-    verificationStates: romVerificationStates,
-    ...(singleRom && expectedRomChecks ? { expectedChecks: expectedRomChecks } : {}),
-    ...(singleRom && bundleRomExpectation?.name ? { expectedName: bundleRomExpectation.name } : {}),
-  };
+    romVerificationStates,
+    singleRom,
+    uiController,
+  });
   const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
-  // The "ROM header" select only exists when the staged ROM has a strippable
-  // copier header (the checksum variants carry the detection). Auto follows the
-  // engine's rule: re-add emulator-required headers, drop junk copier headers.
-  const outputHeaderVariant = romInputs
-    .flatMap((row) => row.info.checksumVariants || [])
-    .find(
-      (variant) =>
-        variant.applyCompatibility?.removeHeader === true || variant.applyCompatibility?.strip_header === true,
-    );
-  const outputHeaderTransform = outputHeaderVariant?.transforms?.removeHeader as
-    | { headeredExtension?: string; headerlessExtension?: string; retainOnOutput?: boolean }
-    | undefined;
-  const outputHeaderRetained = outputHeaderTransform?.retainOnOutput !== false;
-  const headeredExtension = outputHeaderTransform?.headeredExtension;
-  const headerlessExtension = outputHeaderTransform?.headerlessExtension;
+  const header = resolveOutputHeaderOptions(romInputs);
   const outputHeaderField = (
     <OutputHeaderField
       disabled={outputState.disabled}
-      headeredExtension={headeredExtension}
-      headerlessExtension={headerlessExtension}
+      headeredExtension={header.headeredExtension}
+      headerlessExtension={header.headerlessExtension}
       onChange={(value) => controllers.output.setOutputHeader?.(value)}
-      retained={outputHeaderRetained}
+      retained={header.retained}
       value={outputState.outputHeader}
-      visible={!!outputHeaderVariant}
+      visible={header.visible}
     />
   );
   // "Create <format> [ROM] Bundle" until an export exists, then "Download ...".
@@ -1462,41 +1658,12 @@ function ApplyWorkflowFormView({
   // "identifying" placeholder until its ROM-vs-patch bucket is classified.
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  const [sampleLoading, setSampleLoading] = useState(false);
-  const [sampleError, setSampleError] = useState("");
-  const [sampleTutorial, setSampleTutorial] = useState<"apply" | "bundle" | null>(null);
-  const loadFirstWeave = async () => {
-    setSampleLoading(true);
-    setSampleError("");
-    try {
-      const response = await fetch(resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET));
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      handleUnifiedDrop([new File([blob], "first-weave.zip", { type: "application/zip" })]);
-    } catch {
-      setSampleTutorial(null);
-      setSampleError("Could not load the sample. Try again.");
-    } finally {
-      setSampleLoading(false);
-    }
-  };
-  useGuidedSampleStart(
-    "apply",
-    () => {
-      setSampleTutorial("apply");
-      void loadFirstWeave();
-    },
-    () => setSampleTutorial(null),
-  );
-  useGuidedSampleStart(
-    "bundle",
-    () => {
-      bundleTools?.setBundlePackage("zip:patches");
-      setSampleTutorial("bundle");
-      void loadFirstWeave();
-    },
-    () => setSampleTutorial(null),
-  );
+  const { closeSampleTutorial, sampleError, sampleLoading, sampleTutorial, startApplySample, startBundleSample } =
+    useGuidedSampleLoader({
+      assetBaseUrl,
+      onDrop: handleUnifiedDrop,
+      onStartBundle: () => bundleTools?.setBundlePackage("zip:patches"),
+    });
   // Start the hero morph at the gesture, not after a large input finishes enough
   // staging to publish its first row. This is presentation-only; Rust ingestion
   // continues on its existing schedule behind the transition.
@@ -1574,15 +1741,8 @@ function ApplyWorkflowFormView({
         afterDropZone={
           <ApplyDropAfter
             downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
-            onLoadApplySample={() => {
-              setSampleTutorial("apply");
-              void loadFirstWeave();
-            }}
-            onLoadBundleSample={() => {
-              bundleTools?.setBundlePackage("zip:patches");
-              setSampleTutorial("bundle");
-              void loadFirstWeave();
-            }}
+            onLoadApplySample={startApplySample}
+            onLoadBundleSample={startBundleSample}
             pendingDrops={pendingDrops}
             sampleError={sampleError}
             sampleLoading={sampleLoading}
@@ -1765,7 +1925,7 @@ function ApplyWorkflowFormView({
       {sampleTutorial ? (
         <SampleTutorial
           loadingBody="RomWeaver is unpacking one tiny ROM and two patches, then checking what each file is."
-          onClose={() => setSampleTutorial(null)}
+          onClose={closeSampleTutorial}
           ready={sampleTutorialReady}
           steps={sampleTutorial === "bundle" ? BUNDLE_SAMPLE_TUTORIAL_STEPS : APPLY_SAMPLE_TUTORIAL_STEPS}
         />
