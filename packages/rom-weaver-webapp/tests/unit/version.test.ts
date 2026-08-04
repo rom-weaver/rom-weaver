@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getChangelog, readReleaseNotes } from "../../scripts/version.mjs";
+import { getChangelog, getVersionBranch, readReleaseNotes, resolveGitBranch } from "../../scripts/version.mjs";
 
 const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver";
 const issue = (n: number) => `([#${n}](${REPOSITORY_URL}/issues/${n}))`;
@@ -126,6 +126,28 @@ describe("readReleaseNotes", () => {
   it("returns nothing for an unknown or empty version", () => {
     expect(notesFor("9.9.9")).toBeUndefined();
     expect(notesFor("")).toBeUndefined();
+  });
+});
+
+describe("build metadata branches", () => {
+  it("reports the default branch without adding it to the version suffix", () => {
+    expect(resolveGitBranch({ checkoutBranch: "main" })).toBe("main");
+    expect(getVersionBranch("main", false)).toBe("");
+  });
+
+  it("uses the pull request head ref when the checkout is detached", () => {
+    const branch = resolveGitBranch({
+      checkoutBranch: "HEAD",
+      headRef: "fix/status-dialog",
+      refName: "431/merge",
+    });
+    expect(branch).toBe("fix/status-dialog");
+    expect(getVersionBranch(branch, false)).toBe("fix-status-dialog");
+  });
+
+  it("does not report a release tag as a branch", () => {
+    expect(resolveGitBranch({ checkoutBranch: "HEAD", refName: "v0.11.1", refType: "tag" })).toBe("");
+    expect(getVersionBranch("", true)).toBe("");
   });
 });
 

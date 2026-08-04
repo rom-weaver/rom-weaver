@@ -3,6 +3,7 @@ declare global {
   const __COMMIT_HASH__: string;
   const __COMMITS_SINCE_VERSION__: number | null;
   const __GIT_BRANCH__: string;
+  const __VERSION_BRANCH__: string;
   const __DIRTY_HASH__: string;
   const __VERSION_IS_TAGGED__: boolean;
   const __APP_CHANNEL__: string;

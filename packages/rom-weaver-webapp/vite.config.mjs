@@ -13,7 +13,7 @@ import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
-import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
+import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
 import { readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
@@ -932,6 +932,7 @@ export default defineConfig(({ command, mode }) => {
   const dirtyHash = process.env.ROM_WEAVER_DIRTY_HASH ?? buildInfo.dirtyHash ?? "";
   const gitBranch = process.env.ROM_WEAVER_GIT_BRANCH ?? buildInfo.gitBranch ?? "";
   const versionIsTagged = (buildInfo.isVersionTag ?? false) && !dirtyHash;
+  const versionBranch = getVersionBranch(gitBranch, versionIsTagged);
   // CI's deploy job already resolves which origin this bundle is headed for;
   // an unset channel means a local build or dev server, never production.
   const appChannel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
@@ -996,6 +997,7 @@ export default defineConfig(({ command, mode }) => {
       __COMMITS_SINCE_VERSION__: JSON.stringify(commitsSinceVersion),
       __DIRTY_HASH__: JSON.stringify(dirtyHash),
       __GIT_BRANCH__: JSON.stringify(gitBranch),
+      __VERSION_BRANCH__: JSON.stringify(versionBranch),
       __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
       ...serviceWorkerDefines,
     },

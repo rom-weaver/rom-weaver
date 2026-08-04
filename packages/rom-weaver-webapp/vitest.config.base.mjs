@@ -26,6 +26,7 @@ export default defineConfig({
     __COMMITS_SINCE_VERSION__: JSON.stringify(0),
     __DIRTY_HASH__: JSON.stringify(""),
     __GIT_BRANCH__: JSON.stringify("dev"),
+    __VERSION_BRANCH__: JSON.stringify("dev"),
     __SERVICE_WORKER_ENABLED__: "false",
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: "0",
     __VERSION_IS_TAGGED__: JSON.stringify(false),
