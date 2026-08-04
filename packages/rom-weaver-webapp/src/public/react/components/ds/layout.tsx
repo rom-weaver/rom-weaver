@@ -1,5 +1,5 @@
 import { Upload } from "lucide-react";
-import { type ReactNode, type Ref, useId, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
@@ -139,6 +139,15 @@ const DropZone = ({
   const [reading, setReading] = useState(false);
   const formatsRef = useRef<HTMLSpanElement>(null);
   const showFormats = Boolean(big && formats?.length);
+  useEffect(() => {
+    if (!showFormats) return;
+    const lane = formatsRef.current;
+    if (!lane) return;
+    const timer = window.setTimeout(() => {
+      for (const track of lane.querySelectorAll(".formats-track")) track.setAttribute("data-ticker-ready", "true");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [showFormats]);
   // Phase-lock the extension ticker (`formats-ticker`) to wall-clock time via a
   // negative animation-delay derived from --wall-clock (see dropzone.css), so a
   // page reload resumes the marquee where a continuously-running one would sit
