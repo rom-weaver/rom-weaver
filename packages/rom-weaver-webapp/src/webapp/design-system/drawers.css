@@ -338,7 +338,7 @@
 .rw-app .pfault-title { display: flex; gap: var(--sp-s); align-items: center; color: var(--fault); font-weight: 700; font-size: .86rem; }
 .rw-app .pfault-title svg { width: 15px; height: 15px; flex: none; animation: pverdict-mark .34s var(--ease) both; }
 .rw-app .pfault-detail { margin: 0; font-size: .8rem; color: var(--ink-2); overflow-wrap: anywhere; }
-.rw-app .pfault-hint { margin: 0; font-size: .74rem; color: var(--ink-3); }
+.rw-app .pfault-hint { margin: 0; font-size: .74rem; color: var(--ink-2); }
 @keyframes pverdict-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes pverdict-mark { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {

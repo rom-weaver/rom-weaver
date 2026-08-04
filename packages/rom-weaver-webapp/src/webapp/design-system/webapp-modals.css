@@ -157,6 +157,9 @@ html:has(.rw-modal) { overflow: hidden; }
 }
 /* Isolate per-tick layout and paint invalidation. */
 .rw-app .card, .rw-app .prog-panel { contain: layout paint style; }
+/* Patch menus extend below compact cards. Paint containment would clip their
+   lower actions before they can be reached. */
+.rw-app .card.patch { contain: layout style; }
 
 /* Keep meter animation on the compositor during main-thread stalls. */
 .rw-app .meter.indet .fill { width: 32%; margin-inline-start: 0; animation: indet-slide 1.8s ease-in-out infinite; }
