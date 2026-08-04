@@ -58,7 +58,9 @@ export const onRequest = async ({ request, env, next }) => {
     // Fetch by URL, matching the asset Function. Forwarding the complete document
     // request makes Pages treat this subrequest differently and drops the sidecar's
     // response metadata. Browser validators are checked against that metadata below.
-    const sidecar = await env.ASSETS.fetch(new URL(sidecarPath, request.url));
+    const sidecar = await env.ASSETS.fetch(new URL(sidecarPath, request.url), {
+      headers: { "Accept-Encoding": "br" },
+    });
     if (sidecar.status === 304) {
       const headers = documentHeaders(sidecar);
       headers.delete("Content-Length");
