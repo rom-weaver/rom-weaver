@@ -111,7 +111,7 @@
     padding-block-end: calc(var(--dialog-tabbar-h) + 64px);
   }
   .rw-app .log-dlg .log-body {
-    padding-block-end: calc(var(--dialog-tabbar-h) + 58px);
+    padding-block-end: calc(var(--dialog-tabbar-h) + 172px);
   }
   /* Context actions live above the tab dock, where thumbs naturally land. */
   .rw-app .log-dlg .dlg-subhead:has(.settings-actions) {
@@ -123,12 +123,31 @@
   }
   .rw-app .log-dlg .settings-actions { width: 100%; gap: var(--sp-s); }
   .rw-app .log-dlg .settings-actions .btn { flex: 1 1 0; min-height: 44px; height: 44px; }
-  .rw-app .log-dlg .log-actions {
+  .rw-app .log-dlg .dlg-subhead:has(.log-controls) {
     position: fixed; z-index: 4; inset-inline: 0; inset-block-end: var(--dialog-tabbar-h);
-    justify-content: flex-end; min-height: 58px; padding: var(--sp-s) max(var(--sp-m), var(--safe-r)) var(--sp-s) max(var(--sp-m), var(--safe-l));
+    padding: var(--sp-s) max(var(--sp-m), var(--safe-r)) var(--sp-s) max(var(--sp-m), var(--safe-l));
     border-block-start: 1px solid var(--seam-strong);
     background: color-mix(in oklab, var(--plate) 96%, transparent);
     -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  }
+  .rw-app .log-dlg .dlg-subhead:has(.log-controls) .log-controls {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-s);
+  }
+  .rw-app .log-dlg .dlg-subhead:has(.logview) .logview {
+    grid-column: 1 / -1; width: 100%; min-height: 44px;
+  }
+  .rw-app .log-dlg .dlg-subhead:has(.logview) .logview .seg-btn { height: 38px; }
+  .rw-app .log-dlg .dlg-subhead:has(.logview) .loglevel { margin-inline-start: 0; }
+  .rw-app .log-dlg .dlg-subhead:has(.log-refresh) .log-refresh {
+    grid-column: 2; width: 44px; height: 44px; margin-inline-start: 0;
+  }
+  .rw-app .log-dlg .dlg-subhead:has(.log-controls) .loglevel .select,
+  .rw-app .log-dlg .dlg-subhead:has(.log-controls) .log-filter {
+    height: 44px;
+  }
+  .rw-app .log-dlg .dlg-subhead:has(.log-controls) .log-actions {
+    position: static; justify-content: flex-end; min-height: 44px; padding: 0;
+    border: 0; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none;
   }
   .rw-app .log-dlg .log-actions .log-icon-btn { width: 44px; height: 44px; }
   .rw-app .log-dlg .status-panel .sw-summary,
