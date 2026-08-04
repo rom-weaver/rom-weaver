@@ -36,7 +36,7 @@ inputs:
 outputs:
   url:
     description: The deployment URL Cloudflare reported after success (empty if the deploy failed).
-    value: ${{ steps.deploy.outputs.url }}
+    value: ${{ steps.verify-html-brotli.outcome == 'success' && steps.deploy.outputs.url || '' }}
 
 runs:
   using: composite
@@ -93,3 +93,11 @@ runs:
         BRANCH: ${{ inputs.branch }}
         PAGES_REUSE: "true"
       run: node scripts/ci/deploy-pages.mjs
+
+    - name: Verify HTML Brotli pass-through
+      id: verify-html-brotli
+      if: steps.deploy.outputs.url != ''
+      shell: bash
+      env:
+        DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+      run: node scripts/ci/check-cloudflare-html-brotli.mjs

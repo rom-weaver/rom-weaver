@@ -7,6 +7,9 @@ const isMissingSidecar = (response) =>
 const weakEntityTag = (value) => value.trim().replace(/^W\//, "");
 
 const matchesIfNoneMatch = (value, etag) => {
+  if (value.split(",").some((candidate) => candidate.trim() === "*")) return true;
+  if (etag === null) return false;
+
   const normalizedEtag = weakEntityTag(etag);
   return value.split(",").some((candidate) => {
     const normalizedCandidate = candidate.trim();
@@ -17,8 +20,7 @@ const matchesIfNoneMatch = (value, etag) => {
 const isNotModified = (request, response) => {
   const ifNoneMatch = request.headers.get("If-None-Match");
   if (ifNoneMatch !== null) {
-    const etag = response.headers.get("ETag");
-    return etag !== null && matchesIfNoneMatch(ifNoneMatch, etag);
+    return matchesIfNoneMatch(ifNoneMatch, response.headers.get("ETag"));
   }
 
   const ifModifiedSince = request.headers.get("If-Modified-Since");

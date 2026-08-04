@@ -177,6 +177,16 @@ describe("pages brotli sidecar function", () => {
     expect(response.status).toBe(304);
   });
 
+  it("matches a wildcard validator when the sidecar has no entity tag", async () => {
+    const { context } = makeContext({
+      url: "https://rom-weaver.com/apply",
+      requestHeaders: { "If-None-Match": "*" },
+      sidecarResponse: () => brSidecar(),
+    });
+    const response = await onRequest(context);
+    expect(response.status).toBe(304);
+  });
+
   it("falls through document requests without Brotli support", async () => {
     const { context, fetchLog } = makeContext({
       url: "https://rom-weaver.com/apply",
