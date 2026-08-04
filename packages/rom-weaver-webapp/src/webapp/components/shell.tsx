@@ -304,7 +304,14 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
     runThemeWipe(toggleTheme, buttonRef.current);
   };
   return (
-    <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">
+    <button
+      aria-label={label}
+      className="tool mobile-utility-theme"
+      onClick={handleClick}
+      ref={buttonRef}
+      title={label}
+      type="button"
+    >
       <Moon aria-hidden="true" className="ico-moon" />
       <SunMedium aria-hidden="true" className="ico-sun" />
       <span aria-hidden="true" className="tool-text">
@@ -334,7 +341,6 @@ const AccentPicker = ({
   onToggle: () => void;
   open: boolean;
 }) => {
-  const accent = useAccent();
   const trayRef = useRef<HTMLDivElement | null>(null);
   const label = localizer.message("ui.tools.accent");
 
@@ -346,7 +352,7 @@ const AccentPicker = ({
   }, [open]);
 
   return (
-    <div className="tool-anchor">
+    <div className="tool-anchor mobile-utility-accent">
       <button
         aria-expanded={open}
         aria-label={label}
@@ -360,19 +366,73 @@ const AccentPicker = ({
       </button>
       {open ? (
         <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
-          {ACCENTS.map((entry) => (
-            <label className="accent-chip" key={entry.value} title={entry.label}>
-              <input
-                aria-label={entry.label}
-                checked={entry.value === accent}
-                name="masthead-accent"
-                onChange={() => onChange(entry.value)}
-                type="radio"
-                value={entry.value}
-              />
-              <span aria-hidden="true" className="accent-chip-dot" style={{ background: entry.swatch }} />
-            </label>
-          ))}
+          <AccentChoices name="masthead-accent" onChange={onChange} />
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const AccentChoices = ({ name, onChange }: { name: string; onChange: (accent: string) => void }) => {
+  const accent = useAccent();
+  return (
+    <>
+      {ACCENTS.map((entry) => (
+        <label className="accent-chip" key={entry.value} title={entry.label}>
+          <input
+            aria-label={entry.label}
+            checked={entry.value === accent}
+            name={name}
+            onChange={() => onChange(entry.value)}
+            type="radio"
+            value={entry.value}
+          />
+          <span aria-hidden="true" className="accent-chip-dot" style={{ background: entry.swatch }} />
+        </label>
+      ))}
+    </>
+  );
+};
+
+const ThemeMenuItem = ({ localizer, onClose }: { localizer: Localizer; onClose: () => void }) => {
+  const { theme, toggleTheme } = useTheme();
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const label = localizer.message("ui.tools.theme");
+  return (
+    <button
+      onClick={() => {
+        runThemeWipe(toggleTheme, buttonRef.current);
+        onClose();
+      }}
+      ref={buttonRef}
+      role="menuitem"
+      type="button"
+    >
+      {theme === "dark" ? <SunMedium aria-hidden="true" /> : <Moon aria-hidden="true" />}
+      {label}
+    </button>
+  );
+};
+
+const AccentMenuItem = ({ localizer, onChange }: { localizer: Localizer; onChange?: (accent: string) => void }) => {
+  const [open, setOpen] = useState(false);
+  const trayRef = useRef<HTMLDivElement | null>(null);
+  const label = localizer.message("ui.tools.accent");
+
+  useEffect(() => {
+    if (!open) return;
+    trayRef.current?.querySelector<HTMLInputElement>("input:checked")?.focus();
+  }, [open]);
+
+  return (
+    <div className="more-accent">
+      <button aria-expanded={open} onClick={() => setOpen((isOpen) => !isOpen)} role="menuitem" type="button">
+        <Palette aria-hidden="true" />
+        {label}
+      </button>
+      {open ? (
+        <div aria-label={label} className="more-accent-tray" ref={trayRef} role="radiogroup">
+          <AccentChoices name="mobile-more-accent" onChange={(value) => onChange?.(value)} />
         </div>
       ) : null}
     </div>
@@ -385,6 +445,8 @@ type UtilityMenuProps = {
   githubHref?: string;
   localizer: Localizer;
   menuClassName?: string;
+  mobile?: boolean;
+  onAccentChange?: (accent: string) => void;
   onOpenChangelog: () => void;
   onOpenLog: () => void;
   onOpenStatus: () => void;
@@ -400,7 +462,9 @@ const UtilityMenu = ({
   githubHref,
   localizer,
   menuId,
+  mobile = false,
   onClose,
+  onAccentChange,
   onOpenChangelog,
   onOpenLog,
   onOpenStatus,
@@ -475,6 +539,12 @@ const UtilityMenu = ({
       ref={menuRef}
       role="menu"
     >
+      {mobile ? (
+        <>
+          <ThemeMenuItem localizer={localizer} onClose={onClose} />
+          <AccentMenuItem localizer={localizer} onChange={onAccentChange} />
+        </>
+      ) : null}
       <button onClick={() => select(onOpenStatus)} role="menuitem" type="button">
         <Info aria-hidden="true" />
         {localizer.message("ui.log.tabStatus")}
@@ -1076,7 +1146,9 @@ const Masthead = ({
               localizer={localizer}
               menuClassName="shared-more-menu"
               menuId="more-menu"
+              mobile={utilityPlacement === "mobile"}
               onClose={closeUtility}
+              onAccentChange={onAccentChange}
               onOpenChangelog={onOpenChangelog}
               onOpenLog={onOpenLog}
               onOpenStatus={onOpenStatus}
