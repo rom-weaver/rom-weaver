@@ -6,6 +6,7 @@ const WASM_URL = "https://rom-weaver.com/assets/rom-weaver-app-BWS09Fxt.wasm";
 const NEXT_SENTINEL = new Response("static passthrough");
 
 type FetchLogEntry = { method: string; url: string };
+type SidecarResponse = Response | ((url: string) => Response);
 
 const spaFallback = () => new Response("<!doctype html>", { headers: { "Content-Type": "text/html; charset=utf-8" } });
 
@@ -16,7 +17,7 @@ const makeContext = ({
 }: {
   url?: string;
   acceptEncoding?: string | null;
-  sidecarResponse?: Response;
+  sidecarResponse?: SidecarResponse;
 }) => {
   const headers = new Headers();
   if (acceptEncoding !== null) headers.set("Accept-Encoding", acceptEncoding);
@@ -27,7 +28,8 @@ const makeContext = ({
         ASSETS: {
           fetch: (target: URL | RequestInfo, init?: RequestInit) => {
             fetchLog.push({ method: init?.method ?? "GET", url: String(target) });
-            return Promise.resolve(sidecarResponse ?? spaFallback());
+            const response = typeof sidecarResponse === "function" ? sidecarResponse(String(target)) : sidecarResponse;
+            return Promise.resolve(response ?? spaFallback());
           },
         },
       },
@@ -122,6 +124,26 @@ describe("pages brotli sidecar function", () => {
     expect(response.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate");
     expect(response.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
     expect(await response.text()).toBe("brotli-bytes");
+  });
+
+  it("does not probe an HTML sidecar for an asset request", async () => {
+    const { context, fetchLog } = makeContext({ sidecarResponse: brSidecar() });
+    expect(await onRequest(context)).toBe(NEXT_SENTINEL);
+    expect(fetchLog).toEqual([]);
+  });
+
+  it("falls back from a clean route to its extension sidecar", async () => {
+    const { context, fetchLog } = makeContext({
+      url: "https://rom-weaver.com/trim",
+      sidecarResponse: (url) =>
+        url.endsWith("/trim/index.html.br") ? new Response("missing", { status: 404 }) : brSidecar(),
+    });
+    const response = await onRequest(context);
+    expect(fetchLog).toEqual([
+      { method: "GET", url: "https://rom-weaver.com/trim/index.html.br" },
+      { method: "GET", url: "https://rom-weaver.com/trim.html.br" },
+    ]);
+    expect(response.headers.get("Content-Encoding")).toBe("br");
   });
 
   it("falls through document requests without Brotli support", async () => {

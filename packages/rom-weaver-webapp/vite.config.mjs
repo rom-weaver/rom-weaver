@@ -1059,6 +1059,8 @@ export default defineConfig(({ command, mode }) => {
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),
       writeChangelogAsset(releaseVersion),
       writeCloudflareHeadersAsset(appChannel),
+      // Keep HTML minification and sidecars before VitePWA so precache revisions
+      // are calculated from the final document bytes.
       writeBrotliSidecars(),
       VitePWA({
         devOptions: {

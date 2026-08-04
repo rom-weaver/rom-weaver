@@ -13,11 +13,22 @@ export const DOCUMENT_ROUTE_INCLUDES = [
 
 export const DOCUMENT_ROUTE_EXCLUDES = ["/docs/screenshots/*"];
 
-export const documentSidecarPath = (pathname) => {
+export const documentSidecarPaths = (pathname) => {
   const path = String(pathname || "");
-  if (path === "/") return "/index.html.br";
-  if (!path.startsWith("/") || path.includes(".br")) return null;
-  if (path.endsWith("/")) return `${path}index.html.br`;
-  if (path.endsWith(".html")) return `${path}.br`;
-  return `${path}.html.br`;
+  if (path === "/") return ["/index.html.br"];
+  if (!path.startsWith("/") || path.includes(".br")) return [];
+  if (path === "/index.html" || /\/index\.html$/i.test(path)) return [`${path}.br`];
+  if (path.endsWith("/")) {
+    const route = path.slice(0, -1);
+    return [`${path}index.html.br`, `${route}.html.br`];
+  }
+  if (path.endsWith(".html")) {
+    const route = path.slice(0, -".html".length);
+    return [`${path}.br`, `${route}/index.html.br`];
+  }
+  const segment = path.slice(path.lastIndexOf("/") + 1);
+  if (segment.includes(".")) return [];
+  return [`${path}/index.html.br`, `${path}.html.br`];
 };
+
+export const documentSidecarPath = (pathname) => documentSidecarPaths(pathname)[0] ?? null;

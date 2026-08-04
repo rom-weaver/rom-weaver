@@ -3,6 +3,7 @@ import {
   DOCUMENT_ROUTE_EXCLUDES,
   DOCUMENT_ROUTE_INCLUDES,
   documentSidecarPath,
+  documentSidecarPaths,
 } from "../../functions/document-routes.js";
 
 describe("Cloudflare document sidecar routes", () => {
@@ -14,9 +15,9 @@ describe("Cloudflare document sidecar routes", () => {
 
   it.each([
     ["/", "/index.html.br"],
-    ["/apply", "/apply.html.br"],
+    ["/apply", "/apply/index.html.br"],
     ["/create/", "/create/index.html.br"],
-    ["/docs/faq", "/docs/faq.html.br"],
+    ["/docs/faq", "/docs/faq/index.html.br"],
     ["/docs/faq/index.html", "/docs/faq/index.html.br"],
   ])("maps %s to %s", (pathname, sidecarPath) => {
     expect(documentSidecarPath(pathname)).toBe(sidecarPath);
@@ -24,5 +25,10 @@ describe("Cloudflare document sidecar routes", () => {
 
   it("declines paths that already name a sidecar", () => {
     expect(documentSidecarPath("/assets/app.js.br")).toBeNull();
+    expect(documentSidecarPaths("/assets/app.js")).toEqual([]);
+  });
+
+  it("keeps the generated index document as the first clean-route candidate", () => {
+    expect(documentSidecarPaths("/trim")).toEqual(["/trim/index.html.br", "/trim.html.br"]);
   });
 });

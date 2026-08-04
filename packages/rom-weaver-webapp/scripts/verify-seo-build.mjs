@@ -260,7 +260,9 @@ for (const route of DOC_ROUTES) {
   );
   // The hub is an index of links, not a guide, but it still has to say enough
   // to stand on its own as the published documentation landing page.
-  let minimumWords = guide ? 300 : 150;
+  // The smallest guide is 324 words after executable markup is removed. Keep
+  // the floor just below that measured minimum so the check stays meaningful.
+  let minimumWords = guide ? 320 : 150;
   if (route.slug === "docs") minimumWords = 250;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {
