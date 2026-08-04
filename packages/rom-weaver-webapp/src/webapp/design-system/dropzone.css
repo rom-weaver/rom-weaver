@@ -346,12 +346,17 @@
   animation-delay: calc(-1 * mod(var(--wall-clock, 0s), 120s));
   will-change: transform;
 }
-.rw-app .drop.hero .formats-track:not([data-ticker-ready="true"]) {
-  margin-inline: auto;
-  animation: none;
+.rw-app .drop.hero .formats:not([data-ticker-ready="true"]) {
+  display: block;
+  height: 74px;
 }
-.rw-app .drop.hero .formats-track:not([data-ticker-ready="true"]) .formats-set + .formats-set {
+.rw-app .drop.hero .formats:not([data-ticker-ready="true"]) .formats-lane {
   display: none;
+}
+@media (max-width: 640px) {
+  .rw-app .drop.hero .formats:not([data-ticker-ready="true"]) {
+    height: 63px;
+  }
 }
 .rw-app .drop.hero .formats-lane:nth-child(2) .formats-track {
   animation-direction: reverse;

@@ -144,7 +144,7 @@ const DropZone = ({
     const lane = formatsRef.current;
     if (!lane) return;
     const timer = window.setTimeout(() => {
-      for (const track of lane.querySelectorAll(".formats-track")) track.setAttribute("data-ticker-ready", "true");
+      lane.setAttribute("data-ticker-ready", "true");
     }, 0);
     return () => window.clearTimeout(timer);
   }, [showFormats]);
