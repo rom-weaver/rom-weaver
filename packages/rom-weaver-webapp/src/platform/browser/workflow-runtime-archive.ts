@@ -1,6 +1,7 @@
 import { isRomSpecificCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
 import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
+import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
@@ -92,12 +93,14 @@ const stageCompressionEntryForRomWeaver = async (
   entry: ReturnType<typeof normalizeCompressionWorkerEntries>[number],
   fileName: string,
   index: number,
+  pathPrefixRoot: string,
 ): Promise<{ cleanup: () => Promise<void>; filePath: string }> => {
   const source = createArchiveEntrySource(entry, fileName);
   if (!source) throw new Error(`Archive entry data was not provided: ${fileName}`);
   const staged = await workerIo.stageSource({
     fallbackFileName: fileName,
-    pathPrefix: `archive-entry-${index + 1}`,
+    pathPrefix: `${pathPrefixRoot}/archive-entry-${index + 1}`,
+    pathPrefixInPath: true,
     scope: "archive",
     source,
   });
@@ -171,6 +174,7 @@ const stageBrowserCompressionEntries = async (
   workerIo: RuntimeWorkerIo,
 ) => {
   const normalizedEntries = normalizeCompressionWorkerEntries(entries);
+  const pathPrefixRoot = `archive-create-${createVfsPathId()}`;
   const stagedEntries: Array<{
     cleanup: () => Promise<void>;
     filePath: string;
@@ -181,7 +185,7 @@ const stageBrowserCompressionEntries = async (
       const entry = normalizedEntries[index];
       if (!entry) continue;
       const fileName = entry.fileName || entry.filename || entry.name || `entry-${index + 1}.bin`;
-      const stagedEntry = await stageCompressionEntryForRomWeaver(workerIo, entry, fileName, index);
+      const stagedEntry = await stageCompressionEntryForRomWeaver(workerIo, entry, fileName, index, pathPrefixRoot);
       stagedEntries.push(stagedEntry);
       inputPaths.push(stagedEntry.filePath);
     }

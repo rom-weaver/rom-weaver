@@ -62,6 +62,7 @@ const stageBundleCreateInputs = async ({
   workerIo: RuntimeWorkerIo;
 }) => {
   const staged: Array<Awaited<ReturnType<RuntimeWorkerIo["stageSource"]>>> = [];
+  const pathPrefixRoot = `bundle-create-${createVfsPathId()}`;
   const stage = async (
     source: { source: unknown; fileName?: string },
     pathPrefix: string,
@@ -69,7 +70,8 @@ const stageBundleCreateInputs = async ({
   ) => {
     const stagedSource = await workerIo.stageSource({
       fallbackFileName,
-      pathPrefix,
+      pathPrefix: `${pathPrefixRoot}/${pathPrefix}`,
+      pathPrefixInPath: true,
       scope: "archive",
       source: source.source,
       trace: { logLevel, onLog },

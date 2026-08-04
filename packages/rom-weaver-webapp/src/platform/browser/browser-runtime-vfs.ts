@@ -182,6 +182,7 @@ const createBrowserRuntimeVfsIo = ({
     scope,
     source,
     trace,
+    pathPrefixInPath,
   }) => {
     emitBrowserRuntimeVfsTrace(trace, "stageSource start", {
       fallbackFileName,
@@ -210,6 +211,7 @@ const createBrowserRuntimeVfsIo = ({
         bucket: pathBucket,
         mountPoint,
         pathPrefix: pathPrefix || scope,
+        pathPrefixInPath,
         trace,
       });
     emitBrowserRuntimeVfsTrace(trace, "stageSource creating source ref", {
