@@ -559,6 +559,11 @@ leg per channel, deploying with Cloudflare Direct Upload and reusing the
 CI-tested WASM artifact rather than spending Cloudflare build minutes on a
 second toolchain.
 
+The deployment wrapper matches the Pages branch and commit hash before invoking
+Wrangler. It waits for new deployments to finish before publishing their URLs.
+Retries reuse successful deployments, wait for active deployments, and retry
+failed matching deployments instead of creating another deployment.
+
 | Channel | Cloudflare project | URL | Intended use |
 | --- | --- | --- | --- |
 | `prod` | `rom-weaver` | [rom-weaver.com](https://rom-weaver.com/) | Stable public webapp |

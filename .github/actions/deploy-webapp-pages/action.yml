@@ -66,7 +66,8 @@ runs:
       run: npm --prefix packages/rom-weaver-webapp run build
 
     # Idempotent, so the first run on a channel bootstraps its own project and
-    # no local wrangler auth is ever needed.
+    # no local wrangler auth is ever needed. The deploy wrapper also waits for
+    # a matching new deployment to finish and reuses it when a run is retried.
     #
     # Uses the REST API rather than `wrangler pages project create`: wrangler
     # enumerates accounts internally, which a token scoped to specific account
