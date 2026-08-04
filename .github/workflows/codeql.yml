@@ -10,6 +10,8 @@ on:
       - main
     paths:
       - "**/*.cjs"
+      # CodeQL reads inline `<script>` blocks, so an HTML-only edit is analyzable code.
+      - "**/*.html"
       - "**/*.js"
       - "**/*.mjs"
       - "**/*.rs"

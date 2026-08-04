@@ -23,6 +23,12 @@ const DOC_ROUTES = readDocRoutes();
 const escapeHtml = (value) =>
   String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
+// A `<script>` element is raw text: the parser reads no entities and closes on
+// the first `</script`, so guide-derived JSON headed for an inline script has
+// its `<` escaped. `<` is the same character to a JSON reader.
+/** @param {unknown} value */
+const serializeInlineJson = (value) => JSON.stringify(value).replaceAll("<", "\\u003c");
+
 // Guide-derived text can contain `$`, which `String.replace` reads as a match
 // reference in a replacement *string* - every substitution here goes through a
 // replacer function so the content is inserted literally.
@@ -63,7 +69,7 @@ const createDocsRouteHtml = (html, route, channel, channelLabel) => {
   }
   return routeHtml.replace(
     "</head>",
-    `  <script type="application/ld+json">${JSON.stringify(structuredData)}</script>\n  </head>`,
+    `  <script type="application/ld+json">${serializeInlineJson(structuredData)}</script>\n  </head>`,
   );
 };
 
