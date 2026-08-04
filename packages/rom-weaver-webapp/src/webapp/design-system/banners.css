@@ -37,6 +37,25 @@
 .rw-app .updates-pulse { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--thread); animation: pulse 2.2s ease-in-out infinite; }
 .rw-app .updates-text { flex: 1 1 auto; min-width: 0; font-size: .88rem; }
 .rw-app .updates-text b { font-weight: 650; }
+.rw-app .banner-x {
+  position: relative; appearance: none; cursor: pointer; display: grid; place-items: center; flex: none;
+  width: 30px; height: 30px; padding: 0;
+  border: 1px solid transparent; border-radius: var(--r-m); background: transparent; color: var(--ink-2);
+  transition: background .18s, border-color .18s, color .18s, transform .15s var(--ease);
+}
+.rw-app .banner-x::after { content: ""; position: absolute; inset: -7px; }
+@media (hover: hover) {
+  .rw-app .banner-x:hover {
+    color: var(--ink); border-color: var(--seam-strong);
+    background: color-mix(in oklab, currentColor 10%, transparent); transform: translateY(-1px);
+  }
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .banner-x:active {
+  color: var(--ink); border-color: var(--seam-strong); background: color-mix(in oklab, currentColor 10%, transparent);
+  transform: translateY(0) scale(.98);
+}
+.rw-app .banner-x svg { width: 18px; height: 18px; }
 /* the version IS the "what's new" affordance - a quiet dotted-underline link
    that opens the changelog, instead of a second button crowding the banner */
 .rw-app .updates-ver {
