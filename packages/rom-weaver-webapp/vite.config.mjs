@@ -8,11 +8,13 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
+import { DOCUMENT_ROUTE_EXCLUDES, DOCUMENT_ROUTE_INCLUDES } from "./functions/document-routes.js";
 import { sidecarContentType } from "./functions/assets/content-types.js";
 import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
+import { minifyHtmlDirectory } from "./scripts/minify-html.mjs";
 import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
 import { readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
@@ -365,7 +367,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
   let outDir = "dist";
   return {
     apply: "build",
-    closeBundle() {
+    async closeBundle() {
       const distDir = path.resolve(rootDir, outDir);
       const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
       for (const assetPath of Object.keys(rootStaticAssetSources)) {
@@ -494,24 +496,23 @@ const writeCloudflareHeadersAsset = (channel) => {
   };
 };
 
-// Every webapp bundle carries quality-11 brotli sidecars for hashed assets
-// where q11 saves at least 2%. Cloudflare's Pages Function uses _routes.json
-// to serve those exact URLs; Docker and self-hosters can serve the same static
-// siblings directly. Already-compressed formats (woff2, png, zip) fail the
-// savings bar and stay on the ordinary static path. Only /assets/* is eligible:
-// mutable root files (index.html, the service worker, changelog.json) must keep
-// their no-cache semantics and never route through the function's immutable
-// response.
+// Every webapp bundle carries quality-11 brotli sidecars for hashed assets and
+// generated HTML where q11 saves at least 2%. Cloudflare's Pages Functions use
+// _routes.json to serve those bytes; Docker and self-hosters can serve the same
+// static siblings directly. Already-compressed formats (woff2, png, zip) fail
+// the savings bar and stay on the ordinary static path. HTML uses a separate
+// middleware path with browser revalidation, while the service worker and
+// changelog keep their no-cache static responses.
 const PAGES_BROTLI_MIN_SAVINGS = 0.02;
 // _routes.json rejects more than 100 combined include/exclude entries; leave
 // headroom so an asset-count creep fails the build before Cloudflare does.
-const PAGES_ROUTES_MAX_INCLUDES = 90;
+const PAGES_ROUTES_MAX_INCLUDES = 95;
 
 const writeBrotliSidecars = () => {
   let outDir = "dist";
   return {
     apply: "build",
-    closeBundle() {
+    async closeBundle() {
       const distDir = path.resolve(rootDir, outDir);
       const assetsDir = path.join(distDir, "assets");
       const wasmNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".wasm"));
@@ -555,12 +556,40 @@ const writeBrotliSidecars = () => {
         assertSidecarTypeIsKnown(`/assets/${name}`);
         sidecarUrls.push(`/assets/${name}`);
       }
-      if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {
-        throw new Error(`${sidecarUrls.length} sidecar routes exceed the ${PAGES_ROUTES_MAX_INCLUDES} budget`);
+      const htmlFiles = [];
+      const collectHtmlFiles = (directory) => {
+        for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+          const filePath = path.join(directory, entry.name);
+          if (entry.isDirectory()) collectHtmlFiles(filePath);
+          else if (entry.isFile() && entry.name.endsWith(".html")) htmlFiles.push(filePath);
+        }
+      };
+      // HTML is generated after Vite's index transform, so minify the final
+      // route documents before calculating their sidecars.
+      await minifyHtmlDirectory(distDir);
+      collectHtmlFiles(distDir);
+      for (const htmlPath of htmlFiles) {
+        const sidecarPath = `${htmlPath}.br`;
+        const { compressedSize, sourceSize } = brotliCompressFile({
+          inputPath: htmlPath,
+          outputPath: sidecarPath,
+          quality: 11,
+        });
+        if (compressedSize > sourceSize * (1 - PAGES_BROTLI_MIN_SAVINGS)) {
+          fs.rmSync(sidecarPath);
+          continue;
+        }
+        const assetUrl = `/${path.relative(distDir, htmlPath).replaceAll(path.sep, "/")}`;
+        assertSidecarTypeIsKnown(assetUrl);
+      }
+      const routeEntries = [...new Set([...sidecarUrls, ...DOCUMENT_ROUTE_INCLUDES])];
+      const routeEntryCount = routeEntries.length + DOCUMENT_ROUTE_EXCLUDES.length;
+      if (routeEntryCount > PAGES_ROUTES_MAX_INCLUDES) {
+        throw new Error(`${routeEntryCount} _routes.json entries exceed the ${PAGES_ROUTES_MAX_INCLUDES} budget`);
       }
       fs.writeFileSync(
         path.join(distDir, "_routes.json"),
-        `${JSON.stringify({ version: 1, include: sidecarUrls.sort(), exclude: [] }, null, 2)}\n`,
+        `${JSON.stringify({ version: 1, include: routeEntries.sort(), exclude: DOCUMENT_ROUTE_EXCLUDES }, null, 2)}\n`,
       );
     },
     configResolved(config) {
@@ -1030,6 +1059,8 @@ export default defineConfig(({ command, mode }) => {
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),
       writeChangelogAsset(releaseVersion),
       writeCloudflareHeadersAsset(appChannel),
+      // Keep HTML minification and sidecars before VitePWA so precache revisions
+      // are calculated from the final document bytes.
       writeBrotliSidecars(),
       VitePWA({
         devOptions: {
