@@ -96,7 +96,9 @@ pre-commit:
       run: npm --prefix packages/rom-weaver-webapp run lint:i18n
     root-node-lint:
       glob:
+        - "scripts/*.{mjs,cjs,js}"
         - "scripts/**/*.{mjs,cjs,js}"
+        - "packages/rom-weaver-alias/*.{mjs,cjs,js}"
         - "packages/rom-weaver-alias/**/*.{mjs,cjs,js}"
         - ".oxlintrc.json"
         - "package.json"
