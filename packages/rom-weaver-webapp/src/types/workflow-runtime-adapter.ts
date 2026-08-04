@@ -75,6 +75,8 @@ type RuntimeWorkerSourceRequest = {
   scope: RuntimeWorkerSourceScope;
   source: unknown;
   trace?: RuntimeWorkerTraceContext;
+  /** Keep the requested basename while isolating this staged path from live same-name inputs. */
+  pathPrefixInPath?: boolean;
 };
 
 type RuntimeWorkerOutput = {
