@@ -975,6 +975,7 @@ jobs:
           PAGES_COMMIT_HASH: ${{ github.event.pull_request.head.sha }}
           PAGES_DIRECTORY: "."
           PAGES_WORKING_DIRECTORY: target/lighthouse
+          PAGES_REUSE: "false"
         run: node scripts/ci/deploy-pages.mjs
 
       - name: Link Lighthouse reports in summary

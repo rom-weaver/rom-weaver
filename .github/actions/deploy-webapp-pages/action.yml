@@ -35,7 +35,7 @@ inputs:
 
 outputs:
   url:
-    description: The deployment URL wrangler reported (empty if the deploy failed).
+    description: The deployment URL Cloudflare reported after success (empty if the deploy failed).
     value: ${{ steps.deploy.outputs.url }}
 
 runs:
@@ -67,7 +67,9 @@ runs:
 
     # Idempotent, so the first run on a channel bootstraps its own project and
     # no local wrangler auth is ever needed. The deploy wrapper also waits for
-    # a matching new deployment to finish and reuses it when a run is retried.
+    # a matching new deployment to finish and reuses preview deployments when
+    # a run is retried. Completed production deployments upload again so a
+    # rerun can intentionally restore an older main commit.
     #
     # Uses the REST API rather than `wrangler pages project create`: wrangler
     # enumerates accounts internally, which a token scoped to specific account
@@ -89,4 +91,5 @@ runs:
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
         PROJECT: ${{ inputs.project }}
         BRANCH: ${{ inputs.branch }}
+        PAGES_REUSE: "true"
       run: node scripts/ci/deploy-pages.mjs

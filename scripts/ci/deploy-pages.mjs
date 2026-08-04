@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 const DEFAULT_MAX_POLLS = 60;
+const DEFAULT_MAX_DEPLOYMENT_PAGES = 4;
 const defaultSleep = (milliseconds) => new Promise((resolve_) => setTimeout(resolve_, milliseconds));
 
 export const extractPagesUrl = (output) =>
@@ -47,10 +48,10 @@ export async function findMatchingDeployment({
   branch,
   commitHash,
   fetchImpl = globalThis.fetch,
+  maxPages = DEFAULT_MAX_DEPLOYMENT_PAGES,
 }) {
   const environment = branch === "main" ? "production" : "preview";
-  const deployments = [];
-  for (let page = 1; ; page += 1) {
+  for (let page = 1; page <= maxPages; page += 1) {
     const body = await cloudflareRequest({
       fetchImpl,
       accountId,
@@ -58,16 +59,17 @@ export async function findMatchingDeployment({
       project,
       path: `/deployments?env=${environment}&page=${page}`,
     });
-    deployments.push(...(Array.isArray(body.result) ? body.result : []));
+    const deployments = Array.isArray(body.result) ? body.result : [];
+    const matching = deployments
+      .filter((deployment) => {
+        const metadata = deployment?.deployment_trigger?.metadata;
+        return metadata?.branch === branch && metadata.commit_hash === commitHash;
+      })
+      .sort((left, right) => Date.parse(right.created_on) - Date.parse(left.created_on));
+    if (matching.length > 0) return matching[0];
     if (page >= (body.result_info?.total_pages || page)) break;
   }
-
-  return deployments
-    .filter((deployment) => {
-      const metadata = deployment?.deployment_trigger?.metadata;
-      return metadata?.branch === branch && metadata.commit_hash === commitHash;
-    })
-    .sort((left, right) => Date.parse(right.created_on) - Date.parse(left.created_on))[0] || null;
+  return null;
 }
 
 export async function waitForMatchingDeployment({
@@ -80,9 +82,18 @@ export async function waitForMatchingDeployment({
   sleep = defaultSleep,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
   maxPolls = DEFAULT_MAX_POLLS,
+  maxDeploymentPages = DEFAULT_MAX_DEPLOYMENT_PAGES,
 }) {
   for (let poll = 0; poll <= maxPolls; poll += 1) {
-    const deployment = await findMatchingDeployment({ accountId, token, project, branch, commitHash, fetchImpl });
+    const deployment = await findMatchingDeployment({
+      accountId,
+      token,
+      project,
+      branch,
+      commitHash,
+      fetchImpl,
+      maxPages: maxDeploymentPages,
+    });
     if (deployment) return deployment;
     if (poll < maxPolls) await sleep(pollIntervalMs);
   }
@@ -164,24 +175,44 @@ export async function deployPages({
   sleep,
   pollIntervalMs,
   maxPolls,
+  reuse = false,
+  maxDeploymentPages = DEFAULT_MAX_DEPLOYMENT_PAGES,
 } = {}) {
   const cwd = resolve(root, workingDirectory);
 
-  if (accountId && token) {
-    const existing = await findMatchingDeployment({ accountId, token, project, branch, commitHash, fetchImpl });
+  if (reuse && accountId && token) {
+    const existing = await findMatchingDeployment({
+      accountId,
+      token,
+      project,
+      branch,
+      commitHash,
+      fetchImpl,
+      maxPages: maxDeploymentPages,
+    });
     if (existing) {
       let deployment = existing;
       const status = deploymentStatus(deployment);
       if (status === "failure" || status === "canceled") {
         process.stdout.write(`retrying existing Cloudflare Pages deployment ${deployment.id}\n`);
-        deployment = await retryDeployment({ accountId, token, project, id: deployment.id, fetchImpl });
+        try {
+          deployment = await retryDeployment({ accountId, token, project, id: deployment.id, fetchImpl });
+        } catch (error) {
+          process.stderr.write(`retrying existing Cloudflare Pages deployment ${deployment.id} failed; uploading a fresh deployment: ${error.message}\n`);
+          deployment = null;
+        }
+      } else if (status === "success" && branch === "main") {
+        process.stdout.write(`existing production deployment ${deployment.id} is complete; uploading a fresh deployment\n`);
+        deployment = null;
       } else {
         process.stdout.write(`reusing existing Cloudflare Pages deployment ${deployment.id}\n`);
       }
-      const url = await waitForDeployment({ accountId, token, project, deployment, fetchImpl, sleep, pollIntervalMs, maxPolls });
-      writeOutput(outputFile, url);
-      process.stdout.write(`deployed to ${url}\n`);
-      return url;
+      if (deployment) {
+        const url = await waitForDeployment({ accountId, token, project, deployment, fetchImpl, sleep, pollIntervalMs, maxPolls });
+        writeOutput(outputFile, url);
+        process.stdout.write(`deployed to ${url}\n`);
+        return url;
+      }
     }
   }
 
@@ -219,6 +250,7 @@ export async function deployPages({
       sleep,
       pollIntervalMs,
       maxPolls,
+      maxDeploymentPages,
     });
     url = await waitForDeployment({ accountId, token, project, deployment, fetchImpl, sleep, pollIntervalMs, maxPolls });
   }
@@ -235,6 +267,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       commitHash: process.env.PAGES_COMMIT_HASH || process.env.GITHUB_SHA,
       directory: process.env.PAGES_DIRECTORY || undefined,
       workingDirectory: process.env.PAGES_WORKING_DIRECTORY || undefined,
+      reuse: process.env.PAGES_REUSE === "true",
     });
   } catch (error) {
     process.stderr.write(`${error.message}\n`);

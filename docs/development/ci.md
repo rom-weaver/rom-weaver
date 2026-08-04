@@ -561,8 +561,11 @@ second toolchain.
 
 The deployment wrapper matches the Pages branch and commit hash before invoking
 Wrangler. It waits for new deployments to finish before publishing their URLs.
-Retries reuse successful deployments, wait for active deployments, and retry
-failed matching deployments instead of creating another deployment.
+Retries reuse successful preview deployments, wait for active deployments, and
+retry failed matching deployments instead of creating another deployment.
+Lighthouse report deployments opt out of reuse because their generated reports
+can differ between runs. Completed production deployments upload again so a
+rerun can restore the selected main commit.
 
 | Channel | Cloudflare project | URL | Intended use |
 | --- | --- | --- | --- |
