@@ -72,6 +72,7 @@ export const onRequest = async ({ request, env, next }) => {
     // Materialize this small document as a fixed-length body so the precompressed
     // bytes and their Content-Length reach the client unchanged.
     const body = new Uint8Array(await sidecar.arrayBuffer());
+    headers.set("Content-Length", String(body.byteLength));
     return new Response(body, { encodeBody: "manual", headers });
   }
   return next();
