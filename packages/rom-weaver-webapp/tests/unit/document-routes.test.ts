@@ -14,11 +14,11 @@ describe("Cloudflare document sidecar routes", () => {
   });
 
   it.each([
-    ["/", "/index.html.br"],
-    ["/apply", "/apply/index.html.br"],
-    ["/create/", "/create/index.html.br"],
-    ["/docs/faq", "/docs/faq/index.html.br"],
-    ["/docs/faq/index.html", "/docs/faq/index.html.br"],
+    ["/", "/index.q11.br"],
+    ["/apply", "/apply/index.q11.br"],
+    ["/create/", "/create/index.q11.br"],
+    ["/docs/faq", "/docs/faq/index.q11.br"],
+    ["/docs/faq/index.html", "/docs/faq/index.q11.br"],
   ])("maps %s to %s", (pathname, sidecarPath) => {
     expect(documentSidecarPath(pathname)).toBe(sidecarPath);
   });
@@ -29,6 +29,11 @@ describe("Cloudflare document sidecar routes", () => {
   });
 
   it("keeps the generated index document as the first clean-route candidate", () => {
-    expect(documentSidecarPaths("/trim")).toEqual(["/trim/index.html.br", "/trim.html.br"]);
+    expect(documentSidecarPaths("/trim")).toEqual([
+      "/trim/index.q11.br",
+      "/trim/index.html.br",
+      "/trim.q11.br",
+      "/trim.html.br",
+    ]);
   });
 });

@@ -49,16 +49,16 @@ const documentHeaders = (sidecar) => {
   return headers;
 };
 
-export const onRequest = async ({ request, next, fetch: fetchImpl = globalThis.fetch }) => {
+export const onRequest = async ({ request, env, next }) => {
   if (request.method !== "GET" && request.method !== "HEAD") return next();
   if (!acceptsBrotli(request.headers.get("Accept-Encoding"))) return next();
 
   const sidecarPaths = documentSidecarPaths(new URL(request.url).pathname);
   for (const sidecarPath of sidecarPaths) {
-    // Fetch the public static sidecar directly. Pages' asset binding resolves
-    // direct HTML filenames through the pretty-path fallback instead of the file.
+    // Pages' asset binding resolves direct HTML filenames through the pretty-path
+    // fallback, so documentSidecarPaths tries the non-HTML .q11.br alias first.
     // Request Brotli explicitly so Cloudflare passes the encoded bytes through.
-    const sidecar = await fetchImpl(new URL(sidecarPath, request.url), {
+    const sidecar = await env.ASSETS.fetch(new URL(sidecarPath, request.url), {
       headers: { "Accept-Encoding": "br" },
     });
     if (sidecar.status === 304) {

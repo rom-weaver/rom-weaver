@@ -38,13 +38,6 @@ const makeContext = ({
           },
         },
       },
-      fetch: (target: URL | RequestInfo, init?: RequestInit) => {
-        const targetUrl = target instanceof Request ? target.url : String(target);
-        fetchLog.push({ method: init?.method ?? "GET", url: targetUrl });
-        if (target instanceof Request) forwardedRequests.push(targetUrl);
-        const response = typeof sidecarResponse === "function" ? sidecarResponse(targetUrl) : sidecarResponse;
-        return Promise.resolve(response ?? spaFallback());
-      },
       next: () => Promise.resolve(NEXT_SENTINEL),
       request: new Request(url, { headers }),
     },
@@ -131,7 +124,7 @@ describe("pages brotli sidecar function", () => {
       sidecarResponse: brSidecar(),
     });
     const response = await onRequest(context);
-    expect(fetchLog).toEqual([{ method: "GET", url: "https://rom-weaver.com/docs/faq/index.html.br" }]);
+    expect(fetchLog).toEqual([{ method: "GET", url: "https://rom-weaver.com/docs/faq/index.q11.br" }]);
     expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(response.headers.get("Content-Encoding")).toBe("br");
     expect(response.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate, no-transform");
@@ -162,11 +155,15 @@ describe("pages brotli sidecar function", () => {
     const { context, fetchLog } = makeContext({
       url: "https://rom-weaver.com/trim",
       sidecarResponse: (url) =>
-        url.endsWith("/trim/index.html.br") ? new Response("missing", { status: 404 }) : brSidecar(),
+        ["/trim/index.q11.br", "/trim/index.html.br", "/trim.q11.br"].some((suffix) => url.endsWith(suffix))
+          ? new Response("missing", { status: 404 })
+          : brSidecar(),
     });
     const response = await onRequest(context);
     expect(fetchLog).toEqual([
+      { method: "GET", url: "https://rom-weaver.com/trim/index.q11.br" },
       { method: "GET", url: "https://rom-weaver.com/trim/index.html.br" },
+      { method: "GET", url: "https://rom-weaver.com/trim.q11.br" },
       { method: "GET", url: "https://rom-weaver.com/trim.html.br" },
     ]);
     expect(response.headers.get("Content-Encoding")).toBe("br");
@@ -182,7 +179,7 @@ describe("pages brotli sidecar function", () => {
     expect(response.status).toBe(304);
     expect(response.headers.get("ETag")).toBe('"document"');
     expect(response.headers.get("Content-Encoding")).toBe("br");
-    expect(fetchLog).toEqual([{ method: "GET", url: "https://rom-weaver.com/apply/index.html.br" }]);
+    expect(fetchLog).toEqual([{ method: "GET", url: "https://rom-weaver.com/apply/index.q11.br" }]);
     expect(forwardedRequests).toEqual([]);
   });
 
