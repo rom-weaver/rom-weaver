@@ -375,26 +375,9 @@ export function createBrowserWorkerTransport(): WorkerTransport {
     },
     toError(event) {
       const errorEvent = event as ErrorEvent | null | undefined;
-      if (errorEvent?.error instanceof Error) {
-        return errorEvent.error;
-      }
-      const messageParts = [];
-      if (typeof errorEvent?.message === "string" && errorEvent.message.trim().length > 0) {
-        messageParts.push(errorEvent.message.trim());
-      }
-      if (typeof errorEvent?.filename === "string" && errorEvent.filename.trim().length > 0) {
-        const location = [
-          errorEvent.filename,
-          Number.isFinite(errorEvent?.lineno) ? String(errorEvent.lineno) : null,
-          Number.isFinite(errorEvent?.colno) ? String(errorEvent.colno) : null,
-        ]
-          .filter(Boolean)
-          .join(":");
-        if (location.length > 0) {
-          messageParts.push(`at ${location}`);
-        }
-      }
-      return new Error(messageParts.join(" ") || "worker error");
+      if (errorEvent?.error instanceof Error) return errorEvent.error;
+      const messageParts = [readTrimmedString(errorEvent?.message), formatErrorEventLocation(errorEvent)];
+      return new Error(messageParts.filter(Boolean).join(" ") || "worker error");
     },
     toMessageError(event) {
       const errorEvent = event as MessageEvent | ErrorEvent | null | undefined;
@@ -408,6 +391,25 @@ export function createBrowserWorkerTransport(): WorkerTransport {
       return new Error(message);
     },
   };
+}
+
+/** A trimmed string value, or "" for anything that is not a non-blank string. */
+function readTrimmedString(value: unknown): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : "";
+}
+
+/** "at file:line:col" for an ErrorEvent that names a source, otherwise "". */
+function formatErrorEventLocation(errorEvent: ErrorEvent | null | undefined): string {
+  const filename = readTrimmedString(errorEvent?.filename);
+  if (!filename) return "";
+  const location = [
+    filename,
+    Number.isFinite(errorEvent?.lineno) ? String(errorEvent?.lineno) : null,
+    Number.isFinite(errorEvent?.colno) ? String(errorEvent?.colno) : null,
+  ]
+    .filter(Boolean)
+    .join(":");
+  return location ? `at ${location}` : "";
 }
 
 function isWorkerResponseMessage(value: unknown): value is RomWeaverWorkerResponse {

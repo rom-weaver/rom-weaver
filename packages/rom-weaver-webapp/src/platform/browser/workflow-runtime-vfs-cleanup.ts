@@ -43,6 +43,26 @@ const withExtractedFileSize = async (entry: ExtractedFileEntry): Promise<Extract
   return statSize === null ? entry : { ...entry, sizeBytes: statSize };
 };
 
+/** The named entries, in the order asked for, with duplicate paths collapsed. */
+const collectPreferredExtractedFiles = (
+  emittedFiles: ExtractedFileEntry[],
+  preferredEntryNames: Array<string | null | undefined>,
+) => {
+  const preferred: ExtractedFileEntry[] = [];
+  const seenPreferredPaths = new Set<string>();
+  for (const name of preferredEntryNames) {
+    const normalizedName = String(name || "").trim();
+    if (!normalizedName) continue;
+    const matched = findExtractedFile(emittedFiles, normalizedName);
+    if (!matched) continue;
+    const pathKey = normalizeEntryPath(matched.path);
+    if (pathKey && seenPreferredPaths.has(pathKey)) continue;
+    if (pathKey) seenPreferredPaths.add(pathKey);
+    preferred.push(matched);
+  }
+  return { preferred, seenPreferredPaths };
+};
+
 const selectPreferredExtractedFile = async (input: {
   emittedFiles: ExtractedFileEntry[];
   logLevel?: unknown;
@@ -50,18 +70,10 @@ const selectPreferredExtractedFile = async (input: {
   preferredEntryNames: Array<string | null | undefined>;
   traceLabel: string;
 }): Promise<ExtractedFileEntry | null> => {
-  const preferred: ExtractedFileEntry[] = [];
-  const seenPreferredPaths = new Set<string>();
-  for (const name of input.preferredEntryNames) {
-    const normalizedName = String(name || "").trim();
-    if (!normalizedName) continue;
-    const matched = findExtractedFile(input.emittedFiles, normalizedName);
-    if (!matched) continue;
-    const pathKey = normalizeEntryPath(matched.path);
-    if (pathKey && seenPreferredPaths.has(pathKey)) continue;
-    if (pathKey) seenPreferredPaths.add(pathKey);
-    preferred.push(matched);
-  }
+  const { preferred, seenPreferredPaths } = collectPreferredExtractedFiles(
+    input.emittedFiles,
+    input.preferredEntryNames,
+  );
   const hasPreferred = (entry: ExtractedFileEntry) => seenPreferredPaths.has(normalizeEntryPath(entry.path));
   const nonPreferred = input.emittedFiles.filter((entry) => !hasPreferred(entry));
   const preferredWithSizes = await Promise.all(preferred.map((entry) => withExtractedFileSize(entry)));
