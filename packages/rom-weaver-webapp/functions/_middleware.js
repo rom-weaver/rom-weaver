@@ -55,10 +55,11 @@ export const onRequest = async ({ request, env, next }) => {
 
   const sidecarPaths = documentSidecarPaths(new URL(request.url).pathname);
   for (const sidecarPath of sidecarPaths) {
-    // Fetch by URL, matching the asset Function. Passing request headers makes Pages
-    // treat this subrequest differently and drops the sidecar's response metadata.
-    // Browser validators are checked against that metadata below.
-    const sidecar = await env.ASSETS.fetch(new URL(sidecarPath, request.url));
+    // Request Brotli explicitly so the Pages asset binding returns the encoded
+    // sidecar. Browser validators are checked against that metadata below.
+    const sidecar = await env.ASSETS.fetch(new URL(sidecarPath, request.url), {
+      headers: { "Accept-Encoding": "br" },
+    });
     if (sidecar.status === 304) {
       const headers = documentHeaders(sidecar);
       headers.delete("Content-Length");
