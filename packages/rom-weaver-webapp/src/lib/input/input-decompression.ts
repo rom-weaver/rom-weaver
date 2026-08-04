@@ -263,6 +263,161 @@ const finalizePreparedInputFile = (
   wasDecompressed,
 });
 
+/**
+ * One unwrap step, with the four traces that bracket it. `.before`/`.after` and
+ * `.extract.start`/`.extract.finish` are separate event names that downstream
+ * readers key on, so both pairs stay.
+ */
+const extractOneDecompressionPass = async (input: {
+  compressedIdentity: string;
+  current: PatchFileInstance;
+  options: InputPreparationOptions;
+  pass: number;
+  role: "rom" | "patch";
+  runtime: InputPreparationRuntimeLike;
+  selectedEntryName: string | undefined;
+  sourceIndex: number;
+}) => {
+  const { compressedIdentity, current, options, pass, role, sourceIndex } = input;
+  const before = {
+    compressedIdentity,
+    file: describeArchiveFileForTrace(current),
+    pass,
+    role,
+    selectedEntryName: input.selectedEntryName || "",
+    sourceIndex,
+  };
+  traceInputDecompression(options, "input.decompression.extract.start", before);
+  traceInputDecompression(options, "input.decompression.before", before);
+  const startedAt = Date.now();
+  const extracted = await resolveArchiveInput(
+    current,
+    role,
+    options,
+    input.runtime,
+    input.selectedEntryName,
+    sourceIndex,
+  );
+  const durationMs = getActiveExtractTimeMs(extracted, Date.now() - startedAt);
+  const after = {
+    compressedIdentity,
+    decompressionTimeMs: durationMs,
+    extracted: describeArchiveFileForTrace(extracted),
+    pass,
+    role,
+    sourceIndex,
+  };
+  traceInputDecompression(options, "input.decompression.after", after);
+  traceInputDecompression(options, "input.decompression.extract.finish", after);
+  return { durationMs, extracted };
+};
+
+/**
+ * One asset-producing unwrap step. Sidecar patches the descent harvested move onto
+ * the caller's accumulator here: a later pass rebuilds the asset, so finalize
+ * re-attaches them to whatever asset is ultimately returned.
+ */
+const extractOneAssetPass = async (input: {
+  compressedIdentity: string;
+  current: PatchFileInstance;
+  harvestedSidecarPatches: PreparedSidecarPatch[];
+  options: ApplyWorkflowOptions | undefined;
+  pass: number;
+  runtime: InputPreparationRuntimeLike;
+  selectedEntryName: string | undefined;
+  sourceIndex: number;
+}) => {
+  const { compressedIdentity, current, options, pass, sourceIndex } = input;
+  const before = {
+    compressedIdentity,
+    file: describeArchiveFileForTrace(current),
+    pass,
+    selectedEntryName: input.selectedEntryName || "",
+    sourceIndex,
+  };
+  traceInputDecompression(options, "input.decompression.assets.extract.start", before);
+  traceInputDecompression(options, "input.decompression.assets.before", before);
+  const startedAt = Date.now();
+  const assets = await resolveArchiveInputAssets(current, options, sourceIndex, input.runtime, input.selectedEntryName);
+  const durationMs = Date.now() - startedAt;
+  for (const asset of assets) {
+    if (asset.sidecarPatches?.length) {
+      input.harvestedSidecarPatches.push(...asset.sidecarPatches);
+      asset.sidecarPatches = undefined;
+    }
+  }
+  const after = {
+    compressedIdentity,
+    decompressionTimeMs: durationMs,
+    outputAssetCount: assets.length,
+    outputKinds: assets.map((asset) => asset.kind),
+    pass,
+    sourceIndex,
+  };
+  traceInputDecompression(options, "input.decompression.assets.after", after);
+  traceInputDecompression(options, "input.decompression.assets.extract.finish", after);
+  return { assets, durationMs };
+};
+
+/** Only a lone ROM is worth another unwrap pass; anything else is the final result. */
+const isSingleRomResult = (assets: InputAsset[]): assets is [InputAsset] =>
+  assets.length === 1 && assets[0]?.kind === "rom";
+
+/** A container that unwraps to itself would loop forever; stop with a clear error. */
+const assertNoRepeatedIdentity = (
+  seen: Set<string>,
+  compressedIdentity: string,
+  ctx: { current: PatchFileInstance; options: ApplyWorkflowOptions | undefined; pass: number; sourceIndex: number },
+) => {
+  if (!seen.has(compressedIdentity)) return;
+  traceInputDecompression(ctx.options, "input.decompression.assets.stall", {
+    compressedIdentity,
+    file: describeArchiveFileForTrace(ctx.current),
+    pass: ctx.pass,
+    reason: "repeat-compressed-identity",
+    sourceIndex: ctx.sourceIndex,
+  });
+  throwRecursiveDecompressionStall(ctx.current);
+};
+
+/** The same guard on the other side: an unwrap that returned its own input. */
+const assertMadeProgress = (
+  current: PatchFileInstance,
+  extracted: PatchFileInstance,
+  ctx: { options: ApplyWorkflowOptions | undefined; pass: number; sourceIndex: number },
+) => {
+  if (!hasSameFileIdentity(current, extracted)) return;
+  traceInputDecompression(ctx.options, "input.decompression.assets.stall", {
+    file: describeArchiveFileForTrace(current),
+    pass: ctx.pass,
+    reason: "extracted-same-file-identity",
+    sourceIndex: ctx.sourceIndex,
+  });
+  throwRecursiveDecompressionStall(extracted);
+};
+
+/** One shape for every "stop unwrapping here" trace, so the loop reads as steps. */
+const traceInputFinalize = (
+  options: InputPreparationOptions,
+  input: {
+    classificationKind?: string;
+    current: PatchFileInstance;
+    pass: number;
+    reason: string;
+    role: "rom" | "patch";
+    sourceIndex: number;
+  },
+) => {
+  traceInputDecompression(options, "input.decompression.finalize", {
+    ...(input.classificationKind === undefined ? {} : { classificationKind: input.classificationKind }),
+    file: describeArchiveFileForTrace(input.current),
+    pass: input.pass,
+    reason: input.reason,
+    role: input.role,
+    sourceIndex: input.sourceIndex,
+  });
+};
+
 const resolveCompressedInputFile = async (
   file: PatchFileInstance,
   role: "rom" | "patch",
@@ -278,16 +433,12 @@ const resolveCompressedInputFile = async (
   const seenCompressedInputs = new Set<string>();
   let wasDecompressed = false;
   const sourceSize = file.fileSize;
+  const finalizeHere = () =>
+    finalizePreparedInputFile(current, sourceSize, wasDecompressed, decompressionTimeMs, parentCompressions);
   for (let pass = 0; pass < MAX_DECOMPRESSION_PASSES; pass += 1) {
     if (options?.input?.containerInputsEnabled === false) {
-      traceInputDecompression(options, "input.decompression.finalize", {
-        file: describeArchiveFileForTrace(current),
-        pass,
-        reason: "container-inputs-disabled",
-        role,
-        sourceIndex,
-      });
-      return finalizePreparedInputFile(current, sourceSize, wasDecompressed, decompressionTimeMs, parentCompressions);
+      traceInputFinalize(options, { current, pass, reason: "container-inputs-disabled", role, sourceIndex });
+      return finalizeHere();
     }
     const classification = getCompressionClassification(current);
     traceInputDecompression(options, "input.decompression.pass", {
@@ -301,26 +452,26 @@ const resolveCompressedInputFile = async (
     });
     const finalizeReason = getPreparedInputFinalizeReason(current, classification);
     if (finalizeReason) {
-      traceInputDecompression(options, "input.decompression.finalize", {
+      traceInputFinalize(options, {
         classificationKind: classification.kind,
-        file: describeArchiveFileForTrace(current),
+        current,
         pass,
         reason: finalizeReason,
         role,
         sourceIndex,
       });
-      return finalizePreparedInputFile(current, sourceSize, wasDecompressed, decompressionTimeMs, parentCompressions);
+      return finalizeHere();
     }
     if (classification.kind !== "compression") {
-      traceInputDecompression(options, "input.decompression.finalize", {
+      traceInputFinalize(options, {
         classificationKind: classification.kind,
-        file: describeArchiveFileForTrace(current),
+        current,
         pass,
         reason: "not-compression",
         role,
         sourceIndex,
       });
-      return finalizePreparedInputFile(current, sourceSize, wasDecompressed, decompressionTimeMs, parentCompressions);
+      return finalizeHere();
     }
     const compressedIdentity = getCompressedIdentityKey(current, classification);
     if (seenCompressedInputs.has(compressedIdentity)) {
@@ -336,39 +487,14 @@ const resolveCompressedInputFile = async (
     }
     seenCompressedInputs.add(compressedIdentity);
     reportInputDecompressionStart(current, options);
-    traceInputDecompression(options, "input.decompression.extract.start", {
+    const { durationMs, extracted } = await extractOneDecompressionPass({
       compressedIdentity,
-      file: describeArchiveFileForTrace(current),
+      current,
+      options,
       pass,
       role,
-      selectedEntryName: selectedEntryName || "",
-      sourceIndex,
-    });
-    traceInputDecompression(options, "input.decompression.before", {
-      compressedIdentity,
-      file: describeArchiveFileForTrace(current),
-      pass,
-      role,
-      selectedEntryName: selectedEntryName || "",
-      sourceIndex,
-    });
-    const startedAt = Date.now();
-    const extracted = await resolveArchiveInput(current, role, options, runtime, selectedEntryName, sourceIndex);
-    const durationMs = getActiveExtractTimeMs(extracted, Date.now() - startedAt);
-    traceInputDecompression(options, "input.decompression.after", {
-      compressedIdentity,
-      decompressionTimeMs: durationMs,
-      extracted: describeArchiveFileForTrace(extracted),
-      pass,
-      role,
-      sourceIndex,
-    });
-    traceInputDecompression(options, "input.decompression.extract.finish", {
-      compressedIdentity,
-      decompressionTimeMs: durationMs,
-      extracted: describeArchiveFileForTrace(extracted),
-      pass,
-      role,
+      runtime,
+      selectedEntryName,
       sourceIndex,
     });
     decompressionTimeMs += durationMs;
@@ -445,9 +571,8 @@ const resolveCompressedInputAssets = async (
     // reuses it instead of the standalone `checksum` command, which under-threaded multi-variant ROMs
     // (e.g. GBA: raw + fix-header → 1 thread per variant). Best-effort - on failure (or a source `ingest`
     // classifies as a patch) the file is left unchanged and checksummed the usual way downstream.
-    const finalizeBareRom = async (): Promise<InputAsset[]> => {
-      await attachBareRomIngestMetadata(current, options, runtime);
-      return finalizePreparedInputAssets(
+    const finalizeAsSingleRom = () =>
+      finalizePreparedInputAssets(
         [makeRomAsset(makeInputId(sourceIndex, current.fileName, normalizeArchiveEntryName), current)],
         sourceSize,
         wasDecompressed,
@@ -455,6 +580,9 @@ const resolveCompressedInputAssets = async (
         parentCompressions,
         harvestedSidecarPatches,
       );
+    const finalizeBareRom = async (): Promise<InputAsset[]> => {
+      await attachBareRomIngestMetadata(current, options, runtime);
+      return finalizeAsSingleRom();
     };
     const finalizeReason = getPreparedInputFinalizeReason(current, classification);
     if (finalizeReason) {
@@ -468,76 +596,27 @@ const resolveCompressedInputAssets = async (
       // A large bare ROM is kept as a lazy browser source, so it lands here (`lazy-non-compression`)
       // rather than the plain non-compression branch below - ingest it too. A `disc-output-non-probeable`
       // file is a mid-pipeline decoded disc; leave it on the standard checksum path.
-      return finalizeReason === "lazy-non-compression"
-        ? finalizeBareRom()
-        : finalizePreparedInputAssets(
-            [makeRomAsset(makeInputId(sourceIndex, current.fileName, normalizeArchiveEntryName), current)],
-            sourceSize,
-            wasDecompressed,
-            decompressionTimeMs,
-            parentCompressions,
-            harvestedSidecarPatches,
-          );
+      return finalizeReason === "lazy-non-compression" ? finalizeBareRom() : finalizeAsSingleRom();
     }
     if (classification.kind !== "compression") return finalizeBareRom();
     const compressedIdentity = getCompressedIdentityKey(current, classification);
-    if (seenCompressedInputs.has(compressedIdentity)) {
-      traceInputDecompression(options, "input.decompression.assets.stall", {
-        compressedIdentity,
-        file: describeArchiveFileForTrace(current),
-        pass,
-        reason: "repeat-compressed-identity",
-        sourceIndex,
-      });
-      throwRecursiveDecompressionStall(current);
-    }
+    assertNoRepeatedIdentity(seenCompressedInputs, compressedIdentity, { current, options, pass, sourceIndex });
     seenCompressedInputs.add(compressedIdentity);
     reportInputDecompressionStart(current, options);
-    traceInputDecompression(options, "input.decompression.assets.extract.start", {
+    const { assets, durationMs } = await extractOneAssetPass({
       compressedIdentity,
-      file: describeArchiveFileForTrace(current),
+      current,
+      harvestedSidecarPatches,
+      options,
       pass,
-      selectedEntryName: selectedEntryName || "",
-      sourceIndex,
-    });
-    traceInputDecompression(options, "input.decompression.assets.before", {
-      compressedIdentity,
-      file: describeArchiveFileForTrace(current),
-      pass,
-      selectedEntryName: selectedEntryName || "",
-      sourceIndex,
-    });
-    const startedAt = Date.now();
-    const assets = await resolveArchiveInputAssets(current, options, sourceIndex, runtime, selectedEntryName);
-    const durationMs = Date.now() - startedAt;
-    // Move any sidecar patches this pass's descent harvested onto the loop accumulator: a later pass
-    // rebuilds the asset, so finalize re-attaches them to whatever asset is ultimately returned.
-    for (const asset of assets) {
-      if (asset.sidecarPatches?.length) {
-        harvestedSidecarPatches.push(...asset.sidecarPatches);
-        asset.sidecarPatches = undefined;
-      }
-    }
-    traceInputDecompression(options, "input.decompression.assets.after", {
-      compressedIdentity,
-      decompressionTimeMs: durationMs,
-      outputAssetCount: assets.length,
-      outputKinds: assets.map((asset) => asset.kind),
-      pass,
-      sourceIndex,
-    });
-    traceInputDecompression(options, "input.decompression.assets.extract.finish", {
-      compressedIdentity,
-      decompressionTimeMs: durationMs,
-      outputAssetCount: assets.length,
-      outputKinds: assets.map((asset) => asset.kind),
-      pass,
+      runtime,
+      selectedEntryName,
       sourceIndex,
     });
     wasDecompressed = true;
     decompressionTimeMs += recordDecompressionMetrics({ assets, current, durationMs, parentCompressions });
     selectedEntryName = undefined;
-    if (assets.length !== 1 || assets[0]?.kind !== "rom") {
+    if (!isSingleRomResult(assets)) {
       traceInputDecompression(options, "input.decompression.assets.finalize", {
         outputAssetCount: assets.length,
         outputKinds: assets.map((asset) => asset.kind),
@@ -554,15 +633,7 @@ const resolveCompressedInputAssets = async (
         harvestedSidecarPatches,
       );
     }
-    if (hasSameFileIdentity(current, assets[0].file)) {
-      traceInputDecompression(options, "input.decompression.assets.stall", {
-        file: describeArchiveFileForTrace(current),
-        pass,
-        reason: "extracted-same-file-identity",
-        sourceIndex,
-      });
-      throwRecursiveDecompressionStall(assets[0].file);
-    }
+    assertMadeProgress(current, assets[0].file, { options, pass, sourceIndex });
     current = assets[0].file;
   }
   traceInputDecompression(options, "input.decompression.assets.limit", {
