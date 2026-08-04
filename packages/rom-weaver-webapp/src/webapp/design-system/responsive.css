@@ -68,16 +68,9 @@
     position: relative;
     max-height: 100dvh; height: 100dvh; padding-block-end: 0; border: 0; border-radius: 0;
   }
-  /* Phones get a quiet title row and a thumb-friendly bottom navigation rail.
-     The rail stays visible while each panel scrolls above it. */
-  .rw-app .log-dlg .dlg-head {
-    flex-wrap: nowrap; gap: var(--sp-s); min-height: 58px;
-    padding: var(--sp-s) var(--sp-m);
-  }
-  .rw-app .log-dlg .dlg-mobile-title {
-    display: block; min-width: 0; overflow: hidden; color: var(--ink-2);
-    font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  }
+  /* The bottom rail is the dialog's only navigation chrome on phones. */
+  .rw-app .log-dlg .dlg-head { display: contents; }
+  .rw-app .log-dlg .dlg-mobile-title { display: none; }
   .rw-app .log-dlg .dialog-nav {
     position: absolute; z-index: 5; inset-inline: 0; inset-block-end: 0;
     display: flex; align-items: stretch; gap: 0;
