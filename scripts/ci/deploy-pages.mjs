@@ -56,7 +56,7 @@ export async function findMatchingDeployment({
       accountId,
       token,
       project,
-      path: `/deployments?env=${environment}&page=${page}&per_page=100`,
+      path: `/deployments?env=${environment}&page=${page}`,
     });
     deployments.push(...(Array.isArray(body.result) ? body.result : []));
     if (page >= (body.result_info?.total_pages || page)) break;

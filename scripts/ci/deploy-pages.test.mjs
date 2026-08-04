@@ -55,7 +55,7 @@ test("reuses a successful deployment for the same branch and commit", async () =
 
   assert.equal(url, existing.url);
   assert.equal(spawned.length, 0);
-  assert.match(calls[0].url, /\/deployments\?env=production&page=1&per_page=100$/);
+  assert.match(calls[0].url, /\/deployments\?env=production&page=1$/);
 });
 
 test("waits for an in-progress matching deployment", async () => {
@@ -138,7 +138,7 @@ test("runs Wrangler when no deployment matches the branch and commit", async () 
 
   assert.equal(url, finished.url);
   assert.equal(spawned.length, 1);
-  assert.match(calls[1].url, /\/deployments\?env=preview&page=1&per_page=100$/);
+  assert.match(calls[1].url, /\/deployments\?env=preview&page=1$/);
   assert.match(calls[2].url, /\/deployments\/created-deployment$/);
   assert.equal(sleeps, 1);
   assert.deepEqual(spawned[0][1].slice(0, 5), ["--yes", "wrangler@4", "pages", "deploy", "dist"]);
