@@ -444,14 +444,14 @@ const LogDialog = ({
   const totalHeight = visible.length * TRACE_ROW_HEIGHT;
 
   useEffect(() => {
-    if (!open) return;
+    if (!(open && tab === "logs")) return;
     const trace = traceRef.current;
     if (!trace) return;
     const updateViewport = () => setViewportHeight(trace.clientHeight);
     updateViewport();
     window.addEventListener("resize", updateViewport);
     return () => window.removeEventListener("resize", updateViewport);
-  }, [open]);
+  }, [open, tab]);
 
   // Keep the newest lines in view while the dialog is open.
   useEffect(() => {
