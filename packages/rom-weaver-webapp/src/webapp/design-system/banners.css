@@ -58,7 +58,10 @@
    headings rather than sitting a shade below them. */
 .rw-app .release-changelog-heading { margin-block: 0 var(--sp-s); font-size: 1.02rem; font-weight: 700; letter-spacing: .01em; }
 .rw-app .release-changelog-heading a { color: var(--ink); }
-.rw-app .changelog-more { font-size: .82rem; }
+.rw-app .changelog-more {
+  display: inline-flex; align-items: center; min-height: 24px;
+  font-size: .82rem;
+}
 /* Every link in this dialog sits inside running text with no other affordance -
    no button chrome, no icon - so an underline is the only thing marking it as a
    link. The app default drops it, which left versions, hashes and refs reading
