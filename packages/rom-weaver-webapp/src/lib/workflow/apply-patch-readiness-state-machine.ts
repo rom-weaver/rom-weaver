@@ -35,6 +35,29 @@ const assignApplyPatchTarget = <TSource>(stage: StagedSource<TSource>, target: I
   stage.state.targetInputFileName = target.fileName;
 };
 
+const toFiniteSize = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+/** Which declared requirement the staged bytes fail, or "" when they satisfy all of them. */
+const resolvePreflightMismatch = ({
+  actualCrc32,
+  actualSize,
+  minimumSourceSize,
+  requiredCrc32,
+  requiredSize,
+}: Pick<
+  InternalPatchChecksumPreflight,
+  "actualCrc32" | "actualSize" | "minimumSourceSize" | "requiredCrc32" | "requiredSize"
+>): "" | "crc32" | "size" | "size+crc32" => {
+  const sizeMismatch =
+    (requiredSize !== undefined && actualSize !== undefined && actualSize !== requiredSize) ||
+    (minimumSourceSize !== undefined && actualSize !== undefined && actualSize < minimumSourceSize);
+  const crcMismatch = !!(requiredCrc32 && actualCrc32 && actualCrc32 !== requiredCrc32);
+  if (sizeMismatch && crcMismatch) return "size+crc32";
+  if (sizeMismatch) return "size";
+  return crcMismatch ? "crc32" : "";
+};
+
 const createChecksumPreflightVerdict = ({
   actualCrc32,
   actualSize,
@@ -48,13 +71,14 @@ const createChecksumPreflightVerdict = ({
   if (requiredSize === undefined && minimumSourceSize === undefined && !requiredCrc32) {
     return { actualCrc32, actualSize, status: "unknown" };
   }
-  const sizeMismatch = requiredSize !== undefined && actualSize !== undefined && actualSize !== requiredSize;
-  const minimumSizeMismatch =
-    minimumSourceSize !== undefined && actualSize !== undefined && actualSize < minimumSourceSize;
-  const crcMismatch = !!(requiredCrc32 && actualCrc32 && actualCrc32 !== requiredCrc32);
-  if (sizeMismatch || minimumSizeMismatch || crcMismatch) {
-    const hasSizeMismatch = sizeMismatch || minimumSizeMismatch;
-    const mismatchReason = hasSizeMismatch && crcMismatch ? "size+crc32" : hasSizeMismatch ? "size" : "crc32";
+  const mismatchReason = resolvePreflightMismatch({
+    actualCrc32,
+    actualSize,
+    minimumSourceSize,
+    requiredCrc32,
+    requiredSize,
+  });
+  if (mismatchReason) {
     return {
       actualCrc32,
       actualSize,
@@ -93,27 +117,14 @@ const createApplyPatchChecksumPreflight = <TSource>(
   // Header decision first: when the effective handling is "strip" (auto-decided from the
   // patch's required checksum, or user-chosen in the drawer), the apply runs against the
   // headerless bytes - so the preflight must compare those, not the raw file.
-  const headerResolution = resolveApplyHeaderMode(
-    {
-      ...(requirements?.sourceCrc32 === undefined ? {} : { sourceCrc32: requirements.sourceCrc32 }),
-      filenameCrc32: requirements?.filenameCrc32 ?? userInputCrc32,
-    },
-    {
-      checksums: getInputAssetChecksums(target),
-      checksumVariants: target.checksumVariants,
-    },
-  );
+  const wanted = {
+    ...(requirements?.sourceCrc32 === undefined ? {} : { sourceCrc32: requirements.sourceCrc32 }),
+    filenameCrc32: requirements?.filenameCrc32 ?? userInputCrc32,
+  };
+  const available = { checksums: getInputAssetChecksums(target), checksumVariants: target.checksumVariants };
+  const headerResolution = resolveApplyHeaderMode(wanted, available);
   stage.state.headerResolution = headerResolution;
-  const n64Resolution = resolveApplyN64ByteOrder(
-    {
-      ...(requirements?.sourceCrc32 === undefined ? {} : { sourceCrc32: requirements.sourceCrc32 }),
-      filenameCrc32: requirements?.filenameCrc32 ?? userInputCrc32,
-    },
-    {
-      checksums: getInputAssetChecksums(target),
-      checksumVariants: target.checksumVariants,
-    },
-  );
+  const n64Resolution = resolveApplyN64ByteOrder(wanted, available);
   stage.state.n64Resolution = n64Resolution;
   const effectiveHeaderMode = stage.state.headerChoice ?? headerResolution?.mode ?? "keep";
   const headerRemoved = effectiveHeaderMode === "strip" && !!headerResolution;
@@ -133,14 +144,8 @@ const createApplyPatchChecksumPreflight = <TSource>(
   const actualCrc32 = headerRemoved
     ? headerResolution?.headerlessCrc32
     : toNormalizedCrc32(n64Checksums?.crc32 ?? getInputAssetChecksums(target)?.crc32);
-  const requiredSize =
-    typeof requirements?.sourceSize === "number" && Number.isFinite(requirements.sourceSize)
-      ? requirements.sourceSize
-      : undefined;
-  const minimumSourceSize =
-    typeof requirements?.minimumSourceSize === "number" && Number.isFinite(requirements.minimumSourceSize)
-      ? requirements.minimumSourceSize
-      : undefined;
+  const requiredSize = toFiniteSize(requirements?.sourceSize);
+  const minimumSourceSize = toFiniteSize(requirements?.minimumSourceSize);
   const requiredCrc32 =
     toNormalizedCrc32(requirements?.sourceCrc32) ??
     toNormalizedCrc32(requirements?.filenameCrc32) ??
@@ -231,6 +236,65 @@ const resolveApplyPatchTargetForStage = async <TSource>(
   return null;
 };
 
+/**
+ * The deep dry-run validation is deferred so the patch card can surface its info
+ * and cheap preflight verdict immediately - a slow full-ROM validation no longer
+ * makes a freshly-dropped patch look like it is hanging. It runs as its own pass
+ * via `validatePatches`, so any cached verdict that no longer matches this
+ * target/preflight is dropped and the row falls back to the preflight result.
+ *
+ * Compare BASE keys only: the validation pass stores its key with a `|chain:`
+ * fingerprint appended and owns re-running the dry run when that fingerprint
+ * moves. Comparing the composed key here would never match a chained verdict,
+ * silently discarding a good result and stranding the row on "verifying" with
+ * nothing left to refresh it.
+ */
+const dropStaleValidation = <TSource>(
+  stage: StagedSource<TSource>,
+  target: InputAsset | null | undefined,
+  preflight: InternalPatchChecksumPreflight | undefined,
+) => {
+  if (!(target && preflight)) {
+    stage.state.patchValidation = undefined;
+    return;
+  }
+  const validationKey = createApplyPatchValidationKey(stage, target, preflight);
+  const cachedKey = stage.state.patchValidation?.validationKey;
+  if (cachedKey !== undefined && getApplyPatchValidationBaseKey(cachedKey) !== validationKey) {
+    stage.state.patchValidation = undefined;
+  }
+};
+
+/**
+ * Resolve which input the patch applies to and record its preflight verdict. An
+ * ambiguous or mismatched target is a normal outcome that leaves the row asking
+ * for a selection; anything else is a real failure and propagates.
+ */
+const settleApplyPatchTarget = async <TSource>(
+  stage: StagedSource<TSource>,
+  adapters: PatchReadinessAdapters<TSource>,
+  assets: InputAsset[],
+) => {
+  try {
+    const target = await resolveApplyPatchTargetForStage(stage, assets);
+    stage.state.status = target ? "ready" : "needsSelection";
+    const preflight = target ? createApplyPatchChecksumPreflight(stage, target) : undefined;
+    stage.state.checksumPreflight = preflight;
+    dropStaleValidation(stage, target, preflight);
+    if (target) return;
+    adapters.pushWarning(
+      stage,
+      new RomWeaverError("AMBIGUOUS_SELECTION", `${stage.state.fileName || "Patch"} target selection is required`),
+    );
+  } catch (error) {
+    const normalized = toRomWeaverError(error);
+    if (normalized.code !== "AMBIGUOUS_SELECTION" && normalized.code !== "PATCH_TARGET_MISMATCH") throw normalized;
+    clearApplyPatchTarget(stage);
+    stage.state.status = "needsSelection";
+    adapters.pushWarning(stage, normalized);
+  }
+};
+
 const evaluateApplyPatchReadiness = async <TSource>(
   stage: StagedSource<TSource>,
   adapters: PatchReadinessAdapters<TSource>,
@@ -239,11 +303,12 @@ const evaluateApplyPatchReadiness = async <TSource>(
   stage.state.warnings = stage.state.warnings.filter(
     (warning) => !PATCH_TARGET_SELECTION_ERROR_CODES.has(String(warning.code || "")),
   );
+  const changed = () => previousStatus !== stage.state.status;
   if (stage.state.status === "loading" && !stage.preparedPatchFile && !stage.state.candidates.length) return false;
   if (!stage.state.selectedCandidateId) {
     clearApplyPatchTarget(stage);
     stage.state.status = "needsSelection";
-    return previousStatus !== stage.state.status;
+    return changed();
   }
   if (!stage.preparedPatchFile) await adapters.prepareSelectedSource(stage);
   if (!stage.parsedPatch) await adapters.parsePatch(stage);
@@ -254,49 +319,10 @@ const evaluateApplyPatchReadiness = async <TSource>(
     // The patch itself is fully prepared - it's only blocked because no ROM is ready to verify
     // against yet. Surface that explicitly so the row stops showing its stale extract label.
     if (!assets.length && stage.parsedPatch && stage.preparedPatchFile) adapters.notifyAwaitingInputTarget?.(stage);
-    return previousStatus !== stage.state.status;
+    return changed();
   }
-  try {
-    const target = await resolveApplyPatchTargetForStage(stage, assets);
-    stage.state.status = target ? "ready" : "needsSelection";
-    const preflight = target ? createApplyPatchChecksumPreflight(stage, target) : undefined;
-    stage.state.checksumPreflight = preflight;
-    if (target && preflight) {
-      // The deep dry-run validation is deferred so the patch card can surface its info + cheap
-      // preflight verdict immediately (a slow full-ROM validation no longer makes a freshly-dropped
-      // patch look like it is hanging); it runs as its own pass via `validatePatches`. Drop any cached
-      // verdict that no longer matches this target/preflight so the row falls back to the preflight
-      // result until the background dry-run refreshes it.
-      const validationKey = createApplyPatchValidationKey(stage, target, preflight);
-      // Compare base keys only: the validation pass stores its key with a `|chain:` fingerprint
-      // appended, and it owns re-running the dry run when that fingerprint moves. Comparing the
-      // composed key here would never match a chained verdict, silently discarding a good result
-      // and stranding the row on "verifying" with nothing left to refresh it.
-      if (
-        stage.state.patchValidation &&
-        getApplyPatchValidationBaseKey(stage.state.patchValidation.validationKey) !== validationKey
-      )
-        stage.state.patchValidation = undefined;
-    } else {
-      stage.state.patchValidation = undefined;
-    }
-    if (!target) {
-      adapters.pushWarning(
-        stage,
-        new RomWeaverError("AMBIGUOUS_SELECTION", `${stage.state.fileName || "Patch"} target selection is required`),
-      );
-    }
-  } catch (error) {
-    const normalized = toRomWeaverError(error);
-    if (normalized.code === "AMBIGUOUS_SELECTION" || normalized.code === "PATCH_TARGET_MISMATCH") {
-      clearApplyPatchTarget(stage);
-      stage.state.status = "needsSelection";
-      adapters.pushWarning(stage, normalized);
-    } else {
-      throw normalized;
-    }
-  }
-  return previousStatus !== stage.state.status;
+  await settleApplyPatchTarget(stage, adapters, assets);
+  return changed();
 };
 
 export {
