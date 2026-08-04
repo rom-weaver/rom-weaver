@@ -21,7 +21,6 @@
   box-shadow: var(--overlay-shadow); overflow: clip;
 }
 .dlg-head { display: flex; align-items: center; gap: var(--sp-m); padding: var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
-.dlg-mobile-title { display: none; }
 .dlg-title { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .01em; flex: 1 1 auto; min-width: 0; }
 .dlg-actions { display: inline-flex; gap: var(--sp-s); align-items: center; }
 .dlg-x {
@@ -34,17 +33,39 @@
 }
 .dlg-x:active { transform: translateY(0) scale(.99); }
 .dlg-x svg { width: 15px; height: 15px; }
+/* touch: an invisible halo carries the box to a 44px target without inflating
+   it. Growing the box instead left a 15px glyph rattling around in it, reading
+   as an empty frame rather than a button. */
+@media (pointer: coarse) {
+  .dlg-x { position: relative; }
+  .dlg-x::after { position: absolute; inset: -7px; content: ""; }
+}
 .dlg-body { padding: var(--sp-l); overflow: auto; overscroll-behavior: contain; }
 /* Log dialog */
 .rw-app .log-dlg { max-width: min(1280px, calc(100vw - 32px)); }
 .rw-app .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
+/* One row, never two. The rail is a scroller by design, so when the head runs
+   out of width the tabs are what should give - wrapping instead sent the close
+   button down to a line of its own, adrift at the far side of the dialog from
+   the rail it belongs to. */
 /* The tabs ARE the title here, so the rail rides the head's own bottom rule
    rather than floating above it - the selected tab's weft then reads as a mark
    on a rail instead of a stray underline in open space. */
 .rw-app .log-dlg .dlg-head { flex-wrap: nowrap; row-gap: var(--sp-m); align-items: flex-end; padding-block-end: 0; }
 .rw-app .log-dlg .dlg-title { flex: 0 1 auto; }
-.rw-app .log-dlg .dialog-nav { display: flex; flex: 1 1 auto; min-inline-size: 0; gap: var(--sp-s); align-items: flex-end; }
-.rw-app .log-dlg .dialog-nav > .dlg-x { flex: none; margin-block-end: var(--sp-s); }
+/* Close shares the rail's row but not its baseline - sitting it on the rule
+   would read as one more tab. Every other control moved to the bar below.
+   It also drops the box every other dialog's close wears: in a rail of bare
+   text tabs the border was the only chrome on screen, so a 15px glyph rattling
+   inside it read as an empty frame rather than a control. Bare, at the tabs'
+   own weight, it belongs to the rail. The touch halo still carries it past
+   44px. */
+.rw-app .log-dlg .dlg-head > .dlg-x {
+  flex: none; margin-block-end: var(--sp-s);
+  width: 34px; height: 34px; border-color: transparent;
+}
+.rw-app .log-dlg .dlg-head > .dlg-x svg { width: 18px; height: 18px; }
+.rw-app .dlg-x-label { display: none; }
 .rw-app .log-actions { display: flex; flex: none; gap: var(--sp-s); align-items: center; min-inline-size: 0; }
 .rw-app .log-actions > * { flex: 0 1 auto; min-inline-size: max-content; }
 .rw-app .log-actions .log-icon-btn { flex: 0 0 30px; inline-size: 30px; padding-inline: 0; }
@@ -102,7 +123,12 @@
 .rw-app .dlg-subhead .log-filter { inline-size: 100%; height: 30px; font-size: .76rem; padding-block: 0; }
 .rw-app .dlg-subhead .loglevel { display: flex; flex: 0 0 auto; }
 .rw-app .dlg-subhead .loglevel .select { width: max-content; height: 30px; font-size: var(--dropdown-fs, .76rem); padding-block: 0; }
-.rw-app .log-body { padding: 0; flex: 1 1 auto; display: flex; min-height: 0; }
+/* Every tab's panel takes the height the head and the controls bar leave, and
+   scrolls inside it. Stated once for all of them: when only two of the three
+   claimed it, the settings panel stopped at its content and the bars below it
+   on a phone floated short of the sheet's foot. */
+.rw-app .log-dlg .dlg-body { flex: 1 1 auto; min-block-size: 0; }
+.rw-app .log-body { padding: 0; display: flex; }
 .rw-app .log-dlg .tracelog {
   flex: 1 1 auto; max-height: none; height: auto; min-height: 0;
   border: 0; border-radius: 0; background: var(--well); padding: var(--sp-m) var(--sp-l); font-size: .74rem;
@@ -333,7 +359,7 @@ html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !import
 }
 
 /* ── status tab ── */
-.rw-app .status-panel { display: block; flex: 1 1 auto; min-height: 0; }
+.rw-app .status-panel { display: block; }
 /* the one action the status tab can offer: reload onto a downloaded update. The
    sentence that used to sit here is in the legend below, beside its own state. */
 .rw-app .sw-summary { margin-block-start: var(--sp-m); }

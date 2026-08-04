@@ -493,7 +493,7 @@ const LogDialog = ({
 
   return (
     <dialog
-      aria-label={localizer.message("ui.log.tabStatus")}
+      aria-label={localizer.message("ui.log.dialogLabel")}
       className="dlg log-dlg"
       /* focusable only on purpose: the open effect parks focus here so no
          control wears a ring before the user reaches it */
@@ -511,63 +511,64 @@ const LogDialog = ({
       ref={dialogRef}
     >
       <div className="dlg-frame">
+        {/* the weft sub-rail IS the header: no title competing with it, and the
+            close button parks at the rail's end. On a phone the whole head
+            drops to the foot of the sheet - see responsive.css. */}
         <header className="dlg-head">
-          <span aria-live="polite" className="dlg-mobile-title">
-            {localizer.message(TAB_MESSAGES[tab])}
-          </span>
-          <div className="dialog-nav">
-            <div
-              aria-label={localizer.message("ui.log.tabStatus")}
-              aria-orientation="horizontal"
-              className="subrail dialog-subrail"
-              onKeyDown={(event) => {
-                const index = DIALOG_TABS.indexOf(tab);
-                let next = -1;
-                if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % DIALOG_TABS.length;
-                if (event.key === "ArrowLeft" || event.key === "ArrowUp")
-                  next = (index + DIALOG_TABS.length - 1) % DIALOG_TABS.length;
-                if (event.key === "Home") next = 0;
-                if (event.key === "End") next = DIALOG_TABS.length - 1;
-                if (next < 0) return;
-                event.preventDefault();
-                const nextTab = DIALOG_TABS[next] as LogDialogTab;
-                selectTab(nextTab);
-                tabsRef.current?.querySelector<HTMLButtonElement>(`[data-logtab="${nextTab}"]`)?.focus();
-              }}
-              ref={tabsRef}
-              role="tablist"
-            >
-              {DIALOG_TABS.map((entry) => {
-                const TabIcon = TAB_ICONS[entry];
-                return (
-                  <button
-                    aria-controls={`logpanel-${entry}`}
-                    aria-selected={entry === tab}
-                    className="subtab"
-                    data-logtab={entry}
-                    id={`logtab-${entry}`}
-                    key={entry}
-                    onClick={() => selectTab(entry)}
-                    role="tab"
-                    tabIndex={entry === tab ? 0 : -1}
-                    type="button"
-                  >
-                    <TabIcon aria-hidden="true" />
-                    {localizer.message(TAB_MESSAGES[entry])}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              aria-label={localizer.message("ui.common.close")}
-              className="dlg-x"
-              onClick={onClose}
-              title={localizer.message("ui.common.close")}
-              type="button"
-            >
-              <X aria-hidden="true" />
-            </button>
+          <div
+            aria-label={localizer.message("ui.log.tabsLabel")}
+            aria-orientation="horizontal"
+            className="subrail dialog-subrail"
+            onKeyDown={(event) => {
+              const index = DIALOG_TABS.indexOf(tab);
+              let next = -1;
+              if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % DIALOG_TABS.length;
+              if (event.key === "ArrowLeft" || event.key === "ArrowUp")
+                next = (index + DIALOG_TABS.length - 1) % DIALOG_TABS.length;
+              if (event.key === "Home") next = 0;
+              if (event.key === "End") next = DIALOG_TABS.length - 1;
+              if (next < 0) return;
+              event.preventDefault();
+              const nextTab = DIALOG_TABS[next] as LogDialogTab;
+              selectTab(nextTab);
+              tabsRef.current?.querySelector<HTMLButtonElement>(`[data-logtab="${nextTab}"]`)?.focus();
+            }}
+            ref={tabsRef}
+            role="tablist"
+          >
+            {DIALOG_TABS.map((entry) => {
+              const TabIcon = TAB_ICONS[entry];
+              return (
+                <button
+                  aria-controls={`logpanel-${entry}`}
+                  aria-selected={entry === tab}
+                  className="subtab"
+                  data-logtab={entry}
+                  id={`logtab-${entry}`}
+                  key={entry}
+                  onClick={() => selectTab(entry)}
+                  role="tab"
+                  tabIndex={entry === tab ? 0 : -1}
+                  type="button"
+                >
+                  <TabIcon aria-hidden="true" />
+                  <span>{localizer.message(TAB_MESSAGES[entry])}</span>
+                </button>
+              );
+            })}
           </div>
+          <button
+            aria-label={localizer.message("ui.common.close")}
+            className="dlg-x"
+            onClick={onClose}
+            title={localizer.message("ui.common.close")}
+            type="button"
+          >
+            <X aria-hidden="true" />
+            {/* Only shown when the head is the phone's bottom bar, where a bare
+                glyph among labelled columns is the odd one out. */}
+            <span className="dlg-x-label">{localizer.message("ui.common.close")}</span>
+          </button>
         </header>
         {tab === "settings" && (onRestoreDefaults || onSaveSettings) ? (
           <div className="dlg-subhead">
