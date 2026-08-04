@@ -39,7 +39,8 @@ const documentHeaders = (sidecar) => {
   headers.set("Vary", "Accept-Encoding");
   // Browsers must revalidate documents. The zone Cache Rule overrides the edge
   // TTL to five minutes, while the browser still checks for a new release.
-  headers.set("Cache-Control", "public, max-age=0, must-revalidate");
+  // no-transform keeps the q11 bytes and Content-Length intact at Cloudflare.
+  headers.set("Cache-Control", "public, max-age=0, must-revalidate, no-transform");
   headers.set("Cross-Origin-Embedder-Policy", "require-corp");
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   headers.set("Cross-Origin-Resource-Policy", "same-origin");

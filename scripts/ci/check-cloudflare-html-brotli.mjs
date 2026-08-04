@@ -30,6 +30,9 @@ export const assertExactBrotliResponse = ({
   if (documentHeaders.get("content-encoding") !== "br") {
     throw new Error("document response did not use Brotli content encoding");
   }
+  if (sidecarHeaders.get("content-encoding") !== "br") {
+    throw new Error("sidecar response did not use Brotli content encoding");
+  }
 
   const documentLength = Number(documentHeaders.get("content-length"));
   if (!Number.isInteger(documentLength) || documentLength !== document.byteLength) {
@@ -66,11 +69,11 @@ const fetchRawResponse = async (url, acceptEncoding, directory, name) => {
     "--header",
     `Accept-Encoding: ${acceptEncoding}`,
     "--retry",
-    "8",
+    "30",
     "--retry-delay",
     "2",
     "--retry-max-time",
-    "60",
+    "90",
     "--retry-all-errors",
     "--dump-header",
     headerPath,
@@ -92,7 +95,7 @@ export const checkCloudflareHtmlBrotli = async ({ deploymentUrl, tempDirectory =
   try {
     const [document, sidecar] = await Promise.all([
       fetchRawResponse(`${baseUrl}/apply`, "br", directory, "document"),
-      fetchRawResponse(`${baseUrl}/apply/index.html.br`, "identity", directory, "sidecar"),
+      fetchRawResponse(`${baseUrl}/apply/index.html.br`, "br", directory, "sidecar"),
     ]);
     assertExactBrotliResponse({
       document: document.body,

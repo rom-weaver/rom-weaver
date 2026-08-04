@@ -22,7 +22,10 @@ test("requires exact Brotli bytes and lengths", () => {
       document: body,
       sidecar: Buffer.from(body),
       documentHeaders: headers,
-      sidecarHeaders: new Map([["content-length", "4"]]),
+      sidecarHeaders: new Map([
+        ["content-encoding", "br"],
+        ["content-length", "4"],
+      ]),
     }),
   );
   assert.throws(
@@ -34,7 +37,10 @@ test("requires exact Brotli bytes and lengths", () => {
           ["content-encoding", "br"],
           ["content-length", "3"],
         ]),
-        sidecarHeaders: new Map([["content-length", "4"]]),
+        sidecarHeaders: new Map([
+          ["content-encoding", "br"],
+          ["content-length", "4"],
+        ]),
       }),
     /differ from the sidecar/,
   );

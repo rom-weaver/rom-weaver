@@ -127,7 +127,7 @@ describe("pages brotli sidecar function", () => {
     expect(fetchLog).toEqual([{ method: "GET", url: "https://rom-weaver.com/docs/faq/index.html.br" }]);
     expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(response.headers.get("Content-Encoding")).toBe("br");
-    expect(response.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate");
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate, no-transform");
     expect(response.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
     expect(await response.text()).toBe("brotli-bytes");
   });
