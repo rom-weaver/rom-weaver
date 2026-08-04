@@ -90,7 +90,7 @@ describe("Masthead", () => {
   it("keeps utility destinations behind More on both layouts", () => {
     const onOpenStorage = vi.fn();
     const { container, getByRole, queryByRole } = render(
-      withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} />),
+      withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} serviceWorkerStatus="active" />),
     );
     const more = container.querySelector(".desktop-more .tool") as HTMLButtonElement;
     expect(more.getAttribute("aria-expanded")).toBe("false");
@@ -100,6 +100,10 @@ describe("Masthead", () => {
     const menu = container.querySelector('[role="menu"]') as HTMLElement;
     expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(menu.hidden).toBe(false);
+    const menuStatus = getByRole("menuitem", { name: "Status" });
+    expect(menuStatus.classList.contains("more-status")).toBe(true);
+    expect(menuStatus.getAttribute("data-sw")).toBe("active");
+    expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
     expect(queryByRole("menuitem", { name: "Docs" })).toBeNull();
     expect(getByRole("menuitem", { name: "Tools" })).toBeTruthy();
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
