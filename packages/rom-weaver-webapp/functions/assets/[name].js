@@ -8,16 +8,15 @@
 // sidecars for (see writeBrotliSidecars in vite.config.mjs); every other
 // request stays on Pages' unmetered static path and never invokes this.
 
+import { acceptsBrotli } from "../accept-encoding.js";
 import { sidecarContentType } from "./content-types.js";
-
-const ACCEPTS_BR = /(^|[\s,])br($|[\s,;])/;
 
 // Missing assets are errors now that the build publishes a top-level 404.html;
 // keep the HTML check for hosts that still apply an SPA fallback.
 const isSpaFallback = (response) => !response.ok || (response.headers.get("Content-Type") ?? "").includes("text/html");
 
 export const onRequestGet = async ({ request, env, next }) => {
-  if (!ACCEPTS_BR.test(request.headers.get("Accept-Encoding") ?? "")) return next();
+  if (!acceptsBrotli(request.headers.get("Accept-Encoding"))) return next();
   const url = new URL(request.url);
   // The type comes from the build-verified table rather than a HEAD probe of the
   // static asset. The probe was a second subrequest that had to resolve before the

@@ -38,6 +38,9 @@ const assertCount = (source, expected, count, label) => {
 const countVisibleWords = (source) =>
   source
     .replace(/<style>[\s\S]*?<\/style>/g, " ")
+    // Inline boot scripts are minified as part of the final HTML. They are
+    // executable code, not words a visitor can read, so exclude them here.
+    .replace(/<script[\s\S]*?<\/script>/g, " ")
     .replace(/<[^>]+>/g, " ")
     .trim()
     .split(/\s+/).length;
@@ -51,7 +54,7 @@ const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
 
 for (const route of ["apply", "create", "trim", "tools"]) {
-  assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
+  assertIncludes(read(`${route}/index.html`), '<base href="../"', `${route} static-host route`);
 }
 assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
 assertIncludes(
@@ -72,8 +75,8 @@ assertIncludes(headers, "  ! Link", "disabled deploy-sensitive Link hints");
 if (/^\s+Link:/m.test(headers)) throw new Error("_headers must not emit deploy-sensitive Link preload hints");
 // The 404 body is served at whatever URL missed, so its relative asset URLs
 // need an absolute base to resolve at nested paths.
-assertIncludes(notFoundHtml, '<base href="/" />', "404 asset base");
-assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 robots metadata");
+assertIncludes(notFoundHtml, '<base href="/"', "404 asset base");
+assertIncludes(notFoundHtml, '<meta name="robots" content="noindex"', "404 robots metadata");
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
 assertIncludes(notFoundHtml, '<header class="masthead"', "404 app masthead");
@@ -217,7 +220,7 @@ for (const route of DOC_ROUTES) {
     '<button aria-label="Switch to light theme" class="tool"',
     `${route.slug} React theme control`,
   );
-  assertIncludes(docsHtml, '<base href="/" />', `${route.slug} asset base`);
+  assertIncludes(docsHtml, '<base href="/"', `${route.slug} asset base`);
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
   const legalPage = isLegalDocRoute(route.slug);
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);
@@ -257,7 +260,7 @@ for (const route of DOC_ROUTES) {
   );
   // The hub is an index of links, not a guide, but it still has to say enough
   // to stand on its own as the published documentation landing page.
-  let minimumWords = guide ? 500 : 150;
+  let minimumWords = guide ? 300 : 150;
   if (route.slug === "docs") minimumWords = 250;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {

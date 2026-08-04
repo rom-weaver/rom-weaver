@@ -501,10 +501,9 @@ Duplicate declarations are covered by Biome's recommended CSS rules, and
 duplicate selectors are enabled explicitly.
 
 `check-size-budget.mjs` measures raw bytes plus the bundled `.br` sidecar where
-one exists. The hashed `/assets/*` entries all have one; the HTML shell does
-not - root files deliberately stay off the sidecar path - so its Brotli column
-is an estimate compressed at `assetSizes.brotliQuality`, and moves with that
-setting rather than with anything shipped.
+one exists. The hashed `/assets/*` entries and generated HTML documents all
+have q11 sidecars. The budget still uses `assetSizes.brotliQuality` as the
+fallback for any future text file that has no sidecar.
 
 Lighthouse always audits the local build through `scripts/dev-server.mjs
 preview`, using Lighthouse's default mobile emulation, on every event, including
@@ -609,10 +608,11 @@ fly at a lower quality than the build's quality-11 brotli pass (~640 KB worse
 on the wasm and ~50 KB on the main JS bundle, per cold load). Every webapp
 build therefore stages the prebuilt `.wasm.br` sidecar next to the hashed
 wasm asset (or generates it when only a development WASM artifact is
-available), compresses every other `/assets/*` file to a q11 sibling kept
-only when it saves at least 2% (already-compressed formats such as woff2/png
-fail that bar and stay static), and writes a `_routes.json` routing exactly
-the sidecar-backed URLs through the Pages Function in
+available), compresses every other `/assets/*` file and generated HTML
+document to q11 siblings kept only when they save at least 2% (already-
+compressed formats such as woff2/png fail that bar and stay static), and
+writes a `_routes.json` routing exactly the sidecar-backed URLs through the
+Pages Functions in
 `packages/rom-weaver-webapp/functions/assets/[name].js`. The function takes
 the content type from `functions/assets/content-types.js` and serves the
 sidecar bytes with `Content-Encoding: br`
@@ -623,19 +623,16 @@ if it stages a sidecar for an extension the table does not cover, so it cannot
 go stale. It replaced a headers-only probe of the static asset, which was a
 second subrequest the sidecar fetch had to wait behind and so put a serialized
 round trip in front of the render-critical CSS and entry module. Because function
-responses bypass `_headers`, the function restates the immutable cache rule
-and the cross-origin-isolation headers - COEP in particular, which
-dedicated-worker scripts must carry on a cross-origin-isolated page. Only
-`/assets/*` is eligible: the mutable root files (`index.html`,
-`cache-service-worker.js`, `changelog.json`) keep their no-cache semantics
-and never route through the function. Release archives, Docker images,
-Cloudflare deployments, and local production previews now consume the same
-hashed-asset sidecars, which is also what lets the preview server stand in for
-the edge in the performance budgets above. Two consequences of staging them
-everywhere rather than on deploys only: the release tarball carries the `.br`
-siblings (~2 MB, and no longer asserts their absence), and every bundle ships a
-`_routes.json` that only Cloudflare reads - inert but public wherever the
-bundle is self-hosted.
+responses bypass `_headers`, the asset function restates the immutable cache
+rule and the cross-origin-isolation headers - COEP in particular, which
+dedicated-worker scripts must carry on a cross-origin-isolated page. The
+document middleware maps clean HTML routes to their q11 sidecars, keeps
+browser revalidation, and falls through for clients without Brotli. The
+service worker and changelog keep their no-cache static responses. Release
+archives, Docker images, Cloudflare deployments, and local production previews
+consume the same sidecars, which lets the preview server stand in for the edge
+in the performance budgets above. Every bundle ships a `_routes.json` that
+only Cloudflare reads - inert but public wherever the bundle is self-hosted.
 
 Production bundles carry external source maps (`build.sourcemap`), so a stack
 trace from a deployed build resolves to real source. They are the one class of
@@ -653,19 +650,20 @@ and verifies a hit by decompressing it before reuse. Entries unused for 14 days
 are pruned; `ROM_WEAVER_BROTLI_CACHE=0` disables the cache.
 
 Cost model: sidecar-backed URLs invoke the function, everything else stays
-on the unmetered static path, and repeat visits are covered by the immutable
-browser/service-worker cache. To keep invocations from scaling with traffic,
-the nightly deploy leg idempotently installs a zone Cache Rule ("Ensure zone
-cache rule for /assets" in `ci.yml`) making `/assets/*` on the prod, beta,
-and nightly custom domains eligible for edge caching with `respect_origin`
-TTLs - the function then runs roughly once per URL per PoP instead of per
-request. Safe because every routed URL is content-hashed and immutable. The
-step skips with a notice until two pieces of one-time setup exist: a
-`CLOUDFLARE_ZONE_ID`
-repository secret (the `rom-weaver.com` zone) and `Zone -> Cache Rules ->
-Edit` added to the `CLOUDFLARE_API_TOKEN`. `pages.dev` previews sit outside
-the zone, so preview traffic stays per-request - fine, it is internal. A
-`caches.default` lookup inside the function would not reduce the bill (the
+on the unmetered static path. The nightly deploy leg idempotently installs two
+zone Cache Rules ("Ensure zone cache rules for assets and HTML" in `ci.yml`).
+The `/assets/*` rule respects the immutable response TTL. The document rule
+keeps browser TTL at `no-cache` but gives Cloudflare's edge a two-hour TTL.
+The function then runs roughly once per URL per PoP instead of per request.
+The deploy leg purges every generated HTML URL after each prod, beta, or
+nightly deployment, so that two-hour bound is a safety net rather than the
+normal release delay. Safe because HTML is purged after deployment and every
+asset URL is content-hashed and immutable. The step skips with a notice until
+three pieces of one-time setup exist: a `CLOUDFLARE_ZONE_ID` repository secret
+(the `rom-weaver.com` zone), `Zone -> Cache Rules -> Edit`, and `Zone -> Cache
+Purge -> Purge` added to the `CLOUDFLARE_API_TOKEN`. `pages.dev` previews sit
+outside the zone, so preview traffic stays per-request - fine, it is internal.
+A `caches.default` lookup inside the function would not reduce the bill (the
 invocation is counted whether or not it hits cache). Free tier:
 100,000 invocations/day; past it, the flat $5/month Workers Paid plan; on
 free, excess requests degrade gracefully to static serving (Cloudflare's own
@@ -1335,7 +1333,7 @@ compile for the layer that runs the build.
 | Secret | Used by | For |
 | --- | --- | --- |
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `ci.yml`, preview cleanup | Pages Direct Upload and preview deletion |
-| `CLOUDFLARE_ZONE_ID` (optional) | `ci.yml` | Maintaining the `/assets/*` zone Cache Rule; the API token also needs Cache Rules edit permission |
+| `CLOUDFLARE_ZONE_ID` (optional) | `ci.yml` | Maintaining asset/document zone Cache Rules and purging deployed HTML; the API token also needs Cache Rules edit and Cache Purge permissions |
 | `RELEASE_PLEASE_TOKEN` | `release.yml` | Release pull request and release-metadata operations |
 | `PACKAGE_MANAGER_TOKEN` | `release.yml` | Pushing stable releases to the Homebrew tap and Scoop bucket repositories |
 | `NPM_BOOTSTRAP_TOKEN` (optional) | `npm-publish.yml` | First publication of a newly added npm package before trusted publishing can be configured |

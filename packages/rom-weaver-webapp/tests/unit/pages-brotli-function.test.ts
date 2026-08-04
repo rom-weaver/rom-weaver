@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { onRequest } from "../../functions/_middleware.js";
 import { onRequestGet } from "../../functions/assets/[name].js";
 
 const WASM_URL = "https://rom-weaver.com/assets/rom-weaver-app-BWS09Fxt.wasm";
@@ -93,6 +94,12 @@ describe("pages brotli sidecar function", () => {
     expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
   });
 
+  it("honors an explicit br quality of zero", async () => {
+    const { context, fetchLog } = makeContext({ acceptEncoding: "br;q=0, gzip" });
+    expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+    expect(fetchLog).toEqual([]);
+  });
+
   it("falls through when the sidecar is missing (SPA fallback response), which also covers a missing asset", async () => {
     const { context } = makeContext({ sidecarResponse: spaFallback() });
     expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
@@ -101,5 +108,29 @@ describe("pages brotli sidecar function", () => {
   it("falls through when the sidecar fetch is not ok", async () => {
     const { context } = makeContext({ sidecarResponse: new Response("nope", { status: 404 }) });
     expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+  });
+
+  it("serves the minified document sidecar for a clean route", async () => {
+    const { context, fetchLog } = makeContext({
+      url: "https://rom-weaver.com/docs/faq/",
+      sidecarResponse: brSidecar(),
+    });
+    const response = await onRequest(context);
+    expect(fetchLog).toEqual([{ method: "GET", url: "https://rom-weaver.com/docs/faq/index.html.br" }]);
+    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(response.headers.get("Content-Encoding")).toBe("br");
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate");
+    expect(response.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
+    expect(await response.text()).toBe("brotli-bytes");
+  });
+
+  it("falls through document requests without Brotli support", async () => {
+    const { context, fetchLog } = makeContext({
+      url: "https://rom-weaver.com/apply",
+      acceptEncoding: "gzip",
+      sidecarResponse: brSidecar(),
+    });
+    expect(await onRequest(context)).toBe(NEXT_SENTINEL);
+    expect(fetchLog).toEqual([]);
   });
 });
