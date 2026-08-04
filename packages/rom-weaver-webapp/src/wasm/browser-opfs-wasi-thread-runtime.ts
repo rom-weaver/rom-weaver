@@ -69,6 +69,33 @@ export interface BrowserWasiThreadRunPayload {
   wasmModule?: WebAssembly.Module;
 }
 
+/**
+ * The payload carries the runner's compiled module and its shared memory; a
+ * thread cannot run without both, and the memory must actually be shared.
+ */
+function assertThreadPayloadWasm(
+  wasmModule: WebAssembly.Module | undefined,
+  wasmMemory: WebAssembly.Memory | undefined,
+): asserts wasmModule is WebAssembly.Module {
+  if (!(wasmModule instanceof WebAssembly.Module)) {
+    throw new Error("browser wasi thread payload missing compiled WebAssembly.Module");
+  }
+  if (!(wasmMemory instanceof WebAssembly.Memory)) {
+    throw new Error("browser wasi thread payload missing shared WebAssembly.Memory");
+  }
+  if (!(wasmMemory.buffer instanceof SharedArrayBuffer)) {
+    throw new Error("browser wasi thread payload memory is not shared");
+  }
+}
+
+const toStringList = (value: unknown): string[] => (Array.isArray(value) ? value.map((entry) => String(entry)) : []);
+
+/** argv is never empty: the guest reads argv[0] as the program name. */
+const toWasiArgs = (value: unknown): string[] => {
+  const args = toStringList(value);
+  return args.length > 0 ? args : ["rom-weaver"];
+};
+
 export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThreadRunPayload = {}) {
   assertDedicatedWorkerRuntime();
 
@@ -92,20 +119,14 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
     wasmModule,
   } = payload;
 
-  if (!(wasmModule instanceof WebAssembly.Module)) {
-    throw new Error("browser wasi thread payload missing compiled WebAssembly.Module");
-  }
-  if (!(wasmMemory instanceof WebAssembly.Memory)) {
-    throw new Error("browser wasi thread payload missing shared WebAssembly.Memory");
-  }
-  if (!(wasmMemory.buffer instanceof SharedArrayBuffer)) {
-    throw new Error("browser wasi thread payload memory is not shared");
-  }
+  assertThreadPayloadWasm(wasmModule, wasmMemory);
+  const sharedMemory = wasmMemory as WebAssembly.Memory;
 
   attachThreadWorkerCensus(runtime?.opfsProxyTransfer);
   const trace = createLineTrace(stderrLineHandler);
+  const tidLabel = tid ?? "unknown";
   trace(
-    `[browser-opfs-thread] start tid=${tid ?? "unknown"} startArg=${startArg ?? "unknown"} args=${formatArgsForTrace(Array.isArray(wasiArgs) ? wasiArgs : [])} virtualFiles=${summarizeRawVirtualFiles(runtime?.virtualFiles)}`,
+    `[browser-opfs-thread] start tid=${tidLabel} startArg=${startArg ?? "unknown"} args=${formatArgsForTrace(Array.isArray(wasiArgs) ? wasiArgs : [])} virtualFiles=${summarizeRawVirtualFiles(runtime?.virtualFiles)}`,
   );
   const moduleImports = WebAssembly.Module.imports(wasmModule);
   const startControl = threadStartControlFromBuffer(payload.startControlBuffer);
@@ -119,9 +140,9 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
     trace,
   });
   if (runtime?.invalidateMountCacheBeforeRun) {
-    trace(`[browser-opfs-thread] invalidate mount cache before run start tid=${tid ?? "unknown"}`);
+    trace(`[browser-opfs-thread] invalidate mount cache before run start tid=${tidLabel}`);
     await THREAD_WORKER_MOUNT_CACHE.invalidateMountPaths(normalizedRuntimeMounts);
-    trace(`[browser-opfs-thread] invalidate mount cache before run done tid=${tid ?? "unknown"}`);
+    trace(`[browser-opfs-thread] invalidate mount cache before run done tid=${tidLabel}`);
   }
   let runSucceeded = false;
   let mounts: Awaited<ReturnType<typeof buildBrowserOpfsWasiFds>>["mounts"] = [];
@@ -134,7 +155,7 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
   const proxyClient = new OpfsProxyClient(attachOpfsProxyChannel(runtime.opfsProxyTransfer), { trace });
 
   try {
-    trace(`[browser-opfs-thread] build wasi fds start tid=${tid ?? "unknown"}`);
+    trace(`[browser-opfs-thread] build wasi fds start tid=${tidLabel}`);
     const built = await buildBrowserOpfsWasiFds({
       cwdMountPath: runtime?.cwdMountPath,
       knownInputPaths: runtime?.knownInputPaths,
@@ -154,13 +175,10 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
       writableRoots: Array.isArray(runtime?.writableRoots) ? runtime.writableRoots : [],
     });
     mounts = built.mounts;
-    trace(`[browser-opfs-thread] build wasi fds done tid=${tid ?? "unknown"} mounts=${mounts.length}`);
-    const threadWasi = new wasiShim.WASI(
-      Array.isArray(wasiArgs) && wasiArgs.length > 0 ? wasiArgs.map((value) => String(value)) : ["rom-weaver"],
-      Array.isArray(envList) ? envList.map((value) => String(value)) : [],
-      built.fds,
-      { debug: Boolean(debugWasi ?? runtime?.debugWasi ?? false) },
-    );
+    trace(`[browser-opfs-thread] build wasi fds done tid=${tidLabel} mounts=${mounts.length}`);
+    const threadWasi = new wasiShim.WASI(toWasiArgs(wasiArgs), toStringList(envList), built.fds, {
+      debug: Boolean(debugWasi ?? runtime?.debugWasi ?? false),
+    });
     installDirectWasiFileIoImports(threadWasi, trace);
     const nestedThreadSpawner = createBrowserWasiThreadSpawner({
       allowWorkerPool: false,
@@ -174,16 +192,16 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
       threadWorkerUrl: nestedThreadWorkerUrl,
       trace,
       wasiArgs,
-      wasmMemory,
+      wasmMemory: sharedMemory,
       wasmModule,
     });
-    trace(`[browser-opfs-thread] instantiate start tid=${tid ?? "unknown"}`);
+    trace(`[browser-opfs-thread] instantiate start tid=${tidLabel}`);
     const instance = (await WebAssembly.instantiate(wasmModule, {
-      env: createWasmEnvImports(wasmMemory),
+      env: createWasmEnvImports(sharedMemory),
       wasi_snapshot_preview1: threadWasi.wasiImport,
       ...(needsWasiThreadSpawnImport(moduleImports) ? { wasi: { "thread-spawn": nestedThreadSpawner.spawn } } : {}),
     })) as WasiThreadInstance;
-    trace(`[browser-opfs-thread] instantiate done tid=${tid ?? "unknown"}`);
+    trace(`[browser-opfs-thread] instantiate done tid=${tidLabel}`);
 
     threadWasi.inst = instance;
     if (typeof instance.exports.wasi_thread_start !== "function") {
@@ -191,34 +209,34 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
     }
     signalThreadStartState(startControl, THREAD_SLOT_STATE_RUNNING);
     startAcked = true;
-    trace(`[browser-opfs-thread] wasi_thread_start start tid=${tid ?? "unknown"}`);
+    trace(`[browser-opfs-thread] wasi_thread_start start tid=${tidLabel}`);
     instance.exports.wasi_thread_start(Number(tid) | 0, Number(startArg) | 0);
-    trace(`[browser-opfs-thread] wasi_thread_start returned tid=${tid ?? "unknown"}`);
-    trace(`[browser-opfs-thread] nested waitForWorkers start tid=${tid ?? "unknown"}`);
+    trace(`[browser-opfs-thread] wasi_thread_start returned tid=${tidLabel}`);
+    trace(`[browser-opfs-thread] nested waitForWorkers start tid=${tidLabel}`);
     await nestedThreadSpawner.waitForWorkers();
-    trace(`[browser-opfs-thread] nested waitForWorkers done tid=${tid ?? "unknown"}`);
+    trace(`[browser-opfs-thread] nested waitForWorkers done tid=${tidLabel}`);
     traceFlushOpenWasiFileDescriptors(
       trace,
       threadWasi.fds,
-      `[browser-opfs-thread] flush fd write buffers tid=${tid ?? "unknown"}`,
+      `[browser-opfs-thread] flush fd write buffers tid=${tidLabel}`,
     );
-    traceDirectWasiFileIoStats(trace, threadWasi, `[perf] direct file io tid=${tid ?? "unknown"}`);
-    traceRandomAccessFileIoStats(trace, built.fds, `[perf] random access file io tid=${tid ?? "unknown"}`);
+    traceDirectWasiFileIoStats(trace, threadWasi, `[perf] direct file io tid=${tidLabel}`);
+    traceRandomAccessFileIoStats(trace, built.fds, `[perf] random access file io tid=${tidLabel}`);
     // Output files are written straight to OPFS through the proxy during the run; no materialization.
     runSucceeded = true;
   } catch (error) {
-    trace(`[browser-opfs-thread] failed tid=${tid ?? "unknown"} ${formatErrorForTrace(error)}`);
+    trace(`[browser-opfs-thread] failed tid=${tidLabel} ${formatErrorForTrace(error)}`);
     if (!startAcked) signalThreadStartState(startControl, THREAD_SLOT_STATE_FAILED);
     throw error;
   } finally {
-    trace(`[browser-opfs-thread] cleanup start tid=${tid ?? "unknown"} succeeded=${runSucceeded}`);
+    trace(`[browser-opfs-thread] cleanup start tid=${tidLabel} succeeded=${runSucceeded}`);
     closeSyncFiles(closeables);
     // Preserve the existing microtask boundary before invalidating the thread mount.
     // oxlint-disable-next-line typescript/await-thenable
     await cleanupBrowserOpfsMounts(mounts);
     if (!runSucceeded || runtime?.invalidateMountCacheAfterRun)
       await THREAD_WORKER_MOUNT_CACHE.invalidateMounts(mounts);
-    trace(`[browser-opfs-thread] cleanup done tid=${tid ?? "unknown"}`);
+    trace(`[browser-opfs-thread] cleanup done tid=${tidLabel}`);
   }
 }
 

@@ -196,31 +196,37 @@ export function createBrowserWasiThreadSpawner({
     return finishThreadSpawn(wasmMemory, errorOrTidPtr, tid, false);
   };
 
+  /**
+   * Block until one spawned thread reaches a terminal state. A completed worker is
+   * parked for reuse; a failed one is retired so it is never handed out again.
+   */
+  const settleNestedWorker = (tid: number, slot: NestedThreadWorkerSlot) => {
+    while (true) {
+      const state = loadThreadSlotState(slot.control);
+      if (state !== THREAD_SLOT_STATE_IDLE && state !== THREAD_SLOT_STATE_FAILED) {
+        waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
+        continue;
+      }
+      activeWorkers.delete(tid);
+      if (state === THREAD_SLOT_STATE_FAILED) {
+        const failure = slot.failure || new Error(`wasi thread ${tid} failed in browser worker ${slot.index}`);
+        nestedWorkers.retire(slot);
+        recordFailure(tid, failure);
+      } else {
+        nestedWorkers.release(slot);
+        trace?.(`[browser-opfs] thread completed tid=${tid} worker=${slot.index}`);
+      }
+      return;
+    }
+  };
+
   // True nested spawners park finished workers so the next parent thread in this realm can reuse
   // them. A top-level no-pool fallback owns its list and drains it here instead.
   const waitForWorkers = async () => {
     try {
       trace?.(`[browser-opfs] thread wait start active=${activeWorkers.size}`);
       while (activeWorkers.size > 0) {
-        for (const [tid, slot] of activeWorkers.entries()) {
-          while (true) {
-            const state = loadThreadSlotState(slot.control);
-            if (state === THREAD_SLOT_STATE_IDLE) {
-              activeWorkers.delete(tid);
-              nestedWorkers.release(slot);
-              trace?.(`[browser-opfs] thread completed tid=${tid} worker=${slot.index}`);
-              break;
-            }
-            if (state === THREAD_SLOT_STATE_FAILED) {
-              const failure = slot.failure || new Error(`wasi thread ${tid} failed in browser worker ${slot.index}`);
-              activeWorkers.delete(tid);
-              nestedWorkers.retire(slot);
-              recordFailure(tid, failure);
-              break;
-            }
-            waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
-          }
-        }
+        for (const [tid, slot] of activeWorkers.entries()) settleNestedWorker(tid, slot);
       }
       if (firstThreadFailure) throw firstThreadFailure;
       trace?.("[browser-opfs] thread wait done");
@@ -329,9 +335,22 @@ function createBrowserWasiThreadSpawnerForCommand({
     return null;
   };
 
+  const traceSaturationWait = (tid: number, suffix: string) => {
+    trace?.(
+      `[browser-opfs] thread spawn ${suffix} tid=${tid} command=${command.commandId}` +
+        ` active=${activeWorkers.size} slots=${command.slots.length}`,
+    );
+  };
+
   const waitForIdlePooledWorker = (tid: number): ThreadPoolCommandSlot | null => {
     const deadline = createWaitDeadline(THREAD_WORKER_SATURATION_WAIT_MS);
     let tracedWait = false;
+    // Trace the stall once, not on every wake-up.
+    const traceStallOnce = () => {
+      if (tracedWait) return;
+      traceSaturationWait(tid, "waiting for idle pooled worker");
+      tracedWait = true;
+    };
     while (true) {
       reapCompletedWorkers();
       if (firstThreadFailure) return null;
@@ -340,21 +359,12 @@ function createBrowserWasiThreadSpawnerForCommand({
 
       const waitable = findWaitablePooledWorker();
       if (!waitable) return null;
-      if (!tracedWait) {
-        trace?.(
-          `[browser-opfs] thread spawn waiting for idle pooled worker tid=${tid} command=${command.commandId}` +
-            ` active=${activeWorkers.size} slots=${command.slots.length}`,
-        );
-        tracedWait = true;
-      }
+      traceStallOnce();
       const waitResult = waitForAtomicsStateChange(waitable.slot.control, THREAD_SLOT_STATE_INDEX, waitable.state, {
         deadline,
       });
       if (waitResult === "timed-out") {
-        trace?.(
-          `[browser-opfs] thread spawn wait for idle pooled worker timed out tid=${tid} command=${command.commandId}` +
-            ` active=${activeWorkers.size} slots=${command.slots.length}`,
-        );
+        traceSaturationWait(tid, "wait for idle pooled worker timed out");
         return null;
       }
     }
@@ -403,37 +413,41 @@ function createBrowserWasiThreadSpawnerForCommand({
     return finishThreadSpawn(wasmMemory, errorOrTidPtr, tid, false);
   };
 
+  /**
+   * Block until one dispatched thread reaches a terminal state and free its slot.
+   * A poisoned slot (start never acknowledged) is already failing and
+   * SHUTDOWN-signalled, so it is dropped without waiting - the bounded
+   * command.shutdown owns its teardown and blocking here could hang the run.
+   */
+  const settlePooledWorker = (tid: number, slot: ThreadPoolCommandSlot) => {
+    if (poisonedSlots.has(slot)) {
+      poisonedSlots.delete(slot);
+      activeWorkers.delete(tid);
+      trace?.(`[browser-opfs] thread abandoned tid=${tid} worker=${slot.index} command=${command.commandId}`);
+      return;
+    }
+    while (true) {
+      const state = loadThreadSlotState(slot.control);
+      if (state !== THREAD_SLOT_STATE_IDLE && state !== THREAD_SLOT_STATE_FAILED) {
+        waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
+        continue;
+      }
+      if (state === THREAD_SLOT_STATE_FAILED) {
+        recordFailure(tid, slot.failure || new Error(`wasi thread ${tid} failed in browser worker ${slot.index}`));
+      } else {
+        trace?.(`[browser-opfs] thread completed tid=${tid} worker=${slot.index} command=${command.commandId}`);
+      }
+      slot.busy = false;
+      slot.tid = null;
+      activeWorkers.delete(tid);
+      return;
+    }
+  };
+
   const waitForWorkers = async () => {
     trace?.(`[browser-opfs] thread wait start active=${activeWorkers.size} command=${command.commandId}`);
     while (activeWorkers.size > 0) {
-      for (const [tid, slot] of activeWorkers.entries()) {
-        // A poisoned slot (start never acknowledged) is already failing and SHUTDOWN-signalled; do not
-        // block on its state - the bounded command.shutdown tears it down.
-        if (poisonedSlots.has(slot)) {
-          poisonedSlots.delete(slot);
-          activeWorkers.delete(tid);
-          trace?.(`[browser-opfs] thread abandoned tid=${tid} worker=${slot.index} command=${command.commandId}`);
-          continue;
-        }
-        while (true) {
-          const state = loadThreadSlotState(slot.control);
-          if (state === THREAD_SLOT_STATE_IDLE) {
-            slot.busy = false;
-            slot.tid = null;
-            activeWorkers.delete(tid);
-            trace?.(`[browser-opfs] thread completed tid=${tid} worker=${slot.index} command=${command.commandId}`);
-            break;
-          }
-          if (state === THREAD_SLOT_STATE_FAILED) {
-            recordFailure(tid, slot.failure || new Error(`wasi thread ${tid} failed in browser worker ${slot.index}`));
-            slot.busy = false;
-            slot.tid = null;
-            activeWorkers.delete(tid);
-            break;
-          }
-          waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
-        }
-      }
+      for (const [tid, slot] of activeWorkers.entries()) settlePooledWorker(tid, slot);
     }
     await shutdownCommandWithDeadline();
     if (firstThreadFailure) throw firstThreadFailure;

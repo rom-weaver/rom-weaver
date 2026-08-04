@@ -126,6 +126,24 @@ const _setByteSource = (file: PatchFileLike, source: SyncByteSource) => {
   _syncMetadataFromByteSource(file);
 };
 
+/** The live browser file objects PatchFile refuses; it needs staged bytes instead. */
+const _isBrowserFileSource = (source: PatchFileSource): boolean => {
+  if (typeof File !== "undefined" && source instanceof File) return true;
+  if (typeof FileList !== "undefined" && source instanceof FileList) return true;
+  return (
+    typeof HTMLInputElement !== "undefined" &&
+    source instanceof HTMLInputElement &&
+    source.tagName === "INPUT" &&
+    source.type === "file"
+  );
+};
+
+const _resolveBrowserFile = (source: PatchFileSource): File | undefined => {
+  if (typeof HTMLInputElement !== "undefined" && source instanceof HTMLInputElement) return source.files?.[0];
+  if (typeof FileList !== "undefined" && source instanceof FileList) return source[0];
+  return source as File;
+};
+
 class PatchFile implements PatchFileLike {
   static RUNTIME_ENVIROMENT: PatchFileRuntime = (() => {
     if (typeof window === "object" && typeof window.document === "object") return "browser";
@@ -160,26 +178,17 @@ class PatchFile implements PatchFileLike {
   _sharedReadScratch?: Uint8Array;
 
   constructor(source: PatchFileSource, onLoad?: (file: PatchFileInstance) => void) {
+    const notifyLoaded = () => {
+      if (typeof onLoad === "function") onLoad(this);
+    };
     if (isSyncByteSource(source)) {
       _setByteSource(this, source);
-      if (typeof onLoad === "function") onLoad(this);
+      notifyLoaded();
       return;
     }
 
-    if (
-      PatchFile.RUNTIME_ENVIROMENT === "browser" &&
-      ((typeof File !== "undefined" && source instanceof File) ||
-        (typeof FileList !== "undefined" && source instanceof FileList) ||
-        (typeof HTMLInputElement !== "undefined" &&
-          source instanceof HTMLInputElement &&
-          source.tagName === "INPUT" &&
-          source.type === "file"))
-    ) {
-      let browserSource: File | undefined;
-      if (typeof HTMLInputElement !== "undefined" && source instanceof HTMLInputElement)
-        browserSource = source.files?.[0];
-      else if (typeof FileList !== "undefined" && source instanceof FileList) browserSource = source[0];
-      else browserSource = source as File;
+    if (PatchFile.RUNTIME_ENVIROMENT === "browser" && _isBrowserFileSource(source)) {
+      const browserSource = _resolveBrowserFile(source);
       if (!browserSource) throw new Error("invalid PatchFile source");
 
       this.fileName = browserSource.name;
@@ -193,22 +202,12 @@ class PatchFile implements PatchFileLike {
       if (source.fileSize) source.readIntoAt(bytes, 0, source.fileSize, 0);
       _setByteSource(this, new MemoryByteSource(bytes, { fileName: source.fileName, fileType: source.fileType }));
       this.littleEndian = source.littleEndian;
-      if (typeof onLoad === "function") onLoad(this);
+      notifyLoaded();
       return;
     }
-    if (source instanceof ArrayBuffer) {
+    if (source instanceof ArrayBuffer || ArrayBuffer.isView(source) || typeof source === "number") {
       _setByteSource(this, new MemoryByteSource(source));
-      if (typeof onLoad === "function") onLoad(this);
-      return;
-    }
-    if (ArrayBuffer.isView(source)) {
-      _setByteSource(this, new MemoryByteSource(source));
-      if (typeof onLoad === "function") onLoad(this);
-      return;
-    }
-    if (typeof source === "number") {
-      _setByteSource(this, new MemoryByteSource(source));
-      if (typeof onLoad === "function") onLoad(this);
+      notifyLoaded();
       return;
     }
     throw new Error("invalid PatchFile source");

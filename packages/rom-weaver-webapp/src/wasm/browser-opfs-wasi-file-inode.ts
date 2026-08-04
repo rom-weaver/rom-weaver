@@ -392,47 +392,64 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return wasiShim.wasi.ERRNO_SUCCESS;
   }
 
+  /**
+   * A seek away from where the buffer ends breaks the run it was coalescing, so
+   * the pending bytes have to land before the new position is used.
+   */
+  private flushIfPositionBrokeRun() {
+    if (this.writeBufferLength === 0) return wasiShim.wasi.ERRNO_SUCCESS;
+    const expectedPosition = this.writeBufferStart + BigInt(this.writeBufferLength);
+    if (this.position === expectedPosition) return wasiShim.wasi.ERRNO_SUCCESS;
+    return this.flushPendingWrite();
+  }
+
+  /**
+   * Copy one chunk into the coalescing buffer, flushing first when it is full.
+   * Returns the bytes taken, or an errno when the flush failed.
+   */
+  private appendToWriteBuffer(data: Uint8Array, nwritten: number) {
+    const buffer = this.ensureWriteBuffer();
+    const available = buffer.byteLength - this.writeBufferLength;
+    if (available <= 0) return { ret: this.flushPendingWrite(), taken: 0 };
+    const chunkLength = Math.min(data.byteLength - nwritten, available);
+    buffer.set(data.subarray(nwritten, nwritten + chunkLength), this.writeBufferLength);
+    this.writeBufferLength += chunkLength;
+    this.position += BigInt(chunkLength);
+    const ret = this.writeBufferLength >= buffer.byteLength ? this.flushPendingWrite() : wasiShim.wasi.ERRNO_SUCCESS;
+    return { ret, taken: chunkLength };
+  }
+
+  /**
+   * Writes large enough to be worth their own syscall bypass the buffer entirely.
+   * Returns null when the remainder is too small to skip coalescing.
+   */
+  private writeThroughIfLarge(data: Uint8Array, nwritten: number) {
+    if (this.writeBufferLength !== 0) return null;
+    this.writeBufferStart = this.position;
+    if (data.byteLength - nwritten < OPFS_SEQUENTIAL_DIRECT_WRITE_MIN_BYTES) return null;
+    const source = data.subarray(nwritten);
+    const bytesWritten = this.inode.file.writeAt(this.position, source);
+    this.position += BigInt(bytesWritten);
+    return { short: bytesWritten !== source.byteLength, written: bytesWritten };
+  }
+
   bufferSequentialWrite(data: Uint8Array) {
     if (this.closed) return { nwritten: 0, ret: wasiShim.wasi.ERRNO_BADF };
     let nwritten = 0;
     while (nwritten < data.byteLength) {
-      if (this.writeBufferLength > 0) {
-        const expectedPosition = this.writeBufferStart + BigInt(this.writeBufferLength);
-        if (this.position !== expectedPosition) {
-          const flushRet = this.flushPendingWrite();
-          if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return { nwritten, ret: flushRet };
-        }
-      }
+      const brokeRunRet = this.flushIfPositionBrokeRun();
+      if (brokeRunRet !== wasiShim.wasi.ERRNO_SUCCESS) return { nwritten, ret: brokeRunRet };
 
-      if (this.writeBufferLength === 0) {
-        this.writeBufferStart = this.position;
-        const remaining = data.byteLength - nwritten;
-        if (remaining >= OPFS_SEQUENTIAL_DIRECT_WRITE_MIN_BYTES) {
-          const source = data.subarray(nwritten);
-          const bytesWritten = this.inode.file.writeAt(this.position, source);
-          this.position += BigInt(bytesWritten);
-          nwritten += bytesWritten;
-          if (bytesWritten !== source.byteLength) break;
-          continue;
-        }
-      }
-
-      const buffer = this.ensureWriteBuffer();
-      const available = buffer.byteLength - this.writeBufferLength;
-      if (available <= 0) {
-        const flushRet = this.flushPendingWrite();
-        if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return { nwritten, ret: flushRet };
+      const direct = this.writeThroughIfLarge(data, nwritten);
+      if (direct) {
+        nwritten += direct.written;
+        if (direct.short) break;
         continue;
       }
-      const chunkLength = Math.min(data.byteLength - nwritten, available);
-      buffer.set(data.subarray(nwritten, nwritten + chunkLength), this.writeBufferLength);
-      this.writeBufferLength += chunkLength;
-      this.position += BigInt(chunkLength);
-      nwritten += chunkLength;
-      if (this.writeBufferLength >= buffer.byteLength) {
-        const flushRet = this.flushPendingWrite();
-        if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return { nwritten, ret: flushRet };
-      }
+
+      const appended = this.appendToWriteBuffer(data, nwritten);
+      nwritten += appended.taken;
+      if (appended.ret !== wasiShim.wasi.ERRNO_SUCCESS) return { nwritten, ret: appended.ret };
     }
     return { nwritten, ret: wasiShim.wasi.ERRNO_SUCCESS };
   }

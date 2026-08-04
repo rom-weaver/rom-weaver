@@ -136,27 +136,42 @@ const lineClassName = (copied: boolean, failed: boolean) => {
   return "ln";
 };
 
-const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
+/**
+ * Copy with the transient copied/failed states the buttons paint. The two call
+ * sites flash for slightly different durations, so the timings are arguments.
+ */
+const useCopyFeedback = (copiedMs: number, failedMs: number) => {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
+  const copy = useCallback(
+    (text: string, failureLabel: string) => {
+      copyToClipboard(text)
+        .then(() => {
+          setFailed(false);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), copiedMs);
+        })
+        .catch((error) => {
+          logger.warn(failureLabel, { message: String(error) });
+          setCopied(false);
+          setFailed(true);
+          window.setTimeout(() => setFailed(false), failedMs);
+        });
+    },
+    [copiedMs, failedMs],
+  );
+  return { copied, copy, failed };
+};
+
+type CopyFeedback = ReturnType<typeof useCopyFeedback>;
+
+const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
+  const { copied, copy, failed } = useCopyFeedback(1200, 1600);
   const details = formatDetails(entry.details);
   return (
     <button
       className={lineClassName(copied, failed)}
-      onClick={() => {
-        copyToClipboard(formatCopyLine(entry))
-          .then(() => {
-            setFailed(false);
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 1200);
-          })
-          .catch((error) => {
-            logger.warn("Log line copy failed", { message: String(error) });
-            setCopied(false);
-            setFailed(true);
-            window.setTimeout(() => setFailed(false), 1600);
-          });
-      }}
+      onClick={() => copy(formatCopyLine(entry), "Log line copy failed")}
       type="button"
     >
       <span className="ts">{formatTimestamp(entry.timestamp)}</span>
@@ -347,6 +362,399 @@ const useSettingsFieldFocus = (active: boolean, focusHint: SettingsFocusHint | n
   }, [active, focusHint]);
 };
 
+/** Roving-tabindex movement across the rail; -1 means the key moves nothing. */
+const nextTabIndex = (key: string, index: number): number => {
+  if (key === "ArrowRight" || key === "ArrowDown") return (index + 1) % DIALOG_TABS.length;
+  if (key === "ArrowLeft" || key === "ArrowUp") return (index + DIALOG_TABS.length - 1) % DIALOG_TABS.length;
+  if (key === "Home") return 0;
+  if (key === "End") return DIALOG_TABS.length - 1;
+  return -1;
+};
+
+/**
+ * The weft sub-rail that doubles as the dialog header. On a phone the whole head
+ * drops to the foot of the sheet - see responsive.css.
+ */
+const DialogTabRail = ({
+  localizer,
+  onSelect,
+  tab,
+}: {
+  localizer: Localizer;
+  onSelect: (tab: LogDialogTab) => void;
+  tab: LogDialogTab;
+}) => {
+  const tabsRef = useRef<HTMLDivElement | null>(null);
+  return (
+    <div
+      aria-label={localizer.message("ui.log.tabsLabel")}
+      aria-orientation="horizontal"
+      className="subrail dialog-subrail"
+      onKeyDown={(event) => {
+        const next = nextTabIndex(event.key, DIALOG_TABS.indexOf(tab));
+        if (next < 0) return;
+        event.preventDefault();
+        const nextTab = DIALOG_TABS[next] as LogDialogTab;
+        onSelect(nextTab);
+        tabsRef.current?.querySelector<HTMLButtonElement>(`[data-logtab="${nextTab}"]`)?.focus();
+      }}
+      ref={tabsRef}
+      role="tablist"
+    >
+      {DIALOG_TABS.map((entry) => {
+        const TabIcon = TAB_ICONS[entry];
+        return (
+          <button
+            aria-controls={`logpanel-${entry}`}
+            aria-selected={entry === tab}
+            className="subtab"
+            data-logtab={entry}
+            id={`logtab-${entry}`}
+            key={entry}
+            onClick={() => onSelect(entry)}
+            role="tab"
+            tabIndex={entry === tab ? 0 : -1}
+            type="button"
+          >
+            <TabIcon aria-hidden="true" />
+            <span>{localizer.message(TAB_MESSAGES[entry])}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+/** Save/restore for the settings tab; absent handlers drop their buttons. */
+const SettingsActionsBar = ({
+  localizer,
+  onRestoreDefaults,
+  onSaveSettings,
+}: {
+  localizer: Localizer;
+  onRestoreDefaults?: () => void;
+  onSaveSettings?: () => void;
+}) => {
+  if (!(onRestoreDefaults || onSaveSettings)) return null;
+  return (
+    <div className="dlg-subhead">
+      <div className="log-controls">
+        <div className="dlg-actions settings-actions">
+          {onRestoreDefaults ? (
+            <button
+              className="btn ghost"
+              onClick={onRestoreDefaults}
+              title={localizer.message("ui.settings.defaults")}
+              type="button"
+            >
+              <RotateCcw aria-hidden="true" />
+              <span className="bl">{localizer.message("ui.settings.defaults")}</span>
+            </button>
+          ) : null}
+          {onSaveSettings ? (
+            <button
+              className="btn primary"
+              onClick={onSaveSettings}
+              title={localizer.message("ui.settings.save")}
+              type="button"
+            >
+              <Save aria-hidden="true" />
+              <span className="bl">{localizer.message("ui.settings.save")}</span>
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/** Current-vs-previous session switch; only shown when a previous session exists. */
+const LogViewToggle = ({
+  localizer,
+  onChange,
+  showingPrevious,
+}: {
+  localizer: Localizer;
+  onChange: (view: "current" | "previous") => void;
+  showingPrevious: boolean;
+}) => (
+  <fieldset className="logview">
+    <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
+    <button aria-pressed={!showingPrevious} className="seg-btn" onClick={() => onChange("current")} type="button">
+      {localizer.message("ui.log.viewCurrent")}
+    </button>
+    <button aria-pressed={showingPrevious} className="seg-btn" onClick={() => onChange("previous")} type="button">
+      {localizer.message("ui.log.viewPrevious")}
+    </button>
+  </fieldset>
+);
+
+const LogLevelSelect = ({
+  currentLevel,
+  localizer,
+  onLevelChange,
+}: {
+  currentLevel: LogLevel;
+  localizer: Localizer;
+  onLevelChange: (level: string) => void;
+}) => (
+  <label className="loglevel">
+    <span className="sr-only">{localizer.message("settings.logLevel")}</span>
+    <select className="select mono" onChange={(event) => onLevelChange(event.currentTarget.value)} value={currentLevel}>
+      {LOG_LEVELS.map((value) => (
+        <option key={value} value={value}>
+          {`level: ${value}`}
+        </option>
+      ))}
+    </select>
+  </label>
+);
+
+const logDownloadName = (showingOpfs: boolean, showingPrevious: boolean) => {
+  if (showingOpfs) return "rom-weaver-opfs.txt";
+  return showingPrevious ? "rom-weaver-previous-log.txt" : "rom-weaver-log.txt";
+};
+
+/** Copy-all and download for whichever listing the body is showing. */
+const LogExportActions = ({
+  copyFeedback,
+  exportText,
+  localizer,
+  showingOpfs,
+  showingPrevious,
+}: {
+  copyFeedback: CopyFeedback;
+  exportText: string;
+  localizer: Localizer;
+  showingOpfs: boolean;
+  showingPrevious: boolean;
+}) => {
+  const { copied, copy, failed } = copyFeedback;
+  return (
+    <div className="dlg-actions log-actions">
+      <button
+        aria-label={localizer.message("ui.common.copy")}
+        className={`btn slim ghost log-icon-btn${copied ? " copied" : ""}${failed ? " copy-failed" : ""}`}
+        onClick={() => copy(exportText, "Log copy failed")}
+        title={localizer.message("ui.common.copy")}
+        type="button"
+      >
+        {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+      </button>
+      <button
+        aria-label={localizer.message("ui.result.download")}
+        className="btn slim ghost log-icon-btn"
+        onClick={() => {
+          void triggerBrowserDownload(exportText, logDownloadName(showingOpfs, showingPrevious));
+        }}
+        title={localizer.message("ui.result.download")}
+        type="button"
+      >
+        <Download aria-hidden="true" />
+      </button>
+    </div>
+  );
+};
+
+const OpfsInspector = ({
+  entries,
+  error,
+  filter,
+  loading,
+}: {
+  entries: readonly StorageEntry[];
+  error: string | null;
+  filter: string;
+  loading: boolean;
+}) => {
+  const emptyMessage = filter.trim() ? "No matching entries" : "OPFS has no entries";
+  return (
+    <div aria-live="polite" className="opfs-inspector mono">
+      <div className="opfs-summary">{loading ? "Loading OPFS…" : formatOpfsEntryCount(entries.length)}</div>
+      {error ? <div className="tracelog-empty">{error}</div> : null}
+      {!error && entries.length === 0 ? <div className="tracelog-empty">{emptyMessage}</div> : null}
+      {!error && entries.length > 0 ? (
+        <ul className="opfs-list">
+          {entries.map((entry) => (
+            <li className="opfs-row" key={`${entry.kind}:${entry.path}`}>
+              <span className="opfs-kind">{formatStorageEntryKind(entry)}</span>
+              <span className="opfs-path">{entry.path}</span>
+              <span className="opfs-size">{formatOpfsSize(entry.size)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+};
+
+/**
+ * The virtualized trace listing. Only rows near the viewport are mounted; the
+ * fixed CSS row height keeps the native scrollbar exact without a list library.
+ * The scroll state lives on the dialog, so leaving this tab and coming back does
+ * not re-run the scroll-to-newest effect and lose the reader's place.
+ */
+const TraceList = ({
+  entries,
+  filter,
+  localizer,
+  onScroll,
+  traceRef,
+  scrollTop,
+  viewportHeight,
+}: {
+  entries: readonly LogStoreEntry[];
+  filter: string;
+  localizer: Localizer;
+  onScroll: (scrollTop: number) => void;
+  traceRef: React.RefObject<HTMLDivElement | null>;
+  scrollTop: number;
+  viewportHeight: number;
+}) => {
+  const virtualStart = Math.max(0, Math.floor(scrollTop / TRACE_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS);
+  const virtualEnd = Math.min(
+    entries.length,
+    Math.ceil((scrollTop + viewportHeight) / TRACE_ROW_HEIGHT) + VIRTUAL_OVERSCAN_ROWS,
+  );
+  const emptyMessage = filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-";
+  return (
+    <div
+      aria-atomic="false"
+      aria-live="polite"
+      className="tracelog mono"
+      onScroll={(event) => onScroll(event.currentTarget.scrollTop)}
+      ref={traceRef}
+    >
+      {entries.length === 0 ? (
+        <div className="tracelog-empty">{emptyMessage}</div>
+      ) : (
+        <div className="tracelog-virtual-content" style={{ height: entries.length * TRACE_ROW_HEIGHT }}>
+          <div className="tracelog-virtual-window" style={{ top: virtualStart * TRACE_ROW_HEIGHT }}>
+            {entries.slice(virtualStart, virtualEnd).map((entry) => (
+              <TraceLine entry={entry} key={entry.id} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * The logs and storage tabs, which share one toolbar and body. Every piece of
+ * state it renders is owned by the dialog, so switching tabs keeps the fetched
+ * OPFS listing, the filter, and the reader's scroll position.
+ */
+const LogsStoragePanel = ({
+  copyFeedback,
+  currentLevel,
+  entries,
+  filter,
+  hasPrevious,
+  localizer,
+  onFilterChange,
+  onLevelChange,
+  onRefreshOpfs,
+  onScroll,
+  onViewChange,
+  opfsEntries,
+  opfsError,
+  opfsLoading,
+  scrollTop,
+  showingPrevious,
+  tab,
+  traceRef,
+  viewportHeight,
+}: {
+  copyFeedback: CopyFeedback;
+  currentLevel: LogLevel;
+  entries: readonly LogStoreEntry[];
+  filter: string;
+  hasPrevious: boolean;
+  localizer: Localizer;
+  onFilterChange: (filter: string) => void;
+  onLevelChange: (level: string) => void;
+  onRefreshOpfs: () => void;
+  onScroll: (scrollTop: number) => void;
+  onViewChange: (view: "current" | "previous") => void;
+  opfsEntries: readonly StorageEntry[];
+  opfsError: string | null;
+  opfsLoading: boolean;
+  scrollTop: number;
+  showingPrevious: boolean;
+  tab: LogDialogTab;
+  traceRef: React.RefObject<HTMLDivElement | null>;
+  viewportHeight: number;
+}) => {
+  const showingOpfs = tab === "storage";
+  const exportText = showingOpfs ? opfsEntries.map(formatOpfsEntry).join("\n") : entries.map(formatCopyLine).join("\n");
+  return (
+    <>
+      <div className="dlg-subhead">
+        {/* The controls take the row; the filter gets the next one to itself.
+            Sharing one row meant the filter and the view toggle fought for the
+            same width, and on a phone both lost - the toggle ellipsed its labels
+            while the filter shrank to a slot too narrow to read what you had
+            typed. */}
+        <div className="log-controls">
+          {tab === "logs" && hasPrevious ? (
+            <LogViewToggle localizer={localizer} onChange={onViewChange} showingPrevious={showingPrevious} />
+          ) : null}
+          {showingOpfs ? (
+            <button
+              aria-label="Refresh OPFS"
+              className="btn slim ghost log-refresh"
+              disabled={opfsLoading}
+              onClick={onRefreshOpfs}
+              title="Refresh OPFS"
+              type="button"
+            >
+              <RefreshCw aria-hidden="true" className={opfsLoading ? "spin" : undefined} />
+            </button>
+          ) : (
+            <LogLevelSelect currentLevel={currentLevel} localizer={localizer} onLevelChange={onLevelChange} />
+          )}
+          <LogExportActions
+            copyFeedback={copyFeedback}
+            exportText={exportText}
+            localizer={localizer}
+            showingOpfs={showingOpfs}
+            showingPrevious={showingPrevious}
+          />
+        </div>
+        <input
+          aria-label={localizer.message("ui.log.filterLabel")}
+          className="input mono log-filter"
+          onChange={(event) => onFilterChange(event.currentTarget.value)}
+          placeholder={localizer.message("ui.log.filter")}
+          type="search"
+          value={filter}
+        />
+      </div>
+      <div
+        aria-labelledby={showingOpfs ? "logtab-storage" : "logtab-logs"}
+        className="dlg-body log-body"
+        id={showingOpfs ? "logpanel-storage" : "logpanel-logs"}
+        role="tabpanel"
+      >
+        {showingOpfs ? (
+          <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
+        ) : (
+          <TraceList
+            entries={entries}
+            filter={filter}
+            localizer={localizer}
+            onScroll={onScroll}
+            scrollTop={scrollTop}
+            traceRef={traceRef}
+            viewportHeight={viewportHeight}
+          />
+        )}
+      </div>
+    </>
+  );
+};
+
 const LogDialog = ({
   open,
   onClose,
@@ -384,11 +792,9 @@ const LogDialog = ({
   const [filter, setFilter] = useState("");
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
-  const [copiedAll, setCopiedAll] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
   const [view, setView] = useState<"current" | "previous">("current");
   const [tab, setTab] = useState<LogDialogTab>(initialTab);
-  const tabsRef = useRef<HTMLDivElement | null>(null);
+  const copyFeedback = useCopyFeedback(1300, 1600);
   // Each open lands on the tab the control that opened it names.
   useEffect(() => {
     if (open) setTab(initialTab);
@@ -462,16 +868,6 @@ const LogDialog = ({
     if (!query) return leafEntries;
     return leafEntries.filter((entry) => `${formatOpfsEntry(entry)} ${entry.path}`.toLowerCase().includes(query));
   }, [filter, opfsEntries]);
-  const exportText = showingOpfs ? visibleOpfs.map(formatOpfsEntry).join("\n") : visible.map(formatCopyLine).join("\n");
-
-  const virtualStart = Math.max(0, Math.floor(scrollTop / TRACE_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS);
-  const virtualEnd = Math.min(
-    visible.length,
-    Math.ceil((scrollTop + viewportHeight) / TRACE_ROW_HEIGHT) + VIRTUAL_OVERSCAN_ROWS,
-  );
-  const rendered = visible.slice(virtualStart, virtualEnd);
-  const totalHeight = visible.length * TRACE_ROW_HEIGHT;
-
   useEffect(() => {
     if (!(open && tab === "logs")) return;
     const trace = traceRef.current;
@@ -515,48 +911,7 @@ const LogDialog = ({
             close button parks at the rail's end. On a phone the whole head
             drops to the foot of the sheet - see responsive.css. */}
         <header className="dlg-head">
-          <div
-            aria-label={localizer.message("ui.log.tabsLabel")}
-            aria-orientation="horizontal"
-            className="subrail dialog-subrail"
-            onKeyDown={(event) => {
-              const index = DIALOG_TABS.indexOf(tab);
-              let next = -1;
-              if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % DIALOG_TABS.length;
-              if (event.key === "ArrowLeft" || event.key === "ArrowUp")
-                next = (index + DIALOG_TABS.length - 1) % DIALOG_TABS.length;
-              if (event.key === "Home") next = 0;
-              if (event.key === "End") next = DIALOG_TABS.length - 1;
-              if (next < 0) return;
-              event.preventDefault();
-              const nextTab = DIALOG_TABS[next] as LogDialogTab;
-              selectTab(nextTab);
-              tabsRef.current?.querySelector<HTMLButtonElement>(`[data-logtab="${nextTab}"]`)?.focus();
-            }}
-            ref={tabsRef}
-            role="tablist"
-          >
-            {DIALOG_TABS.map((entry) => {
-              const TabIcon = TAB_ICONS[entry];
-              return (
-                <button
-                  aria-controls={`logpanel-${entry}`}
-                  aria-selected={entry === tab}
-                  className="subtab"
-                  data-logtab={entry}
-                  id={`logtab-${entry}`}
-                  key={entry}
-                  onClick={() => selectTab(entry)}
-                  role="tab"
-                  tabIndex={entry === tab ? 0 : -1}
-                  type="button"
-                >
-                  <TabIcon aria-hidden="true" />
-                  <span>{localizer.message(TAB_MESSAGES[entry])}</span>
-                </button>
-              );
-            })}
-          </div>
+          <DialogTabRail localizer={localizer} onSelect={selectTab} tab={tab} />
           <button
             aria-label={localizer.message("ui.common.close")}
             className="dlg-x"
@@ -570,35 +925,12 @@ const LogDialog = ({
             <span className="dlg-x-label">{localizer.message("ui.common.close")}</span>
           </button>
         </header>
-        {tab === "settings" && (onRestoreDefaults || onSaveSettings) ? (
-          <div className="dlg-subhead">
-            <div className="log-controls">
-              <div className="dlg-actions settings-actions">
-                {onRestoreDefaults ? (
-                  <button
-                    className="btn ghost"
-                    onClick={onRestoreDefaults}
-                    title={localizer.message("ui.settings.defaults")}
-                    type="button"
-                  >
-                    <RotateCcw aria-hidden="true" />
-                    <span className="bl">{localizer.message("ui.settings.defaults")}</span>
-                  </button>
-                ) : null}
-                {onSaveSettings ? (
-                  <button
-                    className="btn primary"
-                    onClick={onSaveSettings}
-                    title={localizer.message("ui.settings.save")}
-                    type="button"
-                  >
-                    <Save aria-hidden="true" />
-                    <span className="bl">{localizer.message("ui.settings.save")}</span>
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
+        {tab === "settings" ? (
+          <SettingsActionsBar
+            localizer={localizer}
+            onRestoreDefaults={onRestoreDefaults}
+            onSaveSettings={onSaveSettings}
+          />
         ) : null}
         {tab === "settings" ? (
           <div
@@ -636,172 +968,32 @@ const LogDialog = ({
           </div>
         ) : null}
         {tab === "logs" || tab === "storage" ? (
-          <>
-            <div className="dlg-subhead">
-              {/* The controls take the row; the filter gets the next one to
-                  itself. Sharing one row meant the filter and the view toggle
-                  fought for the same width, and on a phone both lost - the
-                  toggle ellipsed its labels while the filter shrank to a slot
-                  too narrow to read what you had typed. */}
-              <div className="log-controls">
-                {tab === "logs" && hasPrevious ? (
-                  <fieldset className="logview">
-                    <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
-                    <button
-                      aria-pressed={view === "current"}
-                      className="seg-btn"
-                      onClick={() => setView("current")}
-                      type="button"
-                    >
-                      {localizer.message("ui.log.viewCurrent")}
-                    </button>
-                    <button
-                      aria-pressed={showingPrevious}
-                      className="seg-btn"
-                      onClick={() => setView("previous")}
-                      type="button"
-                    >
-                      {localizer.message("ui.log.viewPrevious")}
-                    </button>
-                  </fieldset>
-                ) : null}
-                {showingOpfs ? (
-                  <button
-                    aria-label="Refresh OPFS"
-                    className="btn slim ghost log-refresh"
-                    disabled={opfsLoading}
-                    onClick={() => void refreshOpfs()}
-                    title="Refresh OPFS"
-                    type="button"
-                  >
-                    <RefreshCw aria-hidden="true" className={opfsLoading ? "spin" : undefined} />
-                  </button>
-                ) : (
-                  <label className="loglevel">
-                    <span className="sr-only">{localizer.message("settings.logLevel")}</span>
-                    <select
-                      className="select mono"
-                      onChange={(event) => onLevelChange(event.currentTarget.value)}
-                      value={currentLevel}
-                    >
-                      {LOG_LEVELS.map((value) => (
-                        <option key={value} value={value}>
-                          {`level: ${value}`}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                <div className="dlg-actions log-actions">
-                  <button
-                    aria-label={localizer.message("ui.common.copy")}
-                    className={`btn slim ghost log-icon-btn${copiedAll ? " copied" : ""}${copyFailed ? " copy-failed" : ""}`}
-                    onClick={() => {
-                      copyToClipboard(exportText)
-                        .then(() => {
-                          setCopyFailed(false);
-                          setCopiedAll(true);
-                          window.setTimeout(() => setCopiedAll(false), 1300);
-                        })
-                        .catch((error) => {
-                          logger.warn("Log copy failed", { message: String(error) });
-                          setCopiedAll(false);
-                          setCopyFailed(true);
-                          window.setTimeout(() => setCopyFailed(false), 1600);
-                        });
-                    }}
-                    title={localizer.message("ui.common.copy")}
-                    type="button"
-                  >
-                    {copiedAll ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-                  </button>
-                  <button
-                    aria-label={localizer.message("ui.result.download")}
-                    className="btn slim ghost log-icon-btn"
-                    onClick={() => {
-                      void triggerBrowserDownload(
-                        exportText,
-                        showingOpfs
-                          ? "rom-weaver-opfs.txt"
-                          : showingPrevious
-                            ? "rom-weaver-previous-log.txt"
-                            : "rom-weaver-log.txt",
-                      );
-                    }}
-                    title={localizer.message("ui.result.download")}
-                    type="button"
-                  >
-                    <Download aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-              <input
-                aria-label={localizer.message("ui.log.filterLabel")}
-                className="input mono log-filter"
-                onChange={(event) => {
-                  setFilter(event.currentTarget.value);
-                  if (traceRef.current) traceRef.current.scrollTop = 0;
-                  setScrollTop(0);
-                }}
-                placeholder={localizer.message("ui.log.filter")}
-                type="search"
-                value={filter}
-              />
-            </div>
-            <div
-              aria-labelledby={showingOpfs ? "logtab-storage" : "logtab-logs"}
-              className="dlg-body log-body"
-              id={showingOpfs ? "logpanel-storage" : "logpanel-logs"}
-              role="tabpanel"
-            >
-              {showingOpfs ? (
-                <div aria-live="polite" className="opfs-inspector mono">
-                  <div className="opfs-summary">
-                    {opfsLoading ? "Loading OPFS…" : formatOpfsEntryCount(visibleOpfs.length)}
-                  </div>
-                  {opfsError ? (
-                    <div className="tracelog-empty">{opfsError}</div>
-                  ) : visibleOpfs.length === 0 ? (
-                    <div className="tracelog-empty">
-                      {filter.trim() ? "No matching entries" : "OPFS has no entries"}
-                    </div>
-                  ) : (
-                    <ul className="opfs-list">
-                      {visibleOpfs.map((entry) => (
-                        <li className="opfs-row" key={`${entry.kind}:${entry.path}`}>
-                          <span className="opfs-kind">{formatStorageEntryKind(entry)}</span>
-                          <span className="opfs-path">{entry.path}</span>
-                          <span className="opfs-size">{formatOpfsSize(entry.size)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : (
-                <div
-                  aria-atomic="false"
-                  aria-live="polite"
-                  className="tracelog mono"
-                  onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-                  ref={traceRef}
-                >
-                  {visible.length === 0 ? (
-                    <div className="tracelog-empty">
-                      {filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-"}
-                    </div>
-                  ) : (
-                    <div className="tracelog-virtual-content" style={{ height: totalHeight }}>
-                      <div className="tracelog-virtual-window" style={{ top: virtualStart * TRACE_ROW_HEIGHT }}>
-                        {rendered.map((entry) => (
-                          <TraceLine entry={entry} key={entry.id} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </>
+          <LogsStoragePanel
+            copyFeedback={copyFeedback}
+            currentLevel={currentLevel}
+            entries={visible}
+            filter={filter}
+            hasPrevious={hasPrevious}
+            localizer={localizer}
+            onFilterChange={(next) => {
+              setFilter(next);
+              // A new query re-ranges the list, so start reading it from the top.
+              if (traceRef.current) traceRef.current.scrollTop = 0;
+              setScrollTop(0);
+            }}
+            onLevelChange={onLevelChange}
+            onRefreshOpfs={() => void refreshOpfs()}
+            onScroll={setScrollTop}
+            onViewChange={setView}
+            opfsEntries={visibleOpfs}
+            opfsError={opfsError}
+            opfsLoading={opfsLoading}
+            scrollTop={scrollTop}
+            showingPrevious={showingPrevious}
+            tab={tab}
+            traceRef={traceRef}
+            viewportHeight={viewportHeight}
+          />
         ) : null}
       </div>
     </dialog>

@@ -42,6 +42,22 @@ import type {
   WorkflowOptionsFactory,
 } from "./staged-source-types.ts";
 
+/** ROM-only identity fields; the shared state type does not declare them, so each is copied only when present. */
+const SELECTED_OWNER_IDENTITY_KEYS = [
+  "checksums",
+  "checksumVariants",
+  "checksumTimeMs",
+  "romProbe",
+  "romType",
+] as const;
+
+const copySelectedOwnerIdentity = (target: Record<string, unknown>, owner: Record<string, unknown> | undefined) => {
+  if (!owner) return;
+  for (const key of SELECTED_OWNER_IDENTITY_KEYS) {
+    if (key in owner) target[key] = owner[key];
+  }
+};
+
 const MAX_SELECTION_RETRY_COUNT = 12;
 
 const getDefaultPreparedFileName = (asset: InputAsset | undefined, fallback: string) =>
@@ -114,13 +130,14 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     };
   }
 
-  async stageSource(stage: SharedRomStagedSource<TSource, TState>): Promise<SharedRomStagedSource<TSource, TState>> {
-    this.trace?.("source.stage.start", {
-      fileName: stage.state.fileName,
-      order: stage.state.order,
-      role: stage.state.role,
-      sourceSize: stage.state.sourceSize,
-    });
+  /**
+   * Prepare the stage's assets and return whatever candidate selections that
+   * surfaced. A single patchable asset needs no prompt, so its requests are
+   * dropped; when nothing surfaced, the prepared asset itself may still offer one.
+   */
+  private async collectStageRequests(
+    stage: SharedRomStagedSource<TSource, TState>,
+  ): Promise<CandidateSelectionRequest[]> {
     const requests: CandidateSelectionRequest[] = [];
     try {
       stage.preparedInputAssets = await this.prepareStageAssets(stage, requests, undefined);
@@ -145,13 +162,23 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     ) {
       requests.length = 0;
     }
-    if (!requests.length) {
-      const preparedAssetRequest = this.createPreparedAssetSelectionRequest(stage);
-      if (preparedAssetRequest) {
-        requests.push(preparedAssetRequest);
-        releasePreparedRomSource(stage as never);
-      }
+    if (requests.length) return requests;
+    const preparedAssetRequest = this.createPreparedAssetSelectionRequest(stage);
+    if (preparedAssetRequest) {
+      requests.push(preparedAssetRequest);
+      releasePreparedRomSource(stage as never);
     }
+    return requests;
+  }
+
+  async stageSource(stage: SharedRomStagedSource<TSource, TState>): Promise<SharedRomStagedSource<TSource, TState>> {
+    this.trace?.("source.stage.start", {
+      fileName: stage.state.fileName,
+      order: stage.state.order,
+      role: stage.state.role,
+      sourceSize: stage.state.sourceSize,
+    });
+    const requests = await this.collectStageRequests(stage);
     for (const request of requests) this.addCandidateRequest(stage, request);
     if (!stage.state.candidates.length) this.addDirectCandidate(stage, stage.index, stage.state.id);
     const selectable = stage.state.candidates.filter((candidate) => candidate.selectable);
@@ -199,40 +226,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       sourceCount: sources.length,
     });
     if (directAssets) {
-      const view = this.createInitialSource(role, sources[0] as TSource, 0, {
-        id: this.getSessionId?.(role),
-      });
-      view.preparedInputAssets = directAssets;
-      view.state.status = "ready";
-      if (this.getSessionId) view.state.id = this.getSessionId(role);
-      view.state.fileName = directAssets[0]?.fileName || view.state.fileName;
-      view.state.size = directAssets.reduce((total, asset) => total + asset.size, 0) || view.state.size;
-      view.state.sourceSize =
-        sources.reduce((total, source) => total + (getBinarySourceSize(source as never) || 0), 0) ||
-        view.state.sourceSize;
-      this.applyPreparedSourceMetadata(view);
-      const hasDiscSheet = directAssets.some((asset) => asset.kind === "cue" || asset.kind === "gdi");
-      if (
-        this.clearRequestsWhenSinglePatchableAsset &&
-        !hasDiscSheet &&
-        directAssets.filter((asset) => asset.patchable).length === 1
-      ) {
-        requests.length = 0;
-      }
-      for (const request of requests) this.addCandidateRequest(view, request);
-      if (!view.state.candidates.length) this.addDirectCandidate(view, 0, view.state.id);
-      // A cohesive multi-track disc (one selectable "cue-disc" group whose tracks
-      // are parented to it) auto-resolves to the whole disc - no prompt. The
-      // prompt only returns when there is genuine ambiguity (e.g. an unrelated
-      // extra ROM alongside the disc).
-      const automatic = resolveAutomaticSelection(this.createSelectionRequest(view.state));
-      if (automatic) {
-        view.state.selectedCandidateId = automatic.id;
-        view.selectedArchiveEntry = view.internalCandidates.get(automatic.id)?.archiveEntry;
-      } else {
-        view.state.status = "needsSelection";
-      }
-      if (view.state.status === "ready") this.applyPreparedSourceMetadata(view);
+      const view = this.buildDirectAssetView(role, sources, directAssets, requests);
       return { role, sources, stages: [view], synthetic: false, view };
     }
 
@@ -264,6 +258,56 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     }
     const stages = fulfilled.map((result) => result.value);
     return this.buildSyntheticSession(role, sources, stages);
+  }
+
+  /**
+   * The multi-source drop resolved to one direct asset set, so it presents as a
+   * single view rather than a synthetic session. A cohesive multi-track disc (one
+   * selectable "cue-disc" group whose tracks are parented to it) auto-resolves to
+   * the whole disc - the prompt only returns on genuine ambiguity, e.g. an
+   * unrelated extra ROM alongside the disc.
+   */
+  private buildDirectAssetView(
+    role: TState["role"],
+    sources: TSource[],
+    directAssets: NonNullable<Awaited<ReturnType<typeof prepareMultipleDirectInputAssets>>>,
+    requests: CandidateSelectionRequest[],
+  ): SharedRomStagedSource<TSource, TState> {
+    const view = this.createInitialSource(role, sources[0] as TSource, 0, {
+      id: this.getSessionId?.(role),
+    });
+    view.preparedInputAssets = directAssets;
+    view.state.status = "ready";
+    if (this.getSessionId) view.state.id = this.getSessionId(role);
+    view.state.fileName = directAssets[0]?.fileName || view.state.fileName;
+    view.state.size = directAssets.reduce((total, asset) => total + asset.size, 0) || view.state.size;
+    view.state.sourceSize =
+      sources.reduce((total, source) => total + (getBinarySourceSize(source as never) || 0), 0) ||
+      view.state.sourceSize;
+    this.applyPreparedSourceMetadata(view);
+    const hasDiscSheet = directAssets.some((asset) => asset.kind === "cue" || asset.kind === "gdi");
+    if (
+      this.clearRequestsWhenSinglePatchableAsset &&
+      !hasDiscSheet &&
+      directAssets.filter((asset) => asset.patchable).length === 1
+    ) {
+      requests.length = 0;
+    }
+    for (const request of requests) this.addCandidateRequest(view, request);
+    if (!view.state.candidates.length) this.addDirectCandidate(view, 0, view.state.id);
+    // A cohesive multi-track disc (one selectable "cue-disc" group whose tracks
+    // are parented to it) auto-resolves to the whole disc - no prompt. The
+    // prompt only returns when there is genuine ambiguity (e.g. an unrelated
+    // extra ROM alongside the disc).
+    const automatic = resolveAutomaticSelection(this.createSelectionRequest(view.state));
+    if (automatic) {
+      view.state.selectedCandidateId = automatic.id;
+      view.selectedArchiveEntry = view.internalCandidates.get(automatic.id)?.archiveEntry;
+    } else {
+      view.state.status = "needsSelection";
+    }
+    if (view.state.status === "ready") this.applyPreparedSourceMetadata(view);
+    return view;
   }
 
   buildSyntheticSession(
@@ -369,13 +413,10 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     view.state.wasDecompressed = selectedOwner?.state.wasDecompressed;
     view.parentCompressions = cloneParentCompressions(selectedOwner?.parentCompressions);
     view.state.parentCompressions = cloneParentCompressions(selectedOwner?.parentCompressions);
-    if (selectedOwner && "checksums" in selectedOwner.state) view.state.checksums = selectedOwner.state.checksums;
-    if (selectedOwner && "checksumVariants" in selectedOwner.state)
-      view.state.checksumVariants = selectedOwner.state.checksumVariants;
-    if (selectedOwner && "checksumTimeMs" in selectedOwner.state)
-      view.state.checksumTimeMs = selectedOwner.state.checksumTimeMs;
-    if (selectedOwner && "romProbe" in selectedOwner.state) view.state.romProbe = selectedOwner.state.romProbe;
-    if (selectedOwner && "romType" in selectedOwner.state) view.state.romType = selectedOwner.state.romType;
+    copySelectedOwnerIdentity(
+      view.state as unknown as Record<string, unknown>,
+      selectedOwner?.state as unknown as Record<string, unknown> | undefined,
+    );
   }
 
   getSelectedOwner(

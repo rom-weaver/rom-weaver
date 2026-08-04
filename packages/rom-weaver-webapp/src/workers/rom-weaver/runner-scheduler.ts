@@ -151,6 +151,11 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
     return false;
   };
 
+  const hasExclusiveInFlight = (): boolean => {
+    for (const entry of inFlight) if (entry.exclusive) return true;
+    return false;
+  };
+
   const intersectsInFlightPaths = (paths: ReadonlySet<string>): boolean => {
     if (paths.size === 0) return false;
     for (const entry of inFlight) {
@@ -178,18 +183,19 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
   // Local admission gate for NON-I/O ops (unchanged contract). With nothing in flight a candidate
   // always fits (the lone-job rule). I/O in-flight threads count here too, so a CPU op cannot start
   // alongside an I/O wave that already holds the budget.
+  // The thread and memory ceilings only bite once something is already running:
+  // with an idle lane the lone-job rule hands a candidate the whole budget.
+  const fitsSharedBudget = (operation: ScheduledOperation): boolean => {
+    if (inFlight.size === 0) return true;
+    if (allocatedThreads() + Math.max(0, operation.threads) > totalThreadBudget) return false;
+    return allocatedBytes() + Math.max(0, operation.bytes ?? 0) <= memoryCeiling;
+  };
+
   const canAdmit = (operation: ScheduledOperation): boolean => {
     if (inFlight.size >= maxConcurrency) return false;
-    for (const entry of inFlight) {
-      if (entry.exclusive) return false;
-    }
+    if (hasExclusiveInFlight()) return false;
     if (operation.exclusive === true && inFlight.size > 0) return false;
-    if (inFlight.size > 0 && allocatedThreads() + Math.max(0, operation.threads) > totalThreadBudget) {
-      return false;
-    }
-    if (inFlight.size > 0 && allocatedBytes() + Math.max(0, operation.bytes ?? 0) > memoryCeiling) {
-      return false;
-    }
+    if (!fitsSharedBudget(operation)) return false;
     return !intersectsInFlightPaths(operation.paths);
   };
 
@@ -269,72 +275,92 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
     waiter.admit(totalThreadBudget);
   };
 
+  /**
+   * Admit every arrived I/O waiter the planner placed in the current wave, still
+   * subject to the concurrency cap and OPFS path exclusivity. Returns whether any
+   * were admitted, which is what tells the caller real progress was made.
+   */
+  const admitPlannedWave = (
+    ioWaiters: Waiter[],
+    waveJobs: ReadonlySet<number>,
+    offset: number,
+    threadsPerJob: number,
+  ): boolean => {
+    // Index against the plan up front; anything outside the wave waits for the
+    // current one to drain, so the admit walk below is a straight line.
+    const planned = ioWaiters.filter((_waiter, index) => waveJobs.has(offset + index));
+    let admittedAny = false;
+    for (const waiter of planned) {
+      if (inFlight.size >= maxConcurrency) break;
+      const position = waiters.indexOf(waiter);
+      // A missing position means it left the queue meanwhile; the path check is
+      // the OPFS exclusivity safety net.
+      if (position < 0 || intersectsInFlightPaths(waiter.operation.paths)) continue;
+      waiters.splice(position, 1);
+      waiter.admit(threadsPerJob);
+      admittedAny = true;
+    }
+    return admittedAny;
+  };
+
+  /**
+   * One planning round-trip: build the job-size list the planner scores, ask it
+   * for a plan, then admit its first wave. Returns whether anything was admitted.
+   */
+  const planAndAdmitIoWave = async (plan: NonNullable<SchedulerOptions["planBatch"]>): Promise<boolean> => {
+    const ioWaiters = waiters.filter((waiter) => waiter.operation.io);
+    const inFlightIo = [...inFlight].filter((entry) => entry.io);
+    // Order: in-flight, then arrived waiters, then declared-not-yet-arrived. Greedy first-fit fills a
+    // wave by ascending index, so arrived waiters are always preferred over not-yet-arrived ones - a
+    // pending slot never displaces a real waiter; it only shrinks the per-job thread share to match
+    // the full drop.
+    const sizes = [
+      ...inFlightIo.map((entry) => entry.jobSizeBytes),
+      ...ioWaiters.map((waiter) => Math.max(0, Math.floor(waiter.operation.jobSizeBytes ?? 0))),
+      ...pendingIoBatchSizes,
+    ];
+    // Plan against the threads not already held by non-I/O ops, so the two lanes never oversubscribe.
+    const availableThreads = Math.max(1, totalThreadBudget - nonIoAllocatedThreads());
+    const planned = await plan(sizes, { memoryCeilingBytes: memoryCeiling, threadBudget: availableThreads });
+    const wave = planned.waves[0];
+    const threadsPerJob = Math.max(1, Math.floor(wave?.threadsPerJob ?? availableThreads));
+    const admittedAny = admitPlannedWave(ioWaiters, new Set(wave?.jobs ?? []), inFlightIo.length, threadsPerJob);
+    trace("io wave planned", {
+      admitted: admittedAny,
+      inFlightIo: inFlightIo.length,
+      pending: pendingIoBatchSizes.length,
+      threadsPerJob,
+      waiting: waiters.length,
+      waveSize: wave?.jobs?.length ?? 0,
+    });
+    return admittedAny;
+  };
+
   // Asynchronous lane: ask the Rust planner which queued I/O jobs may overlap the in-flight I/O set
   // (plus any noted-but-not-yet-arrived batch jobs, so the first arrival is grouped against the whole
   // drop), then admit that first wave with the wave's thread allotment (subject to the concurrency cap
   // and OPFS path exclusivity). Re-pumps on successful progress so jobs that arrived during the
   // round-trip - the staggered Promise.all case - are planned against the now-larger set.
+  // Nothing to plan while a round-trip is already out, the cap is full, or no I/O is queued.
+  const canPlanIoWave = (): boolean =>
+    !planningIoWave && inFlight.size < maxConcurrency && waiters.some((waiter) => waiter.operation.io);
+
   const pumpIoWave = async (): Promise<void> => {
-    if (planningIoWave) return;
-    if (inFlight.size >= maxConcurrency) return;
-    if (!waiters.some((waiter) => waiter.operation.io)) return;
+    if (!canPlanIoWave()) return;
     if (!planBatch) {
       admitIoFallbackOne();
       return;
     }
     planningIoWave = true;
     let admittedAny = false;
-    let planFailed = false;
     try {
-      const ioWaiters = waiters.filter((waiter) => waiter.operation.io);
-      const inFlightIo = [...inFlight].filter((entry) => entry.io);
-      // Order: in-flight, then arrived waiters, then declared-not-yet-arrived. Greedy first-fit fills a
-      // wave by ascending index, so arrived waiters are always preferred over not-yet-arrived ones - a
-      // pending slot never displaces a real waiter; it only shrinks the per-job thread share to match
-      // the full drop.
-      const sizes = [
-        ...inFlightIo.map((entry) => entry.jobSizeBytes),
-        ...ioWaiters.map((waiter) => Math.max(0, Math.floor(waiter.operation.jobSizeBytes ?? 0))),
-        ...pendingIoBatchSizes,
-      ];
-      // Plan against the threads not already held by non-I/O ops, so the two lanes never oversubscribe.
-      const availableThreads = Math.max(1, totalThreadBudget - nonIoAllocatedThreads());
-      const plan = await planBatch(sizes, { memoryCeilingBytes: memoryCeiling, threadBudget: availableThreads });
-      const wave = plan.waves[0];
-      const waveJobs = new Set(wave?.jobs ?? []);
-      const offset = inFlightIo.length;
-      const threadsPerJob = Math.max(1, Math.floor(wave?.threadsPerJob ?? availableThreads));
-      for (let index = 0; index < ioWaiters.length; index += 1) {
-        if (inFlight.size >= maxConcurrency) break;
-        if (!waveJobs.has(offset + index)) continue; // a later wave - wait for the current one to drain
-        const waiter = ioWaiters[index];
-        if (!waiter) continue;
-        const position = waiters.indexOf(waiter);
-        if (position < 0) continue;
-        if (intersectsInFlightPaths(waiter.operation.paths)) continue; // OPFS exclusivity safety net
-        waiters.splice(position, 1);
-        waiter.admit(threadsPerJob);
-        admittedAny = true;
-      }
-      trace("io wave planned", {
-        admitted: admittedAny,
-        inFlightIo: inFlightIo.length,
-        pending: pendingIoBatchSizes.length,
-        threadsPerJob,
-        waiting: waiters.length,
-        waveSize: wave?.jobs?.length ?? 0,
-      });
+      admittedAny = await planAndAdmitIoWave(planBatch);
     } catch (error) {
-      planFailed = true;
       trace("io wave planning failed; admitting one job serially", {
         message: error instanceof Error ? error.message : String(error),
       });
     } finally {
       planningIoWave = false;
-    }
-    if (planFailed) {
-      admitIoFallbackOne(); // serial; a later finish re-pumps and re-tries the plan
-      return;
     }
     // Re-pump only after real progress, so arrivals during the await are planned against the updated
     // set; no progress means the remaining waiters need a finish to free capacity (avoids a tight
@@ -343,10 +369,11 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
       void pumpIoWave();
       return;
     }
-    // Liveness backstop: the planner's lone-job rule always places a waiter in the first wave when the
-    // I/O lane is idle, so admitting nothing here is unreachable today. But if a plan ever placed none
-    // while nothing is in flight to re-pump on a later finish, the queued ops would hang forever.
-    // admitIoFallbackOne no-ops when I/O is in flight, so this only fires as the idle-lane rescue.
+    // Reached when the plan threw (serial fallback; a later finish re-pumps and re-tries) and as the
+    // liveness backstop: the planner's lone-job rule always places a waiter in the first wave when the
+    // I/O lane is idle, so admitting nothing is unreachable today, but a plan that ever placed none
+    // while nothing was in flight to re-pump on would hang the queued ops forever. admitIoFallbackOne
+    // no-ops when I/O is in flight, so this only fires as the idle-lane rescue.
     admitIoFallbackOne();
   };
 

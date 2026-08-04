@@ -1,5 +1,5 @@
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
-import type { ParsedBundleSourceRef } from "../../types/bundle.ts";
+import type { ParsedBundle, ParsedBundlePatchEntry, ParsedBundleSourceRef } from "../../types/bundle.ts";
 import { setBundleRomProvenance } from "../input/bundle-rom-provenance.ts";
 import type { InputParentCompression } from "../input/input-assets.ts";
 import { fetchRemoteFiles } from "../remote/remote-file-fetch.ts";
@@ -84,7 +84,126 @@ type LoadedLocalBundle = {
   session: BundleApplySession;
 };
 
+/**
+ * Runs the bundle's source acquisitions as one unit: the first failure aborts the
+ * rest, but every settled result is still reported so their cleanups can be
+ * registered before the error is rethrown.
+ */
+function createAcquisitionGroup(signal: AbortSignal | undefined) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener("abort", abort, { once: true });
+  let failed = false;
+  let firstError: unknown;
+  return {
+    acquire: <T>(promise: Promise<T>) =>
+      promise.catch((error: unknown) => {
+        if (!failed) {
+          failed = true;
+          firstError = error;
+        }
+        abort();
+        throw error;
+      }),
+    assertSucceeded: () => {
+      if (failed) throw firstError;
+      if (signal?.aborted) throw createBundleAbortError();
+    },
+    detach: () => signal?.removeEventListener("abort", abort),
+    signal: controller.signal,
+  };
+}
+
+/**
+ * A ROM extracted from the bundle archive keeps that provenance: register a
+ * bundle -> rom breadcrumb (keyed by the extracted ROM's File) so its ROM card
+ * renders the same "Extract" section a plainly-dropped archive would, instead of
+ * appearing as a bare, chainless input.
+ */
+function markExtractedRomProvenance(romFile: File, bundleFile: File, parseElapsedMs: number) {
+  setBundleRomProvenance(romFile, [
+    {
+      decompressionTimeMs: parseElapsedMs,
+      depth: 0,
+      fileName: bundleFile.name,
+      kind: "archive",
+      outputSize: romFile.size,
+      sourceSize: bundleFile.size,
+    },
+  ]);
+}
+
+/** Only the fields the manifest declared reach the session; the rest stay absent. */
+function buildBundleApplySession(
+  result: { bundle: ParsedBundle; warnings: BundleApplySession["warnings"] },
+  bundleFile: File,
+  patchFiles: File[],
+  romFile: File | undefined,
+): BundleApplySession {
+  const output = result.bundle.output;
+  const name = bundleSessionDisplayName(result.bundle);
+  const romExpectation = romFile ? undefined : bundleRomExpectation(result.bundle);
+  return {
+    chainEndpointChecks: bundleChainEndpointChecks(result.bundle),
+    entries: result.bundle.patches.map((patch, index) => toBundleSessionEntry(patch, patchFiles[index], index)),
+    key: `local:${bundleFile.name}:${bundleFile.size}:${bundleFile.lastModified}`,
+    ...(name ? { name } : {}),
+    outputDefaults: {
+      ...(output?.name ? { name: output.name } : {}),
+      ...(output?.header ? { header: output.header } : {}),
+    },
+    ...(romFile ? { romFileName: romFile.name } : {}),
+    ...(romExpectation ? { romExpectation } : {}),
+    warnings: result.warnings,
+  };
+}
+
 // Authoritative load (canonical name): parse errors surface.
+/**
+ * A patch extracted from the bundle archive keeps that provenance: carry a
+ * bundle -> patch breadcrumb on the leaf File (the same `__nestedParentCompressions`
+ * side-channel a fanned-out archive patch uses) so its patch-stack row renders the
+ * "Extract" section instead of a bare leaf. Sizes stay unset - the
+ * bundle-archive-over-one-tiny-patch ratio would be nonsensical - matching the
+ * archive-patch-leaf treatment; only the root extract time rides along.
+ */
+function markExtractedPatchProvenance(
+  patchFiles: File[],
+  patchSources: Array<{ source: { kind: string } }>,
+  bundleFileName: string,
+  parseElapsedMs: number,
+) {
+  patchFiles.forEach((file, index) => {
+    if (patchSources[index]?.source.kind !== "extracted") return;
+    (file as File & NestedPatchSourceMetadata).__nestedParentCompressions = [
+      { decompressionTimeMs: parseElapsedMs, depth: 0, fileName: bundleFileName, kind: "archive" },
+    ];
+  });
+}
+
+/** Only the fields the manifest actually declared reach the session entry. */
+function toBundleSessionEntry(
+  patch: ParsedBundlePatchEntry,
+  file: File | undefined,
+  index: number,
+): BundleApplySessionEntry {
+  if (!file) throw new Error(`Bundle patch ${index + 1} was not acquired`);
+  return {
+    acquisition: { extractedPath: file.name, kind: "extracted" },
+    fileName: file.name,
+    optional: patch.optional === true,
+    ...(patch.name ? { name: patch.name } : {}),
+    ...(patch.description ? { description: patch.description } : {}),
+    ...(patch.version ? { version: patch.version } : {}),
+    ...(patch.author ? { author: patch.author } : {}),
+    ...(patch.label ? { label: patch.label } : {}),
+    ...(patch.header ? { header: patch.header } : {}),
+    ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),
+    ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
+  };
+}
+
 async function loadLocalBundleSession(
   bundleFile: File,
   droppedFiles: File[],
@@ -118,111 +237,35 @@ async function loadLocalBundleSession(
   const cleanup = createCleanupOnce(async () => {
     await Promise.all(acquiredCleanups.map((release) => release()));
   });
-  const acquisitionController = new AbortController();
-  const abortAcquisition = () => acquisitionController.abort();
-  if (signal?.aborted) abortAcquisition();
-  else signal?.addEventListener("abort", abortAcquisition, { once: true });
-  let acquisitionFailed = false;
-  let firstAcquisitionError: unknown;
-  const acquire = <T>(promise: Promise<T>) =>
-    promise.catch((error: unknown) => {
-      if (!acquisitionFailed) {
-        acquisitionFailed = true;
-        firstAcquisitionError = error;
-      }
-      abortAcquisition();
-      throw error;
-    });
+  const group = createAcquisitionGroup(signal);
   try {
     const [settledRom, ...settledPatches] = await Promise.allSettled([
       result.romSource
-        ? acquire(loadSource(result.romSource, droppedFiles, extractedFiles, "ROM", acquisitionController.signal))
+        ? group.acquire(loadSource(result.romSource, droppedFiles, extractedFiles, "ROM", group.signal))
         : Promise.resolve(undefined),
       ...result.patchSources.map((patch, index) =>
-        acquire(
-          loadSource(patch.source, droppedFiles, extractedFiles, `patch ${index + 1}`, acquisitionController.signal),
-        ),
+        group.acquire(loadSource(patch.source, droppedFiles, extractedFiles, `patch ${index + 1}`, group.signal)),
       ),
     ]);
-    const acquiredSources = [settledRom, ...settledPatches].flatMap((entry) =>
-      entry.status === "fulfilled" && entry.value ? [entry.value] : [],
-    );
-    for (const acquired of acquiredSources) {
-      if (acquired.cleanup) acquiredCleanups.push(acquired.cleanup);
+    for (const entry of [settledRom, ...settledPatches]) {
+      if (entry.status === "fulfilled" && entry.value?.cleanup) acquiredCleanups.push(entry.value.cleanup);
     }
-    if (acquisitionFailed || signal?.aborted) {
-      throw acquisitionFailed ? firstAcquisitionError : createBundleAbortError();
-    }
+    group.assertSucceeded();
     const romSource = settledRom.status === "fulfilled" ? settledRom.value : undefined;
     const acquiredPatches = settledPatches.flatMap((entry) => (entry.status === "fulfilled" ? [entry.value] : []));
     const romFile = romSource?.file;
-    // A ROM extracted from the bundle archive keeps that provenance: register a bundle -> rom breadcrumb
-    // (keyed by the extracted ROM's File) so its ROM card renders the same "Extract" section a
-    // plainly-dropped archive would, instead of appearing as a bare, chainless input.
     if (romFile && result.romSource?.kind === "extracted") {
-      setBundleRomProvenance(romFile, [
-        {
-          decompressionTimeMs: parseElapsedMs,
-          depth: 0,
-          fileName: bundleFile.name,
-          kind: "archive",
-          outputSize: romFile.size,
-          sourceSize: bundleFile.size,
-        },
-      ]);
+      markExtractedRomProvenance(romFile, bundleFile, parseElapsedMs);
     }
     const patchFiles = acquiredPatches.map((entry) => entry.file);
-    // A patch extracted from the bundle archive keeps that provenance too: carry a bundle -> patch
-    // breadcrumb on the leaf File (the same `__nestedParentCompressions` side-channel a fanned-out
-    // archive patch uses) so its patch-stack row renders the "Extract" section instead of a bare leaf.
-    // Sizes stay unset - the bundle-archive-over-one-tiny-patch ratio would be nonsensical - matching
-    // the archive-patch-leaf treatment; only the root extract time rides along.
-    patchFiles.forEach((file, index) => {
-      if (result.patchSources[index]?.source.kind !== "extracted") return;
-      (file as File & NestedPatchSourceMetadata).__nestedParentCompressions = [
-        { decompressionTimeMs: parseElapsedMs, depth: 0, fileName: bundleFile.name, kind: "archive" },
-      ];
-    });
-    const toEntry = (patch: (typeof result.bundle.patches)[number], index: number): BundleApplySessionEntry => {
-      const file = patchFiles[index];
-      if (!file) throw new Error(`Bundle patch ${index + 1} was not acquired`);
-      return {
-        acquisition: { extractedPath: file.name, kind: "extracted" },
-        fileName: file.name,
-        optional: patch.optional === true,
-        ...(patch.name ? { name: patch.name } : {}),
-        ...(patch.description ? { description: patch.description } : {}),
-        ...(patch.version ? { version: patch.version } : {}),
-        ...(patch.author ? { author: patch.author } : {}),
-        ...(patch.label ? { label: patch.label } : {}),
-        ...(patch.header ? { header: patch.header } : {}),
-        ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),
-        ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
-      };
-    };
-    const entries: BundleApplySessionEntry[] = result.bundle.patches.map(toEntry);
-    const output = result.bundle.output;
-    const name = bundleSessionDisplayName(result.bundle);
-    const romExpectation = romFile ? undefined : bundleRomExpectation(result.bundle);
-    const session: BundleApplySession = {
-      chainEndpointChecks: bundleChainEndpointChecks(result.bundle),
-      entries,
-      key: `local:${bundleFile.name}:${bundleFile.size}:${bundleFile.lastModified}`,
-      ...(name ? { name } : {}),
-      outputDefaults: {
-        ...(output?.name ? { name: output.name } : {}),
-        ...(output?.header ? { header: output.header } : {}),
-      },
-      ...(romFile ? { romFileName: romFile.name } : {}),
-      ...(romExpectation ? { romExpectation } : {}),
-      warnings: result.warnings,
-    };
+    markExtractedPatchProvenance(patchFiles, result.patchSources, bundleFile.name, parseElapsedMs);
+    const session = buildBundleApplySession(result, bundleFile, patchFiles, romFile);
     return { cleanup, patchFiles, romFile, session };
   } catch (error) {
     await cleanup();
     throw error;
   } finally {
-    signal?.removeEventListener("abort", abortAcquisition);
+    group.detach();
   }
 }
 

@@ -90,21 +90,13 @@ function sanitizeFileName(name: string): string {
   return sanitized || "download.bin";
 }
 
-async function fetchRemoteFile(url: string, options: FetchRemoteFileOptions = {}): Promise<RemoteFile> {
-  const { fallbackFileName, maxBytes = DEFAULT_MAX_BYTES, onProgress, signal } = options;
-  logger.debug(`fetching remote file: ${url}`);
+/** Fetch and check the status, turning the two network failure shapes into typed errors. */
+async function openRemoteResponse(url: string, signal: AbortSignal | undefined): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(url, {
-      cache: "no-store",
-      credentials: "omit",
-      mode: "cors",
-      signal,
-    });
+    response = await fetch(url, { cache: "no-store", credentials: "omit", mode: "cors", signal });
   } catch (error) {
-    if (signal?.aborted) {
-      throw new RemoteFetchError("aborted", url, "download aborted");
-    }
+    if (signal?.aborted) throw new RemoteFetchError("aborted", url, "download aborted");
     // A TypeError from fetch() is the CORS/network-failure shape.
     throw new RemoteFetchError(
       "blocked",
@@ -115,53 +107,126 @@ async function fetchRemoteFile(url: string, options: FetchRemoteFileOptions = {}
   if (!response.ok) {
     throw new RemoteFetchError("http", url, `download failed with HTTP ${response.status}`, response.status);
   }
+  return response;
+}
 
-  const contentLengthRaw = response.headers.get("content-length");
-  const parsedLength = contentLengthRaw === null ? Number.NaN : Number.parseInt(contentLengthRaw, 10);
-  const totalBytes = Number.isFinite(parsedLength) && parsedLength >= 0 ? parsedLength : null;
-  if (totalBytes !== null && totalBytes > maxBytes) {
-    await response.body?.cancel().catch(() => undefined);
-    throw new RemoteFetchError("too-large", url, `download is ${totalBytes} bytes (limit ${maxBytes})`);
-  }
+/** The declared body size, or null when the header is missing or unusable. */
+function readDeclaredLength(response: Response): number | null {
+  const raw = response.headers.get("content-length");
+  const parsed = raw === null ? Number.NaN : Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
 
-  const fileName = sanitizeFileName(
+function resolveRemoteFileName(response: Response, url: string, fallbackFileName: string | undefined): string {
+  return sanitizeFileName(
     fileNameFromContentDisposition(response.headers.get("content-disposition")) ??
       fileNameFromUrl(response.url || url) ??
       fallbackFileName ??
       "download.bin",
   );
+}
+
+/**
+ * Coalesces network chunks into OPFS writes. The buffer grows toward the write
+ * limit rather than starting there, so a small download never allocates a full
+ * chunk, and a flush lands only on the limit or at the end of the stream.
+ */
+function createRemoteChunkWriter(input: {
+  assertNotAborted: () => void;
+  filePath: string;
+  maxBytes: number;
+  totalBytes: number | null;
+}) {
+  const { assertNotAborted, filePath, totalBytes } = input;
+  const writeBufferLimit = Math.max(1, Math.min(OPFS_WRITE_CHUNK_SIZE, input.maxBytes));
+  let writeBuffer: Uint8Array | undefined;
+  let bufferedBytes = 0;
+  let writtenBytes = 0;
+
+  const flush = async () => {
+    if (!(writeBuffer && bufferedBytes)) return;
+    assertNotAborted();
+    await browserVfs.write(filePath, writeBuffer.subarray(0, bufferedBytes), { fileOffset: writtenBytes });
+    writtenBytes += bufferedBytes;
+    bufferedBytes = 0;
+    assertNotAborted();
+  };
+
+  const grow = (requiredBytes: number) => {
+    if (writeBuffer && writeBuffer.byteLength >= requiredBytes) return;
+    const initialSize = totalBytes === null ? requiredBytes : Math.min(totalBytes, writeBufferLimit);
+    const nextSize = Math.min(
+      writeBufferLimit,
+      Math.max(requiredBytes, initialSize, writeBuffer ? writeBuffer.byteLength * 2 : 0),
+    );
+    const next = new Uint8Array(nextSize);
+    if (writeBuffer && bufferedBytes) next.set(writeBuffer.subarray(0, bufferedBytes));
+    writeBuffer = next;
+  };
+
+  const append = async (value: Uint8Array) => {
+    let sourceOffset = 0;
+    while (sourceOffset < value.byteLength) {
+      if (writeBuffer && bufferedBytes === writeBuffer.byteLength && writeBuffer.byteLength === writeBufferLimit) {
+        await flush();
+      }
+      grow(Math.min(writeBufferLimit, bufferedBytes + value.byteLength - sourceOffset));
+      const availableBytes = (writeBuffer?.byteLength || 0) - bufferedBytes;
+      const copyBytes = Math.min(availableBytes, value.byteLength - sourceOffset);
+      writeBuffer?.set(value.subarray(sourceOffset, sourceOffset + copyBytes), bufferedBytes);
+      bufferedBytes += copyBytes;
+      sourceOffset += copyBytes;
+      if (bufferedBytes === writeBufferLimit) await flush();
+    }
+  };
+
+  return { append, flush };
+}
+
+/**
+ * Read the body to completion. The size check runs before buffering so an
+ * oversized download cancels the stream rather than being written and discarded.
+ */
+async function drainResponseBody(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  bufferChunk: (value: Uint8Array) => Promise<void>,
+  readLoadedBytes: () => number,
+  maxBytes: number,
+  url: string,
+) {
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return;
+    if (!value) continue;
+    if (readLoadedBytes() + value.byteLength > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new RemoteFetchError("too-large", url, `download exceeded the ${maxBytes} byte limit`);
+    }
+    await bufferChunk(value);
+  }
+}
+
+async function fetchRemoteFile(url: string, options: FetchRemoteFileOptions = {}): Promise<RemoteFile> {
+  const { fallbackFileName, maxBytes = DEFAULT_MAX_BYTES, onProgress, signal } = options;
+  logger.debug(`fetching remote file: ${url}`);
+  const response = await openRemoteResponse(url, signal);
+  const totalBytes = readDeclaredLength(response);
+  if (totalBytes !== null && totalBytes > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new RemoteFetchError("too-large", url, `download is ${totalBytes} bytes (limit ${maxBytes})`);
+  }
+  const fileName = resolveRemoteFileName(response, url, fallbackFileName);
 
   const filePath = joinVfsPath(browserVfs.rootPath, "remote-fetch", `${createVfsPathId()}.bin`);
   let loadedBytes = 0;
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
     await browserVfs.truncate(filePath, 0);
-    const writeBufferLimit = Math.max(1, Math.min(OPFS_WRITE_CHUNK_SIZE, maxBytes));
-    let writeBuffer: Uint8Array | undefined;
-    let bufferedBytes = 0;
-    let writtenBytes = 0;
     const assertNotAborted = () => {
       if (signal?.aborted) throw new RemoteFetchError("aborted", url, "download aborted");
     };
-    const flush = async () => {
-      if (!(writeBuffer && bufferedBytes)) return;
-      assertNotAborted();
-      await browserVfs.write(filePath, writeBuffer.subarray(0, bufferedBytes), { fileOffset: writtenBytes });
-      writtenBytes += bufferedBytes;
-      bufferedBytes = 0;
-      assertNotAborted();
-    };
-    const growWriteBuffer = (requiredBytes: number) => {
-      if (writeBuffer && writeBuffer.byteLength >= requiredBytes) return;
-      const initialSize = totalBytes === null ? requiredBytes : Math.min(totalBytes, writeBufferLimit);
-      const nextSize = Math.min(
-        writeBufferLimit,
-        Math.max(requiredBytes, initialSize, writeBuffer ? writeBuffer.byteLength * 2 : 0),
-      );
-      const next = new Uint8Array(nextSize);
-      if (writeBuffer && bufferedBytes) next.set(writeBuffer.subarray(0, bufferedBytes));
-      writeBuffer = next;
-    };
+    const writer = createRemoteChunkWriter({ assertNotAborted, filePath, maxBytes, totalBytes });
+    const flush = writer.flush;
     const bufferNetworkChunk = async (value: Uint8Array) => {
       assertNotAborted();
       const nextLoadedBytes = loadedBytes + value.byteLength;
@@ -170,39 +235,16 @@ async function fetchRemoteFile(url: string, options: FetchRemoteFileOptions = {}
       }
       loadedBytes = nextLoadedBytes;
       onProgress?.({ loadedBytes, totalBytes });
-      let sourceOffset = 0;
-      while (sourceOffset < value.byteLength) {
-        if (writeBuffer && bufferedBytes === writeBuffer.byteLength) {
-          if (writeBuffer.byteLength === writeBufferLimit) await flush();
-          else growWriteBuffer(Math.min(writeBufferLimit, bufferedBytes + value.byteLength - sourceOffset));
-        }
-        growWriteBuffer(Math.min(writeBufferLimit, bufferedBytes + value.byteLength - sourceOffset));
-        const availableBytes = (writeBuffer?.byteLength || 0) - bufferedBytes;
-        const copyBytes = Math.min(availableBytes, value.byteLength - sourceOffset);
-        writeBuffer?.set(value.subarray(sourceOffset, sourceOffset + copyBytes), bufferedBytes);
-        bufferedBytes += copyBytes;
-        sourceOffset += copyBytes;
-        if (bufferedBytes === writeBufferLimit) await flush();
-      }
+      await writer.append(value);
     };
     const body = response.body;
     if (body) {
       reader = body.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (!value) continue;
-        if (loadedBytes + value.byteLength > maxBytes) {
-          await reader.cancel().catch(() => undefined);
-          throw new RemoteFetchError("too-large", url, `download exceeded the ${maxBytes} byte limit`);
-        }
-        await bufferNetworkChunk(value);
-      }
+      await drainResponseBody(reader, bufferNetworkChunk, () => loadedBytes, maxBytes, url);
     } else {
       // Compatibility fallback for fetch implementations without a ReadableStream body.
       // This branch must materialize the response once, but still stores the retained file in OPFS.
-      const buffer = await response.arrayBuffer();
-      await bufferNetworkChunk(new Uint8Array(buffer));
+      await bufferNetworkChunk(new Uint8Array(await response.arrayBuffer()));
     }
     await flush();
     assertNotAborted();

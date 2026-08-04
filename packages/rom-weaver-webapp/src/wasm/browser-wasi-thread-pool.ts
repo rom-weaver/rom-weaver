@@ -285,6 +285,80 @@ export function createBrowserWasiThreadWorkerPool({
     return replacement;
   };
 
+  /**
+   * Neither of these is recoverable by another pass: a shell that died holding a
+   * command loses that command's work, and an exhausted replacement budget means
+   * the failures are genuine rather than transient.
+   */
+  const assertShellReplaceable = (input: {
+    lastFailure: unknown;
+    maxReplacementCount: number;
+    onlineCount: () => number;
+    replacementCount: number;
+    shell: ThreadPoolShell;
+    targetSize: number;
+    trace: ThreadPoolShell["trace"];
+  }) => {
+    const { lastFailure, maxReplacementCount, replacementCount } = input;
+    if (input.shell.currentCommand) {
+      throw lastFailure || new Error("browser wasi thread worker failed while running a command");
+    }
+    if (replacementCount >= maxReplacementCount) {
+      input.trace?.(
+        `[browser-opfs] thread pool ensureSize giving up target=${input.targetSize} online=${input.onlineCount()}` +
+          ` replacements=${replacementCount}/${maxReplacementCount} ${formatErrorForTrace(lastFailure)}`,
+      );
+      throw lastFailure || new Error("browser wasi thread worker pool could not replace failed workers");
+    }
+  };
+
+  /**
+   * Fill one creation batch: start missing slots, replace dead ones, and stop at
+   * the batch cap.
+   */
+  const collectStartBatch = (input: {
+    lastFailure: unknown;
+    maxReplacementCount: number;
+    onlineCount: () => number;
+    replacementCount: number;
+    targetSize: number;
+    trace: ThreadPoolShell["trace"];
+  }) => {
+    const { lastFailure, maxReplacementCount, targetSize, trace } = input;
+    // Missing or dead slots, capped at the batch size.
+    const pending: number[] = [];
+    for (let index = 0; index < targetSize && pending.length < SHELL_CREATE_BATCH_SIZE; index += 1) {
+      const shell = workers[index];
+      if (!shell || shell.terminated) pending.push(index);
+    }
+    const batch: ThreadPoolShell[] = [];
+    const created: number[] = [];
+    const replaced: number[] = [];
+    let replacementCount = input.replacementCount;
+    for (const index of pending) {
+      if (workers[index]) {
+        assertShellReplaceable({
+          lastFailure,
+          maxReplacementCount,
+          onlineCount: input.onlineCount,
+          replacementCount,
+          shell: workers[index],
+          targetSize,
+          trace,
+        });
+        replaceShell(index, lastFailure as Error | null, trace);
+        replacementCount += 1;
+        replaced.push(index);
+      } else {
+        workers[index] = createShell(index, trace);
+        created.push(index);
+      }
+      const startedShell = workers[index];
+      if (startedShell) batch.push(startedShell);
+    }
+    return { batch, created, replaced, replacementCount };
+  };
+
   const ensureSize = async (size: number, trace: ThreadPoolShell["trace"] = null) => {
     if (disposed) throw new Error("browser wasi thread worker pool is disposed");
     const targetSize = Math.min(Math.max(0, size), MAX_BROWSER_THREAD_POOL_SIZE);
@@ -301,33 +375,20 @@ export function createBrowserWasiThreadWorkerPool({
     // budget separately prevents endless retries on genuine failures.
     while (true) {
       pass += 1;
-      const batch: ThreadPoolShell[] = [];
-      const created: number[] = [];
-      const replaced: number[] = [];
-      for (let index = 0; index < targetSize && batch.length < SHELL_CREATE_BATCH_SIZE; index += 1) {
-        const shell = workers[index];
-        if (shell && !shell.terminated) continue;
-        if (shell) {
-          if (shell.currentCommand) {
-            throw lastFailure || new Error("browser wasi thread worker failed while running a command");
-          }
-          if (replacementCount >= maxReplacementCount) {
-            trace?.(
-              `[browser-opfs] thread pool ensureSize giving up target=${targetSize} online=${onlineCount()}` +
-                ` replacements=${replacementCount}/${maxReplacementCount} ${formatErrorForTrace(lastFailure)}`,
-            );
-            throw lastFailure || new Error("browser wasi thread worker pool could not replace failed workers");
-          }
-          replaceShell(index, lastFailure as Error | null, trace);
-          replacementCount += 1;
-          replaced.push(index);
-        } else {
-          workers[index] = createShell(index, trace);
-          created.push(index);
-        }
-        const startedShell = workers[index];
-        if (startedShell) batch.push(startedShell);
-      }
+      const {
+        batch,
+        created,
+        replaced,
+        replacementCount: nextReplacementCount,
+      } = collectStartBatch({
+        lastFailure,
+        maxReplacementCount,
+        onlineCount,
+        replacementCount,
+        targetSize,
+        trace,
+      });
+      replacementCount = nextReplacementCount;
       if (batch.length === 0) {
         trace?.(
           `[browser-opfs] thread pool ensureSize ready target=${targetSize} online=${onlineCount()} passes=${pass - 1}`,
@@ -382,6 +443,104 @@ export function createBrowserWasiThreadWorkerPool({
     return workers.slice(0, targetSize).every((slot) => slot.online && !slot.terminated && !slot.currentCommand);
   };
 
+  /**
+   * Claim one shell for a command: build its control block and promises, then post
+   * the command to the worker. A failed post tears the slot back down so the shell
+   * is free for the next attempt rather than left holding a dead command.
+   */
+  const armCommandSlot = (
+    shell: ThreadPoolShell,
+    command: BrowserWasiThreadPoolCommand,
+    input: Omit<BrowserWasiThreadPoolCommandOptions, "poolSize" | "threadWorkerUrl"> & { threadWorkerUrl: string },
+  ): ThreadPoolCommandSlot => {
+    const { commandId } = command;
+    const { trace } = input;
+    const shellWorker = shell.worker;
+    if (shell.terminated || !shellWorker) {
+      throw new Error(`browser wasi thread worker ${shell.index} is not available`);
+    }
+    const control = createThreadSlotControl();
+    control[THREAD_SLOT_STATE_INDEX] = THREAD_SLOT_STATE_IDLE;
+    control[THREAD_SLOT_TID_INDEX] = 0;
+    control[THREAD_SLOT_START_ARG_INDEX] = 0;
+    control[THREAD_SLOT_ERROR_INDEX] = 0;
+    const commandSlot: ThreadPoolCommandSlot = {
+      busy: false,
+      commandId,
+      control,
+      done: null,
+      failure: null,
+      index: shell.index,
+      online: true,
+      ready: null,
+      readyResolved: false,
+      rejectReady: null,
+      resolveDone: null,
+      resolveReady: null,
+      shell,
+      tid: null,
+      worker: shellWorker,
+    };
+    commandSlot.ready = new Promise<void>((resolveReady, rejectReady) => {
+      commandSlot.resolveReady = () => resolveReady();
+      commandSlot.rejectReady = rejectReady;
+    });
+    commandSlot.done = new Promise<void>((resolveDone) => {
+      commandSlot.resolveDone = () => resolveDone();
+    });
+    shell.currentCommand = commandSlot;
+    const payload: ThreadWorkerPoolCommandMessage = {
+      __streamBroadcastChannelName: input.streamBroadcastChannelName,
+      __streamRequestId: input.streamRequestId,
+      commandId,
+      controlBuffer: control.buffer,
+      debugWasi: input.debugWasi,
+      envList: input.envList,
+      mode: "pool-command",
+      runtime: createThreadWorkerRuntimePayload(input.runtime),
+      threadIdState: input.threadIdState,
+      threadWorkerUrl: input.threadWorkerUrl,
+      wasiArgs: input.wasiArgs,
+      wasmMemory: input.wasmMemory,
+      wasmModule: input.wasmModule,
+    };
+    trace?.(`[browser-opfs] thread pool command post worker=${shell.index} id=${commandId}`);
+    try {
+      shellWorker.postMessage(payload);
+      trace?.(`[browser-opfs] thread pool command post returned worker=${shell.index} id=${commandId}`);
+    } catch (error) {
+      trace?.(
+        `[browser-opfs] thread pool command post failed worker=${shell.index} id=${commandId} ${formatErrorForTrace(error)}`,
+      );
+      commandSlot.failure = toThreadWorkerError(error);
+      commandSlot.rejectReady?.(error);
+      commandSlot.resolveDone?.();
+      shell.currentCommand = null;
+      throw error;
+    }
+    return commandSlot;
+  };
+
+  /** Blocks until a slot leaves its running states, so shutdown never races a live thread. */
+  const awaitSlotQuiesced = (
+    slot: ThreadPoolCommandSlot,
+    commandId: number,
+    trace: BrowserWasiThreadPoolCommandOptions["trace"],
+  ) => {
+    while (true) {
+      const state = loadThreadSlotState(slot.control);
+      if (
+        state === THREAD_SLOT_STATE_IDLE ||
+        state === THREAD_SLOT_STATE_FAILED ||
+        state === THREAD_SLOT_STATE_SHUTDOWN
+      ) {
+        return;
+      }
+      trace?.(`[browser-opfs] thread pool command shutdown wait worker=${slot.index} state=${state} id=${commandId}`);
+      waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
+    }
+  };
+
   const createCommand = ({
     poolSize,
     streamBroadcastChannelName,
@@ -411,20 +570,7 @@ export function createBrowserWasiThreadWorkerPool({
         trace?.(`[browser-opfs] thread pool command shutdown start id=${commandId}`);
         for (const slot of command.slots) {
           if (slot.shell.currentCommand !== slot) continue;
-          while (true) {
-            const state = loadThreadSlotState(slot.control);
-            if (
-              state === THREAD_SLOT_STATE_IDLE ||
-              state === THREAD_SLOT_STATE_FAILED ||
-              state === THREAD_SLOT_STATE_SHUTDOWN
-            ) {
-              break;
-            }
-            trace?.(
-              `[browser-opfs] thread pool command shutdown wait worker=${slot.index} state=${state} id=${commandId}`,
-            );
-            waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
-          }
+          awaitSlotQuiesced(slot, commandId, trace);
           Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_SHUTDOWN);
           Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
         }
@@ -457,70 +603,21 @@ export function createBrowserWasiThreadWorkerPool({
       );
       const postStartMs = monotonicNowMs();
       for (const shell of shells) {
-        const shellWorker = shell.worker;
-        if (shell.terminated || !shellWorker) {
-          throw new Error(`browser wasi thread worker ${shell.index} is not available`);
-        }
-        const control = createThreadSlotControl();
-        control[THREAD_SLOT_STATE_INDEX] = THREAD_SLOT_STATE_IDLE;
-        control[THREAD_SLOT_TID_INDEX] = 0;
-        control[THREAD_SLOT_START_ARG_INDEX] = 0;
-        control[THREAD_SLOT_ERROR_INDEX] = 0;
-        const commandSlot: ThreadPoolCommandSlot = {
-          busy: false,
-          commandId,
-          control,
-          done: null,
-          failure: null,
-          index: shell.index,
-          online: true,
-          ready: null,
-          readyResolved: false,
-          rejectReady: null,
-          resolveDone: null,
-          resolveReady: null,
-          shell,
-          tid: null,
-          worker: shellWorker,
-        };
-        commandSlot.ready = new Promise<void>((resolveReady, rejectReady) => {
-          commandSlot.resolveReady = () => resolveReady();
-          commandSlot.rejectReady = rejectReady;
-        });
-        commandSlot.done = new Promise<void>((resolveDone) => {
-          commandSlot.resolveDone = () => resolveDone();
-        });
-        shell.currentCommand = commandSlot;
-        command.slots.push(commandSlot);
-        const payload: ThreadWorkerPoolCommandMessage = {
-          __streamBroadcastChannelName: streamBroadcastChannelName,
-          __streamRequestId: streamRequestId,
-          commandId,
-          controlBuffer: control.buffer,
-          debugWasi,
-          envList,
-          mode: "pool-command",
-          runtime: createThreadWorkerRuntimePayload(runtime),
-          threadIdState,
-          threadWorkerUrl: resolvedThreadWorkerUrl,
-          wasiArgs,
-          wasmMemory,
-          wasmModule,
-        };
-        trace?.(`[browser-opfs] thread pool command post worker=${shell.index} id=${commandId}`);
-        try {
-          shellWorker.postMessage(payload);
-          trace?.(`[browser-opfs] thread pool command post returned worker=${shell.index} id=${commandId}`);
-        } catch (error) {
-          trace?.(
-            `[browser-opfs] thread pool command post failed worker=${shell.index} id=${commandId} ${formatErrorForTrace(error)}`,
-          );
-          commandSlot.failure = toThreadWorkerError(error);
-          commandSlot.rejectReady?.(error);
-          commandSlot.resolveDone?.();
-          shell.currentCommand = null;
-          throw error;
-        }
+        command.slots.push(
+          armCommandSlot(shell, command, {
+            debugWasi,
+            envList,
+            runtime,
+            streamBroadcastChannelName,
+            streamRequestId,
+            threadIdState,
+            threadWorkerUrl: resolvedThreadWorkerUrl,
+            trace,
+            wasiArgs,
+            wasmMemory,
+            wasmModule,
+          }),
+        );
       }
       const postMs = monotonicNowMs() - postStartMs;
       await Promise.all(command.slots.map((slot) => Promise.resolve(slot.ready)));
