@@ -209,7 +209,16 @@ const StatusRows = ({ localizer, runtimeState }: { localizer: Localizer; runtime
         "—"
       ),
     ],
-    [localizer.message("ui.status.branch"), <code key="branch">{GIT_BRANCH || "—"}</code>],
+    [
+      localizer.message("ui.status.branch"),
+      GIT_BRANCH ? (
+        <a href={`${GITHUB_BASE}/tree/${encodeURIComponent(GIT_BRANCH)}`} key="branch" rel="noreferrer" target="_blank">
+          <code>{GIT_BRANCH}</code>
+        </a>
+      ) : (
+        "—"
+      ),
+    ],
   ];
   if (PR_NUMBER) {
     rows.push([
