@@ -55,9 +55,10 @@ output relative to the reference's, so negative means smaller.
 | `scripts/bench-solid-extract.py` | Redundant decode when extracting a solid archive in parallel, as user CPU relative to one thread | `python3 scripts/bench-solid-extract.py` |
 | `packages/rom-weaver-webapp/tests/wasm/*.bench.mjs` | Browser WASM worker-client and checksum threading | `npm --prefix packages/rom-weaver-webapp run test:browser:wasm:bench` |
 
-`scripts/parity-check.mjs` is the correctness counterpart: it checks that
-rom-weaver's CHD output round-trips through chdman and its RVZ output through
-dolphin-tool, and vice versa.
+`scripts/parity-check.mjs` is the correctness counterpart. It checks that
+CHD, RVZ, 7z, and ZIP payloads round-trip through rom-weaver and their
+reference tools in both directions. It compares extracted payload bytes,
+because archive metadata and compression streams are implementation-specific.
 
 ## Method
 
