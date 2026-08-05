@@ -34,6 +34,12 @@ recorded next to every timing.
 
 ## Summary
 
+Compared with the reference tools, the user-visible change is straightforward:
+on this corpus, rom-weaver extracts all four formats faster. RVZ and ZIP
+compression also finish faster; CHD and 7z compression stay roughly even.
+Archives take about the same space: CHD saves up to 0.7 MB, RVZ up to 0.5 MB,
+7z saves 19–24 bytes, and ZIP stays within 0.1%.
+
 The table below translates the detailed measurements into waiting time and disk
 space. A result such as 2× faster means the reference tool takes twice as long.
 The ranges cover this corpus, not every file. Compressed output means the archive
