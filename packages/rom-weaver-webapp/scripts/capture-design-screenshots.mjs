@@ -107,7 +107,11 @@ const capture = async () => {
           await page.goto(pageUrl(captureCase.route), { waitUntil: "domcontentloaded" });
           await page.locator("body").waitFor({ state: "visible" });
           await page.getByText(captureCase.waitFor, { exact: true }).last().waitFor({ state: "visible" });
-          if (captureCase.dismissGuide) await page.getByRole("button", { name: "End guide", exact: true }).click();
+          if (captureCase.dismissGuide) {
+            const exitGuide = page.getByRole("button", { name: "Exit tutorial", exact: true });
+            await exitGuide.evaluate((button) => button.click());
+            await exitGuide.waitFor({ state: "detached" });
+          }
           if (captureCase.openOutputOptions) {
             const output = page.locator("#rom-weaver-row-output-file-name");
             const options = output.locator(".cks > .cks-head");
