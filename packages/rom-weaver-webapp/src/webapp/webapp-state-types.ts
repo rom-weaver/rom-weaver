@@ -1,4 +1,4 @@
-type WorkflowView = "patcher" | "creator" | "trim" | "tools";
+type WorkflowView = "patcher" | "creator" | "trim" | "tools" | "test";
 type WebappView = WorkflowView | "docs";
 
 type ValidationState = {

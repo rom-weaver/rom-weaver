@@ -45,12 +45,13 @@ const countVisibleWords = (source) =>
 const applyHtml = read("index.html");
 const notFoundHtml = read("404.html");
 const createHtml = read("create.html");
+const testHtml = read("test.html");
 const headers = read("_headers");
 const redirects = read("_redirects");
 const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
 
-for (const route of ["apply", "create", "trim", "tools"]) {
+for (const route of ["apply", "create", "test", "trim", "tools"]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
 assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
@@ -136,6 +137,9 @@ assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply descri
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
+assertIncludes(testHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.test.slug}"`, "test canonical");
+assertIncludes(testHtml, WORKFLOW_SEO_ROUTES.test.description, "test description");
+assertIncludes(read("test/index.html"), WORKFLOW_SEO_ROUTES.test.description, "static-host test description");
 assertIncludes(applyHtml, 'aria-selected="true" class="mode" data-mode="patcher"', "apply prerendered workflow");
 assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator"', "create prerendered workflow");
 assertHasClass(applyHtml, "build-tag", "preloaded build tag");
@@ -151,6 +155,7 @@ for (const route of [
   "404.html",
   "apply/index.html",
   "create/index.html",
+  "test/index.html",
   "trim/index.html",
   "tools/index.html",
 ]) {

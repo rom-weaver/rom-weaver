@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEmulatorDocument } from "../../src/public/react/components/emulatorjs-test.tsx";
+import { createEmulatorDocument } from "../../src/public/react/components/emulator-document.ts";
 import { getEmulatorJsCore } from "../../src/public/react/components/emulatorjs.ts";
 
 describe("getEmulatorJsCore", () => {

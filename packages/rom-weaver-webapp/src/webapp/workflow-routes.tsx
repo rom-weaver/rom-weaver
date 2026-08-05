@@ -27,6 +27,7 @@ type WorkflowRouteProps = {
     slug: string;
   };
   patcher: ApplyPatchFormProps;
+  test: Record<string, never>;
   tools: ToolsFormProps;
   trim: TrimPatchFormProps;
 };
@@ -91,6 +92,9 @@ const DocsRoute = createWorkflowRoute("docs", () =>
 const PatcherRoute = createWorkflowRoute("patcher", () =>
   import("../public/react/apply-patch-form.tsx").then((module) => ({ default: module.ApplyPatchForm })),
 );
+const TestRoute = createWorkflowRoute("test", () =>
+  import("../public/react/emulator-test-view.tsx").then((module) => ({ default: module.EmulatorTestView })),
+);
 const ToolsRoute = createWorkflowRoute("tools", () =>
   import("./components/tools-form.tsx").then((module) => ({ default: module.ToolsForm })),
 );
@@ -102,6 +106,7 @@ const WORKFLOW_ROUTES = {
   creator: CreatorRoute,
   docs: DocsRoute,
   patcher: PatcherRoute,
+  test: TestRoute,
   tools: ToolsRoute,
   trim: TrimRoute,
 } as const;
@@ -109,6 +114,7 @@ const WORKFLOW_ROUTES = {
 const CreatePatchRoute = CreatorRoute.Component;
 const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
+const EmulatorTestRoute = TestRoute.Component;
 const ToolsRouteForm = ToolsRoute.Component;
 const TrimPatchRoute = TrimRoute.Component;
 
@@ -127,6 +133,7 @@ export {
   ApplyPatchRoute,
   CreatePatchRoute,
   DocsPageRoute,
+  EmulatorTestRoute,
   preloadDocsRouteHtml,
   preloadWorkflowRoute,
   ToolsRouteForm,

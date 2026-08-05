@@ -1,4 +1,4 @@
-import { BookOpen, GitCompare, House, RotateCcw, Scissors, Wrench } from "lucide-react";
+import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, Scissors, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -37,6 +37,7 @@ import {
   ApplyPatchRoute,
   CreatePatchRoute,
   DocsPageRoute,
+  EmulatorTestRoute,
   preloadWorkflowRoute,
   ToolsRouteForm,
   TrimPatchRoute,
@@ -51,6 +52,7 @@ const WORKFLOW_TABS = [
   // moves into More on the phone dock; it is never persisted as the tab to
   // resume - see `isResumableWorkflowView`.
   { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
+  { href: "test", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
   // Beta-only utility route. The shell keeps it out of both primary navs and
   // exposes it from More when the beta-tools setting is enabled.
@@ -71,8 +73,10 @@ const logger = createLogger("webapp-root");
 
 const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
-  const route =
-    view === "creator" ? WORKFLOW_SEO_ROUTES.creator : view === "patcher" ? WORKFLOW_SEO_ROUTES.patcher : null;
+  let route = null;
+  if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
+  else if (view === "patcher") route = WORKFLOW_SEO_ROUTES.patcher;
+  else if (view === "test") route = WORKFLOW_SEO_ROUTES.test;
   if (!route) {
     const tab = WORKFLOW_TABS.find((entry) => entry.id === view);
     document.title = tab ? `rom-weaver - ${tab.label}` : "rom-weaver";
@@ -618,6 +622,7 @@ function WebappRoot({
                     onBundlePackageChange={actions.onPatcherBundlePackageChange}
                     onInputsChange={actions.onPatcherInputsChange}
                     onPatchesChange={actions.onPatcherPatchesChange}
+                    onSelectView={() => actions.onSelectView("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
                     pageDrop={activePageDrop}
                     startup={state.startup}
@@ -634,6 +639,7 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
+                {workflowPanel("test", <EmulatorTestRoute />)}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute

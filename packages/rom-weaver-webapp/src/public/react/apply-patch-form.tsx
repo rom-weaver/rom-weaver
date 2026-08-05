@@ -1583,6 +1583,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           setBundlePackage: changeBundlePackage,
         }}
         onBundleMetaChange={updateBundleMeta}
+        onSelectView={props.onSelectView}
         onTrace={emitApplyFormInputTrace}
         onUnifiedDrop={handleUnifiedDrop}
         patchEnablement={{

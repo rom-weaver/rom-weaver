@@ -23,6 +23,7 @@ const TABS = [
   { href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
   { href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
+  { href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
   { href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
   { href: "tools", icon: <svg aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
@@ -62,8 +63,8 @@ describe("Masthead", () => {
     expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
 
     for (const [list, selectedClass, labels] of [
-      [rail, "mode", ["Apply", "Create", "Docs", "Trim"]],
-      [dock, "dock-tab", ["Apply", "Create", "Docs", "Trim"]],
+      [rail, "mode", ["Apply", "Create", "Docs", "Test", "Trim"]],
+      [dock, "dock-tab", ["Apply", "Create", "Docs", "Test", "Trim"]],
     ] as const) {
       const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);
       expect(tabs.map((tab) => tab.textContent)).toEqual(labels);

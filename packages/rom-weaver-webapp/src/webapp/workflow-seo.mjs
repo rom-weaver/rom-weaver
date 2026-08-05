@@ -14,6 +14,11 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     slug: "apply",
     title: `${SITE_NAME} — Apply ROM patches online`,
   }),
+  test: Object.freeze({
+    description: "Test patched and local ROMs in EmulatorJS directly in your browser. No uploads or account required.",
+    slug: "test",
+    title: `${SITE_NAME} — Test ROMs online`,
+  }),
 });
 
 export { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES };

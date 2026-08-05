@@ -1,14 +1,5 @@
 import { Archive, Disc3, Download, ListChecks, Package, TriangleAlert } from "lucide-react";
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
@@ -56,28 +47,66 @@ import type {
 } from "./patcher-form.ts";
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
+import { addEntry, setCurrentGame } from "./emulator-session-store.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
-const EmulatorJsTest = lazy(() =>
-  import("./components/emulatorjs-test.tsx").then((module) => ({ default: module.EmulatorJsTest })),
-);
-
 const EmulatorJsAction = ({
   core,
+  onSelectView,
   output,
 }: {
   core: string | undefined;
+  onSelectView?: (view: "test") => void;
   output?: BrowserApplyResult["output"] | null;
 }) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   if (!(core && output)) return null;
+  const openInEmulator = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const blob = await output.getBlob?.();
+      if (!blob) throw new Error("The finished output cannot be opened in EmulatorJS.");
+      addEntry({
+        core,
+        fileName: output.fileName,
+        id: output.id,
+        objectUrl: URL.createObjectURL(blob),
+        sizeBytes: blob.size,
+        source: "apply",
+      });
+      setCurrentGame(output.id);
+      onSelectView?.("test");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not prepare the output for EmulatorJS.");
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
-    <Suspense fallback={null}>
-      <EmulatorJsTest core={core} output={output} />
-    </Suspense>
+    <div className="emulatorjs-test">
+      <button
+        aria-busy={loading}
+        className="btn ghost slim"
+        disabled={loading}
+        id="rom-weaver-button-test-emulator"
+        onClick={() => void openInEmulator()}
+        type="button"
+      >
+        {loading ? "Preparing EmulatorJS…" : "Test in emulator"}
+      </button>
+      <span className="emulatorjs-note">Open the uncompressed output in the Test tab.</span>
+      {error ? (
+        <p className="emulatorjs-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 };
 
@@ -1237,6 +1266,7 @@ const ApplyOutputAction = ({
   errorNotice,
   localizer,
   noticeController,
+  onSelectView,
   outputState,
   patches,
   romInputs,
@@ -1252,6 +1282,7 @@ const ApplyOutputAction = ({
   disabledPatchCount: number;
   enabledPatchCount: number;
   emulatorOutput?: BrowserApplyResult["output"] | null;
+  onSelectView?: (view: "test") => void;
   errorNotice: NoticeState | null;
   localizer: ReturnType<typeof useUiLocalizer>;
   noticeController?: NoticeController;
@@ -1277,6 +1308,7 @@ const ApplyOutputAction = ({
     />
     <EmulatorJsAction
       core={getEmulatorJsCore(romInputs[0]?.info.romType?.platform, outputState.pendingDownloadFileName ?? undefined)}
+      onSelectView={onSelectView}
       output={emulatorOutput}
     />
     {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
@@ -1545,6 +1577,7 @@ function ApplyWorkflowFormView({
   bundleRomExpectation,
   bundleTools,
   onBundleMetaChange,
+  onSelectView,
   onUnifiedDrop,
   patchEnablement,
   pendingDrops = [],
@@ -1570,6 +1603,7 @@ function ApplyWorkflowFormView({
   /** Shown while the bundle session waits for the user to supply the expected ROM. */
   bundleRomExpectation?: BundleRomExpectation;
   onBundleMetaChange?: (id: string, updates: Partial<BundlePatchMeta>) => void;
+  onSelectView?: (view: "test") => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[]) => void;
   patchEnablement?: PatchEnablement;
@@ -1754,6 +1788,7 @@ function ApplyWorkflowFormView({
       errorNotice={errorNotice}
       localizer={localizer}
       noticeController={noticeController}
+      onSelectView={onSelectView}
       outputState={outputState}
       patches={patches}
       romInputs={romInputs}
