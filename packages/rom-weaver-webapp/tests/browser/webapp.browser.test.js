@@ -1,5 +1,6 @@
 import { createElement, useMemo } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { beforeEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { getDefaultBrowserThreadCount } from "../../src/platform/shared/compression-options.ts";
@@ -7,6 +8,7 @@ import { createEmptyPageUpdateState } from "../../src/webapp/page-update-state.t
 import { getDefaultSettings } from "../../src/webapp/settings/settings-state.ts";
 import { WebappRoot } from "../../src/webapp/webapp-root.tsx";
 import { createEmptyConfirmationDialogState } from "../../src/webapp/webapp-root-types.ts";
+import { preloadWorkflowRoute } from "../../src/webapp/workflow-routes.tsx";
 import "../../src/webapp/design-system/index.css";
 // deferred.css ships lazily in production (webapp.ts loads it at boot); the dialog and
 // drawer surfaces under test live in it.
@@ -366,6 +368,31 @@ test("PWA vertical insets keep the dock clear of the home indicator", async () =
   await page.viewport(1280, 900);
 });
 
+test("installed PWA state survives shell hydration", async () => {
+  const standaloneDescriptor = Object.getOwnPropertyDescriptor(navigator, "standalone");
+  Object.defineProperty(navigator, "standalone", { configurable: true, value: true });
+  try {
+    await preloadWorkflowRoute("patcher");
+    const serverMarkup = renderToString(createElement(WebappRootHarness));
+    expect(serverMarkup).not.toContain('data-pwa="true"');
+
+    const host = document.createElement("div");
+    host.id = "webapp-root";
+    host.innerHTML = serverMarkup;
+    document.body.replaceChildren(host);
+    const recoverableErrors = [];
+    mountedRoot = hydrateRoot(host, createElement(WebappRootHarness), {
+      onRecoverableError: (error) => recoverableErrors.push(error),
+    });
+
+    await expect.poll(() => document.querySelector(".rw-app")?.getAttribute("data-pwa") || "").toBe("true");
+    expect(recoverableErrors).toEqual([]);
+  } finally {
+    if (standaloneDescriptor) Object.defineProperty(navigator, "standalone", standaloneDescriptor);
+    else delete navigator.standalone;
+  }
+});
+
 test("iOS standalone state applies the PWA dock inset adjustment", async () => {
   const standaloneDescriptor = Object.getOwnPropertyDescriptor(navigator, "standalone");
   Object.defineProperty(navigator, "standalone", { configurable: true, value: true });
@@ -377,12 +404,37 @@ test("iOS standalone state applies the PWA dock inset adjustment", async () => {
     await expect.poll(() => document.querySelector(".rw-app")?.getAttribute("data-pwa") || "").toBe("true");
     document.head.append(simulatedSafeArea);
     expect(getComputedStyle(document.querySelector(".dock")).paddingBlockEnd).toBe("4px");
+    expect(document.querySelector(".dock-pad").getBoundingClientRect().height).toBe(64);
+    await page.getByRole("button", { name: "More" }).click();
+    await expect.element(page.getByRole("menu")).toBeInTheDocument();
+    const dock = document.querySelector(".dock").getBoundingClientRect();
+    const menu = document.querySelector(".shared-more-menu").getBoundingClientRect();
+    expect(menu.bottom).toBeLessThanOrEqual(dock.top + 1);
+    expect(menu.bottom).toBeGreaterThanOrEqual(dock.top - 20);
   } finally {
     simulatedSafeArea.remove();
     if (standaloneDescriptor) Object.defineProperty(navigator, "standalone", standaloneDescriptor);
     else delete navigator.standalone;
   }
   await page.viewport(1280, 900);
+});
+
+test("tablet inspector uses the dock-style bottom rail", async () => {
+  await page.viewport(800, 900);
+  mountWebappRoot();
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Logs" }).click();
+  await expect.poll(() => document.querySelector(".log-dlg")?.open ?? false).toBe(true);
+
+  const head = document.querySelector(".log-dlg .dlg-head");
+  const rail = document.querySelector(".log-dlg .dialog-subrail");
+  expect(getComputedStyle(head).display).toBe("grid");
+  expect(getComputedStyle(head).order).toBe("2");
+  expect(getComputedStyle(head).borderBlockStartWidth).toBe("1px");
+  expect(getComputedStyle(head).borderBlockEndWidth).toBe("0px");
+  expect(getComputedStyle(rail).display).toBe("grid");
+  expect(getComputedStyle(rail.querySelector(".subtab")).minBlockSize).toBe("48px");
+  expect(getComputedStyle(rail.querySelector('[aria-selected="true"]')).borderBlockEndWidth).toBe("0px");
 });
 
 test("the mobile scroll reserve returns once the bench holds a card", async () => {

@@ -84,6 +84,10 @@
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --pwa-footer-reserve: 0px;
+  /* The installed PWA dock deliberately uses a four-pixel bottom pad. Keep
+     the page reserve and menus on that same geometry instead of retaining the
+     device's full home-indicator inset. */
+  --dock-safe-b: var(--safe-b);
   /* the only piece of dock geometry the rest of the page consumes; masthead.css
      raises it below the dock threshold */
   --dock-h: 0px;

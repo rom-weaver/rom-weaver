@@ -941,7 +941,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
     display: none;
   }
   .rw-app {
-    --dock-h: calc(64px + var(--safe-b));
+    --dock-h: calc(64px + var(--dock-safe-b));
   }
 }
 @media (min-width: 1000px) {
@@ -999,9 +999,15 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
    standalone mode, where `navigator.standalone` is true but the display-mode
    media query is not. */
 @media (display-mode: standalone), (display-mode: fullscreen) {
+  .rw-app {
+    --dock-safe-b: 0px;
+  }
   .rw-app .dock {
     padding-block-end: 4px;
   }
+}
+.rw-app[data-pwa="true"] {
+  --dock-safe-b: 0px;
 }
 .rw-app[data-pwa="true"] .dock {
   padding-block-end: 4px;

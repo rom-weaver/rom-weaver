@@ -342,6 +342,19 @@ const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
 const PRERENDER_RUNTIME_SLOT = '<span class="shell-identity" hidden=""></span>';
 const PRERENDER_RUNTIME_RESOLVER =
   "<script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}finally{document.currentScript.remove()}</script>";
+const PRERENDER_PWA_RESOLVER = `<script>
+try {
+  const displayModes = ["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"];
+  const installed =
+    displayModes.some((mode) => matchMedia("(display-mode: " + mode + ")").matches) ||
+    navigator.standalone === true;
+  const app = document.querySelector(".rw-app");
+  if (app) {
+    if (installed) app.dataset.pwa = "true";
+    else delete app.dataset.pwa;
+  }
+} catch {}
+</script>`;
 const DOC_SHELF_STATE_KEY = "rom-weaver-docs-shelves";
 // Restore the reader's docs shelves while the parser is still handling the
 // prerendered shell. The first client render reads the same storage value, so
@@ -358,7 +371,7 @@ try {
 const PRERENDER_ROOT = (shell) =>
   `<div id="webapp-root" aria-busy="true">${shell.replace(
     PRERENDER_RUNTIME_SLOT,
-    `${PRERENDER_RUNTIME_SLOT}${PRERENDER_RUNTIME_RESOLVER}`,
+    `${PRERENDER_RUNTIME_SLOT}${PRERENDER_RUNTIME_RESOLVER}${PRERENDER_PWA_RESOLVER}`,
   )}</div>${PRERENDER_DOC_SHELF_RESTORER}`;
 
 const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, routePreloadLinks) => {

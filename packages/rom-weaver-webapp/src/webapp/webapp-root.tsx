@@ -261,6 +261,12 @@ function WebappRoot({
   const threads = state.settings.threads;
   useLayoutEffect(() => notifyGuidedSampleView(state.currentView), [state.currentView]);
   useLayoutEffect(() => {
+    const app = document.getElementById("column");
+    if (!app) return;
+    if (readPwaState()) app.dataset.pwa = "true";
+    else delete app.dataset.pwa;
+  }, []);
+  useLayoutEffect(() => {
     document.documentElement.dataset.betaToolsEnabled = state.settings.betaToolsEnabled ? "true" : "false";
   }, [state.settings.betaToolsEnabled]);
   useEffect(() => {
@@ -512,11 +518,7 @@ function WebappRoot({
   });
   return (
     <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
-      <div
-        className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"}
-        data-pwa={readPwaState() ? "true" : undefined}
-        id="column"
-      >
+      <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
         <div className="app">
           <Masthead
             // "/" maps to no route, so the brand has to name one or the browser

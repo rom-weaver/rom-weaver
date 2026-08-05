@@ -142,6 +142,8 @@ assertHasClass(applyHtml, "build-tag", "preloaded build tag");
 assertHasClass(applyHtml, "masthead-threads-count", "preloaded thread count");
 assertHasClass(applyHtml, "sub-status", "preloaded runtime status control");
 assertIncludes(applyHtml, 'data-service-worker-enabled="true"', "service-worker build marker");
+assertIncludes(applyHtml, "navigator.standalone === true", "parser-time PWA state resolver");
+assertIncludes(applyHtml, 'app.dataset.pwa = "true"', "parser-time PWA attribute");
 const runtimeResolver =
   '<span class="shell-identity" hidden=""></span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
 for (const route of [

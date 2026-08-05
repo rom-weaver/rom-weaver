@@ -385,12 +385,74 @@
     border-radius: 0;
   }
   .rw-app .log-dlg .dlg-head {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0;
     order: 2;
+    padding: 4px max(var(--sp-s), var(--safe-r)) 4px max(var(--sp-s), var(--safe-l));
     border-block-start: 1px solid var(--seam-soft);
     border-block-end: 0;
   }
+  .rw-app .log-dlg .dialog-subrail {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-column: span 5;
+    gap: 0;
+    overflow: visible;
+  }
+  .rw-app .log-dlg .dialog-subrail .subtab,
+  .rw-app .log-dlg .dlg-head > .dlg-x {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    inline-size: auto;
+    min-inline-size: 0;
+    block-size: auto;
+    min-block-size: 48px;
+    padding: 6px 2px 4px;
+    margin: 0;
+    border: 0;
+    border-radius: var(--r-s);
+  }
+  .rw-app .log-dlg .dialog-subrail .subtab svg,
+  .rw-app .log-dlg .dlg-head > .dlg-x svg {
+    inline-size: 20px;
+    block-size: 20px;
+  }
+  .rw-app .log-dlg .dialog-subrail .subtab span,
+  .rw-app .log-dlg .dlg-x-label {
+    display: block;
+    max-inline-size: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rw-app .log-dlg .dialog-subrail .subtab[aria-selected="true"] {
+    color: var(--thread-text);
+    background: transparent;
+    border: 0;
+  }
+  .rw-app .log-dlg .dialog-subrail .subtab[aria-selected="true"]::before {
+    position: absolute;
+    inset-block-start: -5px;
+    inset-inline: 8px;
+    block-size: 2px;
+    content: "";
+    background: var(--thread);
+    border-radius: 1px;
+  }
+  .rw-app .log-dlg .dlg-head > .dlg-x::after {
+    content: none;
+  }
   .rw-app .log-dlg .dlg-subhead {
     order: 1;
+    padding-block: var(--sp-s);
+    padding-inline: max(var(--sp-m), var(--safe-l)) max(var(--sp-m), var(--safe-r));
+    border-block-start: 1px solid var(--seam-soft);
+    border-block-end: 0;
   }
 }
 
