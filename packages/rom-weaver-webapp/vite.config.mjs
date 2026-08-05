@@ -354,6 +354,9 @@ try {
     else delete app.dataset.pwa;
   }
 } catch {}
+finally {
+  document.currentScript?.remove();
+}
 </script>`;
 const DOC_SHELF_STATE_KEY = "rom-weaver-docs-shelves";
 // Restore the reader's docs shelves while the parser is still handling the
