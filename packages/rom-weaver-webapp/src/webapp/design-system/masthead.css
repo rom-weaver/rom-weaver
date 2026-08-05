@@ -994,13 +994,17 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
-/* Standalone PWAs reserve the full home-indicator inset. The dock background
-   still fills that inset, but its controls can use the outer portion so they
-   do not float unnecessarily high above the device edge. */
+/* Installed PWAs put the dock controls close to the device edge. The dock
+   background still fills the full viewport, and the data attribute covers iOS
+   standalone mode, where `navigator.standalone` is true but the display-mode
+   media query is not. */
 @media (display-mode: standalone), (display-mode: fullscreen) {
   .rw-app .dock {
-    padding-block-end: max(4px, calc(var(--safe-b) - var(--sp-l)));
+    padding-block-end: 4px;
   }
+}
+.rw-app[data-pwa="true"] .dock {
+  padding-block-end: 4px;
 }
 .rw-app .dock-tabs {
   display: contents;

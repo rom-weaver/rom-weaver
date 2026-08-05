@@ -366,6 +366,25 @@ test("PWA vertical insets keep the dock clear of the home indicator", async () =
   await page.viewport(1280, 900);
 });
 
+test("iOS standalone state applies the PWA dock inset adjustment", async () => {
+  const standaloneDescriptor = Object.getOwnPropertyDescriptor(navigator, "standalone");
+  Object.defineProperty(navigator, "standalone", { configurable: true, value: true });
+  const simulatedSafeArea = document.createElement("style");
+  simulatedSafeArea.textContent = ".rw-app { --safe-b: 34px; }";
+  try {
+    await page.viewport(393, 852);
+    mountWebappRoot();
+    await expect.poll(() => document.querySelector(".rw-app")?.getAttribute("data-pwa") || "").toBe("true");
+    document.head.append(simulatedSafeArea);
+    expect(getComputedStyle(document.querySelector(".dock")).paddingBlockEnd).toBe("4px");
+  } finally {
+    simulatedSafeArea.remove();
+    if (standaloneDescriptor) Object.defineProperty(navigator, "standalone", standaloneDescriptor);
+    else delete navigator.standalone;
+  }
+  await page.viewport(1280, 900);
+});
+
 test("the mobile scroll reserve returns once the bench holds a card", async () => {
   // The reserve keeps the last card clear of the phone browser's collapsing
   // bottom toolbar. It is only suppressed while the bench is empty; dropping

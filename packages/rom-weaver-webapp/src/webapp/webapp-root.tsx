@@ -23,7 +23,7 @@ import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
-import { Masthead, UpdateBanner } from "./components/shell.tsx";
+import { Masthead, readPwaState, UpdateBanner } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
@@ -512,7 +512,11 @@ function WebappRoot({
   });
   return (
     <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
-      <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
+      <div
+        className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"}
+        data-pwa={readPwaState() ? "true" : undefined}
+        id="column"
+      >
         <div className="app">
           <Masthead
             // "/" maps to no route, so the brand has to name one or the browser
