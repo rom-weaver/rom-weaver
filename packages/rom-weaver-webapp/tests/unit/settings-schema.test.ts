@@ -279,11 +279,20 @@ describe("loadSettings", () => {
     expect(storage.removedKeys).toEqual([LOCAL_STORAGE_SETTINGS_ID]);
   });
 
-  it("resets and returns defaults on a storage version mismatch", () => {
-    const payload = JSON.stringify({ common: { language: "de" }, version: SETTINGS_STORAGE_VERSION - 1 });
+  it("resets and returns defaults on an incompatible storage version", () => {
+    const payload = JSON.stringify({ common: { language: "de" }, version: 4 });
     const storage = makeStorage(payload);
     expect(loadSettings(storage)).toEqual(getDefaultSettings());
     expect(storage.removedKeys).toEqual([LOCAL_STORAGE_SETTINGS_ID]);
+  });
+
+  it("loads a version 5 payload and defaults the post-apply behavior it predates", () => {
+    const payload = JSON.stringify({ common: { language: "de" }, version: 5 });
+    const storage = makeStorage(payload);
+    const settings = loadSettings(storage);
+    expect(settings.language).toBe("de");
+    expect(settings.postApplyRomBehavior).toBe("auto-download");
+    expect(storage.removedKeys).toEqual([]);
   });
 
   it("resets when the payload is the right version but not an object", () => {

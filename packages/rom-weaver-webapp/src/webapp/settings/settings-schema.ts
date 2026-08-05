@@ -34,6 +34,11 @@ import {
 const logger = createLogger("settings");
 
 const SETTINGS_STORAGE_VERSION = 6;
+// Versions whose payload loads under the current schema without changes, so
+// stored settings survive the upgrade. v6 only added postApplyRomBehavior,
+// which the loader defaults when absent; the next save rewrites the payload
+// at the current version. Anything not listed here still wipes.
+const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5]);
 
 type GroupedStoredSettings = {
   apply?: {
@@ -428,7 +433,10 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
       resetStoredSettings(storageObject, "settings payload is not an object");
       return settings;
     }
-    if (parsedSettings.version !== SETTINGS_STORAGE_VERSION) {
+    if (
+      parsedSettings.version !== SETTINGS_STORAGE_VERSION &&
+      !COMPATIBLE_PRIOR_STORAGE_VERSIONS.has(parsedSettings.version as number)
+    ) {
       resetStoredSettings(storageObject, `expected version ${SETTINGS_STORAGE_VERSION}`);
       return settings;
     }
