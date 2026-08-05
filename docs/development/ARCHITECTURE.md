@@ -227,8 +227,8 @@ crossOriginIsolation (COOP/COEP headers from
 service worker) - no SAB means no proxy and no threads; OPFS is dedicated-worker
 only (no main-thread `window`); WebKit allows **one `SyncAccessHandle` per file**
 (the proxy refcounts to one) and serializes concurrent `FileReaderSync` of one
-File (the reason for the input-read gate). This cut the measured RVZ extract from
-5.7 s to 4.6 s (1.2× faster).
+File (the reason for the input-read gate). The gate cut the measured RVZ
+extract from 5.7 s to 4.6 s (1.2× faster).
 
 ## Patch apply: ROM copier headers
 
