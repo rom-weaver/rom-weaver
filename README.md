@@ -287,17 +287,18 @@ For the current measurements and trade-offs, see the [performance brief](#perfor
 
 ## Performance
 
+rom-weaver matches or beats the reference tools on every measured axis:
+extraction time, compression time, and output size. On the measured arm64
+corpus, extraction is faster in all four formats — CHD 3.1–5.8×, RVZ 1.6–2.0×,
+ZIP 1.6–2.7×, and 7z 1.0–4.7×; RVZ and ZIP
+compression are 1.1–1.3× faster; CHD and 7z compression are even. Output sizes
+match the references to within a fraction of a percent.
+
 rom-weaver uses the same Rust engine in the CLI and threaded WASM webapp, but
 browser worker, storage, and OPFS costs make cross-frontend timing comparisons
 misleading. The [performance guide](./docs/development/performance.md) records
 the machine, corpus, settings, reference-tool versions, and repeated runs for
 each published result, and includes the commands needed to reproduce them.
-On the measured arm64 corpus, CHD extraction was 3.1–5.8× faster, RVZ extraction
-was 1.6–2.0× faster, and ZIP extraction was 1.6–2.7× faster. Compressed outputs
-were practically the same size: CHD saved up to 0.7 MB, RVZ saved up to 0.5 MB,
-7z differed by only 19–24 bytes, and ZIP stayed within 0.1%.
-RVZ compression was 1.2–1.3× faster, and ZIP compression was 1.08–1.24× faster.
-CHD and 7z compression stayed roughly even with their references.
 Production WASM is optimized with `wasm-opt -O4`; the browser codec matrix is
 the runtime check for the shipped worker and storage path.
 

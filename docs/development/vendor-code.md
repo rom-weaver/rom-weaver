@@ -178,9 +178,9 @@ Build wiring lives in `libarchive/build.rs`:
   `Z7_LZMA_DEC_OPT`) replaces `LzmaDec.c`'s C loop wherever it can be
   assembled. Its staged ARM64 source caches the same distance-2 through
   distance-8 periods as the portable loop. It is the same bitstream and is what
-  `7zz` itself runs; the upstream loop makes a 1 GiB LZMA1 extract about 1.35×
-  slower before these short-period copies. Which platforms get it is the matrix
-  below.
+  `7zz` itself runs; before these short-period copies, the upstream loop
+  accounts for ~26% of a 1 GiB LZMA1 extract's time. Which platforms get it is
+  the matrix below.
 
 The portable fill was measured separately because it is deliberately narrower
 than the assembly port. On an arm64 native build forced onto the C decoder, a
