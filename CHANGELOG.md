@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.1](https://github.com/rom-weaver/rom-weaver/compare/v0.12.0...v0.12.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **ci:** retry Lighthouse startup failures ([#454](https://github.com/rom-weaver/rom-weaver/issues/454)) ([524bafd](https://github.com/rom-weaver/rom-weaver/commit/524bafdc99d2105a662299eb2d639997ef50b77f))
+* **ci:** use supported Pages pagination ([#455](https://github.com/rom-weaver/rom-weaver/issues/455)) ([4261f6e](https://github.com/rom-weaver/rom-weaver/commit/4261f6ea5bc6989f79bce7eb8bd124ff83355b9d))
+* **webapp:** center desktop masthead navigation ([#456](https://github.com/rom-weaver/rom-weaver/issues/456)) ([6264823](https://github.com/rom-weaver/rom-weaver/commit/62648239e7d89477acfad375dda6f3fc346c8d0e))
+
 ## [0.12.0](https://github.com/rom-weaver/rom-weaver/compare/v0.11.1...v0.12.0) (2026-08-05)
 
 

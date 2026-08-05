@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/linux-arm64-musl",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Linux arm64 musl binary for rom-weaver",
   "author": "Brandon Casey",
   "repository": {
