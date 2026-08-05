@@ -2488,7 +2488,7 @@ zip_read_data_zipx_zstd(struct archive_read *a, const void **buff,
 
 	/* Check end of the stream. */
 	if (ret == 0) {
-		if ((in.pos == in.size) && (out.pos < out.size)) {
+		if (in.pos == in.size) {
 			zip->end_of_entry = 1;
 			ZSTD_freeDStream(zip->zstdstream);
 			zip->zstdstream_valid = 0;
