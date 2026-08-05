@@ -905,9 +905,10 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
    The nav is top row or dock, never a second row. The tabs keep their icon +
    label pairing at every rail width, tightening (not shedding) in the snug band
    above the dock handoff. */
-@media (min-width: 1160px) {
+@media (min-width: 1000px) {
   /* Equal side tracks center the top rail against the app column rather than
-     against the leftover space between the brand and action group. */
+     against the leftover space between the brand and action group. The snug
+     band keeps its tighter tab padding below. */
   .rw-app .masthead {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   }

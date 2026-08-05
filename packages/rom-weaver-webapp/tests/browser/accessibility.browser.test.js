@@ -1173,8 +1173,8 @@ describe("webapp responsive navigation", () => {
     expect(getComputedStyle(host.querySelector(".mode .mode-label")).maxWidth).toBe("none");
   });
 
-  test("the roomy desktop rail centers on the masthead", async () => {
-    for (const width of [1280, 1600]) {
+  test("the desktop rail centers on the masthead across top-row widths", async () => {
+    for (const width of [1000, 1100, 1280, 1600]) {
       await setViewport({ height: 900, width });
       await renderMastheadOnly(PAGE_TABS);
 
