@@ -135,7 +135,9 @@ export const lighthouseArguments = (url, outputBase) => [
 
 export const LIGHTHOUSE_ATTEMPTS = 3;
 
-export const shouldRetryLighthouse = (attempt, report) =>
+export const shouldRetryLighthouse = (attempt, report) => attempt === 1 && Boolean(report?.runtimeError);
+
+export const shouldRetryLighthouseAttempt = (attempt, report) =>
   attempt < LIGHTHOUSE_ATTEMPTS && report?.runtimeError?.code === "NO_NAVSTART";
 
 const clearReports = (outputBase) => {
@@ -152,7 +154,7 @@ const runAudit = (url, outputBase) => {
     );
     const reportPath = `${outputBase}.report.json`;
     const report = fs.existsSync(reportPath) ? JSON.parse(fs.readFileSync(reportPath, "utf8")) : undefined;
-    if (shouldRetryLighthouse(attempt, report)) {
+    if (shouldRetryLighthouseAttempt(attempt, report)) {
       process.stdout.write(
         `::warning title=Lighthouse retry::${url} hit ${report.runtimeError.code}; retrying (attempt ${attempt + 1}/${LIGHTHOUSE_ATTEMPTS})\n`,
       );
