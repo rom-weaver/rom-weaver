@@ -1,10 +1,10 @@
 # Performance
 
-How rom-weaver is benchmarked, what the numbers currently are, and how to
-reproduce them.
+This page explains how rom-weaver is benchmarked. It lists the current
+numbers and shows how to reproduce them.
 
-The benchmark suites below measure CHD, RVZ, 7z, and zip against their
-reference tools in both directions: compress and extract. Output size is
+The suites below measure CHD, RVZ, 7z, and zip against their reference tools.
+Each suite measures both directions: compress and extract. Output size is
 recorded next to every timing.
 
 <!-- START doctoc -->
@@ -34,11 +34,11 @@ recorded next to every timing.
 
 ## Summary
 
-Ratios compare wall time: 2× faster means the reference tool took twice as
+Ratios compare wall time. "2× faster" means the reference tool took twice as
 long. Results cover this corpus, not every file. Extraction is faster in all
-four formats; RVZ and ZIP compression are modestly faster; CHD and 7z
-compression are even with their references. Output sizes match the references
-to within a fraction of a percent everywhere.
+four formats. RVZ and ZIP compression are slightly faster. CHD and 7z
+compression match their references. Output sizes match the references to
+within a fraction of a percent everywhere.
 
 | Suite | Reference | Compress | Extract | Output size |
 | --- | --- | --- | --- | --- |
@@ -48,8 +48,9 @@ to within a fraction of a percent everywhere.
 | zip | Info-ZIP | 1.1–1.2× faster | 1.6–2.7× faster | within 0.1% |
 
 † The 7z extract timings include rom-weaver's default common-file filter. 7zz
-extracts those sidecars, so the multi-file result is an application-path result,
-not a pure decoder comparison. The filter writes 291–717 fewer bytes in this set.
+extracts those sidecar files. The multi-file result therefore measures the
+whole application path, not just the decoder. The filter writes 291–717 fewer
+bytes in this set.
 
 ## Benchmarks in this repository
 
@@ -63,37 +64,39 @@ not a pure decoder comparison. The filter writes 291–717 fewer bytes in this s
 
 `scripts/parity-check.mjs` is the correctness counterpart. It checks that
 CHD, RVZ, 7z, and ZIP payloads round-trip through rom-weaver and their
-reference tools in both directions. It compares extracted payload bytes,
-because archive metadata and compression streams are implementation-specific.
+reference tools in both directions. It compares extracted payload bytes.
+Archive metadata and compression streams differ between tools, so it cannot
+compare archive bytes.
 
 ## Method
 
-`scripts/bench-disc-tools.mjs` walks a corpus directory and builds two
-benchmarks per source it recognises, one compress and one extract, then hands both
-commands to [hyperfine](https://github.com/sharkdp/hyperfine), which runs a
-warmup pass followed by the measured runs.
+`scripts/bench-disc-tools.mjs` walks a corpus directory. For each source it
+recognises, it builds two benchmarks: one compress and one extract. It hands
+both commands to [hyperfine](https://github.com/sharkdp/hyperfine), which runs
+a warmup pass and then the measured runs.
 
-Each run is preceded by a `--prepare` step that deletes the previous output.
-Every run starts from the same clean slate: `rom-weaver extract` stops rather
-than overwrite files already in the output directory, and a reference tool that
+A `--prepare` step deletes the previous output before each run, so every run
+starts clean. This matters for two reasons. `rom-weaver extract` stops rather
+than overwrite files already in the output directory. A reference tool that
 skipped a write because the target existed would be timed as instant.
 
 Output size is recorded separately, from a single untimed execution of the same
 command.
 
-The warmup run puts the source in the page cache, so the measured runs compare
-compression work rather than first-read disk latency. On a machine without room
-to cache the whole source, the numbers describe an I/O-bound workload instead.
+The warmup run puts the source in the page cache. The measured runs then
+compare compression work, not first-read disk latency. On a machine without
+room to cache the whole source, the numbers describe an I/O-bound workload
+instead.
 
-Sources under 1 MB are excluded by default (`--min-size`); at that size every
-tool here finishes in under 20 ms and the measurement is dominated by process
-startup.
+Sources under 1 MB are excluded by default (`--min-size`). At that size every
+tool here finishes in under 20 ms, so process startup dominates the
+measurement.
 
 ### Settings
 
-Both sides run at parity: where two tools already agree on a default, both are
-left alone; where they do not, both are pinned to the *reference* tool's own
-default, never rom-weaver's.
+Both sides run at parity. Where the two tools already agree on a default, both
+are left alone. Where they do not, both are pinned to the *reference* tool's
+own default, never rom-weaver's.
 
 | Suite | rom-weaver | Reference | Note |
 | --- | --- | --- | --- |
@@ -119,23 +122,23 @@ Three further details:
 
 ### Two chdman behaviors the harness works around
 
-- **Extraction is split across subcommands by disc type, and chdman picks none
-  of them for you.** `extractcd` handles CD and GD-ROM, `extractdvd` handles
+- **Extraction is split across subcommands by disc type, and chdman does not
+  pick one for you.** `extractcd` handles CD and GD-ROM. `extractdvd` handles
   DVD. The harness reads the CHD's own metadata tag via `chdman info`
-  (`CHT2`/`CHTR` → CD, `CHGD` → GD-ROM, `DVD ` → DVD) and routes accordingly.
-  rom-weaver reads the same tag itself, which is why its side is one command for
-  all three.
-- **A wrong subcommand fails but still exits 0.** `chdman extractcd` against a
-  DVD CHD terminates on an uncaught C++ exception, writes nothing, and returns
-  success. Exit status alone would score that crash as an extremely fast run.
-  Every measured command is therefore also required to produce a non-empty
+  (`CHT2`/`CHTR` → CD, `CHGD` → GD-ROM, `DVD ` → DVD) and routes to the right
+  subcommand. rom-weaver reads the same tag itself, so its side is one command
+  for all three types.
+- **A wrong subcommand fails but still exits 0.** Run `chdman extractcd`
+  against a DVD CHD and it stops on an uncaught C++ exception, writes nothing,
+  and returns success. Exit status alone would score that crash as an extremely
+  fast run. Every measured command must therefore also produce a non-empty
   output.
 
 ## Results
 
-Produced by `scripts/bench-disc-tools.mjs` at the codec settings in
-[Settings](#settings), which pin both sides to the same codec, level, and block
-size so the two tools are doing equivalent work.
+`scripts/bench-disc-tools.mjs` produced these results at the codec settings in
+[Settings](#settings). Those settings pin both sides to the same codec, level,
+and block size, so the two tools do equivalent work.
 
 **Machine:** a quiet 10-core arm64 machine, otherwise idle.
 **Binaries:** rom-weaver 0.8.0 built `--release`, against chdman 0.287,
@@ -144,35 +147,34 @@ dolphin-tool, 7zz 26.02, and Info-ZIP.
 **Runs:** three timed runs per command after one warmup; `±` is the standard
 deviation across those runs.
 
-Each group of suites ran back to back, with `chd` and `rvz` in one sitting and `7z` and
-`zip` in a second after the archive corpus grew to include the 256 MB and 1 GiB
-ROMs.
+The suites ran in two sittings: `chd` and `rvz` in one, then `7z` and `zip` in
+a second after the archive corpus grew to include the 256 MB and 1 GiB ROMs.
 
 One exception: the **RVZ size columns** were re-measured after
-[#213](https://github.com/rom-weaver/rom-weaver/pull/213), which changed how much
-padding RVZ compression detects. Their time columns are still from the original
-sitting. RVZ output is deterministic. Three repeats produced bit-identical
-sizes, so the size columns are exact even though they and the time columns come
-from different runs. #213 touches only GameCube junk detection, so no other suite
-was affected.
+[#213](https://github.com/rom-weaver/rom-weaver/pull/213), which changed how
+much padding RVZ compression detects. Their time columns are still from the
+original sitting. RVZ output is deterministic: three repeats produced
+bit-identical sizes. The size columns are therefore exact even though they and
+the time columns come from different runs. #213 touches only GameCube junk
+detection, so no other suite was affected.
 
-The **7z tables** below supersede the earlier 7z results. They were rerun on
-2026-08-04 after native LZMA2 writes and eligible LZMA1/LZMA2 reads moved onto
-7-Zip's own LZMA SDK - the same coders `7zz` runs. Filter chains, LZMA1 writes,
-and WebAssembly writes stay on liblzma.
+The **7z tables** below replace the earlier 7z results. They were rerun on
+2026-08-04, after native LZMA2 writes and eligible LZMA1/LZMA2 reads moved
+onto 7-Zip's own LZMA SDK - the same coders `7zz` runs. Filter chains, LZMA1
+writes, and WebAssembly writes stay on liblzma.
 
 The rerun used an Apple M1 Max, rom-weaver 0.11.1, and 7zz 26.02. Each command
 had one warmup and three measured runs. Hyperfine flagged outliers on the 32 MB
 and 256 MB compression rows, so those row-level timings are less certain.
 
-Time change is rom-weaver's elapsed time minus the reference tool's, in seconds
-and as a percentage of the reference, so negative means rom-weaver finished
-sooner. Size change is rom-weaver's output relative to the reference's, so
-negative means smaller.
+Time change is rom-weaver's elapsed time minus the reference tool's, in
+seconds and as a percentage of the reference. Negative means rom-weaver
+finished sooner. Size change is rom-weaver's output relative to the
+reference's. Negative means smaller.
 
-Sources are identified by platform and disc type rather than by title, since the
-corpus is not redistributable. The same label means the same source everywhere in
-this document.
+The corpus is not redistributable, so sources are identified by platform and
+disc type rather than by title. The same label means the same source
+everywhere in this document.
 
 ### CHD vs chdman
 
@@ -192,8 +194,8 @@ and audio tracks (`CHT2`), a Dreamcast GD-ROM (`CHGD`), and a PS2 DVD (`DVD `).
 rom-weaver extracted these discs 3.1–5.8× faster than chdman — 6 to 22 seconds
 sooner per disc.
 
-Output sizes agree with chdman's to within 72 bytes on every disc; the difference
-is cue-sheet text, specifically track naming and line endings, not image data.
+Output sizes agree with chdman's to within 72 bytes on every disc. The
+difference is cue-sheet text - track naming and line endings - not image data.
 
 #### Compress
 
@@ -204,8 +206,8 @@ is cue-sheet text, specifically track naming and line endings, not image data.
 | GD-ROM B | GD-ROM | 13.855 s ± 0.085 | 17.382 s ± 0.048 | −3.527 s (−20.3%) | 646.8 MB | 646.8 MB | −0.01% |
 | GD-ROM A | GD-ROM | 15.712 s ± 0.161 | 18.675 s ± 0.364 | −2.963 s (−15.9%) | 872.2 MB | 872.3 MB | −0.01% |
 
-Compression is even: within a few percent of chdman on every disc, with output
-up to 0.7 MB smaller.
+Compression matches chdman: within a few percent on every disc, with output up
+to 0.7 MB smaller.
 
 ### RVZ vs dolphin-tool
 
@@ -228,21 +230,23 @@ rom-weaver extracts these two discs 1.6–2.0× faster.
 | GameCube A | 0.273 s ± 0.018 | 0.340 s ± 0.004 | −0.067 s (−19.7%) | 103.4 MB | 103.9 MB | −0.48% |
 | GameCube B | 0.269 s ± 0.014 | 0.363 s ± 0.008 | −0.094 s (−25.9%) | 156.9 MB | 156.9 MB | +0.01% |
 
-Times here are sub-second because most of a GameCube disc is pseudorandom padding
-that RVZ stores as a seed rather than compressing. Only the real payload,
-roughly 100–160 MB of a 1.46 GB disc, reaches the compressor.
+Times here are sub-second because most of a GameCube disc is pseudorandom
+padding. RVZ stores that padding as a seed instead of compressing it. Only the
+real payload, roughly 100–160 MB of a 1.46 GB disc, reaches the compressor.
 
-Both directions are lossless: extracting either tool's RVZ reproduces the source
-ISO's SHA-1 exactly, and the two extracted ISOs are byte-identical to each other.
+Both directions are lossless. Extracting either tool's RVZ reproduces the
+source ISO's SHA-1 exactly, and the two extracted ISOs are byte-identical to
+each other.
 
-GameCube A measured +8.38% before #213, which changed junk detection to read the
-GameCube filesystem table for file end offsets.
+GameCube A measured +8.38% before #213, which changed junk detection to read
+the GameCube filesystem table for file end offsets.
 
 ### 7z vs 7zz
 
-LZMA2 at level 5 on both sides. The compress inputs are cartridge ROMs, 16 MB to
-1 GiB; disc images are excluded because they are what the `chd` and `rvz` suites
-measure. The `.7z` archives read back on the extract side do contain disc images.
+LZMA2 at level 5 on both sides. The compress inputs are cartridge ROMs, 16 MB
+to 1 GiB. Disc images are excluded here because the `chd` and `rvz` suites
+already measure them. The `.7z` archives read back on the extract side do
+contain disc images.
 
 #### Compress
 
@@ -255,8 +259,8 @@ measure. The `.7z` archives read back on the extract side do contain disc images
 
 The SDK encoder keeps compression even with 7zz: every row is within ±6%, and
 the archives are 19–24 bytes smaller. The archive bytes are not expected to be
-identical because the tools write different metadata; the parity check compares
-the extracted payload instead.
+identical, because the tools write different metadata. The parity check
+compares the extracted payload instead.
 
 `ROM_WEAVER_7Z_ENCODER=liblzma` still selects the seeded liblzma encoder. The
 legacy encoder is not measured in this table.
@@ -272,22 +276,22 @@ legacy encoder is not measured in this table.
 | GD-ROM B `.7z` | 673 MB | 20.644 s ± 0.066 | 21.167 s ± 0.344 | −0.522 s (−2.5%) | 1,134.7 MB |
 
 The output size column counts bytes written by each tool. rom-weaver's default
-common-file filter omits sidecars that 7zz writes, so its output is 291–717 bytes
-smaller on these rows. PS1 CD A contains eight track files plus sidecars. Its
-large lead (4.7×) combines multi-file extraction with that filtering. The other rows
-are 1.01–1.03× faster with rom-weaver, but they still include the same filtering
-difference.
+common-file filter skips sidecar files that 7zz writes, so its output is
+291–717 bytes smaller on these rows. PS1 CD A contains eight track files plus
+sidecars. Its large lead (4.7×) combines multi-file extraction with that
+filtering. The other rows are 1.01–1.03× faster with rom-weaver, and they
+still include the same filtering difference.
 
-A pure decoder comparison
-needs the harness to pass `--no-ignore` to rom-weaver's extract command. The
-portable decoder also optimizes repeated-byte matches; see the targeted
-measurements in [`vendor-code.md`](vendor-code.md).
+For a pure decoder comparison, pass `--no-ignore` to rom-weaver's extract
+command in the harness. The portable decoder also optimizes repeated-byte
+matches; see the targeted measurements in [`vendor-code.md`](vendor-code.md).
 
-These numbers are arm64, where that loop needs no extra tooling. On x86-64 it is
-MASM assembly and the build only uses it when a MASM-compatible assembler is on
-`PATH`; the shipped Linux x86-64 (glibc) and Windows x86-64 builds have one, and
-`x86_64-apple-darwin` never does. A build without one keeps the C decoder and
-lands roughly where the old rows did, and says so in a `cargo:warning`. See
+These numbers are arm64, where that loop needs no extra tooling. On x86-64 the
+loop is MASM assembly. The build only uses it when a MASM-compatible assembler
+is on `PATH`: the shipped Linux x86-64 (glibc) and Windows x86-64 builds have
+one, and `x86_64-apple-darwin` never does. A build without one keeps the C
+decoder, lands roughly where the old rows did, and says so in a
+`cargo:warning`. See
 [Which platforms get the assembly decode loop](vendor-code.md#which-platforms-get-the-assembly-decode-loop)
 for the full matrix.
 
@@ -320,8 +324,8 @@ rom-weaver extracts these archives 1.6–2.7× faster than `unzip`.
 rom-weaver compresses 1.1–1.2× faster than `zip`, with output within 0.1% of
 Info-ZIP's.
 
-Info-ZIP's spread on the two largest compress inputs (± 1.4 s and ± 1.9 s) is
-wide enough that those two percentages are not precise.
+Info-ZIP's run-to-run spread on the two largest compress inputs (± 1.4 s and
+± 1.9 s) is wide, so those two percentages are not precise.
 
 ## Reproducing
 
@@ -336,18 +340,18 @@ BENCH_CORPUS=/path/to/corpus mise run bench-7z
 BENCH_CORPUS=/path/to/corpus mise run bench-zip
 ```
 
-All four tasks wrap one script, which can be called directly for anything they
-do not expose:
+All four tasks wrap one script. Call it directly for anything they do not
+expose:
 
 ```bash
 node scripts/bench-disc-tools.mjs --suite rvz --corpus /path/to/corpus --runs 5
 ```
 
-The corpus is deliberately not in the repository: these benchmarks need real ROMs
-and disc images, which are not redistributable. Point `--corpus` (or
-`BENCH_CORPUS`) at a directory of your own. The harness discovers sources up to
-three levels deep, so the usual one-directory-per-title layout works as-is, and
-each suite picks up only what it can use:
+The corpus is deliberately not in the repository. These benchmarks need real
+ROMs and disc images, which are not redistributable. Point `--corpus` (or
+`BENCH_CORPUS`) at a directory of your own. The harness discovers sources up
+to three levels deep, so the usual one-directory-per-title layout works as-is.
+Each suite picks up only what it can use:
 
 | Suite | Reference | Compress inputs | Extract inputs |
 | --- | --- | --- | --- |
@@ -358,8 +362,8 @@ each suite picks up only what it can use:
 
 "ROM files" means `.gba`, `.nds`, `.3ds`, `.cci`, `.sfc`, `.smc`, `.n64`,
 `.z64`, `.nes`, `.gb`, `.gbc`. These cartridge dumps range from a 128 KB NES
-ROM to a 1 GiB 3DS image. Some of the larger ones only exist inside the corpus's
-own archives; extract those once and the archive suites pick them up.
+ROM to a 1 GiB 3DS image. Some of the larger ones only exist inside the
+corpus's own archives. Extract those once and the archive suites pick them up.
 
 Flags:
 

@@ -177,31 +177,32 @@ Build wiring lives in `libarchive/build.rs`:
 - The SDK's hand-written decode loop (`vendor/Asm/`, selected with
   `Z7_LZMA_DEC_OPT`) replaces `LzmaDec.c`'s C loop wherever it can be
   assembled. Its staged ARM64 source caches the same distance-2 through
-  distance-8 periods as the portable loop. It is the same bitstream and is what
-  `7zz` itself runs; before these short-period copies, the upstream loop
-  accounts for ~26% of a 1 GiB LZMA1 extract's time. Which platforms get it is
-  the matrix below.
+  distance-8 periods as the portable loop. It decodes the same bitstream and
+  is what `7zz` itself runs. Before these short-period copies, the upstream
+  loop accounts for ~26% of a 1 GiB LZMA1 extract's time. The matrix below
+  lists which platforms get it.
 
 The portable fill was measured separately because it is deliberately narrower
 than the assembly port. On an arm64 native build forced onto the C decoder, a
 256 MiB repeated-byte LZMA2 stream fell from a 497 ms median to 123 ms
-(4.0× faster), while a 128 MiB literal-heavy stream stayed effectively flat
-(66.4 ms to 64.6 ms). In the browser-WASM runner the same change improved the
-repeated-byte case from 1.055 s to 0.853 s (1.24× faster) and left the literal-heavy case
-within 2%. The distance-2 path reduced a 512 MiB alternating-byte stream from
-873 ms to 310 ms on the same portable native decoder (2.8× faster), and a 256 MiB
-browser-WASM extraction from 2.302 s to 2.105 s (1.09× faster). Extending the same
-cached-pattern copy to periods 3 through 8 cut native decoder CPU by 2.3× to
-3.2× on 512 MiB pure-pattern streams. End-to-end 128 MiB browser extractions
-were 1.02× to 1.07× faster; period 1, period 2, periodic 4 KiB, and random-data
-controls stayed within run-to-run variation. These are targeted
-microbenchmarks, not a claim that every archive gets faster.
+(4.0× faster). A 128 MiB literal-heavy stream stayed effectively flat
+(66.4 ms to 64.6 ms). In the browser-WASM runner, the same change improved the
+repeated-byte case from 1.055 s to 0.853 s (1.24× faster) and left the
+literal-heavy case within 2%. The distance-2 path reduced a 512 MiB
+alternating-byte stream from 873 ms to 310 ms on the same portable native
+decoder (2.8× faster). It also reduced a 256 MiB browser-WASM extraction from
+2.302 s to 2.105 s (1.09× faster). Extending the same cached-pattern copy to
+periods 3 through 8 cut native decoder CPU by 2.3× to 3.2× on 512 MiB
+pure-pattern streams. End-to-end 128 MiB browser extractions were 1.02× to
+1.07× faster. The period 1, period 2, periodic 4 KiB, and random-data controls
+stayed within run-to-run variation. These are targeted microbenchmarks, not a
+claim that every archive gets faster.
 
 The assembly version was measured end-to-end on native ARM64 over ten runs per
 case. Against the unmodified SDK assembly loop, 512 MiB period-2 through
-period-8 archives were 1.67× to 2.49× faster by median wall time; period 1 was
+period-8 archives were 1.67× to 2.49× faster by median wall time. Period 1 was
 unchanged, and literal-heavy random data was within 2%. The x86 assembly loop
-stays unpatched: its port of these copies is staged separately so it can be
+stays unpatched. Its port of these copies is staged separately so it can be
 reviewed and measured on x86 hardware on its own.
 
 ### One 7z LZMA backend policy
