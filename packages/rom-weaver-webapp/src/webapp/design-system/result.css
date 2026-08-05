@@ -122,6 +122,22 @@
   color: var(--thread-text);
 }
 
+/* Optional local EmulatorJS smoke test. Its assets are fetched only after the user opens it. */
+.rw-app .emulatorjs-test {
+  display: grid;
+  gap: var(--sp-s);
+  margin-block-start: var(--sp-s);
+}
+.rw-app .emulatorjs-note {
+  font-size: 0.72rem;
+  color: var(--ink-3);
+}
+.rw-app .emulatorjs-error {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--fault);
+}
+
 /* Reserve space for the create-mode swap control. */
 .rw-app .swap-row {
   position: relative;

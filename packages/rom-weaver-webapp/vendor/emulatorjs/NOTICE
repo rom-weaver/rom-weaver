@@ -1,0 +1,19 @@
+EmulatorJS 4.2.3 and selected EmulatorJS core assets are self-hosted by RomWeaver.
+
+EmulatorJS runtime license: GPL-3.0. See LICENSE.
+
+Self-hosted cores:
+@emulatorjs/core-fceumm (Copying)
+@emulatorjs/core-gambatte (COPYING)
+@emulatorjs/core-genesis_plus_gx (LICENSE)
+@emulatorjs/core-handy
+@emulatorjs/core-melonds (LICENSE)
+@emulatorjs/core-mgba (LICENSE)
+@emulatorjs/core-mupen64plus_next (LICENSE)
+@emulatorjs/core-pcsx_rearmed (COPYING)
+@emulatorjs/core-prosystem (License.txt)
+@emulatorjs/core-smsplus
+@emulatorjs/core-snes9x (LICENSE)
+@emulatorjs/core-yabause
+
+Source: https://github.com/EmulatorJS/EmulatorJS
