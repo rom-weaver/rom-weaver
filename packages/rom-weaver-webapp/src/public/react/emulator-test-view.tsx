@@ -1,6 +1,7 @@
 import { Gamepad2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
+import { ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
 import {
   addEntry,
   disposeEntry,
@@ -9,7 +10,7 @@ import {
   useEmulatorSession,
   type EmulatorSessionEntry,
 } from "./emulator-session-store.ts";
-import { createEmulatorDocument } from "./components/emulator-document.ts";
+import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
@@ -72,14 +73,48 @@ const EmulatorSessionOutput = ({ entry, current }: { entry: EmulatorSessionEntry
   );
 };
 
-const EmulatorTestView = () => {
+type EmulatorTestViewProps = {
+  onOpenStorage?: () => void;
+};
+
+const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [preparing, setPreparing] = useState(false);
   const currentGame = entries.find((entry) => entry.id === currentGameId) || null;
+  const currentIdentity = useMemo(
+    () =>
+      currentGame
+        ? createEmulatorGameIdentity({
+            checksum: currentGame.checksum,
+            fileName: currentGame.fileName,
+            sizeBytes: currentGame.sizeBytes,
+          })
+        : null,
+    [currentGame],
+  );
   const dataUrl =
     typeof document === "undefined" ? "/emulatorjs/data/" : new URL("emulatorjs/data/", document.baseURI).href;
+
+  useEffect(() => {
+    ensureEmulatorSaveBridge();
+  }, []);
+
+  useEffect(() => {
+    if (!currentIdentity) return undefined;
+    const sendVisibility = (kind: "visibility-pause" | "visibility-resume") => {
+      iframeRef.current?.contentWindow?.postMessage(
+        { gameId: currentIdentity.gameName, kind, source: "rom-weaver-emulator" },
+        "*",
+      );
+    };
+    const handleVisibilityChange = () => sendVisibility(document.hidden ? "visibility-pause" : "visibility-resume");
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    if (document.hidden) sendVisibility("visibility-pause");
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [currentIdentity]);
 
   useEffect(() => {
     if (!currentGame) return;
@@ -153,13 +188,18 @@ const EmulatorTestView = () => {
           <p className="emulatorjs-error" role="alert">
             {error}
           </p>
-        ) : currentGame && currentCore && currentGame.objectUrl ? (
+        ) : currentGame && currentCore && currentGame.objectUrl && currentIdentity ? (
           <div className="emulator-player-frame">
             <iframe
               allow="autoplay; fullscreen; gamepad"
               allowFullScreen
+              key={currentGame.id}
+              ref={iframeRef}
               referrerPolicy="no-referrer"
-              srcDoc={createEmulatorDocument(dataUrl, currentGame.objectUrl, currentGame.fileName, currentCore)}
+              srcDoc={createEmulatorDocument(dataUrl, currentGame.objectUrl, currentIdentity.gameName, currentCore, {
+                gameId: currentIdentity.gameId,
+                gameLabel: currentIdentity.gameLabel,
+              })}
               title={`EmulatorJS test for ${currentGame.fileName}`}
             />
           </div>
@@ -203,6 +243,11 @@ const EmulatorTestView = () => {
           </div>
           <span className="mono">{entries.length}</span>
         </div>
+        {onOpenStorage ? (
+          <button className="btn ghost slim emulator-saves-link" onClick={onOpenStorage} type="button">
+            Manage saved states and SRAM
+          </button>
+        ) : null}
         {entries.length ? (
           <div className="cards emulator-session-list">
             {entries.map((entry) => (

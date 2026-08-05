@@ -35,6 +35,7 @@ import {
 } from "../pwa/emulator-prefetch.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
+import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
   prefersReducedMotion,
   readPwaState,
@@ -902,6 +903,7 @@ const LogsStoragePanel = ({
         {showingOpfs ? (
           <>
             <EmulatorPrefetchPanel active={showingOpfs} />
+            <EmulatorSavesPanel active={showingOpfs} />
             <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
           </>
         ) : (

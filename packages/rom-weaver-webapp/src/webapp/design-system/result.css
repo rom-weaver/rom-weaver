@@ -191,6 +191,9 @@
 .rw-app .emulator-session-head > .mono {
   color: var(--thread-text);
 }
+.rw-app .emulator-saves-link {
+  justify-self: start;
+}
 .rw-app .emulator-session-list {
   gap: var(--sp-s);
 }

@@ -24,9 +24,11 @@ describe("createEmulatorDocument", () => {
   it("selects the self-hosted non-threaded WebGL 2 core", () => {
     const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
 
-    expect(document).toContain("EJS_DEBUG_XX = true");
+    expect(document).toContain("EJS_DEBUG_XX = false");
     expect(document).toContain("webgl2Enabled: 'enabled'");
     expect(document).toContain("ejs_threads: 'disabled'");
-    expect(document).toContain("EJS_disableLocalStorage = true");
+    expect(document).toContain("EJS_disableLocalStorage = false");
+    expect(document).toContain("EJS_onSaveState");
+    expect(document).toContain("EJS_onSaveSave");
   });
 });
