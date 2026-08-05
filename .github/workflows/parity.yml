@@ -62,9 +62,15 @@ jobs:
           tools: node
           cargo-cache: "false"
 
-      # The reference tools are cross-platform npm packages (chdman from
+      - name: Install archive reference tool (7zz)
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes 7zip
+
+      # The disc reference tools are cross-platform npm packages (chdman from
       # emmercm/chdman-js, dolphin-tool). Each exposes a binary of the same name
-      # on PATH after a global install. node comes from mise (.config/mise.toml).
+      # on PATH after a global install. zip and unzip are part of the Ubuntu
+      # runner image. node comes from mise (.config/mise.toml).
       - name: Install reference tools (chdman, dolphin-tool)
         run: |
           npm install --global chdman dolphin-tool
