@@ -137,7 +137,7 @@ would let a nightly build read and corrupt production's OPFS state.
 | Production | `rom-weaver.com` | stable tag `vX.Y.Z` | `rom-weaver` |
 | Beta | `beta.rom-weaver.com` | any release tag, stable or prerelease | `rom-weaver-beta` |
 | Nightly | `nightly.rom-weaver.com` | every push to `main`, and any release tag | `rom-weaver-nightly` |
-| Preview | generated `pages.dev` alias | internal pull request | `rom-weaver-preview` |
+| Preview | `pr-<n>.rom-weaver-preview.pages.dev` | every first-party pull-request commit | `rom-weaver-preview` |
 
 The three permanent channels are a stability ladder, and a deploy refreshes its
 own channel **plus every less-stable one below it**. A stable release therefore

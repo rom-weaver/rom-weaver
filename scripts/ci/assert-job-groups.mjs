@@ -13,7 +13,7 @@ runMain(() => {
   const groups = [
     [process.env.REPO_LINT_SELECTED, [`repo-lint=${process.env.REPO_LINT_RESULT}`]],
     [process.env.DOCKER_SELECTED, [`docker=${process.env.DOCKER_RESULT}`]],
-    [process.env.WEBAPP_SELECTED, [`wasm=${process.env.WASM_RESULT}`]],
+    [process.env.WASM_SELECTED, [`wasm=${process.env.WASM_RESULT}`]],
     [
       process.env.DOCKER_PREBUILT_SELECTED,
       [`docker-prebuilt=${process.env.DOCKER_PREBUILT_RESULT}`],

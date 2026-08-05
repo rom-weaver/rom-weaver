@@ -414,12 +414,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: changes
-    # Skipped whole rather than started with every step gated off. Everything
-    # downstream of it - the webapp jobs, `docker-prebuilt`, and `deploy` -
-    # carries the same selection, so none of them is left waiting on an
-    # artifact that was never going to be built. The `Plumbing` aggregate below
-    # is the required check.
-    if: needs.changes.outputs.webapp == 'true'
+    # Skipped whole rather than started with every step gated off. Webapp tests
+    # and `docker-prebuilt` still select this through `changes.webapp`, while
+    # first-party pull requests also select it to build their preview bundle.
+    # The `Plumbing` aggregate below is the required check.
+    if: >-
+      needs.changes.outputs.webapp == 'true' ||
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]')
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -475,7 +478,8 @@ jobs:
   # a job removed from a matrix reports no status at all, and the ruleset has no
   # bypass actors, so an unreported required name blocks the merge forever.
   # Same shape as `rust` and `webapp` below: it runs even when its dependencies
-  # skipped, and accepts a skip only where `changes` did not select the stack.
+  # skipped, and accepts a WASM skip only where neither a webapp change nor a
+  # first-party pull-request preview selected it.
   plumbing:
     name: Plumbing
     runs-on: ubuntu-24.04
@@ -499,7 +503,7 @@ jobs:
           REPO_LINT_RESULT: ${{ needs.repo-lint.result }}
           DOCKER_SELECTED: ${{ needs.changes.outputs.docker_matrix != '[]' }}
           DOCKER_RESULT: ${{ needs.docker.result }}
-          WEBAPP_SELECTED: ${{ needs.changes.outputs.webapp }}
+          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
           WASM_RESULT: ${{ needs.wasm.result }}
           DOCKER_PREBUILT_SELECTED: ${{ needs.changes.outputs.docker_prebuilt }}
           DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
@@ -1234,7 +1238,8 @@ jobs:
     if: >-
       (github.ref_type == 'tag' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_channel != 'none') ||
-      needs.changes.outputs.webapp == 'true') &&
+      needs.changes.outputs.webapp == 'true' ||
+      github.event_name == 'pull_request') &&
       (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_channel != 'none') &&
       (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
@@ -1361,6 +1366,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           DEPLOYMENT_CHANNEL: preview
+          DEPLOYMENT_TARGET_URL: ${{ format('https://{0}.rom-weaver-preview.pages.dev', needs.deploy-plan.outputs.preview_branch) }}
           DEPLOYMENT_STATE: pending
           STATUS_CONTEXT: Webapp Deploy / preview
         run: node scripts/ci/deployment-status.mjs
@@ -1387,6 +1393,7 @@ jobs:
           DEPLOYMENT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           DEPLOYMENT_CHANNEL: preview
           DEPLOYMENT_URL: ${{ steps.pages.outputs.url }}
+          DEPLOYMENT_TARGET_URL: ${{ format('https://{0}.rom-weaver-preview.pages.dev', needs.deploy-plan.outputs.preview_branch) }}
           DEPLOYMENT_RECORD: "true"
           DEPLOYMENT_ENVIRONMENT: rom-weaver-preview.pages.dev
           STATUS_CONTEXT: Webapp Deploy / preview
@@ -1457,6 +1464,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           DEPLOYMENT_CHANNEL: ${{ matrix.target.channel }}
+          DEPLOYMENT_TARGET_URL: ${{ matrix.target.channel == 'preview' && format('https://{0}.rom-weaver-preview.pages.dev', matrix.target.branch) || '' }}
           DEPLOYMENT_STATE: pending
           STATUS_CONTEXT: Webapp Deploy / ${{ matrix.target.channel }}
         run: node scripts/ci/deployment-status.mjs
@@ -1487,6 +1495,7 @@ jobs:
           DEPLOYMENT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           DEPLOYMENT_CHANNEL: ${{ matrix.target.channel }}
           DEPLOYMENT_URL: ${{ steps.pages.outputs.url }}
+          DEPLOYMENT_TARGET_URL: ${{ matrix.target.channel == 'preview' && format('https://{0}.rom-weaver-preview.pages.dev', matrix.target.branch) || '' }}
           DEPLOYMENT_RECORD: "true"
           DEPLOYMENT_ENVIRONMENT: ${{ matrix.target.env }}
           STATUS_CONTEXT: Webapp Deploy / ${{ matrix.target.channel }}

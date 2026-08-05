@@ -76,12 +76,32 @@ test("success links the commit status to the exact deployment", async () => {
   });
 });
 
+test("success keeps the commit status on the immutable URL", async () => {
+  const calls = await run({
+    DEPLOYMENT_URL: "https://abc.rom-weaver-preview.pages.dev",
+    DEPLOYMENT_TARGET_URL: "https://pr-225.rom-weaver-preview.pages.dev",
+  });
+  assert.deepEqual(statusCall(calls).body, {
+    state: "success",
+    context: CONTEXT,
+    description: "Webapp deployed to preview",
+    target_url: "https://abc.rom-weaver-preview.pages.dev",
+  });
+});
+
 test("a cached deployment creates a GitHub deployment record", async () => {
   const calls = await run({
     DEPLOYMENT_URL: "https://abc.rom-weaver-preview.pages.dev",
+    DEPLOYMENT_TARGET_URL: "https://pr-225.rom-weaver-preview.pages.dev",
     DEPLOYMENT_REF: "feature/preview-record",
     DEPLOYMENT_RECORD: "true",
     DEPLOYMENT_ENVIRONMENT: "rom-weaver-preview.pages.dev",
+  });
+  assert.deepEqual(statusCall(calls).body, {
+    state: "success",
+    context: CONTEXT,
+    description: "Webapp deployed to preview",
+    target_url: "https://abc.rom-weaver-preview.pages.dev",
   });
   assert.deepEqual(deploymentCall(calls).body, {
     ref: "feature/preview-record",
@@ -95,8 +115,8 @@ test("a cached deployment creates a GitHub deployment record", async () => {
   });
   assert.deepEqual(deploymentStatusCall(calls).body, {
     state: "success",
-    target_url: "https://abc.rom-weaver-preview.pages.dev",
-    environment_url: "https://abc.rom-weaver-preview.pages.dev",
+    target_url: "https://pr-225.rom-weaver-preview.pages.dev",
+    environment_url: "https://pr-225.rom-weaver-preview.pages.dev",
     description: "Webapp deployed to preview",
   });
 });

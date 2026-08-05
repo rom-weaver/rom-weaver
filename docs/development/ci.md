@@ -463,17 +463,19 @@ security ── advisories (warn only, always green)
   check name (`Webapp`) while the suites run in parallel.
 - **`deploy-plan`** turns the ref into the list of channels to publish (below).
   It exists as its own job because a matrix can only be fed by an upstream
-  job's output. Documentation-only commits do not deploy; webapp/runtime
-  changes, tags, and explicit manual deploys do.
+  job's output. Every first-party pull-request commit deploys a preview,
+  including documentation-only commits. Fork and Dependabot pull requests do
+  not deploy because they cannot access the Cloudflare secrets. Webapp/runtime
+  changes, tags, and explicit manual deploys also deploy.
 - **`deploy`** ships the site, one matrix leg per channel (below). Both jobs
   are `continue-on-error: true`, so a Cloudflare outage cannot turn a green
   `main` red and suppress release automation.
 - **`deploy-preview-fast`** publishes the PR preview without waiting on `wasm`.
   `deploy` needs that job's artifact; this one restores the same module from
-  cache, which hits on every PR that leaves `Cargo.lock` and `crates/` alone
-  and lands the preview URL ~13s sooner. On a miss it deploys nothing - never
-  the module itself, which would duplicate the ~6.5 min build already running -
-  and `deploy` publishes the preview as usual. The two can never both publish:
+  cache, which hits whenever the module inputs are unchanged and lands the
+  preview URL ~13s sooner. On a miss it deploys nothing - never the module
+  itself, which would duplicate the ~6.5 min build already running - and
+  `deploy` publishes the preview as usual. The two can never both publish:
   `deploy` skips whenever this job reports a URL. Both share
   `.github/actions/deploy-webapp-pages` so a preview has exactly one build-and-
   publish implementation.
@@ -720,7 +722,9 @@ Each leg also declares a GitHub `environment` named for the hostname it serves
 mirrored into GitHub's Deployments API - PRs get a native "View deployment"
 button. Each leg also posts a `Webapp Deploy / <channel>` commit status against
 the deployed commit: pending and failure link to the workflow run, while
-success links to the exact Cloudflare deployment URL. The channel is one of
+success links to the immutable Cloudflare deployment URL. The GitHub deployment
+record's `View deployment` link uses the stable PR branch alias
+(`pr-<n>.rom-weaver-preview.pages.dev`) for previews. The channel is one of
 `prod`/`beta`/`nightly`/`preview`, so this resolves to exactly four stable
 environments; all previews share
 `rom-weaver-preview.pages.dev` (each PR's actual URL is

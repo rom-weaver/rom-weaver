@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 //
 // Publish the deployment state for the commit the webapp build represents.
-// Success links to the exact Cloudflare deployment; pending and failure link
-// back to the workflow run so the status is useful before a URL exists.
+// The commit status keeps the immutable deployment URL; the GitHub deployment
+// record can use a stable target alias for pull-request navigation.
 
 import { createGitHubApi, createStatusPoster } from "./github-api.mjs";
 
@@ -14,6 +14,7 @@ const {
   DEPLOYMENT_CHANNEL,
   DEPLOYMENT_STATE = "",
   DEPLOYMENT_URL = "",
+  DEPLOYMENT_TARGET_URL = "",
   DEPLOYMENT_RECORD = "false",
   DEPLOYMENT_ENVIRONMENT = "",
   STATUS_CONTEXT,
@@ -41,7 +42,8 @@ if (state === "success" && !DEPLOYMENT_URL) {
 }
 
 const runUrl = `${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}`;
-const targetUrl = DEPLOYMENT_URL || runUrl;
+const statusUrl = state === "success" ? DEPLOYMENT_URL : runUrl;
+const deploymentTargetUrl = state === "success" ? DEPLOYMENT_TARGET_URL || DEPLOYMENT_URL : runUrl;
 const description =
   state === "success"
     ? `Webapp deployed to ${DEPLOYMENT_CHANNEL}`
@@ -68,7 +70,7 @@ await createStatusPoster({
   repo: REPO,
   sha: DEPLOYMENT_SHA,
   context: STATUS_CONTEXT,
-})(state, description, targetUrl);
+})(state, description, statusUrl);
 
 if (createDeploymentRecord) {
   const deployment = await api(`/repos/${REPO}/deployments`, {
@@ -89,11 +91,11 @@ if (createDeploymentRecord) {
     method: "POST",
     body: {
       state,
-      target_url: targetUrl,
-      environment_url: DEPLOYMENT_URL || undefined,
+      target_url: deploymentTargetUrl,
+      environment_url: state === "success" ? deploymentTargetUrl : undefined,
       description,
     },
   });
 }
 
-console.log(`${STATUS_CONTEXT} ${state} on ${DEPLOYMENT_SHA}: ${targetUrl}`);
+console.log(`${STATUS_CONTEXT} ${state} on ${DEPLOYMENT_SHA}: ${statusUrl}`);
