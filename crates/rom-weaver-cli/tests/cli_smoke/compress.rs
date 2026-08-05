@@ -883,6 +883,61 @@ fn archive_container_formats_round_trip() {
 }
 
 #[test]
+fn zip_zstd_large_incompressible_payload_round_trips() {
+    let temp = setup_temp_dir();
+    let mut payload = Vec::with_capacity(8 * 1024 * 1024);
+    let mut state = 0x0BAD_C0DE_u32;
+    for _ in 0..(8 * 1024 * 1024) {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        payload.push((state & 0xff) as u8);
+    }
+    fs::write(temp.child("source.bin").path(), &payload).expect("fixture");
+
+    let archive = temp.child("source.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("source.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--codec",
+            "zstd",
+            "--threads",
+            "4",
+            "--json",
+        ],
+        0,
+    );
+
+    let out_dir = temp.child("extract");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--select",
+            "source.bin",
+            "--output",
+            out_dir.path().to_str().expect("path"),
+            "--threads",
+            "4",
+            "--json",
+        ],
+        0,
+    );
+
+    assert_eq!(
+        fs::read(out_dir.child("source.bin").path()).expect("read extracted output"),
+        payload
+    );
+}
+
+#[test]
 fn extract_zst_reports_parallel_decode_threads() {
     let temp = setup_temp_dir();
     let payload = (0..131_072)
