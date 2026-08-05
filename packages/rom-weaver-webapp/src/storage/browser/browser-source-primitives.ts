@@ -24,21 +24,38 @@ const getBrowserSourceBlob = (source: unknown): Blob | null => {
   return typeof Blob !== "undefined" && blob instanceof Blob ? blob : null;
 };
 
-const managedSourceCleanups = new WeakMap<object, () => Promise<void>>();
+type ManagedSourceCleanup = {
+  cleanup: () => Promise<void>;
+  references: number;
+};
+
+const managedSourceCleanups = new WeakMap<object, ManagedSourceCleanup>();
+
+const releaseManagedBrowserSource = async (source: unknown): Promise<void> => {
+  if (!(source && typeof source === "object")) return;
+  const managed = managedSourceCleanups.get(source);
+  if (!managed) return;
+  if (managed.references > 1) {
+    managed.references -= 1;
+    return;
+  }
+  managedSourceCleanups.delete(source);
+  await managed.cleanup();
+};
 
 const registerBrowserSourceCleanup = (source: object, cleanup: () => Promise<void> | void): (() => Promise<void>) => {
   const cleanupOnce = createCleanupOnce(cleanup);
-  managedSourceCleanups.set(source, cleanupOnce);
-  return cleanupOnce;
+  managedSourceCleanups.set(source, { cleanup: cleanupOnce, references: 1 });
+  return () => releaseManagedBrowserSource(source);
 };
 
-const releaseBrowserSource = async (source: unknown): Promise<void> => {
+const retainBrowserSource = (source: unknown): void => {
   if (!(source && typeof source === "object")) return;
-  const cleanup = managedSourceCleanups.get(source);
-  if (!cleanup) return;
-  managedSourceCleanups.delete(source);
-  await cleanup();
+  const managed = managedSourceCleanups.get(source);
+  if (managed) managed.references += 1;
 };
+
+const releaseBrowserSource = releaseManagedBrowserSource;
 
 let configured = false;
 
@@ -59,6 +76,7 @@ export {
   configureBrowserSourcePrimitives,
   getBrowserSourceBlob,
   getBrowserSourceHandle,
+  retainBrowserSource,
   registerBrowserSourceCleanup,
   releaseBrowserSource,
 };

@@ -1,4 +1,5 @@
 import { coverageConfigDefaults, defineConfig } from "vitest/config";
+import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 
 // Coverage is collected by the v8 provider in browser mode (V8 precise coverage
@@ -25,6 +26,7 @@ export default defineConfig({
     __COMMITS_SINCE_VERSION__: JSON.stringify(0),
     __DIRTY_HASH__: JSON.stringify(""),
     __GIT_BRANCH__: JSON.stringify("dev"),
+    __VERSION_BRANCH__: JSON.stringify("dev"),
     __SERVICE_WORKER_ENABLED__: "false",
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: "0",
     __VERSION_IS_TAGGED__: JSON.stringify(false),
@@ -36,7 +38,7 @@ export default defineConfig({
     },
   },
   // The docs route imports its rendered guides from `virtual:rom-weaver-docs`.
-  plugins: [docsVirtualModule()],
+  plugins: [docsVirtualModule(), brandMarkAssets()],
   publicDir: false,
   test: {
     hookTimeout: 60000,

@@ -46,8 +46,7 @@ jobs:
             response=$(curl --fail-with-body --silent --show-error --get "$api" \
               -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
               --data-urlencode "env=preview" \
-              --data-urlencode "page=${page}" \
-              --data-urlencode "per_page=100")
+              --data-urlencode "page=${page}")
             jq -c '.result[]?' <<<"$response" >>"$deployments"
             pages=$(jq -r '.result_info.total_pages // 1' <<<"$response")
             [ "$page" -ge "$pages" ] && break

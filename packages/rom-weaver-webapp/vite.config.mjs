@@ -9,10 +9,11 @@ import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
+import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
-import { getBuildInfo, getChangelog } from "./scripts/version.mjs";
+import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
 import { readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
@@ -25,7 +26,7 @@ const repoRoot = path.resolve(rootDir, "../..");
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
 const docsScreenshotSources = Object.fromEntries(
-  DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(rootDir, "design", name)]),
+  DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(repoRoot, "docs", "screenshots", name)]),
 );
 
 // A manifest's icons are read at install time, so an installed PWA's icon can
@@ -449,14 +450,27 @@ const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
   },
 });
 
-const PRERENDER_RUNTIME_SLOT = '<span class="masthead-runtime">· web · sw</span>';
+const PRERENDER_RUNTIME_SLOT = '<span class="shell-identity" hidden=""></span>';
 const PRERENDER_RUNTIME_RESOLVER =
   "<script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}finally{document.currentScript.remove()}</script>";
+const DOC_SHELF_STATE_KEY = "rom-weaver-docs-shelves";
+// Restore the reader's docs shelves while the parser is still handling the
+// prerendered shell. The first client render reads the same storage value, so
+// hydration never paints the server's default closed state first.
+const PRERENDER_DOC_SHELF_RESTORER = `<script>
+try {
+  const stored = JSON.parse(sessionStorage.getItem(${JSON.stringify(DOC_SHELF_STATE_KEY)}) || "{}");
+  for (const shelf of document.querySelectorAll(".guide-shelf, .docs-index-shelf")) {
+    const title = shelf.querySelector(".guide-shelf-title, .docs-index-title")?.textContent?.trim() || "";
+    if (typeof stored[title] === "boolean") shelf.open = stored[title];
+  }
+} catch {}
+</script>`;
 const PRERENDER_ROOT = (shell) =>
   `<div id="webapp-root" aria-busy="true">${shell.replace(
     PRERENDER_RUNTIME_SLOT,
     `${PRERENDER_RUNTIME_SLOT}${PRERENDER_RUNTIME_RESOLVER}`,
-  )}</div>`;
+  )}</div>${PRERENDER_DOC_SHELF_RESTORER}`;
 
 const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, routePreloadLinks) => {
   let outDir = "dist";
@@ -514,7 +528,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         if (!docsShell) throw new Error(`rom-weaver-static-assets: no prerendered shell for ${route.slug}`);
         const routeShellHtml = withRoutePreloadLinks(
           indexHtml.replace(patcherRoot, PRERENDER_ROOT(docsShell)),
-          routePreloadLinks.get("docs"),
+          routePreloadLinks.get(`docs:${route.slug}`) ?? routePreloadLinks.get("docs"),
         );
         const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
         const extensionlessPath = path.join(distDir, `${route.slug}.html`);
@@ -867,12 +881,13 @@ const collectChunkCss = (bundle, chunkFileNames) => {
 // (see "Worker URLs" in docs/development/ARCHITECTURE.md).
 const WORKER_URL_IMPORT_PATTERN = /[?&]worker(?:&|$)/;
 const URL_IMPORT_PATTERN = /[?&]url(?:&|$)/;
+const WORKER_OR_URL_IMPORT_FILTER = /[?&](?:worker|url)(?:&|$)/;
 
 // Filled by the plugin below with the absolute path of every emitted worker
 // entry, so the chunk grouping can tell worker-only modules from app modules.
 const workerEntryFiles = new Set();
-/** Memoized isWorkerOnlyModule answers; the module graph is rebuilt per build, so it resets there. */
-const workerOnlyModules = new Map();
+/** Memoized worker graph classifications; the module graph is rebuilt per build. */
+const workerModuleKinds = new Map();
 
 const shareWorkerRuntimeChunks = () => {
   const chunkRefs = new Map();
@@ -881,24 +896,27 @@ const shareWorkerRuntimeChunks = () => {
     buildStart() {
       chunkRefs.clear();
       workerEntryFiles.clear();
-      workerOnlyModules.clear();
+      workerModuleKinds.clear();
     },
     enforce: "pre",
-    load(id) {
-      if (!(WORKER_URL_IMPORT_PATTERN.test(id) && URL_IMPORT_PATTERN.test(id))) return null;
-      const workerFile = id.split("?")[0];
-      let ref = chunkRefs.get(workerFile);
-      if (!ref) {
-        workerEntryFiles.add(workerFile);
-        ref = this.emitFile({
-          id: workerFile,
-          name: path.basename(workerFile, path.extname(workerFile)),
-          preserveSignature: false,
-          type: "chunk",
-        });
-        chunkRefs.set(workerFile, ref);
-      }
-      return `export default import.meta.ROLLUP_FILE_URL_${ref};`;
+    load: {
+      filter: { id: WORKER_OR_URL_IMPORT_FILTER },
+      handler(id) {
+        if (!(WORKER_URL_IMPORT_PATTERN.test(id) && URL_IMPORT_PATTERN.test(id))) return null;
+        const workerFile = id.split("?")[0];
+        let ref = chunkRefs.get(workerFile);
+        if (!ref) {
+          workerEntryFiles.add(workerFile);
+          ref = this.emitFile({
+            id: workerFile,
+            name: path.basename(workerFile, path.extname(workerFile)),
+            preserveSignature: false,
+            type: "chunk",
+          });
+          chunkRefs.set(workerFile, ref);
+        }
+        return `export default import.meta.ROLLUP_FILE_URL_${ref};`;
+      },
     },
     name: "rom-weaver-share-worker-runtime-chunks",
   };
@@ -908,32 +926,52 @@ const shareWorkerRuntimeChunks = () => {
 // Grouping by path instead would sweep up the wasm modules the document entry
 // also uses (the OPFS proxy client, the command builders), which would drag the
 // whole worker runtime onto the first-paint critical path.
-const isWorkerOnlyModule = (moduleId, ctx) => {
-  const cached = workerOnlyModules.get(moduleId);
-  if (cached !== undefined) return cached;
+const classifyWorkerModule = (moduleId, ctx) => {
+  const cached = workerModuleKinds.get(moduleId);
+  if (cached) return cached;
   const visited = new Set([moduleId]);
   const pending = [moduleId];
   let workerOnly = true;
-  while (pending.length > 0 && workerOnly) {
+  let workerReachable = false;
+  while (pending.length > 0 && !(workerReachable && !workerOnly)) {
     const id = pending.pop();
     // Only the bare path is the worker entry; the `?worker&url` module of the same file is the
     // URL stub the app imports, and its own importers decide where it belongs.
-    if (workerEntryFiles.has(id)) continue;
-    const info = ctx.getModuleInfo(id);
-    const importers = info ? [...info.importers, ...info.dynamicImporters] : [];
-    if (importers.length === 0) {
-      workerOnly = false;
-      break;
+    if (workerEntryFiles.has(id)) {
+      workerReachable = true;
+      continue;
     }
-    for (const importer of importers) {
+    const info = ctx.getModuleInfo(id);
+    if (!info || (info.importers.length === 0 && info.dynamicImporters.length === 0)) {
+      workerOnly = false;
+      continue;
+    }
+    for (const importer of [...info.importers, ...info.dynamicImporters]) {
       if (visited.has(importer)) continue;
       visited.add(importer);
       pending.push(importer);
     }
   }
-  workerOnlyModules.set(moduleId, workerOnly);
-  return workerOnly;
+  const result = { workerOnly, workerReachable };
+  workerModuleKinds.set(moduleId, result);
+  return result;
 };
+
+const isWorkerOnlyModule = (moduleId, ctx) => classifyWorkerModule(moduleId, ctx).workerOnly;
+
+// True when at least one import path reaching this module starts at a worker
+// entry. `isWorkerOnlyModule` above answers the stricter question; this one
+// catches the modules a worker and the document both use, which is what decides
+// whether a worker has to download the document's chunk to reach them.
+const isWorkerReachableModule = (moduleId, ctx) => {
+  return classifyWorkerModule(moduleId, ctx).workerReachable;
+};
+
+/** Everything a worker can reach that is not worker-only: the overlap between a
+ * worker's graph and the document's. Without a chunk of its own it lands in
+ * `shared`, and since a chunk is the unit of loading, an 8 kB thread worker then
+ * pulls the whole document chunk - React and all - into every worker realm. */
+const nameWorkerSharedGroup = (moduleId, ctx) => (isWorkerReachableModule(moduleId, ctx) ? "worker-shared" : null);
 
 /** Captures the worker-only runtime into one `wasm-runtime` chunk; everything else falls through
  * to the `shared` group below it. `includeDependenciesRecursively` has to stay off, or the group
@@ -957,12 +995,30 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
           throw new Error(`rom-weaver-preload-workflow-route-chunks: no chunk emitted for ${moduleSuffix}`);
         const routeFiles = [...collectStaticImportClosure(bundle, [routeChunk])]
           .filter((fileName) => !alreadyLoaded.has(fileName))
-          .sort();
-        const routeCss = [...collectChunkCss(bundle, routeFiles)].filter((fileName) => !entryCss.has(fileName)).sort();
+          .sort((left, right) => Number(left > right) - Number(left < right));
+        const routeCss = [...collectChunkCss(bundle, routeFiles)]
+          .filter((fileName) => !entryCss.has(fileName))
+          .sort((left, right) => Number(left > right) - Number(left < right));
         const links = [renderRouteStylesheetLinks(routeCss), renderRoutePreloadLinks(routeFiles)]
           .filter(Boolean)
           .join("\n");
         routePreloadLinks.set(view, links);
+      }
+      // Guide HTML is one chunk per docs page (scripts/docs-virtual-module.mjs),
+      // so each docs document also preloads its own guide's chunk alongside the
+      // docs route chunks - hydration needs it, and without the link it would
+      // only be requested after the route chunk evaluates.
+      const docsChunk = findChunkForModule(bundle, WORKFLOW_ROUTE_MODULES.docs);
+      const docsFiles = collectStaticImportClosure(bundle, [docsChunk]);
+      for (const route of DOC_ROUTES) {
+        const pageChunk = findChunkForModule(bundle, `rom-weaver-docs-page/${route.slug}`);
+        if (!pageChunk)
+          throw new Error(`rom-weaver-preload-workflow-route-chunks: no chunk emitted for docs page ${route.slug}`);
+        const pageFiles = [...collectStaticImportClosure(bundle, [pageChunk])]
+          .filter((fileName) => !(alreadyLoaded.has(fileName) || docsFiles.has(fileName)))
+          .sort((left, right) => Number(left > right) - Number(left < right));
+        const links = [routePreloadLinks.get("docs"), renderRoutePreloadLinks(pageFiles)].filter(Boolean).join("\n");
+        routePreloadLinks.set(`docs:${route.slug}`, links);
       }
       return html.replace(
         "</head>",
@@ -990,6 +1046,7 @@ export default defineConfig(({ command, mode }) => {
   const dirtyHash = process.env.ROM_WEAVER_DIRTY_HASH ?? buildInfo.dirtyHash ?? "";
   const gitBranch = process.env.ROM_WEAVER_GIT_BRANCH ?? buildInfo.gitBranch ?? "";
   const versionIsTagged = (buildInfo.isVersionTag ?? false) && !dirtyHash;
+  const versionBranch = getVersionBranch(gitBranch, versionIsTagged);
   // CI's deploy job already resolves which origin this bundle is headed for;
   // an unset channel means a local build or dev server, never production.
   const appChannel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
@@ -1020,9 +1077,10 @@ export default defineConfig(({ command, mode }) => {
           // was ~8 kB brotli against a ~2 kB raw gain. One shared chunk for
           // everything two or more chunks reach restores the compression
           // context; the size floor keeps a future split from re-stranding it.
-          advancedChunks: {
+          codeSplitting: {
             groups: [
-              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerRuntimeGroup, priority: 1 },
+              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerRuntimeGroup, priority: 2 },
+              { includeDependenciesRecursively: false, minShareCount: 2, name: nameWorkerSharedGroup, priority: 1 },
               { minShareCount: 2, name: "shared", priority: 0, test: /./ },
             ],
             minSize: SHARED_CHUNK_MIN_SIZE,
@@ -1053,6 +1111,7 @@ export default defineConfig(({ command, mode }) => {
       __COMMITS_SINCE_VERSION__: JSON.stringify(commitsSinceVersion),
       __DIRTY_HASH__: JSON.stringify(dirtyHash),
       __GIT_BRANCH__: JSON.stringify(gitBranch),
+      __VERSION_BRANCH__: JSON.stringify(versionBranch),
       __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
       ...serviceWorkerDefines,
     },
@@ -1070,7 +1129,8 @@ export default defineConfig(({ command, mode }) => {
       ],
     },
     plugins: [
-      docsVirtualModule(),
+      docsVirtualModule(DOC_ROUTES),
+      brandMarkAssets(),
       shareWorkerRuntimeChunks(),
       serveRootStaticAssets(appChannel, appChannelLabel),
       serveEmulatorJsAssets(),

@@ -42,11 +42,11 @@ Examples:
   rom-weaver probe --input game.iso
 
   # Apply a patch, writing a plain ROM
-  rom-weaver weave --input game.sfc --patch hack.bps \\
+  rom-weaver patch apply --input game.sfc --patch hack.bps \\
     --output hacked.sfc --no-compress
 
   # Two patches in order; the .zip extension compresses the result
-  rom-weaver weave --input game.sfc \\
+  rom-weaver patch apply --input game.sfc \\
     --patch base.ips --patch fixes.ups --output hacked.zip
 
   # Hash a ROM, including one inside an archive
@@ -55,7 +55,7 @@ Examples:
   # Shrink a disc image; the .cue brings its tracks along
   rom-weaver compress --input game.cue --output game.chd
 
-Full guide: https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli/reference.md";
+Full guide: https://rom-weaver.com/docs/cli";
 
 #[derive(Debug)]
 #[cfg(not(target_arch = "wasm32"))]

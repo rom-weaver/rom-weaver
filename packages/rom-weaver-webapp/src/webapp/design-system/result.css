@@ -1,87 +1,264 @@
 /* Result */
-.rw-app .result { margin-block-start: 2px; animation: drop-in .4s var(--ease); }
+.rw-app .result {
+  margin-block-start: 2px;
+  animation: drop-in 0.4s var(--ease);
+}
 /* .result supports older markup; .outcard is the live output card. */
-.rw-app .result .download-btn, .rw-app .outcard .download-btn { position: relative; overflow: clip; }
-.rw-app .result .download-btn::after, .rw-app .outcard .download-btn::after {
-  content: ""; position: absolute; inset-block: 0; left: 0; width: 22%; pointer-events: none;
+.rw-app .result .download-btn,
+.rw-app .outcard .download-btn {
+  position: relative;
+  overflow: clip;
+}
+.rw-app .result .download-btn::after,
+.rw-app .outcard .download-btn::after {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 22%;
+  pointer-events: none;
+  content: "";
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--shuttle) 45%, transparent), transparent);
   translate: -100% 0;
-  animation: shuttle-pass .8s ease-out .3s both;
+  animation: shuttle-pass 0.8s ease-out 0.3s both;
 }
-@keyframes shuttle-pass { to { translate: 560% 0; } }
+@keyframes shuttle-pass {
+  to {
+    translate: 560% 0;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .result .download-btn::after, .rw-app .outcard .download-btn::after { animation: none; opacity: 0; }
+  .rw-app .result .download-btn::after,
+  .rw-app .outcard .download-btn::after {
+    opacity: 0;
+    animation: none;
+  }
 }
 /* Wrap long output details instead of clipping them. */
-.rw-app .download-btn { gap: var(--sp-s) var(--sp-m); font-size: .9rem; flex-wrap: wrap; min-width: 0; }
-.rw-app .download-btn > svg { flex: none; }
-.rw-app .download-btn .dl-kind, .rw-app .download-btn .dl-size { flex: 0 1 auto; overflow-wrap: anywhere; }
+.rw-app .download-btn {
+  flex-wrap: wrap;
+  gap: var(--sp-s) var(--sp-m);
+  min-width: 0;
+  font-size: 0.9rem;
+}
+.rw-app .download-btn > svg {
+  flex: none;
+}
+.rw-app .download-btn .dl-kind,
+.rw-app .download-btn .dl-size {
+  flex: 0 1 auto;
+  overflow-wrap: anywhere;
+}
 /* Full opacity preserves 4.5:1 contrast on the orange button. */
 .rw-app .download-btn .dl-delta {
-  min-width: 0; overflow-wrap: anywhere;
-  font-weight: 600; font-size: .88rem; opacity: 1; text-transform: none; letter-spacing: .01em;
+  min-width: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+  opacity: 1;
 }
-.rw-app .download-btn .dl-kind { font-weight: 700; font-size: 1.02rem; text-transform: none; letter-spacing: .01em; }
-.rw-app .download-btn .dl-size { font-weight: 600; font-size: .94rem; opacity: .92; text-transform: none; letter-spacing: .01em; }
-.rw-app .download-btn .dl-size::before { content: "·"; margin-inline-end: 9px; opacity: .55; }
-.rw-app .download-btn .dl-delta::before { content: "·"; margin-inline-end: 9px; opacity: .55; }
-.rw-app .download-btn .dl-total { margin-inline-start: auto; font-weight: 600; font-size: .88rem; opacity: .92; text-transform: none; letter-spacing: .01em; white-space: nowrap; }
-.rw-app .download-btn .dl-total b { font-weight: 750; }
-.rw-app .step-meta .rb { gap: var(--sp-xs); }
-.rw-app .step-meta .rb.done-chip { animation: chip-in .3s var(--ease) backwards; }
-.rw-app .step-meta .rb.verified { color: var(--verified); background: color-mix(in oklab, var(--verified) 12%, var(--well)); border-color: color-mix(in oklab, var(--verified) 36%, var(--seam-soft)); }
+.rw-app .download-btn .dl-kind {
+  font-size: 1.02rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+.rw-app .download-btn .dl-size {
+  font-size: 0.94rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  opacity: 0.92;
+}
+.rw-app .download-btn .dl-size::before {
+  margin-inline-end: 9px;
+  content: "·";
+  opacity: 0.55;
+}
+.rw-app .download-btn .dl-delta::before {
+  margin-inline-end: 9px;
+  content: "·";
+  opacity: 0.55;
+}
+.rw-app .download-btn .dl-total {
+  margin-inline-start: auto;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  opacity: 0.92;
+}
+.rw-app .download-btn .dl-total b {
+  font-weight: 750;
+}
+.rw-app .step-meta .rb {
+  gap: var(--sp-xs);
+}
+.rw-app .step-meta .rb.done-chip {
+  animation: chip-in 0.3s var(--ease) backwards;
+}
+.rw-app .step-meta .rb.verified {
+  color: var(--verified);
+  background: color-mix(in oklab, var(--verified) 12%, var(--well));
+  border-color: color-mix(in oklab, var(--verified) 36%, var(--seam-soft));
+}
 /* Limit the light-theme tint to preserve 4.5:1 label contrast. */
-:root[data-theme="light"] .step-meta .rb.verified { background: color-mix(in oklab, var(--verified) 6%, var(--well)); }
-:root[data-theme="light"] .step-meta .rb.verified .k { color: var(--ink-2); }
-.rw-app .step-meta .rb.verified svg { width: 14px; height: 14px; }
-.rw-app .step-meta .rb .k { color: var(--ink-3); }
-.rw-app .step-meta .rb .t { color: var(--thread-text); }
+:root[data-theme="light"] .step-meta .rb.verified {
+  background: color-mix(in oklab, var(--verified) 6%, var(--well));
+}
+:root[data-theme="light"] .step-meta .rb.verified .k {
+  color: var(--ink-2);
+}
+.rw-app .step-meta .rb.verified svg {
+  width: 14px;
+  height: 14px;
+}
+.rw-app .step-meta .rb .k {
+  color: var(--ink-3);
+}
+.rw-app .step-meta .rb .t {
+  color: var(--thread-text);
+}
 
 /* Reserve space for the create-mode swap control. */
-.rw-app .swap-row { display: flex; justify-content: center; height: 30px; margin-block: var(--sp-s) -15px; position: relative; z-index: 1; }
-.rw-app .swap-btn { height: 30px; gap: var(--sp-s); padding-inline: 13px; font-size: .72rem; letter-spacing: .04em; background: var(--plate); }
-.rw-app .swap-btn svg { transition: transform .4s var(--ease); }
+.rw-app .swap-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  height: 30px;
+  margin-block: var(--sp-s) -15px;
+}
+.rw-app .swap-btn {
+  gap: var(--sp-s);
+  height: 30px;
+  padding-inline: 13px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  background: var(--plate);
+}
+.rw-app .swap-btn svg {
+  transition: transform 0.4s var(--ease);
+}
 @media (hover: hover) {
-  .rw-app .swap-btn:hover svg { transform: rotate(180deg); }
+  .rw-app .swap-btn:hover svg {
+    transform: rotate(180deg);
+  }
 }
 
 /* Trace log */
 .rw-app .tracelog {
-  max-height: 220px; overflow: auto; font-size: .7rem; line-height: 1.65; color: var(--ink-2);
-  background: var(--well); border-radius: var(--r-s); padding: var(--sp-s) var(--sp-m);
+  max-height: 220px;
+  padding: var(--sp-s) var(--sp-m);
+  overflow: auto;
   overscroll-behavior: contain;
+  font-size: 0.7rem;
+  line-height: 1.65;
+  color: var(--ink-2);
+  background: var(--well);
+  border-radius: var(--r-s);
 }
 /* Size rows to their content so long trace lines scroll instead of clipping, and
    strip the user-agent chrome - these are keyboard-copyable buttons. The reset has
    to sit with the state rules below: from a later layer its transparent background
    would erase their hover/copied feedback regardless of specificity. */
 .rw-app .tracelog .ln {
-  appearance: none; background: transparent; color: inherit; font: inherit; text-align: start;
-  border-inline: 0; border-block-start: 0; padding-inline: 0;
-  display: flex; gap: var(--sp-s); white-space: nowrap; width: max-content; min-width: 100%;
-  padding-block: 2px; border-block-end: 1px solid color-mix(in oklab, var(--seam-soft) 70%, transparent);
-  cursor: pointer; transition: background .12s;
-  animation: trace-in .25s var(--ease);
+  display: flex;
+  gap: var(--sp-s);
+  width: max-content;
+  min-width: 100%;
+  padding-block: 2px;
+  padding-inline: 0;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border-block-start: 0;
+  border-block-end: 1px solid color-mix(in oklab, var(--seam-soft) 70%, transparent);
+  border-inline: 0;
+  transition: background 0.12s;
+  animation: trace-in 0.25s var(--ease);
 }
-.rw-app .tracelog .ln:last-child { border-block-end: 0; }
+.rw-app .tracelog .ln:last-child {
+  border-block-end: 0;
+}
 @media (hover: hover) {
-  .rw-app .tracelog .ln:hover { background: color-mix(in oklab, var(--thread) 8%, transparent); }
+  .rw-app .tracelog .ln:hover {
+    background: color-mix(in oklab, var(--thread) 8%, transparent);
+  }
 }
 /* Touch devices need active feedback because they lack hover. */
-.rw-app .tracelog .ln:active { background: color-mix(in oklab, var(--thread) 8%, transparent); }
-.rw-app .tracelog .ln.copied { background: color-mix(in oklab, var(--verified) 16%, transparent); }
-.rw-app .tracelog .ln.copy-failed { background: color-mix(in oklab, var(--fault) 16%, transparent); }
-.rw-app .tracelog .ts { color: #6aa8c0; flex: none; }
-.rw-app .tracelog .caller { color: #b594d6; flex: none; font-stretch: 90%; }
-:root[data-theme="light"] .tracelog .ts { color: #2a6f8a; }
-:root[data-theme="light"] .tracelog .caller { color: #7a4fb0; }
-.rw-app .tracelog .lv { flex: none; width: 6ch; font-weight: 650; text-transform: uppercase; font-size: .92em; }
-.rw-app .tracelog .lv.trace { color: var(--ink-4); } .rw-app .tracelog .lv.debug { color: var(--ink-3); }
-.rw-app .tracelog .lv.info { color: var(--verified); } .rw-app .tracelog .lv.warn { color: var(--care); } .rw-app .tracelog .lv.error { color: var(--fault); }
-.rw-app .tracelog .msg { color: var(--ink-2); }
-.rw-app .tracelog:empty::after { content: "-"; color: var(--ink-4); }
+.rw-app .tracelog .ln:active {
+  background: color-mix(in oklab, var(--thread) 8%, transparent);
+}
+.rw-app .tracelog .ln.copied {
+  background: color-mix(in oklab, var(--verified) 16%, transparent);
+}
+.rw-app .tracelog .ln.copy-failed {
+  background: color-mix(in oklab, var(--fault) 16%, transparent);
+}
+.rw-app .tracelog .ts {
+  flex: none;
+  color: #6aa8c0;
+}
+.rw-app .tracelog .caller {
+  flex: none;
+  font-stretch: 90%;
+  color: #b594d6;
+}
+:root[data-theme="light"] .tracelog .ts {
+  color: #25677e;
+}
+:root[data-theme="light"] .tracelog .caller {
+  color: #7a4fb0;
+}
+.rw-app .tracelog .lv {
+  flex: none;
+  width: 6ch;
+  font-size: 0.92em;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+.rw-app .tracelog .lv.trace {
+  color: var(--ink-4);
+}
+.rw-app .tracelog .lv.debug {
+  color: var(--ink-3);
+}
+.rw-app .tracelog .lv.info {
+  color: var(--verified);
+}
+.rw-app .tracelog .lv.warn {
+  color: var(--care-text);
+}
+.rw-app .tracelog .lv.error {
+  color: var(--fault);
+}
+.rw-app .tracelog .msg {
+  color: var(--ink-2);
+}
+.rw-app .tracelog:empty::after {
+  color: var(--ink-4);
+  content: "-";
+}
 
 /* Optional local EmulatorJS smoke test. Its assets are fetched only after the user opens it. */
-.rw-app .emulatorjs-test { display: grid; gap: var(--sp-s); margin-block-start: var(--sp-s); }
-.rw-app .emulatorjs-note { color: var(--ink-3); font-size: .72rem; }
-.rw-app .emulatorjs-error { margin: 0; color: var(--fault); font-size: .78rem; }
+.rw-app .emulatorjs-test {
+  display: grid;
+  gap: var(--sp-s);
+  margin-block-start: var(--sp-s);
+}
+.rw-app .emulatorjs-note {
+  font-size: 0.72rem;
+  color: var(--ink-3);
+}
+.rw-app .emulatorjs-error {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--fault);
+}

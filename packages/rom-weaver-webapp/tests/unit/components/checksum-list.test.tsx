@@ -2,6 +2,7 @@
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChecksumList, ChecksumRow } from "../../../src/public/react/components/ds/checksum-list.tsx";
+import { navigatorWith } from "../navigator-test-utils.ts";
 
 /**
  * Checksum row/list contract: the `.ck` / `.ck-k` / `.ck-v` structure is what
@@ -23,7 +24,7 @@ describe("ChecksumRow", () => {
 
   it("copies the value when the row is clicked", async () => {
     const writeText = vi.fn(() => Promise.resolve());
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
     const { container } = render(<ChecksumRow copyValue="deadbeef" label="CRC32" value="DEADBEEF" />);
     fireEvent.click(container.querySelector("button.ck") as HTMLButtonElement);
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("deadbeef"));

@@ -2,85 +2,92 @@
 
 @import "../assets/fonts/archivo.css";
 
-body{
-	--rom-weaver-color-background:oklch(0.23 0.022 292);
-	--rom-weaver-color-text:oklch(0.33 0.026 299);
-	--rom-weaver-color-text-soft:oklch(0.46 0.028 300);
-	--rom-weaver-color-primary:oklch(0.66 0.16 303);
-	--rom-weaver-color-primary-hover:oklch(0.71 0.16 304);
-	--rom-weaver-color-muted:var(--rom-weaver-color-text-soft);
-	margin:0;
-	/* follow the active loom theme (which defaults to the OS preference) */
-	background-color:var(--chassis, var(--rom-weaver-color-background));
-	color:var(--ink, var(--rom-weaver-color-text));
-	font:500 14.5px/1.5 "Archivo", "Archivo Fallback", "Segoe UI", system-ui, sans-serif;
-	letter-spacing:0;
-	font-stretch:94%;
-	cursor:default;
-	text-rendering:optimizeLegibility;
-	-webkit-font-smoothing:antialiased;
+body {
+  --rom-weaver-color-background: oklch(0.23 0.022 292);
+  --rom-weaver-color-text: oklch(0.33 0.026 299);
+  --rom-weaver-color-text-soft: oklch(0.46 0.028 300);
+  --rom-weaver-color-primary: oklch(0.66 0.16 303);
+  --rom-weaver-color-primary-hover: oklch(0.71 0.16 304);
+  --rom-weaver-color-muted: var(--rom-weaver-color-text-soft);
+  margin: 0;
+  font:
+    500 14.5px / 1.5 "Archivo",
+    "Archivo Fallback",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  font-stretch: 94%;
+  -webkit-font-smoothing: antialiased;
+  color: var(--ink, var(--rom-weaver-color-text));
+  letter-spacing: 0;
+  cursor: default;
+  /* follow the active loom theme (which defaults to the OS preference) */
+  background-color: var(--chassis, var(--rom-weaver-color-background));
+  text-rendering: optimizeLegibility;
 }
 
 html,
-body{
-	height:100%;
+body {
+  height: 100%;
 }
 
-#webapp-root{
-	min-height:100%;
+#webapp-root {
+  min-height: 100%;
 }
 
 /* the app root fills the viewport (design-system.css sets the flex column;
    the id selector here must not override its 100dvh) */
-#column{
-	min-height:100dvh;
+#column {
+  min-height: 100dvh;
 }
 
-a{
-	color:var(--rom-weaver-color-primary);
+a {
+  color: var(--rom-weaver-color-primary);
 }
 
-a:focus-visible{
-	color:var(--rom-weaver-color-primary-hover);
+a:focus-visible {
+  color: var(--rom-weaver-color-primary-hover);
 }
 
-@media (hover: hover){
-	a:hover{
-		color:var(--rom-weaver-color-primary-hover);
-	}
+@media (hover: hover) {
+  a:hover {
+    color: var(--rom-weaver-color-primary-hover);
+  }
 }
 
 /* Touch devices need active feedback because they lack hover. */
-a:active{
-	color:var(--rom-weaver-color-primary-hover);
+a:active {
+  color: var(--rom-weaver-color-primary-hover);
 }
 
-select{
-	appearance:none;
-	background-image:
-		linear-gradient(45deg, transparent 50%, currentColor 50%),
-		linear-gradient(135deg, currentColor 50%, transparent 50%);
-	background-position:
-		calc(100% - 14px) calc(50% - 1px),
-		calc(100% - 9px) calc(50% - 1px);
-	background-size:5px 5px, 5px 5px;
-	background-repeat:no-repeat;
-	text-overflow:"";
+select {
+  text-overflow: "";
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-repeat: no-repeat;
+  background-position:
+    calc(100% - 14px) calc(50% - 1px),
+    calc(100% - 9px) calc(50% - 1px);
+  background-size:
+    5px 5px,
+    5px 5px;
 }
 
 input::placeholder,
-textarea::placeholder{
-	color:var(--rom-weaver-color-muted);
-	opacity:.95;
+textarea::placeholder {
+  color: var(--rom-weaver-color-muted);
+  opacity: 0.95;
 }
 
-@media (prefers-reduced-motion:reduce){
-	*,
-	*::before,
-	*::after{
-		animation-duration:.001ms !important;
-		animation-iteration-count:1 !important;
-		transition-duration:.001ms !important;
-		scroll-behavior:auto !important;
-	}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

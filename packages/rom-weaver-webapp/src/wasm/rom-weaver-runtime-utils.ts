@@ -105,7 +105,7 @@ export function createWasmEnvImports(memory?: WebAssembly.Memory, hostSelect?: H
       return 0;
     },
     __cxa_throw(pointer, typeInfo) {
-      throw new Error(`rom-weaver wasm raised a C++ exception (pointer=${pointer}, type=${typeInfo})`);
+      throw new Error(`rom-weaver wasm raised a C++ exception (pointer=${String(pointer)}, type=${String(typeInfo)})`);
     },
     rom_weaver_host_select(requestPtr, requestLen) {
       const indices = resolveHostSelection(requestPtr, requestLen);

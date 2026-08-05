@@ -22,6 +22,8 @@ installPatcherTestHooks();
 
 test("manual output name is used for patchless apply download", async () => {
   const downloadNames = [];
+  // The method is called with the element receiver after the test double records the download.
+  // oxlint-disable-next-line typescript/unbound-method
   const originalAnchorClick = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function (...args) {
     downloadNames.push(this.download || "");
@@ -144,7 +146,11 @@ test("editing output name after download is ready keeps the prepared output", as
   const downloadNames = [];
   const downloadBlobTypes = [];
   let applyCompleteCount = 0;
+  // The method is called with the element receiver after the test double records the download.
+  // oxlint-disable-next-line typescript/unbound-method
   const originalAnchorClick = HTMLAnchorElement.prototype.click;
+  // The original function is called directly with the Blob argument after the test double records its type.
+  // oxlint-disable-next-line typescript/unbound-method
   const originalCreateObjectUrl = URL.createObjectURL;
   HTMLAnchorElement.prototype.click = function (...args) {
     downloadNames.push(this.download || "");

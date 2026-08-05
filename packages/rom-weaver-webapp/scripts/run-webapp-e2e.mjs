@@ -8,7 +8,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, webkit } from "playwright";
 import { DOC_SOURCES, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
@@ -23,7 +23,8 @@ const CSS_COVERAGE_BUDGET = JSON.parse(
 const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0793373cce4b4f46fb";
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
 // Derived from the route table, so a new guide is audited without a second edit.
-const DOCS_ROUTES = DOC_SOURCES.map((source) => source.slug);
+export const computeDocsRouteSlugs = (docSources) => docSources.map((source) => source.slug);
+const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
 const A11Y_VIEWPORTS = [
   { height: 720, label: "desktop", width: 1280 },
   { height: 844, label: "mobile", width: 390 },
@@ -60,7 +61,7 @@ const reservePort = () =>
 // misconfigured URL should fail loudly rather than silently trust an unknown certificate.
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
-const shouldRejectUnauthorized = (url) => {
+export const shouldRejectUnauthorized = (url) => {
   try {
     return !LOOPBACK_HOSTNAMES.has(new URL(url).hostname);
   } catch {
@@ -118,7 +119,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       if (!audit.initialView && active) audit.initialView = active.getAttribute("data-mode") || "";
       if (!audit.identityResolved) return;
       const threads = document.querySelector(".masthead-threads");
-      const runtime = document.querySelector(".masthead-runtime");
+      const runtime = document.querySelector(".sub-status");
       if (!(threads && runtime)) return;
       if (!audit.threads) {
         audit.threads = threads;
@@ -188,9 +189,11 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           });
           const initialShell = await page.evaluate(() => {
             const root = document.getElementById("webapp-root");
-            const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
-            const links = document.querySelector(".site-footer-links")?.getBoundingClientRect();
-            const status = document.querySelector(".site-footer-status")?.getBoundingClientRect();
+            // The dock is the phone chrome the shell must paint inside the
+            // first viewport now that the footer is gone.
+            const footer = document.querySelector(".dock")?.getBoundingClientRect();
+            const links = document.querySelector(".dock-tab")?.getBoundingClientRect();
+            const status = [...document.querySelectorAll(".dock-tab")].at(-1)?.getBoundingClientRect();
             const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
             return {
               footerInFirstViewport:
@@ -208,7 +211,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           });
           initialShellLayout = initialShell;
           if (!(initialShell.prerendered && initialShell.footerInFirstViewport)) {
-            throw new Error(`initial shell footer is not visible: ${JSON.stringify(initialShell)}`);
+            throw new Error(`initial shell dock is not visible: ${JSON.stringify(initialShell)}`);
           }
           await settings.click();
           releaseScripts();
@@ -227,7 +230,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         const result = await page.evaluate((initialLayout) => {
           const audit = window.__romWeaverHydrationAudit;
           const root = document.getElementById("webapp-root");
-          const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
+          const footer = document.querySelector(".dock")?.getBoundingClientRect();
           const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
           const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
           return {
@@ -235,7 +238,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             finalView: document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") || "",
             initialTheme: audit.initialTheme,
             initialView: audit.initialView,
-            runtimeRetained: document.querySelector(".masthead-runtime") === audit.runtime,
+            runtimeRetained: document.querySelector(".sub-status") === audit.runtime,
             runtimeTexts: audit.runtimeTexts,
             threadRetained: document.querySelector(".masthead-threads") === audit.threads,
             threadTexts: audit.threadTexts,
@@ -250,9 +253,9 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         const problems = [];
         if (!result.threadRetained) problems.push("thread node was replaced");
         if (!result.runtimeRetained) problems.push("runtime node was replaced");
-        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3 threads"))
+        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3 Threads"))
           problems.push(`thread text changed: ${JSON.stringify(result.threadTexts)}`);
-        if (result.runtimeTexts.length !== 1 || !result.runtimeTexts[0]?.includes("web · sw off"))
+        if (result.runtimeTexts.length !== 1)
           problems.push(`runtime text changed: ${JSON.stringify(result.runtimeTexts)}`);
         if (result.initialTheme !== "light" || result.finalTheme !== "light")
           problems.push(`theme changed: ${result.initialTheme} -> ${result.finalTheme}`);
@@ -301,6 +304,30 @@ const settleAnimations = async (page) => {
   }
 };
 
+const waitForStableBox = async (page, locator) => {
+  const selector = await locator.evaluate((element) => {
+    if (!(element instanceof HTMLElement && element.id)) throw new Error("Stable-layout target needs an element id");
+    return `#${CSS.escape(element.id)}`;
+  });
+  await page.waitForFunction(
+    ({ selector: targetSelector }) => {
+      const element = document.querySelector(targetSelector);
+      if (!(element instanceof HTMLElement)) return false;
+      const rect = element.getBoundingClientRect();
+      const box = [rect.x, rect.y, rect.width, rect.height];
+      const previous = globalThis.__romWeaverStableBox;
+      const now = performance.now();
+      if (previous?.element === element && previous.box.every((value, index) => value === box[index])) {
+        return now - previous.since >= 500;
+      }
+      globalThis.__romWeaverStableBox = { box, element, since: now };
+      return false;
+    },
+    { selector },
+    { polling: 50, timeout: 60_000 },
+  );
+};
+
 const scanLiveApp = async (page, label) => {
   await settleAnimations(page);
   const violations = await page.evaluate(async (tags) => {
@@ -311,14 +338,37 @@ const scanLiveApp = async (page, label) => {
     return results.violations.map((violation) => ({
       help: violation.help,
       id: violation.id,
-      nodes: violation.nodes.map((node) => node.target.join(" ")),
+      nodes: violation.nodes.map((node) => {
+        const target = node.target.join(" ");
+        const element = document.querySelector(target);
+        const rect = element?.getBoundingClientRect();
+        // Geometry rules (target size, contrast) are unreadable from a selector
+        // alone: what fails is where the box ended up and what is sitting on top
+        // of it, and neither survives into the CI log otherwise.
+        const covering = rect ? document.elementFromPoint(rect.left + rect.width / 2, rect.bottom - 1) : null;
+        return {
+          covering:
+            covering && covering !== element
+              ? `${covering.tagName.toLowerCase()}${covering.className ? `.${String(covering.className).trim().split(/\s+/).join(".")}` : ""}`
+              : null,
+          rect: rect && {
+            bottom: Math.round(rect.bottom),
+            height: Math.round(rect.height),
+            top: Math.round(rect.top),
+            width: Math.round(rect.width),
+          },
+          reason: node.failureSummary,
+          target,
+          viewport: { height: window.innerHeight, width: window.innerWidth },
+        };
+      }),
     }));
   }, A11Y_TAGS);
   if (violations.length) throw new Error(`${label} accessibility violations:\n${JSON.stringify(violations, null, 2)}`);
   process.stdout.write(`PASS accessibility ${label}\n`);
 };
 
-const checkCssCoverage = (entries) => {
+export const checkCssCoverage = (entries) => {
   const coverage = summarizeCssCoverage(entries);
   if (coverage.stylesheetCount === 0) throw new Error("CSS coverage did not include a bundled stylesheet");
   const usedPercent = ((coverage.usedBytes / coverage.totalBytes) * 100).toFixed(1);
@@ -339,7 +389,13 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   watchPageErrors();
   const setTheme = async (theme) => {
     if ((await page.locator("html").getAttribute("data-theme")) !== theme) {
-      await page.locator('button[aria-label^="Switch to "]').click();
+      const mastheadTheme = page.locator('button[aria-label^="Switch to "]:visible').first();
+      if (await mastheadTheme.count()) {
+        await mastheadTheme.click();
+      } else {
+        await page.getByRole("button", { exact: true, name: "More" }).click();
+        await page.getByRole("menuitem", { exact: true, name: "Theme" }).click();
+      }
       await page.waitForFunction((expected) => document.documentElement.dataset.theme === expected, theme);
     }
   };
@@ -367,7 +423,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.addScriptTag({ path: AXE_SCRIPT_PATH });
     await page.addStyleTag({
       content:
-        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}",
+        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}" +
+        '.rw-app .btn[data-guide-cta="true"]{animation:none!important;}',
     });
   };
 
@@ -390,6 +447,70 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (browserName === "chromium") await page.coverage.startCSSCoverage();
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+
+    // On a mobile Docs reload the trail is already in the prerendered shell.
+    // Its fixed position must be viewport-relative before hydration finishes;
+    // WebKit otherwise treats the workflow body's entrance translate as its
+    // containing block and leaves the bar below the article.
+    await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "mobile"));
+    const docsReloadResponse = await page.goto(new URL("docs/get-started/", baseUrl).href, { waitUntil: "commit" });
+    const docsReloadHtml = (await docsReloadResponse?.text()) ?? "";
+    if (!docsReloadHtml.includes('class="warp-rail is-initializing"')) {
+      throw new Error("Docs route response is missing the static rail initialization state");
+    }
+    if (!docsReloadHtml.includes('aria-current="true"')) {
+      throw new Error("Docs route response is missing the static initial rail marker");
+    }
+    const docsTrail = page.locator(".docs-trail");
+    await docsTrail.waitFor({ state: "attached" });
+    const trailGeometry = await docsTrail.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { bottom: rect.bottom, height: rect.height, viewportHeight: window.innerHeight };
+    });
+    if (Math.abs(trailGeometry.bottom - trailGeometry.viewportHeight) > 1 || trailGeometry.height <= 0) {
+      throw new Error(`Mobile Docs trail is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
+    }
+
+    // A cold Docs tab load must keep the current panel until the lazy route is
+    // ready; otherwise the first frame after the click has no docs navigation.
+    const docsNavigationContext = await createContext({ ignoreHTTPSErrors: true, serviceWorkers: "block" });
+    const docsNavigationPage = await docsNavigationContext.newPage();
+    try {
+      const docsChunkPattern = /\/assets\/docs-page-[^/]+\.js(?:\?.*)?$/;
+      let releaseDocsChunk;
+      let docsChunkRequest;
+      const docsChunkStarted = new Promise((resolve) => {
+        docsChunkRequest = resolve;
+      });
+      const docsChunkReleased = new Promise((resolve) => {
+        releaseDocsChunk = resolve;
+      });
+      await docsNavigationPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await docsNavigationPage.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+      await docsNavigationPage.route(docsChunkPattern, async (route) => {
+        docsChunkRequest();
+        await docsChunkReleased;
+        await route.continue();
+      });
+      await docsNavigationPage.locator('[role="tab"][data-mode="docs"]:visible').first().click();
+      await docsChunkStarted;
+      await docsNavigationPage
+        .locator('.mode[role="tab"][aria-selected="true"][data-mode="patcher"]')
+        .waitFor({ state: "visible" });
+      if ((await docsNavigationPage.locator(".docs-rails .guide-nav").count()) !== 0) {
+        throw new Error("Docs navigation mounted before its lazy route was ready");
+      }
+      releaseDocsChunk();
+      await docsNavigationPage.locator(".docs-rails .guide-nav").waitFor({ state: "visible" });
+      await docsNavigationPage
+        .locator('.mode[role="tab"][aria-selected="true"][data-mode="docs"]')
+        .waitFor({ state: "visible" });
+    } finally {
+      await docsNavigationContext.close();
+    }
+    await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "desktop"));
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await installAuditTools();
 
     for (const viewport of A11Y_VIEWPORTS) {
@@ -403,19 +524,26 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         if (!(await betaTools.isChecked())) await betaTools.check();
         await page.getByRole("button", { exact: true, name: "Save" }).click();
       }
-      for (const tab of ["patcher", "creator", "trim", "tools"]) {
-        await page.locator(`[role="tab"][data-mode="${tab}"]`).click();
+      for (const tab of ["patcher", "creator", "trim"]) {
+        await page.locator(`[role="tab"][data-mode="${tab}"]:visible`).first().click();
         await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
         for (const theme of ["light", "dark"]) {
           await setTheme(theme);
           await scanLiveApp(page, `${tab} (${viewport.label}, ${theme})`);
         }
       }
+      await page.getByRole("button", { name: "More", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Tools", exact: true }).click();
+      await page.locator("#panel-tools:not([hidden])").waitFor({ state: "visible" });
+      for (const theme of ["light", "dark"]) {
+        await setTheme(theme);
+        await scanLiveApp(page, `tools (${viewport.label}, ${theme})`);
+      }
     }
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    await page.locator('[role="tab"][data-mode="patcher"]').click();
+    await page.locator('[role="tab"][data-mode="patcher"]:visible').first().click();
 
     const infoButton = page.locator(".info-btn").first();
     await infoButton.click();
@@ -431,8 +559,10 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await scanVariants("codec combobox");
     await page.locator(".codec-combobox-option").first().click();
     await page.getByRole("button", { exact: true, name: "Save" }).click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
 
-    await page.getByRole("button", { name: "Log" }).click();
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Logs", exact: true }).click();
     const logDialog = page.locator("dialog.log-dlg");
     await logDialog.waitFor({ state: "visible" });
     await scanVariants("log dialog");
@@ -488,9 +618,11 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await page.getByRole("button", { name: "Create ZIP Bundle", exact: true }).click();
         const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
         await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
-        const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });
-        await downloadButton.click();
-        const download = await downloadPromise;
+        await waitForStableBox(page, downloadButton);
+        const [download] = await Promise.all([
+          page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+          downloadButton.click(),
+        ]);
         if (!download.suggestedFilename().endsWith(".zip")) {
           throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
         }
@@ -527,7 +659,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    await page.locator('[role="tab"][data-mode="creator"]').click();
+    await page.locator('[role="tab"][data-mode="creator"]:visible').first().click();
     const createOnboardingChip = page.getByRole("button", { name: "New here?" });
     await createOnboardingChip.waitFor({ state: "visible" });
     await createOnboardingChip.click();
@@ -563,7 +695,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await page.locator(".docs-article h1").waitFor({ state: "visible" });
       await installAuditTools();
       const headings = await page.locator("h1").count();
-      if (headings !== 1) throw new Error(`${slug} rendered ${headings} level-one headings; expected exactly 1`);
+      assertSingleDocsHeading(headings, slug);
       // This origin is not production, so once the page is live every sample
       // download has to have moved to it. The served HTML still names
       // production, which is the right answer for a crawler but the wrong one
@@ -583,8 +715,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           production: countBlocksNaming(productionOrigin),
         };
       }, SITE_ORIGIN);
-      if (samples.production)
-        throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
+      assertNoProductionDocsSamples(samples, slug);
       retargetedSamples += samples.local;
       await scanVariants(slug);
       if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
@@ -603,7 +734,37 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   }
 };
 
-const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
+export const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
+
+// Every docs route must render exactly one top-level heading; extracted so
+// the invariant (and its exact message) is pinned independently of the live
+// Playwright walk that calls it once per route in DOCS_ROUTES.
+export const assertSingleDocsHeading = (headingCount, slug) => {
+  if (headingCount !== 1) throw new Error(`${slug} rendered ${headingCount} level-one headings; expected exactly 1`);
+};
+
+// A docs route running against a non-production origin must retarget every
+// sample download away from production - extracted for the same reason as
+// assertSingleDocsHeading above.
+export const assertNoProductionDocsSamples = (samples, slug) => {
+  if (samples.production) throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
+};
+
+// Pure half of createWorkerReuseCorpus's manifest.json: the one deterministic
+// "case" entry (payload/archive bytes in, sha256-pinned metadata out), split
+// out so it is testable without touching the filesystem or a wall-clock
+// timestamp.
+export const buildWorkerReuseManifestCase = (archive, payload) => ({
+  compressedBytes: archive.byteLength,
+  entryCount: MANY_ENTRIES_COUNT,
+  expectedSha256: sha256(payload),
+  fileName: "many-entries.zip",
+  id: "many-entries",
+  kind: "generated",
+  sha256: sha256(archive),
+  uncompressedBytes: MANY_ENTRIES_COUNT * MANY_ENTRY_SIZE,
+  url: "/__rom_weaver_corpus__/files/many-entries.zip",
+});
 
 const createWorkerReuseCorpus = () => {
   const corpusDir = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-worker-reuse-"));
@@ -616,19 +777,7 @@ const createWorkerReuseCorpus = () => {
   fs.writeFileSync(
     path.join(corpusDir, "manifest.json"),
     `${JSON.stringify({
-      cases: [
-        {
-          compressedBytes: archive.byteLength,
-          entryCount: MANY_ENTRIES_COUNT,
-          expectedSha256: sha256(payload),
-          fileName: "many-entries.zip",
-          id: "many-entries",
-          kind: "generated",
-          sha256: sha256(archive),
-          uncompressedBytes: MANY_ENTRIES_COUNT * MANY_ENTRY_SIZE,
-          url: "/__rom_weaver_corpus__/files/many-entries.zip",
-        },
-      ],
+      cases: [buildWorkerReuseManifestCase(archive, payload)],
       generatedAt: new Date().toISOString(),
       version: 1,
     })}\n`,
@@ -664,9 +813,10 @@ const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
       return button instanceof HTMLButtonElement && !button.disabled && /apply/i.test(button.textContent || "");
     });
 
-    const downloadPromise = page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS });
-    await apply.click();
-    const download = await downloadPromise;
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+      apply.click(),
+    ]);
     const downloadPath = await download.path();
     if (!downloadPath) throw new Error(`${name}: Playwright did not expose the downloaded file`);
     const bytes = fs.readFileSync(downloadPath);
@@ -742,19 +892,29 @@ const runArchiveStressSmoke = async (createContext, baseUrl) => {
 
 const createBrowserContextFactory = async (browserType, browserName) => {
   const persistentContextDirs = [];
+  // This suite audits the app and workflows, not PWA caching. Blocking workers
+  // avoids a WebKit service-worker certificate race across the preview ports.
+  const createContextOptions = (options) => ({ serviceWorkers: "block", ...options });
   if (browserName === "webkit") {
     return {
       browser: null,
       createContext: async (options) => {
         const userDataDir = fs.mkdtempSync(path.join(process.env.TMPDIR || "/tmp", "rom-weaver-webkit-e2e-"));
         persistentContextDirs.push(userDataDir);
-        return browserType.launchPersistentContext(userDataDir, { ...options, headless: true });
+        return browserType.launchPersistentContext(userDataDir, {
+          ...createContextOptions(options),
+          headless: true,
+        });
       },
       persistentContextDirs,
     };
   }
   const browser = await browserType.launch({ headless: true });
-  return { browser, createContext: (options) => browser.newContext(options), persistentContextDirs };
+  return {
+    browser,
+    createContext: (options) => browser.newContext(createContextOptions(options)),
+    persistentContextDirs,
+  };
 };
 
 const startServer = (mode, port, corpusDir) => {
@@ -845,7 +1005,13 @@ const runWithRetry = async () => {
   }
 };
 
-runWithRetry().catch((error) => {
-  process.stderr.write(`${error?.stack || String(error)}\n`);
-  process.exitCode = 1;
-});
+// Guards direct execution (`node scripts/run-webapp-e2e.mjs`, or via the
+// `test:e2e:webapp*`/`test:e2e:a11y` npm scripts) from module import - the
+// unit tests in run-webapp-e2e.test.mjs import this file for its exported
+// pure helpers and must not trigger a full browser E2E run as a side effect.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runWithRetry().catch((error) => {
+    process.stderr.write(`${error?.stack || String(error)}\n`);
+    process.exitCode = 1;
+  });
+}

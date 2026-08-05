@@ -79,6 +79,8 @@ test("direct CUE plus BIN upload shows the cue sheet on the bin row", async () =
 
 test("direct CUE plus BIN upload can output CHD from the CUE source", async () => {
   const downloadNames = [];
+  // The method is called with the element receiver after the test double records the download.
+  // oxlint-disable-next-line typescript/unbound-method
   const originalAnchorClick = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function (...args) {
     downloadNames.push(this.download || "");

@@ -337,7 +337,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   }, [bundleSessionKey]);
   const activeBundleSession = bundleDismissed ? null : localBundleSession || props.bundleSession || null;
   const bundleControllersRef = useRef<BundleSessionControllers>({ output: null, patchStack: null });
-  const { handleBundlePatchesChange, bundleMetaById, updateBundleMeta } = useBundleApplySession({
+  const { bundleDefaultsPending, handleBundlePatchesChange, bundleMetaById, updateBundleMeta } = useBundleApplySession({
     bundleSession: activeBundleSession,
     controllersRef: bundleControllersRef,
     getPatchIds,
@@ -458,12 +458,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       const carrierIndex = items.findIndex((item) => (item.validateOutputChecksum || "") === bundleOutputChecksum);
       if (desired) {
         if (carrierIndex === targetIndex) return;
-        if (carrierIndex >= 0) await stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" });
+        if (carrierIndex >= 0)
+          await Promise.resolve(stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" }));
         if (targetIndex >= 0 && targetIndex < items.length)
-          await stack?.setPatchOption?.(targetIndex, { validateOutputChecksum: bundleOutputChecksum });
+          await Promise.resolve(stack?.setPatchOption?.(targetIndex, { validateOutputChecksum: bundleOutputChecksum }));
         return;
       }
-      if (carrierIndex >= 0) await stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" });
+      if (carrierIndex >= 0)
+        await Promise.resolve(stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" }));
     })();
     return () => {
       cancelled = true;
@@ -565,11 +567,23 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       snapshot: ApplyWorkflowSessionInput,
       baseSettings: ReturnType<typeof createBaseApplyWorkflowSettings>,
       baseSettingsChanged: boolean,
-      options: { baseSettingsApplied?: boolean } = {},
+      options: { baseSettingsApplied?: boolean; force?: boolean } = {},
     ) => {
       const outputOverridesKey = createWorkflowOutputOverridesKey(snapshot);
       const outputOverridesChanged = workflowOutputOverridesKeyRef.current !== outputOverridesKey;
-      if (!(baseSettingsChanged || outputOverridesChanged)) return;
+      if (!(baseSettingsChanged || outputOverridesChanged || options.force)) {
+        emitApplyWorkflowTrace(snapshot.options, "workflow output overrides unchanged", {
+          compression: snapshot.options.output?.compression || "auto",
+          outputName: snapshot.options.output?.outputName || "",
+        });
+        return;
+      }
+      emitApplyWorkflowTrace(snapshot.options, "workflow output overrides applying", {
+        baseSettingsChanged,
+        force: options.force === true,
+        outputOverridesChanged,
+        outputName: snapshot.options.output?.outputName || "",
+      });
       if (!options.baseSettingsApplied) await workflow.setSettings(baseSettings);
       await applyOutputOverrides(workflow, snapshot);
       workflowOutputOverridesKeyRef.current = outputOverridesKey;
@@ -618,10 +632,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           forceInputWorkflowRefreshRef.current ||
           preparationSettingsChanged ||
           !sameBinarySourceLists(previousSync.inputs, snapshot.inputs);
+        const workflowPatchSources = workflow.getPatchSources().filter(isReactBinarySource);
+        const workflowPatchesChanged = !sameBinarySourceLists(workflowPatchSources, previousSync.patches);
         const patchesChanged =
           forcePatchWorkflowRefreshRef.current ||
           preparationSettingsChanged ||
-          !sameBinarySourceLists(previousSync.patches, snapshot.patches);
+          !sameBinarySourceLists(previousSync.patches, snapshot.patches) ||
+          workflowPatchesChanged;
         // Appending patches keeps the existing prefix staged in the workflow (and OPFS).
         // Only the new tail needs addPatch, so skip the clear-and-re-add of everything.
         const previousPatches = previousSync.patches;
@@ -653,6 +670,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           patchesChanged,
           preparationSettingsChanged,
           singleReplaceIndex,
+          workflowPatchCount: workflowPatchSources.length,
+          workflowPatchesChanged,
         });
         await setWorkflowSettingsIfChanged({ baseSettings, changed: executionSettingsChanged, snapshot, workflow });
         if (patchesChanged && !patchesAppended && singleReplaceIndex < 0) {
@@ -772,6 +791,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
         await syncWorkflowOutputOverrides(workflow, snapshot, baseSettings, executionSettingsChanged, {
           baseSettingsApplied: executionSettingsChanged,
+          force: patchesChanged,
         });
         workflowSyncRef.current = {
           executionSettingsKey,
@@ -804,6 +824,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow finish", {
           hasChecksums: !!input?.checksums,
           inputStatus: input?.status,
+          outputName: resolvedOutput.outputName,
+          ready: workflow.getSnapshot().ready,
           patchCount: patches.length,
         });
 
@@ -1270,18 +1292,24 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             });
           };
           onVerifying?.(buildInfos());
-          // Toggled-off patches are excluded from the run, so skip their deep dry-run too; the
-          // enablement-change pass revalidates a patch when it is toggled back on.
+          // Toggled-off patches are excluded from the run, so skip their deep dry-run too. Every
+          // enablement change dispatches a fresh plan pass before the next manual Apply.
+          const disabledIndexes = getDisabledPatchIndexes(input.patches);
+          emitApplyFormInputTrace("patch validation start", {
+            disabledIndexes: [...disabledIndexes],
+            patchCount: workflow.getPatches().length,
+            sources: summarizeApplyWorkflowSources(workflow.getPatchSources().filter(isReactBinarySource), "Patch"),
+          });
           await workflow.validatePatches({
             chainMeta: buildChainMeta(input.patches),
-            disabledIndexes: getDisabledPatchIndexes(input.patches),
+            disabledIndexes,
           });
           setChainPlans(new Map(workflow.latestChainPlans));
           return buildInfos();
         },
       );
     },
-    [buildChainMeta, getDisabledPatchIndexes, withPreparedWorkflow],
+    [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, withPreparedWorkflow],
   );
 
   const setPatchTarget = useCallback(
@@ -1352,6 +1380,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           },
         },
         async ({ input: stagedInput, workflow }) => {
+          emitApplyFormInputTrace("patch option update start", {
+            patchIndex,
+            patchCount: workflow.getPatches().length,
+            revalidate: !!revalidate,
+            sources: summarizeApplyWorkflowSources(workflow.getPatchSources().filter(isReactBinarySource), "Patch"),
+          });
           await workflow.setPatchOption(patchIndex, patchOption);
           // A user edit changed what the run verifies (header bytes / expected
           // checks): rerun the deep validation - patches whose validation key is
@@ -1388,14 +1422,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
       );
     },
-    [buildChainMeta, getDisabledPatchIndexes, withPreparedWorkflow],
+    [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, withPreparedWorkflow],
   );
 
   const { localUiController, localStackController, localOutputController, localNoticeController } =
     useLocalApplyPatchFormSession({
       ...propsWithSettings,
       applyPatches,
-      applyReady,
+      applyReady: applyReady && !bundleDefaultsPending,
       disabledPatchIds,
       downloadOutput,
       onApplyComplete: () => undefined,

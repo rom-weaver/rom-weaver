@@ -14,7 +14,10 @@ import {
 } from "./docs-screenshot-manifest.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUTPUT_DIR = path.resolve(process.env.ROM_WEAVER_SCREENSHOT_OUTPUT || path.join(PACKAGE_DIR, "design"));
+const REPO_ROOT = path.resolve(PACKAGE_DIR, "../..");
+const OUTPUT_DIRS = process.env.ROM_WEAVER_SCREENSHOT_OUTPUT
+  ? [path.resolve(process.env.ROM_WEAVER_SCREENSHOT_OUTPUT)]
+  : [path.join(REPO_ROOT, "docs", "screenshots"), path.join(REPO_ROOT, "design")];
 const BASE_URL = process.env.ROM_WEAVER_SCREENSHOT_BASE_URL || "https://localhost:4173/";
 const CASE_FILTER = process.env.ROM_WEAVER_SCREENSHOT_CASE;
 const CAPTURE_CASES = CASE_FILTER
@@ -86,7 +89,7 @@ const captureRegion = async (page, selector) => {
 };
 
 const capture = async () => {
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  for (const outputDir of OUTPUT_DIRS) fs.mkdirSync(outputDir, { recursive: true });
   const browser = await chromium.launch();
   try {
     for (const viewport of DOCS_SCREENSHOT_VIEWPORTS) {
@@ -104,7 +107,11 @@ const capture = async () => {
           await page.goto(pageUrl(captureCase.route), { waitUntil: "domcontentloaded" });
           await page.locator("body").waitFor({ state: "visible" });
           await page.getByText(captureCase.waitFor, { exact: true }).last().waitFor({ state: "visible" });
-          if (captureCase.dismissGuide) await page.getByRole("button", { name: "End guide", exact: true }).click();
+          if (captureCase.dismissGuide) {
+            const exitGuide = page.getByRole("button", { name: "Exit tutorial", exact: true });
+            await exitGuide.evaluate((button) => button.click());
+            await exitGuide.waitFor({ state: "detached" });
+          }
           if (captureCase.openOutputOptions) {
             const output = page.locator("#rom-weaver-row-output-file-name");
             const options = output.locator(".cks > .cks-head");
@@ -114,17 +121,20 @@ const capture = async () => {
           await waitForStableContent(page);
           await assertNoDevBadge(page);
           await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
-          const outputBase = path.join(OUTPUT_DIR, `${captureCase.name}-${viewport.name}-${theme}`);
+          const outputName = `${captureCase.name}-${viewport.name}-${theme}`;
           const { crop, shot } = await captureRegion(page, captureCase.target);
           for (const { extension, imageMagickArgs } of DOCS_SCREENSHOT_FORMATS) {
             const image = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", ...imageMagickArgs], {
               input: shot,
               maxBuffer: 64 * 1024 * 1024,
             });
-            fs.writeFileSync(`${outputBase}.${extension}`, image);
+            for (const outputDir of OUTPUT_DIRS)
+              fs.writeFileSync(path.join(outputDir, `${outputName}.${extension}`), image);
           }
           await context.close();
-          console.log(`Captured ${path.relative(PACKAGE_DIR, outputBase)}.{${CAPTURE_EXTENSION_LIST}}`);
+          console.log(
+            `Captured ${OUTPUT_DIRS.map((outputDir) => path.relative(PACKAGE_DIR, path.join(outputDir, outputName))).join(", ")}.{${CAPTURE_EXTENSION_LIST}}`,
+          );
         }
       }
     }

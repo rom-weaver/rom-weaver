@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
+import { isLegalDocRoute } from "../src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
@@ -18,6 +19,16 @@ const production = channel === "prod";
 const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
 const assertIncludes = (source, expected, label) => {
   if (!source.includes(expected)) throw new Error(`${label} is missing ${JSON.stringify(expected)}`);
+};
+// The parser-time resolver in index.html finds its slots by class, so what has
+// to hold is that the class is ON the element - not that it is the element's
+// whole class attribute. Prerendered markup composes class lists (`sub-chip
+// sub-status`), and a literal `class="sub-status"` breaks the moment a token
+// gains a sibling. Tokens are compared exactly: a substring test would let
+// `sub-status-text` answer for `sub-status`.
+const assertHasClass = (source, className, label) => {
+  const present = [...source.matchAll(/class="([^"]*)"/g)].some((match) => match[1].split(/\s+/).includes(className));
+  if (!present) throw new Error(`${label} is missing the ${JSON.stringify(className)} class`);
 };
 const assertCount = (source, expected, count, label) => {
   const actual = source.split(expected).length - 1;
@@ -95,9 +106,8 @@ for (const url of [
   "https://rom-weaver.com/docs/architecture",
   "https://github.com/rom-weaver/rom-weaver",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md",
-  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/usage/README.md",
-  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/cli/reference.md",
-  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/cli/install.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/cli.md",
+  "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/install-cli.md",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/formats.md",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/webapp-integration.md",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/self-hosting.md",
@@ -128,13 +138,12 @@ assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create desc
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
 assertIncludes(applyHtml, 'aria-selected="true" class="mode" data-mode="patcher"', "apply prerendered workflow");
 assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator"', "create prerendered workflow");
-assertIncludes(applyHtml, 'class="build-version-label"', "preloaded build version");
-assertIncludes(applyHtml, 'class="masthead-threads-full"', "preloaded full thread label");
-assertIncludes(applyHtml, 'class="masthead-threads-short"', "preloaded compact thread label");
-assertIncludes(applyHtml, 'class="masthead-runtime"', "preloaded runtime status slot");
+assertHasClass(applyHtml, "build-tag", "preloaded build tag");
+assertHasClass(applyHtml, "masthead-threads-count", "preloaded thread count");
+assertHasClass(applyHtml, "sub-status", "preloaded runtime status control");
 assertIncludes(applyHtml, 'data-service-worker-enabled="true"', "service-worker build marker");
 const runtimeResolver =
-  '<span class="masthead-runtime">· web · sw</span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
+  '<span class="shell-identity" hidden=""></span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
 for (const route of [
   "index.html",
   "apply.html",
@@ -210,7 +219,7 @@ for (const route of DOC_ROUTES) {
   );
   assertIncludes(docsHtml, '<base href="/" />', `${route.slug} asset base`);
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
-  const legalPage = route.slug === "docs/notices" || route.slug === "docs/privacy";
+  const legalPage = isLegalDocRoute(route.slug);
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);
   // The guided-sample offer is the hub's, not every page's: the guides all
   // closing on the same three buttons made it furniture. Each guide still reaches
@@ -220,7 +229,7 @@ for (const route of DOC_ROUTES) {
     assertIncludes(docsHtml, 'href="/create?guide=create"', `${route.slug} guided Create link`);
     assertIncludes(docsHtml, 'href="/apply?guide=bundle"', `${route.slug} guided Bundle link`);
     assertIncludes(docsHtml, 'href="/docs/faq"', `${route.slug} FAQ link`);
-    assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} browser usage link`);
+    assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} tutorial link`);
     assertIncludes(docsHtml, 'href="/docs/cli"', `${route.slug} CLI usage link`);
     assertIncludes(docsHtml, 'href="/docs/self-hosting"', `${route.slug} self-hosting link`);
   }
@@ -243,8 +252,13 @@ for (const route of DOC_ROUTES) {
   // the page metadata below may name the production origin.
   const crossChannel = route.html.match(/href="https:\/\/rom-weaver\.com[^"]*"/g);
   if (crossChannel) throw new Error(`${route.slug} links to production: ${crossChannel.join(", ")}`);
-  const guide = route.source.startsWith("docs/usage/");
-  const minimumWords = guide ? (route.slug === "docs" || legalPage ? 250 : 500) : 150;
+  const guide = ["docs/tutorials/", "docs/how-to/", "docs/explanation/"].some((folder) =>
+    route.source.startsWith(folder),
+  );
+  // The hub is an index of links, not a guide, but it still has to say enough
+  // to stand on its own as the published documentation landing page.
+  let minimumWords = guide ? 500 : 150;
+  if (route.slug === "docs") minimumWords = 250;
   const wordCount = countVisibleWords(docsHtml);
   if (wordCount < minimumWords) {
     throw new Error(`${route.slug} has ${wordCount} visible words; expected at least ${minimumWords}`);

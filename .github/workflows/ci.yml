@@ -121,13 +121,16 @@ jobs:
           cargo-cache: "false"
 
       - name: Install root dependencies
-        run: npm ci --ignore-scripts --omit=optional --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Workflows
         run: mise run actionlint
 
       - name: Shell scripts
         run: mise run shellcheck
+
+      - name: Node.js scripts
+        run: npm run lint:code
 
       - name: Dockerfiles
         run: mise run hadolint
@@ -824,7 +827,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # Same version as the .config/mise.toml pin; this leg cannot use mise.
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-nextest@0.9.140
 
@@ -838,6 +841,18 @@ jobs:
 
       - name: Rust doc tests
         run: cargo test --quiet --doc --workspace --locked
+
+      # nextest and the plain workspace test above never build these: both
+      # examples set `required-features`, which cargo only enables when the
+      # matching `--features ... --example ...` invocation asks for them
+      # explicitly. Kept as separate steps for the same reason `test-rust` in
+      # .config/mise.toml splits them out - this leg bypasses mise (see the
+      # job comment above) so it needs its own copy of the same two commands.
+      - name: Rust typegen example tests
+        run: cargo test -p rom-weaver-cli --locked --features typescript-types --example rom-weaver-typegen
+
+      - name: Rust wasm-app example tests
+        run: cargo test -p rom-weaver-cli --locked --features wasm-app --example rom-weaver-app
 
   # Presents one stable check name while the independent host and threaded-target
   # work runs in parallel, so branch protection has a single thing to require.
@@ -915,6 +930,9 @@ jobs:
       - name: Build script tests
         run: npm test
 
+      - name: Webapp script tests
+        run: npm --prefix packages/rom-weaver-webapp run test:scripts
+
       - name: Lint
         run: npm --prefix packages/rom-weaver-webapp run lint
 
@@ -960,6 +978,7 @@ jobs:
           PAGES_COMMIT_HASH: ${{ github.event.pull_request.head.sha }}
           PAGES_DIRECTORY: "."
           PAGES_WORKING_DIRECTORY: target/lighthouse
+          PAGES_REUSE: "false"
         run: node scripts/ci/deploy-pages.mjs
 
       - name: Link Lighthouse reports in summary

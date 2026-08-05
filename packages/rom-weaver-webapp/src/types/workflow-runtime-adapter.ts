@@ -75,6 +75,8 @@ type RuntimeWorkerSourceRequest = {
   scope: RuntimeWorkerSourceScope;
   source: unknown;
   trace?: RuntimeWorkerTraceContext;
+  /** Keep the requested basename while isolating this staged path from live same-name inputs. */
+  pathPrefixInPath?: boolean;
 };
 
 type RuntimeWorkerOutput = {
@@ -105,6 +107,8 @@ type RuntimeWorkerIo = {
     fallbackFileName: string,
     failureMessage?: string,
   ) => Promise<PublicOutput>;
+  /** Reacquires externally managed source storage after a workflow owner releases it. */
+  retainOwnedSources?: (sources: unknown[]) => void;
   /** Releases externally managed source storage after its workflow owner is disposed. */
   releaseOwnedSources?: (sources: unknown[]) => Promise<void>;
   releaseSources?: (sources: unknown[]) => Promise<void>;

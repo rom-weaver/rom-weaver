@@ -5,6 +5,9 @@ import { normalizeGuestPath } from "./rom-weaver-runtime-utils.ts";
 declare const FileSystemSyncAccessHandle: unknown;
 
 const DEFAULT_BROWSER_WASM_URLS = [new URL("./rom-weaver-app.wasm", import.meta.url).href];
+const PROBE_REMOVE_RETRY_DELAYS_MS = [25, 50, 100, 200, 400, 800];
+const STALE_WRITABLE_PROBE_AGE_MS = 60_000;
+const WRITABLE_PROBE_TIMESTAMP = /^\.rw-probe-(\d+)-/;
 
 type ResolvedBrowserModule = {
   module: WebAssembly.Module;
@@ -19,6 +22,7 @@ type WasmModuleIdentity = {
 };
 
 export async function verifyWritableOpfsRoot(rootHandle: FileSystemDirectoryHandleLike): Promise<void> {
+  await removeStaleWritableProbes(rootHandle);
   const probeName = `.rw-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const probeFile = await rootHandle.getFileHandle(probeName, { create: true });
   let accessHandle: SyncAccessHandleLike | null = null;
@@ -27,7 +31,7 @@ export async function verifyWritableOpfsRoot(rootHandle: FileSystemDirectoryHand
     accessHandle.write(new Uint8Array([0x52, 0x57]), { at: 0 });
     accessHandle.flush();
   } catch (error) {
-    throw new Error(`OPFS root is not writable with sync access handles: ${error}`);
+    throw new Error(`OPFS root is not writable with sync access handles: ${String(error)}`);
   } finally {
     if (accessHandle) {
       try {
@@ -36,10 +40,34 @@ export async function verifyWritableOpfsRoot(rootHandle: FileSystemDirectoryHand
         // ignore best-effort close failures
       }
     }
+    await removeWritableProbe(rootHandle, probeName);
+  }
+}
+
+async function removeStaleWritableProbes(rootHandle: FileSystemDirectoryHandleLike): Promise<void> {
+  if (typeof rootHandle.entries !== "function") return;
+  const now = Date.now();
+  for await (const [name, handle] of rootHandle.entries()) {
+    if ((handle as { kind?: string } | null)?.kind !== "file" || !name.startsWith(".rw-probe-")) continue;
+    if (!isStaleWritableProbe(name, now)) continue;
+    await removeWritableProbe(rootHandle, name);
+  }
+}
+
+export function isStaleWritableProbe(name: string, now = Date.now()): boolean {
+  const timestamp = Number(WRITABLE_PROBE_TIMESTAMP.exec(name)?.[1]);
+  return Number.isFinite(timestamp) && now - timestamp >= STALE_WRITABLE_PROBE_AGE_MS;
+}
+
+async function removeWritableProbe(rootHandle: FileSystemDirectoryHandleLike, probeName: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
     try {
       await rootHandle.removeEntry?.(probeName);
-    } catch {
-      // ignore best-effort cleanup failures
+      return;
+    } catch (error) {
+      const delay = PROBE_REMOVE_RETRY_DELAYS_MS[attempt];
+      if ((error as { name?: string } | null)?.name !== "NoModificationAllowedError" || delay === undefined) return;
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 }

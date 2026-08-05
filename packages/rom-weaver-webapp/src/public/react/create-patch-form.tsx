@@ -80,6 +80,185 @@ import {
 } from "./workflow-run-hooks.ts";
 import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 
+/**
+ * What the staging effect has to redo this pass. Settings changes rebuild the
+ * workflow outright; clearing either source does too, since the surviving one
+ * has to be re-staged against a fresh workflow.
+ */
+const resolveCreateStagingPlan = (
+  previousSync: { modifiedKey: string; originalKey: string; settingsKey: string },
+  next: {
+    modified: BinarySource | null;
+    modifiedSourceKey: string;
+    original: BinarySource | null;
+    originalSourceKey: string;
+    settingsKey: string;
+  },
+) => {
+  const settingsChanged = previousSync.settingsKey !== next.settingsKey;
+  const originalKeyChanged = previousSync.originalKey !== next.originalSourceKey;
+  const modifiedKeyChanged = previousSync.modifiedKey !== next.modifiedSourceKey;
+  const sourceCleared = (originalKeyChanged && !next.original) || (modifiedKeyChanged && !next.modified);
+  const workflowReset = settingsChanged || sourceCleared;
+  return {
+    modifiedChanged: settingsChanged || modifiedKeyChanged || (workflowReset && !!next.modified),
+    originalChanged: settingsChanged || originalKeyChanged || (workflowReset && !!next.original),
+    workflowReset,
+  };
+};
+
+/** The source a failed role was staging, so its own queue warning can suppress the message. */
+const readStagedRoleSource = <TSource,>(
+  workflow: { getModified: () => TSource; getOriginal: () => TSource },
+  role: "modified" | "original" | "output",
+): TSource | null => {
+  if (role === "original") return workflow.getOriginal();
+  return role === "modified" ? workflow.getModified() : null;
+};
+
+/**
+ * Claim this staging pass. Bumping a generation is what invalidates any pass
+ * still in flight, so the bumps, the workflow reset, and the sync-key commit all
+ * have to land together - a pass that claimed half of this would let a displaced
+ * run write over the newer one's state.
+ */
+const claimCreateStagingPass = (input: {
+  generationRefs: {
+    modified: { current: number };
+    original: { current: number };
+    workflow: { current: number };
+  };
+  modifiedChanged: boolean;
+  originalChanged: boolean;
+  syncKeys: { modifiedKey: string; originalKey: string; settingsKey: string };
+  syncRef: { current: { modifiedKey: string; originalKey: string; settingsKey: string } };
+  workflowReset: boolean;
+  workflowRef: { current: CreateWorkflow | null };
+}) => {
+  const { generationRefs, workflowReset } = input;
+  const bump = (ref: { current: number }, changed: boolean) => (changed ? ++ref.current : ref.current);
+  let workflow = input.workflowRef.current;
+  const generation = bump(generationRefs.workflow, workflowReset);
+  if (workflowReset) {
+    workflow?.dispose().catch(() => undefined);
+    workflow = null;
+    input.workflowRef.current = null;
+  }
+  const originalGeneration = bump(generationRefs.original, input.originalChanged);
+  const modifiedGeneration = bump(generationRefs.modified, input.modifiedChanged);
+  input.syncRef.current = input.syncKeys;
+  return { generation, modifiedGeneration, originalGeneration, workflow };
+};
+
+type CreateStagingRoleEntry = {
+  changed: boolean;
+  commit: () => void;
+  generation: number;
+  role: "modified" | "original";
+  setSource: () => Promise<void>;
+  source: BinarySource | null;
+};
+
+/**
+ * The staging pass for one effect run. Every callback closes over the generation
+ * it was created with, so a displaced pass writes nothing: `isCurrent` fails and
+ * the run returns without touching state the newer pass now owns.
+ */
+const createCreateStagingSession = (input: {
+  activeWorkflow: CreateWorkflow;
+  clearInputProgress: () => void;
+  generation: number;
+  generationRefs: {
+    modified: { current: number };
+    original: { current: number };
+    workflow: { current: number };
+  };
+  onError?: (error: Error) => void;
+  queueRef: { current: Promise<void> };
+  rolePlan: CreateStagingRoleEntry[];
+  setModifiedState: (value: ReturnType<CreateWorkflow["getModified"]> | null) => void;
+  setOriginalState: (value: ReturnType<CreateWorkflow["getOriginal"]> | null) => void;
+  setStagingRole: (role: "modified" | "original" | null) => void;
+  setWorkflowMessage: (role: "modified" | "original" | "output", error: Error) => void;
+  workflowRef: { current: CreateWorkflow | null };
+}) => {
+  const { activeWorkflow, generationRefs, rolePlan } = input;
+  let activeRole: "modified" | "original" | null = null;
+
+  const isCurrentStaging = () =>
+    generationRefs.workflow.current === input.generation && input.workflowRef.current === activeWorkflow;
+
+  const isCurrentRoleStaging = (role: "modified" | "original", roleGeneration: number) =>
+    isCurrentStaging() &&
+    (role === "original"
+      ? generationRefs.original.current === roleGeneration
+      : generationRefs.modified.current === roleGeneration);
+
+  // One source at a time: two concurrent setOriginal/setModified calls would race
+  // the same workflow.
+  const enqueueSourceStage = (role: "modified" | "original", run: () => Promise<void>) => {
+    const queued = input.queueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        if (!isCurrentStaging()) return;
+        input.setStagingRole(role);
+        await run();
+      });
+    input.queueRef.current = queued.then(
+      () => undefined,
+      () => undefined,
+    );
+    return queued;
+  };
+
+  const stageRoles = async () => {
+    for (const entry of rolePlan) {
+      if (!(entry.changed && entry.source)) continue;
+      activeRole = entry.role;
+      await enqueueSourceStage(entry.role, entry.setSource);
+      const staged = finishCreateRoleStaging(
+        entry.role,
+        entry.generation,
+        isCurrentStaging,
+        isCurrentRoleStaging,
+        entry.commit,
+        input.clearInputProgress,
+      );
+      if (!staged) return false;
+      activeRole = null;
+    }
+    return true;
+  };
+
+  const reportFailure = (error: unknown) => {
+    const normalizedError = error instanceof Error ? error : new Error(String(error));
+    if (getErrorCode(normalizedError) === "WORKFLOW_SELECTION_SKIPPED" || !isCurrentStaging()) return;
+    input.setOriginalState(activeWorkflow.getOriginal());
+    input.setModifiedState(activeWorkflow.getModified());
+    const failedRole = activeRole || "output";
+    if (!hasSourceQueueWarning(readStagedRoleSource(activeWorkflow, failedRole))) {
+      input.setWorkflowMessage(failedRole, normalizedError);
+    }
+    input.onError?.(normalizedError);
+  };
+
+  const finish = async (detachProgress: () => void) => {
+    try {
+      await stageRoles();
+    } catch (error) {
+      reportFailure(error);
+    } finally {
+      detachProgress();
+      if (isCurrentStaging()) {
+        input.setStagingRole(null);
+        input.clearInputProgress();
+      }
+    }
+  };
+
+  return { finish };
+};
+
 const finishCreateRoleStaging = (
   role: "modified" | "original",
   roleGeneration: number,
@@ -575,147 +754,88 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       const CreateWorkflowConstructor =
         createWorkflowOverride || (hasSource ? (await loadBrowserApi()).CreateWorkflow : null);
       if (disposed) return;
-      const previousSync = stagedCreateWorkflowSyncRef.current;
-      const settingsChanged = previousSync.settingsKey !== stagingSettingsKey;
-      const originalKeyChanged = previousSync.originalKey !== originalSourceKey;
-      const modifiedKeyChanged = previousSync.modifiedKey !== modifiedSourceKey;
-      const sourceCleared = (originalKeyChanged && !original) || (modifiedKeyChanged && !modified);
-      const workflowReset = settingsChanged || sourceCleared;
-      const originalChanged = settingsChanged || originalKeyChanged || (workflowReset && !!original);
-      const modifiedChanged = settingsChanged || modifiedKeyChanged || (workflowReset && !!modified);
-      let workflow = stagedCreateWorkflowRef.current;
-      const generation = workflowReset
-        ? ++stagedCreateWorkflowGenerationRef.current
-        : stagedCreateWorkflowGenerationRef.current;
-      if (workflowReset) {
-        workflow?.dispose().catch(() => undefined);
-        workflow = null;
-        stagedCreateWorkflowRef.current = null;
-      }
-      const originalGeneration = originalChanged
-        ? ++stagingOriginalGenerationRef.current
-        : stagingOriginalGenerationRef.current;
-      const modifiedGeneration = modifiedChanged
-        ? ++stagingModifiedGenerationRef.current
-        : stagingModifiedGenerationRef.current;
+      const { modifiedChanged, originalChanged, workflowReset } = resolveCreateStagingPlan(
+        stagedCreateWorkflowSyncRef.current,
+        { modified, modifiedSourceKey, original, originalSourceKey, settingsKey: stagingSettingsKey },
+      );
+      const claimed = claimCreateStagingPass({
+        generationRefs: {
+          modified: stagingModifiedGenerationRef,
+          original: stagingOriginalGenerationRef,
+          workflow: stagedCreateWorkflowGenerationRef,
+        },
+        modifiedChanged,
+        originalChanged,
+        syncKeys: {
+          modifiedKey: modifiedSourceKey,
+          originalKey: originalSourceKey,
+          settingsKey: stagingSettingsKey,
+        },
+        syncRef: stagedCreateWorkflowSyncRef,
+        workflowReset,
+        workflowRef: stagedCreateWorkflowRef,
+      });
+      const { generation, modifiedGeneration, originalGeneration } = claimed;
       if (originalChanged) setOriginalState(null);
       if (modifiedChanged) setModifiedState(null);
-      stagedCreateWorkflowSyncRef.current = {
-        modifiedKey: modifiedSourceKey,
-        originalKey: originalSourceKey,
-        settingsKey: stagingSettingsKey,
-      };
       if (!(original || modified)) {
         setStagingRole(null);
         setProgress((current) => (current?.stage === "input" ? null : current));
         return;
       }
-      if (!workflow) {
-        if (!CreateWorkflowConstructor) return;
-        workflow = new CreateWorkflowConstructor({
-          ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-          id: `${workflowIdRef.current}:stage:${generation}`,
-          selectFile: async (request) =>
-            createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
-          settings: stagingSettingsRef.current,
-        });
-        stagedCreateWorkflowRef.current = workflow;
-      }
-      const activeWorkflow = workflow;
+      const activeWorkflow =
+        claimed.workflow ??
+        (CreateWorkflowConstructor
+          ? new CreateWorkflowConstructor({
+              ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+              id: `${workflowIdRef.current}:stage:${generation}`,
+              selectFile: async (request) =>
+                createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
+              settings: stagingSettingsRef.current,
+            })
+          : null);
+      if (!activeWorkflow) return;
+      stagedCreateWorkflowRef.current = activeWorkflow;
       const handleProgress = createProgressHandler("input");
       activeWorkflow.on("progress", handleProgress);
-      const isCurrentStaging = () =>
-        stagedCreateWorkflowGenerationRef.current === generation && stagedCreateWorkflowRef.current === activeWorkflow;
-      const isCurrentRoleStaging = (role: "modified" | "original", roleGeneration: number) =>
-        isCurrentStaging() &&
-        (role === "original"
-          ? stagingOriginalGenerationRef.current === roleGeneration
-          : stagingModifiedGenerationRef.current === roleGeneration);
-      const enqueueSourceStage = (role: "modified" | "original", run: () => Promise<void>) => {
-        const queued = sourceStageQueueRef.current
-          .catch(() => undefined)
-          .then(async () => {
-            if (!isCurrentStaging()) return;
-            setStagingRole(role);
-            await run();
-          });
-        sourceStageQueueRef.current = queued.then(
-          () => undefined,
-          () => undefined,
-        );
-        return queued;
-      };
-      const stageCreateRole = async (
-        role: "modified" | "original",
-        changed: boolean,
-        source: BinarySource | null,
-        roleGeneration: number,
-        setSource: () => Promise<void>,
-        commit: () => void,
-      ) => {
-        if (!changed) return true;
-        if (!source) return true;
-        await enqueueSourceStage(role, setSource);
-        return finishCreateRoleStaging(role, roleGeneration, isCurrentStaging, isCurrentRoleStaging, commit, () =>
-          clearProgressForStage("input"),
-        );
-      };
-      let activeRole: "modified" | "original" | null = null;
-      const stageCreateRoles = async () => {
-        if (originalChanged && original) {
-          activeRole = "original";
-          const originalStaged = await stageCreateRole(
-            "original",
-            originalChanged,
-            original,
-            originalGeneration,
-            () => activeWorkflow.setOriginal(original),
-            () => setOriginalState(activeWorkflow.getOriginal()),
-          );
-          if (!originalStaged) return false;
-          activeRole = null;
-        }
-        if (modifiedChanged && modified) {
-          activeRole = "modified";
-          const modifiedStaged = await stageCreateRole(
-            "modified",
-            modifiedChanged,
-            modified,
-            modifiedGeneration,
-            () => activeWorkflow.setModified(modified),
-            () => setModifiedState(activeWorkflow.getModified()),
-          );
-          if (!modifiedStaged) return false;
-          activeRole = null;
-        }
-        return true;
-      };
-      const finishStaging = async () => {
-        try {
-          if (!(await stageCreateRoles())) return;
-        } catch (error) {
-          const normalizedError = error instanceof Error ? error : new Error(String(error));
-          const code = getErrorCode(normalizedError);
-          if (code === "WORKFLOW_SELECTION_SKIPPED" || !isCurrentStaging()) return;
-          setOriginalState(activeWorkflow.getOriginal());
-          setModifiedState(activeWorkflow.getModified());
-          const failedRole = activeRole || "output";
-          const failedSource =
-            failedRole === "original"
-              ? activeWorkflow.getOriginal()
-              : failedRole === "modified"
-                ? activeWorkflow.getModified()
-                : null;
-          if (!hasSourceQueueWarning(failedSource)) setWorkflowMessage(failedRole, normalizedError);
-          onError?.(normalizedError);
-        } finally {
-          activeWorkflow.off("progress", handleProgress);
-          if (isCurrentStaging()) {
-            setStagingRole(null);
-            clearProgressForStage("input");
-          }
-        }
-      };
+      const session = createCreateStagingSession({
+        activeWorkflow,
+        clearInputProgress: () => clearProgressForStage("input"),
+        generation,
+        generationRefs: {
+          modified: stagingModifiedGenerationRef,
+          original: stagingOriginalGenerationRef,
+          workflow: stagedCreateWorkflowGenerationRef,
+        },
+        onError,
+        queueRef: sourceStageQueueRef,
+        // Original first: the diff reads it as the base, so a modified source
+        // staged against a half-set original would derive the wrong patch.
+        rolePlan: [
+          {
+            changed: originalChanged,
+            commit: () => setOriginalState(activeWorkflow.getOriginal()),
+            generation: originalGeneration,
+            role: "original",
+            setSource: () => activeWorkflow.setOriginal(original as BinarySource),
+            source: original,
+          },
+          {
+            changed: modifiedChanged,
+            commit: () => setModifiedState(activeWorkflow.getModified()),
+            generation: modifiedGeneration,
+            role: "modified",
+            setSource: () => activeWorkflow.setModified(modified as BinarySource),
+            source: modified,
+          },
+        ],
+        setModifiedState,
+        setOriginalState,
+        setStagingRole,
+        setWorkflowMessage,
+        workflowRef: stagedCreateWorkflowRef,
+      });
+      const finishStaging = () => session.finish(() => activeWorkflow.off("progress", handleProgress));
       void finishStaging();
       cleanup = () => activeWorkflow.off("progress", handleProgress);
     };

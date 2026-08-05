@@ -1671,3 +1671,7 @@ impl ChdContainerHandler {
         Ok(attach_emitted_file_paths(report, &produced_outputs))
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/disc_extract.rs"]
+mod disc_extract_tests;

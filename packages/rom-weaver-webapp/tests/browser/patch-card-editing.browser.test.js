@@ -92,6 +92,12 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; exp
   expect(bundleFormat.value).toBe("");
   expect(document.getElementById("rom-weaver-button-export-bundle")).toBeNull();
 
+  // Compact patch cards must let the open menu escape the card's paint boundary.
+  const patchMenuButton = document.getElementById("rom-weaver-patch-menu-0");
+  patchMenuButton?.click();
+  await expect.poll(() => document.querySelector("#rom-weaver-list-patch-stack .patch-menu-list")?.hidden).toBe(false);
+  expect(getComputedStyle(patchMenuButton?.closest(".card") || document.body).contain).not.toContain("paint");
+
   // The pencil on the card opens the name/description editors in place; the
   // same control (now a check) closes them. No mode, no hash.
   document.getElementById("rom-weaver-patch-meta-edit-0")?.click();
@@ -241,6 +247,8 @@ test("two freshly added checks hand off focus once each instead of trading it fo
      renders again. The cap keeps a regression a failed assertion instead of a
      hung browser. */
   const FOCUS_CAP = 25;
+  // The saved method is called with each element as its receiver.
+  // oxlint-disable-next-line typescript/unbound-method
   const realFocus = HTMLElement.prototype.focus;
   let focusCalls = 0;
   HTMLElement.prototype.focus = function countedFocus(...args) {

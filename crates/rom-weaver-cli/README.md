@@ -104,10 +104,10 @@ A few commands and flags answer to more than one name: `weave` is the short
 name for `patch apply`, `inspect` for `probe`, and `trim --untrim`/`--restore`
 for `trim --revert`. Format names have alternates too, so `--format 7zip` and
 `--format 7z` are the same. The
-[CLI guide](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli/reference.md#alternate-names)
+[CLI guide](https://rom-weaver.com/docs/cli#alternate-names)
 lists them all.
 
-The [CLI reference](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli/reference.md)
+The [CLI reference](https://rom-weaver.com/docs/cli)
 covers every command, the supported-format tables, compression settings, JSON
 output, man pages, Docker usage, and file permissions.
 
@@ -130,8 +130,8 @@ seam between the native and wasm frontends, not a supported API.
 
 ## Documentation
 
-- [CLI reference](https://github.com/rom-weaver/rom-weaver/blob/main/docs/cli/reference.md)
-- [Documentation index](https://github.com/rom-weaver/rom-weaver/blob/main/docs/README.md)
+- [CLI reference](https://rom-weaver.com/docs/cli)
+- [Documentation index](https://rom-weaver.com/docs)
 - [Project README](https://github.com/rom-weaver/rom-weaver#readme)
 
 ## License

@@ -7,7 +7,8 @@
   "options": {
     "denyWarnings": true,
     "reportUnusedDisableDirectives": "error",
-    "respectEslintDisableDirectives": false
+    "respectEslintDisableDirectives": false,
+    "typeAware": true
   },
   "rules": {
     "no-alert": "error",
@@ -17,6 +18,16 @@
     "eslint/no-unused-vars": "error",
     "eslint/no-control-regex": "error",
     "typescript/no-explicit-any": "error",
+    "typescript/no-base-to-string": "off",
+    "typescript/no-meaningless-void-operator": "error",
+    "typescript/no-misused-spread": "error",
+    "typescript/no-redundant-type-constituents": "off",
+    "typescript/no-floating-promises": [
+      "error",
+      {
+        "allowForKnownSafeCalls": ["describe", "it", "test"]
+      }
+    ],
     "unicorn/no-single-promise-in-promise-methods": "error",
     "unicorn/require-number-to-fixed-digits-argument": "error",
     "unicorn/no-useless-fallback-in-spread": "error",

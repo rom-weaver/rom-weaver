@@ -253,7 +253,7 @@ self.addEventListener("install", () => {
     precacheName: PRECACHE_NAME,
     precacheVersion: PRECACHE_VERSION,
   });
-  if (isFirstInstall) self.skipWaiting();
+  if (isFirstInstall) void self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -295,7 +295,7 @@ self.addEventListener("message", (event) => {
   // "skip-waiting" (action) is the app's own convention. Accept both.
   if (event.data.type === "SKIP_WAITING" || event.data.action === "skip-waiting") {
     logServiceWorker("message received; calling skipWaiting");
-    self.skipWaiting();
+    void self.skipWaiting();
     return;
   }
 

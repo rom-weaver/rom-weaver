@@ -670,3 +670,7 @@ fn unique_formats(groups: &[&[&'static str]]) -> Vec<&'static str> {
     }
     out
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/typegen_main.rs"]
+mod typegen_main_tests;

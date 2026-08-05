@@ -319,7 +319,7 @@ const PatchHeaderModeSelect = ({
         onChange={(event) => {
           const next = event.currentTarget.value;
           // Auto clears the pin - the engine's checksum-driven decision applies again.
-          void patchStack.setPatchOption?.(index, {
+          patchStack.setPatchOption?.(index, {
             header: next === "keep" || next === "strip" ? next : undefined,
             revalidate: true,
           });
@@ -367,7 +367,7 @@ const PatchN64ByteOrderSelect = ({
         id={`rom-weaver-patch-n64-byte-order-${index}`}
         onChange={(event) => {
           const next = event.currentTarget.value;
-          void patchStack.setPatchOption?.(index, {
+          patchStack.setPatchOption?.(index, {
             n64ByteOrder:
               next === "keep" || next === "big-endian" || next === "little-endian" || next === "byte-swapped"
                 ? next
@@ -663,10 +663,8 @@ const PatchChecksDrawer = ({
   // ROM re-verifies immediately (card coloring) and the apply enforces it.
   const syncEndpointValidation = (side: "input" | "output", checksums: Record<string, string>) => {
     const preferred = checksums.sha1 || checksums.md5 || checksums.crc32 || "";
-    if (side === "input" && isChainInput)
-      void setOption?.(index, { revalidate: true, validateInputChecksum: preferred });
-    if (side === "output" && isChainOutput)
-      void setOption?.(index, { revalidate: true, validateOutputChecksum: preferred });
+    if (side === "input" && isChainInput) setOption?.(index, { revalidate: true, validateInputChecksum: preferred });
+    if (side === "output" && isChainOutput) setOption?.(index, { revalidate: true, validateOutputChecksum: preferred });
   };
   const commitCheck = (side: "input" | "output", algorithm: CheckAlgorithm, raw: string) => {
     const value = normalizeCheckInput(raw);
@@ -779,7 +777,7 @@ const PatchChecksDrawer = ({
                     // Auto clears the pin - checksum inference decides again. The basis
                     // feeds the chain plan, so re-resolve the verdicts either way.
                     onMetaChange({ basis });
-                    void setOption?.(index, { basis, revalidate: true });
+                    setOption?.(index, { basis, revalidate: true });
                   }}
                   title="Which ROM this patch's input checks describe: the base ROM (verified once up front) or the previous patch's output."
                   value={meta?.basis || ""}

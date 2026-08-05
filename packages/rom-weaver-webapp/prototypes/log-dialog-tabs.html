@@ -1,0 +1,723 @@
+<!doctype html>
+<html data-accent="madder" data-theme="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport" />
+    <title>rom-weaver — status/logs dialog: tab treatments + log controls</title>
+    <style>
+      /* ═════════════════════════════════════════════════════════════════════
+         Two open questions from PR #367 review, side by side at real size:
+
+           1. the dialog tabs "need to be more distinct" — four treatments,
+              A is exactly what ships today so the others read as deltas.
+           2. the logs tab "needs all existing buttons for last and current
+              log" — four control layouts for the same row.
+
+         Tokens and component CSS are lifted verbatim from tokens.css /
+         dialogs.css so anything picked here ports as-is. Every frame is a real
+         dialog head at its real width; the phone column is 390px, the desktop
+         column is the dialog's own max.
+         ═════════════════════════════════════════════════════════════════════ */
+      :root {
+        --thread: #d9690f;
+        --thread-ink: #1c1206;
+        --thread-hi: #fccb90;
+        --font: "Archivo", "Segoe UI", system-ui, sans-serif;
+        --r-s: 6px;
+        --r-m: 9px;
+        --r-l: 13px;
+        --sp-2xs: 2px;
+        --sp-xs: 4px;
+        --sp-s: clamp(6px, 2.5px + 0.625vw, 8px);
+        --sp-m: clamp(8px, 1px + 1.25vw, 12px);
+        --sp-l: clamp(11px, 2.25px + 1.5625vw, 16px);
+        --sp-xl: clamp(16px, 2px + 2.5vw, 24px);
+        --ease: cubic-bezier(0.2, 0.85, 0.3, 1);
+      }
+      :root[data-theme="dark"] {
+        --chassis: #0c0f13;
+        --plate: #161b21;
+        --plate-2: #1c222a;
+        --well: #0f1318;
+        --seam: #39414e;
+        --seam-soft: #2c333f;
+        --seam-strong: #4b5564;
+        --ink: #edf0f5;
+        --ink-2: #b3bbc8;
+        --ink-3: #9aa3b1;
+        --ink-4: #939cab;
+        --weft: #e7d3a8;
+        --thread-text: #ef8534;
+        --verified: #69aa84;
+        --fault: #e0606a;
+        --care: #d8a64f;
+        --overlay-shadow: 0 24px 64px -24px rgb(0 0 0 / 0.7), 0 4px 16px rgb(0 0 0 / 0.35);
+        color-scheme: dark;
+      }
+      :root[data-theme="light"] {
+        --chassis: #ece9e1;
+        --plate: #ffffff;
+        --plate-2: #f7f5ef;
+        --well: #efede6;
+        --seam: #d4d2ca;
+        --seam-soft: #e1dfd8;
+        --seam-strong: #b4b1a6;
+        --ink: #1a1d22;
+        --ink-2: #4b5159;
+        --ink-3: #62686f;
+        --ink-4: #686d76;
+        --weft: #92400e;
+        --thread-text: #b03a0a;
+        --verified: #04684e;
+        --fault: #b91c1c;
+        --care: #c4870f;
+        --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / 0.35), 0 4px 14px rgb(35 30 18 / 0.14);
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: var(--sp-xl);
+        font-family: var(--font);
+        color: var(--ink);
+        background: var(--chassis);
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 1.05rem;
+        letter-spacing: 0.01em;
+      }
+      h2 {
+        margin: 32px 0 4px;
+        font-size: 0.95rem;
+      }
+      .lede,
+      .note {
+        margin: 0 0 18px;
+        max-width: 62ch;
+        font-size: 0.8rem;
+        line-height: 1.55;
+        color: var(--ink-3);
+      }
+      .rig {
+        display: flex;
+        gap: var(--sp-m);
+        align-items: center;
+        flex-wrap: wrap;
+        padding: var(--sp-m);
+        margin-block-end: 24px;
+        border: 1px dashed var(--seam-strong);
+        border-radius: var(--r-m);
+        font-size: 0.76rem;
+        color: var(--ink-3);
+      }
+      .rig button {
+        appearance: none;
+        min-height: 30px;
+        padding: 0 12px;
+        font: inherit;
+        font-weight: 650;
+        color: var(--ink-2);
+        cursor: pointer;
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      .rig button[aria-pressed="true"] {
+        color: var(--thread-ink);
+        background: var(--thread);
+        border-color: var(--thread);
+      }
+
+      /* ── the specimen grid ── */
+      .specimens {
+        display: grid;
+        gap: 22px;
+      }
+      .specimen {
+        display: grid;
+        gap: 10px;
+      }
+      .caption {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+      .caption b {
+        font-size: 0.84rem;
+      }
+      .caption span {
+        font-size: 0.74rem;
+        line-height: 1.5;
+        color: var(--ink-3);
+      }
+      .caption em {
+        font-style: normal;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--thread-text);
+      }
+      .widths {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 390px;
+        gap: 14px;
+        align-items: start;
+      }
+      @media (max-width: 900px) {
+        .widths {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .width-label {
+        margin: 0 0 5px;
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-4);
+      }
+
+      /* ── real dialog chrome, from dialogs.css ── */
+      .dlg-frame {
+        border: 1px solid var(--seam-strong);
+        border-radius: var(--r-l);
+        background: var(--plate);
+        box-shadow: var(--overlay-shadow);
+        overflow: clip;
+      }
+      .dlg-head {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: var(--sp-m);
+        align-items: flex-end;
+        padding: var(--sp-l) var(--sp-l) 0;
+        border-block-end: 1px solid var(--seam-soft);
+      }
+      .dlg-x {
+        appearance: none;
+        flex: none;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        margin-block-end: var(--sp-s);
+        color: var(--ink-3);
+        cursor: pointer;
+        background: transparent;
+        border: 1px solid var(--seam-strong);
+        border-radius: var(--r-s);
+      }
+      .dlg-x svg {
+        width: 15px;
+        height: 15px;
+      }
+      .log-actions {
+        display: flex;
+        flex: none;
+        gap: var(--sp-s);
+        align-items: center;
+        margin-inline-start: auto;
+        margin-block-end: var(--sp-s);
+      }
+      .log-icon-btn {
+        appearance: none;
+        flex: 0 0 30px;
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        padding: 0;
+        color: var(--ink-2);
+        cursor: pointer;
+        background: transparent;
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      .log-icon-btn svg {
+        width: 15px;
+        height: 15px;
+      }
+      .body-stub {
+        padding: var(--sp-l);
+        font-size: 0.74rem;
+        font-family: ui-monospace, monospace;
+        color: var(--ink-4);
+        background: var(--well);
+      }
+
+      /* ── A · shipping: bare label + weft on the head rule ── */
+      .subrail {
+        position: relative;
+        display: flex;
+        flex: 1 1 0;
+        gap: var(--sp-xs);
+        min-inline-size: 0;
+        padding: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+        scroll-snap-type: inline proximity;
+        background: transparent;
+      }
+      .subrail::-webkit-scrollbar {
+        display: none;
+      }
+      .subtab {
+        scroll-snap-align: start;
+        display: inline-flex;
+        gap: var(--sp-s);
+        align-items: center;
+        min-height: 36px;
+        padding: 4px 12px 7px;
+        font: inherit;
+        font-size: 0.8rem;
+        font-weight: 650;
+        color: var(--ink-3);
+        white-space: nowrap;
+        appearance: none;
+        cursor: pointer;
+        background: transparent;
+        border: 0;
+        border-block-end: 2px solid transparent;
+        border-radius: var(--r-s) var(--r-s) 0 0;
+      }
+      .subtab[aria-selected="true"] {
+        color: var(--thread-text);
+        border-block-end-color: var(--thread);
+      }
+
+      /* ── B · chips: every tab gets its own resting box ── */
+      [data-variant="chips"] .subrail {
+        gap: var(--sp-s);
+        padding-block-end: var(--sp-s);
+        align-items: center;
+      }
+      [data-variant="chips"] .subtab {
+        min-height: 32px;
+        padding: 4px 13px;
+        color: var(--ink-2);
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: 999px;
+      }
+      [data-variant="chips"] .subtab[aria-selected="true"] {
+        color: var(--thread-ink);
+        background: var(--thread);
+        border-color: var(--thread);
+        box-shadow: 0 1px 3px -1px color-mix(in oklab, var(--thread) 60%, transparent);
+      }
+
+      /* ── C · segmented track, same pattern as the masthead mode rail ── */
+      [data-variant="segmented"] .subrail {
+        flex: 0 1 auto;
+        gap: var(--sp-2xs);
+        padding: 3px;
+        margin-block-end: var(--sp-s);
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-m);
+      }
+      [data-variant="segmented"] .subtab {
+        min-height: 28px;
+        padding: 4px 12px;
+        color: var(--ink-3);
+        border-block-end: 0;
+        border-radius: var(--r-s);
+      }
+      [data-variant="segmented"] .subtab[aria-selected="true"] {
+        color: var(--thread-ink);
+        background: var(--thread);
+      }
+
+      /* ── D · the weft, doubled: tinted riser above a 3px rule ── */
+      [data-variant="riser"] .subtab {
+        border-block-end-width: 3px;
+        border-radius: var(--r-s) var(--r-s) 0 0;
+      }
+      [data-variant="riser"] .subtab[aria-selected="true"] {
+        color: var(--thread-text);
+        background: color-mix(in oklab, var(--thread) 15%, transparent);
+      }
+      [data-variant="riser"] .subtab:not([aria-selected="true"]) {
+        color: var(--ink-3);
+      }
+
+      /* the scroll cue every variant shares: a fade at the rail's ends so a
+         part-scrolled tab reads as "more to scroll", not as a broken cut */
+      [data-fade="on"] .subrail {
+        mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+      }
+
+      /* ── the logs control row, from dialogs.css ── */
+      .log-filter-bar {
+        display: flex;
+        gap: var(--sp-s);
+        align-items: center;
+        padding: var(--sp-s) var(--sp-l);
+        border-block-end: 1px solid var(--seam-soft);
+      }
+      .log-filter {
+        flex: 1 1 auto;
+        min-inline-size: 0;
+        height: 30px;
+        padding: 0 10px;
+        font:
+          500 0.76rem ui-monospace,
+          monospace;
+        color: var(--ink);
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      .loglevel {
+        flex: 0 0 auto;
+        height: 30px;
+        padding: 0 6px;
+        font:
+          500 0.76rem ui-monospace,
+          monospace;
+        color: var(--ink-2);
+        background: var(--well);
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      .logview {
+        flex: 0 1 auto;
+        display: flex;
+        gap: var(--sp-2xs);
+        min-inline-size: 0;
+        margin: 0;
+        padding: 3px;
+        background: var(--well);
+        border: 1px solid var(--seam-strong);
+        border-radius: var(--r-s);
+      }
+      .seg-btn {
+        flex: 1 1 0;
+        min-inline-size: 0;
+        height: 28px;
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+        justify-content: center;
+        padding: 0 10px;
+        font: inherit;
+        font-size: 0.76rem;
+        font-weight: 650;
+        letter-spacing: 0.02em;
+        color: var(--ink-3);
+        white-space: nowrap;
+        /* verbatim from dialogs.css: the row squeezes the toggle before the
+           filter, so a cramped phone ellipses the labels rather than wrapping */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+        background: transparent;
+        border: 0;
+        border-radius: calc(var(--r-s) - 3px);
+      }
+      .seg-btn[aria-pressed="true"] {
+        color: var(--thread-ink);
+        background: var(--thread);
+        box-shadow: 0 1px 3px -1px color-mix(in oklab, var(--thread) 55%, transparent);
+      }
+      .seg-btn:disabled {
+        color: var(--ink-4);
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+      .seg-btn svg {
+        width: 13px;
+        height: 13px;
+      }
+      .seg-count {
+        font-size: 0.66rem;
+        font-weight: 700;
+        opacity: 0.75;
+      }
+      .inline-icons {
+        display: inline-flex;
+        gap: 2px;
+        align-items: center;
+        padding-inline-start: 6px;
+        margin-inline-start: 2px;
+        border-inline-start: 1px solid color-mix(in oklab, currentColor 30%, transparent);
+      }
+      .inline-icon {
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        display: grid;
+        place-items: center;
+        padding: 0;
+        color: inherit;
+        cursor: pointer;
+        background: transparent;
+        border: 0;
+        border-radius: 4px;
+      }
+      .inline-icon svg {
+        width: 13px;
+        height: 13px;
+      }
+      .danger-btn {
+        appearance: none;
+        flex: none;
+        height: 30px;
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        padding: 0 11px;
+        font: inherit;
+        font-size: 0.76rem;
+        font-weight: 650;
+        color: var(--ink-2);
+        white-space: nowrap;
+        cursor: pointer;
+        background: transparent;
+        border: 1px solid var(--seam);
+        border-radius: var(--r-s);
+      }
+      .danger-btn svg {
+        width: 13px;
+        height: 13px;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Status &amp; logs dialog — tab treatments and log controls</h1>
+    <p class="lede">
+      Every frame below is the real dialog head at real width, built from the shipped tokens and component CSS. The left
+      column is desktop, the right is a 390px phone. Tabs are clickable. <b>A</b> is what ships today.
+    </p>
+
+    <div class="rig">
+      <span><b>Rig</b></span>
+      <button data-theme-toggle type="button">Toggle light / dark</button>
+      <button aria-pressed="true" data-fade-toggle type="button">Scroll-edge fade</button>
+      <button data-accent-toggle type="button">Swap accent</button>
+      <span>the fade is independent of the four treatments — it fixes the hard-cut tab in the phone screenshot</span>
+    </div>
+
+    <h2>1 · How distinct should the tabs be?</h2>
+    <p class="note">
+      The rail sits on the head's own rule, so the selected tab's weft reads as a mark on a rail. The question is how
+      much box each tab gets at rest.
+    </p>
+    <div class="specimens" id="tab-specimens"></div>
+
+    <h2>2 · The logs row: what exists for the last and current log</h2>
+    <p class="note">
+      Copy and download live in the dialog head and already act on whichever log is shown. The gap is that the
+      <b>Now / Last</b> toggle is rendered only when a previous-session log exists — with none stored, the control
+      disappears entirely and nothing says the feature is there.
+    </p>
+    <div class="specimens" id="log-specimens"></div>
+
+    <script>
+      const ICON = {
+        copy: '<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="13" rx="2" width="13" x="9" y="9"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+        download:
+          '<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
+        close:
+          '<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+        trash:
+          '<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
+      };
+
+      const TABS = ["Settings", "Status", "Logs", "Storage", "Changelog"];
+
+      const TAB_VARIANTS = [
+        {
+          id: "underline",
+          name: "A · bare label + weft",
+          note: "ships today — no box at rest, a 2px thread rule under the selected label",
+          tag: "current",
+        },
+        {
+          id: "chips",
+          name: "B · chips",
+          note: "each tab a pill at rest (well fill, seam border); selected fills with the thread",
+        },
+        {
+          id: "segmented",
+          name: "C · segmented track",
+          note: "one bordered track around all five, selected filled — the masthead mode-rail pattern",
+        },
+        {
+          id: "riser",
+          name: "D · weft, doubled",
+          note: "keeps the underline language: 3px rule plus a tinted riser behind the selected label",
+        },
+      ];
+
+      const LOG_VARIANTS = [
+        {
+          id: "today",
+          name: "1 · today",
+          note: "toggle present only when a previous log exists — shown here in both states",
+          tag: "current",
+          rows: [
+            { label: "with a stored previous log", previous: true, mode: "plain" },
+            { label: "with none stored — the control is simply gone", previous: false, mode: "plain" },
+          ],
+        },
+        {
+          id: "always",
+          name: "2 · always show Now / Last",
+          note: "Last stays, disabled and counted, so the affordance never vanishes",
+          rows: [
+            { label: "with a stored previous log", previous: true, mode: "count" },
+            { label: "with none stored", previous: false, mode: "count" },
+          ],
+        },
+        {
+          id: "perlog",
+          name: "3 · copy + download per log",
+          note: "each side carries its own actions instead of one pair in the head acting on the selection",
+          rows: [{ label: "", previous: true, mode: "perlog" }],
+        },
+        {
+          id: "clear",
+          name: "4 · plus a clear button",
+          note: "nothing today can discard the live buffer or the stored copy",
+          rows: [{ label: "", previous: true, mode: "count", clear: true }],
+        },
+      ];
+
+      const railHtml = (selected) =>
+        `<div aria-label="Status and logs" class="subrail" role="tablist">${TABS.map(
+          (label, index) =>
+            `<button aria-selected="${index === selected}" class="subtab" role="tab" tabindex="${
+              index === selected ? 0 : -1
+            }" type="button">${label}</button>`,
+        ).join("")}</div>`;
+
+      const headHtml = (selected) => `
+        <div class="dlg-head">
+          ${railHtml(selected)}
+          <div class="log-actions">
+            <button aria-label="Copy" class="log-icon-btn" type="button">${ICON.copy}</button>
+            <button aria-label="Download" class="log-icon-btn" type="button">${ICON.download}</button>
+          </div>
+          <button aria-label="Close" class="dlg-x" type="button">${ICON.close}</button>
+        </div>`;
+
+      const viewToggleHtml = (row) => {
+        if (row.mode === "plain" && !row.previous) return "";
+        if (row.mode === "plain") {
+          return `<fieldset class="logview"><legend class="sr-only">Log</legend>
+            <button aria-pressed="true" class="seg-btn" type="button">Now</button>
+            <button aria-pressed="false" class="seg-btn" type="button">Last</button></fieldset>`;
+        }
+        if (row.mode === "perlog") {
+          return `<fieldset class="logview"><legend class="sr-only">Log</legend>
+            <button aria-pressed="true" class="seg-btn" type="button">Now<span class="inline-icons">
+              <span class="inline-icon" title="Copy">${ICON.copy}</span>
+              <span class="inline-icon" title="Download">${ICON.download}</span></span></button>
+            <button aria-pressed="false" class="seg-btn" type="button">Last<span class="inline-icons">
+              <span class="inline-icon" title="Copy">${ICON.copy}</span>
+              <span class="inline-icon" title="Download">${ICON.download}</span></span></button></fieldset>`;
+        }
+        return `<fieldset class="logview"><legend class="sr-only">Log</legend>
+          <button aria-pressed="true" class="seg-btn" type="button">Now</button>
+          <button aria-pressed="false" class="seg-btn"${row.previous ? "" : " disabled"} type="button">Last${
+            row.previous ? '<span class="seg-count">1.2k</span>' : '<span class="seg-count">none</span>'
+          }</button></fieldset>`;
+      };
+
+      const filterBarHtml = (row) => `
+        <div class="log-filter-bar">
+          <input class="log-filter" placeholder="Filter logs…" type="search" />
+          ${viewToggleHtml(row)}
+          ${row.clear ? `<button class="danger-btn" type="button">${ICON.trash}Clear</button>` : ""}
+          <select aria-label="Log level" class="loglevel"><option>level: trace</option></select>
+        </div>`;
+
+      const specimen = (variant, inner) => `
+        <section class="specimen">
+          <div class="caption"><b>${variant.name}</b>${variant.tag ? `<em>${variant.tag}</em>` : ""}<span>${
+            variant.note
+          }</span></div>
+          <div class="widths">
+            <div><p class="width-label">desktop</p>${inner}</div>
+            <div><p class="width-label">phone · 390px</p>${inner}</div>
+          </div>
+        </section>`;
+
+      document.getElementById("tab-specimens").innerHTML = TAB_VARIANTS.map((variant) =>
+        specimen(
+          variant,
+          `<div class="dlg-frame" data-variant="${variant.id}">${headHtml(2)}<div class="body-stub">14:55:54.756 &nbsp;DEBUG &nbsp;webapp &nbsp;Applying runtime settings</div></div>`,
+        ),
+      ).join("");
+
+      document.getElementById("log-specimens").innerHTML = LOG_VARIANTS.map((variant) =>
+        specimen(
+          variant,
+          variant.rows
+            .map(
+              (row) =>
+                `${row.label ? `<p class="width-label" style="margin-block:10px 5px">${row.label}</p>` : ""}
+                 <div class="dlg-frame">${headHtml(2)}${filterBarHtml(row)}<div class="body-stub">14:55:54.756 &nbsp;DEBUG &nbsp;webapp &nbsp;Applying runtime settings</div></div>`,
+            )
+            .join(""),
+        ),
+      ).join("");
+
+      // tabs and segmented buttons stay live so each treatment can be judged in
+      // its selected AND resting state without editing the file
+      document.addEventListener("click", (event) => {
+        const tab = event.target.closest('[role="tab"]');
+        if (tab) {
+          for (const sibling of tab.parentElement.querySelectorAll('[role="tab"]')) {
+            sibling.setAttribute("aria-selected", String(sibling === tab));
+            sibling.tabIndex = sibling === tab ? 0 : -1;
+          }
+          return;
+        }
+        const seg = event.target.closest(".seg-btn");
+        if (seg && !seg.disabled) {
+          for (const sibling of seg.parentElement.querySelectorAll(".seg-btn")) {
+            sibling.setAttribute("aria-pressed", String(sibling === seg));
+          }
+        }
+      });
+
+      const root = document.documentElement;
+      document.querySelector("[data-theme-toggle]").addEventListener("click", () => {
+        root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+      });
+      document.querySelector("[data-accent-toggle]").addEventListener("click", () => {
+        const madder = root.dataset.accent === "madder";
+        root.dataset.accent = madder ? "woad" : "madder";
+        root.style.setProperty("--thread", madder ? "#6d7ce8" : "#d9690f");
+        root.style.setProperty("--thread-ink", madder ? "#0b1030" : "#1c1206");
+        root.style.setProperty("--thread-text", madder ? "#9aa6ff" : "#ef8534");
+      });
+      const fade = document.querySelector("[data-fade-toggle]");
+      const applyFade = () => {
+        root.dataset.fade = fade.getAttribute("aria-pressed") === "true" ? "on" : "off";
+      };
+      fade.addEventListener("click", () => {
+        fade.setAttribute("aria-pressed", String(fade.getAttribute("aria-pressed") !== "true"));
+        applyFade();
+      });
+      applyFade();
+    </script>
+  </body>
+</html>

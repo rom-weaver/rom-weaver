@@ -45,3 +45,7 @@ pub mod util;
 pub mod read;
 
 pub mod write;
+
+#[cfg(all(test, not(target_family = "wasm")))]
+#[path = "../../tests/unit/xdvdfs.rs"]
+mod xdvdfs_tests;

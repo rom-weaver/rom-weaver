@@ -55,8 +55,18 @@ msgstr "7z-Codec"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.updateDesc"
+msgstr "Eine neue Version wurde im Hintergrund geladen. Zum Wechseln neu laden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.masthead.slogan"
 msgstr "Ein ROM- und Patch-Toolkit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.about"
+msgstr "Über rom-weaver, seine Lizenz und seinen Datenschutz"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -85,8 +95,18 @@ msgstr "wird nach Patch {n} angewendet"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.apply"
+msgstr "Anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
 msgstr "Patches auf jede ROM anwenden, komprimiert oder unkomprimiert,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.PATCH_APPLY_FAILED"
+msgstr "Das Anwenden des Patches ist fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -120,8 +140,28 @@ msgstr "Basis-ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.channel.beta"
+msgstr "Beta-Build"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.rvzBlockSize"
 msgstr "Blockgröße"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.branch"
+msgstr "Branch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.envWeb"
+msgstr "Browser-Tab"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingDesc"
+msgstr "Die App wird für die Offline-Nutzung zwischengespeichert…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -135,6 +175,16 @@ msgstr "CD-Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.tabChangelog"
+msgstr "Änderungen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.channel"
+msgstr "Kanal"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.CHECKSUM_MISMATCH"
 msgstr "Die Prüfsummen-Validierung ist fehlgeschlagen."
 
@@ -142,6 +192,11 @@ msgstr "Die Prüfsummen-Validierung ist fehlgeschlagen."
 #: src/presentation/localization/messages.ts
 msgid "ui.common.close"
 msgstr "Schließen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.commit"
+msgstr "Commit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -170,8 +225,23 @@ msgstr "Dunkel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.defaults"
+msgstr "Standardwerte"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.channel.dev"
+msgstr "Dev-Build"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.dismiss"
 msgstr "Verwerfen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.docs"
+msgstr "Doku"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -205,6 +275,11 @@ msgstr "Beta-Tools aktivieren (Trimmen und Tools)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.environment"
+msgstr "Umgebung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.differentRom"
 msgstr "erwartete eine andere ROM"
 
@@ -232,6 +307,16 @@ msgstr "Reihenfolge korrigieren"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "ROM-Header korrigieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.envPwa"
+msgstr "Installierte App (PWA)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installing"
+msgstr "Offline-Kopie wird installiert"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -290,6 +375,11 @@ msgstr "Protokollstufe"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.tabLogs"
+msgstr "Protokoll"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.matchesRom"
 msgstr "passt zu deiner ROM"
 
@@ -305,8 +395,18 @@ msgstr "Modifiziert"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.more"
+msgstr "Mehr"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.AMBIGUOUS_SELECTION"
 msgstr "Mehrere passende Dateien wurden gefunden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.channel.nightly"
+msgstr "Nightly-Build"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -327,6 +427,26 @@ msgstr "Keine wählbare Datei gefunden."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Aktuell"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.offline"
+msgstr "Offline"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.active"
+msgstr "Offline aktiv"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.ready"
+msgstr "Offline bereit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.disabled"
+msgstr "Offline-Modus aus"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -385,8 +505,23 @@ msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.channel.preview"
+msgstr "Vorschau-Build"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "vorherige Ausgabe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.pullRequest"
+msgstr "Pull Request"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.channel.prPreview"
+msgstr "Pull-Request-Vorschau"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -450,6 +585,16 @@ msgstr "rom-weaver fertig in {t}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.home"
+msgstr "rom-weaver Startseite"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.readyDesc"
+msgstr "rom-weaver ist in diesem Browser zwischengespeichert. Der nächste Besuch lädt aus dieser Kopie, mit oder ohne Netzwerk."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.rvzCodec"
 msgstr "RVZ"
 
@@ -465,13 +610,23 @@ msgstr "RVZ-Codec"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.wakelock.text"
-msgstr "Der Bildschirm bleibt aktiv, solange ein Job läuft."
+msgid "ui.settings.save"
+msgstr "Speichern"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.tabsLabel"
+msgstr "Bereiche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Einstellungen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.dialogLabel"
+msgstr "Einstellungen und Status"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -487,6 +642,16 @@ msgstr "Schnellstart-Tipps („New here?“) anzeigen"
 #: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Zum Hauptinhalt springen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.tabStatus"
+msgstr "Status"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.tabStorage"
+msgstr "Speicher"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -560,6 +725,16 @@ msgstr "Der gewählte Quelltyp wird nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.disabledDesc"
+msgstr "Der Service Worker ist aus — rom-weaver braucht bei jedem Besuch das Netz. Das Patchen läuft trotzdem komplett auf diesem Gerät."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.activeDesc"
+msgstr "Der Service Worker hat diese Seite aus dem Cache ausgeliefert, rom-weaver läuft also ohne Netzwerk."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.theme"
 msgstr "Design"
 
@@ -590,6 +765,11 @@ msgstr "Verwandle eine Original-ROM und ihre modifizierte Version, ob komprimier
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.update"
+msgstr "Update verfügbar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Update bereit"
 
@@ -605,13 +785,18 @@ msgstr "wird beim Anwenden überprüft"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.step.apply"
-msgstr "Anwenden"
+msgid "ui.status.version"
+msgstr "Version"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "error.PATCH_APPLY_FAILED"
-msgstr "Das Anwenden des Patches ist fehlgeschlagen."
+msgid "ui.tools.github"
+msgstr "Quelltext auf GitHub"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.offlineLegend"
+msgstr "Was die Offline-Zustände bedeuten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -622,6 +807,11 @@ msgstr "Neuigkeiten"
 #: src/presentation/localization/messages.ts
 msgid "error.WORKER_FAILED"
 msgstr "Die Worker-Ausführung ist fehlgeschlagen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.primary"
+msgstr "Arbeitsablauf"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

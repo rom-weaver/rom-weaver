@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createLogger } from "../lib/logging.ts";
+import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
 
 /**
  * Accent dye lots. The accent is the second theme axis alongside dark/light:
@@ -14,28 +15,7 @@ import { createLogger } from "../lib/logging.ts";
 
 const logger = createLogger("accent");
 
-/**
- * The dye lots, in the settings picker's order. Source of truth for the
- * `--thread` / `--thread-hi` literals in design-system/accents.css (asserted by
- * tests/unit/accent-palette.test.ts) and for the per-channel app icons that
- * scripts/generate-channel-icons.mjs rasterizes.
- *
- * `highlight` is the logo's specular tint: hue and saturation of the swatch at
- * `l + (100 - l) * 0.6`. Madder keeps the hand-picked value it has always
- * shipped (the rule would land 4 points off) so the stock mark is unchanged.
- */
-const ACCENTS = [
-  { highlight: "#fccb90", label: "Madder", swatch: "#d9690f", value: "madder" },
-  { highlight: "#c5cbf6", label: "Woad", swatch: "#6d7ce8", value: "woad" },
-  { highlight: "#d7c3f3", label: "Violet", swatch: "#9a6ae0", value: "violet" },
-  { highlight: "#aee1c6", label: "Verdigris", swatch: "#3faa72", value: "verdigris" },
-  { highlight: "#9fe2e7", label: "Teal", swatch: "#2aa0a8", value: "teal" },
-  { highlight: "#eac1db", label: "Plum", swatch: "#cb63a5", value: "plum" },
-] as const;
-
 type Accent = (typeof ACCENTS)[number]["value"];
-
-const DEFAULT_ACCENT: Accent = "madder";
 const ACCENT_VALUES: readonly string[] = ACCENTS.map((accent) => accent.value);
 
 const isAccent = (value: unknown): value is Accent => typeof value === "string" && ACCENT_VALUES.includes(value);

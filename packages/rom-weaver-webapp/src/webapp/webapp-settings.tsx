@@ -4,9 +4,7 @@ import { CodecCombobox } from "../public/react/components/ds/codec-combobox.tsx"
 import { CompressInfoContent } from "../public/react/components/ds/compress-panel.tsx";
 import { COMPRESSION_PROFILE_FIELD_INFO } from "../public/react/compress-options.ts";
 import { ACCENTS } from "./accent.ts";
-import { RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
-import { LICENSE_URL, NOTICE_URL, PRIVACY_URL } from "./project-links.ts";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import { useTheme, type ThemePreference } from "./theme.ts";
 import type { SettingsDraftState, SettingsFieldKey, SettingsUiState } from "./settings/settings-state.ts";
@@ -44,9 +42,6 @@ type SettingsPanelProps = Omit<SettingsFieldShared, "uiState"> & {
   // Derived from `draftSettings` when omitted: keeping the derivation in here is
   // what lets the panel's whole metadata graph stay off the shared entry chunk.
   uiState?: SettingsUiState;
-  onClose: () => void;
-  onRestoreDefaults: () => void;
-  onSaveClose: () => void;
 };
 
 type FieldRenderProps = SettingsFieldShared & {
@@ -426,42 +421,12 @@ const SettingsGroup = ({
   );
 };
 
-const AboutSection = () => (
-  <div className="setgroup set-about">
-    <div className="gtitle">About</div>
-    <div className="about-line mono">
-      rom-weaver{RESOLVED_APP_BUILD_VERSION ? ` ${RESOLVED_APP_BUILD_VERSION}` : ""}
-    </div>
-    <div className="about-line">
-      © Brandon Casey. Free and open-source software under the{" "}
-      <a href={LICENSE_URL} rel="noreferrer" target="_blank">
-        GNU AGPL v3 (or later) license
-      </a>
-      .
-    </div>
-    <div className="about-line">
-      Built with open-source components (nod, libarchive, chd-rs, and others) used under their own licenses; see the{" "}
-      <a href={NOTICE_URL} rel="noreferrer" target="_blank">
-        notices and attribution
-      </a>
-      .
-    </div>
-    <div className="about-line">
-      Files are processed locally in your browser. Read the{" "}
-      <a href={PRIVACY_URL} rel="noreferrer" target="_blank">
-        privacy page
-      </a>{" "}
-      for storage and network details.
-    </div>
-  </div>
-);
-
 function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: SettingsPanelProps): ReactNode {
   const shared = { draftSettings, onDraftChange, uiState: uiState ?? getSettingsUiState(draftSettings), validation };
   const fullWidthSections = settingsPanelSections.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
   const gridSections = settingsPanelSections.filter((section) => FORMAT_GROUP_TITLES.has(section.title));
   return (
-    <div>
+    <div className="settings-panel">
       {fullWidthSections.map((section) => (
         <SettingsGroup key={section.title} section={section} {...shared} />
       ))}
@@ -475,7 +440,6 @@ function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: Se
           {validation.messages.join(" ")}
         </div>
       ) : null}
-      <AboutSection />
     </div>
   );
 }

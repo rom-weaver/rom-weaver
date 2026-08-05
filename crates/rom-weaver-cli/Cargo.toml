@@ -25,10 +25,10 @@ crc32fast.workspace = true
 flate2.workspace = true
 miniz_oxide.workspace = true
 rayon.workspace = true
-rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.11.1" }
-rom-weaver-containers = { path = "../rom-weaver-containers", version = "0.11.1" }
-rom-weaver-core = { path = "../rom-weaver-core", version = "0.11.1" }
-rom-weaver-patches = { path = "../rom-weaver-patches", version = "0.11.1" }
+rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.12.0" }
+rom-weaver-containers = { path = "../rom-weaver-containers", version = "0.12.0" }
+rom-weaver-core = { path = "../rom-weaver-core", version = "0.12.0" }
+rom-weaver-patches = { path = "../rom-weaver-patches", version = "0.12.0" }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
@@ -69,11 +69,19 @@ path = "src/main.rs"
 name = "rom-weaver-app"
 path = "src/wasm_main.rs"
 required-features = ["wasm-app"]
+# Enables `cargo test --features wasm-app --example rom-weaver-app` to run the
+# `#[cfg(test)]` module covering `parse_wasm_run_request` and the panic
+# marker; see tests/unit/wasm_main.rs.
+test = true
 
 [[example]]
 name = "rom-weaver-typegen"
 path = "src/typegen_main.rs"
 required-features = ["typescript-types"]
+# Enables `cargo test --features typescript-types --example rom-weaver-typegen`
+# to run the `#[cfg(test)]` module pinning the generator's output; see
+# tests/unit/typegen_main.rs.
+test = true
 
 [package.metadata.binstall]
 pkg-fmt = "tgz"

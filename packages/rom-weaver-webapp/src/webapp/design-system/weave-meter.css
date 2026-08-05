@@ -1,72 +1,215 @@
 /* Progress meter */
-.rw-app .meter { position: relative; height: 8px; border-radius: 99px; background: var(--well); overflow: clip; box-shadow: inset 0 1px 2px rgb(0 0 0 / .25); }
-:root[data-theme="light"] .meter { box-shadow: inset 0 1px 2px rgb(40 36 28 / .14); }
+.rw-app .meter {
+  position: relative;
+  height: 8px;
+  overflow: clip;
+  background: var(--well);
+  border-radius: 99px;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.25);
+}
+:root[data-theme="light"] .meter {
+  box-shadow: inset 0 1px 2px rgb(40 36 28 / 0.14);
+}
 .rw-app .meter::before {
-  content: ""; position: absolute; inset: 0;
-  background: repeating-linear-gradient(90deg, color-mix(in oklab, var(--thread) 22%, var(--well)) 0 1px, transparent 1px 7px);
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--thread) 22%, var(--well)) 0 1px,
+    transparent 1px 7px
+  );
 }
 .rw-app .meter .fill {
-  position: relative; height: 100%; width: var(--p, 0%); border-radius: 99px;
+  position: relative;
+  width: var(--p, 0%);
+  height: 100%;
   background: var(--thread);
-  transition: width .4s var(--ease);
+  border-radius: 99px;
+  transition: width 0.4s var(--ease);
 }
 /* Keep the texture subtle enough that the fill reads as solid. */
 .rw-app .meter .fill::after {
-  content: ""; position: absolute; inset: 0; border-radius: inherit;
-  background: rgb(255 255 255 / .16);
-  mask-image: var(--weave-mask); mask-size: 6px 6px;
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: rgb(255 255 255 / 0.16);
+  border-radius: inherit;
+  mask-image: var(--weave-mask);
+  mask-size: 6px 6px;
 }
 .rw-app .meter .fill::before {
-  content: ""; position: absolute; inset-block: 0; right: 0; width: 4px; border-radius: 99px;
-  background: var(--shuttle); box-shadow: 0 0 6px color-mix(in srgb, var(--shuttle) 70%, transparent);
-  opacity: 0; transition: opacity .25s;
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  width: 4px;
+  content: "";
+  background: var(--shuttle);
+  border-radius: 99px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--shuttle) 70%, transparent);
+  opacity: 0;
+  transition: opacity 0.25s;
 }
-.rw-app .running .meter .fill::before, .rw-app .meter.live .fill::before { opacity: 1; }
-.rw-app .meter.indet .fill::before { opacity: 0; }
+.rw-app .running .meter .fill::before,
+.rw-app .meter.live .fill::before {
+  opacity: 1;
+}
+.rw-app .meter.indet .fill::before {
+  opacity: 0;
+}
 /* Let the shuttle settle at completion; unsupported style queries degrade cleanly. */
 @container style(--scale: 1) {
-  .rw-app .meter:not(.indet) .fill::before { animation: shuttle-park 1.1s var(--ease) both; }
+  .rw-app .meter:not(.indet) .fill::before {
+    animation: shuttle-park 1.1s var(--ease) both;
+  }
 }
 @keyframes shuttle-park {
-  0% { opacity: 1; }
-  45% { opacity: 1; box-shadow: 0 0 12px color-mix(in srgb, var(--shuttle) 90%, transparent); }
-  100% { opacity: 0; box-shadow: 0 0 0 transparent; }
+  0% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 1;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--shuttle) 90%, transparent);
+  }
+  100% {
+    opacity: 0;
+    box-shadow: 0 0 0 transparent;
+  }
 }
-.rw-app .meter.live .fill { transition: none; }
-.rw-app .meter.indet .fill { width: 32%; animation: indet 1.8s ease-in-out infinite; }
-.rw-app .prog { display: flex; flex-direction: column; gap: var(--sp-s); min-width: 0; }
-.rw-app .prog .lab { display: flex; justify-content: space-between; gap: var(--sp-m); font-size: .8rem; color: var(--ink-2); }
-.rw-app .prog .lab .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rw-app .prog .sub { display: flex; justify-content: space-between; gap: var(--sp-m); font-size: .7rem; color: var(--ink-4); }
+.rw-app .meter.live .fill {
+  transition: none;
+}
+.rw-app .meter.indet .fill {
+  width: 32%;
+  animation: indet 1.8s ease-in-out infinite;
+}
+.rw-app .prog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  min-width: 0;
+}
+.rw-app .prog .lab {
+  display: flex;
+  gap: var(--sp-m);
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.rw-app .prog .lab .what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-app .prog .sub {
+  display: flex;
+  gap: var(--sp-m);
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--ink-4);
+}
 .rw-app .cancel {
-  appearance: none; flex: none; width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer;
-  border: 1px solid var(--seam); border-radius: var(--r-s); background: var(--plate-2); color: var(--ink-3);
-  transition: color .15s, border-color .15s, background .15s;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--ink-3);
+  appearance: none;
+  cursor: pointer;
+  background: var(--plate-2);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
 }
 @media (hover: hover) {
-  .rw-app .cancel:hover { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, var(--seam)); background: color-mix(in oklab, var(--fault) 8%, var(--plate-2)); }
+  .rw-app .cancel:hover {
+    color: var(--fault);
+    background: color-mix(in oklab, var(--fault) 8%, var(--plate-2));
+    border-color: color-mix(in oklab, var(--fault) 40%, var(--seam));
+  }
 }
 /* Touch devices need active feedback because they lack hover. */
-.rw-app .cancel:active { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 40%, var(--seam)); background: color-mix(in oklab, var(--fault) 8%, var(--plate-2)); }
-.rw-app .cancel svg { width: 14px; height: 14px; }
+.rw-app .cancel:active {
+  color: var(--fault);
+  background: color-mix(in oklab, var(--fault) 8%, var(--plate-2));
+  border-color: color-mix(in oklab, var(--fault) 40%, var(--seam));
+}
+.rw-app .cancel svg {
+  width: 14px;
+  height: 14px;
+}
 .rw-app .prog-panel {
   --lab-lh: 1.2rem;
-  position: relative; display: flex; align-items: stretch;
-  padding: 16px 14px; min-height: 116px; border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--plate-2);
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-height: 116px;
+  padding: 16px 14px;
+  background: var(--plate-2);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-s);
 }
 /* Reserve the top-right corner for progress actions. */
-.rw-app .prog-panel .prog { flex: 1 1 auto; justify-content: space-between; gap: var(--sp-m); }
+.rw-app .prog-panel .prog {
+  flex: 1 1 auto;
+  gap: var(--sp-m);
+  justify-content: space-between;
+}
 /* Transform preserves panel height while optically centering the bar. */
-.rw-app .prog-panel .meter { height: 14px; transform: translateY(3px); }
-.rw-app .prog-panel .prog-actions { position: absolute; top: calc(16px + (var(--lab-lh) - var(--ctrl-h)) / 2); inset-inline-end: 10px; display: flex; align-items: center; gap: var(--sp-s); }
+.rw-app .prog-panel .meter {
+  height: 14px;
+  transform: translateY(3px);
+}
+.rw-app .prog-panel .prog-actions {
+  position: absolute;
+  inset-inline-end: 10px;
+  top: calc(16px + (var(--lab-lh) - var(--ctrl-h)) / 2);
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+}
 /* Derive label space from action size to prevent overlap. */
-.rw-app .prog-panel .lab { padding-inline-end: calc(var(--ctrl-h) + 16px); }
-.rw-app .prog-panel .cancel { width: var(--ctrl-h); height: var(--ctrl-h); background: var(--well); }
-.rw-app .runprog .prog { flex: 1 1 auto; }
+.rw-app .prog-panel .lab {
+  padding-inline-end: calc(var(--ctrl-h) + 16px);
+}
+.rw-app .prog-panel .cancel {
+  width: var(--ctrl-h);
+  height: var(--ctrl-h);
+  background: var(--well);
+}
+.rw-app .runprog .prog {
+  flex: 1 1 auto;
+}
 /* Avoid double-insetting the run panel inside its card. */
-.rw-app .runprog .prog-actions { inset-inline-end: 0; }
+.rw-app .runprog .prog-actions {
+  inset-inline-end: 0;
+}
 /* Account for the output card's existing bottom padding. */
-.rw-app .runprog { border-inline: 0; border-block-end: 0; border-radius: 0; padding-inline: 0; padding-block-end: 6px; min-height: 106px; }
-.rw-app .prog-panel .sub { align-items: baseline; }
-.rw-app .prog-panel .sub .run-pct { font-size: .92rem; font-weight: 650; color: var(--thread-text); font-variant-numeric: tabular-nums; }
-.rw-app .prog .sub .run-rate { margin-inline: auto; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rw-app .runprog {
+  min-height: 106px;
+  padding-block-end: 6px;
+  padding-inline: 0;
+  border-block-end: 0;
+  border-inline: 0;
+  border-radius: 0;
+}
+.rw-app .prog-panel .sub {
+  align-items: baseline;
+}
+.rw-app .prog-panel .sub .run-pct {
+  font-size: 0.92rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--thread-text);
+}
+.rw-app .prog .sub .run-rate {
+  margin-inline: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  white-space: nowrap;
+}

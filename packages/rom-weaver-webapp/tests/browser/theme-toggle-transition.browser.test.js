@@ -26,6 +26,8 @@ let originalSupports;
 /** Minimal stand-in: the real API is absent in this engine. */
 const stubViewTransitions = () => {
   startCalls = [];
+  // The original method is restored after the test double runs.
+  // oxlint-disable-next-line typescript/unbound-method
   originalStart = document.startViewTransition;
   document.startViewTransition = (update) => {
     startCalls.push(update);
@@ -44,6 +46,8 @@ const pretendIosWebKit = () => {
 /** Like the stub above, but the caller decides when each run finishes. */
 const stubDeferredViewTransitions = () => {
   startCalls = [];
+  // The original method is restored after the deferred test double runs.
+  // oxlint-disable-next-line typescript/unbound-method
   originalStart = document.startViewTransition;
   const settlers = [];
   document.startViewTransition = (update) => {
@@ -70,9 +74,10 @@ const renderMasthead = async () => {
       { settings: {} },
       createElement(Masthead, {
         currentTab: "patcher",
+        onOpenChangelog: noop,
         onOpenLog: noop,
         onOpenSettings: noop,
-        onReset: noop,
+        onOpenStatus: noop,
         onSelectTab: noop,
         tabs: PAGE_TABS,
       }),

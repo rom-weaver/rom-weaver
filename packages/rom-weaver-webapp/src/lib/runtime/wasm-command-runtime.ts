@@ -340,6 +340,153 @@ const isPatchValidationChecksumIgnored = (options: unknown) => {
   return Boolean(record?.ignoreChecksumValidation || record?.ignore_checksum_validation);
 };
 
+/** Output naming and header choice; "auto" is the CLI default, so it is omitted. */
+const bundleOutputNamingArgs = (input: { outputHeader?: BundleHeaderMode; outputName?: string; romName?: string }) => ({
+  ...(input.outputName ? { output_name: input.outputName } : {}),
+  ...(input.romName === undefined ? {} : { rom_name: input.romName.trim() }),
+  ...(input.outputHeader && input.outputHeader !== "auto" ? { output_header: input.outputHeader } : {}),
+});
+
+/** The bundle's declared base-ROM identity, as the CLI's `assume_in` tokens. */
+const bundleRomExpectationArgs = (romChecksums: string | undefined, romSize: number | undefined) => {
+  const tokens = [
+    ...(romChecksums
+      ? romChecksums
+          .split(",")
+          .map((token) => token.trim())
+          .filter(Boolean)
+      : []),
+    ...(typeof romSize === "number" ? [`size=${romSize}`] : []),
+  ];
+  return tokens.length ? { assume_in: tokens } : {};
+};
+
+/**
+ * Index-aligned per-patch metadata. `createAlignedBundleMetadata` returns
+ * undefined for a field nothing declared, and an absent flag is what tells Rust
+ * to skip that array entirely.
+ */
+const perPatchMetadataArgs = (fields: {
+  patchAuthors?: string[];
+  patchBases?: PatchBasisMode[];
+  patchDescriptions?: string[];
+  patchHeaders?: BundleHeaderMode[];
+  patchIds?: string[];
+  patchInputChecks?: string[];
+  patchLabels?: string[];
+  patchNames?: string[];
+  patchOptionals?: boolean[];
+  patchOutputChecks?: string[];
+  patchVersions?: string[];
+}) => ({
+  ...(fields.patchNames ? { patch_name: fields.patchNames } : {}),
+  ...(fields.patchIds ? { patch_id: fields.patchIds } : {}),
+  ...(fields.patchDescriptions ? { patch_description: fields.patchDescriptions } : {}),
+  ...(fields.patchVersions ? { patch_version: fields.patchVersions } : {}),
+  ...(fields.patchAuthors ? { patch_author: fields.patchAuthors } : {}),
+  ...(fields.patchLabels ? { patch_label: fields.patchLabels } : {}),
+  ...(fields.patchOptionals ? { patch_optional: fields.patchOptionals } : {}),
+  ...(fields.patchHeaders ? { patch_header: fields.patchHeaders } : {}),
+  ...(fields.patchBases ? { patch_basis: fields.patchBases } : {}),
+  ...(fields.patchInputChecks ? { patch_input_check: fields.patchInputChecks } : {}),
+  ...(fields.patchOutputChecks ? { patch_output_check: fields.patchOutputChecks } : {}),
+});
+
+/** Trimmed, non-empty strings from an unknown list; anything else drops out. */
+const toTrimmedList = (value: unknown): string[] =>
+  (Array.isArray(value) ? value : []).map((entry) => String(entry || "").trim()).filter(Boolean);
+
+/** Only the flags the caller actually set reach the CLI command. */
+const buildPatchValidateCommand = (args: {
+  checksumCache: string[];
+  effectiveThreadArg: ReturnType<typeof toThreadBudget> | null;
+  expectIn: string[];
+  ignoreChecksumValidation: boolean;
+  independent: boolean;
+  input: RuntimePatchValidateWorkerInput;
+  n64ByteOrder: ReturnType<typeof normalizeN64ByteOrder>;
+  patchBasis: PatchBasisMode[];
+  patchInputChecks: string[];
+  patchOutputChecks: string[];
+  plan: boolean;
+  removeHeader: boolean;
+}) =>
+  createRomWeaverCommand("patch-validate", {
+    ...(args.checksumCache.length ? { assume_in: args.checksumCache } : {}),
+    ...(args.independent ? { independent: true } : {}),
+    ...(args.plan ? { plan: true } : {}),
+    ...(args.patchBasis.length ? { patch_basis: args.patchBasis } : {}),
+    ...(args.patchInputChecks.length ? { patch_input_check: args.patchInputChecks } : {}),
+    ...(args.patchOutputChecks.length ? { patch_output_check: args.patchOutputChecks } : {}),
+    ignore_checksum_validation: args.ignoreChecksumValidation,
+    input: args.input.romFilePath,
+    ...(args.n64ByteOrder ? { n64_byte_order: args.n64ByteOrder } : {}),
+    no_extract: true,
+    filter: ["rom", "patch"],
+    patches: args.input.patchFiles.map((patch) => patch.patchFilePath),
+    strip_header: args.removeHeader,
+    ...(args.effectiveThreadArg ? { threads: args.effectiveThreadArg } : {}),
+    ...(args.expectIn.length ? { expect_in: args.expectIn } : {}),
+  });
+
+/**
+ * Some validates fan worker threads across the source: bps block-check CRCs,
+ * xdelta's per-window decode, or a caller-requested source-checksum verification.
+ * Those MUST keep the runner's worker pool - without it the engine spawns from an
+ * empty pool and panics (os error 6). The rest (PPF/IPS/UPS structural + block
+ * checks) read a few hundred bytes single-threaded, so the pool spin-up is pure
+ * setup/teardown and is skipped. The apply path keeps its own input-size gate
+ * since it always reads+writes the source.
+ */
+const resolvePatchValidateThreading = (input: RuntimePatchValidateWorkerInput, hasSourceChecksums: boolean) => {
+  const requestedThreadArg = toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads);
+  const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =
+    resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
+  const validateUsesThreadPool = hasBpsPatch || hasXdeltaPatch || hasSourceChecksums;
+  const noWorkerPool = singleThreadNoPool || !validateUsesThreadPool;
+  const effectiveThreadArg = noWorkerPool ? null : threadArg;
+  return {
+    disableDefaultThreadArgInjection: noWorkerPool || (hasBpsPatch && !effectiveThreadArg),
+    effectiveThreadArg,
+    forceSingleThreadReason,
+    forcedSingleThread,
+    hasBpsPatch,
+    hasXdeltaPatch,
+    noWorkerPool,
+    requestedThreadArg,
+    syncAccessMode: hasBpsPatch ? ("readwrite-unsafe" as const) : undefined,
+    virtualOnlyMounts: hasBpsPatch,
+  };
+};
+
+/**
+ * The caller's options arrive untyped and in both camelCase and snake_case, so
+ * every field is normalized once here rather than at each use.
+ */
+const readPatchValidateOptions = (options: RuntimePatchValidateWorkerInput["options"]) => {
+  const record = asRecord(options);
+  const requirements = getPatchValidationRequirements(options);
+  const readArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+  const sourceCrc32 = toOptionalUint32Hex(requirements?.sourceCrc32 ?? requirements?.source_crc32);
+  return {
+    checksumCache: normalizePatchValidationChecksumEntries(record?.checksumCache ?? record?.checksum_cache),
+    ignoreChecksumValidation: isPatchValidationChecksumIgnored(options),
+    independent: Boolean(record?.independent),
+    n64ByteOrder: normalizeN64ByteOrder(record?.n64ByteOrder ?? record?.n64_byte_order),
+    patchBasis: readArray<PatchBasisMode>(record?.patchBasis),
+    patchInputChecks: readArray<string>(record?.patchInputChecks),
+    patchOutputChecks: readArray<string>(record?.patchOutputChecks),
+    plan: Boolean(record?.plan),
+    removeHeader: Boolean(record?.removeHeader),
+    validateWithChecksums: [
+      ...normalizePatchValidationChecksumEntries(record?.validateWithChecksums ?? record?.validate_with_checksums),
+      ...(sourceCrc32 ? [`crc32=${sourceCrc32}`] : []),
+    ],
+    validateWithMinSize: toOptionalInt(requirements?.minimumSourceSize ?? requirements?.minimum_source_size),
+    validateWithSize: toOptionalInt(requirements?.sourceSize ?? requirements?.source_size),
+  };
+};
+
 const invokeRomWeaverPatchValidateWorker = async (
   input: RuntimePatchValidateWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
@@ -350,67 +497,46 @@ const invokeRomWeaverPatchValidateWorker = async (
   plan?: PatchValidationPlan;
   status: "passed" | "mixed";
 }> => {
-  const independent = Boolean((input.options as { independent?: unknown } | undefined)?.independent);
-  const plan = Boolean((input.options as { plan?: unknown } | undefined)?.plan);
-  const planOptionRecord = asRecord(input.options);
-  const patchBasis = Array.isArray(planOptionRecord?.patchBasis)
-    ? (planOptionRecord.patchBasis as PatchBasisMode[])
-    : [];
-  const patchInputChecks = Array.isArray(planOptionRecord?.patchInputChecks)
-    ? (planOptionRecord.patchInputChecks as string[])
-    : [];
-  const patchOutputChecks = Array.isArray(planOptionRecord?.patchOutputChecks)
-    ? (planOptionRecord.patchOutputChecks as string[])
-    : [];
-  const requirements = getPatchValidationRequirements(input.options);
-  const optionRecord = asRecord(input.options);
-  const sourceCrc32 = toOptionalUint32Hex(requirements?.sourceCrc32 ?? requirements?.source_crc32);
-  const validateWithChecksums = [
-    ...normalizePatchValidationChecksumEntries(
-      optionRecord?.validateWithChecksums ?? optionRecord?.validate_with_checksums,
-    ),
-    ...(sourceCrc32 ? [`crc32=${sourceCrc32}`] : []),
-  ];
-  const checksumCache = normalizePatchValidationChecksumEntries(
-    optionRecord?.checksumCache ?? optionRecord?.checksum_cache,
-  );
-  const n64ByteOrder = normalizeN64ByteOrder(optionRecord?.n64ByteOrder ?? optionRecord?.n64_byte_order);
-  const validateWithSize = toOptionalInt(requirements?.sourceSize ?? requirements?.source_size);
-  const validateWithMinSize = toOptionalInt(requirements?.minimumSourceSize ?? requirements?.minimum_source_size);
-  const removeHeader = Boolean((input.options as { removeHeader?: unknown } | undefined)?.removeHeader);
-  const ignoreChecksumValidation = isPatchValidationChecksumIgnored(input.options);
-  const requestedThreadArg = toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads);
-  const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =
-    resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
-  // Some validates fan worker threads across the source: bps block-check CRCs, xdelta's per-window
-  // decode, or a caller-requested source-checksum verification. Those MUST keep the runner's worker
-  // pool - without it the engine spawns from an empty pool and panics (os error 6). The rest (PPF/
-  // IPS/UPS structural + block checks) read a few hundred bytes single-threaded, so the pool spin-up
-  // is pure setup/teardown and is skipped. The apply path keeps its own input-size gate since it
-  // always reads+writes the source.
-  const validateUsesThreadPool = hasBpsPatch || hasXdeltaPatch || validateWithChecksums.length > 0;
-  const noWorkerPool = singleThreadNoPool || !validateUsesThreadPool;
-  const effectiveThreadArg = noWorkerPool ? null : threadArg;
-  const disableDefaultThreadArgInjection = noWorkerPool || (hasBpsPatch && !effectiveThreadArg);
-  const virtualOnlyMounts = hasBpsPatch;
-  const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
+  const {
+    checksumCache,
+    ignoreChecksumValidation,
+    independent,
+    n64ByteOrder,
+    patchBasis,
+    patchInputChecks,
+    patchOutputChecks,
+    plan,
+    removeHeader,
+    validateWithChecksums,
+    validateWithMinSize,
+    validateWithSize,
+  } = readPatchValidateOptions(input.options);
+  const {
+    disableDefaultThreadArgInjection,
+    effectiveThreadArg,
+    forceSingleThreadReason,
+    forcedSingleThread,
+    hasBpsPatch,
+    hasXdeltaPatch,
+    noWorkerPool,
+    requestedThreadArg,
+    syncAccessMode,
+    virtualOnlyMounts,
+  } = resolvePatchValidateThreading(input, validateWithChecksums.length > 0);
   const expectIn = expectInTokens(validateWithChecksums, validateWithSize, validateWithMinSize);
-  const command = createRomWeaverCommand("patch-validate", {
-    ...(checksumCache.length ? { assume_in: checksumCache } : {}),
-    ...(independent ? { independent: true } : {}),
-    ...(plan ? { plan: true } : {}),
-    ...(patchBasis.length ? { patch_basis: patchBasis } : {}),
-    ...(patchInputChecks.length ? { patch_input_check: patchInputChecks } : {}),
-    ...(patchOutputChecks.length ? { patch_output_check: patchOutputChecks } : {}),
-    ignore_checksum_validation: ignoreChecksumValidation,
-    input: input.romFilePath,
-    ...(n64ByteOrder ? { n64_byte_order: n64ByteOrder } : {}),
-    no_extract: true,
-    filter: ["rom", "patch"],
-    patches: input.patchFiles.map((patch) => patch.patchFilePath),
-    strip_header: removeHeader,
-    ...(effectiveThreadArg ? { threads: effectiveThreadArg } : {}),
-    ...(expectIn.length ? { expect_in: expectIn } : {}),
+  const command = buildPatchValidateCommand({
+    checksumCache,
+    effectiveThreadArg,
+    expectIn,
+    ignoreChecksumValidation,
+    independent,
+    input,
+    n64ByteOrder,
+    patchBasis,
+    patchInputChecks,
+    patchOutputChecks,
+    plan,
+    removeHeader,
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-validate dispatch", {
     command,
@@ -931,18 +1057,8 @@ const invokeRomWeaverIngestWorker = async (
   if (!sourcePath) throw new Error("Ingest source path is required");
   const outDirPath = String(input.outDirPath || "").trim();
   if (!outDirPath) throw new Error("Ingest output directory is required");
-  const select: string[] = [];
-  for (const selected of Array.isArray(input.select) ? input.select : []) {
-    const value = String(selected || "").trim();
-    if (value) select.push(value);
-  }
-  const checksum: string[] = [];
-  for (const algorithm of Array.isArray(input.checksumAlgorithms) ? input.checksumAlgorithms : []) {
-    const value = String(algorithm || "")
-      .trim()
-      .toLowerCase();
-    if (value) checksum.push(value);
-  }
+  const select = toTrimmedList(input.select);
+  const checksum = toTrimmedList(input.checksumAlgorithms).map((value) => value.toLowerCase());
   const threadArg = toThreadBudget(input.threads);
   const command = createRomWeaverCommand("ingest", {
     output: outDirPath,
@@ -1128,11 +1244,11 @@ const invokeRomWeaverBundleCreateWorker = async (
 ): Promise<ParsedBundleCreateResult> => {
   const outputPath = String(input.outputPath || "").trim();
   if (!outputPath) throw new Error("Bundle create output path is required");
-  const patchPaths = (input.patchPaths || []).map((path) => String(path || "").trim()).filter((path) => !!path);
+  const patchPaths = toTrimmedList(input.patchPaths);
   if (!patchPaths.length) throw new Error("Bundle create requires at least one patch path");
-  const romPath = String(input.romPath || "").trim();
-  const bundlePath = String(input.bundlePath || "").trim();
-  const bundleRomPath = String(input.bundleRomPath || "").trim();
+  const [romPath, bundlePath, bundleRomPath] = [input.romPath, input.bundlePath, input.bundleRomPath].map((value) =>
+    String(value || "").trim(),
+  ) as [string, string, string];
   // The Rust side requires each metadata array to match the patch count exactly (or be empty), so a
   // partially-filled array is padded with empty strings; empty values round-trip as absent metadata.
   const {
@@ -1155,34 +1271,22 @@ const invokeRomWeaverBundleCreateWorker = async (
     ...(romPath ? { rom: romPath } : {}),
     ...(bundlePath ? { bundle: bundlePath } : {}),
     ...(bundleRomPath ? { bundle_rom: bundleRomPath } : {}),
-    ...(input.outputName ? { output_name: input.outputName } : {}),
-    ...(input.romName === undefined ? {} : { rom_name: input.romName.trim() }),
-    ...(input.outputHeader && input.outputHeader !== "auto" ? { output_header: input.outputHeader } : {}),
-    ...(input.romChecksums || typeof input.romSize === "number"
-      ? {
-          assume_in: [
-            ...(input.romChecksums
-              ? input.romChecksums
-                  .split(",")
-                  .map((token) => token.trim())
-                  .filter(Boolean)
-              : []),
-            ...(typeof input.romSize === "number" ? [`size=${input.romSize}`] : []),
-          ],
-        }
-      : {}),
+    ...bundleOutputNamingArgs(input),
+    ...bundleRomExpectationArgs(input.romChecksums, input.romSize),
     ...(outputCheck ? { output_check: [outputCheck] } : {}),
-    ...(patchNames ? { patch_name: patchNames } : {}),
-    ...(patchIds ? { patch_id: patchIds } : {}),
-    ...(patchDescriptions ? { patch_description: patchDescriptions } : {}),
-    ...(patchVersions ? { patch_version: patchVersions } : {}),
-    ...(patchAuthors ? { patch_author: patchAuthors } : {}),
-    ...(patchLabels ? { patch_label: patchLabels } : {}),
-    ...(patchOptionals ? { patch_optional: patchOptionals } : {}),
-    ...(patchHeaders ? { patch_header: patchHeaders } : {}),
-    ...(patchBases ? { patch_basis: patchBases } : {}),
-    ...(patchInputChecks ? { patch_input_check: patchInputChecks } : {}),
-    ...(patchOutputChecks ? { patch_output_check: patchOutputChecks } : {}),
+    ...perPatchMetadataArgs({
+      patchAuthors,
+      patchBases,
+      patchDescriptions,
+      patchHeaders,
+      patchIds,
+      patchInputChecks,
+      patchLabels,
+      patchNames,
+      patchOptionals,
+      patchOutputChecks,
+      patchVersions,
+    }),
     ...(input.noBundleRom ? { no_bundle_rom: true } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson bundle-create dispatch", {

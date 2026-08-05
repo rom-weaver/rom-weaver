@@ -65,7 +65,7 @@ test("keeps the full matrix on the release pull request", () => {
 });
 
 test("refuses to emit an empty matrix when nothing is marked for pull requests", () => {
-  const unmarked = platforms.map(({ pr, ...rest }) => ({ ...rest, pr: false }));
+  const unmarked = platforms.map((platform) => ({ ...platform, pr: false }));
   assert.throws(
     () => selectPlatformMatrix(unmarked, "pull_request"),
     /refusing to emit an empty matrix/,

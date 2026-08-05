@@ -1,14 +1,18 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { DOC_ROUTES } from "virtual:rom-weaver-docs";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
-import { DocsPage } from "../../src/webapp/docs-page.tsx";
+import { DocsPage, preloadDocsHtml } from "../../src/webapp/docs-page.tsx";
 import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
 
+// Guide HTML ships as one lazy chunk per page; rendering a guide synchronously
+// requires its HTML resolved first, exactly as the app preloads before mount.
+beforeAll(async () => {
+  await Promise.all(DOC_ROUTES.map((route) => preloadDocsHtml(route.slug)));
+});
+
 const BUNDLE_GUIDE_ANCHORS = [
-  "what-does-a-bundle-do",
-  "practice-with-the-guided-bundle-tour",
   "choose-what-to-include",
   "build-the-patch-recipe",
   "turn-on-bundle-output-and-download-it",
@@ -49,7 +53,10 @@ describe("DocsPage", () => {
       <link rel="canonical" href="">
     `;
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    window.history.replaceState({}, "", "/");
+    vi.restoreAllMocks();
+  });
 
   it("restores docs metadata when its kept-alive panel becomes active again", () => {
     const { rerender } = render(<DocsPage active slug="docs" />);
@@ -72,18 +79,11 @@ describe("DocsPage", () => {
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://rom-weaver.com/docs");
   });
 
-  it("opens guided samples inside the running webapp", () => {
-    const onGuideIntent = vi.fn();
-    const onStartGuide = vi.fn(() => true);
-    render(<DocsPage active onGuideIntent={onGuideIntent} onStartGuide={onStartGuide} slug="docs" />);
+  it("does not render the guided sample CTA", () => {
+    render(<DocsPage active slug="docs" />);
 
-    const guidedApply = screen.getByRole("link", { name: "Guided Apply" });
-    fireEvent.focus(guidedApply);
-    fireEvent.click(guidedApply);
-
-    expect(onGuideIntent).toHaveBeenCalledWith("apply");
-    expect(onStartGuide).toHaveBeenCalledWith("apply");
-    expect(guidedApply.getAttribute("href")).toBe("/apply?guide=apply");
+    expect(document.querySelector(".docs-cta")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Guided Apply" })).toBeNull();
   });
 
   it("builds the section rail from the guide's own headings and drops the generated outline", () => {
@@ -120,18 +120,23 @@ describe("DocsPage", () => {
     expect(unrewritten).toEqual([]);
   });
 
-  it("keeps links between published guide sections pointed at real anchors", () => {
+  it("keeps links between published guide sections pointed at real anchors", async () => {
     const routes = new Map(DOC_ROUTES.map((route) => [`/${route.slug}`, route]));
+    const htmlOf = new Map(
+      await Promise.all(
+        DOC_ROUTES.map(async (route) => [route.slug, (await DOC_PAGE_LOADERS[route.slug]()).html] as const),
+      ),
+    );
     for (const route of DOC_ROUTES) {
       const source = document.createElement("template");
-      source.innerHTML = route.html;
+      source.innerHTML = htmlOf.get(route.slug) ?? "";
       for (const link of source.content.querySelectorAll<HTMLAnchorElement>("a[href*='#']")) {
         const targetUrl = new URL(link.getAttribute("href") ?? "", SITE_ORIGIN);
         const targetRoute = routes.get(targetUrl.pathname);
         if (!(targetRoute && targetUrl.hash)) continue;
 
         const target = document.createElement("template");
-        target.innerHTML = targetRoute.html;
+        target.innerHTML = htmlOf.get(targetRoute.slug) ?? "";
         const ids = [...target.content.querySelectorAll<HTMLElement>("[id]")].map((element) => element.id);
         expect(ids, `${route.slug} links to missing ${targetUrl.pathname}${targetUrl.hash}`).toContain(
           decodeURIComponent(targetUrl.hash.slice(1)),
@@ -155,14 +160,14 @@ describe("DocsPage", () => {
 
   it("renders headings, links, and code through parser hooks", () => {
     const route = createDocRoute(
-      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
 
 ## A &amp; \`B\`
 
-[Formats](patch-formats.md#ips) and [this section](#a-and-b).
+[Formats](../explanation/patch-formats.md#ips) and [this section](#a-and-b).
 
 ## A &amp; \`B\`
 
@@ -189,7 +194,7 @@ echo hi
 
   it("drops raw HTML from headings before rendering them", () => {
     const route = createDocRoute(
-      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
@@ -207,7 +212,7 @@ Fixture description.
   // tags around it survive. They do not in a heading, so it has to be escaped.
   it("escapes heading text that a dropped raw block would pass through", () => {
     const route = createDocRoute(
-      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
@@ -273,18 +278,31 @@ Fixture description.
     }
   });
 
+  it("loads the tutorial screenshots before they enter the viewport", () => {
+    render(<DocsPage active slug="docs/get-started" />);
+
+    const images = [...document.querySelectorAll<HTMLImageElement>(".docs-article img")];
+    expect(images).toHaveLength(2);
+    for (const image of images) {
+      expect(image.getAttribute("loading")).toBeNull();
+      expect(image.getAttribute("decoding")).toBeNull();
+      expect(Number(image.getAttribute("width"))).toBeGreaterThan(0);
+      expect(Number(image.getAttribute("height"))).toBeGreaterThan(0);
+    }
+  });
+
   it("resolves hosted documents, repository-only documents, and published images from their source file", () => {
     const route = createDocRoute(
-      { file: "usage/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
       `# Fixture
 
 Fixture description.
 
 ## Resources
 
-[Install](../cli/reference.md#install)
+[Install](../reference/cli.md#install)
 [Maintainer notes](../development/mobile-safari-verification.md)
-![Sample](../../packages/rom-weaver-webapp/design/first-sample-modified-world.webp)
+![Sample](../screenshots/first-sample-modified-world.webp)
 `,
     );
 
@@ -311,7 +329,7 @@ Fixture description.
     const { unmount } = render(<DocsPage active slug="docs/cli" />);
 
     const nav = document.querySelector(".docs-rails .guide-nav");
-    expect(defaultShelfTitle).toBe("Browser usage");
+    expect(defaultShelfTitle).toBe("Start here");
     expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual(
       shelfTitles,
     );
@@ -348,31 +366,25 @@ Fixture description.
     vi.unstubAllGlobals();
   });
 
-  it("pitches the guided samples on the hub only", () => {
-    // Every guide closing on the same three buttons made the offer read as
-    // furniture, and every guide already ends on a link its own author chose.
-    const { unmount } = render(<DocsPage active slug="docs" />);
-    expect(document.querySelector(".docs-cta")).toBeTruthy();
-
-    unmount();
-    render(<DocsPage active slug="docs/apply-rom-patches" />);
-    expect(document.querySelector(".docs-cta")).toBeNull();
-  });
-
   it("lists browser, CLI, installation, and self-hosting paths, and previews the FAQ", () => {
     render(<DocsPage active slug="docs" />);
 
     const index = document.querySelector(".docs-index");
     expect(screen.getAllByRole("combobox", { name: "Search documentation" })).toHaveLength(2);
-    expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain("Browser usage");
+    expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain(
+      "Apply your first patch (browser)",
+    );
+    expect(index?.querySelector('a[href="/docs/cli-get-started"]')?.textContent).toContain(
+      "Apply your first patch (CLI)",
+    );
     expect(index?.querySelector('a[href="/docs/cli"]')?.textContent).toContain("CLI reference");
-    expect(index?.querySelector('a[href="/docs/install"]')?.textContent).toContain("Install");
+    expect(index?.querySelector('a[href="/docs/install"]')?.textContent).toContain("Install the CLI");
     expect(index?.querySelector('a[href="/docs/self-hosting"]')?.textContent).toContain("Self-hosting");
     expect(screen.getByRole("link", { name: "Read the full FAQ" }).getAttribute("href")).toBe("/docs/faq");
     expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();
   });
 
-  it("fuzzy-searches guide text and links directly to the matching section", () => {
+  it("fuzzy-searches guide text and links directly to the matching section", async () => {
     render(<DocsPage active slug="docs" />);
 
     const input = screen.getAllByRole("combobox", { name: "Search documentation" })[0] as HTMLInputElement;
@@ -382,10 +394,15 @@ Fixture description.
       (entry) => entry.id === "what-does-the-warning-mean",
     );
     expect(section).toBeTruthy();
-    const resultLink = document.querySelector<HTMLAnchorElement>(
-      `.docs-search-results a[href^="/docs/fix-checksum-errors?highlight="][href$="#${section?.id}"]`,
+    // The search index is a lazy chunk fetched on the first keystroke, so the
+    // results fill in once it lands.
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector<HTMLAnchorElement>(
+          `.docs-search-results a[href^="/docs/fix-checksum-errors?highlight="][href$="#${section?.id}"]`,
+        ),
+      ).toBeTruthy(),
     );
-    expect(resultLink).toBeTruthy();
     expect(screen.getByRole("status").textContent).toMatch(/result/);
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
@@ -395,12 +412,40 @@ Fixture description.
     expect(document.querySelector(".guide-shelf")).toBeTruthy();
   });
 
-  it("shares search state with the mobile search", () => {
+  it("plays the page turn only after the reader changes guide", () => {
+    // The first article is the prerendered document, so fading it in would push
+    // the largest paint back by the length of the animation.
+    const { rerender } = render(<DocsPage active slug="docs/cli" />);
+    expect(document.querySelector(".docs-article")?.getAttribute("data-page-turn")).toBeNull();
+
+    rerender(<DocsPage active slug="docs/faq" />);
+    expect(document.querySelector(".docs-article")?.getAttribute("data-page-turn")).toBe("true");
+  });
+
+  it("opens this guide's outline and every guide from the phone trail", () => {
+    render(<DocsPage active slug="docs/cli" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Contents" }));
+
+    const sheet = document.querySelector(".rw-modal.guide-sheet");
+    expect(sheet?.querySelector(".warp-rail")).toBeTruthy();
+    expect(sheet?.querySelectorAll(".guide-nav .guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+    expect(sheet?.querySelector('.guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
+
+    // Choosing a guide has to take the sheet with it - the reader asked to leave.
+    fireEvent.click(sheet?.querySelector(".guide-nav .guide-nav-list a") as HTMLElement);
+    expect(document.querySelector(".rw-modal.guide-sheet")).toBeNull();
+  });
+
+  it("shares search state with the mobile search", async () => {
     render(<DocsPage active slug="docs" />);
     const inputs = screen.getAllByRole("combobox", { name: "Search documentation" });
     fireEvent.change(inputs.at(-1) as HTMLElement, { target: { value: "OPFS" } });
 
-    expect(document.querySelectorAll(".docs-trail .docs-search-results a[href*='#']").length).toBeGreaterThan(0);
+    // The search index is a lazy chunk fetched on the first keystroke.
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll(".docs-trail .docs-search-results a[href*='#']").length).toBeGreaterThan(0),
+    );
   });
 
   it("highlights and centers the selected search term in its section", async () => {
@@ -426,16 +471,39 @@ Fixture description.
     await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" }));
   });
 
-  it.each(["docs", "docs/apply-rom-patches"])("ends %s with nothing but the way back up", (slug) => {
-    // Every guide's own last paragraph already links onward, in prose, to whatever
-    // follows from what was just read. A generated previous/next pair underneath
-    // that repeated it - and on the first guide it repeated the very link the
-    // paragraph above had just made.
-    render(<DocsPage active slug={slug} />);
+  it("scrolls to a guide anchor after its article is ready", async () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    const sectionId = routeFor("docs/patch-formats").sections[0]?.id;
+    window.history.replaceState({}, "", `/docs/patch-formats#${sectionId}`);
+
+    render(<DocsPage active slug="docs/patch-formats" />);
+
+    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" }));
+  });
+
+  it("ends a guide with the steps either side of it, and the way back up", () => {
+    const index = DOC_ROUTES.findIndex((route) => route.slug === "docs/apply-rom-patches");
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
 
     const onward = document.querySelector(".docs-onward");
-    expect(onward?.children).toHaveLength(1);
+    const steps = Array.from(onward?.querySelectorAll<HTMLAnchorElement>(".docs-step") ?? []);
+    expect(steps.map((step) => step.getAttribute("href"))).toEqual([
+      `/${DOC_ROUTES[index - 1]?.slug}`,
+      `/${DOC_ROUTES[index + 1]?.slug}`,
+    ]);
     expect(onward?.querySelector(".docs-to-top")).toBeTruthy();
+  });
+
+  it("holds the previous step's place on the first page rather than sliding next into it", () => {
+    // The hub is route zero, so it has no previous. The empty span keeps Next
+    // where Next belongs instead of letting it take the left-hand slot.
+    render(<DocsPage active slug="docs" />);
+
+    const onward = document.querySelector(".docs-onward");
+    expect(onward?.firstElementChild?.className).toBe("docs-step-gap");
+    const steps = Array.from(onward?.querySelectorAll<HTMLAnchorElement>(".docs-step") ?? []);
+    expect(steps.map((step) => step.getAttribute("href"))).toEqual([`/${DOC_ROUTES[1]?.slug}`]);
   });
 
   it("tracks the reading position as the reader scrolls", () => {

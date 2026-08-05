@@ -49,6 +49,8 @@ export function createBrowserOpfsMountCache() {
       }
       if (current) {
         mountsByPath.delete(mountPath);
+        // Preserve the existing microtask boundary; mount disposal is synchronous by design.
+        // oxlint-disable-next-line typescript/await-thenable
         await current.dispose();
       }
       const mount = await BrowserOpfsMount.create({
@@ -68,6 +70,8 @@ export function createBrowserOpfsMountCache() {
       const mounts = [...mountsByPath.values()];
       mountsByPath.clear();
       for (const mount of mounts) {
+        // Preserve the existing microtask boundary between synchronous mount disposals.
+        // oxlint-disable-next-line typescript/await-thenable
         await mount.dispose();
       }
     },
@@ -77,6 +81,8 @@ export function createBrowserOpfsMountCache() {
       for (const [mountPath, mount] of mountsByPath) {
         if (!lookup.has(mountPath)) continue;
         mountsByPath.delete(mountPath);
+        // Preserve the existing microtask boundary between synchronous mount disposals.
+        // oxlint-disable-next-line typescript/await-thenable
         await mount.dispose();
       }
     },
@@ -88,6 +94,8 @@ export function createBrowserOpfsMountCache() {
         const current = mountsByPath.get(mount.mountPath);
         if (current !== mount) continue;
         mountsByPath.delete(mount.mountPath);
+        // Preserve the existing microtask boundary between synchronous mount disposals.
+        // oxlint-disable-next-line typescript/await-thenable
         await mount.dispose();
       }
     },

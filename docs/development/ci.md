@@ -1,8 +1,10 @@
 # Continuous integration
 
 Every workflow in `.github/workflows`, what triggers it, what it gates, and
-what it caches. For the release *decision* - versions, tags, trusted
-publishing, and retry procedures - see the [release guide](../../.github/RELEASING.md).
+what it caches. To run these checks yourself, see
+[Reproduce a CI failure locally](reproduce-ci-locally.md). For the release
+*decision* - versions, tags, trusted publishing, and retry procedures - see the
+[release guide](../../.github/RELEASING.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -36,7 +38,6 @@ publishing, and retry procedures - see the [release guide](../../.github/RELEASI
 - [Actions cache budget](#actions-cache-budget)
   - [Why the Docker build cache is not in this budget](#why-the-docker-build-cache-is-not-in-this-budget)
 - [Secrets](#secrets)
-- [Reproducing CI locally](#reproducing-ci-locally)
 - [Gotchas](#gotchas)
 
 <!-- END doctoc -->
@@ -50,7 +51,7 @@ publishing, and retry procedures - see the [release guide](../../.github/RELEASI
 | `dependabot-auto-merge.yml` | Dependabot PR open/reopen/sync | No | Arm native squash auto-merge for patch and minor updates after required checks pass |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
-| `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman / dolphin-tool, with an exact cached CLI |
+| `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman, dolphin-tool, 7zz, and Info-ZIP, with an exact cached CLI |
 | `e2e-nightly.yml` | manual | No | Exhaustive browser E2E, service-worker checks, and published-install smoke tests |
 | `cache-cleanup.yml` | every 6 h, manual | No | Reap closed-PR and superseded Actions caches |
 | `cloudflare-preview-cleanup.yml` | every 6 h, manual | No | Reap stale Cloudflare Pages preview deployments |
@@ -541,11 +542,8 @@ of those runs, published to the `lighthouse-pr-<number>` branch of the
 the same terms as the preview itself. Fork pull requests stop at the artifact
 link, because their read-only token can neither deploy nor publish a status.
 
-Reproduce a CI run with a production WASM artifact, a rebuild, then the gates:
-`mise run build-wasm-prod`,
-`npm --prefix packages/rom-weaver-webapp run build`, and
-`npm --prefix packages/rom-weaver-webapp run test:performance`. The audit picks
-a free port unless `PORT` is set.
+To reproduce a run, see
+[Reproduce a CI failure locally](reproduce-ci-locally.md#match-a-specific-job).
 
 ### Tag runs
 
@@ -560,6 +558,14 @@ channels that tag publishes.
 leg per channel, deploying with Cloudflare Direct Upload and reusing the
 CI-tested WASM artifact rather than spending Cloudflare build minutes on a
 second toolchain.
+
+The deployment wrapper matches the Pages branch and commit hash before invoking
+Wrangler. It waits for new deployments to finish before publishing their URLs.
+Retries reuse successful preview deployments, wait for active deployments, and
+retry failed matching deployments instead of creating another deployment.
+Lighthouse report deployments opt out of reuse because their generated reports
+can differ between runs. Completed production deployments upload again so a
+rerun can restore the selected main commit.
 
 | Channel | Cloudflare project | URL | Intended use |
 | --- | --- | --- | --- |
@@ -1263,7 +1269,7 @@ asset list. That is why adding them does not interact with
 and the step is safe on a rerun and after the release is published.
 
 The consumer side is a single query against the digest - see
-[Verifying a download](../cli/install.md#verifying-a-download), where both install scripts'
+[Verify a download](../how-to/verify-downloads.md), where both install scripts'
 check and the `gh attestation verify` route for a file downloaded by hand are
 written out.
 
@@ -1352,45 +1358,6 @@ stored npm secret.
 Permissions are declared per workflow and widened per job rather than granted
 workflow-wide; `cache-cleanup.yml` starts from `permissions: {}` and takes only
 `actions: write` and `pull-requests: read`.
-
-## Reproducing CI locally
-
-The pre-commit hooks select lint checks from the staged paths. CI reuses those
-tasks over the whole tree, then adds tests, builds, publishability checks, and
-the macOS/Windows Rust legs. `mise run ci` is the broad local gate; use the
-individual commands below when narrowing a failure or matching a specific job.
-
-```bash
-mise run ci                                                  # broad local gate
-
-mise run actionlint ::: docs-lint ::: shellcheck ::: hadolint # repo-lint
-node --test scripts/ci/classify-changes.test.mjs             # change boundaries
-node --test scripts/ci/docker-matrix.test.mjs                # image/arch leg planning
-node --test scripts/ci/wasm-runtime-coverage.test.mjs        # wasm_runtime vs. the suite
-mise run fmt ::: clippy ::: typegen-check ::: whitespace ::: thread-guards
-mise run test-rust ::: licenses-check ::: deny-policy ::: machete # rust-host
-cargo publish --workspace --locked --dry-run --no-verify     # rust-host
-mise run wasm-check                                          # local threaded-target check
-mise run build-wasm-prod                                     # wasm
-npm test                                                     # repository tooling tests
-npm run docs:lint                                            # owned Markdown
-npm --prefix packages/rom-weaver-webapp run lint             # webapp lint fan-out
-npm --prefix packages/rom-weaver-webapp run icons:channels:check
-npm --prefix packages/rom-weaver-webapp run test:unit
-npm --prefix packages/rom-weaver-webapp run test:browser:wasm
-npm --prefix packages/rom-weaver-webapp run test:browser
-npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
-npm --prefix packages/rom-weaver-webapp run build
-```
-
-`actionlint` is shellcheck-aware and lints inline workflow `run:` scripts;
-the separate `shellcheck` task covers the tracked shell files, and `npm test`
-covers the Node.js tooling. `docker` is
-conditional on image-plumbing changes and is most directly reproduced with the
-source-build commands in the [self-hosting guide](../hosting/self-hosting.md);
-`docker-prebuilt` is `docker build --build-arg DIST=prebuilt .` with the bundle
-staged under `prebuilt/`; the CLI job uses `BINARY=prebuilt` when its packaging
-inputs change.
 
 ## Gotchas
 

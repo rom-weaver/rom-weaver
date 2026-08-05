@@ -20,18 +20,20 @@
 
 <p align="center">
   <a href="https://rom-weaver.com/apply">Open the webapp</a>
-  · <a href="docs/README.md">Docs index</a>
   · <a href="https://github.com/sponsors/brandonocasey">Sponsor on GitHub</a>
   · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
 </p>
 
 <!-- START doctoc -->
 
+- [Install](#install)
+- [Webapp](#webapp)
+- [Self-hosting](#self-hosting)
+- [CLI](#cli)
 - [Why](#why)
 - [Performance](#performance)
 - [Features](#features)
 - [Notices](#notices)
-- [Install](#install)
 - [Screenshots](#screenshots)
 - [Documentation](#documentation)
 - [Contributing and support](#contributing-and-support)
@@ -39,118 +41,12 @@
 
 <!-- END doctoc -->
 
-## Why
-
-Every console generation brought its own compressed format: CHD for discs, RVZ
-for GameCube and Wii, Z3DS for 3DS ROMs, CSO and PBP for PSP, plus the usual ZIP
-and 7z on top. Working across them can mean finding several separate programs,
-learning different flags, and checking which builds are available for your
-platform.
-
-Patching adds another manual sequence. A translation, bugfix, and undub may
-need to run in a specific order, with intermediate files kept straight and a
-compressed input unpacked before the first patch and recompressed afterward.
-Repeating that setup whenever the patch combination changes adds disk churn and
-room for mistakes to what should be one workflow.
-
-The last piece is curation. Keeping a collection in order means storing ROMs
-compressed, keeping the patches next to them, and being able to prove months
-later that a patched file came from the ROM you think it did. rom-weaver
-handles all of it in one place. It reads every format above. It writes CHD, RVZ,
-Z3DS, ZIP, and 7z archives. It chains as many patches as you want in a single pass
-without manually unpacking first, and records the whole recipe - patch order,
-checksums, and output names - in a bundle file you can hand to someone else.
-Native CLI builds are
-available for Linux, macOS, and Windows. The browser webapp handles patching
-and bundle workflows without an install.
-
-For the current measurements and trade-offs, see the [performance brief](#performance).
-
-## Performance
-
-rom-weaver uses the same Rust engine in the CLI and threaded WASM webapp, but
-browser worker, storage, and OPFS costs make cross-frontend timing comparisons
-misleading. The [performance guide](./docs/development/performance.md) records
-the machine, corpus, settings, reference-tool versions, and repeated runs for
-each published result, and includes the commands needed to reproduce them.
-Production WASM is optimized with `wasm-opt -O4`; the browser codec matrix is
-the runtime check for the shipped worker and storage path.
-
-## Features
-
-- **Apply and create patches.** Twenty-one formats, including IPS, BPS, UPS,
-  xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered
-  multi-patch chains, checksum validation when the format or bundle supplies
-  expected values, and cheat-code baking. Three of them (DCP, BSP, and
-  HDiffPatch) can only be applied, not created.
-- **Inspect and extract containers.** ZIP, 7z, RAR, the tar family, CHD, RVZ,
-  Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
-- **Create format-specific compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS with
-  codec-aware compression settings. CHD and RVZ outputs are checked for
-  round-trip compatibility with chdman and dolphin-tool.
-- **Checksum and verify.** CRC32, MD5, SHA-1, SHA-256, BLAKE3, and friends,
-  with copier-header detection, header repair, and header-aware checksum
-  variants.
-- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS,
-  GBA, and 3DS can be reverted, with an opt-in footer that restores the
-  original file byte-for-byte.
-- **Share workflows.** Distributable [`rom-weaver-bundle.json`](./docs/rom-weaver-bundle-v1.schema.json)
-  bundles pin patch order, checksums, and output naming so others can replay
-  the exact workflow.
-- **Local-first and private.** Everything runs on your machine. The webapp is
-  an installable PWA that works offline and never uploads your files.
-- **One engine, two frontends.** The same Rust core powers the terminal CLI
-  and the threaded WASM webapp. CLI operation commands can emit line-delimited
-  JSON for scripting.
-
-The complete format, codec, and checksum compatibility tables are maintained
-in the [CLI guide](./docs/reference/formats.md).
-
-## Notices
-
-### Beta status
-
-rom-weaver is beta software and follows Semantic Versioning, but until v1.0,
-breaking changes may still happen between minor releases. Patching,
-compressing, extracting, and bundling are covered by automated tests. Hands-on
-testing happens on macOS and Linux; Windows is covered by hosted CI but has seen
-much less real-world use, so expect rougher edges there and please report
-anything Windows-specific. If you
-rely on the APIs or CLI flags, expect things to be a bit tougher: those
-interfaces may still change as the project heads toward v1.0. Trim and Tools are
-still beta, so they are disabled by default in the webapp and can be enabled in
-Settings. The `rom-weaver-core`, `-checksum`, `-containers`, and
-`-patches` crates are published to crates.io only so `rom-weaver-cli` can use
-them. The CLI and the webapp are the supported interfaces; using those crates as
-libraries in another project is not supported.
-
-### First complete public release
-
-v0.7.2 was the first complete public release. The changelog and the git
-history go back further, but v0.6.0 through v0.7.1 failed partway through the
-release pipeline or were only partially published. v0.7.1 completed most of
-the pipeline, but it still missed the crates.io CLI package, shipped a broken
-unscoped npm launcher, and built the static webapp archive with mismatched
-release metadata. Starting with v0.7.2, all public install methods were intended
-to work together. Install commands below resolve the current release unless you
-explicitly pin a version.
-
-### LLM-assisted development
-
-rom-weaver is built by a full-time software engineer in my spare time. Claude
-and ChatGPT are used during development for brainstorming, implementation,
-debugging, and review. I make the engineering decisions and review and test
-the resulting work myself; the goal is high-quality, dependable software, but
-AI-assisted code may still need extra scrutiny.
-
-### Translations
-
-Localized translations are early and may be entirely wrong in places. Manual
-edits and corrections are welcome.
-
 ## Install
 
-### Webapp
+Choose the [webapp](#webapp), [self-hosting](#self-hosting), or [CLI](#cli)
+path below.
+
+## Webapp
 
 Open the hosted webapp at **[rom-weaver.com/apply](https://rom-weaver.com/apply)**. You
 do not need to install anything or create an account. Choose **Apply**, add a
@@ -166,13 +62,10 @@ For a guided explanation, use
 [guided Create](https://rom-weaver.com/create?guide=create), or
 [guided Bundle](https://rom-weaver.com/apply?guide=bundle).
 To run the webapp on your own host, see the
-[self-hosting guide](./docs/hosting/self-hosting.md) for the release tarball,
-Docker, and Docker Compose setups.
+[Self-hosting](#self-hosting) section below or the
+[full self-hosting guide](./docs/hosting/self-hosting.md).
 
-<a name="self-host-the-webapp"></a>
-
-<details>
-<summary>Self-host the webapp</summary>
+## Self-hosting
 
 For a quick setup, choose static files, Docker Run, or Docker Compose. The
 [full self-hosting guide](./docs/hosting/self-hosting.md) covers reverse proxies,
@@ -192,7 +85,7 @@ tar --extract --gzip --file rom-weaver-webapp.tar.gz --directory rom-weaver-weba
 Serve the extracted `rom-weaver-webapp` directory from an HTTPS static host.
 For a pinned release, replace `latest` in the URL with its tag.
 
-Docker Run:
+Docker Run using the published GitHub Container Registry (GHCR) image:
 
 ```bash
 docker run --detach --name rom-weaver-webapp \
@@ -200,24 +93,29 @@ docker run --detach --name rom-weaver-webapp \
   ghcr.io/rom-weaver/rom-weaver-webapp:latest
 ```
 
-Docker Compose, building from source:
+Docker Compose using the same published GitHub Container Registry (GHCR) image:
+Download the [Docker Compose template](https://github.com/rom-weaver/rom-weaver/blob/main/docker-compose.yml)
+into a new directory:
 
 ```bash
-git clone https://github.com/rom-weaver/rom-weaver.git
-cd rom-weaver
-docker compose up --build --detach
+mkdir -p rom-weaver-compose
+cd rom-weaver-compose
+curl --fail --location --proto '=https' --tlsv1.2 \
+  --output docker-compose.yml \
+  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docker-compose.yml
+docker compose pull
+docker compose up --detach
 curl --fail --silent --show-error http://localhost:8080/health
 ```
 
-Only Docker with Compose is required; the image installs its own build
-toolchains. Set `PORT` to change the host port, for example
-`PORT=3000 docker compose up --build --detach`.
+Only Docker with Compose is required. Set `PORT` to change the host port, for
+example `PORT=3000 docker compose up --detach`. To build the image from source
+instead, clone the repository and add `--build` to the `docker compose up`
+command from its checkout; that path is slower and intended for development.
 For standalone TLS, mount a trusted certificate as described in the guide and
 set `HTTPS_PORT` instead.
 
-</details>
-
-### CLI
+## CLI
 
 Native release assets cover macOS arm64 and x86-64; Linux x86-64 GNU plus
 x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86. The package
@@ -333,7 +231,7 @@ docker run --rm \
 
 Mount your ROM directory at `/work` and pass paths under it. On Linux and
 macOS, `--user` keeps files created in the bind mount owned by your host user.
-See [Run in Docker](./docs/cli/install.md#run-in-docker).
+See [Run in Docker](./docs/how-to/install-cli.md#run-in-docker).
 
 </details>
 
@@ -355,10 +253,119 @@ toolchain.
 </details>
 
 Hitting `Permission denied`? See
-[File permissions](./docs/cli/reference.md#file-permissions).
+[File permissions](./docs/reference/cli.md#file-permissions).
 
 The [development guide](./docs/development/development.md) covers the full toolchain setup,
 webapp builds, and tests.
+
+## Why
+
+Every console generation brought its own compressed format: CHD for discs, RVZ
+for GameCube and Wii, Z3DS for 3DS ROMs, CSO and PBP for PSP, plus the usual ZIP
+and 7z on top. Working across them can mean finding several separate programs,
+learning different flags, and checking which builds are available for your
+platform.
+
+Patching adds another manual sequence. A translation, bugfix, and undub may
+need to run in a specific order, with intermediate files kept straight and a
+compressed input unpacked before the first patch and recompressed afterward.
+Repeating that setup whenever the patch combination changes adds disk churn and
+room for mistakes to what should be one workflow.
+
+The last piece is curation. Keeping a collection in order means storing ROMs
+compressed, keeping the patches next to them, and being able to prove months
+later that a patched file came from the ROM you think it did. rom-weaver
+handles all of it in one place. It reads every format above. It writes CHD, RVZ,
+Z3DS, ZIP, and 7z archives. It chains as many patches as you want in a single pass
+without manually unpacking first, and records the whole recipe - patch order,
+checksums, and output names - in a bundle file you can hand to someone else.
+Native CLI builds are
+available for Linux, macOS, and Windows. The browser webapp handles patching
+and bundle workflows without an install.
+
+For the current measurements and trade-offs, see the [performance brief](#performance).
+
+## Performance
+
+rom-weaver uses the same Rust engine in the CLI and threaded WASM webapp, but
+browser worker, storage, and OPFS costs make cross-frontend timing comparisons
+misleading. The [performance guide](./docs/development/performance.md) records
+the machine, corpus, settings, reference-tool versions, and repeated runs for
+each published result, and includes the commands needed to reproduce them.
+Production WASM is optimized with `wasm-opt -O4`; the browser codec matrix is
+the runtime check for the shipped worker and storage path.
+
+## Features
+
+- **Apply and create patches.** Twenty-one formats, including IPS, BPS, UPS,
+  xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered
+  multi-patch chains, checksum validation when the format or bundle supplies
+  expected values, and cheat-code baking. Three of them (DCP, BSP, and
+  HDiffPatch) can only be applied, not created.
+- **Inspect and extract containers.** ZIP, 7z, RAR, the tar family, CHD, RVZ,
+  Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
+- **Create format-specific compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS with
+  codec-aware compression settings. CHD and RVZ outputs are checked for
+  round-trip compatibility with chdman and dolphin-tool.
+- **Checksum and verify.** CRC32, MD5, SHA-1, SHA-256, BLAKE3, and friends,
+  with copier-header detection, header repair, and header-aware checksum
+  variants.
+- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS,
+  GBA, and 3DS can be reverted, with an opt-in footer that restores the
+  original file byte-for-byte.
+- **Share workflows.** Distributable [`rom-weaver-bundle.json`](./docs/rom-weaver-bundle-v1.schema.json)
+  bundles pin patch order, checksums, and output naming so others can replay
+  the exact workflow.
+- **Local-first and private.** Everything runs on your machine. The webapp is
+  an installable PWA that works offline and never uploads your files.
+- **One engine, two frontends.** The same Rust core powers the terminal CLI
+  and the threaded WASM webapp. CLI operation commands can emit line-delimited
+  JSON for scripting.
+
+The complete format, codec, and checksum compatibility tables are maintained
+in the [CLI guide](./docs/reference/formats.md).
+
+## Notices
+
+### Beta status
+
+rom-weaver is beta software and follows Semantic Versioning, but until v1.0,
+breaking changes may still happen between minor releases. Patching,
+compressing, extracting, and bundling are covered by automated tests. Hands-on
+testing happens on macOS and Linux; Windows is covered by hosted CI but has seen
+much less real-world use, so expect rougher edges there and please report
+anything Windows-specific. If you
+rely on the APIs or CLI flags, expect things to be a bit tougher: those
+interfaces may still change as the project heads toward v1.0. Trim and Tools are
+still beta, so they are disabled by default in the webapp and can be enabled in
+Settings. The `rom-weaver-core`, `-checksum`, `-containers`, and
+`-patches` crates are published to crates.io only so `rom-weaver-cli` can use
+them. The CLI and the webapp are the supported interfaces; using those crates as
+libraries in another project is not supported.
+
+### First complete public release
+
+v0.7.2 was the first complete public release. The changelog and the git
+history go back further, but v0.6.0 through v0.7.1 failed partway through the
+release pipeline or were only partially published. v0.7.1 completed most of
+the pipeline, but it still missed the crates.io CLI package, shipped a broken
+unscoped npm launcher, and built the static webapp archive with mismatched
+release metadata. Starting with v0.7.2, all public install methods were intended
+to work together. Install commands below resolve the current release unless you
+explicitly pin a version.
+
+### LLM-assisted development
+
+rom-weaver is built by a full-time software engineer in my spare time. Claude
+and ChatGPT are used during development for brainstorming, implementation,
+debugging, and review. I make the engineering decisions and review and test
+the resulting work myself; the goal is high-quality, dependable software, but
+AI-assisted code may still need extra scrutiny.
+
+### Translations
+
+Localized translations are early and may be entirely wrong in places. Manual
+edits and corrections are welcome.
 
 ## Screenshots
 
@@ -376,8 +383,8 @@ webapp builds, and tests.
       <td>Desktop: ordered patch stack</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/apply-patches-desktop-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/apply-patches-desktop-light.webp" alt="Focused Apply patch stack with two ordered sample patches on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-patches-desktop-dark.webp">
+          <img src="docs/screenshots/apply-patches-desktop-light.webp" alt="Focused Apply patch stack with two ordered sample patches on desktop">
         </picture>
       </td>
     </tr>
@@ -385,8 +392,8 @@ webapp builds, and tests.
       <td>Desktop: create output</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-output-desktop-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/create-output-desktop-light.webp" alt="Focused Create output card with BPS selected on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/create-output-desktop-dark.webp">
+          <img src="docs/screenshots/create-output-desktop-light.webp" alt="Focused Create output card with BPS selected on desktop">
         </picture>
       </td>
     </tr>
@@ -394,8 +401,8 @@ webapp builds, and tests.
       <td>Mobile: Original and Modified</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/create-inputs-mobile-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/create-inputs-mobile-light.webp" alt="Focused Create Original and Modified cards on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/create-inputs-mobile-dark.webp">
+          <img src="docs/screenshots/create-inputs-mobile-light.webp" alt="Focused Create Original and Modified cards on mobile" width="390">
         </picture>
       </td>
     </tr>
@@ -403,8 +410,8 @@ webapp builds, and tests.
       <td>Mobile: bundle output options</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/bundle-output-mobile-dark.webp">
-          <img src="packages/rom-weaver-webapp/design/bundle-output-mobile-light.webp" alt="Focused patch-only bundle controls on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/bundle-output-mobile-dark.webp">
+          <img src="docs/screenshots/bundle-output-mobile-light.webp" alt="Focused patch-only bundle controls on mobile" width="390">
         </picture>
       </td>
     </tr>
@@ -416,7 +423,7 @@ webapp builds, and tests.
 Start with the browser-first [documentation home](https://rom-weaver.com/docs)
 or the repository [documentation index](./docs/README.md). The web docs include
 a task and tool picker, guided samples, focused screenshots, and a
-[FAQ](./docs/usage/faq.md). CLI, deployment, integration, development,
+[FAQ](./docs/faq.md). CLI, deployment, integration, development,
 architecture, and format references each have their own guides.
 
 ## Contributing and support

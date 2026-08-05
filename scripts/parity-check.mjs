@@ -3,7 +3,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { basename, delimiter, dirname, join, resolve } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
@@ -78,8 +78,14 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
   if (!["debug", "release"].includes(profile)) fail(`PARITY_CARGO_PROFILE must be 'debug' or 'release' (got: ${profile})`);
   const chdman = env.CHDMAN_BIN || "chdman";
   const dolphin = env.DOLPHIN_TOOL_BIN || "dolphin-tool";
+  const sevenzip = env.SEVENZIP_BIN || "7zz";
+  const zip = env.ZIP_BIN || "zip";
+  const unzip = env.UNZIP_BIN || "unzip";
   requireTool("CHDMAN", chdman, env);
   requireTool("DOLPHIN_TOOL", dolphin, env);
+  requireTool("SEVENZIP", sevenzip, env);
+  requireTool("ZIP", zip, env);
+  requireTool("UNZIP", unzip, env);
   const cli = env.ROM_WEAVER_BIN || join(root, "target", profile, "rom-weaver");
   if (!env.ROM_WEAVER_BIN && !existsSync(cli)) {
     log(`building rom-weaver CLI (${profile} profile)`);
@@ -89,6 +95,9 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
   log(`rom-weaver: ${cli}`);
   log(`chdman:     ${findTool(chdman, env) || chdman}`);
   log(`dolphin:    ${findTool(dolphin, env) || dolphin}`);
+  log(`7zz:        ${findTool(sevenzip, env) || sevenzip}`);
+  log(`zip:        ${findTool(zip, env) || zip}`);
+  log(`unzip:      ${findTool(unzip, env) || unzip}`);
 
   const workRoot = join(root, "target/parity-check");
   rmSync(workRoot, { recursive: true, force: true });
@@ -143,8 +152,47 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
   const rvzExtractDir = join(rvzDir, "ref-extract");
   extractOne(cli, referenceRvz, rvzExtractDir);
   failures += reportExtract(join(rvzExtractDir, "ref.iso"), rvzSource, "rom-weaver-extracted dolphin-tool RVZ");
+
+  // Archive containers carry tool-specific metadata, so comparing their raw
+  // bytes would reject valid output. Compare the payload bytes after each
+  // implementation reads the other one's archive instead.
+  section("7z and ZIP payload parity vs reference tools");
+  const archiveDir = join(workRoot, "archives");
+  mkdirSync(archiveDir);
+  const archiveSource = join(archiveDir, "payload.bin");
+  generateFixture(archiveSource, 4 * 1024 * 1024);
+  log(`fixture payload.bin sha1=${sha1(archiveSource)} (${readFileSync(archiveSource).length} bytes)`);
+
+  const rw7z = join(archiveDir, "rw.7z");
+  run(cli, ["compress", "--input", archiveSource, "--format", "7z", "--output", rw7z, "--codec", "lzma2:5", "--threads", "1", "--json"]);
+  const rw7zExtract = join(archiveDir, "rw-7z-extract");
+  mkdirSync(rw7zExtract);
+  run(sevenzip, ["x", "-y", "-bso0", "-bsp0", `-o${rw7zExtract}`, rw7z]);
+  failures += reportExtract(join(rw7zExtract, "payload.bin"), archiveSource, "7zz-extracted rom-weaver 7z");
+
+  const reference7z = join(archiveDir, "ref.7z");
+  run(sevenzip, ["a", "-t7z", "-m0=lzma2", "-mx=5", "-mmt=on", "-bso0", "-bsp0", reference7z, "payload.bin"], { cwd: archiveDir });
+  const ref7zExtract = join(archiveDir, "ref-7z-extract");
+  mkdirSync(ref7zExtract);
+  extractOne(cli, reference7z, ref7zExtract);
+  failures += reportExtract(join(ref7zExtract, "payload.bin"), archiveSource, "rom-weaver-extracted 7zz 7z");
+
+  const rwZip = join(archiveDir, "rw.zip");
+  run(cli, ["compress", "--input", archiveSource, "--format", "zip", "--output", rwZip, "--codec", "deflate:6", "--threads", "1", "--json"]);
+  const rwZipExtract = join(archiveDir, "rw-zip-extract");
+  mkdirSync(rwZipExtract);
+  run(unzip, ["-qq", "-o", rwZip, "-d", rwZipExtract]);
+  failures += reportExtract(join(rwZipExtract, "payload.bin"), archiveSource, "unzip-extracted rom-weaver ZIP");
+
+  const referenceZip = join(archiveDir, "ref.zip");
+  run(zip, ["-6", "-q", "-j", referenceZip, "payload.bin"], { cwd: archiveDir });
+  const refZipExtract = join(archiveDir, "ref-zip-extract");
+  mkdirSync(refZipExtract);
+  extractOne(cli, referenceZip, refZipExtract);
+  failures += reportExtract(join(refZipExtract, "payload.bin"), archiveSource, "rom-weaver-extracted Info-ZIP");
+
   if (failures) fail(`${failures} parity check(s) FAILED -- a vendored codec may have regressed`);
-  log("all parity checks PASSED (CHD vs chdman, RVZ round-trip vs dolphin-tool)");
+  log("all parity checks PASSED (CHD vs chdman, RVZ vs dolphin-tool, 7z vs 7zz, ZIP vs Info-ZIP)");
 }
 
 function runDolphin(bin, user, input, output, format, extra = []) {

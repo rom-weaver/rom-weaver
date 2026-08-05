@@ -357,22 +357,22 @@ document.addEventListener("visibilitychange", () => {
 });
 
 runButton?.addEventListener("click", () => {
-  runMatrix("fast");
+  void runMatrix("fast");
 });
 exhaustiveButton?.addEventListener("click", () => {
-  runMatrix("exhaustive");
+  void runMatrix("exhaustive");
 });
 stressButton?.addEventListener("click", () => {
-  runMatrix("stress");
+  void runMatrix("stress");
 });
 threadsButton?.addEventListener("click", () => {
-  runMatrix("threads");
+  void runMatrix("threads");
 });
 memoryButton?.addEventListener("click", () => {
-  runMatrix("memory");
+  void runMatrix("memory");
 });
 growthButton?.addEventListener("click", () => {
-  runMatrix("growth");
+  void runMatrix("growth");
 });
 copyButton?.addEventListener("click", () => {
   copyReport().catch((error) => {

@@ -133,10 +133,20 @@ export const lighthouseArguments = (url, outputBase) => [
   "--chrome-flags=--headless=new --no-sandbox --disable-dev-shm-usage --ignore-certificate-errors",
 ];
 
+export const LIGHTHOUSE_ATTEMPTS = 3;
+
 export const shouldRetryLighthouse = (attempt, report) => attempt === 1 && Boolean(report?.runtimeError);
 
+export const shouldRetryLighthouseAttempt = (attempt, report) =>
+  attempt < LIGHTHOUSE_ATTEMPTS && report?.runtimeError?.code === "NO_NAVSTART";
+
+const clearReports = (outputBase) => {
+  for (const extension of ["json", "html"]) fs.rmSync(`${outputBase}.report.${extension}`, { force: true });
+};
+
 const runAudit = (url, outputBase) => {
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (let attempt = 1; attempt <= LIGHTHOUSE_ATTEMPTS; attempt += 1) {
+    clearReports(outputBase);
     const result = spawnSync(
       process.execPath,
       [fileURLToPath(import.meta.resolve("lighthouse/cli/index.js")), ...lighthouseArguments(url, outputBase)],
@@ -144,9 +154,9 @@ const runAudit = (url, outputBase) => {
     );
     const reportPath = `${outputBase}.report.json`;
     const report = fs.existsSync(reportPath) ? JSON.parse(fs.readFileSync(reportPath, "utf8")) : undefined;
-    if (shouldRetryLighthouse(attempt, report)) {
+    if (shouldRetryLighthouseAttempt(attempt, report)) {
       process.stdout.write(
-        `::warning title=Lighthouse retry::${url} hit ${report.runtimeError.code || "a runtime error"}; retrying once\n`,
+        `::warning title=Lighthouse retry::${url} hit ${report.runtimeError.code}; retrying (attempt ${attempt + 1}/${LIGHTHOUSE_ATTEMPTS})\n`,
       );
       continue;
     }

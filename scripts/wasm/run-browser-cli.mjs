@@ -4,7 +4,6 @@ import {
   closeSync,
   mkdtempSync,
   openSync,
-  readFileSync,
   readSync,
   rmSync,
   statSync,

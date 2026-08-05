@@ -17,7 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TEST_DIR = path.join(ROOT_DIR, "tests", "browser");
@@ -72,7 +72,7 @@ const extractRunnerFlags = (argv) => {
 
 // "<index>/<total>", 1-based. Anything else is a typo that would otherwise run
 // the wrong subset - or the whole suite twice - so it has to be fatal.
-const parseShard = (spec, source) => {
+export const parseShard = (spec, source) => {
   if (!spec) {
     if (source) throw new Error(`Missing ${source} value: expected <index>/<total> (e.g. 1/2)`);
     return null;
@@ -90,7 +90,7 @@ const parseShard = (spec, source) => {
 // shard is currently lightest. File size is the only cheap proxy for runtime we
 // have, and it is a decent one - these files are dominated by per-test setup -
 // whereas an alphabetical or round-robin split leaves one runner minutes behind.
-const selectShard = (files, shard) => {
+export const selectShard = (files, shard) => {
   if (!shard) return files;
   const weighed = files
     // A path that does not exist is left for Vitest to report; weigh it as 0
@@ -103,7 +103,7 @@ const selectShard = (files, shard) => {
     target.files.push(file);
     target.weight += weight;
   }
-  return buckets[shard.index - 1].files.sort();
+  return buckets[shard.index - 1].files.sort((left, right) => Number(left > right) - Number(left < right));
 };
 
 const partitionRunnerArgs = (argv) => {
@@ -138,7 +138,7 @@ const assertSummaryPreservingArgs = (vitestArgs) => {
   }
 };
 
-const discoverTestFiles = (requestedFiles) => {
+export const discoverTestFiles = (requestedFiles) => {
   if (requestedFiles.length) return requestedFiles;
   return fs
     .readdirSync(TEST_DIR)
@@ -203,7 +203,7 @@ const runPool = async (files, vitestArgs, concurrency, onResult) => {
   await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker));
 };
 
-const main = async () => {
+export const main = async () => {
   const { listOnly, shard, rest } = extractRunnerFlags(process.argv.slice(2));
   const { files: requestedFiles, vitestArgs } = partitionRunnerArgs(rest);
   assertSummaryPreservingArgs(vitestArgs);
@@ -270,7 +270,9 @@ const main = async () => {
   }
 };
 
-main().catch((error) => {
-  process.stderr.write(`${String(error?.stack || error)}\n`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    process.stderr.write(`${String(error?.stack || error)}\n`);
+    process.exitCode = 1;
+  });
+}

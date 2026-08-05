@@ -36,8 +36,8 @@ pub const PATCH_APPLY_ABOUT: &str = "Apply one or more patches to a ROM, in orde
 pub const PATCH_APPLY_LONG_ABOUT: &str = "\
 Apply one or more patches to a ROM, in order.
 
-`rom-weaver weave` runs this same command under a shorter name, and is what
-most of the examples use.
+Use `rom-weaver patch apply` for the canonical command. The compatibility
+spelling `rom-weaver weave` runs the same command.
 
 Repeat --patch once per patch. They run left to right, each one on the result
 of the last. --input takes a plain ROM, an archive, or a single-payload
@@ -61,18 +61,18 @@ cannot be combined with other patches or with the header and checksum options.";
 pub const PATCH_APPLY_AFTER_HELP: &str = "\
 Examples:
   # One patch, plain ROM out
-  rom-weaver weave --input game.sfc --patch hack.bps \\
+  rom-weaver patch apply --input game.sfc --patch hack.bps \\
     --output hacked.sfc --no-compress
 
   # Two patches in order, straight out of and back into a zip
-  rom-weaver weave --input game.zip \\
+  rom-weaver patch apply --input game.zip \\
     --patch translation.bps --patch fixes.ips --output hacked.zip
 
   # Replay someone else's published recipe
-  rom-weaver weave --bundle rom-weaver-bundle.json --input game.sfc
+  rom-weaver patch apply --bundle rom-weaver-bundle.json --input game.sfc
 
   # Check the result against a checksum the patch author published
-  rom-weaver weave --input game.sfc --patch hack.bps \\
+  rom-weaver patch apply --input game.sfc --patch hack.bps \\
     --output hacked.sfc --no-compress \\
     --expect-out sha1=0123456789abcdef0123456789abcdef01234567";
 

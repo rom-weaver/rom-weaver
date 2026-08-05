@@ -36,7 +36,7 @@ mise run deny                                      # dep advisories + licenses +
 mise run machete                                   # unused Rust dependencies
 mise run build-wasm                                # wasm build (needs WASI SDK v33+)
 npm --prefix packages/rom-weaver-webapp run dev     # webapp dev server
-npm --prefix packages/rom-weaver-webapp run lint    # oxfmt + oxlint + biome + tsc + browser-compat + knip
+npm --prefix packages/rom-weaver-webapp run lint    # oxfmt + biome (CSS) + oxlint + tsc + browser-compat + knip
 npm --prefix packages/rom-weaver-webapp run test:browser:wasm  # wasm-layer browser tests
 ```
 
@@ -88,7 +88,51 @@ shared actions, caching, and the release fan-out.
   belongs in the file that owns the component it modifies; reaching across a
   boundary cannot be fixed by adding specificity. Enforced by
   `npm run lint:css-layers`, with exceptions in that script's `EXEMPT` map.
+- **CSS belongs to Biome; everything else to oxfmt.** oxfmt does not read CSS,
+  so `npm run format:css` runs Biome's formatter plus its property sort, and
+  `biome.jsonc` turns the JS/TS/JSON formatters off to keep Biome off oxfmt's
+  territory. Biome ignores glob arguments, so that scope lives in the config,
+  not the command line. Two of Biome's CSS rules are deliberately `off` with
+  the reason written at each rule: `noImportantStyles`, because every
+  `!important` here escapes an inline style, a later cascade layer, or a
+  reduced-motion reset, and `noDescendingSpecificity`, because it pairs rules
+  by their rightmost selector and reports every icon rule ending in `svg`
+  against every other one. Real ordering hazards are `lint:css-layers`'s job.
 - Relative imports only in TypeScript (no path aliases).
+
+## Documentation
+
+`docs/` follows [Diátaxis](https://diataxis.fr/): every page serves exactly one
+mode, and the folder names the mode.
+
+- **`tutorials/`** - learning. Guided practice runs against supplied sample
+  files, numbered start to finish, ending in verification. Background prose
+  belongs in explanation, linked.
+- **`how-to/`** - tasks. Start at the task; each recipe uses only the flags
+  that task needs. No practice-run openers (link the tutorial in one line), no
+  flag-by-flag catalogs (link the reference), no "why" essays (link the
+  explanation).
+- **`reference/`** - facts. No advice, no steps, no advocacy. Flag catalogs,
+  tables, exit codes, formats. A troubleshooting or install procedure found
+  here moves to a how-to.
+- **`explanation/`** - understanding. No procedures and no UI instructions;
+  pages should be able to say "nothing here is a procedure" truthfully.
+- When a section drifts into another mode, move it to the owning page and
+  leave a one-line link both ways - do not duplicate content across pages. The
+  FAQ is a router: answers live on owning pages, the FAQ only links.
+- `hosting/` and `development/` are audience folders, with the same
+  mode-per-page discipline applied loosely: a subject-organized page
+  (`vendor-code.md`, `performance.md`) stays whole when splitting by mode
+  would scatter one subject's story.
+- Browser guides never contain terminal commands and CLI guides never describe
+  cards or drag handles (`explanation/browser-and-cli.md` promises this).
+- **Published slugs never break.** Slugs live in `DOC_SOURCES`
+  (`packages/rom-weaver-webapp/src/webapp/docs-routing.mjs`); a new page is
+  added there (its folder decides its nav shelf), to the `docs/README.md` map,
+  and to `llms.txt` when reader-relevant. Moving a page keeps its slug;
+  retiring a GitHub-served path needs a stub (see `docs/hosting/cli.md`) or a
+  `_redirects` rule.
+- Regenerate TOCs with `node scripts/update-markdown-toc.mjs <files>`.
 
 ## Releases
 

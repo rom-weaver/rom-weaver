@@ -30,10 +30,10 @@ test("documentation changes skip compiled stacks", () =>
     full: "false",
   }));
 test("usage guide changes build the webapp", () =>
-  assert.equal(classify("docs/usage/apply-rom-patches.md").webapp, "true"));
+  assert.equal(classify("docs/how-to/apply-rom-patches.md").webapp, "true"));
 test("every published guide builds the webapp, whatever folder it sits in", () => {
   for (const path of [
-    "docs/cli/reference.md",
+    "docs/reference/cli.md",
     "docs/legal/privacy.md",
     "docs/development/ARCHITECTURE.md",
   ]) {
@@ -227,9 +227,15 @@ test("plumbing lint runs only for the file kinds it lints", () => {
     ".github/ISSUE_TEMPLATE/config.yml",
     ".github/actions/wasm-cache/action.yml",
     "scripts/setup-worktree.sh",
+    "scripts/example.cjs",
+    "scripts/example.js",
     "scripts/warn-only.mjs",
     "packages/rom-weaver-webapp/Dockerfile",
     ".config/hadolint.yaml",
+    ".config/lefthook.yml",
+    ".oxlintrc.json",
+    "package.json",
+    "package-lock.json",
   ]) {
     assert.equal(classify(path).repo_lint, "true", path);
   }

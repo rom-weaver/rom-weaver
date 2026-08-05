@@ -29,6 +29,7 @@ type BrowserOpfsSourceRefOptions = {
   bucket?: WorkerStorageBucket;
   mountPoint: string;
   pathPrefix: string;
+  pathPrefixInPath?: boolean;
   trace?: BrowserOpfsSourceTraceContext;
 };
 
@@ -155,11 +156,13 @@ const createVisibleCollisionFileName = (fileName: string, suffixIndex: number) =
 // Allocate the bare name or smallest free `name-N`. Cleanup reclaims names only
 // after command handles close, so later stages reuse names safely while live
 // collisions remain distinct.
-const allocateVirtualInputPath = (mountPoint: string, fileName: string) => {
+const allocateVirtualInputPath = (mountPoint: string, fileName: string, pathPrefix?: string) => {
   const normalizedMountPoint = String(mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, "");
+  const normalizedPrefix = pathPrefix ? normalizeVirtualFileName(pathPrefix, "") : "";
   for (let suffixIndex = 1; suffixIndex < Number.MAX_SAFE_INTEGER; suffixIndex += 1) {
     const candidateName = createVisibleCollisionFileName(fileName, suffixIndex);
-    const candidatePath = getWorkerStorageBucketPath(normalizedMountPoint, "input", candidateName, candidateName);
+    const relativePath = normalizedPrefix ? `${normalizedPrefix}/${candidateName}` : candidateName;
+    const candidatePath = getWorkerStorageBucketPath(normalizedMountPoint, "input", relativePath, candidateName);
     if (allocatedVirtualInputPaths.has(candidatePath)) continue;
     allocatedVirtualInputPaths.add(candidatePath);
     return candidatePath;
@@ -174,7 +177,11 @@ const releaseVirtualInputPath = (filePath: string) => {
 const createVirtualInputPath = (options: BrowserOpfsSourceRefOptions, fileName: string) => {
   const mountPoint = String(options.mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, "");
   const normalizedFileName = normalizeVirtualFileName(fileName);
-  return allocateVirtualInputPath(mountPoint, normalizedFileName);
+  return allocateVirtualInputPath(
+    mountPoint,
+    normalizedFileName,
+    options.pathPrefixInPath ? options.pathPrefix : undefined,
+  );
 };
 
 const getOpfsPathSize = async (

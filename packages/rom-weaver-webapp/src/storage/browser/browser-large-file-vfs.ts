@@ -39,6 +39,38 @@ const getDestinationFileHandle = (destination: unknown) => {
   return null;
 };
 
+/**
+ * Write the snapshot where the destination asks: into a picked file handle when
+ * there is one, otherwise down the browser's download path.
+ */
+const saveFileToDestination = async (file: File, destination: unknown, fallbackFileName: string) => {
+  const destinationFileHandle = getDestinationFileHandle(destination);
+  if (destinationFileHandle) {
+    await writeBlobToFileHandle(destinationFileHandle, file);
+    return;
+  }
+  const destinationFileName = getDestinationFileName(destination);
+  const downloadBlob = destinationFileName ? new Blob([file], { type: "application/octet-stream" }) : file;
+  await triggerBrowserDownload(downloadBlob, destinationFileName || fallbackFileName, {
+    interactive: getDestinationInteractive(destination),
+  });
+};
+
+/** Byte range a read touches, clamped to what the caller's buffer can hold. */
+const resolveReadRange = (
+  target: Uint8Array,
+  options: { bufferOffset?: number; fileOffset?: number; length?: number } | undefined,
+) => {
+  const bufferOffset =
+    typeof options?.bufferOffset === "number" && options.bufferOffset > 0 ? Math.floor(options.bufferOffset) : 0;
+  const fileOffset =
+    typeof options?.fileOffset === "number" && options.fileOffset > 0 ? Math.floor(options.fileOffset) : 0;
+  const available = Math.max(0, target.byteLength - bufferOffset);
+  const length =
+    typeof options?.length === "number" ? Math.max(0, Math.min(Math.floor(options.length), available)) : available;
+  return { bufferOffset, fileOffset, length };
+};
+
 // OPFS refuses `removeEntry` with NoModificationAllowedError while any SyncAccessHandle is still
 // open on the entry. The proxy closes a run's handles asynchronously once the run reports done, so
 // cleanup that fires immediately after a run can land inside that window - observed closing within
@@ -92,6 +124,46 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     }
   };
 
+  /** Walks to the directory holding an entry; null when any segment is already gone. */
+  const resolveParentDirectory = async (segments: string[]) => {
+    let currentDirectory = await getRootDirectory();
+    try {
+      for (const segment of segments)
+        currentDirectory = await currentDirectory.getDirectoryHandle(segment, { create: false });
+    } catch {
+      return null;
+    }
+    return currentDirectory;
+  };
+
+  /**
+   * Remove an entry, waiting out the window where a SyncAccessHandle still holds
+   * it. Any other failure is left ignored, matching the historical cleanup behavior.
+   */
+  const removeEntryWhenFree = async (directory: FileSystemDirectoryHandle, fileName: string) => {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await directory.removeEntry(fileName, { recursive: true });
+        return;
+      } catch (error) {
+        const busy = (error as { name?: string } | null)?.name === "NoModificationAllowedError";
+        const delay = REMOVE_BUSY_RETRY_DELAYS_MS[attempt];
+        if (!(busy && delay !== undefined)) return;
+        await wait(delay);
+      }
+    }
+  };
+
+  // OPFS can lag a just-finished write, so poll briefly before declaring the output missing.
+  const awaitOutputHandle = async (normalizedPath: string) => {
+    let fileHandle = await resolveFileHandle(normalizedPath, false);
+    for (let attempt = 0; !fileHandle && attempt < 6; attempt += 1) {
+      await wait(25 * (attempt + 1));
+      fileHandle = await resolveFileHandle(normalizedPath, false);
+    }
+    return fileHandle;
+  };
+
   const createOutputRef = async (
     filePath: string,
     fileName: string,
@@ -104,14 +176,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     } = {},
   ): Promise<VfsOutputRef> => {
     const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
-    let fileHandle = await resolveFileHandle(normalizedPath, false);
-    if (!fileHandle) {
-      for (let attempt = 0; attempt < 6; attempt += 1) {
-        await wait(25 * (attempt + 1));
-        fileHandle = await resolveFileHandle(normalizedPath, false);
-        if (fileHandle) break;
-      }
-    }
+    const fileHandle = await awaitOutputHandle(normalizedPath);
     if (!fileHandle) throw new Error(`Browser VFS output is not available: ${fileName}`);
     let cachedOutputFile: File | null = null;
     const getOutputFile = async (): Promise<File> => {
@@ -134,17 +199,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
         await getOutputFile();
       },
       saveAs: async (destination) => {
-        const file = await getOutputFile();
-        const destinationFileHandle = getDestinationFileHandle(destination);
-        if (!destinationFileHandle) {
-          const destinationFileName = getDestinationFileName(destination);
-          const downloadBlob = destinationFileName ? new Blob([file], { type: "application/octet-stream" }) : file;
-          await triggerBrowserDownload(downloadBlob, destinationFileName || fileName, {
-            interactive: getDestinationInteractive(destination),
-          });
-          return;
-        }
-        await writeBlobToFileHandle(destinationFileHandle, file);
+        await saveFileToDestination(await getOutputFile(), destination, fileName);
       },
       size: knownSize ?? initialFile?.size ?? 0,
       timing: input.timing,
@@ -163,14 +218,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     read: async (filePath, buffer, options) => {
       const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
       const target = toUint8Array(buffer);
-      const bufferOffset =
-        typeof options?.bufferOffset === "number" && options.bufferOffset > 0 ? Math.floor(options.bufferOffset) : 0;
-      const fileOffset =
-        typeof options?.fileOffset === "number" && options.fileOffset > 0 ? Math.floor(options.fileOffset) : 0;
-      const length =
-        typeof options?.length === "number"
-          ? Math.max(0, Math.min(Math.floor(options.length), target.byteLength - bufferOffset))
-          : Math.max(0, target.byteLength - bufferOffset);
+      const { bufferOffset, fileOffset, length } = resolveReadRange(target, options);
       if (!length) return 0;
       const snapshotEntry = async () => {
         const fileHandle = await resolveFileHandle(normalizedPath, false);
@@ -199,31 +247,13 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     },
     remove: async (filePath) => {
       invalidateReadCache(normalizeAbsoluteVfsPath(filePath, rootPath));
-      const directory = await getRootDirectory();
       const relativePath = getVfsRelativePath(filePath, rootPath);
       const segments = relativePath ? relativePath.split("/") : [];
       const fileName = segments.pop();
       if (!fileName) return;
-      let currentDirectory = directory;
-      try {
-        for (const segment of segments)
-          currentDirectory = await currentDirectory.getDirectoryHandle(segment, { create: false });
-      } catch {
-        return; // A missing parent directory means there is nothing left to remove.
-      }
-      for (let attempt = 0; ; attempt += 1) {
-        try {
-          await currentDirectory.removeEntry(fileName, { recursive: true });
-          return;
-        } catch (error) {
-          // Only "a handle is still open" is worth waiting on. Anything else (already gone, denied)
-          // is not going to change on retry, so keep the historical ignore-cleanup-errors behavior.
-          const busy = (error as { name?: string } | null)?.name === "NoModificationAllowedError";
-          const delay = REMOVE_BUSY_RETRY_DELAYS_MS[attempt];
-          if (!(busy && delay !== undefined)) return;
-          await wait(delay);
-        }
-      }
+      const parent = await resolveParentDirectory(segments);
+      if (!parent) return; // A missing parent directory means there is nothing left to remove.
+      await removeEntryWhenFree(parent, fileName);
     },
     rootPath,
     saveAs: async (filePath, destination, fileName) => {

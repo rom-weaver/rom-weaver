@@ -72,6 +72,10 @@ export class RomWeaverWorkerClientCore {
   protected _disposed: boolean;
   protected _onSelect?: (request: string) => Promise<number[]> | number[];
   protected _openSelectResponders: Set<(indices: number[]) => void>;
+  protected _boundOnMessage: (event: Event) => void;
+  protected _boundOnError: (event: Event) => void;
+  protected _boundOnMessageError: (event: Event) => void;
+  protected _boundOnExit: (code: unknown) => void;
 
   constructor(worker: Worker, transport: WorkerTransport) {
     this.worker = worker;
@@ -81,15 +85,15 @@ export class RomWeaverWorkerClientCore {
     this._disposed = false;
     this._openSelectResponders = new Set();
 
-    this._onMessage = this._onMessage.bind(this);
-    this._onError = this._onError.bind(this);
-    this._onMessageError = this._onMessageError.bind(this);
-    this._onExit = this._onExit.bind(this);
+    this._boundOnMessage = (event) => this._onMessage(event);
+    this._boundOnError = (event) => this._onError(event);
+    this._boundOnMessageError = (event) => this._onMessageError(event);
+    this._boundOnExit = (code) => this._onExit(code);
 
-    this._transport.onMessage(this.worker, this._onMessage);
-    this._transport.onError(this.worker, this._onError);
-    this._transport.onMessageError?.(this.worker, this._onMessageError);
-    this._transport.onExit?.(this.worker, this._onExit);
+    this._transport.onMessage(this.worker, this._boundOnMessage);
+    this._transport.onError(this.worker, this._boundOnError);
+    this._transport.onMessageError?.(this.worker, this._boundOnMessageError);
+    this._transport.onExit?.(this.worker, this._boundOnExit);
   }
 
   /**
@@ -329,10 +333,10 @@ export class RomWeaverWorkerClientCore {
   }
 
   _detachListeners() {
-    this._transport.offMessage(this.worker, this._onMessage);
-    this._transport.offError(this.worker, this._onError);
-    this._transport.offMessageError?.(this.worker, this._onMessageError);
-    this._transport.offExit?.(this.worker, this._onExit);
+    this._transport.offMessage(this.worker, this._boundOnMessage);
+    this._transport.offError(this.worker, this._boundOnError);
+    this._transport.offMessageError?.(this.worker, this._boundOnMessageError);
+    this._transport.offExit?.(this.worker, this._boundOnExit);
   }
 
   _terminateWorker() {
@@ -371,26 +375,9 @@ export function createBrowserWorkerTransport(): WorkerTransport {
     },
     toError(event) {
       const errorEvent = event as ErrorEvent | null | undefined;
-      if (errorEvent?.error instanceof Error) {
-        return errorEvent.error;
-      }
-      const messageParts = [];
-      if (typeof errorEvent?.message === "string" && errorEvent.message.trim().length > 0) {
-        messageParts.push(errorEvent.message.trim());
-      }
-      if (typeof errorEvent?.filename === "string" && errorEvent.filename.trim().length > 0) {
-        const location = [
-          errorEvent.filename,
-          Number.isFinite(errorEvent?.lineno) ? String(errorEvent.lineno) : null,
-          Number.isFinite(errorEvent?.colno) ? String(errorEvent.colno) : null,
-        ]
-          .filter(Boolean)
-          .join(":");
-        if (location.length > 0) {
-          messageParts.push(`at ${location}`);
-        }
-      }
-      return new Error(messageParts.join(" ") || "worker error");
+      if (errorEvent?.error instanceof Error) return errorEvent.error;
+      const messageParts = [readTrimmedString(errorEvent?.message), formatErrorEventLocation(errorEvent)];
+      return new Error(messageParts.filter(Boolean).join(" ") || "worker error");
     },
     toMessageError(event) {
       const errorEvent = event as MessageEvent | ErrorEvent | null | undefined;
@@ -404,6 +391,25 @@ export function createBrowserWorkerTransport(): WorkerTransport {
       return new Error(message);
     },
   };
+}
+
+/** A trimmed string value, or "" for anything that is not a non-blank string. */
+function readTrimmedString(value: unknown): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : "";
+}
+
+/** "at file:line:col" for an ErrorEvent that names a source, otherwise "". */
+function formatErrorEventLocation(errorEvent: ErrorEvent | null | undefined): string {
+  const filename = readTrimmedString(errorEvent?.filename);
+  if (!filename) return "";
+  const location = [
+    filename,
+    Number.isFinite(errorEvent?.lineno) ? String(errorEvent?.lineno) : null,
+    Number.isFinite(errorEvent?.colno) ? String(errorEvent?.colno) : null,
+  ]
+    .filter(Boolean)
+    .join(":");
+  return location ? `at ${location}` : "";
 }
 
 function isWorkerResponseMessage(value: unknown): value is RomWeaverWorkerResponse {

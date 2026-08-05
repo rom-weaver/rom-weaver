@@ -17,7 +17,7 @@ const listFiles = (directory) =>
   });
 
 // The worker runtime chunk guard. `rom-weaver-share-worker-runtime-chunks` (vite.config.mjs) emits
-// each `?worker&url` entry into the main rollup graph so the `wasm-runtime` advancedChunks group can
+// each `?worker&url` entry into the main rollup graph so the `wasm-runtime` codeSplitting group can
 // hoist the modules only worker entries reach into one chunk both workers import. The grouping leans
 // on two rolldown behaviours that a Vite/rolldown upgrade can silently change: `ctx.getModuleInfo`
 // being usable inside a group `name` function, and `includeDependenciesRecursively` staying off. If
@@ -30,7 +30,7 @@ const WORKER_ENTRY_CHUNK_PATTERNS = [/^browser-runner-worker-[\w-]+\.js$/, /^bro
 const STATIC_IMPORT_PATTERN = /(?:^|[;}\n])import\s*(?:[\w$*{},\s]+?\s*from\s*)?"([^"]+)"/g;
 const GUARD_REFERENCE =
   'the "Workers share one runtime chunk" bullet in docs/development/ARCHITECTURE.md, and the ' +
-  "`rom-weaver-share-worker-runtime-chunks` plugin plus the `wasm-runtime` advancedChunks group in " +
+  "`rom-weaver-share-worker-runtime-chunks` plugin plus the `wasm-runtime` codeSplitting group in " +
   "packages/rom-weaver-webapp/vite.config.mjs";
 
 const staticImportsOf = (assetsDir, fileName) => {
@@ -97,7 +97,7 @@ export function checkWorkerRuntimeChunk(distDir = DIST_DIR) {
   if (documentChunks.has(runtimeChunk)) {
     const importers = [...documentChunks]
       .filter((name) => name !== runtimeChunk && staticImportsOf(assetsDir, name).has(runtimeChunk))
-      .sort();
+      .sort((left, right) => Number(left > right) - Number(left < right));
     problems.push(
       `${runtimeChunk} is on the first-paint critical path; ${
         importers.length > 0 ? `imported by ${importers.join(", ")}` : "reached from index.html directly"

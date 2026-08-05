@@ -1,6 +1,5 @@
 import { type ComponentType, lazy } from "react";
 import { createLogger } from "../lib/logging.ts";
-import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
 import type { ToolsFormProps } from "./components/tools-form.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
@@ -25,8 +24,6 @@ type WorkflowRouteProps = {
   creator: CreatePatchFormProps;
   docs: {
     active: boolean;
-    onGuideIntent: (guide: GuidedSample) => void;
-    onStartGuide: (guide: GuidedSample) => boolean | void;
     slug: string;
   };
   patcher: ApplyPatchFormProps;
@@ -84,7 +81,12 @@ const CreatorRoute = createWorkflowRoute("creator", () =>
   import("../public/react/create-patch-form.tsx").then((module) => ({ default: module.CreatePatchForm })),
 );
 const DocsRoute = createWorkflowRoute("docs", () =>
-  import("./docs-page.tsx").then((module) => ({ default: module.DocsPage })),
+  import("./docs-page.tsx").then(async (module) => {
+    // Each guide's HTML is its own chunk; without the landing guide's the
+    // article would mount empty and pop in a frame later.
+    await module.preloadDocsHtml().catch(() => undefined);
+    return { default: module.DocsPage };
+  }),
 );
 const PatcherRoute = createWorkflowRoute("patcher", () =>
   import("../public/react/apply-patch-form.tsx").then((module) => ({ default: module.ApplyPatchForm })),
@@ -113,4 +115,20 @@ const TrimPatchRoute = TrimRoute.Component;
 /** Resolve one route's chunk. Awaited before the first mount so the landing tab never suspends. */
 const preloadWorkflowRoute = (view: WebappView): Promise<unknown> => WORKFLOW_ROUTES[view].preload();
 
-export { ApplyPatchRoute, CreatePatchRoute, DocsPageRoute, preloadWorkflowRoute, ToolsRouteForm, TrimPatchRoute };
+/**
+ * Resolve one guide's HTML chunk (defaults to the guide named by the current
+ * URL). Prerender and the client boot await this alongside the docs route
+ * chunk so a docs document hydrates onto the article it already shows.
+ */
+const preloadDocsRouteHtml = (slug?: string): Promise<unknown> =>
+  import("./docs-page.tsx").then((module) => module.preloadDocsHtml(slug));
+
+export {
+  ApplyPatchRoute,
+  CreatePatchRoute,
+  DocsPageRoute,
+  preloadDocsRouteHtml,
+  preloadWorkflowRoute,
+  ToolsRouteForm,
+  TrimPatchRoute,
+};

@@ -84,6 +84,20 @@ const sanitizeVersionToken = (value) =>
     .replace(/[^0-9A-Za-z-]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+const resolveGitBranch = ({ checkoutBranch, headRef = "", refName = "", refType = "" }) => {
+  const checkedOutBranch = String(checkoutBranch || "").trim();
+  if (checkedOutBranch && checkedOutBranch !== "HEAD") return checkedOutBranch;
+  const pullRequestBranch = String(headRef || "").trim();
+  if (pullRequestBranch) return pullRequestBranch;
+  return refType === "tag" ? "" : String(refName || "").trim();
+};
+
+const getVersionBranch = (branch, isVersionTag) => {
+  const normalizedBranch = sanitizeVersionToken(branch);
+  const isDefaultBranch = normalizedBranch === "main" || normalizedBranch === "master";
+  return normalizedBranch && !isDefaultBranch && !isVersionTag ? normalizedBranch : "";
+};
+
 const hasPackageVersionTag = (version) => {
   if (!version) return false;
   const versionTags = new Set([version, `v${version}`]);
@@ -108,13 +122,16 @@ const getGitMetadata = (version) => {
   if (!revision) return null;
 
   const branchName = runGit("git rev-parse --abbrev-ref HEAD");
-  const normalizedBranch = sanitizeVersionToken(branchName);
   const isVersionTag = hasPackageVersionTag(version);
-  // Default-branch builds carry no branch prefix; the tag check alone can't
-  // cover them because CI's shallow checkout doesn't fetch tags.
-  const isDefaultBranch = normalizedBranch === "main" || normalizedBranch === "master";
-  const gitBranch =
-    normalizedBranch && normalizedBranch !== "HEAD" && !isDefaultBranch && !isVersionTag ? normalizedBranch : "";
+  // PR builds use a detached merge checkout, so git cannot report the source
+  // branch. GitHub's head ref is the branch users need to see in the dialog.
+  const gitBranch = resolveGitBranch({
+    checkoutBranch: branchName,
+    headRef: process.env.GITHUB_HEAD_REF,
+    refName: process.env.GITHUB_REF_NAME,
+    refType: process.env.GITHUB_REF_TYPE,
+  });
+  const versionBranch = getVersionBranch(gitBranch, isVersionTag);
 
   const dirtyDiff = runGit("git diff --binary HEAD --");
   const untrackedDigest = getUntrackedFileDigestInput();
@@ -127,6 +144,7 @@ const getGitMetadata = (version) => {
     commitsSinceVersion: getCommitsSinceVersion(version),
     dirtyHash,
     gitBranch,
+    versionBranch,
     isVersionTag,
     revision,
   };
@@ -136,7 +154,7 @@ const buildVersionString = (baseVersion, gitMetadata) => {
   if (!gitMetadata?.revision) return baseVersion;
   // A clean checkout of the tagged release commit IS the release: no suffix.
   if (gitMetadata.isVersionTag && !gitMetadata.dirtyHash) return baseVersion;
-  const branchPrefix = gitMetadata.gitBranch ? `${gitMetadata.gitBranch}.` : "";
+  const branchPrefix = gitMetadata.versionBranch ? `${gitMetadata.versionBranch}.` : "";
   const hashToken = gitMetadata.dirtyHash ? `dirty.${gitMetadata.dirtyHash}` : gitMetadata.revision;
   return `${baseVersion}+${branchPrefix}${hashToken}`;
 };
@@ -283,9 +301,10 @@ const getBuildInfo = () => {
   const commitHash = gitMetadata?.revision || "unknown";
   const dirtyHash = gitMetadata?.dirtyHash || "";
   const gitBranch = gitMetadata?.gitBranch || "";
+  const versionBranch = gitMetadata?.versionBranch || "";
   const isVersionTag = (gitMetadata?.isVersionTag ?? false) && !dirtyHash;
   const hashSuffix = dirtyHash ? `.dirty#${dirtyHash}` : `#${commitHash}`;
-  const displayVersion = isVersionTag ? version : `${version}${gitBranch ? `.${gitBranch}` : ""}${hashSuffix}`;
+  const displayVersion = isVersionTag ? version : `${version}${versionBranch ? `.${versionBranch}` : ""}${hashSuffix}`;
   return {
     buildVersion: buildVersionString(version, gitMetadata),
     commitHash,
@@ -295,8 +314,9 @@ const getBuildInfo = () => {
     gitBranch,
     hasDirtyChanges: !!dirtyHash,
     isVersionTag,
+    versionBranch,
     version,
   };
 };
 
-export { getBuildInfo, getChangelog, readReleaseNotes };
+export { getBuildInfo, getChangelog, getVersionBranch, readReleaseNotes, resolveGitBranch };

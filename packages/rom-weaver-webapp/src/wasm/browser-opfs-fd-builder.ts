@@ -124,6 +124,8 @@ export async function buildBrowserOpfsWasiFds({
   } catch (error) {
     trace?.(`[browser-opfs] build fds failed ${formatErrorForTrace(error)}`);
     closeSyncFiles(runCloseables);
+    // Preserve the existing microtask boundary; this cleanup function is synchronous by design.
+    // oxlint-disable-next-line typescript/await-thenable
     await cleanupBrowserOpfsMounts(mounts);
     throw error;
   }

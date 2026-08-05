@@ -3,7 +3,7 @@ import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
-import { Masthead, SiteFooter } from "../../src/webapp/components/shell.tsx";
+import { Masthead } from "../../src/webapp/components/shell.tsx";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -23,14 +23,13 @@ const shell = (threads, serviceWorkerStatus, betaToolsEnabled = false) =>
       null,
       createElement(Masthead, {
         currentTab: "patcher",
+        onOpenChangelog: () => undefined,
         onOpenLog: () => undefined,
         onOpenSettings: () => undefined,
-        onReset: () => undefined,
+        onOpenStatus: () => undefined,
         onSelectTab: () => undefined,
-        tabs,
-      }),
-      createElement(SiteFooter, {
         serviceWorkerStatus,
+        tabs,
         threads,
         version: "1.2.3",
       }),
@@ -51,14 +50,16 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
   host.innerHTML = renderToString(shell(1, null));
   document.body.append(host);
 
+  // Exactly what the parser-time resolver in index.html writes before React
+  // loads: the count, its accessible name, and the runtime state + glyph.
   const threads = host.querySelector(".masthead-threads");
-  const runtime = host.querySelector(".masthead-runtime");
-  threads.querySelector(".masthead-threads-full").textContent = "· 8 threads";
-  threads.querySelector(".masthead-threads-short").textContent = "· 8T";
-  threads.querySelector(".sr-only").textContent = "8 threads";
-  threads.title = "8 threads";
-  runtime.textContent = "· web · sw off";
-  runtime.title = "Service-worker offline support is unavailable.";
+  const runtime = host.querySelector(".sub-status");
+  threads.querySelector(".masthead-threads-count").textContent = "8";
+  threads.setAttribute("aria-label", "8 threads");
+  runtime.dataset.sw = "disabled";
+  runtime.setAttribute("aria-label", "Offline support off");
+  runtime.querySelector("svg").innerHTML =
+    '<path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"></path><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"></path><path d="m2 2 20 20"></path>';
 
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
   const recoverableErrors = [];
@@ -69,7 +70,7 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
   });
 
   expect(host.querySelector(".masthead-threads")).toBe(threads);
-  expect(host.querySelector(".masthead-runtime")).toBe(runtime);
+  expect(host.querySelector(".sub-status")).toBe(runtime);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });
@@ -88,6 +89,7 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
     });
   });
 
+  // trim, once in the mode rail and once in the phone dock; Tools lives in More
   expect(host.querySelectorAll("[data-beta-tool]").length).toBe(2);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();

@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 
 const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
 const LZMA_SDK_PATCH_ROOT: &str = "lzma-sdk/patches";
+const PATCH_ROOT: &str = "libarchive/patches";
+// Appended to the staged 7zip reader on every target so the solid-block index of
+// the current entry is reachable from Rust.
+const SEVENZ_SOLID_BLOCK_PATCH_FILE: &str = "7zip_solid_block.c";
 const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
 const VENDORED_LZMA_SDK: &str = "lzma-sdk/vendor/C";
 // rom-weaver's own opaque wrapper over the SDK. libarchive ships its own
@@ -618,6 +622,10 @@ fn wasm_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
     manifest_dir.join(WASM_PATCH_ROOT).join(relative_path)
 }
 
+fn patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
+    manifest_dir.join(PATCH_ROOT).join(relative_path)
+}
+
 fn emit_vendor_patch_rerun_if_changed(manifest_dir: &Path) {
     for patch_file in WASM_PATCH_FILES {
         println!(
@@ -631,6 +639,10 @@ fn emit_vendor_patch_rerun_if_changed(manifest_dir: &Path) {
             lzma_sdk_patch_path(manifest_dir, patch_file).display()
         );
     }
+    println!(
+        "cargo:rerun-if-changed={}",
+        patch_path(manifest_dir, SEVENZ_SOLID_BLOCK_PATCH_FILE).display()
+    );
 }
 
 fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Path) -> PathBuf {
@@ -656,6 +668,11 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
     let write_extra = write_extra_enabled();
     add_wasm_archive_write_format_shim(manifest_dir, &staged.join("libarchive"))
         .expect("failed to add libarchive format shim");
+    add_archive_read_7zip_solid_block_accessor(
+        manifest_dir,
+        &staged.join("libarchive/archive_read_support_format_7zip.c"),
+    )
+    .expect("failed to add libarchive 7zip solid-block accessor");
     if wasm_target {
         patch_archive_util_tempdir_for_wasm(
             manifest_dir,
@@ -754,6 +771,43 @@ fn patch_archive_util_tempdir_for_wasm(
         &wasm_patch_path(manifest_dir, "archive_util_tempdir.replacement.txt"),
         "libarchive archive_util.c tempdir fallback block",
     )
+}
+
+// Every field the appended accessor reads. Checking them here turns a vendor
+// refresh that renames or drops one into a build failure naming the field,
+// instead of a compiler error inside a generated source file.
+const SEVENZ_SOLID_BLOCK_REQUIRED_FIELDS: &[&str] = &[
+    "uint32_t\t\t folderIndex;",
+    "uint64_t\t\t numFolders;",
+    "struct _7zip_entry\t*entry;",
+    "struct _7z_coders_info\t ci;",
+];
+
+// Append the solid-block accessor to the staged 7zip reader. It has to live in
+// that translation unit: `struct _7zip` and `struct _7zip_entry` are file-local,
+// so no out-of-tree file can read `zip->entry->folderIndex`.
+fn add_archive_read_7zip_solid_block_accessor(
+    manifest_dir: &Path,
+    sevenz_path: &Path,
+) -> std::io::Result<()> {
+    let content = fs::read_to_string(sevenz_path)?;
+    for field in SEVENZ_SOLID_BLOCK_REQUIRED_FIELDS {
+        if !content.contains(field) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "libarchive 7zip reader field `{}` was not found in {}; the solid-block accessor needs it",
+                    field.replace('\t', " "),
+                    sevenz_path.display()
+                ),
+            ));
+        }
+    }
+    let accessor = fs::read_to_string(patch_path(manifest_dir, SEVENZ_SOLID_BLOCK_PATCH_FILE))?;
+    if content.contains("rom_weaver_7zip_entry_solid_block") {
+        return Ok(());
+    }
+    fs::write(sevenz_path, format!("{content}\n{accessor}"))
 }
 
 fn patch_archive_write_set_format_7zip_for_wasm(sevenz_path: &Path) -> std::io::Result<()> {

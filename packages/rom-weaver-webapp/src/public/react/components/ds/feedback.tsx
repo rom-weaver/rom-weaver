@@ -1,6 +1,8 @@
 import { CircleX, TriangleAlert, X } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, ReactNode, RefObject } from "react";
+import { useEffect, useRef } from "react";
 import { join } from "./cx.ts";
+import { prefersReducedMotion } from "./flat-transition.ts";
 
 /**
  * Loom feedback primitives: notices, the weave meter, the recessed progress
@@ -196,6 +198,24 @@ const RunButtonDownloadSummary = ({ download }: { download: DownloadMeta }) => (
 );
 
 /**
+ * A finished run swaps the progress panel for a shorter result, so the button
+ * that carries the download can land below the fold - or behind the phone dock,
+ * which is fixed over the end of the column. `nearest` scrolls the least amount
+ * that makes it visible, and its scroll margin (buttons.css) is what clears the
+ * dock, so a button already in view does not move at all.
+ */
+const useRevealFinishedDownload = (button: RefObject<HTMLButtonElement | null>, download?: DownloadMeta) => {
+  const offered = useRef(Boolean(download));
+  useEffect(() => {
+    const offering = Boolean(download);
+    const wasOffering = offered.current;
+    offered.current = offering;
+    if (!offering || wasOffering) return;
+    button.current?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "nearest" });
+  }, [button, download]);
+};
+
+/**
  * The primary action button. Renders the uppercase action by default, or the
  * download summary (kind · size · detail) when `download` is provided.
  */
@@ -218,18 +238,23 @@ const RunButton = ({
   ariaLabel?: string;
   id?: string;
   type?: "button" | "submit";
-}) => (
-  <button
-    aria-label={ariaLabel}
-    className={join("btn primary run", download && "download-btn dl")}
-    disabled={disabled}
-    id={id}
-    onClick={onClick}
-    type={type}
-  >
-    {icon}
-    {download ? <RunButtonDownloadSummary download={download} /> : children}
-  </button>
-);
+}) => {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  useRevealFinishedDownload(buttonRef, download);
+  return (
+    <button
+      aria-label={ariaLabel}
+      className={join("btn primary run", download && "download-btn dl")}
+      disabled={disabled}
+      id={id}
+      onClick={onClick}
+      ref={buttonRef}
+      type={type}
+    >
+      {icon}
+      {download ? <RunButtonDownloadSummary download={download} /> : children}
+    </button>
+  );
+};
 
 export { type DownloadMeta, FileProgress, type FileProgressProps, InlineProgress, Notice, ProgressTrack, RunButton };

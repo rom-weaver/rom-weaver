@@ -130,20 +130,18 @@ const createServiceWorkerBootGate = ({
 
     let elapsed = 0;
     let controlledAt: number | null = hasController() ? 0 : null;
+    // Controlled but still not isolated for too long means the handshake stalled.
+    const handshakeStalled = () => controlledAt !== null && elapsed - controlledAt >= stuckReloadMs;
+    // Reload to retry while there is budget; otherwise stop holding the page.
+    const resolveStalledHandshake = () => {
+      if (reloadCount < maxReloads) reloadToRetry("controlled-but-not-isolated");
+      else boot("reload-budget-exhausted");
+    };
     const tick = () => {
-      if (isCrossOriginIsolated()) {
-        boot("cross-origin-isolated");
-        return;
-      }
+      if (isCrossOriginIsolated()) return boot("cross-origin-isolated");
       elapsed += POLL_MS;
       if (controlledAt === null && hasController()) controlledAt = elapsed;
-      // Controlled but still not isolated for too long: the handshake stalled. Reload to retry while we
-      // still have retry budget; otherwise stop holding the page and boot un-isolated.
-      if (controlledAt !== null && elapsed - controlledAt >= stuckReloadMs) {
-        if (reloadCount < maxReloads) reloadToRetry("controlled-but-not-isolated");
-        else boot("reload-budget-exhausted");
-        return;
-      }
+      if (handshakeStalled()) return resolveStalledHandshake();
       // Absolute backstop (e.g. the worker never installed): boot un-isolated rather than hang.
       if (elapsed >= timeoutMs) boot("isolation-gate-timeout");
     };

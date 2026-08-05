@@ -73,9 +73,10 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     if (
       /^\.github\/workflows\/(?:ci|coverage)\.yml$/.test(path) ||
       /^\.github\/actions\/(?:setup-build-env|wasm-cache)\//.test(path) ||
-      /^\.cargo\//.test(path) ||
+      path.startsWith(".cargo/") ||
+      path === ".config/lefthook.yml" ||
       path === ".config/mise.toml" ||
-      /^scripts\/ci\//.test(path)
+      path.startsWith("scripts/ci/")
     )
       result.full = true;
 
@@ -96,9 +97,9 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
         path,
       ) ||
       /^\.github\/workflows\/(?:npm-publish|release)\.yml$/.test(path) ||
-      /^\.github\/actions\/build-cli-platform\//.test(path) ||
+      path.startsWith(".github/actions/build-cli-platform/") ||
       path === ".github/cli-platforms.json" ||
-      /^packages\/rom-weaver-cli-platforms\//.test(path) ||
+      path.startsWith("packages/rom-weaver-cli-platforms/") ||
       /^(?:bin\/rom-weaver\.mjs|install\.(?:sh|ps1))$/.test(path) ||
       /^(?:scripts\/(?:check-thread-guards|check-whitespace|gen-third-party-licenses|prepare-npm-platform-package|sync-version|vendored-pathspecs|verify-cli-platform)\.mjs|scripts\/wasm\/)/.test(
         path,
@@ -114,7 +115,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       path === "package.json" ||
       path === "package-lock.json" ||
       /^scripts\/.*\.mjs$/.test(path) ||
-      /^scripts\/wasm\//.test(path) ||
+      path.startsWith("scripts/wasm/") ||
       path === ".dockerignore" ||
       path === "docker-compose.yml" ||
       path === ".github/workflows/docker-publish.yml"
@@ -127,13 +128,13 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     // fails if anything reachable from it is not selected here.
     if (
       /^(?:Cargo\.toml|Cargo\.lock|package\.json|package-lock\.json)$/.test(path) ||
-      /^scripts\/wasm\//.test(path) ||
-      /^tests\/fixtures\//.test(path) ||
-      /^crates\/rom-weaver-patches\/tests\/fixtures\/hdiffpatch\//.test(path) ||
+      path.startsWith("scripts/wasm/") ||
+      path.startsWith("tests/fixtures/") ||
+      path.startsWith("crates/rom-weaver-patches/tests/fixtures/hdiffpatch/") ||
       /^packages\/rom-weaver-webapp\/(?:package(?:-lock)?\.json|vitest(?:\.config\.base|(?:\.wasm)?\.browser\.config)\.mjs)$/.test(
         path,
       ) ||
-      /^packages\/rom-weaver-webapp\/src\/(?:lib\/runtime|platform|storage|types|wasm|workers)(?:\/|$)/.test(
+      /^packages\/rom-weaver-webapp\/src\/(?:lib\/(?:logging\.ts|runtime)|platform|storage|types|wasm|workers)(?:\/|$)/.test(
         path,
       ) ||
       /^packages\/rom-weaver-webapp\/tests\/(?:fixtures|wasm)(?:\/|$)/.test(path)
@@ -156,7 +157,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     // architecture on a pull request - see `docker_cli_arm64` above.
     if (
       path === "Dockerfile" ||
-      /^\.cargo\//.test(path) ||
+      path.startsWith(".cargo/") ||
       /^(?:Cargo\.toml|Cargo\.lock)$/.test(path)
     ) {
       result.docker_cli = true;
@@ -196,12 +197,15 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     // script, any Node.js script, any Markdown file, any Dockerfile, and
     // hadolint's config.
     if (
-      /^\.github\/workflows\//.test(path) ||
-      /^\.github\/actions\//.test(path) ||
+      path.startsWith(".github/workflows/") ||
+      path.startsWith(".github/actions/") ||
       /^\.github\/.*\.(?:yml|yaml)$/.test(path) ||
       path === ".config/hadolint.yaml" ||
+      path === ".oxlintrc.json" ||
+      path === "package.json" ||
+      path === "package-lock.json" ||
       /(?:Dockerfile(?:\.|$))/.test(path) ||
-      /\.(?:md|sh|mjs)$/.test(path)
+      /\.(?:cjs|js|md|mjs|sh)$/.test(path)
     )
       result.repo_lint = true;
   }

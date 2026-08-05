@@ -83,9 +83,9 @@ Before 1.0 a breaking change bumps the **minor** version, because
 ## Footers
 
 - `Release-As: X.Y.Z` forces a specific version, including a prerelease such as
-  `Release-As: 0.7.0-alpha.1`. Routing keys off the hyphen automatically - npm
-  gets the `beta` dist-tag, Docker skips `latest`, and the webapp deploys to
-  `beta.rom-weaver.com`.
+  `Release-As: 0.7.0-alpha.1`. A hyphen in the version routes every publish to
+  the prerelease channels automatically; see
+  [prerelease routing](ci.md#prerelease-routing).
 - `Fixes #123` closes the issue when the pull request merges.
 
 The [release guide](../../.github/RELEASING.md) covers the rest of the release

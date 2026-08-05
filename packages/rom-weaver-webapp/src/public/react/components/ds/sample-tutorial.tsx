@@ -159,6 +159,22 @@ const GUIDE_ANCHOR_QUERY = "(min-width: 641px)";
 const clampWithin = (value: number, limit: number) =>
   Math.min(Math.max(value, GUIDE_MARGIN), Math.max(GUIDE_MARGIN, limit));
 
+const clampBetween = (value: number, floor: number, limit: number) =>
+  Math.min(Math.max(value, floor), Math.max(floor, limit));
+
+/**
+ * The highest the card may sit. A bare margin from the viewport top is not it:
+ * the masthead owns that band, and a card tall enough to be clamped there lands
+ * on the toolbar - covering controls the reader can still see and reach for.
+ * Measured rather than assumed, so it costs nothing once the masthead has
+ * scrolled away and follows the masthead through every width it changes at.
+ */
+const guideTopLimit = () => {
+  const masthead = document.querySelector(".rw-app .masthead");
+  if (!masthead) return GUIDE_MARGIN;
+  return Math.max(GUIDE_MARGIN, masthead.getBoundingClientRect().bottom + GUIDE_MARGIN);
+};
+
 /**
  * Which side of the row the card sits on. A row taller than a chunk of the
  * viewport anchors from its top, so the card lands beside the header the step
@@ -186,7 +202,7 @@ const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: "bottom" |
   const top = placeAbove ? above : below;
   return {
     left: clampWithin(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - GUIDE_MARGIN),
-    top: clampWithin(top, window.innerHeight - height - GUIDE_MARGIN),
+    top: clampBetween(top, guideTopLimit(), window.innerHeight - height - GUIDE_MARGIN),
   };
 };
 

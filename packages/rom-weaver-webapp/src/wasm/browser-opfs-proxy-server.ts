@@ -180,17 +180,7 @@ class OpfsProxyServer {
         const seen = Atomics.load(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
         let servicedAny = false;
         for (const slot of slots) {
-          if (Atomics.load(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX) !== OPFS_PROXY_STATE_REQUESTED) continue;
-          if (
-            Atomics.compareExchange(
-              slot.control,
-              OPFS_PROXY_CONTROL_STATE_INDEX,
-              OPFS_PROXY_STATE_REQUESTED,
-              OPFS_PROXY_STATE_PROXY_SERVICING,
-            ) !== OPFS_PROXY_STATE_REQUESTED
-          ) {
-            continue;
-          }
+          if (!this.claimRequestedSlot(slot)) continue;
           await this.serviceSlot(slot);
           servicedAny = true;
         }
@@ -211,6 +201,18 @@ class OpfsProxyServer {
       this.poisonAndWakeConsumers();
       this.trace?.("[browser-opfs] proxy server stopped");
     }
+  }
+
+  /** Take a slot that has a pending request, flipping it to servicing so no other pass takes it. */
+  private claimRequestedSlot(slot: OpfsProxyChannelSlot): boolean {
+    if (Atomics.load(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX) !== OPFS_PROXY_STATE_REQUESTED) return false;
+    const previous = Atomics.compareExchange(
+      slot.control,
+      OPFS_PROXY_CONTROL_STATE_INDEX,
+      OPFS_PROXY_STATE_REQUESTED,
+      OPFS_PROXY_STATE_PROXY_SERVICING,
+    );
+    return previous === OPFS_PROXY_STATE_REQUESTED;
   }
 
   // Mark the proxy dead and wake every consumer parked on a slot's STATE word — the poison flag alone

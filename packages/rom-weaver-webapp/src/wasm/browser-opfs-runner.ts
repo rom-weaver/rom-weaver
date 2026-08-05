@@ -46,6 +46,7 @@ import {
   traceRandomAccessFileIoStats,
 } from "./browser-opfs-stdio-events.ts";
 import { closeSyncFiles } from "./browser-opfs-sync-access.ts";
+import { cleanupBrowserOpfsRunScratch } from "./browser-opfs-run-cleanup.ts";
 import type { NormalizedVirtualFile } from "./browser-opfs-virtual-files.ts";
 import { attachThreadWorkerCensus, readThreadWorkerCensus } from "./browser-wasi-thread-census.ts";
 import {
@@ -75,6 +76,7 @@ import {
 } from "./rom-weaver-runtime-utils.ts";
 import type { RomWeaverEnv } from "./rom-weaver-types.d.ts";
 import { normalizeDefaultThreads, resolveBrowserDefaultThreads } from "./workers/browser-thread-budget.ts";
+import { createVfsPathId } from "../storage/vfs/path-id.ts";
 
 const DEFAULT_BROWSER_RAYON_GLOBAL_THREADS = DEFAULT_BROWSER_THREAD_COUNT;
 const MAX_BROWSER_RAYON_GLOBAL_THREADS = 8;
@@ -140,6 +142,109 @@ const getRunThreadWorkerPool = (
   runOptions: BrowserOpfsRunOptions,
   threadWorkerPool: ReturnType<typeof createBrowserWasiThreadWorkerPool> | null,
 ) => (runOptions.threadWorkerUrl && runOptions.threadWorkerUrl !== options.threadWorkerUrl ? null : threadWorkerPool);
+
+/**
+ * Everything a run derives by layering this call's overrides over the runner's
+ * own options. Kept together so `run` reads as a sequence of steps rather than
+ * a wall of fallback chains.
+ */
+const resolveRunSettings = (options: BrowserOpfsCreateOptions, runOptions: BrowserOpfsRunOptions) => ({
+  debugWasi: Boolean(runOptions.debugWasi ?? options.debugWasi ?? false),
+  knownInputPaths: normalizeKnownInputPaths([
+    ...(Array.isArray(options.knownInputPaths) ? options.knownInputPaths : []),
+    ...(Array.isArray(runOptions.knownInputPaths) ? runOptions.knownInputPaths : []),
+  ]),
+  virtualFiles: normalizeVirtualFiles([
+    ...(Array.isArray(options.virtualFiles) ? options.virtualFiles : []),
+    ...(Array.isArray(runOptions.virtualFiles) ? runOptions.virtualFiles : []),
+  ]),
+  virtualOnlyMounts: Boolean(runOptions.virtualOnlyMounts ?? options.virtualOnlyMounts ?? false),
+});
+
+/**
+ * The per-op latency breakdown, logged once teardown finishes. `setup` is the
+ * "before the operation starts" cost, `compute` is wasi.start itself, and
+ * `teardown` is the drain/flush/cleanup after it returns.
+ */
+const traceRunTimings = (
+  trace: (line: string) => void,
+  input: {
+    command: unknown;
+    computeDoneAtMs: number | null;
+    exitCode: number | null;
+    request: RomWeaverRunRequest;
+    runEndedAtMs: number;
+    runStartedAtMs: number;
+    runSucceeded: boolean;
+    setupDoneAtMs: number | null;
+    stagingMs: number | undefined;
+  },
+) => {
+  const { computeDoneAtMs, runEndedAtMs, runStartedAtMs, setupDoneAtMs } = input;
+  const setupMs = setupDoneAtMs === null ? null : setupDoneAtMs - runStartedAtMs;
+  const computeMs = setupDoneAtMs === null || computeDoneAtMs === null ? null : computeDoneAtMs - setupDoneAtMs;
+  const teardownMs = computeDoneAtMs === null ? null : runEndedAtMs - computeDoneAtMs;
+  const fmt = (value: number | null): string => (value === null ? "n/a" : value.toFixed(1));
+  // `threads` is the requested budget (>1 = thread pool engaged, which is what setupMs mostly
+  // measures on a cold runner). stagingMs = OPFS input copy-in time (recorded on the main
+  // thread); 0 = already on OPFS, n/a = nothing staged (e.g. virtual-Blob input).
+  const stagingMsFmt = typeof input.stagingMs === "number" ? input.stagingMs.toFixed(1) : "n/a";
+  trace(
+    `[perf] command timings command=${formatCommandForTrace(input.command)}` +
+      ` threads=${parseRequestedThreadCount(input.request) ?? 1} exitCode=${input.exitCode === null ? "n/a" : input.exitCode}` +
+      ` stagingMs=${stagingMsFmt} setupMs=${fmt(setupMs)} computeMs=${fmt(computeMs)} teardownMs=${fmt(teardownMs)}` +
+      ` totalMs=${(runEndedAtMs - runStartedAtMs).toFixed(1)} succeeded=${input.runSucceeded}`,
+  );
+};
+
+/**
+ * Runs the guest to completion. A throw here is re-raised through
+ * `throwWithThreadFailure` so a worker-side crash replaces the opaque trap.
+ */
+const startWasiInstance = async (input: {
+  instance: WasiStartInstance;
+  setupMs: number;
+  threadSpawner: BrowserThreadSpawner;
+  trace: (message: string) => void;
+  wasi: wasiShim.WASI;
+}): Promise<number> => {
+  const { trace } = input;
+  try {
+    trace(`[perf] wasi.start start setupMs=${input.setupMs.toFixed(1)}`);
+    return input.wasi.start(input.instance);
+  } catch (error) {
+    trace(`[browser-opfs] wasi.start threw ${formatErrorForTrace(error)}`);
+    await throwWithThreadFailure(error, input.threadSpawner);
+    // throwWithThreadFailure always throws; this unreachable rethrow keeps the
+    // return type free of undefined for the success path.
+    throw error;
+  }
+};
+
+/**
+ * Two gauges sampled before teardown, so they report what the run actually held
+ * rather than what cleanup left behind. Handle `live` tracking an archive's entry
+ * count is the many-small-files fan-out that kills iOS tabs (one SyncAccessHandle
+ * plus its coalescing buffers per entry); it must stay bounded by concurrency. The
+ * worker census is its companion: a dedicated Worker per unit of work rather than
+ * per unit of concurrency is a ~7 MB wasm instantiation each time. `total` spans
+ * the runner's whole lifetime, `created` only this run.
+ */
+const traceRunResourceStats = (
+  trace: (message: string) => void,
+  handleStats: { live: number; opened: number; peak: number },
+  threadWorkersAtRunStart: number,
+) => {
+  trace(
+    `[perf] opfs proxy handles live=${handleStats.live} peak=${handleStats.peak} opened=${handleStats.opened}` +
+      ` adapterBufferBytes=${browserProxyAdapterBufferBytes()}`,
+  );
+  const threadWorkersTotal = readThreadWorkerCensus();
+  trace(
+    `[perf] thread workers created=${threadWorkersTotal === null ? "n/a" : threadWorkersTotal - threadWorkersAtRunStart}` +
+      ` total=${threadWorkersTotal ?? "n/a"}`,
+  );
+};
 
 const createRunWasmMemory = (importsEnvMemory: boolean, options: BrowserOpfsCreateOptions) =>
   importsEnvMemory
@@ -269,6 +374,8 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         runEnv: runOptions.env,
         threaded,
       });
+      const opfsRunId = createVfsPathId();
+      env.ROM_WEAVER_OPFS_RUN_ID = opfsRunId;
       const envList = Object.entries(env).map(([key, value]) => `${key}=${String(value)}`);
       const wasmMemory = createRunWasmMemory(importsEnvMemory, options);
       const threadIdState = createThreadIdState();
@@ -276,10 +383,8 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         ...baseMountHandles,
         ...normalizeMountHandleMap({ mountHandles: runOptions.mountHandles }),
       };
-      const virtualFiles = normalizeVirtualFiles([
-        ...(Array.isArray(options.virtualFiles) ? options.virtualFiles : []),
-        ...(Array.isArray(runOptions.virtualFiles) ? runOptions.virtualFiles : []),
-      ]);
+      const settings = resolveRunSettings(options, runOptions);
+      const { debugWasi, knownInputPaths, virtualFiles } = settings;
       trace(`[browser-opfs] virtual files normalized ${summarizeNormalizedVirtualFiles(virtualFiles)}`);
 
       // Hand any proxy-handle Blob inputs to the OPFS proxy worker so it serves them by guest path
@@ -311,11 +416,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         workGuestPath,
         writableDirectories: runOptions.writableDirectories,
       });
-      const resolvedVirtualOnlyMounts = Boolean(runOptions.virtualOnlyMounts ?? options.virtualOnlyMounts ?? false);
-      const knownInputPaths = normalizeKnownInputPaths([
-        ...(Array.isArray(options.knownInputPaths) ? options.knownInputPaths : []),
-        ...(Array.isArray(runOptions.knownInputPaths) ? runOptions.knownInputPaths : []),
-      ]);
+      const resolvedVirtualOnlyMounts = settings.virtualOnlyMounts;
       const threadSpawner = createRunThreadSpawner({
         options,
         runOptions,
@@ -324,7 +425,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         moduleImports,
         runtime: {
           cwdMountPath: workGuestPath,
-          debugWasi: Boolean(runOptions.debugWasi ?? options.debugWasi ?? false),
+          debugWasi,
           invalidateMountCacheAfterRun: Boolean(runOptions.invalidateMountCacheAfterRun),
           invalidateMountCacheBeforeRun: Boolean(runOptions.invalidateMountCacheBeforeRun),
           knownInputPaths,
@@ -375,12 +476,16 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           throw error;
         });
       trace(`[browser-opfs] build wasi fds done fds=${fds.length} mounts=${mounts.length}`);
+      // Both exits report whatever the run managed to emit, so the flush is shared.
+      const flushStreams = () => {
+        stdoutCollector.flush();
+        stderrCollector.flush();
+        return { stderr: decodeChunks(stderrChunks), stdout: decodeChunks(stdoutChunks) };
+      };
 
       try {
         trace("[browser-opfs] instantiate start");
-        const wasi = new wasiShim.WASI(wasiArgs, envList, fds, {
-          debug: Boolean(runOptions.debugWasi ?? options.debugWasi ?? false),
-        });
+        const wasi = new wasiShim.WASI(wasiArgs, envList, fds, { debug: debugWasi });
         installDirectWasiFileIoImports(wasi, trace);
 
         const instance = (await WebAssembly.instantiate(module, {
@@ -393,21 +498,18 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         trace("[browser-opfs] thread spawner ready wait start");
         await threadSpawner.ready;
         trace("[browser-opfs] thread spawner ready");
-        try {
-          setupDoneAtMs = nowMs();
-          trace(`[perf] wasi.start start setupMs=${(setupDoneAtMs - runStartedAtMs).toFixed(1)}`);
-          exitCode = wasi.start(instance);
-          computeDoneAtMs = nowMs();
-          trace(
-            `[perf] wasi.start returned exitCode=${String(exitCode)} computeMs=${(computeDoneAtMs - setupDoneAtMs).toFixed(1)}`,
-          );
-        } catch (error) {
-          trace(`[browser-opfs] wasi.start threw ${formatErrorForTrace(error)}`);
-          await throwWithThreadFailure(error, threadSpawner);
-          // throwWithThreadFailure always throws; this unreachable rethrow keeps exitCode
-          // definitely assigned for the success path below.
-          throw error;
-        }
+        setupDoneAtMs = nowMs();
+        exitCode = await startWasiInstance({
+          instance,
+          setupMs: setupDoneAtMs - runStartedAtMs,
+          threadSpawner,
+          trace,
+          wasi,
+        });
+        computeDoneAtMs = nowMs();
+        trace(
+          `[perf] wasi.start returned exitCode=${String(exitCode)} computeMs=${(computeDoneAtMs - setupDoneAtMs).toFixed(1)}`,
+        );
         trace("[browser-opfs] waitForWorkers start");
         await threadSpawner.waitForWorkers();
         trace("[browser-opfs] waitForWorkers done");
@@ -417,78 +519,39 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         // Output files are real OPFS files written through the proxy during the run, so there is no
         // end-of-run materialization step: the bytes are already persisted by the time wasi.start returns.
         runSucceeded = true;
-        stdoutCollector.flush();
-        stderrCollector.flush();
-        const stdout = decodeChunks(stdoutChunks);
-        const stderr = decodeChunks(stderrChunks);
-
-        return {
-          command,
-          exitCode,
-          ok: exitCode === 0,
-          request,
-          stderr,
-          stdout,
-        };
+        return { command, exitCode, ok: exitCode === 0, request, ...flushStreams() };
       } catch (error) {
         trace(`[browser-opfs] run failed ${formatErrorForTrace(error)}`);
-        stdoutCollector.flush();
-        stderrCollector.flush();
-        const stdout = decodeChunks(stdoutChunks);
-        const stderr = decodeChunks(stderrChunks);
-
-        return {
-          command,
-          error,
-          exitCode: 1,
-          ok: false,
-          request,
-          stderr,
-          stdout,
-        };
+        return { command, error, exitCode: 1, ok: false, request, ...flushStreams() };
       } finally {
-        // Sampled before teardown so it reports what the run actually held, not what cleanup left.
-        // `live` tracking an archive's entry count is the many-small-files fan-out regression that
-        // kills iOS tabs (one SyncAccessHandle + its coalescing buffers per entry); it must stay
-        // bounded by concurrency instead.
-        const handleStats = opfsProxy.client.handleStats();
-        trace(
-          `[perf] opfs proxy handles live=${handleStats.live} peak=${handleStats.peak} opened=${handleStats.opened}` +
-            ` adapterBufferBytes=${browserProxyAdapterBufferBytes()}`,
-        );
-        // Companion gauge to the handle one: a dedicated Worker per unit of work (rather than per
-        // unit of concurrency) is a ~7 MB wasm instantiation each time and is what made the
-        // many-entries fan-out unusable on mobile. `total` spans the runner's whole lifetime,
-        // `created` only this run.
-        const threadWorkersTotal = readThreadWorkerCensus();
-        trace(
-          `[perf] thread workers created=${threadWorkersTotal === null ? "n/a" : threadWorkersTotal - threadWorkersAtRunStart}` +
-            ` total=${threadWorkersTotal ?? "n/a"}`,
-        );
+        traceRunResourceStats(trace, opfsProxy.client.handleStats(), threadWorkersAtRunStart);
         trace(`[browser-opfs] cleanup start succeeded=${runSucceeded}`);
         // Drain before tearing down mounts (mirrors the success path's waitForWorkers→flush order) so
         // pool workers release their OPFS handles before the mount handles are closed.
         await drainThreadSpawnerOnce();
         closeSyncFiles(closeables);
+        // Preserve the existing microtask boundary before listing scratch paths.
+        // oxlint-disable-next-line typescript/await-thenable
         await cleanupBrowserOpfsMounts(mounts);
         for (const file of proxyBlobInputs) opfsProxy.unregisterBlobSource(file.path);
         if (!runSucceeded || runOptions.invalidateMountCacheAfterRun) await mountCache.invalidateMounts(mounts);
+        try {
+          await cleanupBrowserOpfsRunScratch({ runId: opfsRunId, trace, workGuestPath });
+        } catch (error) {
+          trace(`[browser-opfs] run scratch cleanup failed ${formatErrorForTrace(error)}`);
+        }
         trace("[browser-opfs] cleanup done");
-        const runEndedAtMs = nowMs();
-        const setupMs = setupDoneAtMs === null ? null : setupDoneAtMs - runStartedAtMs;
-        const computeMs = setupDoneAtMs === null || computeDoneAtMs === null ? null : computeDoneAtMs - setupDoneAtMs;
-        const teardownMs = computeDoneAtMs === null ? null : runEndedAtMs - computeDoneAtMs;
-        const fmt = (value: number | null): string => (value === null ? "n/a" : value.toFixed(1));
-        // `threads` is the requested budget (>1 = thread pool engaged, which is what setupMs mostly
-        // measures on a cold runner). stagingMs = OPFS input copy-in time (recorded on the main
-        // thread); 0 = already on OPFS, n/a = nothing staged (e.g. virtual-Blob input).
-        const stagingMsFmt = typeof runOptions.stagingMs === "number" ? runOptions.stagingMs.toFixed(1) : "n/a";
-        trace(
-          `[perf] command timings command=${formatCommandForTrace(command)}` +
-            ` threads=${parseRequestedThreadCount(request) ?? 1} exitCode=${exitCode === null ? "n/a" : exitCode}` +
-            ` stagingMs=${stagingMsFmt} setupMs=${fmt(setupMs)} computeMs=${fmt(computeMs)} teardownMs=${fmt(teardownMs)}` +
-            ` totalMs=${(runEndedAtMs - runStartedAtMs).toFixed(1)} succeeded=${runSucceeded}`,
-        );
+        traceRunTimings(trace, {
+          command,
+          computeDoneAtMs,
+          exitCode,
+          request,
+          runEndedAtMs: nowMs(),
+          runStartedAtMs,
+          runSucceeded,
+          setupDoneAtMs,
+          stagingMs: runOptions.stagingMs,
+        });
       }
     },
 

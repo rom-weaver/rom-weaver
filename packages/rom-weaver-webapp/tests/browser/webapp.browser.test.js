@@ -150,7 +150,7 @@ beforeEach(() => {
 });
 
 test("WebappRoot mounts the full workflow shell and stages archive inputs", async () => {
-  // The Trim and Tools tabs are beta-gated (see `betaToolsEnabled`), so the full-shell assertions
+  // Trim is beta-gated (see `betaToolsEnabled`), so the full-shell assertions
   // below require the flag on - matching the pattern the sibling controller unit tests use.
   mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
@@ -162,7 +162,9 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /apply/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /create/i })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /tools/i })).toBeInTheDocument();
+  await page.getByRole("button", { name: "More" }).click();
+  await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
+  await page.getByRole("button", { name: "More" }).click();
 
   await romInput.upload(await loadFixtureFile(ONE_ROM_ZIP, "application/zip"));
   await selectCandidateIfPrompted("game.bin");
@@ -187,7 +189,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
-test("WebappRoot keeps Trim and Tools behind the beta flag and Guides in front of it", async () => {
+test("WebappRoot keeps Trim gated and Tools behind More", async () => {
   mountWebappRoot();
   // Docs is reference rather than a workflow, but it rides in the rail so the
   // readers it is written for do not have to go hunting for it.
@@ -198,6 +200,35 @@ test("WebappRoot keeps Trim and Tools behind the beta flag and Guides in front o
         .map((tab) => tab.textContent),
     )
     .toEqual(["Apply", "Create", "Docs"]);
+  await page.getByRole("button", { name: "More" }).click();
+  await expect.element(page.getByRole("menuitem", { name: "Tools" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+});
+
+test("enabled Tools stays behind More on desktop and phone", async () => {
+  for (const [width, height] of [
+    [1280, 900],
+    [390, 844],
+  ]) {
+    await page.viewport(width, height);
+    mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
+    await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
+    await page.getByRole("button", { name: "More" }).click();
+    await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
+    expect(document.querySelector(`[role="tab"][data-mode="tools"]`)).toBeNull();
+    expect(document.querySelector(`.dock-tab[data-mode="tools"]`)).toBeNull();
+    if (width >= 1000) {
+      expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");
+      expect(getComputedStyle(document.querySelector(".desktop-more .tool-text")).display).toBe("none");
+      expect(document.querySelector(".masthead-settings .tip")?.textContent).toBe("Settings");
+      expect(document.querySelector(".desktop-more .tip")?.textContent).toBe("More");
+      await page.getByRole("button", { name: "Settings" }).hover();
+      await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
+    }
+    await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+    await page.getByRole("button", { name: "More" }).click();
+  }
+  await page.viewport(1280, 900);
 });
 
 test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {
@@ -206,28 +237,48 @@ test("WebappRoot reports the configured thread count in the masthead, not the co
   // navigator.hardwareConcurrency and a user who dialled threads down to 1
   // still read the host core count in the header.
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
-  await expect.poll(() => document.querySelector(".masthead-threads-full")?.textContent || "").toContain("1 threads");
-  await expect.poll(() => document.querySelector(".masthead-threads-short")?.textContent || "").toContain("1T");
+  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1 Threads");
+  await expect
+    .poll(() => document.querySelector(".masthead-threads")?.getAttribute("aria-label") || "")
+    .toContain("1 threads");
 });
 
-test("WebappRoot uses the compact thread label only on mobile", async () => {
-  page.viewport(1280, 900);
+test("the runtime status keeps its glyph everywhere and sheds its words when the line is tight", async () => {
+  // The glyph is the signal that always survives; the words are what yields -
+  // through the compact rail band, on phones, and whenever a channel badge is
+  // present (this build carries one, so the words are gone at every width).
+  await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
-  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-full")).display).toBe("inline");
-  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-short")).display).toBe("none");
-
-  page.viewport(390, 844);
-  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-full")).display).toBe("none");
-  await expect.poll(() => getComputedStyle(document.querySelector(".masthead-threads-short")).display).toBe("inline");
-  page.viewport(1280, 900);
+  await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
+  expect(document.querySelector(".brand-sub-row .sub-status")).toBeNull();
+  expect(document.querySelector(".masthead-tools .sub-status")).toBeTruthy();
+  expect(document.querySelector(".masthead-status-text")).toBeNull();
+  for (const [width, height] of [
+    [1280, 900],
+    [1100, 900],
+    [390, 844],
+  ]) {
+    await page.viewport(width, height);
+    await expect.poll(() => getComputedStyle(document.querySelector(".sub-status svg")).display).not.toBe("none");
+    if (width >= 1160) {
+      const titleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-word")).fontSize);
+      const subtitleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row")).fontSize);
+      expect(titleSize).toBeGreaterThan(subtitleSize * 1.8);
+      expect(
+        Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row .build-tag .sub-chip")).fontSize),
+      ).toBeLessThanOrEqual(subtitleSize);
+      expect(getComputedStyle(document.querySelector(".sub-status svg")).width).toBe("16px");
+      expect(getComputedStyle(document.querySelector(".sub-status")).cursor).toBe("pointer");
+    }
+  }
+  await page.viewport(1280, 900);
 });
 
-test("the site footer lands inside the first phone screen with an empty bench", async () => {
+test("the phone dock lands inside the first phone screen with an empty bench", async () => {
   // The empty hero is sized as `100svh - --hero-chrome`, so every band the page
-  // spends outside the hero has to be in that budget. The mobile scroll reserve
-  // under the form was not, and it pushed the footer ~85px under the fold on
-  // first paint. The narrowest phone is the tight case: the brand column wraps
-  // there and the masthead grows taller than it is at 390px.
+  // spends outside the hero has to be in that budget. The dock is fixed to the
+  // bottom edge, so it is always on screen - what has to hold is that the hero
+  // does not grow behind it.
   //
   // Only viewports tall enough to clear the hero's 300px min-height are checked.
   // Below roughly 575px of svh that floor wins over the budget on purpose - a
@@ -239,34 +290,36 @@ test("the site footer lands inside the first phone screen with an empty bench", 
     [390, 844],
     [430, 932],
   ]) {
-    page.viewport(width, height);
+    await page.viewport(width, height);
     mountWebappRoot();
     await expect.poll(() => document.querySelector(".step.is-input.is-empty .drop.hero")).toBeTruthy();
     await expect
-      .poll(() => document.querySelector(".site-footer")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
-      .toBeLessThanOrEqual(height);
+      .poll(() => document.querySelector(".dock")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
+      .toBeLessThanOrEqual(height + 1);
+    await expect.poll(() => document.querySelector(".dock")?.getBoundingClientRect().top ?? 0).toBeGreaterThan(0);
   }
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });
 
-test("PWA side insets move footer content without shifting the shell", async () => {
+test("PWA side insets move dock content without shifting the shell", async () => {
   const safeLeft = 18;
   const safeRight = 18;
   const height = 852;
-  page.viewport(393, height);
+  await page.viewport(393, height);
   mountWebappRoot();
-  await expect.poll(() => document.querySelector(".site-footer")).toBeTruthy();
+  await expect.poll(() => document.querySelector(".dock")).toBeTruthy();
   const readLayout = () => {
     const masthead = document.querySelector(".masthead")?.getBoundingClientRect();
-    const footer = document.querySelector(".site-footer")?.getBoundingClientRect();
-    const links = document.querySelector(".site-footer-links")?.getBoundingClientRect();
-    const status = document.querySelector(".site-footer-status")?.getBoundingClientRect();
+    const dock = document.querySelector(".dock")?.getBoundingClientRect();
+    const controls = [...document.querySelectorAll(".dock-tab, .dock-action")].filter(
+      (control) => getComputedStyle(control).display !== "none",
+    );
     return {
-      footerBottom: footer?.bottom ?? 0,
-      footerTop: footer?.top ?? 0,
-      linksLeft: links?.left ?? 0,
+      dockBottom: dock?.bottom ?? 0,
+      dockTop: dock?.top ?? 0,
+      firstControlLeft: controls[0]?.getBoundingClientRect().left ?? 0,
+      lastControlRight: controls.at(-1)?.getBoundingClientRect().right ?? 0,
       mastheadTop: masthead?.top ?? 0,
-      statusRight: status?.right ?? 0,
     };
   };
   const before = readLayout();
@@ -276,23 +329,23 @@ test("PWA side insets move footer content without shifting the shell", async () 
   try {
     const after = readLayout();
     expect(after.mastheadTop).toBe(before.mastheadTop);
-    expect(after.footerTop).toBe(before.footerTop);
-    expect(after.footerBottom).toBe(before.footerBottom);
-    expect(after.linksLeft).toBeGreaterThan(before.linksLeft);
-    expect(after.statusRight).toBeLessThan(before.statusRight);
+    expect(after.dockTop).toBe(before.dockTop);
+    expect(after.dockBottom).toBe(before.dockBottom);
+    expect(after.firstControlLeft).toBeGreaterThan(before.firstControlLeft);
+    expect(after.lastControlRight).toBeLessThan(before.lastControlRight);
   } finally {
     simulatedSafeArea.remove();
   }
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });
 
-test("PWA vertical insets keep the initial footer visible without moving it up", async () => {
+test("PWA vertical insets keep the dock clear of the home indicator", async () => {
   const safeTop = 59;
   const safeBottom = 34;
   const height = 852;
-  page.viewport(393, height);
+  await page.viewport(393, height);
   mountWebappRoot();
-  await expect.poll(() => document.querySelector(".site-footer")).toBeTruthy();
+  await expect.poll(() => document.querySelector(".dock")).toBeTruthy();
   const simulatedSafeArea = document.createElement("style");
   simulatedSafeArea.textContent = `.rw-app { --safe-t: ${safeTop}px; --safe-b: ${safeBottom}px; }`;
   document.head.append(simulatedSafeArea);
@@ -301,19 +354,23 @@ test("PWA vertical insets keep the initial footer visible without moving it up",
       .poll(() => document.querySelector(".masthead")?.getBoundingClientRect().top ?? -1)
       .toBeGreaterThanOrEqual(safeTop);
     await expect
-      .poll(() => document.querySelector(".site-footer")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
-      .toBeLessThanOrEqual(height);
+      .poll(() => document.querySelector(".dock")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
+      .toBeLessThanOrEqual(height + 1);
+    // the last dock tab sits above the home indicator, not under it
+    await expect
+      .poll(() => document.querySelector(".dock-tab")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
+      .toBeLessThanOrEqual(height - safeBottom + 1);
   } finally {
     simulatedSafeArea.remove();
   }
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });
 
 test("the mobile scroll reserve returns once the bench holds a card", async () => {
   // The reserve keeps the last card clear of the phone browser's collapsing
   // bottom toolbar. It is only suppressed while the bench is empty; dropping
   // the suppression on a staged bench would hide the run/download slot again.
-  page.viewport(390, 844);
+  await page.viewport(390, 844);
   mountWebappRoot();
   const workflowBody = await waitForState(() => document.querySelector(".workflow-body"));
   expect(workflowBody).not.toBeNull();
@@ -324,11 +381,11 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
 
   document.querySelector(".step.is-input.is-empty").classList.remove("is-empty");
   expect(getComputedStyle(workflowBody).paddingBlockEnd).toBe("96px");
-  page.viewport(1280, 900);
+  await page.viewport(1280, 900);
 });
 
 test("the New here? beacon stays compact and its popover carries every start action", async () => {
-  page.viewport(1024, 900);
+  await page.viewport(1024, 900);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
@@ -349,7 +406,7 @@ test("the New here? beacon stays compact and its popover carries every start act
   expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(pop.top).toBeGreaterThanOrEqual(0);
 
-  page.viewport(360, 740);
+  await page.viewport(360, 740);
   await expect
     .poll(() => document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().right)
     .toBeLessThanOrEqual(document.documentElement.clientWidth);
@@ -378,7 +435,7 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
     expect(expected).not.toBe(2);
     mountWebappRoot({ settings: { ...getDefaultSettings(), threads: "auto" } });
     await expect
-      .poll(() => document.querySelector(".masthead-threads-full")?.textContent || "")
+      .poll(() => document.querySelector(".masthead-threads")?.getAttribute("aria-label") || "")
       .toContain(`${expected} threads`);
   } finally {
     Reflect.deleteProperty(navigator, "hardwareConcurrency");
@@ -386,11 +443,68 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
   }
 });
 
-test("WebappRoot keeps diagnostics out of the masthead - the Log dialog owns them", async () => {
-  // The header stays theme / log / settings; the console-copy and mobile dev
-  // tools toggles were folded into the Log dialog surface.
+test("WebappRoot keeps diagnostics behind More - the Log dialog owns them", async () => {
+  // Settings stays direct; Docs is a top-level route and diagnostics share More.
   mountWebappRoot();
-  await expect.element(page.getByRole("button", { name: "Log" })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
+  await page.getByRole("button", { name: "More" }).click();
+  await expect.element(page.getByRole("menuitem", { name: "Logs" })).toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
+});
+
+test("mobile More contains every masthead utility action", async () => {
+  await page.viewport(390, 844);
+  mountWebappRoot();
+
+  await expect.poll(() => document.querySelector(".masthead-tools")).toBeTruthy();
+  for (const selector of [".mobile-utility-source", ".mobile-utility-support"]) {
+    const link = document.querySelector(selector);
+    expect(link).not.toBeNull();
+    expect(getComputedStyle(link).display).toBe("none");
+  }
+  const mastheadStatus = document.querySelector(".masthead-status");
+  for (const selector of [".masthead-status", ".mobile-utility-theme", ".mobile-utility-accent"]) {
+    const control = document.querySelector(selector);
+    expect(control).not.toBeNull();
+    expect(getComputedStyle(control).display).not.toBe("none");
+  }
+
+  await page.getByRole("button", { name: "More" }).click();
+  for (const label of ["View source on GitHub", "Support", "Status", "Theme", "Accent"]) {
+    await expect.element(page.getByRole("menuitem", { name: label })).toBeInTheDocument();
+  }
+  expect(document.querySelector('.more-menu [role="menuitem"][data-sw] svg')?.outerHTML).toBe(
+    document.querySelector(".masthead-status svg")?.outerHTML,
+  );
+  const menuStatus = document.querySelector(".more-menu .more-status");
+  expect(menuStatus).not.toBeNull();
+  expect(getComputedStyle(menuStatus).color).toBe(getComputedStyle(mastheadStatus).color);
+  expect(getComputedStyle(menuStatus.querySelector("svg")).color).toBe(getComputedStyle(mastheadStatus).color);
+  const neutralItem = document.querySelector('.more-menu [role="menuitem"]:not(.more-status):not(.more-support)');
+  const neutralColor = getComputedStyle(neutralItem).color;
+  for (const item of document.querySelectorAll('.more-menu [role="menuitem"]')) {
+    if (item.classList.contains("more-status") || item.classList.contains("more-support")) continue;
+    expect(getComputedStyle(item).color).toBe(neutralColor);
+    expect(getComputedStyle(item.querySelector("svg")).color).toBe(neutralColor);
+  }
+  const supportItem = document.querySelector(".more-menu .more-support");
+  expect(getComputedStyle(supportItem).color).toBe(getComputedStyle(document.querySelector(".tool-support")).color);
+  expect(getComputedStyle(supportItem.querySelector("svg")).color).toBe(
+    getComputedStyle(document.querySelector(".tool-support svg")).color,
+  );
+  await page.getByRole("menuitem", { name: "Accent" }).click();
+  await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
+
+  const buildTag = document.querySelector(".build-tag");
+  expect(buildTag?.textContent).toMatch(/v\d/);
+  const badge = buildTag?.querySelector(".channel-badge");
+  if (badge) {
+    expect(getComputedStyle(badge).display).not.toBe("none");
+    expect(badge.textContent).toMatch(/v\d/);
+  }
+  const previewVersion = buildTag?.querySelector(".tag-extra");
+  if (previewVersion) expect(getComputedStyle(previewVersion).display).not.toBe("none");
+
+  await page.viewport(1280, 900);
 });

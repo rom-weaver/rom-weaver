@@ -1,237 +1,1057 @@
 /* Dialogs */
 /* Discrete transitions keep dialogs rendered through their exit animation. */
 .dlg {
-  border: 0; padding: 0; background: transparent; max-width: min(640px, calc(100vw - 32px)); width: 100%;
-  transition: display .26s allow-discrete, overlay .26s allow-discrete;
+  width: 100%;
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 0;
+  background: transparent;
+  border: 0;
+  transition:
+    display 0.26s allow-discrete,
+    overlay 0.26s allow-discrete;
 }
-.dlg .dlg-frame { opacity: 0; transform: translateY(10px) scale(.97); transition: opacity .22s ease, transform .26s var(--ease); }
-.dlg[open] .dlg-frame { opacity: 1; transform: none; }
+.dlg .dlg-frame {
+  opacity: 0;
+  transform: translateY(10px) scale(0.97);
+  transition:
+    opacity 0.22s ease,
+    transform 0.26s var(--ease);
+}
+.dlg[open] .dlg-frame {
+  opacity: 1;
+  transform: none;
+}
 .dlg::backdrop {
-  background: transparent; backdrop-filter: blur(0px);
-  transition: background .26s, backdrop-filter .26s, display .26s allow-discrete, overlay .26s allow-discrete;
+  background: transparent;
+  backdrop-filter: blur(0px);
+  transition:
+    background 0.26s,
+    backdrop-filter 0.26s,
+    display 0.26s allow-discrete,
+    overlay 0.26s allow-discrete;
 }
-.dlg[open]::backdrop { background: var(--scrim); backdrop-filter: blur(3px); }
+.dlg[open]::backdrop {
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+}
 @starting-style {
-  .dlg[open] .dlg-frame { opacity: 0; transform: translateY(10px) scale(.97); }
-  .dlg[open]::backdrop { background: transparent; backdrop-filter: blur(0px); }
+  .dlg[open] .dlg-frame {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  .dlg[open]::backdrop {
+    background: transparent;
+    backdrop-filter: blur(0px);
+  }
 }
 .dlg-frame {
-  margin: 0; display: flex; flex-direction: column; max-height: min(82dvh, 760px);
-  border: 1px solid var(--seam-strong); border-radius: var(--r-l); background: var(--plate);
-  box-shadow: var(--overlay-shadow); overflow: clip;
+  display: flex;
+  flex-direction: column;
+  max-height: min(82dvh, 760px);
+  margin: 0;
+  overflow: clip;
+  background: var(--plate);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-l);
+  box-shadow: var(--overlay-shadow);
 }
-.dlg-head { display: flex; align-items: center; gap: var(--sp-m); padding: var(--sp-l); border-block-end: 1px solid var(--seam-soft); flex: none; }
-.dlg-title { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .01em; flex: 1 1 auto; min-width: 0; }
-.dlg-actions { display: inline-flex; gap: var(--sp-s); align-items: center; }
+.dlg-head {
+  display: flex;
+  flex: none;
+  gap: var(--sp-m);
+  align-items: center;
+  padding: var(--sp-l);
+  border-block-end: 1px solid var(--seam-soft);
+}
+.dlg-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.dlg-actions {
+  display: inline-flex;
+  gap: var(--sp-s);
+  align-items: center;
+}
 .dlg-x {
-  appearance: none; cursor: pointer; width: 30px; height: 30px; padding: 0; display: grid; place-items: center;
-  border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: transparent; color: var(--ink-3);
-  transition: background .18s, border-color .18s, color .18s, transform .15s var(--ease), box-shadow .18s;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--ink-3);
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-s);
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    color 0.18s,
+    transform 0.15s var(--ease),
+    box-shadow 0.18s;
 }
 @media (hover: hover) {
-  .dlg-x:hover { color: var(--ink); border-color: var(--ink-4); background: color-mix(in oklab, currentColor 10%, transparent); transform: translateY(-1px); }
+  .dlg-x:hover {
+    color: var(--ink);
+    background: color-mix(in oklab, currentColor 10%, transparent);
+    border-color: var(--ink-4);
+    transform: translateY(-1px);
+  }
 }
-.dlg-x:active { transform: translateY(0) scale(.99); }
-.dlg-x svg { width: 15px; height: 15px; }
-.dlg-body { padding: var(--sp-l); overflow: auto; overscroll-behavior: contain; }
+.dlg-x:active {
+  transform: translateY(0) scale(0.99);
+}
+.dlg-x svg {
+  width: 15px;
+  height: 15px;
+}
+/* touch: an invisible halo carries the box to a 44px target without inflating
+   it. Growing the box instead left a 15px glyph rattling around in it, reading
+   as an empty frame rather than a button. */
+@media (pointer: coarse) {
+  .dlg-x {
+    position: relative;
+  }
+  .dlg-x::after {
+    position: absolute;
+    inset: -7px;
+    content: "";
+  }
+}
+.dlg-body {
+  padding: var(--sp-l);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
 /* Log dialog */
-.rw-app .log-dlg { max-width: min(1280px, calc(100vw - 32px)); }
-.rw-app .log-dlg .dlg-frame { max-height: min(90dvh, 940px); height: min(90dvh, 940px); }
-.rw-app .log-dlg .dlg-head { flex-wrap: wrap; row-gap: var(--sp-m); }
-.rw-app .log-dlg .dlg-title { flex: 0 1 auto; }
-.rw-app .log-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: var(--sp-s); align-items: center; margin-inline-start: auto; min-inline-size: 0; }
-.rw-app .log-actions > * { flex: 0 1 auto; min-inline-size: max-content; }
-.rw-app .log-actions .log-icon-btn { flex: 0 0 30px; inline-size: 30px; padding-inline: 0; }
-.rw-app .log-actions .btn.copied { color: var(--verified); border-color: color-mix(in oklab, var(--verified) 55%, transparent); }
-.rw-app .log-actions .btn.copy-failed { color: var(--fault); border-color: color-mix(in oklab, var(--fault) 55%, transparent); }
+.rw-app .log-dlg {
+  max-width: min(1280px, calc(100vw - 32px));
+}
+.rw-app .log-dlg .dlg-frame {
+  height: min(90dvh, 940px);
+  max-height: min(90dvh, 940px);
+}
+/* One row, never two. The rail is a scroller by design, so when the head runs
+   out of width the tabs are what should give - wrapping instead sent the close
+   button down to a line of its own, adrift at the far side of the dialog from
+   the rail it belongs to. */
+/* The tabs ARE the title here, so the rail rides the head's own bottom rule
+   rather than floating above it - the selected tab's weft then reads as a mark
+   on a rail instead of a stray underline in open space. */
+.rw-app .log-dlg .dlg-head {
+  flex-wrap: nowrap;
+  row-gap: var(--sp-m);
+  align-items: flex-end;
+  padding-block-end: 0;
+}
+.rw-app .log-dlg .dlg-title {
+  flex: 0 1 auto;
+}
+/* Close shares the rail's row but not its baseline - sitting it on the rule
+   would read as one more tab. Every other control moved to the bar below.
+   It also drops the box every other dialog's close wears: in a rail of bare
+   text tabs the border was the only chrome on screen, so a 15px glyph rattling
+   inside it read as an empty frame rather than a control. Bare, at the tabs'
+   own weight, it belongs to the rail. The touch halo still carries it past
+   44px. */
+.rw-app .log-dlg .dlg-head > .dlg-x {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin-block-end: var(--sp-s);
+  border-color: transparent;
+}
+.rw-app .log-dlg .dlg-head > .dlg-x svg {
+  width: 18px;
+  height: 18px;
+}
+.rw-app .dlg-x-label {
+  display: none;
+}
+.rw-app .log-actions {
+  display: flex;
+  flex: none;
+  gap: var(--sp-s);
+  align-items: center;
+  min-inline-size: 0;
+}
+.rw-app .log-actions > * {
+  flex: 0 1 auto;
+  min-inline-size: max-content;
+}
+.rw-app .log-actions .log-icon-btn {
+  flex: 0 0 30px;
+  inline-size: 30px;
+  padding-inline: 0;
+}
+.rw-app .log-actions .btn.copied {
+  color: var(--verified);
+  border-color: color-mix(in oklab, var(--verified) 55%, transparent);
+}
+.rw-app .log-actions .btn.copy-failed {
+  color: var(--fault);
+  border-color: color-mix(in oklab, var(--fault) 55%, transparent);
+}
 .rw-app .log-dlg .logview {
-  flex: 0 1 auto; display: flex; gap: var(--sp-2xs); margin: 0; padding: 3px; min-inline-size: 0;
-  border: 1px solid var(--seam-strong); border-radius: var(--r-s); background: var(--well);
+  display: flex;
+  flex: 0 1 auto;
+  gap: var(--sp-2xs);
+  min-inline-size: 0;
+  padding: 3px;
+  margin: 0;
+  background: var(--well);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-s);
 }
 .rw-app .log-dlg .logview .seg-btn {
-  flex: 1 1 0; min-inline-size: 0; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  appearance: none; cursor: pointer; border: 0; border-radius: calc(var(--r-s) - 3px);
-  background: transparent; color: var(--ink-3);
-  font-size: .76rem; font-weight: 650; letter-spacing: .02em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  transition: background .18s, color .18s;
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 0;
+  height: 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.76rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--r-s) - 3px);
+  transition:
+    background 0.18s,
+    color 0.18s;
 }
 @media (hover: hover) {
-  .rw-app .log-dlg .logview .seg-btn:hover { color: var(--ink); }
+  .rw-app .log-dlg .logview .seg-btn:hover {
+    color: var(--ink);
+  }
 }
 /* Touch devices need active feedback because they lack hover. */
-.rw-app .log-dlg .logview .seg-btn:active { color: var(--ink); }
+.rw-app .log-dlg .logview .seg-btn:active {
+  color: var(--ink);
+}
 .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"] {
-  background: var(--thread); color: var(--thread-ink);
+  color: var(--thread-ink);
+  background: var(--thread);
   box-shadow: 0 1px 3px -1px color-mix(in oklab, var(--thread) 55%, transparent);
 }
 @media (hover: hover) {
-  .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover { color: var(--thread-ink); }
+  .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover {
+    color: var(--thread-ink);
+  }
 }
-.rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:active { color: var(--thread-ink); }
-.rw-app .log-filter-bar {
-  display: flex; align-items: center; gap: var(--sp-s); padding: var(--sp-s) var(--sp-l);
-  border-block-end: 1px solid var(--seam-soft); flex: none;
+.rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:active {
+  color: var(--thread-ink);
 }
-.rw-app .log-filter-bar .log-filter { flex: 1 1 auto; min-inline-size: 0; height: 30px; width: auto; font-size: .76rem; padding-block: 0; }
-.rw-app .log-filter-bar .loglevel { display: flex; flex: 0 0 auto; }
-.rw-app .log-filter-bar .loglevel .select { width: max-content; height: 30px; font-size: var(--dropdown-fs, .76rem); padding-block: 0; }
-.rw-app .log-body { padding: 0; flex: 1 1 auto; display: flex; min-height: 0; }
+/* Every tab's own controls live in a bar under the head rather than in it, so
+   the head carries nothing but the tab rail and the close button at any width.
+   Rows stack: the controls own the first, and a filter (logs, storage) the one
+   below. Sharing one row made the filter and the view toggle compete for the
+   same width, and a phone left both unusable - ellipsed toggle labels above a
+   filter too narrow to read back what you had typed. */
+.rw-app .dlg-subhead {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--sp-s);
+  align-items: stretch;
+  padding: var(--sp-s) var(--sp-l);
+  border-block-end: 1px solid var(--seam-soft);
+}
+.rw-app .dlg-subhead .log-controls {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+  min-inline-size: 0;
+}
+/* Everything after the view toggle parks at the far end, so the row reads
+   left-to-right as "which log", then what to do with it. The break is named
+   rather than positional: the view toggle is conditional, and a `:last-child`
+   rule would strand the group mid-row on the tabs that lack it. */
+.rw-app .dlg-subhead .log-controls > .loglevel,
+.rw-app .dlg-subhead .log-controls > .log-refresh {
+  margin-inline-start: auto;
+}
+/* copy/download trail the picker they belong with - the head's auto margin
+   would otherwise split the free space between the two groups */
+.rw-app .dlg-subhead .log-controls > .log-actions {
+  margin-inline-start: 0;
+}
+/* Settings has no left-hand control, so its pair carries the auto margin and
+   lands under the close button - where the head used to hold it. */
+.rw-app .dlg-subhead .settings-actions {
+  margin-inline-start: auto;
+}
+.rw-app .dlg-subhead .log-filter {
+  inline-size: 100%;
+  height: 30px;
+  padding-block: 0;
+  font-size: 0.76rem;
+}
+.rw-app .dlg-subhead .loglevel {
+  display: flex;
+  flex: 0 0 auto;
+}
+.rw-app .dlg-subhead .loglevel .select {
+  width: max-content;
+  height: 30px;
+  padding-block: 0;
+  font-size: var(--dropdown-fs, 0.76rem);
+}
+/* Every tab's panel takes the height the head and the controls bar leave, and
+   scrolls inside it. Stated once for all of them: when only two of the three
+   claimed it, the settings panel stopped at its content and the bars below it
+   on a phone floated short of the sheet's foot. */
+.rw-app .log-dlg .dlg-body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+.rw-app .log-body {
+  display: flex;
+  padding: 0;
+}
 .rw-app .log-dlg .tracelog {
-  flex: 1 1 auto; max-height: none; height: auto; min-height: 0;
-  border: 0; border-radius: 0; background: var(--well); padding: var(--sp-m) var(--sp-l); font-size: .74rem;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  padding: var(--sp-m) var(--sp-l);
+  font-size: 0.74rem;
+  background: var(--well);
+  border: 0;
+  border-radius: 0;
 }
-.rw-app .log-dlg .tracelog-virtual-content { position: relative; flex: none; }
-.rw-app .log-dlg .tracelog-virtual-window { position: absolute; inset-inline: 0; width: max-content; min-width: 100%; }
-.rw-app .log-dlg .tracelog .ln { box-sizing: border-box; height: 25px; }
-.rw-app .tracelog-empty { color: var(--ink-4); font-size: .78rem; padding: 4px 2px; }
-.rw-app .opfs-inspector { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--well); padding: var(--sp-m) var(--sp-l); }
-.rw-app .opfs-summary { color: var(--ink-3); font-size: .74rem; padding-block-end: var(--sp-s); }
-.rw-app .opfs-list { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.rw-app .log-dlg .tracelog-virtual-content {
+  position: relative;
+  flex: none;
+}
+.rw-app .log-dlg .tracelog-virtual-window {
+  position: absolute;
+  inset-inline: 0;
+  width: max-content;
+  min-width: 100%;
+}
+.rw-app .log-dlg .tracelog .ln {
+  box-sizing: border-box;
+  height: 25px;
+}
+/* --ink-4 is the sub-line grey; on the log's `--well` panel it lands at 4.43:1. */
+.rw-app .tracelog-empty {
+  padding: 4px 2px;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+.rw-app .opfs-inspector {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--sp-m) var(--sp-l);
+  overflow: auto;
+  background: var(--well);
+}
+.rw-app .opfs-summary {
+  padding-block-end: var(--sp-s);
+  font-size: 0.74rem;
+  color: var(--ink-3);
+}
+.rw-app .opfs-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
 .rw-app .opfs-row {
-  display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) max-content; gap: var(--sp-m);
-  min-height: 25px; align-items: baseline; border-block-end: 1px solid var(--seam); font-size: .74rem;
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr) max-content;
+  gap: var(--sp-m);
+  align-items: baseline;
+  min-height: 25px;
+  font-size: 0.74rem;
+  border-block-end: 1px solid var(--seam);
 }
-.rw-app .opfs-kind, .rw-app .opfs-size { color: var(--ink-3); }
-.rw-app .opfs-path { min-width: 0; overflow-wrap: anywhere; }
-.rw-app .log-refresh { flex: 0 0 30px; inline-size: 30px; padding-inline: 0; }
-.rw-app .log-refresh svg { width: 15px; height: 15px; }
-.rw-app .log-refresh .spin { animation: log-refresh-spin .8s linear infinite; }
-@keyframes log-refresh-spin { to { transform: rotate(360deg); } }
+.rw-app .opfs-kind,
+.rw-app .opfs-size {
+  color: var(--ink-3);
+}
+.rw-app .opfs-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rw-app .log-refresh {
+  flex: 0 0 30px;
+  inline-size: 30px;
+  padding-inline: 0;
+}
+.rw-app .log-refresh svg {
+  width: 15px;
+  height: 15px;
+}
+.rw-app .log-refresh .spin {
+  animation: log-refresh-spin 0.8s linear infinite;
+}
+@keyframes log-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Settings tab of the unified dialog. Viewport units avoid a cyclic width under
+   inline-size containment, and the named container is the same one the settings
+   rows already query. */
+.rw-app .log-dlg .settings-body {
+  padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom));
+  container: settings-card / inline-size;
+}
+.rw-app .log-dlg .settings-actions {
+  flex: 0 0 auto;
+}
+.rw-app .log-dlg .settings-actions .btn {
+  height: 30px;
+  padding-inline: 12px;
+  font-size: 0.76rem;
+}
+@container settings-card (min-width: 688px) {
+  .rw-app .settings-panel {
+    columns: 2;
+    column-gap: var(--sp-m);
+  }
+  .rw-app .settings-panel .setcols {
+    display: contents;
+  }
+  .rw-app .settings-panel .setcols .setgroup {
+    margin-block-end: 11px;
+  }
+  .rw-app .settings-panel .validation {
+    column-span: all;
+  }
+}
+/* Deep link landing cue: the focus ring says where, this says "here". */
+.rw-app .field-flash {
+  border-radius: var(--r-s);
+  animation: settings-field-flash 0.9s ease-out 1;
+}
+@keyframes settings-field-flash {
+  from {
+    background: color-mix(in oklab, var(--thread) 26%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .field-flash {
+    animation: none;
+  }
+}
 
 /* Archive candidate picker */
-.rw-app .picklist { display: flex; flex-direction: column; gap: var(--sp-xs); margin-block-start: var(--sp-s); }
+.rw-app .picklist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  margin-block-start: var(--sp-s);
+}
 .rw-app .pick-row {
-  display: flex; align-items: flex-start; gap: var(--sp-m); padding: var(--sp-xs) var(--sp-m); cursor: pointer;
   position: relative;
-  border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
-  transition: border-color .15s, background .15s;
+  display: flex;
+  gap: var(--sp-m);
+  align-items: flex-start;
+  padding: var(--sp-xs) var(--sp-m);
+  cursor: pointer;
+  background: var(--plate-2);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 @media (hover: hover) {
-  .rw-app .pick-row:hover { border-color: color-mix(in oklab, var(--thread) 40%, var(--seam)); }
+  .rw-app .pick-row:hover {
+    border-color: color-mix(in oklab, var(--thread) 40%, var(--seam));
+  }
 }
 /* Touch devices need active feedback because they lack hover. */
-.rw-app .pick-row:active { border-color: color-mix(in oklab, var(--thread) 40%, var(--seam)); }
-.rw-app .pick-row:has(input:checked) { border-color: var(--thread); background: color-mix(in oklab, var(--thread) 7%, var(--plate-2)); }
-.rw-app .pick-row.skip { opacity: .55; cursor: not-allowed; }
+.rw-app .pick-row:active {
+  border-color: color-mix(in oklab, var(--thread) 40%, var(--seam));
+}
+.rw-app .pick-row:has(input:checked) {
+  background: color-mix(in oklab, var(--thread) 7%, var(--plate-2));
+  border-color: var(--thread);
+}
+.rw-app .pick-row.skip {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
 /* Visually clip inputs while preserving keyboard and screen-reader behavior. */
 .rw-app .pick-row .pick-input {
-  position: absolute; width: 1px; height: 1px; margin: 0; border: 0;
-  clip-path: inset(50%); overflow: hidden; pointer-events: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border: 0;
+  clip-path: inset(50%);
 }
-.rw-app .pick-row:has(.pick-input:focus-visible) { outline: 2px solid var(--thread); outline-offset: 2px; }
+.rw-app .pick-row:has(.pick-input:focus-visible) {
+  outline: 2px solid var(--thread);
+  outline-offset: 2px;
+}
 /* Pair color with edge and weight selection cues. */
 .rw-app .pick-row::before {
-  content: ""; position: absolute; inset-block: -1px; inset-inline-start: -1px; width: 4px;
-  border-start-start-radius: var(--r-m); border-end-start-radius: var(--r-m);
-  background: transparent; transition: background .15s;
+  position: absolute;
+  inset-block: -1px;
+  inset-inline-start: -1px;
+  width: 4px;
+  content: "";
+  background: transparent;
+  border-start-start-radius: var(--r-m);
+  border-end-start-radius: var(--r-m);
+  transition: background 0.15s;
 }
-.rw-app .pick-row:has(.pick-input:checked)::before { background: var(--thread); }
-.rw-app .pick-row:has(.pick-input:checked) .pick-name { font-weight: 750; }
-.rw-app .pick-row .pick-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2xs); }
+.rw-app .pick-row:has(.pick-input:checked)::before {
+  background: var(--thread);
+}
+.rw-app .pick-row:has(.pick-input:checked) .pick-name {
+  font-weight: 750;
+}
+.rw-app .pick-row .pick-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-2xs);
+  min-width: 0;
+}
 /* Preserve paths that distinguish duplicate filenames. */
-.rw-app .pick-row .pick-crumb { font-size: .68rem; color: var(--ink-3); overflow-wrap: anywhere; }
-.rw-app .pick-row .pick-name { min-width: 0; font-size: .84rem; font-weight: 600; overflow-wrap: anywhere; }
-.rw-app .pick-row .pick-archive { flex: 1 1 auto; min-width: 0; font-size: .68rem; color: var(--ink-3); overflow-wrap: anywhere; }
-.rw-app .pick-row .pick-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2xs) var(--sp-s); margin-block-start: 2px; }
-.rw-app .pick-row .pick-size { flex: none; margin-inline-start: auto; font-size: .76rem; color: var(--ink-3); }
+.rw-app .pick-row .pick-crumb {
+  font-size: 0.68rem;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.rw-app .pick-row .pick-name {
+  min-width: 0;
+  font-size: 0.84rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.rw-app .pick-row .pick-archive {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.68rem;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.rw-app .pick-row .pick-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2xs) var(--sp-s);
+  align-items: baseline;
+  margin-block-start: 2px;
+}
+.rw-app .pick-row .pick-size {
+  flex: none;
+  margin-inline-start: auto;
+  font-size: 0.76rem;
+  color: var(--ink-3);
+}
 
 /* Settings groups use subgrid to align labels and controls. */
 .rw-app .setgroup {
-  border: 1px solid var(--seam); border-radius: var(--r-m); background: var(--plate-2);
-  padding: var(--sp-m) var(--sp-l) var(--sp-l); margin-block-end: 11px;
-  display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: var(--sp-m); align-content: start;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--sp-m);
+  align-content: start;
+  padding: var(--sp-m) var(--sp-l) var(--sp-l);
+  margin-block-end: 11px;
+  background: var(--plate-2);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
   break-inside: avoid;
 }
-.rw-app .setgroup > * { grid-column: 1 / -1; min-width: 0; }
-.rw-app .setgroup .gtitle { font-size: .84rem; font-weight: 650; letter-spacing: 0; color: var(--thread-text); margin-block-end: 9px; }
-.rw-app .setrow { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; gap: var(--sp-m); padding-block: 4px; }
-.rw-app .slabel { display: inline-flex; align-items: center; gap: var(--sp-s); font-size: .8rem; color: var(--ink-2); }
-.rw-app .gtitle .info { margin-inline-start: 8px; }
-.rw-app .setrow .select { height: 34px; font-size: var(--dropdown-fs, .85rem); }
-.rw-app .setrow .input { height: 34px; font-size: .85rem; }
-.rw-app .setchecks { display: flex; flex-direction: column; gap: var(--sp-s); padding-block-start: 4px; }
-.rw-app .setchecks .popt { font-size: .82rem; }
-.rw-app .set-about .about-line { font-size: .78rem; color: var(--ink-3); }
-.rw-app .set-about .about-line + .about-line { margin-block-start: 5px; }
-.rw-app .set-about .about-line a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.rw-app .setgroup > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.rw-app .setgroup .gtitle {
+  margin-block-end: 9px;
+  font-size: 0.84rem;
+  font-weight: 650;
+  color: var(--thread-text);
+  letter-spacing: 0;
+}
+.rw-app .setrow {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  gap: var(--sp-m);
+  align-items: center;
+  padding-block: 4px;
+}
+.rw-app .slabel {
+  display: inline-flex;
+  gap: var(--sp-s);
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.rw-app .gtitle .info {
+  margin-inline-start: 8px;
+}
+.rw-app .setrow .select {
+  height: 34px;
+  font-size: var(--dropdown-fs, 0.85rem);
+}
+.rw-app .setrow .input {
+  height: 34px;
+  font-size: 0.85rem;
+}
+.rw-app .setchecks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding-block-start: 4px;
+}
+.rw-app .setchecks .popt {
+  font-size: 0.82rem;
+}
+/* About folded into the Status tab: licence, attribution, privacy - the build
+   facts above it are the status rows, never repeated here. */
+.rw-app .status-about {
+  padding-block-start: var(--sp-m);
+  margin-block-start: var(--sp-l);
+  border-block-start: 1px solid var(--seam);
+}
+.rw-app .status-about .about-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+@media (hover: hover) {
+  .rw-app .status-about .about-link:hover {
+    color: var(--ink);
+  }
+}
+.rw-app .status-about .about-link:active {
+  color: var(--ink);
+}
 /* Avoid forcing a 300px track into narrower viewports. */
-.rw-app .setcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--sp-m); }
-.rw-app .setcols .setgroup { margin: 0; }
-.rw-app .srange { padding-block: 6px 2px; }
-.rw-app .srange-label { display: inline-flex; align-items: center; gap: var(--sp-s); }
-.rw-app .srange-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-m); margin-block-end: 4px; }
-.rw-app .srange-head .v { font-size: .76rem; font-weight: 650; color: var(--thread-text); }
-.rw-app .srange-scale { display: flex; justify-content: space-between; font-size: .62rem; color: var(--ink-4); margin-block-start: 2px; }
-.rw-app .validation { margin-block-start: 4px; padding: var(--sp-s) var(--sp-m); border-radius: var(--r-s); font-size: .82rem; color: var(--fault); background: color-mix(in oklab, var(--fault) 9%, transparent); border: 1px solid color-mix(in oklab, var(--fault) 32%, var(--seam)); }
+.rw-app .setcols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: var(--sp-m);
+}
+.rw-app .setcols .setgroup {
+  margin: 0;
+}
+.rw-app .srange {
+  padding-block: 6px 2px;
+}
+.rw-app .srange-label {
+  display: inline-flex;
+  gap: var(--sp-s);
+  align-items: center;
+}
+.rw-app .srange-head {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: baseline;
+  justify-content: space-between;
+  margin-block-end: 4px;
+}
+.rw-app .srange-head .v {
+  font-size: 0.76rem;
+  font-weight: 650;
+  color: var(--thread-text);
+}
+.rw-app .srange-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-block-start: 2px;
+  font-size: 0.62rem;
+  color: var(--ink-4);
+}
+.rw-app .validation {
+  padding: var(--sp-s) var(--sp-m);
+  margin-block-start: 4px;
+  font-size: 0.82rem;
+  color: var(--fault);
+  background: color-mix(in oklab, var(--fault) 9%, transparent);
+  border: 1px solid color-mix(in oklab, var(--fault) 32%, var(--seam));
+  border-radius: var(--r-s);
+}
 
 /* Crossfade same-origin navigations where supported. */
-@view-transition { navigation: auto; }
+@view-transition {
+  navigation: auto;
+}
 /* JS supplies the theme-wipe origin; CSS owns the transition. */
-:root.vt-theme::view-transition-old(root) { animation: none; mix-blend-mode: normal; }
+:root.vt-theme::view-transition-old(root) {
+  mix-blend-mode: normal;
+  animation: none;
+}
 :root.vt-theme::view-transition-new(root) {
   mix-blend-mode: normal;
-  animation: theme-wipe .42s cubic-bezier(.4, 0, .2, 1) both;
+  animation: theme-wipe 0.42s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 @keyframes theme-wipe {
-  from { clip-path: circle(0px at var(--wipe-x, 50%) var(--wipe-y, 0%)); }
-  to { clip-path: circle(var(--wipe-r, 150vmax) at var(--wipe-x, 50%) var(--wipe-y, 0%)); }
+  from {
+    clip-path: circle(0px at var(--wipe-x, 50%) var(--wipe-y, 0%));
+  }
+  to {
+    clip-path: circle(var(--wipe-r, 150vmax) at var(--wipe-x, 50%) var(--wipe-y, 0%));
+  }
 }
-::view-transition-old(root) { z-index: 0; }
-::view-transition-new(root) { z-index: 1; }
-:root.vt-flat::view-transition-old(root), :root.vt-flat::view-transition-new(root) { animation-duration: .2s; }
+::view-transition-old(root) {
+  z-index: 0;
+}
+::view-transition-new(root) {
+  z-index: 1;
+}
+:root.vt-flat::view-transition-old(root),
+:root.vt-flat::view-transition-new(root) {
+  animation-duration: 0.2s;
+}
 /* Stretch snapshots to their morphing boxes. */
-::view-transition-group(*) { animation-duration: .34s; animation-timing-function: cubic-bezier(.22, .9, .26, 1); }
-::view-transition-old(*), ::view-transition-new(*) {
-  height: 100%; width: 100%;
-  animation-duration: .34s; animation-timing-function: cubic-bezier(.22, .9, .26, 1);
+::view-transition-group(*) {
+  animation-duration: 0.34s;
+  animation-timing-function: cubic-bezier(0.22, 0.9, 0.26, 1);
+}
+::view-transition-old(*),
+::view-transition-new(*) {
+  width: 100%;
+  height: 100%;
+  animation-duration: 0.34s;
+  animation-timing-function: cubic-bezier(0.22, 0.9, 0.26, 1);
 }
 /* Suppress unrelated morphs during theme wipes and mode switches. */
-html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transition-name"] { view-transition-name: none !important; }
+html.vt-theme [style*="view-transition-name"],
+html.vt-flat [style*="view-transition-name"] {
+  view-transition-name: none !important;
+}
 /* Unique names preserve each form's drop-surface transition. */
-.rw-app #rom-weaver-row-unified-drop { view-transition-name: vt-drop-apply; }
-.rw-app #patch-builder-row-unified-drop { view-transition-name: vt-drop-create; }
-.rw-app #trim-builder-row-unified-drop { view-transition-name: vt-drop-trim; }
-.rw-app .drop:has(#tools-input-picker) { view-transition-name: vt-drop-tools; }
-.rw-app .unified-drop-step:has(#rom-weaver-row-unified-drop) > .step-head { view-transition-name: vt-input-head-apply; }
-.rw-app .unified-drop-step:has(#patch-builder-row-unified-drop) > .step-head { view-transition-name: vt-input-head-create; }
-.rw-app .unified-drop-step:has(#trim-builder-row-unified-drop) > .step-head { view-transition-name: vt-input-head-trim; }
-.rw-app .unified-drop-step:has(#tools-input-picker) > .step-head { view-transition-name: vt-input-head-tools; }
+.rw-app #rom-weaver-row-unified-drop {
+  view-transition-name: vt-drop-apply;
+}
+.rw-app #patch-builder-row-unified-drop {
+  view-transition-name: vt-drop-create;
+}
+.rw-app #trim-builder-row-unified-drop {
+  view-transition-name: vt-drop-trim;
+}
+.rw-app .drop:has(#tools-input-picker) {
+  view-transition-name: vt-drop-tools;
+}
+.rw-app .unified-drop-step:has(#rom-weaver-row-unified-drop) > .step-head {
+  view-transition-name: vt-input-head-apply;
+}
+.rw-app .unified-drop-step:has(#patch-builder-row-unified-drop) > .step-head {
+  view-transition-name: vt-input-head-create;
+}
+.rw-app .unified-drop-step:has(#trim-builder-row-unified-drop) > .step-head {
+  view-transition-name: vt-input-head-trim;
+}
+.rw-app .unified-drop-step:has(#tools-input-picker) > .step-head {
+  view-transition-name: vt-input-head-tools;
+}
 html.vt-theme .unified-drop-step .drop,
-html.vt-theme .unified-drop-step .step-head { view-transition-name: none !important; }
+html.vt-theme .unified-drop-step .step-head {
+  view-transition-name: none !important;
+}
 /* Flatten mode switches into one root crossfade. */
 html.vt-mode .unified-drop-step .drop,
 html.vt-mode .unified-drop-step .step-head,
-html.vt-mode .drop:has(#tools-input-picker) { view-transition-name: none !important; }
+html.vt-mode .drop:has(#tools-input-picker) {
+  view-transition-name: none !important;
+}
 /* Keep drop morphs faster than the ambient crossfade. */
-::view-transition-group(vt-drop-apply), ::view-transition-group(vt-drop-create),
-::view-transition-group(vt-drop-trim), ::view-transition-group(vt-drop-tools) {
-  animation-duration: .2s; animation-timing-function: cubic-bezier(.3, .8, .2, 1);
+::view-transition-group(vt-drop-apply),
+::view-transition-group(vt-drop-create),
+::view-transition-group(vt-drop-trim),
+::view-transition-group(vt-drop-tools) {
+  animation-duration: 0.2s;
+  animation-timing-function: cubic-bezier(0.3, 0.8, 0.2, 1);
 }
-::view-transition-old(vt-drop-apply), ::view-transition-old(vt-drop-create),
-::view-transition-old(vt-drop-trim), ::view-transition-old(vt-drop-tools) {
-  animation: vt-drop-out .1s ease both;
+::view-transition-old(vt-drop-apply),
+::view-transition-old(vt-drop-create),
+::view-transition-old(vt-drop-trim),
+::view-transition-old(vt-drop-tools) {
+  animation: vt-drop-out 0.1s ease both;
 }
-::view-transition-new(vt-drop-apply), ::view-transition-new(vt-drop-create),
-::view-transition-new(vt-drop-trim), ::view-transition-new(vt-drop-tools) {
-  animation: vt-drop-in .12s ease .07s both;
+::view-transition-new(vt-drop-apply),
+::view-transition-new(vt-drop-create),
+::view-transition-new(vt-drop-trim),
+::view-transition-new(vt-drop-tools) {
+  animation: vt-drop-in 0.12s ease 0.07s both;
 }
-::view-transition-group(vt-input-head-apply), ::view-transition-group(vt-input-head-create),
-::view-transition-group(vt-input-head-trim), ::view-transition-group(vt-input-head-tools) {
-  animation-duration: .2s; animation-timing-function: cubic-bezier(.3, .8, .2, 1);
+::view-transition-group(vt-input-head-apply),
+::view-transition-group(vt-input-head-create),
+::view-transition-group(vt-input-head-trim),
+::view-transition-group(vt-input-head-tools) {
+  animation-duration: 0.2s;
+  animation-timing-function: cubic-bezier(0.3, 0.8, 0.2, 1);
 }
-::view-transition-old(vt-input-head-apply), ::view-transition-old(vt-input-head-create),
-::view-transition-old(vt-input-head-trim), ::view-transition-old(vt-input-head-tools) {
-  animation: vt-input-head-out .2s linear both;
+::view-transition-old(vt-input-head-apply),
+::view-transition-old(vt-input-head-create),
+::view-transition-old(vt-input-head-trim),
+::view-transition-old(vt-input-head-tools) {
+  animation: vt-input-head-out 0.2s linear both;
 }
-::view-transition-new(vt-input-head-apply), ::view-transition-new(vt-input-head-create),
-::view-transition-new(vt-input-head-trim), ::view-transition-new(vt-input-head-tools) {
-  animation: vt-input-head-in .06s ease .14s both;
+::view-transition-new(vt-input-head-apply),
+::view-transition-new(vt-input-head-create),
+::view-transition-new(vt-input-head-trim),
+::view-transition-new(vt-input-head-tools) {
+  animation: vt-input-head-in 0.06s ease 0.14s both;
 }
-@keyframes vt-drop-out { to { opacity: 0; } }
-@keyframes vt-drop-in { from { opacity: 0; } }
-@keyframes vt-input-head-out { 0%, 72% { opacity: 1; } to { opacity: 0; } }
-@keyframes vt-input-head-in { from { opacity: 0; } }
+@keyframes vt-drop-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-drop-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes vt-input-head-out {
+  0%,
+  72% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-input-head-in {
+  from {
+    opacity: 0;
+  }
+}
 /* Avoid replaying entry animations beneath a view transition. */
-.vt-quiet .card:not(.pending-card), .vt-quiet .workflow-body, .vt-quiet .notice, .vt-quiet .result, .vt-quiet .prog-panel { animation: none !important; }
+.vt-quiet .card:not(.pending-card),
+.vt-quiet .workflow-body,
+.vt-quiet .notice,
+.vt-quiet .result,
+.vt-quiet .prog-panel {
+  animation: none !important;
+}
+
+/* ── the weft sub-rail ──
+   One pattern for every second-level nav: visually subordinate to the mode rail
+   (an underline weft, not a filled pill), scrolling horizontally when cramped so
+   it never wraps and never vanishes. The status/logs dialog wears it as its
+   header - the tabs are the title. */
+.rw-app .subrail {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  gap: var(--sp-xs);
+  min-inline-size: 0;
+  overflow-x: auto;
+  /* Keeps a part-scrolled tab from resting half-cut, so the rail always reads as
+     whole tabs and the cut edge is never mistaken for the end of the list. */
+  scroll-snap-type: inline proximity;
+  scrollbar-width: none;
+}
+.rw-app .subrail::-webkit-scrollbar {
+  display: none;
+}
+.rw-app .dialog-subrail {
+  padding: 0;
+  background: transparent;
+}
+.rw-app .subtab {
+  display: inline-flex;
+  gap: var(--sp-s);
+  align-items: center;
+  min-height: 36px;
+  padding: 4px 12px 7px;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  scroll-snap-align: start;
+  background: transparent;
+  border: 0;
+  border-block-end: 3px solid transparent;
+  border-radius: var(--r-s) var(--r-s) 0 0;
+  transition:
+    color 0.18s,
+    background-color 0.18s;
+}
+.rw-app .subtab svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+/* The weft, doubled: a tinted riser standing on a thicker rule. A bare label
+   with a hairline under it left the tabs reading as running text - at a glance
+   there was no telling the rail from the sentence above it. The riser gives the
+   selected tab a body without turning the rail into filled pills, which would
+   put it in competition with the masthead's mode rail. */
+.rw-app .subtab[aria-selected="true"] {
+  color: var(--thread-text);
+  background: color-mix(in oklab, var(--thread) 15%, transparent);
+  border-block-end-color: var(--thread);
+}
+@media (hover: hover) {
+  .rw-app .subtab:not([aria-selected="true"]):hover {
+    color: var(--ink);
+  }
+}
+.rw-app .subtab:not([aria-selected="true"]):active {
+  color: var(--ink);
+}
+@media (forced-colors: active) {
+  .rw-app .subtab[aria-selected="true"] {
+    border-block-end-color: SelectedItem;
+  }
+}
+
+/* ── status tab ── */
+.rw-app .status-panel {
+  display: block;
+}
+.rw-app .sw-chip {
+  display: inline-flex;
+  gap: var(--sp-xs);
+  align-items: center;
+  min-height: 22px;
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink-3);
+  white-space: nowrap;
+  border: 1px solid var(--seam-soft);
+  border-radius: 999px;
+}
+.rw-app .sw-chip svg {
+  width: 13px;
+  height: 13px;
+}
+.rw-app .sw-chip[data-sw="active"] {
+  color: var(--verified);
+  border-color: color-mix(in oklab, var(--verified) 35%, transparent);
+}
+/* A cache standing by is not a cache in use, and one tint of green apart was not
+   telling anyone that. Stored, not serving: no colour of its own, and the glyph
+   is a box rather than a cloud. */
+.rw-app .sw-chip[data-sw="ready"] {
+  color: var(--ink-2);
+}
+.rw-app .sw-chip[data-sw="update"] {
+  color: var(--care-text);
+  border-color: color-mix(in oklab, var(--care) 40%, transparent);
+}
+.rw-app .sw-chip[data-sw="disabled"] {
+  color: var(--ink-4);
+}
+/* ── offline legend ──
+   Label-and-value rows, the same shape the build facts above use, so the two
+   lists share their layout and differ only in how wide the label column has to
+   be for the widest state name. */
+.rw-app .sw-legend {
+  padding-block-start: var(--sp-m);
+  margin-block-start: var(--sp-l);
+  border-block-start: 1px solid var(--seam);
+}
+.rw-app .sw-legend-title,
+.rw-app .status-row dt {
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rw-app .sw-legend-title {
+  margin: 0 0 var(--sp-s);
+}
+.rw-app .status-rows,
+.rw-app .sw-legend dl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  margin: 0;
+}
+.rw-app .status-row,
+.rw-app .sw-legend-row {
+  display: grid;
+  gap: var(--sp-m);
+  align-items: baseline;
+}
+.rw-app .status-row {
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+}
+.rw-app .sw-legend-row {
+  grid-template-columns: 10.5rem minmax(0, 1fr);
+}
+.rw-app .status-row dd,
+.rw-app .sw-legend-row dd {
+  min-width: 0;
+  margin: 0;
+}
+.rw-app .sw-legend-row dd {
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+/* the one you have, named in the same list as the four you could have */
+.rw-app .sw-legend-row[data-current] dd {
+  color: var(--ink-2);
+}
+.rw-app .sw-legend-row[data-current] .sw-chip {
+  background: color-mix(in oklab, currentColor 12%, transparent);
+}
+@media (max-width: 519px) {
+  .rw-app .sw-legend-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-2xs);
+  }
+}
+.rw-app .status-row dd {
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+.rw-app .status-row code {
+  padding: 1px 6px;
+  font-size: 0.78rem;
+  background: var(--well);
+  border: 1px solid var(--seam-soft);
+  border-radius: 4px;
+}
+.rw-app .status-row a {
+  color: var(--thread-text);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+/* phones: the inspector and settings take the whole screen */
+@media (max-width: 719px) {
+  .rw-app .log-dlg {
+    max-width: 100vw;
+  }
+  .rw-app .log-dlg .dlg-frame {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding-block-start: var(--safe-t);
+    padding-block-end: var(--safe-b);
+    border: 0;
+    border-radius: 0;
+  }
+}

@@ -11,7 +11,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SRC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src");
 
@@ -38,6 +38,10 @@ const EXEMPT = new Map([
   ["input[type=checkbox].styled:hover:not(:disabled)", "toggle - the :checked flip is the feedback"],
   ["input[type=checkbox].styled:hover:checked:not(:disabled)", "toggle - the :checked flip is the feedback"],
   ['.rw-app input[type="checkbox"]:hover', "toggle - the :checked flip is the feedback"],
+  [
+    ".rw-app .tool:hover .tip",
+    "pointer-only tooltip; touch gets the label from the button's own aria-label, and a press twin would flash a tip under the finger",
+  ],
 ]);
 
 const cssFiles = (dir) =>
@@ -94,7 +98,19 @@ const collect = (src, file, out, gated = false, lineOffset = 0) => {
             collect(body, file, out, gated || isHoverQuery, line - 1);
           }
         } else {
-          for (const selector of trimmed.split(",").map(normalize)) {
+          const selectorGroup = trimmed.split(",").map(normalize);
+          const hasHover = selectorGroup.some((selector) => selector.includes(":hover"));
+          const hasGroupedNonHoverState = selectorGroup.some(
+            (selector) =>
+              !selector.includes(":hover") &&
+              (selector.includes(":focus-visible") ||
+                selector.includes(":focus-within") ||
+                selector.includes(":active")),
+          );
+          if (selectorGroup.length > 1 && hasHover && hasGroupedNonHoverState) {
+            out.groupedWithHover.push({ file, line, selectorGroup: trimmed });
+          }
+          for (const selector of selectorGroup) {
             if (selector.includes(":hover")) {
               if (gated) out.gatedHover.push({ file, line, selector });
               else out.ungated.push({ file, line, selector });
@@ -111,28 +127,62 @@ const collect = (src, file, out, gated = false, lineOffset = 0) => {
   }
 };
 
-const out = { active: new Set(), gatedHover: [], ungated: [] };
-for (const file of cssFiles(SRC_DIR)) collect(readFileSync(file, "utf8"), file, out);
+/**
+ * Walk `{ file, css }` sources and collect every `:hover` selector (split by
+ * gated vs. ungated) plus every `:active` selector seen anywhere. Pure - no
+ * filesystem access - so tests can hand it inline CSS instead of real files.
+ */
+export const collectTouchStyleFacts = (cssSources) => {
+  const out = { active: new Set(), gatedHover: [], groupedWithHover: [], ungated: [] };
+  for (const { file, css } of cssSources) collect(css, file, out);
+  return out;
+};
 
-const failures = [];
-for (const { file, line, selector } of out.ungated) {
-  failures.push(`${path.relative(SRC_DIR, file)}:${line}: \`${selector}\` is not inside @media (hover: hover)`);
-}
-for (const { file, line, selector } of out.gatedHover) {
-  if (EXEMPT.has(selector)) continue;
-  const twin = selector.replaceAll(":hover", ":active");
-  if (out.active.has(twin)) continue;
-  failures.push(
-    `${path.relative(SRC_DIR, file)}:${line}: \`${selector}\` has no \`${twin}\` twin (add one, or an EXEMPT entry with a reason)`,
+/** Ungated `:hover` rules, `:hover` grouped with `:focus-visible`/`:focus-within`/`:active` in one
+ * selector list, and gated `:hover` rules missing their `:active` twin. */
+export const findTouchStyleViolations = (facts, exempt) => {
+  const failures = [];
+  for (const { file, line, selector } of facts.ungated) {
+    failures.push(`${file}:${line}: \`${selector}\` is not inside @media (hover: hover)`);
+  }
+  for (const { file, line, selectorGroup } of facts.groupedWithHover) {
+    failures.push(
+      `${file}:${line}: \`${selectorGroup}\` groups :hover with :focus-visible/:focus-within/:active - keep those halves in separate selector lists`,
+    );
+  }
+  for (const { file, line, selector } of facts.gatedHover) {
+    if (exempt.has(selector)) continue;
+    const twin = selector.replaceAll(":hover", ":active");
+    if (facts.active.has(twin)) continue;
+    failures.push(
+      `${file}:${line}: \`${selector}\` has no \`${twin}\` twin (add one, or an EXEMPT entry with a reason)`,
+    );
+  }
+  return failures;
+};
+
+/** Full touch-style audit over `{ file, css }` sources - the pure entry point tests exercise. */
+export const checkTouchStyles = (cssSources, exempt = EXEMPT) => {
+  const facts = collectTouchStyleFacts(cssSources);
+  return { facts, failures: findTouchStyleViolations(facts, exempt) };
+};
+
+export const main = () => {
+  const cssSources = cssFiles(SRC_DIR).map((file) => ({
+    file: path.relative(SRC_DIR, file),
+    css: readFileSync(file, "utf8"),
+  }));
+  const { facts, failures } = checkTouchStyles(cssSources, EXEMPT);
+
+  if (failures.length) {
+    console.error("Touch style audit failed:");
+    for (const failure of failures) console.error(`- ${failure}`);
+    process.exit(1);
+  }
+
+  console.log(
+    `Touch style audit passed: ${facts.gatedHover.length} gated hover rule(s), ${facts.active.size} :active selector(s), ${EXEMPT.size} documented exemption(s).`,
   );
-}
+};
 
-if (failures.length) {
-  console.error("Touch style audit failed:");
-  for (const failure of failures) console.error(`- ${failure}`);
-  process.exit(1);
-}
-
-console.log(
-  `Touch style audit passed: ${out.gatedHover.length} gated hover rule(s), ${out.active.size} :active selector(s), ${EXEMPT.size} documented exemption(s).`,
-);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

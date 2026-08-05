@@ -1,4 +1,4 @@
-import { BookOpen, GitCompare, House, RotateCcw, Save, Scissors, Wrench } from "lucide-react";
+import { BookOpen, GitCompare, House, RotateCcw, Scissors, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -9,8 +9,8 @@ import { perfNow, recordDrop } from "../lib/runtime/perf-latency.ts";
 import { getDefaultBrowserThreadCount } from "../platform/shared/compression-options.ts";
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
-import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
-import { type GuidedSample, notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
+import { ConfirmDialog } from "../public/react/components/ds/index.ts";
+import { notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
 import type { PageFileDrop } from "../public/react/public-types.ts";
 // Deliberately NOT the ../public/react/index.tsx barrel: that barrel re-exports
 // every workflow form, so a static import of it pulls all four route chunks
@@ -21,13 +21,14 @@ import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
-import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH } from "./build-version.ts";
-import { ChangelogDialog } from "./components/changelog-dialog.tsx";
-import { Masthead, SiteFooter, UpdateBanner } from "./components/shell.tsx";
-import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
+import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
+import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
+import { Masthead, UpdateBanner } from "./components/shell.tsx";
+import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
-import { DONATE_URL, GITHUB_URL, NOTICE_URL, PRIVACY_URL } from "./project-links.ts";
-import { getSettingsUiState } from "./settings/settings-state.ts";
+import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
+import { getSettingsUiState, SETTINGS_FIELD_METADATA } from "./settings/settings-state.ts";
+import { shouldWarnBeforeUnload } from "./unload-guard.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
@@ -46,15 +47,15 @@ const WORKFLOW_TABS = [
   // "Apply": the tab both applies patch chains and edits/exports them as bundles.
   { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
-  // Reference rather than a workflow, but it earns a slot because the people it
-  // is written for are the least likely to go looking in an icon tray. It is
-  // still never persisted as the tab to resume - see `isResumableWorkflowView`.
+  // Reference rather than a workflow. It stays direct in the desktop rail and
+  // moves into More on the phone dock; it is never persisted as the tab to
+  // resume - see `isResumableWorkflowView`.
   { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
+  // Beta-only utility route. The shell keeps it out of both primary navs and
+  // exposes it from More when the beta-tools setting is enabled.
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
-
-const getGuideView = (guide: GuidedSample): WebappView => (guide === "create" ? "creator" : "patcher");
 
 // Keep the trace inspector out of the initial bundle, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
@@ -167,6 +168,17 @@ const useEntryAnimationLock = () => {
    transition so all layout swaps use one mechanism. */
 const selectViewWithTransition = (select: () => void) => runFlatViewTransition(select, "vt-mode");
 
+/** Reset is a labelled, contextual workflow action now, not a global icon. */
+const ResetButton = ({ onReset }: { onReset: () => void }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <button className="reset-btn" onClick={onReset} type="button">
+      <RotateCcw aria-hidden="true" />
+      <span>{localizer.message("ui.settings.reset")}</span>
+    </button>
+  );
+};
+
 const DropVeil = () => {
   const localizer = useUiLocalizer();
   return (
@@ -187,9 +199,10 @@ const DropVeil = () => {
  * updates on every progress tick, and re-rendering the whole workbench per
  * tick makes the weave animations stutter during extraction.
  */
-const ActivityWakeLockNotice = () => {
+const ActivityWakeLock = ({ pageHasPendingChanges }: { pageHasPendingChanges: boolean }) => {
   const activity = useSyncExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
-  return <ProcessingWakeLockNotice active={activity.state === "running"} />;
+  useScreenWakeLock(pageHasPendingChanges || activity.state === "running" || activity.state === "staging");
+  return null;
 };
 
 const ActivityFinishMarker = () => {
@@ -228,12 +241,20 @@ function WebappRoot({
   }, [notFound, state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
   const [logOpen, setLogOpen] = useState(false);
-  const [changelogOpen, setChangelogOpen] = useState(false);
+  const [logTab, setLogTab] = useState<LogDialogTab>("status");
+  const [settingsFocusHint, setSettingsFocusHint] = useState<SettingsFocusHint | null>(null);
+  // The settings tab owns a draft, so closing it runs the controller's
+  // discard-confirmation flow first; the dialog itself only closes once that
+  // flow actually clears `settingsDialogOpen`.
+  const settingsCloseArmedRef = useRef(false);
+  const pendingViewRef = useRef<WebappView | null>(null);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
   // silently discard the user's work. Each form mounts on first visit and then
   // stays mounted but hidden, which preserves state across tab switches.
   const [visitedViews, setVisitedViews] = useState<readonly WebappView[]>([state.currentView]);
+  const currentViewRef = useRef(state.currentView);
+  currentViewRef.current = state.currentView;
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
@@ -242,33 +263,6 @@ function WebappRoot({
   useLayoutEffect(() => {
     document.documentElement.dataset.betaToolsEnabled = state.settings.betaToolsEnabled ? "true" : "false";
   }, [state.settings.betaToolsEnabled]);
-  const preloadGuide = useCallback(
-    (guide: GuidedSample) => {
-      void preloadWorkflowRoute(getGuideView(guide));
-      void preloadBrowserRuntime({ threads });
-    },
-    [threads],
-  );
-  const startGuide = useCallback(
-    (guide: GuidedSample) => {
-      const targetHasFiles =
-        guide === "create"
-          ? state.creatorSession.originalFilePresent || state.creatorSession.modifiedFilePresent
-          : state.patcherSession.romFilePresent || state.patcherSession.patchCount > 0;
-      if (targetHasFiles) return false;
-      preloadGuide(guide);
-      selectViewWithTransition(() => actions.onStartGuide(guide));
-      return true;
-    },
-    [
-      actions,
-      preloadGuide,
-      state.creatorSession.modifiedFilePresent,
-      state.creatorSession.originalFilePresent,
-      state.patcherSession.patchCount,
-      state.patcherSession.romFilePresent,
-    ],
-  );
   useEffect(() => {
     if (notFound) return;
     let cancelled = false;
@@ -304,16 +298,74 @@ function WebappRoot({
   const preloadSettingsPanel = useCallback(() => {
     void loadSettingsPanel().catch(() => undefined);
   }, []);
-  const openSettings = useCallback(() => {
-    void loadSettingsPanel().then(
-      () => actions.onOpenSettings(),
-      () => actions.onOpenSettings(),
-    );
+  // The panel is lazy, but the dialog opens immediately: its tab rail is the
+  // header, so a still-loading panel shows a usable frame rather than a bare
+  // one. Hover/focus/idle preloads mean it is almost always already resident.
+  const openSettingsTab = useCallback(
+    (fieldId?: string) => {
+      preloadSettingsPanel();
+      settingsCloseArmedRef.current = false;
+      setSettingsFocusHint(fieldId ? { fieldId, token: Date.now() } : null);
+      setLogTab("settings");
+      setLogOpen(true);
+      actions.onOpenSettings();
+    },
+    [actions, preloadSettingsPanel],
+  );
+  const handleDialogTabChange = useCallback(
+    (tab: LogDialogTab) => {
+      setLogTab(tab);
+      // Reaching Settings from inside the dialog must stage a draft exactly the
+      // way the gear does, or the panel would edit a stale one.
+      if (tab === "settings") {
+        preloadSettingsPanel();
+        actions.onOpenSettings();
+      }
+    },
+    [actions, preloadSettingsPanel],
+  );
+  const closeDialog = useCallback(() => {
+    if (!state.settingsDialogOpen) {
+      setLogOpen(false);
+      return;
+    }
+    settingsCloseArmedRef.current = true;
+    actions.onCloseSettings();
+  }, [actions, state.settingsDialogOpen]);
+  const saveSettings = useCallback(() => {
+    settingsCloseArmedRef.current = true;
+    actions.onSaveClose();
   }, [actions]);
+  useEffect(() => {
+    if (state.settingsDialogOpen || !settingsCloseArmedRef.current) return;
+    settingsCloseArmedRef.current = false;
+    logger.trace("unified dialog closing after the settings draft settled");
+    setLogOpen(false);
+  }, [state.settingsDialogOpen]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
   }, []);
+  // Every changelog affordance - the version chip, the update notification, and
+  // the runtime chip while it is amber - lands on the one tab that holds every
+  // view of the changelog.
+  const openChangelogTab = useCallback(() => {
+    preloadLogDialog();
+    setLogTab("changelog");
+    setLogOpen(true);
+  }, [preloadLogDialog]);
+  // The runtime chip reports a state, and Status is where that state is
+  // explained - except in the one state that asks for an action. An amber chip
+  // is an update waiting, so it goes where the update is described.
+  const openStatusTab = useCallback(() => {
+    if (pageUpdate.ready) {
+      openChangelogTab();
+      return;
+    }
+    preloadLogDialog();
+    setLogTab("status");
+    setLogOpen(true);
+  }, [openChangelogTab, pageUpdate.ready, preloadLogDialog]);
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
@@ -395,7 +447,7 @@ function WebappRoot({
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (state.settingsDialogOpen || confirmationDialog.open) return;
+      if (logOpen || state.settingsDialogOpen || confirmationDialog.open) return;
       const droppedAtMs = perfNow();
       // Read synchronously so dropped folders are captured before the transfer
       // clears; routing/classification is owned by the active tab's unified drop
@@ -426,7 +478,7 @@ function WebappRoot({
       document.removeEventListener("dragover", handlePageDragOver);
       document.removeEventListener("drop", handlePageDrop);
     };
-  }, [confirmationDialog.open, notFound, state.currentView, state.settingsDialogOpen]);
+  }, [confirmationDialog.open, logOpen, notFound, state.currentView, state.settingsDialogOpen]);
 
   const workflowPanel = (view: WebappView, form: React.ReactNode) =>
     isViewMounted(view) ? (
@@ -437,36 +489,86 @@ function WebappRoot({
         id={`panel-${view}`}
         role="tabpanel"
       >
+        {view === "docs" ? null : (
+          <div className="workflow-panel-head">
+            <ResetButton onReset={actions.onReset} />
+          </div>
+        )}
         <div className="workflow-body">
           {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
           <Suspense fallback={null}>{form}</Suspense>
         </div>
       </section>
     ) : null;
+  const pageHasPendingChanges = shouldWarnBeforeUnload({
+    creatorState: state.creatorSession,
+    outputState: state.patcherSession,
+    patchStackState: { items: Array.from({ length: state.patcherSession.patchCount }) },
+    patcherFormEdited: !!(state.patcherSession.outputName.trim() || state.patcherSession.outputCompression !== "none"),
+    romFilePresent: state.patcherSession.romFilePresent,
+    toolsActive: state.toolsSession?.active ?? false,
+    trimState: state.trimSession,
+    webappState: state,
+  });
   return (
     <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
         <div className="app">
           <Masthead
+            // "/" maps to no route, so the brand has to name one or the browser
+            // hard-reloads and every staged file goes with it.
+            homeHref="/apply"
             channelBadge={CHANNEL_BADGE}
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={notFound ? "" : state.currentView}
             githubHref={GITHUB_URL}
             onAccentChange={actions.onAccentChange}
-            onOpenLog={() => setLogOpen(true)}
+            commitsSinceVersion={COMMITS_SINCE_VERSION}
+            dirty={Boolean(DIRTY_HASH)}
+            donateHref={DONATE_URL}
+            onOpenChangelog={openChangelogTab}
+            onOpenLog={() => {
+              setLogTab("logs");
+              setLogOpen(true);
+            }}
+            onOpenStatus={openStatusTab}
+            onOpenStorage={() => {
+              preloadLogDialog();
+              setLogTab("storage");
+              setLogOpen(true);
+            }}
             onPreloadLog={preloadLogDialog}
-            onOpenSettings={openSettings}
+            onOpenSettings={() => openSettingsTab()}
+            onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
             onPreloadSettings={preloadSettingsPanel}
-            onReset={actions.onReset}
+            serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+            threads={resolveThreads(threads)}
+            updateReady={pageUpdate.ready}
+            version={APP_VERSION}
+            versionTitle={`v${APP_BUILD_VERSION}`}
             onSelectTab={(id) => {
               if (notFound) {
                 const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href;
                 if (href) window.location.assign(`/${href}`);
                 return;
               }
-              selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]));
+              const view = id as WebappRootProps["state"]["currentView"];
+              if (view === "docs") {
+                // Keep the current panel visible until the lazy Docs route is ready;
+                // switching first leaves its navigation bar absent for one frame.
+                const startingView = currentViewRef.current;
+                pendingViewRef.current = view;
+                void preloadWorkflowRoute(view).then(() => {
+                  if (pendingViewRef.current !== view || currentViewRef.current !== startingView) return;
+                  pendingViewRef.current = null;
+                  selectViewWithTransition(() => actions.onSelectView(view));
+                });
+                return;
+              }
+              pendingViewRef.current = null;
+              selectViewWithTransition(() => actions.onSelectView(view));
             }}
-            settingsOpen={state.settingsDialogOpen}
+            settingsOpen={logOpen && logTab === "settings"}
             tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
             tabsControlPanels={!notFound}
           />
@@ -475,18 +577,13 @@ function WebappRoot({
               setUpdateDismissed(true);
               writeUpdateDismissed();
             }}
+            onOpenChangelog={openChangelogTab}
             onReload={actions.onReloadUpdate}
-            onShowChangelog={() => setChangelogOpen(true)}
             open={pageUpdate.ready && !updateDismissed}
             title={pageUpdate.title}
           />
-          <ChangelogDialog
-            onClose={() => setChangelogOpen(false)}
-            onReload={actions.onReloadUpdate}
-            open={changelogOpen}
-          />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
-          <ActivityWakeLockNotice />
+          <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
             {notFound ? (
               <section aria-labelledby="not-found-title" className="not-found-page">
@@ -536,15 +633,7 @@ function WebappRoot({
                     pageDrop={activePageDrop}
                   />,
                 )}
-                {workflowPanel(
-                  "docs",
-                  <DocsPageRoute
-                    active={state.currentView === "docs"}
-                    onGuideIntent={preloadGuide}
-                    onStartGuide={startGuide}
-                    slug={docsSlug}
-                  />,
-                )}
+                {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute
@@ -562,68 +651,39 @@ function WebappRoot({
               </>
             )}
           </main>
-          <SiteFooter
-            commitHash={COMMIT_HASH}
-            commitsSinceVersion={COMMITS_SINCE_VERSION}
-            confirmExternalNavigation={actions.onConfirmExternalNavigation}
-            donateHref={DONATE_URL}
-            dirty={Boolean(DIRTY_HASH)}
-            githubHref={GITHUB_URL}
-            legalHref={NOTICE_URL}
-            privacyHref={PRIVACY_URL}
-            serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
-            threads={resolveThreads(threads)}
-            version={APP_VERSION}
-            versionTitle={`v${APP_BUILD_VERSION}`}
-          />
+          {/* the dock is fixed, so the column reserves its height through the one
+              variable masthead.css raises below the dock threshold */}
+          <div aria-hidden="true" className="dock-pad" />
         </div>
         <ActivityFinishMarker />
         {logOpen ? (
           <Suspense fallback={null}>
             <LogDialog
+              initialTab={logTab}
               level={state.settings.logLevel}
-              onClose={() => setLogOpen(false)}
+              onClose={closeDialog}
               onLevelChange={actions.onLogLevelChange}
+              onReload={actions.onReloadUpdate}
+              onRestoreDefaults={actions.onRestoreDefaults}
+              onSaveSettings={saveSettings}
+              onTabChange={handleDialogTabChange}
               open={logOpen}
+              serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+              settingsFocusHint={settingsFocusHint}
+              settingsPanel={
+                <Suspense fallback={null}>
+                  <SettingsPanel
+                    draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
+                    onDraftChange={actions.onDraftChange}
+                    uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
+                    validation={state.validation}
+                  />
+                </Suspense>
+              }
+              updateReady={pageUpdate.ready}
             />
           </Suspense>
         ) : null}
-        {/* Keep the frame inside the boundary so lazy loads never show a header-only modal. */}
-        <Suspense fallback={null}>
-          <Modal
-            headerActions={
-              <>
-                <button
-                  className="btn ghost"
-                  onClick={actions.onRestoreDefaults}
-                  title="Reset to defaults"
-                  type="button"
-                >
-                  <RotateCcw aria-hidden="true" />
-                  <span className="bl">Defaults</span>
-                </button>
-                <button className="btn primary" onClick={actions.onSaveClose} title="Save &amp; close" type="button">
-                  <Save aria-hidden="true" />
-                  <span className="bl">Save</span>
-                </button>
-              </>
-            }
-            onClose={actions.onCloseSettings}
-            open={state.settingsDialogOpen}
-            title="Settings"
-            variant="settings-modal"
-          >
-            <SettingsPanel
-              draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-              onClose={actions.onCloseSettings}
-              onDraftChange={actions.onDraftChange}
-              onRestoreDefaults={actions.onRestoreDefaults}
-              onSaveClose={actions.onSaveClose}
-              uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
-              validation={state.validation}
-            />
-          </Modal>
-        </Suspense>
         <ConfirmDialog
           body={confirmationDialog.message}
           cancelLabel={confirmationDialog.cancelLabel}

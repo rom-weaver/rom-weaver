@@ -789,7 +789,7 @@ export async function runFullFormatMatrix({ runJson, opfsHandle, dir, fixtures, 
   return runBrowserFullFormatMatrixCore({ dir, fixtures, opfsHandle, profile, runJson });
 }
 
-async function runPatchApplyNoCompress(runJson, { inputPath, patchPath, outputPath }, runOptions = undefined) {
+async function runPatchApplyNoCompress(runJson, { inputPath, patchPath, outputPath }, runOptions) {
   return runJson(
     [
       "patch",
