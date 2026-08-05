@@ -33,6 +33,27 @@ afterEach(() => {
 });
 
 describe("emulator session store", () => {
+  it("disposes the predecessor when a retained apply entry is replaced", () => {
+    const firstDispose = vi.fn(async () => undefined);
+    const secondDispose = vi.fn(async () => undefined);
+    const first = entry({
+      artifact: { dispose: firstDispose, getBlob: async () => new Blob(["one"]) },
+      source: "apply",
+    });
+    const second = entry({
+      artifact: { dispose: secondDispose, getBlob: async () => new Blob(["two"]) },
+      source: "apply",
+    });
+
+    addEntry(first);
+    addEntry(second);
+
+    expect(firstDispose).toHaveBeenCalledOnce();
+    expect(secondDispose).not.toHaveBeenCalled();
+    disposeEntry("game");
+    expect(secondDispose).toHaveBeenCalledOnce();
+  });
+
   it("adds and replaces an entry with the same id", () => {
     addEntry(entry({ objectUrl: createObjectUrl(new Blob(["one"])) }));
     addEntry(entry({ fileName: "updated.nes", objectUrl: createObjectUrl(new Blob(["two"])) }));

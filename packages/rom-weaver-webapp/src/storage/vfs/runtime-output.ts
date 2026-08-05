@@ -1,6 +1,7 @@
 import { getPathBaseName } from "../../lib/path-utils.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
+import type { RetainedRuntimeOutput } from "./types.ts";
 import { copySourceToWriter } from "../shared/binary/binary-source-utils.ts";
 import { getNamedSource } from "../shared/binary/source-file-utils.ts";
 import { createCleanupOnce } from "../shared/disposal.ts";
@@ -186,10 +187,53 @@ const readRuntimeOutputBlob = async (
   });
 };
 
+const copyRuntimeOutputToPath = async (
+  source: Pick<PublicOutput, "fileName" | "mediaType" | "path" | "size" | "vfs">,
+  fileName = source.fileName,
+  pathPrefix = "runtime-output/emulator",
+): Promise<RetainedRuntimeOutput> => {
+  const outputPath = createRuntimeOutputPath(source.vfs.rootPath, fileName, pathPrefix);
+  const cleanup = createOutputPathCleanup(source.vfs, outputPath);
+  const size = Math.max(0, Math.floor(source.size || 0));
+  try {
+    await source.vfs.truncate(outputPath, 0);
+    const buffer = new Uint8Array(OUTPUT_CHUNK_SIZE);
+    let offset = 0;
+    while (offset < size) {
+      const length = Math.min(buffer.byteLength, size - offset);
+      const bytesRead = await source.vfs.read(source.path, buffer, {
+        fileOffset: offset,
+        length,
+      });
+      if (!bytesRead) throw new Error("Runtime output ended before the retained copy was complete");
+      await source.vfs.write(outputPath, buffer.subarray(0, bytesRead), { fileOffset: offset });
+      offset += bytesRead;
+    }
+    const output = await createRuntimeOutputFromVfs(source.vfs, outputPath, fileName, {
+      cleanup,
+      mediaType: source.mediaType,
+      size,
+    });
+    return {
+      dispose: output.dispose,
+      fileName: output.fileName,
+      getBlob: () => readRuntimeOutputBlob(output),
+      mediaType: output.mediaType,
+      path: output.path,
+      size: output.size,
+      vfs: output.vfs,
+    };
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+};
+
 const getRuntimeOutputStorage = (output: Pick<PublicOutput, "vfs">) =>
   output.vfs.hostKind === "browser-opfs" ? "opfs" : "file";
 
 export {
+  copyRuntimeOutputToPath,
   createRuntimeOutputFromBytes,
   createRuntimeOutputFromSource,
   createRuntimeOutputFromVfs,

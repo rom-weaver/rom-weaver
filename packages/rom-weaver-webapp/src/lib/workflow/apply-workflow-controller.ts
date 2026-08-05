@@ -106,6 +106,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   ApplyWorkflowSnapshot
 > {
   private readonly ownedSourceRefCounts = new Map<unknown, number>();
+  private readonly retainUncompressedOutput: ApplyWorkflowOptions["retainUncompressedOutput"];
   private readonly pendingOwnedSourceReleases = new Map<unknown, ReturnType<typeof setTimeout>>();
   private readonly releasedOwnedSources = new WeakSet<object>();
   /** Latest verification plan per target chain, refreshed by each plan-mode validate pass. The
@@ -133,6 +134,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     validateSources?: SourceValidator<TSource>,
   ) {
     super("apply", runtime, options, validateSources);
+    this.retainUncompressedOutput = options.retainUncompressedOutput;
     this.outputState = createApplyOutputState(this.settings);
     this.inputStages = this.createStagedController<InternalSourceState>({
       getExecutionOptions: () => this.createExecutionOptions(),
@@ -1497,6 +1499,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         outputName:
           getApplyExecutionOutputName(this.outputState, this.settings, this.getInput()?.fileName) || output.outputName,
       },
+      ...(this.retainUncompressedOutput ? { retainUncompressedOutput: this.retainUncompressedOutput } : {}),
       signal: this.abortController.signal,
       validation: cloneValue(this.settings.validation || {}),
       workers: cloneValue(this.settings.workers || {}),

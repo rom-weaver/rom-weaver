@@ -47,7 +47,8 @@ import type {
 } from "./patcher-form.ts";
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
-import { addEntry, setCurrentGame } from "./emulator-session-store.ts";
+import { addEntry, getApplyEntry, setCurrentGame } from "./emulator-session-store.ts";
+import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
@@ -56,12 +57,16 @@ import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./
 
 const EmulatorJsAction = ({
   core,
+  fileName,
   onSelectView,
   output,
+  platform,
 }: {
   core: string | undefined;
+  fileName?: string;
   onSelectView?: (view: "test") => void;
   output?: BrowserApplyResult["output"] | null;
+  platform?: string;
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -70,14 +75,22 @@ const EmulatorJsAction = ({
     setLoading(true);
     setError("");
     try {
+      const retained = getApplyEntry(fileName) || getApplyEntry();
+      if (retained) {
+        setCurrentGame(retained.id);
+        onSelectView?.("test");
+        return;
+      }
       const blob = await output.getBlob?.();
       if (!blob) throw new Error("The finished output cannot be opened in EmulatorJS.");
+      const loaded = await loadEmulatorRom(blob, output.fileName);
       addEntry({
         core,
-        fileName: output.fileName,
+        fileName: loaded.fileName,
         id: output.id,
-        objectUrl: URL.createObjectURL(blob),
-        sizeBytes: blob.size,
+        objectUrl: URL.createObjectURL(loaded.blob),
+        platform,
+        sizeBytes: loaded.blob.size,
         source: "apply",
       });
       setCurrentGame(output.id);
@@ -100,7 +113,7 @@ const EmulatorJsAction = ({
       >
         {loading ? "Preparing EmulatorJS…" : "Test in emulator"}
       </button>
-      <span className="emulatorjs-note">Open the uncompressed output in the Test tab.</span>
+      <span className="emulatorjs-note">Open the ROM in the Test tab.</span>
       {error ? (
         <p className="emulatorjs-error" role="alert">
           {error}
@@ -1307,9 +1320,17 @@ const ApplyOutputAction = ({
       totalTime={applyTotalTime || undefined}
     />
     <EmulatorJsAction
-      core={getEmulatorJsCore(romInputs[0]?.info.romType?.platform, outputState.pendingDownloadFileName ?? undefined)}
+      core={getEmulatorJsCore(
+        romInputs[0]?.info.romType?.platform,
+        romInputs[0]?.info.fileName ||
+          romInputs[0]?.info.archiveName ||
+          outputState.pendingDownloadFileName ||
+          undefined,
+      )}
+      fileName={romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || undefined}
       onSelectView={onSelectView}
       output={emulatorOutput}
+      platform={romInputs[0]?.info.romType?.platform}
     />
     {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
     {bundleTools?.outputVerification ? (

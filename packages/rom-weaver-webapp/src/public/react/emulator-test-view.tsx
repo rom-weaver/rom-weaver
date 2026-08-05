@@ -4,6 +4,7 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import {
   addEntry,
   disposeEntry,
+  prepareEntry,
   setCurrentGame,
   useEmulatorSession,
   type EmulatorSessionEntry,
@@ -75,6 +76,7 @@ const EmulatorTestView = () => {
   const { currentGameId, entries } = useEmulatorSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [preparing, setPreparing] = useState(false);
   const currentGame = entries.find((entry) => entry.id === currentGameId) || null;
   const dataUrl =
     typeof document === "undefined" ? "/emulatorjs/data/" : new URL("emulatorjs/data/", document.baseURI).href;
@@ -82,6 +84,23 @@ const EmulatorTestView = () => {
   useEffect(() => {
     if (!currentGame) return;
     setError(hasWebgl2() ? "" : WEBGL2_ERROR);
+  }, [currentGame]);
+
+  useEffect(() => {
+    if (!currentGame || currentGame.objectUrl || !currentGame.artifact) return;
+    let cancelled = false;
+    setPreparing(true);
+    void prepareEntry(currentGame.id)
+      .catch((reason) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not read the retained ROM.");
+        return null;
+      })
+      .finally(() => {
+        if (!cancelled) setPreparing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [currentGame]);
 
   const handleFiles = useCallback(async (files: File[]) => {
@@ -134,7 +153,7 @@ const EmulatorTestView = () => {
           <p className="emulatorjs-error" role="alert">
             {error}
           </p>
-        ) : currentGame && currentCore ? (
+        ) : currentGame && currentCore && currentGame.objectUrl ? (
           <div className="emulator-player-frame">
             <iframe
               allow="autoplay; fullscreen; gamepad"
@@ -144,6 +163,8 @@ const EmulatorTestView = () => {
               title={`EmulatorJS test for ${currentGame.fileName}`}
             />
           </div>
+        ) : currentGame && currentCore && preparing ? (
+          <p className="emulator-player-empty">Preparing the ROM…</p>
         ) : currentGame ? (
           <p className="emulator-player-empty">No emulator core for this system.</p>
         ) : entries.length ? (

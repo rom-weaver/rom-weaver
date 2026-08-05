@@ -83,20 +83,24 @@ const patchItem = (fileName: string): PatchStackItemState =>
   }) as unknown as PatchStackItemState;
 
 const renderView = ({
+  emulatorOutput,
   onUnifiedDrop,
+  outputOverrides,
   patches = [] as PatchStackItemState[],
   patchEnablement,
   pendingDrops,
   ui,
 }: {
+  emulatorOutput?: unknown;
   onUnifiedDrop?: Parameters<typeof ApplyWorkflowFormView>[0]["onUnifiedDrop"];
+  outputOverrides?: Partial<PatcherOutputState>;
   patches?: PatchStackItemState[];
   patchEnablement?: Parameters<typeof ApplyWorkflowFormView>[0]["patchEnablement"];
   pendingDrops?: Parameters<typeof ApplyWorkflowFormView>[0]["pendingDrops"];
   ui: PatcherUiState;
 }) => {
   const controllers = {
-    output: storeOf(outputState()) as unknown as PatcherOutputController,
+    output: storeOf(outputState(outputOverrides)) as unknown as PatcherOutputController,
     patchStack: {
       ...storeOf({ items: patches }),
       removeItem: () => undefined,
@@ -108,6 +112,7 @@ const renderView = ({
     <RomWeaverSettingsProvider settings={{}}>
       <ApplyWorkflowFormView
         controllers={controllers}
+        emulatorOutput={emulatorOutput as never}
         onUnifiedDrop={onUnifiedDrop}
         patchEnablement={patchEnablement}
         pendingDrops={pendingDrops}
@@ -271,6 +276,28 @@ describe("apply workflow view - empty bench", () => {
 });
 
 describe("apply workflow view - staged bench", () => {
+  it("shows the emulator action only when the input resolves to a supported core", () => {
+    const output = {
+      fileName: "game.nes",
+      getBlob: async () => new Blob(["rom"]),
+      id: "output-1",
+    };
+    const supported = renderView({
+      emulatorOutput: output,
+      outputOverrides: { pendingDownloadFileName: "game.nes" },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+    expect(supported.container.querySelector("#rom-weaver-button-test-emulator")).toBeTruthy();
+    supported.unmount();
+
+    const unsupported = renderView({
+      emulatorOutput: output,
+      outputOverrides: { pendingDownloadFileName: "game.bin" },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
+    });
+    expect(unsupported.container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+  });
+
   it("keeps likely drawers visible while ROMs and patches are still staging", () => {
     const rom = romRow("game.zip");
     rom.info.validationPhase = "extract";

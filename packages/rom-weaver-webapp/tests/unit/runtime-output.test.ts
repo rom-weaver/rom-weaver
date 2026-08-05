@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRuntimeOutputFromBytes, readRuntimeOutputBlob } from "../../src/storage/vfs/runtime-output.ts";
+import {
+  copyRuntimeOutputToPath,
+  createRuntimeOutputFromBytes,
+  readRuntimeOutputBlob,
+} from "../../src/storage/vfs/runtime-output.ts";
 import type { LargeFileVfs } from "../../src/storage/vfs/types.ts";
 
 const createVfs = () => {
@@ -15,7 +19,18 @@ const createVfs = () => {
     }),
     hostKind: "browser-opfs",
     normalizePath: (path: string) => path,
-    read: vi.fn(),
+    read: vi.fn(async (path: string, buffer: ArrayBuffer | ArrayBufferView, options = {}) => {
+      const source = files.get(path) || new Uint8Array();
+      const fileOffset = options.fileOffset || 0;
+      const bufferOffset = options.bufferOffset || 0;
+      const length = Math.min(options.length ?? source.byteLength - fileOffset, source.byteLength - fileOffset);
+      const target =
+        buffer instanceof ArrayBuffer
+          ? new Uint8Array(buffer)
+          : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+      if (length > 0) target.set(source.subarray(fileOffset, fileOffset + length), bufferOffset);
+      return Math.max(0, length);
+    }),
     remove: vi.fn(async (path: string) => {
       files.delete(path);
     }),
@@ -38,6 +53,28 @@ const createVfs = () => {
 };
 
 describe("runtime output paths", () => {
+  it("copies a path-backed output into the emulator retention scope", async () => {
+    const { files, vfs } = createVfs();
+    files.set("/work/patched.nes", new Uint8Array([1, 2, 3]));
+
+    const retained = await copyRuntimeOutputToPath(
+      {
+        fileName: "patched.nes",
+        path: "/work/patched.nes",
+        size: 3,
+        vfs,
+      },
+      "patched.nes",
+    );
+
+    expect(retained.path).toMatch(/^\/work\/runtime-output\/emulator\/[0-9a-f-]+-patched\.nes$/);
+    expect(files.get(retained.path)).toEqual(new Uint8Array([1, 2, 3]));
+    expect(new Uint8Array(await (await retained.getBlob()).arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+
+    await retained.dispose();
+    expect(files.has(retained.path)).toBe(false);
+  });
+
   it("returns a native VFS file snapshot without reading the output into a second buffer", async () => {
     const { vfs } = createVfs();
     const nativeFile = new Blob([new Uint8Array([1, 2, 3, 4])], { type: "application/octet-stream" }) as File;

@@ -55,6 +55,7 @@ import { useInputStaging } from "./use-input-staging.ts";
 import { useInputUiController, usePatchStackController } from "./use-patcher-controllers.ts";
 import { useActiveAbortController, useDisposableCleanup } from "./workflow-run-hooks.ts";
 import { retainBrowserSource, releaseBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
+import { clearApplyEntries } from "./emulator-session-store.ts";
 
 const createSettingsIdentityKey = (settings: ApplyPatchFormSettings) =>
   JSON.stringify(settings, (_key, value) => (typeof value === "function" ? "[function]" : value));
@@ -396,6 +397,7 @@ const useLocalApplyPatchFormSession = ({
   const disposeActiveOutput = useCallback(() => {
     clearPendingDownload();
     disposeActiveOutputCleanup();
+    clearApplyEntries();
   }, [clearPendingDownload, disposeActiveOutputCleanup]);
 
   const clearActiveApplyProgress = useCallback(() => {

@@ -3,13 +3,18 @@ import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.t
 import { emitTraceLog } from "../../lib/logging.ts";
 import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
+import { waitForBrowserOpfsBootCleanup } from "../../storage/browser/browser-opfs-cleanup.ts";
 import type {
   ApplyWorkflowBundleSources,
   ApplyWorkflowInputState,
   ApplyWorkflowPatchState,
 } from "../../types/apply-workflow.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
-import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
+import type {
+  ApplyWorkflowResult,
+  ProgressEvent,
+  UncompressedOutputRetentionRequest,
+} from "../../types/workflow-runtime-types.ts";
 import type { PatchValidationPlan } from "../../wasm/index.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
@@ -44,6 +49,9 @@ import type { BinarySource } from "./patcher-form.ts";
 import { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt } from "./public-types.ts";
 import { useApplySettings, useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
+import { getEmulatorJsCore } from "./components/emulatorjs.ts";
+import { addEntry } from "./emulator-session-store.ts";
+import { shouldRetainEmulatorOutput } from "./emulator-retention-policy.ts";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
 import { type BundleSessionControllers, useBundleApplySession } from "./use-bundle-apply-session.ts";
 import { useUnifiedApplyDrop } from "./use-unified-apply-drop.ts";
@@ -505,6 +513,28 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     void workflow?.dispose();
   }, [workflowHandle]);
 
+  const retainUncompressedOutput = useCallback(async (request: UncompressedOutputRetentionRequest) => {
+    if (!shouldRetainEmulatorOutput(request)) return;
+    const core = getEmulatorJsCore(request.platform, request.fileName);
+    if (!core) return;
+    await waitForBrowserOpfsBootCleanup();
+    const artifact = await request.retain();
+    try {
+      addEntry({
+        artifact,
+        core,
+        fileName: request.fileName,
+        id: `apply-${request.fileName}`,
+        platform: request.platform,
+        sizeBytes: artifact.size,
+        source: "apply",
+      });
+    } catch (error) {
+      await artifact.dispose().catch(() => undefined);
+      throw error;
+    }
+  }, []);
+
   const getWorkflow = useCallback(
     () =>
       workflowHandle.get(() =>
@@ -514,6 +544,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               new ApplyWorkflow({
                 ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
                 id: workflowIdRef.current,
+                retainUncompressedOutput,
                 selectFile: async (request) => {
                   const handlers = prepareHandlersRef.current;
                   const promptInputSelection = handlers?.selection?.promptInputSelection !== false;
@@ -531,7 +562,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               }),
         ),
       ),
-    [resolvedAssetBaseUrl, workflowHandle],
+    [resolvedAssetBaseUrl, retainUncompressedOutput, workflowHandle],
   );
 
   useEffect(
