@@ -34,20 +34,21 @@ recorded next to every timing.
 
 ## Summary
 
-Times are rom-weaver's elapsed time relative to the reference tool's, so a
-negative percentage means rom-weaver finished sooner. Sizes are rom-weaver's
-output relative to the reference's, so negative means smaller.
+The table below translates the detailed measurements into waiting time and disk
+space. A result such as 2× faster means the reference tool takes twice as long.
+The ranges cover this corpus, not every file. Compressed output means the archive
+written by each tool.
 
-| Suite | Reference | Compress time | Extract time | Size vs reference |
+| Suite | Reference | Compress | Extract | Compressed output |
 | --- | --- | --- | --- | --- |
-| CHD | chdman 0.287 | −20.3% to +8.1% | −67.8% to −82.9% | −0.27% to −0.01% |
-| RVZ | dolphin-tool | −19.7% to −25.9% | −35.5% to −50.3% | −0.48% to +0.01% |
-| 7z | 7zz 26.02 | −6.5% to +5.6% | −78.7% to −1.0%† | −0.00% |
-| zip | Info-ZIP | −7.5% to −19.3% | −37.0% to −63.2% | −0.10% to +0.02% |
+| CHD | chdman 0.287 | About the same: 0.7 s slower to 3.5 s faster per disc | 3.1–5.8× faster; saves 6–22 s per disc | 0.1–0.7 MB smaller; extracted bytes match within 72 bytes |
+| RVZ | dolphin-tool | 1.2–1.3× faster; saves 0.07–0.09 s | 1.6–2.0× faster; saves 0.2–0.4 s | Same to 0.5 MB smaller |
+| 7z | 7zz 26.02 | About the same: 0.5 s faster to 0.6 s slower | 1.01–1.03× faster on single-file archives; 4.7× faster on the multi-file case† | 19–24 bytes smaller |
+| zip | Info-ZIP | 1.08–1.24× faster; saves 0.03–3.5 s | 1.6–2.7× faster; saves 0.04–0.9 s | Same practical size; within 0.1% |
 
 † The 7z extract timings include rom-weaver's default common-file filter. 7zz
-extracts those sidecars, so these are application-path timings rather than a
-pure decoder comparison.
+extracts those sidecars, so the multi-file result is an application-path result,
+not a pure decoder comparison. The filter writes 291–717 fewer bytes in this set.
 
 ## Benchmarks in this repository
 
@@ -187,6 +188,9 @@ and audio tracks (`CHT2`), a Dreamcast GD-ROM (`CHGD`), and a PS2 DVD (`DVD `).
 | GD-ROM A | GD-ROM | 5.394 s ± 0.096 | 27.031 s ± 0.032 | −21.637 s (−80.0%) | 1,145.4 MB |
 | PS2 DVD | DVD | 5.726 s ± 0.062 | 17.766 s ± 0.034 | −12.040 s (−67.8%) | 1,697.8 MB |
 
+In user terms, rom-weaver extracted these discs in 1.5–5.7 seconds. chdman took
+7.5–27.0 seconds. That saves 6–22 seconds per disc.
+
 Output sizes agree with chdman's to within 72 bytes on every disc; the difference
 is cue-sheet text, specifically track naming and line endings, not image data.
 
@@ -198,6 +202,9 @@ is cue-sheet text, specifically track naming and line endings, not image data.
 | PS1 CD C | CD | 13.887 s ± 0.087 | 15.110 s ± 0.081 | −1.223 s (−8.1%) | 419.2 MB | 419.5 MB | −0.07% |
 | GD-ROM B | GD-ROM | 13.855 s ± 0.085 | 17.382 s ± 0.048 | −3.527 s (−20.3%) | 646.8 MB | 646.8 MB | −0.01% |
 | GD-ROM A | GD-ROM | 15.712 s ± 0.161 | 18.675 s ± 0.364 | −2.963 s (−15.9%) | 872.2 MB | 872.3 MB | −0.01% |
+
+Compression took about the same time on these discs. rom-weaver saved up to
+3.5 seconds, was at most 0.7 seconds slower, and wrote up to 0.7 MB less.
 
 ### RVZ vs dolphin-tool
 
@@ -211,12 +218,18 @@ compress inputs were produced by extracting them.
 | GameCube A | 0.350 s ± 0.013 | 0.543 s ± 0.023 | −0.193 s (−35.5%) | 1,392.3 MB |
 | GameCube B | 0.357 s ± 0.015 | 0.718 s ± 0.021 | −0.361 s (−50.3%) | 1,392.3 MB |
 
+That means rom-weaver finishes RVZ extraction 0.2–0.4 seconds sooner, or about
+1.6–2.0 times faster on these two discs.
+
 #### Compress (ISO → RVZ)
 
 | Disc | rom-weaver | dolphin-tool | Time change | rom-weaver | dolphin | Size change |
 | --- | --- | --- | --- | --- | --- | --- |
 | GameCube A | 0.273 s ± 0.018 | 0.340 s ± 0.004 | −0.067 s (−19.7%) | 103.4 MB | 103.9 MB | −0.48% |
 | GameCube B | 0.269 s ± 0.014 | 0.363 s ± 0.008 | −0.094 s (−25.9%) | 156.9 MB | 156.9 MB | +0.01% |
+
+RVZ compression saves less than a tenth of a second here. GameCube A's archive
+is about 0.5 MB smaller. GameCube B's archives are the same displayed size.
 
 Times here are sub-second because most of a GameCube disc is pseudorandom padding
 that RVZ stores as a seed rather than compressing. Only the real payload,
@@ -243,11 +256,11 @@ measure. The `.7z` archives read back on the extract side do contain disc images
 | DS ROM `.nds` | 256 MB | 10.369 s ± 1.105 | 9.819 s ± 0.199 | +0.550 s (+5.6%) | 61.0 MB | 61.0 MB | −0.00003% |
 | 3DS ROM `.cci` | 1 GiB | 15.267 s ± 0.115 | 15.780 s ± 0.239 | −0.513 s (−3.3%) | 315.5 MB | 315.5 MB | −0.000007% |
 
-The SDK encoder keeps compression close to 7zz. rom-weaver is faster on the
-16 MB and 1 GiB inputs, and slower on the 32 MB and 256 MB inputs. Its archives
-are 19–24 bytes smaller in every row. The archive bytes are not expected to be
-identical because the tools write different metadata; the parity check compares
-the extracted payload instead.
+The SDK encoder keeps compression close to 7zz. The largest difference is 0.5
+seconds faster or 0.6 seconds slower. Its archives are 19–24 bytes smaller in
+every row. That is the same practical size. The archive bytes are not expected to
+be identical because the tools write different metadata; the parity check
+compares the extracted payload instead.
 
 `ROM_WEAVER_7Z_ENCODER=liblzma` still selects the seeded liblzma encoder. The
 legacy encoder is not measured in this table.
@@ -266,13 +279,15 @@ The output size column counts bytes written by each tool. rom-weaver's default
 common-file filter omits sidecars that 7zz writes, so its output is 291–717 bytes
 smaller on these rows. PS1 CD A contains eight track files plus sidecars. Its
 large lead combines multi-file extraction with that filtering. The other rows
-are 1.0–2.5% faster with rom-weaver, but they still include the same filtering
+are 1.01–1.03× faster with rom-weaver, but they still include the same filtering
 difference.
 
-The SDK decoder keeps the comparable rows close to 7zz. A pure decoder
-comparison needs the harness to pass `--no-ignore` to rom-weaver's extract
-command. The portable decoder also optimizes repeated-byte matches; see the
-targeted measurements in [`vendor-code.md`](vendor-code.md).
+The single-file rows finish 0.04–0.52 seconds sooner, or 1.01–1.03× faster.
+PS1 CD A contains eight track files and finishes 8.26 seconds sooner, or 4.7
+× faster. The default filter also writes 291–717 fewer sidecar bytes. A pure
+decoder comparison needs the harness to pass `--no-ignore` to rom-weaver's
+extract command. The portable decoder also optimizes repeated-byte matches; see
+the targeted measurements in [`vendor-code.md`](vendor-code.md).
 
 These numbers are arm64, where that loop needs no extra tooling. On x86-64 it is
 MASM assembly and the build only uses it when a MASM-compatible assembler is on
@@ -297,6 +312,9 @@ Deflate at level 6 on both sides; `zip` writes, `unzip` reads.
 | DS ROM `.zip` | 106 MB | 0.843 s ± 0.003 | 1.723 s ± 0.022 | −0.880 s (−51.1%) | 256.0 MB |
 | GameCube mod `.zip` | 124 MB | 0.568 s ± 0.028 | 1.087 s ± 0.041 | −0.519 s (−47.8%) | 131.6 MB |
 
+ZIP extraction saves 0.04–0.9 seconds on this corpus. That makes rom-weaver
+1.6–2.7× faster than `unzip`.
+
 #### Compress
 
 | Input | Input size | rom-weaver | zip | Time change | rom-weaver | zip | Size change |
@@ -305,6 +323,9 @@ Deflate at level 6 on both sides; `zip` writes, `unzip` reads.
 | GBA ROM (romhack) `.gba` | 32 MB | 0.746 s ± 0.002 | 0.828 s ± 0.011 | −0.083 s (−10.0%) | 11.8 MB | 11.8 MB | −0.01% |
 | DS ROM `.nds` | 256 MB | 6.197 s ± 0.049 | 7.683 s ± 1.429 | −1.487 s (−19.3%) | 105.8 MB | 105.9 MB | −0.10% |
 | 3DS ROM `.cci` | 1 GiB | 16.451 s ± 1.119 | 19.924 s ± 1.868 | −3.473 s (−17.4%) | 373.9 MB | 373.8 MB | +0.02% |
+
+ZIP compression saves 0.03–3.5 seconds. The output stays within 0.1% of Info-ZIP,
+which is about the same disk space at these sizes.
 
 Info-ZIP's spread on the two largest compress inputs (± 1.4 s and ± 1.9 s) is
 wide enough that those two percentages are not precise.
