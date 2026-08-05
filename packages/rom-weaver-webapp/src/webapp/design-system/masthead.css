@@ -1008,9 +1008,43 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
 }
 .rw-app[data-pwa="true"] {
   --dock-safe-b: 0px;
+  --dock-h: calc(64px + var(--dock-safe-b));
 }
 .rw-app[data-pwa="true"] .dock {
   padding-block-end: 4px;
+}
+.rw-app[data-pwa="true"] .modes {
+  display: none;
+}
+.rw-app[data-pwa="true"] .dock-nav {
+  display: block;
+}
+.rw-app[data-pwa="true"] .desktop-more {
+  display: none;
+}
+.rw-app[data-pwa="true"] .mobile-more {
+  display: inline-flex;
+}
+.rw-app[data-pwa="true"] .masthead-settings {
+  display: none;
+}
+.rw-app[data-pwa="true"] .masthead-tools .mobile-utility-source,
+.rw-app[data-pwa="true"] .masthead-tools .mobile-utility-support,
+.rw-app[data-pwa="true"] .masthead-tools .actions-sep {
+  display: none;
+}
+.rw-app[data-pwa="true"] .dock .mobile-more {
+  position: relative;
+  display: flex;
+}
+.rw-app[data-pwa="true"] .dock .mobile-more .dock-action {
+  width: 100%;
+}
+.rw-app[data-pwa="true"] .shared-more-menu {
+  position: fixed;
+  inset-block-start: auto;
+  inset-block-end: calc(var(--dock-h) + var(--sp-xs));
+  inset-inline-end: max(var(--sp-s), var(--safe-r));
 }
 .rw-app .dock-tabs {
   display: contents;

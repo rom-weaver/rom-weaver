@@ -419,6 +419,24 @@ test("iOS standalone state applies the PWA dock inset adjustment", async () => {
   await page.viewport(1280, 900);
 });
 
+test("wide installed PWAs keep workflow navigation in the bottom dock", async () => {
+  const standaloneDescriptor = Object.getOwnPropertyDescriptor(navigator, "standalone");
+  Object.defineProperty(navigator, "standalone", { configurable: true, value: true });
+  try {
+    await page.viewport(1280, 900);
+    mountWebappRoot();
+    await expect.poll(() => document.querySelector(".rw-app")?.getAttribute("data-pwa") || "").toBe("true");
+
+    expect(getComputedStyle(document.querySelector(".modes")).display).toBe("none");
+    expect(getComputedStyle(document.querySelector(".dock-nav")).display).toBe("block");
+    expect(document.querySelector(".dock").getBoundingClientRect().bottom).toBe(900);
+    expect(document.querySelector(".dock-pad").getBoundingClientRect().height).toBe(64);
+  } finally {
+    if (standaloneDescriptor) Object.defineProperty(navigator, "standalone", standaloneDescriptor);
+    else delete navigator.standalone;
+  }
+});
+
 test("tablet inspector uses the dock-style bottom rail", async () => {
   await page.viewport(800, 900);
   mountWebappRoot();
