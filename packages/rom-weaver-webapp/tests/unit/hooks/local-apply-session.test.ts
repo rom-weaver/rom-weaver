@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { LocalApplyPatchFormSessionOptions } from "../../../src/public/react/apply-session-types.ts";
 import { getBinarySourceListStableIds } from "../../../src/public/react/input-session-helpers.ts";
 import type { BinarySource } from "../../../src/public/react/patcher-form.ts";
 import { useLocalApplyPatchFormSession } from "../../../src/public/react/patcher-form-session.ts";
+import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import type { ApplyWorkflowResult } from "../../../src/types/workflow-runtime-types.ts";
 
 const source = (name: string, size = 1024): BinarySource => ({ name, size }) as unknown as BinarySource;
@@ -33,8 +35,11 @@ const renderSession = (overrides: Partial<LocalApplyPatchFormSessionOptions> = {
     settings: {},
     ...overrides,
   } as LocalApplyPatchFormSessionOptions;
+  const wrapper = ({ children }: { children?: ReactNode }) =>
+    createElement(RomWeaverSettingsProvider, { settings: { postApplyRomBehavior: "auto-download" } }, children);
   const utils = renderHook((props: LocalApplyPatchFormSessionOptions) => useLocalApplyPatchFormSession(props), {
     initialProps: options,
+    wrapper,
   });
   return { applyPatches, downloadOutput, onSettingsChange, options, ...utils };
 };

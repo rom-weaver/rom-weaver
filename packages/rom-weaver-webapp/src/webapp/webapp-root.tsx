@@ -370,6 +370,11 @@ function WebappRoot({
     setLogTab("status");
     setLogOpen(true);
   }, [openChangelogTab, pageUpdate.ready, preloadLogDialog]);
+  const openStorageTab = useCallback(() => {
+    preloadLogDialog();
+    setLogTab("storage");
+    setLogOpen(true);
+  }, [preloadLogDialog]);
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
@@ -536,11 +541,7 @@ function WebappRoot({
               setLogOpen(true);
             }}
             onOpenStatus={openStatusTab}
-            onOpenStorage={() => {
-              preloadLogDialog();
-              setLogTab("storage");
-              setLogOpen(true);
-            }}
+            onOpenStorage={openStorageTab}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
@@ -639,7 +640,7 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
-                {workflowPanel("test", <EmulatorTestRoute />)}
+                {workflowPanel("test", <EmulatorTestRoute onOpenStorage={openStorageTab} />)}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute

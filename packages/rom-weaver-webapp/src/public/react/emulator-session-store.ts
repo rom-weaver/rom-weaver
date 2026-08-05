@@ -5,6 +5,7 @@ import { createStore } from "../../webapp/vanilla-store.ts";
 type EmulatorSessionSource = "apply" | "local";
 
 type EmulatorSessionEntry = {
+  checksum?: string;
   id: string;
   fileName: string;
   platform?: string;

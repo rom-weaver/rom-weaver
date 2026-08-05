@@ -1,7 +1,7 @@
-import { type Dispatch, type MutableRefObject, type SetStateAction, useMemo } from "react";
+import { type Dispatch, type MutableRefObject, type SetStateAction, useMemo, useRef } from "react";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
-import type { CompressionFormat } from "../../types/settings.ts";
+import type { CompressionFormat, PostApplyRomBehavior } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import {
   getChecksumProgressInfoPatch,
@@ -21,6 +21,10 @@ import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import { getPublicOutputSize, toError, waitForNextUiPaint } from "./patcher-form-session-utils.ts";
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
+import { addEntry, getApplyEntry, setCurrentGame, type EmulatorSessionEntry } from "./emulator-session-store.ts";
+import { getEmulatorJsCore } from "./components/emulatorjs.ts";
+import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
+import { useRomWeaverSettings } from "./settings-context.tsx";
 import { useLatestRef } from "./use-latest-ref.ts";
 import { createIndeterminateWorkflowProgress } from "./workflow-run-hooks.ts";
 import { deriveWorkflowRunTiming } from "./workflow-run-lifecycle.ts";
@@ -109,6 +113,7 @@ interface ApplyRunLifecycle {
   setApplyQueued: Dispatch<SetStateAction<boolean>>;
   setChecksumOverrideChecked: Dispatch<SetStateAction<boolean>>;
   setPendingDownloadReadyFileName: (fileName: string) => void;
+  selectTestView?: () => void;
 }
 
 // Long-lived run/output refs owned by the parent session.
@@ -226,6 +231,115 @@ const downloadPendingOutput = async ({
   }
 };
 
+const normalizePostApplyRomBehavior = (value: unknown): PostApplyRomBehavior => {
+  if (value === "auto-download" || value === "auto-test" || value === "auto-test-download") return value;
+  return "none";
+};
+
+type PostApplyRomBehaviorOptions = {
+  addSessionEntry: (entry: EmulatorSessionEntry) => void;
+  behavior: PostApplyRomBehavior;
+  core?: string;
+  download: () => void | Promise<void>;
+  fileName: string;
+  focusDownload: () => void;
+  loadRom?: typeof loadEmulatorRom;
+  onSelectTestView?: () => void;
+  output: ApplyWorkflowResult;
+  platform?: string;
+  retainedEntry?: EmulatorSessionEntry | null;
+  setCurrentGame: (id: string) => void;
+};
+
+type EmulatorPlayableOutput = ApplyWorkflowResult["output"] & {
+  getBlob?: () => Promise<Blob>;
+  id?: string;
+};
+
+type PostApplyRomBehaviorResult = {
+  downloaded: boolean;
+  tested: boolean;
+};
+
+const claimPostApplyRun = (
+  handledResultRef: MutableRefObject<ApplyWorkflowResult | null>,
+  result: ApplyWorkflowResult,
+): boolean => {
+  if (handledResultRef.current === result) return false;
+  handledResultRef.current = result;
+  return true;
+};
+
+const runPostApplyRomBehavior = async ({
+  addSessionEntry,
+  behavior,
+  core,
+  download,
+  fileName,
+  focusDownload,
+  loadRom = loadEmulatorRom,
+  onSelectTestView,
+  output,
+  platform,
+  retainedEntry,
+  setCurrentGame: selectCurrentGame,
+}: PostApplyRomBehaviorOptions): Promise<PostApplyRomBehaviorResult> => {
+  const shouldDownload = behavior === "auto-download" || behavior === "auto-test-download";
+  const shouldTest = behavior === "auto-test" || behavior === "auto-test-download";
+  let downloaded = false;
+
+  if (shouldDownload) {
+    try {
+      await Promise.resolve(download());
+      downloaded = true;
+    } catch {
+      // Browsers can reject a download started after the Run gesture expired. The pending
+      // button remains available, and focusing it gives the user a direct recovery path.
+      focusDownload();
+    }
+  }
+
+  if (!(shouldTest && core)) return { downloaded, tested: false };
+
+  let entry = retainedEntry || null;
+  if (!entry) {
+    try {
+      const playableOutput = output.output as EmulatorPlayableOutput;
+      const blob = await playableOutput.getBlob?.();
+      if (!blob || typeof URL === "undefined" || typeof URL.createObjectURL !== "function")
+        return { downloaded, tested: false };
+      const loaded = await loadRom(blob, playableOutput.fileName || fileName);
+      const objectUrl = URL.createObjectURL(loaded.blob);
+      entry = {
+        core,
+        fileName: loaded.fileName,
+        id: playableOutput.id || `apply-${fileName}`,
+        objectUrl,
+        platform,
+        sizeBytes: loaded.blob.size,
+        source: "apply",
+      };
+      addSessionEntry(entry);
+    } catch {
+      return { downloaded, tested: false };
+    }
+  }
+
+  selectCurrentGame(entry.id);
+  if (behavior === "auto-test") onSelectTestView?.();
+  return { downloaded, tested: true };
+};
+
+const focusPendingDownload = () => {
+  const focus = () => {
+    if (typeof document === "undefined") return;
+    const button = document.getElementById("rom-weaver-button-apply");
+    if (button instanceof HTMLElement) button.focus();
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(focus);
+  else queueMicrotask(focus);
+};
+
 const handleApplyPrimaryGate = async ({
   activeSettings,
   applyQueueBlocked,
@@ -296,6 +410,9 @@ const handleApplyPrimaryGate = async ({
 // context is read through a ref so the returned handlers stay stable and always see the latest session.
 const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContext) => {
   const contextRef = useLatestRef(context);
+  const settings = useRomWeaverSettings();
+  const postApplyRomBehaviorRef = useLatestRef(normalizePostApplyRomBehavior(settings.postApplyRomBehavior));
+  const postApplyResultRef = useRef<ApplyWorkflowResult | null>(null);
   return useMemo(
     () => ({
       cancelPrimaryAction: () => {
@@ -354,6 +471,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           setApplyQueued,
           setChecksumOverrideChecked,
           setPendingDownloadReadyFileName,
+          selectTestView,
         } = lifecycle;
         const { applyPatches, downloadOutput, onApplyComplete, onError, onProgress } = workflow;
         const {
@@ -478,18 +596,28 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           void result.output.prepareDownload?.().catch(() => undefined);
           const initialDownloadFileName = result.output.fileName || effectiveResolvedOutputName || "output";
           setPendingDownloadReadyFileName(initialDownloadFileName);
-          try {
-            await Promise.resolve(downloadOutput(result, initialDownloadFileName));
-          } catch (downloadError) {
-            const normalizedDownloadError = toError(downloadError);
-            logUiError("Output download failed", normalizedDownloadError);
-            setOutputErrorMessage(
-              formatCodedErrorForDisplay(
-                normalizedDownloadError,
-                createBrowserLocalizer((activeSettings as { language?: string }).language),
-              ),
-            );
-            onError?.(normalizedDownloadError);
+          if (claimPostApplyRun(postApplyResultRef, result)) {
+            const romInput = session.localState.romInputs[0];
+            const emulatorFileName =
+              romInput?.info.fileName ||
+              romInput?.info.archiveName ||
+              initialDownloadFileName ||
+              result.output.fileName;
+            const platform = romInput?.info.romType?.platform;
+            const core = getEmulatorJsCore(platform, emulatorFileName);
+            await runPostApplyRomBehavior({
+              addSessionEntry: addEntry,
+              behavior: postApplyRomBehaviorRef.current,
+              core,
+              download: () => downloadOutput(result, initialDownloadFileName, { interactive: false }),
+              fileName: emulatorFileName,
+              focusDownload: focusPendingDownload,
+              onSelectTestView: selectTestView,
+              output: result,
+              platform,
+              retainedEntry: core ? getApplyEntry(emulatorFileName) || getApplyEntry() : null,
+              setCurrentGame,
+            });
           }
           onApplyComplete?.(result);
         } catch (error) {
@@ -519,8 +647,8 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         }
       },
     }),
-    [contextRef],
+    [contextRef, postApplyRomBehaviorRef],
   );
 };
 
-export { deriveApplyCompletion, useApplyDownloadOrchestration };
+export { claimPostApplyRun, deriveApplyCompletion, runPostApplyRomBehavior, useApplyDownloadOrchestration };

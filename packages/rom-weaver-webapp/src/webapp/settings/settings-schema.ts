@@ -33,7 +33,7 @@ import {
 
 const logger = createLogger("settings");
 
-const SETTINGS_STORAGE_VERSION = 5;
+const SETTINGS_STORAGE_VERSION = 6;
 
 type GroupedStoredSettings = {
   apply?: {
@@ -76,6 +76,7 @@ const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "language",
   "logLevel",
   "bundlePackage",
+  "postApplyRomBehavior",
   "compressionProfile",
 ] as const satisfies readonly SettingsFieldKey[];
 const CHD_CODEC_FIELDS = ["chdCreateCdCodecs", "chdCreateDvdCodecs"] as const satisfies readonly SettingsFieldKey[];
@@ -388,6 +389,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     onboardingEnabled: commonSettings.onboardingEnabled,
     accent: commonSettings.accent,
     bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
+    postApplyRomBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyRomBehavior : undefined,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
@@ -448,6 +450,14 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const bundlePackage = readStoredField(storedStringSchema, loadedSettings.bundlePackage);
     if (bundlePackage !== undefined)
       settings.bundlePackage = normalizeChoiceField("bundlePackage", bundlePackage, settings.bundlePackage);
+
+    const postApplyRomBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyRomBehavior);
+    if (postApplyRomBehavior !== undefined)
+      settings.postApplyRomBehavior = normalizeChoiceField(
+        "postApplyRomBehavior",
+        postApplyRomBehavior,
+        settings.postApplyRomBehavior,
+      );
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
@@ -573,10 +583,10 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       };
       return;
     }
-    if (fieldKey === "bundlePackage") {
+    if (fieldKey === "bundlePackage" || fieldKey === "postApplyRomBehavior") {
       storedSettings.apply = {
         ...storedSettings.apply,
-        output: { ...storedSettings.apply?.output, bundlePackage: value },
+        output: { ...storedSettings.apply?.output, [fieldKey]: value },
       };
       return;
     }

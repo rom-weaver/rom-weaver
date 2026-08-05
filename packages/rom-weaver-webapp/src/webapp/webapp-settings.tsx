@@ -59,6 +59,7 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
       "onboardingEnabled",
       "fixChecksum",
       "requireInputChecksumMatch",
+      "postApplyRomBehavior",
     ],
     title: "General",
   },

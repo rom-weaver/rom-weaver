@@ -91,6 +91,7 @@ const useLocalApplyPatchFormSession = ({
   onInputsChange,
   onPatchesChange,
   onSettingsChange,
+  onSelectView,
   onProgress,
   onApplyComplete,
   onError,
@@ -1201,6 +1202,7 @@ const useLocalApplyPatchFormSession = ({
       setApplyQueued,
       setChecksumOverrideChecked,
       setPendingDownloadReadyFileName,
+      selectTestView: onSelectView ? () => onSelectView("test") : undefined,
     },
     refs: {
       activeAbortControllerRef,

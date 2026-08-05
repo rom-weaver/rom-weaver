@@ -27,7 +27,9 @@ type WorkflowRouteProps = {
     slug: string;
   };
   patcher: ApplyPatchFormProps;
-  test: Record<string, never>;
+  test: {
+    onOpenStorage?: () => void;
+  };
   tools: ToolsFormProps;
   trim: TrimPatchFormProps;
 };

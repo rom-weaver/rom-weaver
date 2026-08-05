@@ -4,6 +4,7 @@ import type { SettingsDraft, StorageLike } from "../../src/webapp/settings/setti
 import {
   getSettingsFieldId,
   LOCAL_STORAGE_SETTINGS_ID,
+  SETTINGS_FIELD_METADATA,
   SETTINGS_FIELD_ORDER,
 } from "../../src/webapp/settings/settings-metadata.ts";
 import {
@@ -40,6 +41,7 @@ const makeStorage = (initial?: string | null): StubStorage => {
 describe("getDefaultSettings", () => {
   it("returns every field in SETTINGS_FIELD_ORDER with the documented defaults", () => {
     const settings = getDefaultSettings();
+    expect(SETTINGS_STORAGE_VERSION).toBe(6);
     expect(Object.keys(settings).sort()).toEqual([...SETTINGS_FIELD_ORDER].sort());
     expect(settings.defaultCompression).toBe("zip/special");
     expect(settings.compressionProfile).toBe("max");
@@ -50,9 +52,24 @@ describe("getDefaultSettings", () => {
     expect(settings.chdCreateCdCodecs).toBe("cdlz,cdzl,cdfl");
     expect(settings.fixChecksum).toBe(false);
     expect(settings.bundlePackage).toBe("");
+    expect(settings.postApplyRomBehavior).toBe("none");
     expect(settings.requireInputChecksumMatch).toBe(true);
     expect(settings.betaToolsEnabled).toBe(false);
     expect(settings.threads).toBe("auto");
+  });
+
+  it("places post-apply behavior after the bundle output setting", () => {
+    const field = SETTINGS_FIELD_METADATA.postApplyRomBehavior;
+    expect(field.kind).toBe("select");
+    expect(field.options?.map((option) => option.value)).toEqual([
+      "none",
+      "auto-download",
+      "auto-test",
+      "auto-test-download",
+    ]);
+    expect(SETTINGS_FIELD_ORDER.indexOf("postApplyRomBehavior")).toBeGreaterThan(
+      SETTINGS_FIELD_ORDER.indexOf("bundlePackage"),
+    );
   });
 
   it("returns a fresh object each call (no shared mutable defaults)", () => {
@@ -81,6 +98,21 @@ describe("validateSettingsDraft", () => {
     const result = validateSettingsDraft(validDraft({ bundlePackage: "ZIP:ROM" }));
     expect(result.settings.bundlePackage).toBe("zip:rom");
     expect(result.invalidFields).not.toContain(getSettingsFieldId("bundlePackage"));
+  });
+
+  it.each(["none", "auto-download", "auto-test", "auto-test-download"] as const)(
+    "accepts post-apply behavior %s",
+    (postApplyRomBehavior) => {
+      const result = validateSettingsDraft(validDraft({ postApplyRomBehavior }));
+      expect(result.settings.postApplyRomBehavior).toBe(postApplyRomBehavior);
+      expect(result.invalidFields).not.toContain(getSettingsFieldId("postApplyRomBehavior"));
+    },
+  );
+
+  it("rejects an unknown post-apply behavior", () => {
+    const result = validateSettingsDraft(validDraft({ postApplyRomBehavior: "open-in-new-window" }));
+    expect(result.invalidFields).toContain(getSettingsFieldId("postApplyRomBehavior"));
+    expect(result.settings.postApplyRomBehavior).toBe("none");
   });
 
   it("flags an out-of-range choice value and falls back to the first valid value", () => {
@@ -166,6 +198,14 @@ describe("serializeSettingsForStorage", () => {
     const parsed = JSON.parse(json as string);
     expect(parsed.common.betaToolsEnabled).toBe(true);
     expect(loadSettings(makeStorage(json)).betaToolsEnabled).toBe(true);
+  });
+
+  it("serializes and loads post-apply behavior under apply.output", () => {
+    const settings = { ...getDefaultSettings(), postApplyRomBehavior: "auto-test-download" as const };
+    const json = serializeSettingsForStorage(settings);
+    const parsed = JSON.parse(json as string);
+    expect(parsed.apply.output.postApplyRomBehavior).toBe("auto-test-download");
+    expect(loadSettings(makeStorage(json)).postApplyRomBehavior).toBe("auto-test-download");
   });
 });
 
