@@ -21,8 +21,12 @@ const OFFLINE_PAGES = [
   { expectedView: "creator", label: "create directory document", path: "create/index.html" },
   { expectedView: "trim", label: "trim directory", path: "trim/" },
   { expectedView: "trim", label: "trim directory document", path: "trim/index.html" },
-  { expectedView: "tools", label: "tools directory", path: "tools/" },
-  { expectedView: "tools", label: "tools directory document", path: "tools/index.html" },
+  // Tools has no rail/dock tab since it moved into the More menu (#427), so its
+  // readiness is asserted through the visible tabpanel instead of a selected tab.
+  { expectedView: "tools", label: "tools directory", path: "tools/", tabless: true },
+  { expectedView: "tools", label: "tools directory document", path: "tools/index.html", tabless: true },
+  { expectedView: "test", label: "test directory", path: "test/" },
+  { expectedView: "test", label: "test directory document", path: "test/index.html" },
   { expectedNotFound: true, label: "not found", path: "404.html" },
 ];
 const OFFLINE_ONLY_PAGES = [{ expectedNotFound: true, label: "unknown first offline visit", path: "not-a-real-route" }];
@@ -137,7 +141,9 @@ const collectPageState = async (page, { probeHeaders = true } = {}) =>
       : null;
     const root = document.getElementById("webapp-root");
     return {
-      activeView: document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") || null,
+      activePanel: document.querySelector('section[role="tabpanel"]:not([hidden])')?.id || null,
+      activeView:
+        document.querySelector('[role="tab"][aria-selected="true"][data-mode]')?.getAttribute("data-mode") || null,
       controller: Boolean(navigator.serviceWorker?.controller),
       crossOriginIsolated: globalThis.crossOriginIsolated === true,
       headers: {
@@ -158,14 +164,26 @@ const waitForControlledPage = async (page) => {
 };
 
 const waitForPageReady = async (page, pageCase) => {
+  try {
+    await waitForPageReadyInner(page, pageCase);
+  } catch (error) {
+    const state = await collectPageState(page, { probeHeaders: false }).catch(() => null);
+    throw new Error(
+      `Page never became ready: ${pageCase.label} (${pageCase.path || "/"}): ${error.message}\nstate: ${JSON.stringify(state)}`,
+      { cause: error },
+    );
+  }
+};
+
+const waitForPageReadyInner = async (page, pageCase) => {
   await page.waitForFunction(
-    ({ expectedNotFound, expectedView }) => {
+    ({ expectedNotFound, expectedView, tabless }) => {
       const root = document.getElementById("webapp-root");
       if (!root || root.hasAttribute("aria-busy")) return false;
       if (expectedNotFound) return document.documentElement.dataset.page === "not-found";
       const panel = document.getElementById(`panel-${expectedView}`);
       return (
-        document.querySelector(`[role="tab"][aria-selected="true"][data-mode="${expectedView}"]`) &&
+        (tabless || document.querySelector(`[role="tab"][aria-selected="true"][data-mode="${expectedView}"]`)) &&
         panel &&
         !panel.hasAttribute("hidden") &&
         Boolean(panel.querySelector(".workflow-body")?.textContent?.trim())
@@ -185,7 +203,9 @@ const enableBetaToolsForRouteChecks = async (page) => {
       JSON.stringify({
         ...stored,
         common: { ...stored.common, betaToolsEnabled: true },
-        version: 5,
+        // Must match SETTINGS_STORAGE_VERSION (src/webapp/settings/settings-schema.ts);
+        // a mismatch makes the app wipe these settings and re-gate the beta routes.
+        version: 6,
       }),
     );
   });
@@ -200,7 +220,16 @@ const assertPageState = (pageCase, response, state, phase) => {
   if (Boolean(pageCase.expectedNotFound) !== state.notFound) {
     throw new Error(`${phase} ${pageCase.label} had the wrong not-found state: ${JSON.stringify(state)}`);
   }
-  if (!pageCase.expectedNotFound && state.activeView !== pageCase.expectedView) {
+  if (pageCase.expectedNotFound) return;
+  if (pageCase.tabless) {
+    if (state.activePanel !== `panel-${pageCase.expectedView}`) {
+      throw new Error(
+        `${phase} ${pageCase.label} showed ${state.activePanel}, expected panel-${pageCase.expectedView}`,
+      );
+    }
+    return;
+  }
+  if (state.activeView !== pageCase.expectedView) {
     throw new Error(`${phase} ${pageCase.label} selected ${state.activeView}, expected ${pageCase.expectedView}`);
   }
 };
