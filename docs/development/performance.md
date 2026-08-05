@@ -36,13 +36,13 @@ recorded next to every timing.
 
 Ratios compare wall time. "2× faster" means the reference tool took twice as
 long. Results cover this corpus, not every file. Extraction is faster in all
-four formats. RVZ and ZIP compression are slightly faster. CHD and 7z
-compression match their references. Output sizes match the references to
-within a fraction of a percent everywhere.
+four formats. RVZ and ZIP compression are slightly faster. 7z compression is
+even with 7zz. CHD compression ranges from even to 1.3× faster. Output sizes
+match the references to within a fraction of a percent everywhere.
 
 | Suite | Reference | Compress | Extract | Output size |
 | --- | --- | --- | --- | --- |
-| CHD | chdman 0.287 | even | 3.1–5.8× faster (6–22 s per disc) | within 0.3% |
+| CHD | chdman 0.287 | even to 1.3× faster | 3.1–5.8× faster (6–22 s per disc) | within 0.3% |
 | RVZ | dolphin-tool | 1.2–1.3× faster | 1.6–2.0× faster | within 0.5% |
 | 7z | 7zz 26.02 | even | 1.0–4.7× faster† | within 0.001% |
 | zip | Info-ZIP | 1.1–1.2× faster | 1.6–2.7× faster | within 0.1% |
@@ -206,8 +206,8 @@ difference is cue-sheet text - track naming and line endings - not image data.
 | GD-ROM B | GD-ROM | 13.855 s ± 0.085 | 17.382 s ± 0.048 | −3.527 s (−20.3%) | 646.8 MB | 646.8 MB | −0.01% |
 | GD-ROM A | GD-ROM | 15.712 s ± 0.161 | 18.675 s ± 0.364 | −2.963 s (−15.9%) | 872.2 MB | 872.3 MB | −0.01% |
 
-Compression matches chdman: within a few percent on every disc, with output up
-to 0.7 MB smaller.
+Compression ranges from 8% slower to 20% faster across the four discs, with
+output up to 0.7 MB smaller.
 
 ### RVZ vs dolphin-tool
 

@@ -291,8 +291,9 @@ rom-weaver matches or beats the reference tools on every measured axis:
 extraction time, compression time, and output size. On the measured arm64
 corpus, extraction is faster in all four formats. CHD extracts 3.1–5.8× faster,
 RVZ 1.6–2.0×, ZIP 1.6–2.7×, and 7z 1.0–4.7×. RVZ and ZIP compression are
-1.1–1.3× faster. CHD and 7z compression match their references. Output sizes
-match the references to within a fraction of a percent.
+1.1–1.3× faster. 7z compression is even with its reference. CHD compression
+ranges from even to 1.3× faster. Output sizes match the references to within a
+fraction of a percent.
 
 The CLI and the threaded WASM webapp share one Rust engine. The browser adds
 worker, storage, and OPFS costs, so CLI and browser timings are not
