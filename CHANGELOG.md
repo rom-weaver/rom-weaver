@@ -8,10 +8,14 @@
 * **performance:** explain speed and size ([#458](https://github.com/rom-weaver/rom-weaver/issues/458)) ([71dd911](https://github.com/rom-weaver/rom-weaver/commit/71dd911b00872eaaed2d9f15f30b853937a02bcc))
 
 
-### Internal
+<details>
+<summary>Internal</summary>
+
 
 * deploy previews for every PR commit ([#461](https://github.com/rom-weaver/rom-weaver/issues/461)) ([584b218](https://github.com/rom-weaver/rom-weaver/commit/584b21816e3518695a210fa59e797c841ce32a34))
 
+
+</details>
 ## [0.12.1](https://github.com/rom-weaver/rom-weaver/compare/v0.12.0...v0.12.1) (2026-08-05)
 
 
