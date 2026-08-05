@@ -42,8 +42,12 @@ output relative to the reference's, so negative means smaller.
 | --- | --- | --- | --- | --- |
 | CHD | chdman 0.287 | −20.3% to +8.1% | −67.8% to −82.9% | −0.27% to −0.01% |
 | RVZ | dolphin-tool | −19.7% to −25.9% | −35.5% to −50.3% | −0.48% to +0.01% |
-| 7z | 7zz 26.02 | −2.7% to +1.1% | −67.4% to +2.3% | −0.00% to +0.16% |
+| 7z | 7zz 26.02 | −6.5% to +5.6% | −78.7% to −1.0%† | −0.00% |
 | zip | Info-ZIP | −7.5% to −19.3% | −37.0% to −63.2% | −0.10% to +0.02% |
+
+† The 7z extract timings include rom-weaver's default common-file filter. 7zz
+extracts those sidecars, so these are application-path timings rather than a
+pure decoder comparison.
 
 ## Benchmarks in this repository
 
@@ -101,6 +105,10 @@ Three further details:
 - **Archive extraction is capped at one layer.** rom-weaver unpacks archives
   found inside archives; `7zz` and `unzip` stop after one. The harness passes
   `--no-nested-extract` so both sides do the same work.
+- **The 7z extract path keeps rom-weaver's default common-file filter.** This
+  skips sidecars such as provenance text files. `7zz` extracts every member.
+  Add `--no-ignore` to the rom-weaver command in the harness for a pure decoder
+  comparison.
 - **The zip suite uses two reference binaries**, `zip` to write and `unzip` to
   read, since Info-ZIP splits them.
 - **Sources under 1 MB are skipped** (`--min-size`). A ROM corpus carries patch
@@ -146,16 +154,14 @@ sizes, so the size columns are exact even though they and the time columns come
 from different runs. #213 touches only GameCube junk detection, so no other suite
 was affected.
 
-The **7z tables** were re-measured in full a second time as part of the change
-that moves native LZMA2 writes and eligible LZMA1/LZMA2 reads onto 7-Zip's own
-LZMA SDK - the same coders `7zz` runs. Filter chains, LZMA1 writes, and
-WebAssembly writes stay on liblzma. Both tables changed enough that no earlier
-result survives in them. The first re-measure covered the seeded parallel
-blocks, 7-Zip's per-level dictionary sizes, and the single-member extract
-pipeline. Together, those changes produced output smaller than 7zz's but
-increased compression time. The SDK swap gives that fraction of a percent of
-size back but also takes time. The extract rows move with the pipeline and the
-decoder. The compress rows move with the encoder.
+The **7z tables** below supersede the earlier 7z results. They were rerun on
+2026-08-04 after native LZMA2 writes and eligible LZMA1/LZMA2 reads moved onto
+7-Zip's own LZMA SDK - the same coders `7zz` runs. Filter chains, LZMA1 writes,
+and WebAssembly writes stay on liblzma.
+
+The rerun used an Apple M1 Max, rom-weaver 0.11.1, and 7zz 26.02. Each command
+had one warmup and three measured runs. Hyperfine flagged outliers on the 32 MB
+and 256 MB compression rows, so those row-level timings are less certain.
 
 Time change is rom-weaver's elapsed time minus the reference tool's, in seconds
 and as a percentage of the reference, so negative means rom-weaver finished
@@ -232,43 +238,41 @@ measure. The `.7z` archives read back on the extract side do contain disc images
 
 | Input | Input size | rom-weaver | 7zz | Time change | rom-weaver | 7zz | Size change |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GBA ROM `.gba` | 16 MB | 0.944 s ± 0.010 | 0.970 s ± 0.009 | −0.026 s (−2.7%) | 5.5 MB | 5.5 MB | +0.16% |
-| GBA ROM (romhack) `.gba` | 32 MB | 2.029 s ± 0.007 | 2.086 s ± 0.012 | −0.057 s (−2.7%) | 9.7 MB | 9.7 MB | +0.09% |
-| DS ROM `.nds` | 256 MB | 9.300 s ± 0.263 | 9.200 s ± 0.042 | +0.100 s (+1.1%) | 61.0 MB | 61.0 MB | +0.01% |
-| 3DS ROM `.cci` | 1 GiB | 14.721 s ± 0.130 | 14.677 s ± 0.113 | +0.044 s (+0.3%) | 315.5 MB | 315.5 MB | +0.00% |
+| GBA ROM `.gba` | 16 MB | 0.980 s ± 0.003 | 1.048 s ± 0.068 | −0.068 s (−6.5%) | 5.5 MB | 5.5 MB | −0.0004% |
+| GBA ROM (romhack) `.gba` | 32 MB | 2.281 s ± 0.285 | 2.228 s ± 0.007 | +0.053 s (+2.4%) | 9.7 MB | 9.7 MB | −0.0002% |
+| DS ROM `.nds` | 256 MB | 10.369 s ± 1.105 | 9.819 s ± 0.199 | +0.550 s (+5.6%) | 61.0 MB | 61.0 MB | −0.00003% |
+| 3DS ROM `.cci` | 1 GiB | 15.267 s ± 0.115 | 15.780 s ± 0.239 | −0.513 s (−3.3%) | 315.5 MB | 315.5 MB | −0.000007% |
 
-Both sides now run the same encoder — 7-Zip's LZMA SDK with its own block
-multithreading — so time and size land on top of each other. The 1 GiB row is
-where the change is largest: it was +140.7% against liblzma's seeded parallel
-blocks, and the whole of that premium was the seed indexing each worker did
-before it could encode. The SDK resets the dictionary at block boundaries the
-way 7zz does, which is what the remaining size difference (at most +0.16%, on
-the smallest input) buys back.
+The SDK encoder keeps compression close to 7zz. rom-weaver is faster on the
+16 MB and 1 GiB inputs, and slower on the 32 MB and 256 MB inputs. Its archives
+are 19–24 bytes smaller in every row. The archive bytes are not expected to be
+identical because the tools write different metadata; the parity check compares
+the extracted payload instead.
 
-`ROM_WEAVER_7Z_ENCODER=liblzma` still selects the seeded liblzma encoder, which
-is the row above in reverse: slower than 7zz, and a few tenths of a percent
-smaller.
+`ROM_WEAVER_7Z_ENCODER=liblzma` still selects the seeded liblzma encoder. The
+legacy encoder is not measured in this table.
 
 #### Extract
 
 | Input | Input size | rom-weaver | 7zz | Time change | Output |
 | --- | --- | --- | --- | --- | --- |
-| GameCube A `.7z` | 77 MB | 2.445 s ± 0.006 | 2.527 s ± 0.025 | −0.083 s (−3.3%) | 227.4 MB |
-| PS1 CD A `.7z` (8 tracks) | 287 MB | 3.284 s ± 0.010 | 10.084 s ± 0.041 | −6.801 s (−67.4%) | 515.4 MB |
-| 3DS ROM `.7z` | 297 MB | 9.120 s ± 0.027 | 9.551 s ± 0.270 | −0.431 s (−4.5%) | 1,024.0 MB |
-| PS1 CD C `.7z` | 458 MB | 13.557 s ± 0.199 | 13.760 s ± 0.381 | −0.204 s (−1.5%) | 657.2 MB |
-| GD-ROM B `.7z` | 673 MB | 20.539 s ± 0.034 | 20.072 s ± 0.172 | +0.468 s (+2.3%) | 1,134.7 MB |
+| GameCube A `.7z` | 77 MB | 2.529 s ± 0.018 | 2.572 s ± 0.003 | −0.043 s (−1.7%) | 227.4 MB |
+| PS1 CD A `.7z` | 287 MB | 2.237 s ± 0.003 | 10.495 s ± 0.014 | −8.258 s (−78.7%) | 515.4 MB |
+| 3DS ROM `.7z` | 297 MB | 9.496 s ± 0.015 | 9.724 s ± 0.013 | −0.229 s (−2.4%) | 1,024.0 MB |
+| PS1 CD C `.7z` | 458 MB | 14.291 s ± 0.097 | 14.428 s ± 0.055 | −0.137 s (−1.0%) | 657.2 MB |
+| GD-ROM B `.7z` | 673 MB | 20.644 s ± 0.066 | 21.167 s ± 0.344 | −0.522 s (−2.5%) | 1,134.7 MB |
 
-Every extract is byte-exact against 7zz's. PS1 CD A is the only multi-member
-archive in this set — eight track files, which rom-weaver decodes in parallel and
-7zz does not; the other four each hold a single file and are a straight
-coder-speed comparison.
+The output size column counts bytes written by each tool. rom-weaver's default
+common-file filter omits sidecars that 7zz writes, so its output is 291–717 bytes
+smaller on these rows. PS1 CD A contains eight track files plus sidecars. Its
+large lead combines multi-file extraction with that filtering. The other rows
+are 1.0–2.5% faster with rom-weaver, but they still include the same filtering
+difference.
 
-The single-member rows were +29% to +36% before the SDK swap. Nearly all of that
-gap was the decode loop itself: on this corpus the SDK's portable C decoder
-lands around liblzma, while its hand-written loop — which is what `7zz` runs —
-wins. The portable decoder does separately optimize repeated-byte matches; see
-the targeted measurements in [`vendor-code.md`](vendor-code.md).
+The SDK decoder keeps the comparable rows close to 7zz. A pure decoder
+comparison needs the harness to pass `--no-ignore` to rom-weaver's extract
+command. The portable decoder also optimizes repeated-byte matches; see the
+targeted measurements in [`vendor-code.md`](vendor-code.md).
 
 These numbers are arm64, where that loop needs no extra tooling. On x86-64 it is
 MASM assembly and the build only uses it when a MASM-compatible assembler is on
