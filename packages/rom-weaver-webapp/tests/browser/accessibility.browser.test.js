@@ -1173,6 +1173,20 @@ describe("webapp responsive navigation", () => {
     expect(getComputedStyle(host.querySelector(".mode .mode-label")).maxWidth).toBe("none");
   });
 
+  test("the roomy desktop rail centers on the masthead", async () => {
+    for (const width of [1280, 1600]) {
+      await setViewport({ height: 900, width });
+      await renderMastheadOnly(PAGE_TABS);
+
+      const masthead = host.querySelector(".masthead").getBoundingClientRect();
+      const modes = host.querySelector(".modes").getBoundingClientRect();
+      const mastheadCenter = masthead.left + masthead.width / 2;
+      const modesCenter = modes.left + modes.width / 2;
+
+      expect(Math.abs(modesCenter - mastheadCenter)).toBeLessThanOrEqual(1);
+    }
+  });
+
   test("the rail is never clipped: it scrolls instead of colliding", async () => {
     await setViewport({ height: 900, width: 1000 });
     await renderMastheadOnly(ALL_TABS);

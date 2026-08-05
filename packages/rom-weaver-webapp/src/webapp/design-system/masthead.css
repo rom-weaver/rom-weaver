@@ -1,9 +1,10 @@
 /* ═══ masthead ═══
-   One fixed-breakpoint grid: brand | centered rail | actions. There is exactly
-   one layout decision ("does the rail fit?") and it lives in the media queries
-   marked ▼ below - no ResizeObserver, no data-masthead-layout, no measuring.
-   Below the dock threshold the primary nav moves to a fixed bottom dock, so the
-   masthead never wraps to a second row. */
+   One fixed-breakpoint grid: brand | centered rail | actions. Roomy desktop
+   mirrors the side tracks so the rail centers on the masthead; the snug band
+   protects the rail's remaining space. There is exactly one layout decision
+   ("does the rail fit?") and it lives in the media queries marked ▼ below - no
+   ResizeObserver, no data-masthead-layout, no measuring. Below the dock threshold
+   the primary nav moves to a fixed bottom dock, so the masthead never wraps. */
 .rw-app .skip-link {
   position: fixed;
   inset-block-start: var(--sp-s);
@@ -904,6 +905,24 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
    The nav is top row or dock, never a second row. The tabs keep their icon +
    label pairing at every rail width, tightening (not shedding) in the snug band
    above the dock handoff. */
+@media (min-width: 1160px) {
+  /* Equal side tracks center the top rail against the app column rather than
+     against the leftover space between the brand and action group. */
+  .rw-app .masthead {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+  .rw-app .brand {
+    grid-column: 1;
+    justify-self: start;
+  }
+  .rw-app .modes {
+    grid-column: 2;
+  }
+  .rw-app .masthead-tools {
+    grid-column: 3;
+  }
+}
+
 @media (min-width: 1000px) and (max-width: 1159px) {
   .rw-app .mode {
     gap: var(--sp-xs);
