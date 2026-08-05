@@ -199,7 +199,7 @@ test("WebappRoot keeps Trim gated and Tools behind More", async () => {
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply", "Create", "Docs"]);
+    .toEqual(["Apply", "Create", "Docs", "Test"]);
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "Tools" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();

@@ -237,20 +237,22 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validValues: ["", "zip:patches", "zip:rom", "7z:patches", "7z:rom"],
   },
   postApplyRomBehavior: {
-    defaultValue: "none",
+    // Auto-download preserves the pre-setting behavior: a completed apply
+    // downloads its output without a second click.
+    defaultValue: "auto-download",
     id: "settings-post-apply-rom-behavior",
     key: "postApplyRomBehavior",
     kind: "select",
     label: "After applying",
     options: [
-      { label: "Do nothing", value: "none" },
       { label: "Download automatically", value: "auto-download" },
       { label: "Test automatically", value: "auto-test" },
       { label: "Test and download", value: "auto-test-download" },
+      { label: "Do nothing", value: "none" },
     ],
     suggestion: "Choose whether a completed patch should download or open in the Test tab automatically.",
     validationLabel: "After applying",
-    validValues: ["none", "auto-download", "auto-test", "auto-test-download"],
+    validValues: ["auto-download", "auto-test", "auto-test-download", "none"],
   },
   chdCreateCdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateCdCodecs"),

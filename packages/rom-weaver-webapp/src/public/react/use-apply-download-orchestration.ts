@@ -232,8 +232,10 @@ const downloadPendingOutput = async ({
 };
 
 const normalizePostApplyRomBehavior = (value: unknown): PostApplyRomBehavior => {
-  if (value === "auto-download" || value === "auto-test" || value === "auto-test-download") return value;
-  return "none";
+  if (value === "none" || value === "auto-test" || value === "auto-test-download") return value;
+  // Auto-download is the default: it preserves the pre-setting behavior of
+  // downloading the output as soon as an apply completes.
+  return "auto-download";
 };
 
 type PostApplyRomBehaviorOptions = {

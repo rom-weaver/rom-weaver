@@ -52,7 +52,7 @@ describe("getDefaultSettings", () => {
     expect(settings.chdCreateCdCodecs).toBe("cdlz,cdzl,cdfl");
     expect(settings.fixChecksum).toBe(false);
     expect(settings.bundlePackage).toBe("");
-    expect(settings.postApplyRomBehavior).toBe("none");
+    expect(settings.postApplyRomBehavior).toBe("auto-download");
     expect(settings.requireInputChecksumMatch).toBe(true);
     expect(settings.betaToolsEnabled).toBe(false);
     expect(settings.threads).toBe("auto");
@@ -62,10 +62,10 @@ describe("getDefaultSettings", () => {
     const field = SETTINGS_FIELD_METADATA.postApplyRomBehavior;
     expect(field.kind).toBe("select");
     expect(field.options?.map((option) => option.value)).toEqual([
-      "none",
       "auto-download",
       "auto-test",
       "auto-test-download",
+      "none",
     ]);
     expect(SETTINGS_FIELD_ORDER.indexOf("postApplyRomBehavior")).toBeGreaterThan(
       SETTINGS_FIELD_ORDER.indexOf("bundlePackage"),
@@ -112,7 +112,7 @@ describe("validateSettingsDraft", () => {
   it("rejects an unknown post-apply behavior", () => {
     const result = validateSettingsDraft(validDraft({ postApplyRomBehavior: "open-in-new-window" }));
     expect(result.invalidFields).toContain(getSettingsFieldId("postApplyRomBehavior"));
-    expect(result.settings.postApplyRomBehavior).toBe("none");
+    expect(result.settings.postApplyRomBehavior).toBe("auto-download");
   });
 
   it("flags an out-of-range choice value and falls back to the first valid value", () => {
