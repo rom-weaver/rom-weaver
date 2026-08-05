@@ -1,0 +1,103 @@
+name: Cloudflare HTML cache cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type PURGE_HTML_CACHE to remove the stale rule and purge documents
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Purge HTML cache
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Validate confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: test "$CONFIRMATION" = PURGE_HTML_CACHE
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Remove stale rule and purge documents
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { DOC_SOURCES } from "./packages/rom-weaver-webapp/src/webapp/docs-routing.mjs";
+
+          const zoneId = process.env.CLOUDFLARE_ZONE_ID;
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          if (!zoneId) throw new Error("CLOUDFLARE_ZONE_ID is required");
+          if (!token) throw new Error("CLOUDFLARE_API_TOKEN is required");
+
+          const apiRoot = `https://api.cloudflare.com/client/v4/zones/${zoneId}`;
+          const headers = { Authorization: `Bearer ${token}` };
+          const rulesetUrl = `${apiRoot}/rulesets/phases/http_request_cache_settings/entrypoint`;
+          const staleDescription = "rom-weaver: cache HTML documents (managed by ci.yml)";
+
+          const readRuleset = await fetch(rulesetUrl, { headers });
+          if (readRuleset.status === 404) {
+            console.log("No cache ruleset exists; skipping stale-rule removal");
+          } else {
+            const rulesetBody = await readRuleset.json();
+            if (!readRuleset.ok || !rulesetBody.success) {
+              throw new Error(`Cloudflare cache ruleset read failed: ${JSON.stringify(rulesetBody)}`);
+            }
+
+            const rules = rulesetBody.result?.rules ?? [];
+            const remainingRules = rules.filter((rule) => rule.description !== staleDescription);
+            if (remainingRules.length === rules.length) {
+              console.log("Stale HTML cache rule was not present");
+            } else {
+              const update = await fetch(rulesetUrl, {
+                method: "PUT",
+                headers: { ...headers, "Content-Type": "application/json" },
+                body: JSON.stringify({ rules: remainingRules }),
+              });
+              const updateBody = await update.json();
+              if (!update.ok || !updateBody.success) {
+                throw new Error(`Cloudflare cache ruleset update failed: ${JSON.stringify(updateBody)}`);
+              }
+              console.log(`Removed ${rules.length - remainingRules.length} stale HTML cache rule(s)`);
+            }
+          }
+
+          const aliases = (slug) => [`/${slug}`, `/${slug}/`, `/${slug}.html`, `/${slug}/index.html`];
+          const workflows = ["apply", "create", "trim", "tools"];
+          const paths = [
+            "/",
+            "/index.html",
+            "/404.html",
+            ...workflows.flatMap(aliases),
+            ...DOC_SOURCES.flatMap(({ slug }) => aliases(slug)),
+          ].filter((path, index, all) => all.indexOf(path) === index);
+          const hosts = ["rom-weaver.com", "beta.rom-weaver.com", "nightly.rom-weaver.com"];
+          const purgeUrl = `${apiRoot}/purge_cache`;
+          const purgeHeaders = { ...headers, "Content-Type": "application/json" };
+
+          console.log(`Purging ${paths.length} document paths on ${hosts.length} hosts`);
+          for (const host of hosts) {
+            const urls = paths.map((path) => `https://${host}${path}`);
+            for (let offset = 0; offset < urls.length; offset += 30) {
+              const files = urls.slice(offset, offset + 30);
+              const purge = await fetch(purgeUrl, {
+                method: "POST",
+                headers: purgeHeaders,
+                body: JSON.stringify({ files }),
+              });
+              const purgeBody = await purge.json().catch(() => ({}));
+              if (!purge.ok || !purgeBody.success) {
+                throw new Error(`Cloudflare purge failed for ${host}: ${JSON.stringify(purgeBody)}`);
+              }
+              console.log(`${host}: purged ${offset + 1}-${offset + files.length}`);
+            }
+          }
+          NODE
