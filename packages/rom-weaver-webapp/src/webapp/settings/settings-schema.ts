@@ -34,10 +34,14 @@ import {
 const logger = createLogger("settings");
 
 const SETTINGS_STORAGE_VERSION = 6;
-// Versions whose payload loads under the current schema without changes, so
-// stored settings survive the upgrade. v6 only added postApplyRomBehavior,
-// which the loader defaults when absent; the next save rewrites the payload
-// at the current version. Anything not listed here still wipes.
+// Versions whose payload loads under the current schema, so stored settings
+// survive the upgrade; the next save rewrites the payload at the current
+// version. A version bump must keep its predecessors loadable - list the old
+// version here (additive changes load as-is because the loader defaults every
+// missing field) or reshape the payload before the field reads. Wiping is a
+// last resort for payloads that cannot be mapped. v6 only added
+// postApplyRomBehavior, so v5 loads unchanged; v4 and older never shipped
+// publicly and are not worth mapping.
 const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5]);
 
 type GroupedStoredSettings = {
