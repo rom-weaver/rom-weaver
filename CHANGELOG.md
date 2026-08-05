@@ -83,7 +83,9 @@
 * **webapp:** lint and format CSS with biome ([#435](https://github.com/rom-weaver/rom-weaver/issues/435)) ([595a77c](https://github.com/rom-weaver/rom-weaver/commit/595a77cc7d5d6139010a2553fba9e2f673c9da43))
 
 
-### Internal
+<details>
+<summary>Internal</summary>
+
 
 * add temporary HTML cache cleanup workflow ([#446](https://github.com/rom-weaver/rom-weaver/issues/446)) ([f04cb40](https://github.com/rom-weaver/rom-weaver/commit/f04cb4085e4ad798a397b0e89e3aa1ac2c442b3b))
 * **ci:** simplify PR title gate ([#384](https://github.com/rom-weaver/rom-weaver/issues/384)) ([b4aa89e](https://github.com/rom-weaver/rom-weaver/commit/b4aa89e0afbf98a605a6cab0634fb159c0795391))
@@ -111,6 +113,8 @@
 * **webapp:** trim compression manager ([79817be](https://github.com/rom-weaver/rom-weaver/commit/79817be3494d426af6fc58c026ca795b67b03991))
 * **webapp:** use code splitting option ([#405](https://github.com/rom-weaver/rom-weaver/issues/405)) ([54d8bc1](https://github.com/rom-weaver/rom-weaver/commit/54d8bc1d836bcb21060257f9b65d1f3041e2de9f))
 
+
+</details>
 ## [0.11.1](https://github.com/rom-weaver/rom-weaver/compare/v0.11.0...v0.11.1) (2026-08-01)
 
 
