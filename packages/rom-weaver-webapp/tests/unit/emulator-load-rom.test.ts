@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickEmulatorRomOutput } from "../../src/public/react/components/emulator-load-rom.ts";
+import { pickEmulatorRomOutput, renameRomToOutput } from "../../src/public/react/components/emulator-load-rom.ts";
 
 type ArchiveOutput = Parameters<typeof pickEmulatorRomOutput>[0][number];
 
@@ -28,5 +28,19 @@ describe("pickEmulatorRomOutput", () => {
   it("falls back to the first output when nothing matches a ROM extension", () => {
     const first = output("readme.txt");
     expect(pickEmulatorRomOutput([first, output("cover.png")])).toBe(first);
+  });
+});
+
+describe("renameRomToOutput", () => {
+  it("keeps the output stem and takes the ROM's extension", () => {
+    expect(renameRomToOutput("my-hack.zip", "Legend of Zelda, The (U).nes")).toBe("my-hack.nes");
+  });
+
+  it("is the identity when the output was not an archive", () => {
+    expect(renameRomToOutput("my-hack.nes", "my-hack.nes")).toBe("my-hack.nes");
+  });
+
+  it("handles a ROM without an extension", () => {
+    expect(renameRomToOutput("my-hack.zip", "ROMFILE")).toBe("my-hack");
   });
 });

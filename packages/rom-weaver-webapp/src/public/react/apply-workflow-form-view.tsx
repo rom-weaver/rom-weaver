@@ -48,7 +48,7 @@ import type {
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { addEntry, getApplyEntry, setCurrentGame } from "./emulator-session-store.ts";
-import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
+import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-rom.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
@@ -88,7 +88,7 @@ const EmulatorJsAction = ({
       const loaded = await loadEmulatorRom(blob, output.fileName);
       addEntry({
         core,
-        fileName: loaded.fileName,
+        fileName: renameRomToOutput(output.fileName, loaded.fileName),
         id: output.id,
         objectUrl: URL.createObjectURL(loaded.blob),
         platform,

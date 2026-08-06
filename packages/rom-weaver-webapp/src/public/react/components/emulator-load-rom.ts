@@ -21,6 +21,17 @@ const pickEmulatorRomOutput = (outputs: readonly ArchiveOutput[]): ArchiveOutput
   return withCore || romOutputs[0] || first;
 };
 
+/**
+ * Keep an apply output's chosen name on the extracted ROM: only the extension
+ * follows the file that actually came out of the archive. Without this, a
+ * renamed output plays (and saves) under the original inner-archive name.
+ */
+const renameRomToOutput = (outputFileName: string, romFileName: string) => {
+  const stem = outputFileName.replace(/\.[^./]+$/, "");
+  const extension = romFileName.match(/\.[^./]+$/)?.[0] || "";
+  return `${stem}${extension}`;
+};
+
 const loadEmulatorRom = async (blob: Blob, fileName: string) => {
   if (!isEmulatorArchive(fileName)) return { blob, fileName };
   // Imported here, not at module scope: a static import would pull the whole
@@ -41,4 +52,4 @@ const loadEmulatorRom = async (blob: Blob, fileName: string) => {
   }
 };
 
-export { loadEmulatorRom, pickEmulatorRomOutput };
+export { loadEmulatorRom, pickEmulatorRomOutput, renameRomToOutput };

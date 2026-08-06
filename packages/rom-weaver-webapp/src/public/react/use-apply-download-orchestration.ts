@@ -31,7 +31,7 @@ import { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
 import { addEntry, getApplyEntry, setCurrentGame, type EmulatorSessionEntry } from "./emulator-session-store.ts";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
-import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
+import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-rom.ts";
 import { useRomWeaverSettings } from "./settings-context.tsx";
 import { useLatestRef } from "./use-latest-ref.ts";
 import { createIndeterminateWorkflowProgress } from "./workflow-run-hooks.ts";
@@ -368,11 +368,12 @@ const runPostApplyRomBehavior = async ({
       const blob = await playableOutput.getBlob?.();
       if (!blob || typeof URL === "undefined" || typeof URL.createObjectURL !== "function")
         return { downloaded, tested: false };
-      const loaded = await loadRom(blob, playableOutput.fileName || fileName);
+      const outputFileName = playableOutput.fileName || fileName;
+      const loaded = await loadRom(blob, outputFileName);
       const objectUrl = URL.createObjectURL(loaded.blob);
       entry = {
         core,
-        fileName: loaded.fileName,
+        fileName: renameRomToOutput(outputFileName, loaded.fileName),
         id: playableOutput.id || `apply-${fileName}`,
         objectUrl,
         platform,
