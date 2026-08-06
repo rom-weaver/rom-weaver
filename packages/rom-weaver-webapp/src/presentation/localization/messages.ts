@@ -210,6 +210,12 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.runtime.installingDesc",
     message: "Caching the app so it can run offline…",
   }),
+  "ui.runtime.partial": msg({ id: "ui.runtime.partial", message: "Mostly offline ready" }),
+  "ui.runtime.partialDesc": msg({
+    id: "ui.runtime.partialDesc",
+    message:
+      "The app is cached, but some emulator cores are not. Use the download button below to get fully ready for offline play.",
+  }),
   "ui.runtime.ready": msg({ id: "ui.runtime.ready", message: "Offline ready" }),
   "ui.runtime.readyDesc": msg({
     id: "ui.runtime.readyDesc",

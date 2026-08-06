@@ -400,6 +400,11 @@ msgstr "Más"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.partial"
+msgstr "Casi listo sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.AMBIGUOUS_SELECTION"
 msgstr "Se encontraron varios archivos coincidentes."
 
@@ -692,6 +697,11 @@ msgstr "Toca para elegir archivos"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabTest"
 msgstr "Prueba"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.partialDesc"
+msgstr "La aplicación está en caché, pero faltan algunos núcleos del emulador. Usa el botón de descarga de abajo para estar totalmente listo para jugar sin conexión."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

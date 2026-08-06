@@ -200,6 +200,7 @@ const loadEmulatorPrefetchState = async (
     runtime.available && cacheStorage
       ? await getCachedEmulatorAssets(manifest, runtime.baseUrl, cacheStorage)
       : { cachedBytes: 0, cachedFiles: 0 };
+  setEmulatorCoresComplete(runtime.available ? cached.cachedFiles >= manifest.files.length : null);
   return { ...runtime, cached, manifest };
 };
 
@@ -271,11 +272,57 @@ const formatEmulatorBytes = (bytes: number) => {
   return megabytes + " MB";
 };
 
+/**
+ * Whether every EmulatorJS asset is in the offline cache: true, false, or null
+ * while unknown / not applicable (no service worker, load failed). Module-level
+ * so the masthead runtime chip can read it without owning the prefetch panel.
+ */
+let emulatorCoresComplete: boolean | null = null;
+const emulatorCoresCompleteListeners = new Set<() => void>();
+
+const readEmulatorCoresComplete = (): boolean | null => emulatorCoresComplete;
+
+const setEmulatorCoresComplete = (value: boolean | null): void => {
+  if (emulatorCoresComplete === value) return;
+  emulatorCoresComplete = value;
+  for (const listener of emulatorCoresCompleteListeners) listener();
+};
+
+const subscribeEmulatorCoresComplete = (listener: () => void): (() => void) => {
+  emulatorCoresCompleteListeners.add(listener);
+  return () => emulatorCoresCompleteListeners.delete(listener);
+};
+
+let emulatorCoresProbeInFlight = false;
+let emulatorCoresProbeDone = false;
+/**
+ * Background probe so the runtime chip knows the cache state without opening
+ * the dialog. Latches only once the service worker was actually available: a
+ * first-visit probe can run before the controller claims the page, and that
+ * attempt must not block a retry after the status changes.
+ */
+const probeEmulatorCoresComplete = async (options: LoadEmulatorPrefetchStateOptions = {}): Promise<void> => {
+  if (emulatorCoresProbeDone || emulatorCoresProbeInFlight) return;
+  emulatorCoresProbeInFlight = true;
+  try {
+    const state = await loadEmulatorPrefetchState(options);
+    emulatorCoresProbeDone = state.available;
+  } catch {
+    // Leave the latch open so a later service-worker transition can retry.
+  } finally {
+    emulatorCoresProbeInFlight = false;
+  }
+};
+
 export {
   formatEmulatorBytes,
   getCachedEmulatorAssets,
   loadEmulatorPrefetchState,
   parseManifest,
   prefetchEmulatorAssets,
+  probeEmulatorCoresComplete,
+  readEmulatorCoresComplete,
+  setEmulatorCoresComplete,
+  subscribeEmulatorCoresComplete,
 };
 export type { EmulatorAssetManifest, EmulatorPrefetchProgress, LoadedEmulatorPrefetchState };

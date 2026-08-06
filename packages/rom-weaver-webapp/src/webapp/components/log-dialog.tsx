@@ -31,6 +31,7 @@ import {
   getCachedEmulatorAssets,
   loadEmulatorPrefetchState,
   prefetchEmulatorAssets,
+  setEmulatorCoresComplete,
   type EmulatorPrefetchProgress,
   type LoadedEmulatorPrefetchState,
 } from "../pwa/emulator-prefetch.ts";
@@ -44,6 +45,7 @@ import {
   RUNTIME_MESSAGES,
   RUNTIME_STATES,
   RuntimeGlyph,
+  useEmulatorCoresComplete,
 } from "./shell.tsx";
 import type { RuntimeState } from "./shell.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -658,6 +660,7 @@ const EmulatorPrefetchPanel = ({ active }: { active: boolean }) => {
       if (state.baseUrl) {
         const cached = await getCachedEmulatorAssets(state.manifest, state.baseUrl, caches);
         setState((current) => (current ? { ...current, cached } : current));
+        setEmulatorCoresComplete(cached.cachedFiles >= state.manifest.files.length);
       }
     } catch (prefetchError) {
       setError(prefetchError instanceof Error ? prefetchError.message : String(prefetchError));
@@ -982,7 +985,8 @@ const LogDialog = ({
     [onTabChange],
   );
   useSettingsFieldFocus(open && tab === "settings", settingsFocusHint);
-  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady);
+  const emulatorCoresComplete = useEmulatorCoresComplete(serviceWorkerStatus);
+  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady, emulatorCoresComplete);
   const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
   const [opfsError, setOpfsError] = useState<string | null>(null);
@@ -1121,13 +1125,16 @@ const LogDialog = ({
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
             <StatusRows localizer={localizer} runtimeState={runtimeState} />
             <OfflineLegend current={runtimeState} localizer={localizer} />
+            {/* The EmulatorJS cache is the one thing that can hold the app at
+                "mostly ready", so its readout and download consent live with
+                the offline facts rather than on the Test tab. */}
+            <EmulatorPrefetchPanel active={tab === "status"} />
             <AboutLink localizer={localizer} />
           </div>
         ) : null}
         {tab === "test" ? (
           <div aria-labelledby="logtab-test" className="dlg-body log-body test-body" id="logpanel-test" role="tabpanel">
             {emulatorSettingsField ? <div className="test-settings-field">{emulatorSettingsField}</div> : null}
-            <EmulatorPrefetchPanel active={tab === "test"} />
             <EmulatorSavesPanel active={tab === "test"} />
           </div>
         ) : null}

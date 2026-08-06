@@ -400,6 +400,11 @@ msgstr "More"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.partial"
+msgstr "Mostly offline ready"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.AMBIGUOUS_SELECTION"
 msgstr "Multiple matching files were found."
 
@@ -692,6 +697,11 @@ msgstr "Tap to choose files"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabTest"
 msgstr "Test"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.partialDesc"
+msgstr "The app is cached, but some emulator cores are not. Use the download button below to get fully ready for offline play."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

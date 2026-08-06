@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   parseManifest,
   prefetchEmulatorAssets,
+  probeEmulatorCoresComplete,
+  readEmulatorCoresComplete,
   type EmulatorAssetManifest,
   type EmulatorPrefetchProgress,
 } from "../../src/webapp/pwa/emulator-prefetch.ts";
@@ -114,5 +116,28 @@ describe("emulator prefetch", () => {
     expect(result.failures).toEqual([]);
     expect(result.progress).toMatchObject({ bytesDone: 0, failedFiles: 0, filesDone: 0 });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the cores probe retryable until the service worker is available", async () => {
+    // First-visit shape: no controller yet, so the probe must not latch.
+    await probeEmulatorCoresComplete({ navigator: {} });
+    expect(readEmulatorCoresComplete()).toBeNull();
+
+    const cache = createCacheStorage(["cores/first.data"]);
+    const manifestFetch = vi.fn(async () =>
+      Response.json({
+        files: [
+          { path: "cores/first.data", sizeBytes: 10 },
+          { path: "loader.js", sizeBytes: 30 },
+        ],
+        version: "4.2.3",
+      }),
+    );
+    await probeEmulatorCoresComplete({ baseUrl: BASE_URL, caches: cache, fetch: manifestFetch });
+    expect(readEmulatorCoresComplete()).toBe(false);
+
+    // Latched after an available run: a later unavailable call changes nothing.
+    await probeEmulatorCoresComplete({ navigator: {} });
+    expect(readEmulatorCoresComplete()).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
-import { Masthead, Reveal, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
+import { Masthead, resolveRuntimeState, Reveal, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
 
 /**
  * App-shell contract: the masthead tablist and the phone dock (both named
@@ -293,5 +293,16 @@ describe("UpdateBanner", () => {
     expect(onReload).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("resolveRuntimeState", () => {
+  it("refines a working cache to partial only when cores are known-missing", () => {
+    expect(resolveRuntimeState("active", false, false)).toBe("partial");
+    expect(resolveRuntimeState("ready", false, false)).toBe("partial");
+    expect(resolveRuntimeState("active", false, null)).toBe("active");
+    expect(resolveRuntimeState("ready", false, true)).toBe("ready");
+    expect(resolveRuntimeState("active", true, false)).toBe("update");
+    expect(resolveRuntimeState("off", false, false)).toBe("disabled");
   });
 });

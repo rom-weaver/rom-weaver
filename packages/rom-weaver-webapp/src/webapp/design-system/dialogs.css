@@ -1091,6 +1091,10 @@ html.vt-mode .drop:has(#tools-input-picker) {
 .rw-app .sw-chip[data-sw="ready"] {
   color: var(--ink-2);
 }
+/* Working cache, incomplete emulator cores: a gentle nudge, not an alarm. */
+.rw-app .sw-chip[data-sw="partial"] {
+  color: var(--care-text);
+}
 .rw-app .sw-chip[data-sw="update"] {
   color: var(--care-text);
   border-color: color-mix(in oklab, var(--care) 40%, transparent);
