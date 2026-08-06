@@ -298,8 +298,8 @@ describe("UpdateBanner", () => {
 
 describe("resolveRuntimeState", () => {
   it("refines a working cache to partial only when cores are known-missing", () => {
-    expect(resolveRuntimeState("active", false, false)).toBe("partial");
-    expect(resolveRuntimeState("ready", false, false)).toBe("partial");
+    expect(resolveRuntimeState("active", false, false)).toBe("active-partial");
+    expect(resolveRuntimeState("ready", false, false)).toBe("ready-partial");
     expect(resolveRuntimeState("active", false, null)).toBe("active");
     expect(resolveRuntimeState("ready", false, true)).toBe("ready");
     expect(resolveRuntimeState("active", true, false)).toBe("update");

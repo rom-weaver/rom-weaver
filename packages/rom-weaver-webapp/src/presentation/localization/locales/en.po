@@ -30,6 +30,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.runtime.partial"
+#~ msgstr "Mostly offline ready"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.runtime.partialDesc"
+#~ msgstr "The app is cached, but some emulator cores are not. Use the download button below to get fully ready for offline play."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” applied first."
 
@@ -400,11 +410,6 @@ msgstr "More"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.partial"
-msgstr "Mostly offline ready"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.AMBIGUOUS_SELECTION"
 msgstr "Multiple matching files were found."
 
@@ -445,8 +450,18 @@ msgstr "Offline active"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.activePartial"
+msgstr "Offline active, cores missing"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.ready"
 msgstr "Offline ready"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.readyPartial"
+msgstr "Offline ready, cores missing"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -700,8 +715,8 @@ msgstr "Test"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.partialDesc"
-msgstr "The app is cached, but some emulator cores are not. Use the download button below to get fully ready for offline play."
+msgid "ui.runtime.readyPartialDesc"
+msgstr "The app is cached for the next visit, but some emulator cores are not. Use the download button below to get fully ready for offline play."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -767,6 +782,11 @@ msgstr "Theme"
 #: src/presentation/localization/messages.ts
 msgid "ui.rom.baseConflict"
 msgstr "These patches expect different ROMs - each patch card shows the one it needs."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.activePartialDesc"
+msgstr "This page runs from the offline copy, but some emulator cores are not cached. Use the download button below to get fully ready for offline play."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

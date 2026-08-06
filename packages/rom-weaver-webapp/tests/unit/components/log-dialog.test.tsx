@@ -47,7 +47,7 @@ describe("LogDialog", () => {
     expect(branchLink?.textContent).toBe("dev");
     expect(branchLink?.target).toBe("_blank");
     // every offline state is named, so the badge above reads against the rest
-    expect(container.querySelectorAll(".sw-legend-row").length).toBe(6);
+    expect(container.querySelectorAll(".sw-legend-row").length).toBe(7);
     // the settings panel belongs to its own tab, so it is not mounted on Status
     expect(container.querySelector(".settings-panel-stub")).toBeNull();
   });

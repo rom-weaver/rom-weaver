@@ -703,24 +703,33 @@ const useHydratedServiceWorkerStatus = (status: ServiceWorkerStatus | null | und
  * means this very page came out of it, ready means the copy is there and the
  * next load will. The order below is the order the legend lists them in.
  */
-type RuntimeState = "active" | "ready" | "partial" | "update" | "installing" | "disabled";
+type RuntimeState = "active" | "active-partial" | "ready" | "ready-partial" | "update" | "installing" | "disabled";
 
-const RUNTIME_STATES: readonly RuntimeState[] = ["active", "ready", "partial", "update", "installing", "disabled"];
+const RUNTIME_STATES: readonly RuntimeState[] = [
+  "active",
+  "active-partial",
+  "ready",
+  "ready-partial",
+  "update",
+  "installing",
+  "disabled",
+];
 
 const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: MessageId }> = {
   active: { description: "ui.runtime.activeDesc", label: "ui.runtime.active" },
+  "active-partial": { description: "ui.runtime.activePartialDesc", label: "ui.runtime.activePartial" },
   disabled: { description: "ui.runtime.disabledDesc", label: "ui.runtime.disabled" },
   installing: { description: "ui.runtime.installingDesc", label: "ui.runtime.installing" },
-  partial: { description: "ui.runtime.partialDesc", label: "ui.runtime.partial" },
   ready: { description: "ui.runtime.readyDesc", label: "ui.runtime.ready" },
+  "ready-partial": { description: "ui.runtime.readyPartialDesc", label: "ui.runtime.readyPartial" },
   update: { description: "ui.runtime.updateDesc", label: "ui.runtime.update" },
 };
 
 /**
  * An update outranks everything: it is the only state that asks for an action.
- * `partial` refines a working cache: the app is offline-ready, but not every
- * EmulatorJS core is cached yet (null means the cache state is still unknown,
- * which keeps the plain active/ready reading).
+ * The `-partial` variants refine a working cache: the app itself is offline,
+ * but not every EmulatorJS core is cached yet (null means the cache state is
+ * still unknown, which keeps the plain active/ready reading).
  */
 const resolveRuntimeState = (
   status: ServiceWorkerStatus | null | undefined,
@@ -730,17 +739,18 @@ const resolveRuntimeState = (
   if (updateReady) return "update";
   if (status === "off") return "disabled";
   if (status === "active" || status === "ready") {
-    return emulatorCoresComplete === false ? "partial" : status;
+    return emulatorCoresComplete === false ? `${status}-partial` : status;
   }
   return "installing";
 };
 
 const RUNTIME_ICONS = {
   active: CloudCheck,
+  "active-partial": PackageOpen,
   disabled: CloudOff,
   installing: LoaderCircle,
-  partial: PackageOpen,
   ready: PackageCheck,
+  "ready-partial": PackageOpen,
   update: CloudDownload,
 } satisfies Record<RuntimeState, typeof CloudCheck>;
 

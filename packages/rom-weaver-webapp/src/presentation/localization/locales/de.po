@@ -30,6 +30,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.runtime.partial"
+#~ msgstr "Fast offline-bereit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.runtime.partialDesc"
+#~ msgstr "Die App ist zwischengespeichert, aber einige Emulator-Kerne fehlen noch. Mit dem Download-Knopf unten wird das Offline-Spielen vollständig bereit."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
 
@@ -400,11 +410,6 @@ msgstr "Mehr"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.partial"
-msgstr "Fast offline-bereit"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.AMBIGUOUS_SELECTION"
 msgstr "Mehrere passende Dateien wurden gefunden."
 
@@ -445,8 +450,18 @@ msgstr "Offline aktiv"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.activePartial"
+msgstr "Offline aktiv, Kerne fehlen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.ready"
 msgstr "Offline bereit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.readyPartial"
+msgstr "Offline bereit, Kerne fehlen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -700,8 +715,8 @@ msgstr "Test"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.partialDesc"
-msgstr "Die App ist zwischengespeichert, aber einige Emulator-Kerne fehlen noch. Mit dem Download-Knopf unten wird das Offline-Spielen vollständig bereit."
+msgid "ui.runtime.readyPartialDesc"
+msgstr "Die App ist für den nächsten Besuch zwischengespeichert, aber einige Emulator-Kerne fehlen. Mit dem Download-Knopf unten wird das Offline-Spielen vollständig bereit."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -767,6 +782,11 @@ msgstr "Design"
 #: src/presentation/localization/messages.ts
 msgid "ui.rom.baseConflict"
 msgstr "Diese Patches erwarten unterschiedliche ROMs - jede Patch-Karte zeigt die benötigte."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.activePartialDesc"
+msgstr "Diese Seite läuft aus der Offline-Kopie, aber einige Emulator-Kerne sind nicht zwischengespeichert. Mit dem Download-Knopf unten wird das Offline-Spielen vollständig bereit."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
