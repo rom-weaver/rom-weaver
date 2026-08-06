@@ -1,4 +1,12 @@
-import { type Dispatch, type MutableRefObject, type SetStateAction, useMemo, useRef } from "react";
+import {
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import type { CompressionFormat, PostApplyRomBehavior } from "../../types/settings.ts";
@@ -238,6 +246,56 @@ const normalizePostApplyRomBehavior = (value: unknown): PostApplyRomBehavior => 
   return "auto-download";
 };
 
+/**
+ * Session-local override for `postApplyRomBehavior`: the public form has no
+ * write path back into the host app's persisted settings (`settings-context`
+ * is read-only), so the Apply step's "After applying" select overrides the
+ * behavior for this session only, without touching the stored setting. Null
+ * means "follow the setting". Module-level (not React state) so the setter is
+ * reachable from any renderer of the Apply view without threading a prop
+ * through the session hooks that don't otherwise need it.
+ */
+let postApplyRomBehaviorOverride: PostApplyRomBehavior | null = null;
+const postApplyRomBehaviorOverrideListeners = new Set<() => void>();
+
+const getPostApplyRomBehaviorOverride = (): PostApplyRomBehavior | null => postApplyRomBehaviorOverride;
+
+const setPostApplyRomBehaviorOverride = (value: PostApplyRomBehavior | null): void => {
+  if (postApplyRomBehaviorOverride === value) return;
+  postApplyRomBehaviorOverride = value;
+  for (const listener of postApplyRomBehaviorOverrideListeners) listener();
+};
+
+const subscribePostApplyRomBehaviorOverride = (listener: () => void): (() => void) => {
+  postApplyRomBehaviorOverrideListeners.add(listener);
+  return () => postApplyRomBehaviorOverrideListeners.delete(listener);
+};
+
+// Saving a different value in Settings supersedes the session override:
+// without this, the persisted setting would stay dead for the rest of the
+// session once the Apply select had been touched.
+let postApplyRomBehaviorSettingSnapshot: PostApplyRomBehavior | null = null;
+const syncPostApplyRomBehaviorSetting = (settingValue: unknown): void => {
+  const normalized = normalizePostApplyRomBehavior(settingValue);
+  if (postApplyRomBehaviorSettingSnapshot === normalized) return;
+  const isFirstObservation = postApplyRomBehaviorSettingSnapshot === null;
+  postApplyRomBehaviorSettingSnapshot = normalized;
+  if (!isFirstObservation) setPostApplyRomBehaviorOverride(null);
+};
+
+/** The "After applying" select's controlled value: the override once set, else the live setting. */
+const usePostApplyRomBehaviorValue = (settingValue: unknown): PostApplyRomBehavior => {
+  const override = useSyncExternalStore(
+    subscribePostApplyRomBehaviorOverride,
+    getPostApplyRomBehaviorOverride,
+    getPostApplyRomBehaviorOverride,
+  );
+  useEffect(() => {
+    syncPostApplyRomBehaviorSetting(settingValue);
+  }, [settingValue]);
+  return normalizePostApplyRomBehavior(override ?? settingValue);
+};
+
 type PostApplyRomBehaviorOptions = {
   addSessionEntry: (entry: EmulatorSessionEntry) => void;
   behavior: PostApplyRomBehavior;
@@ -413,7 +471,7 @@ const handleApplyPrimaryGate = async ({
 const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContext) => {
   const contextRef = useLatestRef(context);
   const settings = useRomWeaverSettings();
-  const postApplyRomBehaviorRef = useLatestRef(normalizePostApplyRomBehavior(settings.postApplyRomBehavior));
+  const postApplyRomBehaviorRef = useLatestRef(usePostApplyRomBehaviorValue(settings.postApplyRomBehavior));
   const postApplyResultRef = useRef<ApplyWorkflowResult | null>(null);
   return useMemo(
     () => ({
@@ -653,4 +711,14 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
   );
 };
 
-export { claimPostApplyRun, deriveApplyCompletion, runPostApplyRomBehavior, useApplyDownloadOrchestration };
+export {
+  claimPostApplyRun,
+  deriveApplyCompletion,
+  getPostApplyRomBehaviorOverride,
+  runPostApplyRomBehavior,
+  setPostApplyRomBehaviorOverride,
+  subscribePostApplyRomBehaviorOverride,
+  syncPostApplyRomBehaviorSetting,
+  useApplyDownloadOrchestration,
+  usePostApplyRomBehaviorValue,
+};

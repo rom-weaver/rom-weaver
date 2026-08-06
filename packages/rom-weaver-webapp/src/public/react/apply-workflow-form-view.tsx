@@ -50,9 +50,11 @@ import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./p
 import { addEntry, getApplyEntry, setCurrentGame } from "./emulator-session-store.ts";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
-import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
+import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import { setPostApplyRomBehaviorOverride, usePostApplyRomBehaviorValue } from "./use-apply-download-orchestration.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
+import type { PostApplyRomBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
 const EmulatorJsAction = ({
@@ -1188,6 +1190,48 @@ const OutputHeaderField = ({
   );
 };
 
+/**
+ * Mirrors `postApplyRomBehavior`'s options from
+ * `src/webapp/settings/settings-metadata.ts`: `public/react` is the
+ * embeddable form and must not import from `webapp/`, which owns the
+ * Settings dialog, so the option list is duplicated here rather than shared.
+ */
+const POST_APPLY_ROM_BEHAVIOR_OPTIONS: ReadonlyArray<{ label: string; value: PostApplyRomBehavior }> = [
+  { label: "Download automatically", value: "auto-download" },
+  { label: "Test automatically", value: "auto-test" },
+  { label: "Test and download", value: "auto-test-download" },
+  { label: "Do nothing", value: "none" },
+];
+
+/**
+ * "After applying" select for the Apply step's output options. The public form
+ * has no write path into the host app's persisted settings, so a choice here
+ * only overrides the behavior for this session (see
+ * `use-apply-download-orchestration.ts`'s `postApplyRomBehaviorOverride`); the
+ * select still defaults from the live `postApplyRomBehavior` setting.
+ */
+const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean; settingValue: unknown }) => {
+  const value = usePostApplyRomBehaviorValue(settingValue);
+  return (
+    <OutputField label="After applying">
+      <select
+        aria-label="After applying"
+        className="select"
+        disabled={disabled}
+        id="rom-weaver-select-post-apply-behavior"
+        onChange={(event) => setPostApplyRomBehaviorOverride(event.currentTarget.value as PostApplyRomBehavior)}
+        value={value}
+      >
+        {POST_APPLY_ROM_BEHAVIOR_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </OutputField>
+  );
+};
+
 /** Export while running shows the live bar; otherwise the create/download button. */
 const BundleExportAction = ({
   bundleActionLabel,
@@ -1670,6 +1714,7 @@ function ApplyWorkflowFormView({
   const disabledPatchCount = disabledPatchFlags.filter(Boolean).length;
   const enabledPatchCount = patches.length - disabledPatchCount;
   const localizer = useUiLocalizer();
+  const settings = useRomWeaverSettings();
   // Inputs/patches still resolving - surfaced only on the selvage status strip.
   const inputsStaging =
     romInputs.some((row) => !!row.progress) || patches.some((item) => !!item.progress) || uiState.patchInput.loading;
@@ -1745,6 +1790,12 @@ function ApplyWorkflowFormView({
   const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
   const bundleOutputFields = (
     <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} outputHeaderField={outputHeaderField} />
+  );
+  const outputExtraFields = (
+    <>
+      {bundleOutputFields}
+      <PostApplyBehaviorField disabled={outputState.disabled} settingValue={settings.postApplyRomBehavior} />
+    </>
   );
 
   // Unified drop: bare files stage immediately; each archive shows an
@@ -1966,7 +2017,7 @@ function ApplyWorkflowFormView({
             action={renderOutputAction}
             compress={buildOutputCompressionPanel({
               disabled: outputState.disabled,
-              extraChildren: bundleOutputFields,
+              extraChildren: outputExtraFields,
               fields: outputState.compress?.fields,
               format: compressHeaderFormat,
               formatId: "rom-weaver-select-output-format-compress",

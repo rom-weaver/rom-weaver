@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { ApplyExecutionTimingTracker } from "../../src/public/react/apply-session-types.ts";
 import type { EmulatorSessionEntry } from "../../src/public/react/emulator-session-store.ts";
 import {
   claimPostApplyRun,
   deriveApplyCompletion,
+  getPostApplyRomBehaviorOverride,
   runPostApplyRomBehavior,
+  setPostApplyRomBehaviorOverride,
+  subscribePostApplyRomBehaviorOverride,
+  syncPostApplyRomBehaviorSetting,
 } from "../../src/public/react/use-apply-download-orchestration.ts";
 import type { ApplyWorkflowResult } from "../../src/types/workflow-runtime-types.ts";
 
@@ -120,5 +124,42 @@ describe("claimPostApplyRun", () => {
     expect(claimPostApplyRun(handled, first)).toBe(true);
     expect(claimPostApplyRun(handled, first)).toBe(false);
     expect(claimPostApplyRun(handled, second)).toBe(true);
+  });
+});
+
+describe("postApplyRomBehavior session override", () => {
+  afterEach(() => setPostApplyRomBehaviorOverride(null));
+
+  it("defaults to null (follow the setting)", () => {
+    expect(getPostApplyRomBehaviorOverride()).toBeNull();
+  });
+
+  it("stores the chosen behavior until cleared", () => {
+    setPostApplyRomBehaviorOverride("auto-test");
+    expect(getPostApplyRomBehaviorOverride()).toBe("auto-test");
+    setPostApplyRomBehaviorOverride(null);
+    expect(getPostApplyRomBehaviorOverride()).toBeNull();
+  });
+
+  it("clears the override when the committed setting changes", () => {
+    syncPostApplyRomBehaviorSetting("auto-download");
+    setPostApplyRomBehaviorOverride("auto-test");
+    syncPostApplyRomBehaviorSetting("auto-download");
+    expect(getPostApplyRomBehaviorOverride()).toBe("auto-test");
+    syncPostApplyRomBehaviorSetting("none");
+    expect(getPostApplyRomBehaviorOverride()).toBeNull();
+  });
+
+  it("notifies subscribers only when the value actually changes", () => {
+    let notifications = 0;
+    const unsubscribe = subscribePostApplyRomBehaviorOverride(() => {
+      notifications += 1;
+    });
+    setPostApplyRomBehaviorOverride("auto-test-download");
+    setPostApplyRomBehaviorOverride("auto-test-download");
+    setPostApplyRomBehaviorOverride("none");
+    unsubscribe();
+    setPostApplyRomBehaviorOverride("auto-download");
+    expect(notifications).toBe(2);
   });
 });
