@@ -652,7 +652,10 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
-                {workflowPanel("test", <EmulatorTestRoute onOpenStorage={openEmulatorTestTab} />)}
+                {workflowPanel(
+                  "test",
+                  <EmulatorTestRoute active={state.currentView === "test"} onOpenStorage={openEmulatorTestTab} />,
+                )}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute

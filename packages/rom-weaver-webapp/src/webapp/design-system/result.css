@@ -182,10 +182,13 @@
   color: var(--thread-text);
 }
 .rw-app .emulator-saves-link {
-  margin-block-end: var(--sp-m);
+  flex: 0 0 auto;
+  align-self: center;
+  margin-inline-start: auto;
 }
 .rw-app .emulator-session-list {
   gap: var(--sp-s);
+  margin-block-start: var(--sp-s);
 }
 .rw-app .emulator-session-entry.is-disabled {
   opacity: 0.72;
@@ -194,10 +197,6 @@
   margin: 0;
   font-size: 0.78rem;
   color: var(--fault);
-}
-.rw-app .emulator-session-empty {
-  margin: 0;
-  color: var(--ink-3);
 }
 .rw-app .emulatorjs-test {
   display: flex;

@@ -28,10 +28,10 @@ const withSettings = (children: ReactNode) => (
 );
 
 const entry = (overrides: Partial<EmulatorSessionEntry> = {}): EmulatorSessionEntry => ({
+  blob: new Blob(["game"]),
   core: "nes",
   fileName: "game.nes",
   id: "game",
-  objectUrl: "blob:game",
   sizeBytes: 3,
   source: "local",
   ...overrides,
@@ -62,8 +62,8 @@ describe("EmulatorTestView", () => {
 
     expect(screen.getByText("Play a patched ROM in an emulator, right in the browser,")).toBeTruthy();
     expect(screen.getByText("Next:")).toBeTruthy();
-    expect(screen.getByText("Session outputs")).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Session outputs" })).toBeNull();
+    expect(screen.getByText("Play")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
   });
 
   it("disables an output when no EmulatorJS core supports it", () => {
@@ -81,7 +81,7 @@ describe("EmulatorTestView", () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
     addEntry(entry());
-    addEntry(entry({ core: "snes", fileName: "second.sfc", id: "second", objectUrl: "blob:second" }));
+    addEntry(entry({ blob: new Blob(["second"]), core: "snes", fileName: "second.sfc", id: "second" }));
     setCurrentGame("game");
 
     render(withSettings(<EmulatorTestView />));

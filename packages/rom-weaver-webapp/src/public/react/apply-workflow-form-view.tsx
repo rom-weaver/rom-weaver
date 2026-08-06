@@ -87,10 +87,10 @@ const EmulatorJsAction = ({
       if (!blob) throw new Error("The finished output cannot be opened in EmulatorJS.");
       const loaded = await loadEmulatorRom(blob, output.fileName);
       addEntry({
+        blob: loaded.blob,
         core,
         fileName: renameRomToOutput(output.fileName, loaded.fileName),
         id: output.id,
-        objectUrl: URL.createObjectURL(loaded.blob),
         platform,
         sizeBytes: loaded.blob.size,
         source: "apply",

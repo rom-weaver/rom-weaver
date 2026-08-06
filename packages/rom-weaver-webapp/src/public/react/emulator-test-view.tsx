@@ -1,4 +1,4 @@
-import { Gamepad2, Maximize, Minimize } from "lucide-react";
+import { ArrowLeft, Gamepad2, Maximize, Minimize } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
@@ -76,10 +76,12 @@ const EmulatorSessionOutput = ({ entry, current }: { entry: EmulatorSessionEntry
 };
 
 type EmulatorTestViewProps = {
+  /** False while another workflow tab is shown; the running game pauses until the view returns. */
+  active?: boolean;
   onOpenStorage?: () => void;
 };
 
-const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
+const EmulatorTestView = ({ active = true, onOpenStorage }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerFrameRef = useRef<HTMLDivElement>(null);
@@ -114,19 +116,40 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
         "*",
       );
     };
-    const handleVisibilityChange = () => sendVisibility(document.hidden ? "visibility-pause" : "visibility-resume");
+    const hidden = () => document.hidden || !active;
+    const handleVisibilityChange = () => sendVisibility(hidden() ? "visibility-pause" : "visibility-resume");
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    if (document.hidden) sendVisibility("visibility-pause");
+    // Leaving for another workflow tab hides the panel without a visibility
+    // event, so the active flip drives the same pause/resume the tab switch does.
+    handleVisibilityChange();
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [currentIdentity]);
+  }, [currentIdentity, active]);
 
   useEffect(() => {
     if (!currentGame) return;
     setError(hasWebgl2() ? "" : WEBGL2_ERROR);
   }, [currentGame]);
 
+  // Each mount gets its own object URL: EmulatorJS revokes the game URL it is
+  // handed after reading it, so a URL stored on the entry would be dead by the
+  // second play.
+  const currentBlob = currentGame?.blob || null;
+  const [gameUrl, setGameUrl] = useState<string | null>(null);
   useEffect(() => {
-    if (!currentGame || currentGame.objectUrl || !currentGame.artifact) return;
+    if (!currentBlob || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
+      setGameUrl(null);
+      return undefined;
+    }
+    const url = URL.createObjectURL(currentBlob);
+    setGameUrl(url);
+    return () => {
+      setGameUrl(null);
+      URL.revokeObjectURL(url);
+    };
+  }, [currentBlob]);
+
+  useEffect(() => {
+    if (!currentGame || currentGame.blob || !currentGame.artifact) return;
     let cancelled = false;
     setPreparing(true);
     void prepareEntry(currentGame.id)
@@ -173,10 +196,10 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
           const id = createLocalEntryId(loaded.fileName);
           const core = getEmulatorJsCore(undefined, loaded.fileName);
           addEntry({
+            blob: loaded.blob,
             core,
             fileName: loaded.fileName,
             id,
-            objectUrl: URL.createObjectURL(loaded.blob),
             sizeBytes: loaded.blob.size,
             source: "local",
           });
@@ -194,7 +217,7 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
   const currentCore = currentGame
     ? currentGame.core || getEmulatorJsCore(currentGame.platform, currentGame.fileName)
     : null;
-  const canPlay = Boolean(currentGame && currentCore && currentGame.objectUrl && currentIdentity);
+  const canPlay = Boolean(currentGame && currentCore && gameUrl && currentIdentity);
   const workflowEmpty = !(entries.length || error || busy);
 
   return (
@@ -202,10 +225,32 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
       <UnifiedDropZone
         accept={getFileInputAcceptAttributes().unifiedRom}
         addLabel="Choose another ROM"
+        afterDropZone={
+          entries.length ? (
+            <div className="cards emulator-session-list">
+              {entries.map((entry) => (
+                <EmulatorSessionOutput current={entry.id === currentGameId} entry={entry} key={entry.id} />
+              ))}
+            </div>
+          ) : undefined
+        }
         big={workflowEmpty}
+        headerExtra={
+          onOpenStorage ? (
+            <button
+              aria-label="Manage saved states and SRAM"
+              className="btn ghost slim emulator-saves-link"
+              onClick={onOpenStorage}
+              type="button"
+            >
+              Manage saves
+            </button>
+          ) : undefined
+        }
         heroLabel="Drop a ROM or choose a file"
         heroLabelCoarse="Choose a ROM file"
         id="emulator-test-input"
+        info={<p>Loaded games and Apply outputs stay listed here for this session.</p>}
         inputId="emulator-test-file-input"
         lead={{ line1: "ui.hero.testThesis", line2: "ui.hero.testThesis2" }}
         onFiles={(files) => void handleFiles(files)}
@@ -217,31 +262,31 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
       />
 
       {workflowEmpty ? (
-        <GhostSteps
-          steps={[
-            { num: "0x02", title: "Play" },
-            { num: "0x03", title: "Session outputs" },
-          ]}
-        />
+        <GhostSteps steps={[{ num: "0x02", title: "Play" }]} />
       ) : (
         <>
           <StepSection
             headerExtra={
-              canPlay ? (
-                <div className="emulator-player-actions">
-                  <button className="btn ghost slim" onClick={() => setCurrentGame(null)} type="button">
-                    Stop
-                  </button>
-                  <button
-                    aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                    className="btn ghost slim emulator-fullscreen-btn"
-                    onClick={toggleFullscreen}
-                    type="button"
-                  >
-                    {fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}
-                  </button>
-                </div>
-              ) : undefined
+              <div className="emulator-player-actions">
+                <a className="btn ghost slim" href="apply">
+                  <ArrowLeft aria-hidden="true" /> Back to Apply
+                </a>
+                {canPlay ? (
+                  <>
+                    <button className="btn ghost slim" onClick={() => setCurrentGame(null)} type="button">
+                      Stop
+                    </button>
+                    <button
+                      aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      className="btn ghost slim emulator-fullscreen-btn"
+                      onClick={toggleFullscreen}
+                      type="button"
+                    >
+                      {fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}
+                    </button>
+                  </>
+                ) : null}
+              </div>
             }
             meta={currentGame ? currentGame.fileName : undefined}
             num="0x02"
@@ -252,24 +297,18 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
                 <p className="emulatorjs-error" role="alert">
                   {error}
                 </p>
-              ) : currentGame && currentCore && currentGame.objectUrl && currentIdentity ? (
+              ) : currentGame && currentCore && gameUrl && currentIdentity ? (
                 <div className="emulator-player-frame" ref={playerFrameRef}>
                   <iframe
                     allow="autoplay; fullscreen; gamepad"
                     allowFullScreen
-                    key={currentGame.id}
+                    key={`${currentGame.id}:${gameUrl}`}
                     ref={iframeRef}
                     referrerPolicy="no-referrer"
-                    srcDoc={createEmulatorDocument(
-                      dataUrl,
-                      currentGame.objectUrl,
-                      currentIdentity.gameName,
-                      currentCore,
-                      {
-                        gameId: currentIdentity.gameId,
-                        gameLabel: currentIdentity.gameLabel,
-                      },
-                    )}
+                    srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {
+                      gameId: currentIdentity.gameId,
+                      gameLabel: currentIdentity.gameLabel,
+                    })}
                     title={`EmulatorJS test for ${currentGame.fileName}`}
                   />
                 </div>
@@ -278,7 +317,7 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
               ) : currentGame ? (
                 <p className="emulator-player-empty">No emulator core for this system.</p>
               ) : entries.length ? (
-                <p className="emulator-player-empty">Choose a game from Session outputs to start playing.</p>
+                <p className="emulator-player-empty">Choose a game from the list above to start playing.</p>
               ) : (
                 <div className="emulator-player-empty">
                   <Gamepad2 aria-hidden="true" />
@@ -289,25 +328,6 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
                 </div>
               )}
             </div>
-          </StepSection>
-
-          <StepSection meta={String(entries.length)} num="0x03" title="Session outputs">
-            {onOpenStorage ? (
-              <button className="btn ghost slim emulator-saves-link" onClick={onOpenStorage} type="button">
-                Manage saved states and SRAM
-              </button>
-            ) : null}
-            {entries.length ? (
-              <div className="cards emulator-session-list">
-                {entries.map((entry) => (
-                  <EmulatorSessionOutput current={entry.id === currentGameId} entry={entry} key={entry.id} />
-                ))}
-              </div>
-            ) : (
-              <p className="emulator-session-empty">
-                Outputs from the Apply tab and local ROMs will stay here for this session.
-              </p>
-            )}
           </StepSection>
         </>
       )}

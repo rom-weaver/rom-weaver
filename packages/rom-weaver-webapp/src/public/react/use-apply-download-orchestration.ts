@@ -366,16 +366,14 @@ const runPostApplyRomBehavior = async ({
     try {
       const playableOutput = output.output as EmulatorPlayableOutput;
       const blob = await playableOutput.getBlob?.();
-      if (!blob || typeof URL === "undefined" || typeof URL.createObjectURL !== "function")
-        return { downloaded, tested: false };
+      if (!blob) return { downloaded, tested: false };
       const outputFileName = playableOutput.fileName || fileName;
       const loaded = await loadRom(blob, outputFileName);
-      const objectUrl = URL.createObjectURL(loaded.blob);
       entry = {
+        blob: loaded.blob,
         core,
         fileName: renameRomToOutput(outputFileName, loaded.fileName),
         id: playableOutput.id || `apply-${fileName}`,
-        objectUrl,
         platform,
         sizeBytes: loaded.blob.size,
         source: "apply",

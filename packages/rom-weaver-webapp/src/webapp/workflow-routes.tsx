@@ -28,6 +28,7 @@ type WorkflowRouteProps = {
   };
   patcher: ApplyPatchFormProps;
   test: {
+    active?: boolean;
     onOpenStorage?: () => void;
   };
   tools: ToolsFormProps;

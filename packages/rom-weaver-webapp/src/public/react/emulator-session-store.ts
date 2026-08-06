@@ -13,7 +13,13 @@ type EmulatorSessionEntry = {
   artifact?: Pick<RetainedRuntimeOutput, "dispose" | "getBlob">;
   source: EmulatorSessionSource;
   sizeBytes: number;
-  objectUrl?: string;
+  /**
+   * The playable bytes. The player mints a fresh object URL per mount from
+   * this blob: EmulatorJS revokes the game URL it is given once it has read
+   * it, so a stored URL would die after the first run (stop → play failed
+   * with a network error).
+   */
+  blob?: Blob;
 };
 
 type EmulatorSessionState = {
@@ -26,13 +32,7 @@ const store = createStore<EmulatorSessionState>(() => ({
   entries: [],
 }));
 
-const revokeEntryUrl = (entry: EmulatorSessionEntry) => {
-  if (!entry.objectUrl || typeof URL === "undefined" || typeof URL.revokeObjectURL !== "function") return;
-  URL.revokeObjectURL(entry.objectUrl);
-};
-
 const disposeEntryResources = (entry: EmulatorSessionEntry) => {
-  revokeEntryUrl(entry);
   void Promise.resolve(entry.artifact?.dispose()).catch(() => undefined);
 };
 
@@ -47,24 +47,22 @@ const addEntry = (entry: EmulatorSessionEntry) => {
   });
 };
 
-const prepareEntry = async (id: string): Promise<string | null> => {
+const prepareEntry = async (id: string): Promise<Blob | null> => {
   const entry = store.getState().entries.find((candidate) => candidate.id === id);
   if (!entry) return null;
-  if (entry.objectUrl) return entry.objectUrl;
-  if (!entry.artifact || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") return null;
+  if (entry.blob) return entry.blob;
+  if (!entry.artifact) return null;
   const blob = await entry.artifact.getBlob();
-  const objectUrl = URL.createObjectURL(blob);
   let accepted = false;
   store.setState((state) => {
     const current = state.entries.find((candidate) => candidate.id === id);
     if (!current || current.artifact !== entry.artifact) return {};
     accepted = true;
     return {
-      entries: state.entries.map((candidate) => (candidate.id === id ? { ...candidate, objectUrl } : candidate)),
+      entries: state.entries.map((candidate) => (candidate.id === id ? { ...candidate, blob } : candidate)),
     };
   });
-  if (!accepted && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(objectUrl);
-  return accepted ? objectUrl : null;
+  return accepted ? blob : null;
 };
 
 const getApplyEntry = (fileName?: string) =>
