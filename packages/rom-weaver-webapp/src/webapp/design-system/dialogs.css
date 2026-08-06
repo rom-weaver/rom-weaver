@@ -351,8 +351,19 @@
   font-size: 0.78rem;
   color: var(--ink-3);
 }
-.rw-app .storage-body {
+.rw-app .storage-body,
+.rw-app .test-body {
   flex-direction: column;
+}
+/* Mirrors the padding + separator each EmulatorJS panel below it supplies for
+   itself, so the "After applying" field reads as one more row in the same
+   stack rather than a settings-panel card dropped into a diagnostics tab. */
+.rw-app .test-settings-field {
+  padding: var(--sp-m) var(--sp-l);
+  border-block-end: 1px solid var(--seam);
+}
+.rw-app .test-settings-field .setgroup {
+  margin-block-end: 0;
 }
 .rw-app .emulator-prefetch-panel {
   flex: none;

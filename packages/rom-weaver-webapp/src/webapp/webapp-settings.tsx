@@ -422,6 +422,22 @@ const SettingsGroup = ({
   );
 };
 
+/**
+ * Standalone render of the "After applying" field, reused by the log dialog's
+ * Test tab so the EmulatorJS panels sit beside the one setting that decides
+ * whether a completed apply opens there. It shares the exact field markup,
+ * id, and change wiring with the copy in the General settings group - both
+ * read and write the same `postApplyRomBehavior` draft value, so they can
+ * never drift out of sync with each other.
+ */
+function PostApplyRomBehaviorField(props: SettingsFieldShared): ReactNode {
+  return (
+    <div className="setgroup">
+      <SettingsRow fieldKey="postApplyRomBehavior" {...props} />
+    </div>
+  );
+}
+
 function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: SettingsPanelProps): ReactNode {
   const shared = { draftSettings, onDraftChange, uiState: uiState ?? getSettingsUiState(draftSettings), validation };
   const fullWidthSections = settingsPanelSections.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
@@ -445,4 +461,4 @@ function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: Se
   );
 }
 
-export { SettingsPanel };
+export { SettingsPanel, PostApplyRomBehaviorField };

@@ -685,6 +685,11 @@ msgstr "Toca para elegir archivos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.tabTest"
+msgstr "Prueba"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.corsHint"
 msgstr "El servidor de archivos debe permitir descargas de origen cruzado (CORS)."
 

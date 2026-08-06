@@ -82,6 +82,8 @@ type WebappRootProps = {
     onCreatorPatchTypeChange: (patchType: string) => void;
     onCreatorSettingsChange: (settings: unknown) => void;
     onPatcherBundlePackageChange: (value: string) => void;
+    /** Test-tab "After applying" field commits straight to settings - no draft, no Save. */
+    onPostApplyRomBehaviorChange: (value: string) => void;
     onPatcherInputsChange: (inputs: readonly unknown[]) => void;
     onPatcherPatchesChange: (patches: readonly unknown[]) => void;
     onPatcherSettingsChange: (settings: unknown) => void;

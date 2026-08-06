@@ -685,6 +685,11 @@ msgstr "Tippen, um Dateien zu wählen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.tabTest"
+msgstr "Test"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.corsHint"
 msgstr "Der Datei-Host muss Cross-Origin-Downloads (CORS) erlauben."
 

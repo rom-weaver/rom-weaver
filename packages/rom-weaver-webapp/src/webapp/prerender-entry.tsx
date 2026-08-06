@@ -38,6 +38,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onLogLevelChange: noop,
   onOpenSettings: noop,
   onPatcherBundlePackageChange: noop,
+  onPostApplyRomBehaviorChange: noop,
   onPatcherInputsChange: noop,
   onPatcherPatchesChange: noop,
   onPatcherSettingsChange: noop,

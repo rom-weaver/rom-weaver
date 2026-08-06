@@ -108,6 +108,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.log.tabLogs": msg({ id: "ui.log.tabLogs", message: "Logs" }),
   "ui.log.tabStatus": msg({ id: "ui.log.tabStatus", message: "Status" }),
   "ui.log.tabStorage": msg({ id: "ui.log.tabStorage", message: "Storage" }),
+  "ui.log.tabTest": msg({ id: "ui.log.tabTest", message: "Test" }),
   "ui.log.tabsLabel": msg({ id: "ui.log.tabsLabel", message: "Sections" }),
   "ui.masthead.slogan": msg({
     id: "ui.masthead.slogan",
