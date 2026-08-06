@@ -29,7 +29,7 @@ html:has(.docs-workbench) {
   grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
   gap: clamp(18px, 3vw, 30px);
   justify-content: center;
-  margin-block: calc(var(--sp-l) * -1) var(--sp-l);
+  margin-block: 0 var(--sp-l);
 }
 .rw-app .docs-search-header .docs-search {
   grid-column: 2;
