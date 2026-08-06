@@ -505,6 +505,11 @@ msgstr "Parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis"
+msgstr "Juega una ROM parcheada en un emulador, directamente en el navegador,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.channel.preview"
 msgstr "Compilación de vista previa"
 
@@ -807,6 +812,11 @@ msgstr "Qué significan los estados sin conexión"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Novedades"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis2"
+msgstr "con partidas guardadas que permanecen en este dispositivo —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

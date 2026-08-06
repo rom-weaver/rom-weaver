@@ -129,6 +129,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Apply patches to any ROM, compressed or raw," }),
   "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "and download the result or a shareable bundle —" }),
+  "ui.hero.testThesis": msg({
+    id: "ui.hero.testThesis",
+    message: "Play a patched ROM in an emulator, right in the browser,",
+  }),
+  "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "with saves that stay on this device —" }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
     message: "Revert a patched ROM to its original dump,",

@@ -505,6 +505,11 @@ msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis"
+msgstr "Play a patched ROM in an emulator, right in the browser,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.channel.preview"
 msgstr "Preview build"
 
@@ -807,6 +812,11 @@ msgstr "What the offline states mean"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "What’s new"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis2"
+msgstr "with saves that stay on this device —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -54,15 +54,16 @@ afterEach(() => {
 });
 
 describe("EmulatorTestView", () => {
-  it("points an empty session at the Apply tab", () => {
+  it("shows the hero drop state with ghost steps for an empty session", () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
 
     render(withSettings(<EmulatorTestView />));
 
-    expect(screen.getByText("No game is loaded.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Patch a ROM first" }).getAttribute("href")).toBe("apply");
-    expect(screen.getByRole("heading", { name: "Session outputs" })).toBeTruthy();
+    expect(screen.getByText("Play a patched ROM in an emulator, right in the browser,")).toBeTruthy();
+    expect(screen.getByText("Next:")).toBeTruthy();
+    expect(screen.getByText("Session outputs")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Session outputs" })).toBeNull();
   });
 
   it("disables an output when no EmulatorJS core supports it", () => {

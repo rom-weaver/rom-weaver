@@ -11,6 +11,7 @@ import {
   type EmulatorSessionEntry,
 } from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
+import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { StepSection } from "./components/ds/layout.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
@@ -194,16 +195,19 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
     ? currentGame.core || getEmulatorJsCore(currentGame.platform, currentGame.fileName)
     : null;
   const canPlay = Boolean(currentGame && currentCore && currentGame.objectUrl && currentIdentity);
+  const workflowEmpty = !(entries.length || error || busy);
 
   return (
     <div className="emulator-test-view">
       <UnifiedDropZone
         accept={getFileInputAcceptAttributes().unifiedRom}
         addLabel="Choose another ROM"
+        big={workflowEmpty}
         heroLabel="Drop a ROM or choose a file"
         heroLabelCoarse="Choose a ROM file"
         id="emulator-test-input"
         inputId="emulator-test-file-input"
+        lead={{ line1: "ui.hero.testThesis", line2: "ui.hero.testThesis2" }}
         onFiles={(files) => void handleFiles(files)}
         supported={[
           { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
@@ -212,79 +216,101 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
         title="Load a game"
       />
 
-      <StepSection
-        headerExtra={
-          canPlay ? (
-            <button
-              aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-              className="btn ghost slim emulator-fullscreen-btn"
-              onClick={toggleFullscreen}
-              type="button"
-            >
-              {fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}
-            </button>
-          ) : undefined
-        }
-        meta={currentGame ? currentGame.fileName : undefined}
-        num="0x02"
-        title="Play"
-      >
-        <div className="card emulator-player">
-          {error ? (
-            <p className="emulatorjs-error" role="alert">
-              {error}
-            </p>
-          ) : currentGame && currentCore && currentGame.objectUrl && currentIdentity ? (
-            <div className="emulator-player-frame" ref={playerFrameRef}>
-              <iframe
-                allow="autoplay; fullscreen; gamepad"
-                allowFullScreen
-                key={currentGame.id}
-                ref={iframeRef}
-                referrerPolicy="no-referrer"
-                srcDoc={createEmulatorDocument(dataUrl, currentGame.objectUrl, currentIdentity.gameName, currentCore, {
-                  gameId: currentIdentity.gameId,
-                  gameLabel: currentIdentity.gameLabel,
-                })}
-                title={`EmulatorJS test for ${currentGame.fileName}`}
-              />
+      {workflowEmpty ? (
+        <GhostSteps
+          steps={[
+            { num: "0x02", title: "Play" },
+            { num: "0x03", title: "Session outputs" },
+          ]}
+        />
+      ) : (
+        <>
+          <StepSection
+            headerExtra={
+              canPlay ? (
+                <div className="emulator-player-actions">
+                  <button className="btn ghost slim" onClick={() => setCurrentGame(null)} type="button">
+                    Stop
+                  </button>
+                  <button
+                    aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                    className="btn ghost slim emulator-fullscreen-btn"
+                    onClick={toggleFullscreen}
+                    type="button"
+                  >
+                    {fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}
+                  </button>
+                </div>
+              ) : undefined
+            }
+            meta={currentGame ? currentGame.fileName : undefined}
+            num="0x02"
+            title="Play"
+          >
+            <div className="card emulator-player">
+              {error ? (
+                <p className="emulatorjs-error" role="alert">
+                  {error}
+                </p>
+              ) : currentGame && currentCore && currentGame.objectUrl && currentIdentity ? (
+                <div className="emulator-player-frame" ref={playerFrameRef}>
+                  <iframe
+                    allow="autoplay; fullscreen; gamepad"
+                    allowFullScreen
+                    key={currentGame.id}
+                    ref={iframeRef}
+                    referrerPolicy="no-referrer"
+                    srcDoc={createEmulatorDocument(
+                      dataUrl,
+                      currentGame.objectUrl,
+                      currentIdentity.gameName,
+                      currentCore,
+                      {
+                        gameId: currentIdentity.gameId,
+                        gameLabel: currentIdentity.gameLabel,
+                      },
+                    )}
+                    title={`EmulatorJS test for ${currentGame.fileName}`}
+                  />
+                </div>
+              ) : currentGame && currentCore && preparing ? (
+                <p className="emulator-player-empty">Preparing the ROM…</p>
+              ) : currentGame ? (
+                <p className="emulator-player-empty">No emulator core for this system.</p>
+              ) : entries.length ? (
+                <p className="emulator-player-empty">Choose a game from Session outputs to start playing.</p>
+              ) : (
+                <div className="emulator-player-empty">
+                  <Gamepad2 aria-hidden="true" />
+                  <p>No game is loaded.</p>
+                  <a className="btn ghost slim" href="apply">
+                    Patch a ROM first
+                  </a>
+                </div>
+              )}
             </div>
-          ) : currentGame && currentCore && preparing ? (
-            <p className="emulator-player-empty">Preparing the ROM…</p>
-          ) : currentGame ? (
-            <p className="emulator-player-empty">No emulator core for this system.</p>
-          ) : entries.length ? (
-            <p className="emulator-player-empty">Choose a game from Session outputs to start playing.</p>
-          ) : (
-            <div className="emulator-player-empty">
-              <Gamepad2 aria-hidden="true" />
-              <p>No game is loaded.</p>
-              <a className="btn ghost slim" href="apply">
-                Patch a ROM first
-              </a>
-            </div>
-          )}
-        </div>
-      </StepSection>
+          </StepSection>
 
-      <StepSection meta={String(entries.length)} num="0x03" title="Session outputs">
-        {onOpenStorage ? (
-          <button className="btn ghost slim emulator-saves-link" onClick={onOpenStorage} type="button">
-            Manage saved states and SRAM
-          </button>
-        ) : null}
-        {entries.length ? (
-          <div className="cards emulator-session-list">
-            {entries.map((entry) => (
-              <EmulatorSessionOutput current={entry.id === currentGameId} entry={entry} key={entry.id} />
-            ))}
-          </div>
-        ) : (
-          <p className="emulator-session-empty">
-            Outputs from the Apply tab and local ROMs will stay here for this session.
-          </p>
-        )}
-      </StepSection>
+          <StepSection meta={String(entries.length)} num="0x03" title="Session outputs">
+            {onOpenStorage ? (
+              <button className="btn ghost slim emulator-saves-link" onClick={onOpenStorage} type="button">
+                Manage saved states and SRAM
+              </button>
+            ) : null}
+            {entries.length ? (
+              <div className="cards emulator-session-list">
+                {entries.map((entry) => (
+                  <EmulatorSessionOutput current={entry.id === currentGameId} entry={entry} key={entry.id} />
+                ))}
+              </div>
+            ) : (
+              <p className="emulator-session-empty">
+                Outputs from the Apply tab and local ROMs will stay here for this session.
+              </p>
+            )}
+          </StepSection>
+        </>
+      )}
       {busy ? (
         <p aria-live="polite" className="emulatorjs-note">
           Preparing the ROM…

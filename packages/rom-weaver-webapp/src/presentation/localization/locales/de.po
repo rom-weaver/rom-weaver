@@ -505,6 +505,11 @@ msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis"
+msgstr "Eine gepatchte ROM im Emulator spielen, direkt im Browser,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.channel.preview"
 msgstr "Vorschau-Build"
 
@@ -807,6 +812,11 @@ msgstr "Was die Offline-Zustände bedeuten"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Neuigkeiten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis2"
+msgstr "mit Spielständen, die auf diesem Gerät bleiben —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
