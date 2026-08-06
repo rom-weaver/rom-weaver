@@ -1,4 +1,4 @@
-import { Gamepad2 } from "lucide-react";
+import { Gamepad2, Maximize, Minimize } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
@@ -11,9 +11,10 @@ import {
   type EmulatorSessionEntry,
 } from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
-import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
+import { StepSection } from "./components/ds/layout.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
+import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
@@ -80,9 +81,11 @@ type EmulatorTestViewProps = {
 const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const playerFrameRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [preparing, setPreparing] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const currentGame = entries.find((entry) => entry.id === currentGameId) || null;
   const currentIdentity = useMemo(
     () =>
@@ -138,6 +141,22 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
     };
   }, [currentGame]);
 
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    const handleFullscreenChange = () => setFullscreen(document.fullscreenElement === playerFrameRef.current);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (typeof document === "undefined") return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+      return;
+    }
+    void playerFrameRef.current?.requestFullscreen().catch(() => undefined);
+  }, []);
+
   const handleFiles = useCallback(async (files: File[]) => {
     if (!hasWebgl2()) {
       setError(WEBGL2_ERROR);
@@ -174,52 +193,10 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
   const currentCore = currentGame
     ? currentGame.core || getEmulatorJsCore(currentGame.platform, currentGame.fileName)
     : null;
+  const canPlay = Boolean(currentGame && currentCore && currentGame.objectUrl && currentIdentity);
+
   return (
     <div className="emulator-test-view">
-      <section aria-labelledby="emulator-player-title" className="card emulator-player">
-        <div className="emulator-player-head">
-          <div>
-            <p className="eyebrow mono">TEST BENCH</p>
-            <h1 id="emulator-player-title">Play a ROM in EmulatorJS</h1>
-          </div>
-          {currentGame ? <span className="emulator-player-game mono">{currentGame.fileName}</span> : null}
-        </div>
-        {error ? (
-          <p className="emulatorjs-error" role="alert">
-            {error}
-          </p>
-        ) : currentGame && currentCore && currentGame.objectUrl && currentIdentity ? (
-          <div className="emulator-player-frame">
-            <iframe
-              allow="autoplay; fullscreen; gamepad"
-              allowFullScreen
-              key={currentGame.id}
-              ref={iframeRef}
-              referrerPolicy="no-referrer"
-              srcDoc={createEmulatorDocument(dataUrl, currentGame.objectUrl, currentIdentity.gameName, currentCore, {
-                gameId: currentIdentity.gameId,
-                gameLabel: currentIdentity.gameLabel,
-              })}
-              title={`EmulatorJS test for ${currentGame.fileName}`}
-            />
-          </div>
-        ) : currentGame && currentCore && preparing ? (
-          <p className="emulator-player-empty">Preparing the ROM…</p>
-        ) : currentGame ? (
-          <p className="emulator-player-empty">No emulator core for this system.</p>
-        ) : entries.length ? (
-          <p className="emulator-player-empty">Choose a game from Session outputs to start playing.</p>
-        ) : (
-          <div className="emulator-player-empty">
-            <Gamepad2 aria-hidden="true" />
-            <p>No game is loaded.</p>
-            <a className="btn ghost slim" href="apply">
-              Patch a ROM first
-            </a>
-          </div>
-        )}
-      </section>
-
       <UnifiedDropZone
         accept={getFileInputAcceptAttributes().unifiedRom}
         addLabel="Choose another ROM"
@@ -235,14 +212,62 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
         title="Load a game"
       />
 
-      <section aria-labelledby="emulator-session-title" className="emulator-session">
-        <div className="emulator-session-head">
-          <div>
-            <p className="eyebrow mono">SESSION</p>
-            <h2 id="emulator-session-title">Session outputs</h2>
-          </div>
-          <span className="mono">{entries.length}</span>
+      <StepSection
+        headerExtra={
+          canPlay ? (
+            <button
+              aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              className="btn ghost slim emulator-fullscreen-btn"
+              onClick={toggleFullscreen}
+              type="button"
+            >
+              {fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}
+            </button>
+          ) : undefined
+        }
+        meta={currentGame ? currentGame.fileName : undefined}
+        num="0x02"
+        title="Play"
+      >
+        <div className="card emulator-player">
+          {error ? (
+            <p className="emulatorjs-error" role="alert">
+              {error}
+            </p>
+          ) : currentGame && currentCore && currentGame.objectUrl && currentIdentity ? (
+            <div className="emulator-player-frame" ref={playerFrameRef}>
+              <iframe
+                allow="autoplay; fullscreen; gamepad"
+                allowFullScreen
+                key={currentGame.id}
+                ref={iframeRef}
+                referrerPolicy="no-referrer"
+                srcDoc={createEmulatorDocument(dataUrl, currentGame.objectUrl, currentIdentity.gameName, currentCore, {
+                  gameId: currentIdentity.gameId,
+                  gameLabel: currentIdentity.gameLabel,
+                })}
+                title={`EmulatorJS test for ${currentGame.fileName}`}
+              />
+            </div>
+          ) : currentGame && currentCore && preparing ? (
+            <p className="emulator-player-empty">Preparing the ROM…</p>
+          ) : currentGame ? (
+            <p className="emulator-player-empty">No emulator core for this system.</p>
+          ) : entries.length ? (
+            <p className="emulator-player-empty">Choose a game from Session outputs to start playing.</p>
+          ) : (
+            <div className="emulator-player-empty">
+              <Gamepad2 aria-hidden="true" />
+              <p>No game is loaded.</p>
+              <a className="btn ghost slim" href="apply">
+                Patch a ROM first
+              </a>
+            </div>
+          )}
         </div>
+      </StepSection>
+
+      <StepSection meta={String(entries.length)} num="0x03" title="Session outputs">
         {onOpenStorage ? (
           <button className="btn ghost slim emulator-saves-link" onClick={onOpenStorage} type="button">
             Manage saved states and SRAM
@@ -259,7 +284,7 @@ const EmulatorTestView = ({ onOpenStorage }: EmulatorTestViewProps) => {
             Outputs from the Apply tab and local ROMs will stay here for this session.
           </p>
         )}
-      </section>
+      </StepSection>
       {busy ? (
         <p aria-live="polite" className="emulatorjs-note">
           Preparing the ROM…

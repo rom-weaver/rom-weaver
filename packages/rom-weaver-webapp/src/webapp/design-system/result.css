@@ -128,41 +128,36 @@
   gap: var(--sp-l);
 }
 .rw-app .emulator-player {
-  gap: var(--sp-m);
   padding: 0;
   overflow: clip;
   background: var(--well);
 }
-.rw-app .emulator-player-head,
-.rw-app .emulator-session-head {
-  display: flex;
-  gap: var(--sp-m);
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: var(--sp-m);
+.rw-app .emulator-fullscreen-btn {
+  flex: 0 0 auto;
+  align-self: center;
+  inline-size: 30px;
+  padding-inline: 0;
+  margin-inline-start: auto;
 }
-.rw-app .emulator-player-head h1,
-.rw-app .emulator-session-head h2 {
-  margin: 0;
-}
-.rw-app .emulator-player-game {
-  max-width: 45%;
-  padding: var(--sp-xs) var(--sp-s);
-  color: var(--thread-text);
-  overflow-wrap: anywhere;
-  background: color-mix(in oklab, var(--thread) 10%, transparent);
-  border: 1px solid color-mix(in oklab, var(--thread) 35%, var(--seam));
-  border-radius: var(--r-s);
+.rw-app .emulator-fullscreen-btn svg {
+  width: 15px;
+  height: 15px;
 }
 .rw-app .emulator-player-frame {
   min-height: min(62svh, 600px);
   background: #000;
+}
+.rw-app .emulator-player-frame:fullscreen {
+  height: 100%;
 }
 .rw-app .emulator-player-frame iframe {
   display: block;
   width: 100%;
   height: min(62svh, 600px);
   border: 0;
+}
+.rw-app .emulator-player-frame:fullscreen iframe {
+  height: 100%;
 }
 .rw-app .emulator-player-empty {
   display: grid;
@@ -180,19 +175,8 @@
   height: 34px;
   color: var(--thread-text);
 }
-.rw-app .emulator-session {
-  display: grid;
-  gap: var(--sp-m);
-}
-.rw-app .emulator-session-head {
-  align-items: center;
-  padding: 0;
-}
-.rw-app .emulator-session-head > .mono {
-  color: var(--thread-text);
-}
 .rw-app .emulator-saves-link {
-  justify-self: start;
+  margin-block-end: var(--sp-m);
 }
 .rw-app .emulator-session-list {
   gap: var(--sp-s);
@@ -205,10 +189,25 @@
   font-size: 0.78rem;
   color: var(--fault);
 }
+.rw-app .emulator-session-empty {
+  margin: 0;
+  color: var(--ink-3);
+}
+.rw-app .emulatorjs-test {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs) var(--sp-m);
+  align-items: center;
+  margin-top: var(--sp-s);
+}
 .rw-app .emulatorjs-note {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   color: var(--ink-3);
+}
+.rw-app .emulatorjs-test .emulatorjs-error {
+  flex-basis: 100%;
+  margin: 0;
 }
 .rw-app .emulatorjs-error {
   margin: 0 var(--sp-m) var(--sp-m);
@@ -216,12 +215,6 @@
 }
 
 @media (max-width: 720px) {
-  .rw-app .emulator-player-head {
-    display: grid;
-  }
-  .rw-app .emulator-player-game {
-    max-width: none;
-  }
   .rw-app .emulator-player-frame,
   .rw-app .emulator-player-frame iframe {
     height: 56svh;
