@@ -3,6 +3,7 @@ import {
   createEmulatorSaveExport,
   deleteEmulatorSave,
   importEmulatorSave,
+  ensureEmulatorSaveBridge,
   listEmulatorSaves,
   parseSerializedEmulatorSave,
   serializeEmulatorSave,
@@ -154,5 +155,37 @@ describe("emulator saves", () => {
     await writeEmulatorSave(record);
     await deleteEmulatorSave(record.gameId);
     expect(await listEmulatorSaves()).toEqual([]);
+  });
+
+  it("answers emulator save requests with the persisted SRAM", async () => {
+    const source = { postMessage: vi.fn() };
+    const listeners: Array<(event: MessageEvent<unknown>) => void> = [];
+    vi.stubGlobal("window", {
+      addEventListener: (_type: string, listener: (event: MessageEvent<unknown>) => void) => {
+        listeners.push(listener);
+      },
+    });
+    await writeEmulatorSave(record);
+    ensureEmulatorSaveBridge();
+
+    listeners[0]?.({
+      data: {
+        gameId: record.gameId,
+        kind: "request-load-sram",
+        source: "rom-weaver-emulator",
+      },
+      source,
+    } as unknown as MessageEvent<unknown>);
+
+    await vi.waitFor(() => expect(source.postMessage).toHaveBeenCalled());
+    expect(source.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: record.sram,
+        gameId: record.gameId,
+        kind: "load-sram",
+        source: "rom-weaver-emulator",
+      }),
+      "*",
+    );
   });
 });
