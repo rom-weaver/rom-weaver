@@ -200,6 +200,11 @@ describe("Masthead", () => {
     const beta = container.querySelector(".channel-badge") as HTMLButtonElement;
     expect(beta.querySelector(".tag-channel")?.textContent).toBe("beta");
     expect(beta.textContent).toBe("beta / v1.2.3");
+
+    rerender(withSettings(<Masthead {...mastheadProps} channelBadge="dev" />));
+    const dev = container.querySelector(".channel-badge") as HTMLButtonElement;
+    expect(dev.querySelector(".tag-channel")?.textContent).toBe("dev");
+    expect(dev.textContent).toBe("dev / v1.2.3");
   });
 
   it("preloads the Log dialog before interaction completes", () => {
