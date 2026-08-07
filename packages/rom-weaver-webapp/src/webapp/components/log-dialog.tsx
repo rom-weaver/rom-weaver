@@ -108,6 +108,9 @@ const getOpfsLeafEntries = (entries: readonly BrowserOpfsEntry[]) =>
       ),
   );
 const formatOpfsEntryCount = (count: number) => `${count.toLocaleString()} entr${count === 1 ? "y" : "ies"}`;
+/** Sizes are per-entry and optional, so the total covers only the entries that report one. */
+const totalOpfsSize = (entries: readonly StorageEntry[]) =>
+  entries.reduce((total, entry) => total + (entry.size ?? 0), 0);
 
 const getVirtualFileSize = (source: BrowserVirtualFile["source"]) => {
   if (!source) return undefined;
@@ -233,7 +236,10 @@ const StatusRows = ({ localizer, runtimeState }: { localizer: Localizer; runtime
         {localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
       </span>,
     ],
-    [localizer.message("ui.status.version"), `v${APP_VERSION}${distance}${DIRTY_HASH ? "*" : ""}`],
+    [
+      localizer.message("ui.status.version"),
+      <span className="status-build-id" key="version">{`v${APP_VERSION}${distance}${DIRTY_HASH ? "*" : ""}`}</span>,
+    ],
     [
       localizer.message("ui.status.commit"),
       COMMIT_HASH ? (
@@ -275,14 +281,17 @@ const StatusRows = ({ localizer, runtimeState }: { localizer: Localizer; runtime
     localizer.message(readPwaState() ? "ui.status.envPwa" : "ui.status.envWeb"),
   ]);
   return (
-    <dl className="status-rows">
-      {rows.map(([label, value]) => (
-        <div className="status-row" key={label}>
-          <dt>{label}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
-    </dl>
+    <section className="status-group">
+      <h3 className="dlg-section-title">{localizer.message("ui.status.build")}</h3>
+      <dl className="status-rows">
+        {rows.map(([label, value]) => (
+          <div className="status-row" key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 };
 
@@ -293,8 +302,8 @@ const StatusRows = ({ localizer, runtimeState }: { localizer: Localizer; runtime
  * in the same list, not by elimination.
  */
 const OfflineLegend = ({ current, localizer }: { current: RuntimeState; localizer: Localizer }) => (
-  <section className="sw-legend">
-    <h3 className="sw-legend-title">{localizer.message("ui.status.offlineLegend")}</h3>
+  <section className="status-group sw-legend">
+    <h3 className="dlg-section-title">{localizer.message("ui.status.offlineLegend")}</h3>
     <dl>
       {RUNTIME_STATES.map((state) => (
         <div className="sw-legend-row" data-current={state === current ? "" : undefined} key={state}>
@@ -570,14 +579,23 @@ const OpfsInspector = ({
   const emptyMessage = filter.trim() ? "No matching entries" : "OPFS has no entries";
   return (
     <div aria-live="polite" className="opfs-inspector mono">
-      <div className="opfs-summary">{loading ? "Loading OPFS…" : formatOpfsEntryCount(entries.length)}</div>
-      {error ? <div className="tracelog-empty">{error}</div> : null}
-      {!error && entries.length === 0 ? <div className="tracelog-empty">{emptyMessage}</div> : null}
+      {/* The count keeps its own element: it is what the listing is checked
+          against, and the bytes beside it are a second reading of the same set. */}
+      <div className="opfs-readout">
+        <span className="opfs-summary">{loading ? "Loading OPFS…" : formatOpfsEntryCount(entries.length)}</span>
+        {!loading && entries.length > 0 ? (
+          <span className="opfs-total">{formatOpfsSize(totalOpfsSize(entries))}</span>
+        ) : null}
+      </div>
+      {error ? <div className="opfs-error">{error}</div> : null}
+      {!error && entries.length === 0 ? <div className="opfs-empty">{emptyMessage}</div> : null}
       {!error && entries.length > 0 ? (
         <ul className="opfs-list">
           {entries.map((entry) => (
             <li className="opfs-row" key={`${entry.kind}:${entry.path}`}>
-              <span className="opfs-kind">{formatStorageEntryKind(entry)}</span>
+              <span className="opfs-kind" data-kind={formatStorageEntryKind(entry)}>
+                {formatStorageEntryKind(entry)}
+              </span>
               <span className="opfs-path">{entry.path}</span>
               <span className="opfs-size">{formatOpfsSize(entry.size)}</span>
             </li>
@@ -739,7 +757,7 @@ const LogsStoragePanel = ({
       >
         {showingOpfs ? (
           <section aria-labelledby="storage-opfs-title" className="storage-section storage-section-opfs">
-            <h3 className="storage-section-title" id="storage-opfs-title">
+            <h3 className="dlg-section-title storage-section-title" id="storage-opfs-title">
               OPFS
             </h3>
             <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />

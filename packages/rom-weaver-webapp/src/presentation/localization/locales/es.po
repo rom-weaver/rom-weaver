@@ -760,6 +760,11 @@ msgstr "Estos parches esperan ROMs distintas: cada tarjeta de parche muestra la 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.build"
+msgstr "Esta compilación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.env.threads"
 msgstr "hilos"
 

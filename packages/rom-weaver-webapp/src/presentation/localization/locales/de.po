@@ -760,6 +760,11 @@ msgstr "Diese Patches erwarten unterschiedliche ROMs - jede Patch-Karte zeigt di
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.build"
+msgstr "Dieser Build"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.env.threads"
 msgstr "Threads"
 
