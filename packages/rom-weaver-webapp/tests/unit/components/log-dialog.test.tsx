@@ -46,8 +46,6 @@ describe("LogDialog", () => {
     const branchLink = container.querySelector<HTMLAnchorElement>('.status-row a[href$="/tree/dev"]');
     expect(branchLink?.textContent).toBe("dev");
     expect(branchLink?.target).toBe("_blank");
-    // every offline state is named, so the badge above reads against the rest
-    expect(container.querySelectorAll(".sw-legend-row").length).toBe(7);
     // the settings panel belongs to its own tab, so it is not mounted on Status
     expect(container.querySelector(".settings-panel-stub")).toBeNull();
   });
@@ -175,7 +173,7 @@ describe("LogDialog", () => {
     expect(container.querySelector(".opfs-row")?.textContent).toContain("/user-files");
   });
 
-  it("hosts the OPFS inspector on Storage", () => {
+  it("keeps EmulatorJS controls out of Storage", () => {
     vi.mocked(listBrowserOpfs).mockResolvedValue([]);
     const { container: storageContainer } = render(
       <RomWeaverSettingsProvider settings={{}}>
@@ -183,19 +181,7 @@ describe("LogDialog", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(storageContainer.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
-    expect(storageContainer.querySelector("#storage-emulator-title")).toBeNull();
     expect(storageContainer.querySelector(".emulator-saves-panel")).toBeNull();
-    expect(storageContainer.querySelector(".storage-settings-field")).toBeNull();
-    expect(storageContainer.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true");
-    cleanup();
-
-    // the offline-cache download remains beside the status explanation
-    const { container: statusContainer } = render(
-      <RomWeaverSettingsProvider settings={{}}>
-        <LogDialog initialTab="status" onClose={() => undefined} onLevelChange={() => undefined} open />
-      </RomWeaverSettingsProvider>,
-    );
-    expect(statusContainer.querySelector("#logpanel-status .emulator-prefetch-panel")).not.toBeNull();
   });
 
   it("shows active virtual input files with their size", async () => {

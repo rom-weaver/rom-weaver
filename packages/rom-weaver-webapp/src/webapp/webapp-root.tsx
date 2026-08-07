@@ -27,6 +27,7 @@ import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
+import { scheduleEmulatorAssetPrefetch } from "./pwa/emulator-prefetch.ts";
 import { getSettingsUiState, SETTINGS_FIELD_METADATA } from "./settings/settings-state.ts";
 import { shouldWarnBeforeUnload } from "./unload-guard.ts";
 import type { WebappView } from "./webapp-state-types.ts";
@@ -237,6 +238,10 @@ function WebappRoot({
     if (notFound) return;
     syncWorkflowSeoMetadata(state.currentView);
   }, [notFound, state.currentView]);
+  useEffect(() => {
+    if (notFound) return undefined;
+    return scheduleEmulatorAssetPrefetch();
+  }, [notFound]);
   // Route mid-command wasm host selection prompts to the visible tab's form. All
   // forms stay mounted, so without this the last-mounted form would own prompts.
   useEffect(() => {

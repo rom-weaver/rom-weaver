@@ -1,5 +1,9 @@
+import { createLogger } from "../../lib/logging.ts";
+
 const EMULATORJS_MANIFEST_PATH = "emulatorjs/manifest.json";
 const EMULATORJS_DATA_PATH = "emulatorjs/data/";
+const EMULATOR_PREFETCH_DELAY_MS = 5000;
+const logger = createLogger("emulator-prefetch");
 
 type EmulatorAsset = {
   path: string;
@@ -11,59 +15,32 @@ type EmulatorAssetManifest = {
   files: readonly EmulatorAsset[];
 };
 
-type EmulatorPrefetchProgress = {
-  bytesDone: number;
-  currentFile?: string;
-  failedFiles: number;
-  filesDone: number;
-  skippedFiles: number;
-  totalBytes: number;
-  totalFiles: number;
-};
-
-type EmulatorPrefetchFailure = {
-  message: string;
-  path: string;
-};
-
-type EmulatorPrefetchResult = {
-  cancelled: boolean;
-  failures: readonly EmulatorPrefetchFailure[];
-  progress: EmulatorPrefetchProgress;
-};
-
-type CachedEmulatorAssets = {
-  cachedBytes: number;
-  cachedFiles: number;
-};
-
-type CacheStorageLike = Pick<CacheStorage, "match">;
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 type ServiceWorkerRegistrationLike = Pick<ServiceWorkerRegistration, "scope">;
-type ServiceWorkerContainerLike = Pick<ServiceWorkerContainer, "controller" | "ready">;
+
+type ServiceWorkerContainerLike = {
+  controller: ServiceWorker | null;
+  ready: Promise<ServiceWorkerRegistrationLike>;
+  addEventListener?: (type: "controllerchange", listener: () => void) => void;
+  removeEventListener?: (type: "controllerchange", listener: () => void) => void;
+};
+
 type NavigatorLike = { serviceWorker?: ServiceWorkerContainerLike };
 
-type LoadEmulatorPrefetchStateOptions = {
-  baseUrl?: string | URL;
-  caches?: CacheStorageLike;
+type PrefetchEmulatorAssetsOptions = {
   fetch?: FetchLike;
+  signal?: AbortSignal;
+};
+
+type ScheduleEmulatorAssetPrefetchOptions = PrefetchEmulatorAssetsOptions & {
+  delayMs?: number;
   navigator?: NavigatorLike;
 };
 
-type LoadedEmulatorPrefetchState = {
-  available: boolean;
-  baseUrl: URL | null;
-  cached: CachedEmulatorAssets;
-  manifest: EmulatorAssetManifest | null;
-  reason: string | null;
-};
-
-type PrefetchEmulatorAssetsOptions = {
-  baseUrl: string | URL;
-  caches: CacheStorageLike;
-  fetch?: FetchLike;
-  onProgress?: (progress: EmulatorPrefetchProgress) => void;
-  signal?: AbortSignal;
+type EmulatorPrefetchResult = {
+  downloadedFiles: number;
+  failedFiles: readonly string[];
 };
 
 const getGlobalNavigator = (): NavigatorLike | undefined => {
@@ -83,7 +60,7 @@ const normalizeBaseUrl = (value: string | URL) => {
 };
 
 const isSafeAssetPath = (value: unknown): value is string => {
-  if (typeof value !== "string" || !value || value.startsWith("/")) return false;
+  if (typeof value !== "string" || !value || value.startsWith("/") || value.includes("\\")) return false;
   const segments = value.split("/");
   return segments.every((segment) => segment && segment !== "." && segment !== "..");
 };
@@ -121,208 +98,91 @@ const getAssetUrl = (baseUrl: string | URL, path: string) => {
   return new URL(EMULATORJS_DATA_PATH + encodedPath, normalizeBaseUrl(baseUrl)).href;
 };
 
-const getTotalSize = (manifest: EmulatorAssetManifest) =>
-  manifest.files.reduce((total, file) => total + file.sizeBytes, 0);
-
-const getCachedAssetPaths = async (
-  manifest: EmulatorAssetManifest,
-  baseUrl: string | URL,
-  cacheStorage: CacheStorageLike,
-) => {
-  const cachedPaths = new Set<string>();
-  await Promise.all(
-    manifest.files.map(async (file) => {
-      if (await cacheStorage.match(getAssetUrl(baseUrl, file.path))) cachedPaths.add(file.path);
-    }),
-  );
-  return cachedPaths;
-};
-
-const getCachedEmulatorAssets = async (
-  manifest: EmulatorAssetManifest,
-  baseUrl: string | URL,
-  cacheStorage: CacheStorageLike,
-): Promise<CachedEmulatorAssets> => {
-  const cachedPaths = await getCachedAssetPaths(manifest, baseUrl, cacheStorage);
-  return manifest.files.reduce(
-    (cached, file) => {
-      if (!cachedPaths.has(file.path)) return cached;
-      return {
-        cachedBytes: cached.cachedBytes + file.sizeBytes,
-        cachedFiles: cached.cachedFiles + 1,
-      };
-    },
-    { cachedBytes: 0, cachedFiles: 0 },
-  );
-};
-
-const resolveRuntime = async (
-  options: LoadEmulatorPrefetchStateOptions,
-): Promise<{ available: boolean; baseUrl: URL | null; reason: string | null }> => {
-  if (options.baseUrl) return { available: true, baseUrl: normalizeBaseUrl(options.baseUrl), reason: null };
-  const serviceWorker = (options.navigator ?? getGlobalNavigator())?.serviceWorker;
-  if (!serviceWorker?.controller) {
-    return {
-      available: false,
-      baseUrl: null,
-      reason: "The service worker is not controlling this page.",
-    };
-  }
-  try {
-    const registration: ServiceWorkerRegistrationLike = await serviceWorker.ready;
-    return { available: true, baseUrl: normalizeBaseUrl(registration.scope), reason: null };
-  } catch {
-    return {
-      available: false,
-      baseUrl: null,
-      reason: "The service worker registration is not ready.",
-    };
-  }
-};
-
-const loadEmulatorPrefetchState = async (
-  options: LoadEmulatorPrefetchStateOptions = {},
-): Promise<LoadedEmulatorPrefetchState> => {
-  const runtime = await resolveRuntime(options);
-  if (!runtime.baseUrl) {
-    return {
-      ...runtime,
-      cached: { cachedBytes: 0, cachedFiles: 0 },
-      manifest: null,
-    };
-  }
-  const fetcher = options.fetch ?? getGlobalFetch();
-  const response = await fetcher(getManifestUrl(runtime.baseUrl), { credentials: "same-origin" });
-  if (!response.ok) throw new Error("EmulatorJS asset manifest could not be loaded");
-  const manifest = parseManifest(await response.json());
-  const cacheStorage = options.caches ?? (typeof caches === "undefined" ? undefined : caches);
-  const cached =
-    runtime.available && cacheStorage
-      ? await getCachedEmulatorAssets(manifest, runtime.baseUrl, cacheStorage)
-      : { cachedBytes: 0, cachedFiles: 0 };
-  setEmulatorCoresComplete(runtime.available ? cached.cachedFiles >= manifest.files.length : null);
-  return { ...runtime, cached, manifest };
-};
-
-const createProgress = (
-  manifest: EmulatorAssetManifest,
-  cachedPaths: ReadonlySet<string>,
-): EmulatorPrefetchProgress => {
-  const cachedFiles = manifest.files.filter((file) => cachedPaths.has(file.path));
-  return {
-    bytesDone: cachedFiles.reduce((total, file) => total + file.sizeBytes, 0),
-    failedFiles: 0,
-    filesDone: cachedFiles.length,
-    skippedFiles: cachedFiles.length,
-    totalBytes: getTotalSize(manifest),
-    totalFiles: manifest.files.length,
-  };
-};
-
 const prefetchEmulatorAssets = async (
-  manifest: EmulatorAssetManifest,
-  options: PrefetchEmulatorAssetsOptions,
+  baseUrl: string | URL,
+  options: PrefetchEmulatorAssetsOptions = {},
 ): Promise<EmulatorPrefetchResult> => {
   const fetcher = options.fetch ?? getGlobalFetch();
-  const cachedPaths = await getCachedAssetPaths(manifest, options.baseUrl, options.caches);
-  const progress = createProgress(manifest, cachedPaths);
-  const failures: EmulatorPrefetchFailure[] = [];
-  options.onProgress?.({ ...progress });
+  const manifestResponse = await fetcher(getManifestUrl(baseUrl), {
+    credentials: "same-origin",
+    signal: options.signal,
+  });
+  if (!manifestResponse.ok) throw new Error("EmulatorJS asset manifest could not be loaded");
+  const manifest = parseManifest(await manifestResponse.json());
+  const failedFiles: string[] = [];
+  let downloadedFiles = 0;
 
   for (const file of manifest.files) {
-    if (cachedPaths.has(file.path)) continue;
-    if (options.signal?.aborted) {
-      return { cancelled: true, failures, progress: { ...progress } };
-    }
-    const currentProgress = { ...progress, currentFile: file.path };
-    options.onProgress?.(currentProgress);
+    if (options.signal?.aborted) break;
     try {
-      const response = await fetcher(getAssetUrl(options.baseUrl, file.path), {
+      const response = await fetcher(getAssetUrl(baseUrl, file.path), {
         credentials: "same-origin",
         signal: options.signal,
       });
-      if (options.signal?.aborted) {
-        return { cancelled: true, failures, progress: { ...progress } };
-      }
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      progress.bytesDone += file.sizeBytes;
-      progress.filesDone += 1;
-      progress.currentFile = undefined;
-      options.onProgress?.({ ...progress });
-    } catch (error) {
-      if (options.signal?.aborted) {
-        return { cancelled: true, failures, progress: { ...progress } };
-      }
-      progress.failedFiles += 1;
-      progress.currentFile = undefined;
-      failures.push({
-        message: error instanceof Error ? error.message : String(error),
-        path: file.path,
-      });
-      options.onProgress?.({ ...progress });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      downloadedFiles += 1;
+    } catch {
+      if (options.signal?.aborted) break;
+      failedFiles.push(file.path);
     }
   }
-  return { cancelled: false, failures, progress: { ...progress } };
+
+  return { downloadedFiles, failedFiles };
 };
 
-const formatEmulatorBytes = (bytes: number) => {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " KB";
-  const megabytes = (bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "");
-  return megabytes + " MB";
+const scheduleEmulatorAssetPrefetch = (options: ScheduleEmulatorAssetPrefetchOptions = {}): (() => void) => {
+  const serviceWorker = (options.navigator ?? getGlobalNavigator())?.serviceWorker;
+  if (!serviceWorker) return () => undefined;
+
+  let cancelled = false;
+  let started = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let fetchController: AbortController | undefined;
+
+  const start = () => {
+    if (cancelled || started || !serviceWorker.controller) return;
+    started = true;
+    serviceWorker.removeEventListener?.("controllerchange", start);
+    timer = setTimeout(() => {
+      if (cancelled) return;
+      fetchController = new AbortController();
+      void serviceWorker.ready
+        .then((registration) =>
+          prefetchEmulatorAssets(registration.scope, {
+            fetch: options.fetch,
+            signal: fetchController?.signal,
+          }),
+        )
+        .then((result) => {
+          if (fetchController?.signal.aborted) return;
+          if (result.failedFiles.length) {
+            logger.warn("EmulatorJS prefetch incomplete", {
+              downloadedFiles: result.downloadedFiles,
+              failedFiles: result.failedFiles,
+            });
+            return;
+          }
+          logger.debug("EmulatorJS prefetch complete", { downloadedFiles: result.downloadedFiles });
+        })
+        .catch((error) => {
+          if (fetchController?.signal.aborted) return;
+          logger.warn("EmulatorJS prefetch failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }, options.delayMs ?? EMULATOR_PREFETCH_DELAY_MS);
+  };
+
+  if (serviceWorker.controller) start();
+  else serviceWorker.addEventListener?.("controllerchange", start);
+
+  return () => {
+    cancelled = true;
+    if (timer !== undefined) clearTimeout(timer);
+    fetchController?.abort();
+    serviceWorker.removeEventListener?.("controllerchange", start);
+  };
 };
 
-/**
- * Whether every EmulatorJS asset is in the offline cache: true, false, or null
- * while unknown / not applicable (no service worker, load failed). Module-level
- * so the masthead runtime chip can read it without owning the prefetch panel.
- */
-let emulatorCoresComplete: boolean | null = null;
-const emulatorCoresCompleteListeners = new Set<() => void>();
-
-const readEmulatorCoresComplete = (): boolean | null => emulatorCoresComplete;
-
-const setEmulatorCoresComplete = (value: boolean | null): void => {
-  if (emulatorCoresComplete === value) return;
-  emulatorCoresComplete = value;
-  for (const listener of emulatorCoresCompleteListeners) listener();
-};
-
-const subscribeEmulatorCoresComplete = (listener: () => void): (() => void) => {
-  emulatorCoresCompleteListeners.add(listener);
-  return () => emulatorCoresCompleteListeners.delete(listener);
-};
-
-let emulatorCoresProbeInFlight = false;
-let emulatorCoresProbeDone = false;
-/**
- * Background probe so the runtime chip knows the cache state without opening
- * the dialog. Latches only once the service worker was actually available: a
- * first-visit probe can run before the controller claims the page, and that
- * attempt must not block a retry after the status changes.
- */
-const probeEmulatorCoresComplete = async (options: LoadEmulatorPrefetchStateOptions = {}): Promise<void> => {
-  if (emulatorCoresProbeDone || emulatorCoresProbeInFlight) return;
-  emulatorCoresProbeInFlight = true;
-  try {
-    const state = await loadEmulatorPrefetchState(options);
-    emulatorCoresProbeDone = state.available;
-  } catch {
-    // Leave the latch open so a later service-worker transition can retry.
-  } finally {
-    emulatorCoresProbeInFlight = false;
-  }
-};
-
-export {
-  formatEmulatorBytes,
-  getCachedEmulatorAssets,
-  loadEmulatorPrefetchState,
-  parseManifest,
-  prefetchEmulatorAssets,
-  probeEmulatorCoresComplete,
-  readEmulatorCoresComplete,
-  setEmulatorCoresComplete,
-  subscribeEmulatorCoresComplete,
-};
-export type { EmulatorAssetManifest, EmulatorPrefetchProgress, LoadedEmulatorPrefetchState };
+export { parseManifest, prefetchEmulatorAssets, scheduleEmulatorAssetPrefetch };
+export type { EmulatorAssetManifest };
