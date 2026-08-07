@@ -52,11 +52,12 @@
           document.documentElement.setAttribute("data-theme", preferred || system);
           const settings = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
           const common = settings && settings.common ? settings.common : null;
+          // No version gate on these reads: a stale pinned version (v5 while
+          // storage writes v6) silently disabled them, and the boot loader
+          // wipes payloads it cannot map anyway. Each read checks its field's
+          // type and falls open to the boot default on anything unexpected.
           document.documentElement.dataset.betaToolsEnabled =
-            settings && settings.version === 5 && common && common.betaToolsEnabled === true ? "true" : "false";
-          // Read without a version gate: the field is a plain boolean in
-          // `common` and a missing or reshaped value falls open to showing
-          // the beacon, which is the safe side.
+            common && common.betaToolsEnabled === true ? "true" : "false";
           document.documentElement.dataset.onboardingEnabled =
             common && common.onboardingEnabled === false ? "false" : "true";
           const storedAccent = common && typeof common.accent === "string" ? common.accent : "";
@@ -173,7 +174,9 @@
           const stored = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
           const applyCompression = stored?.apply?.compression;
           const createCompression = stored?.create?.compression;
-          if (stored?.version === 5 && (applyCompression || createCompression)) {
+          // No version gate - see the theme/accent script above. The parse
+          // below rejects anything that is not a whole thread count.
+          if (applyCompression || createCompression) {
             const configured =
               applyCompression?.threads ??
               applyCompression?.workerThreads ??
