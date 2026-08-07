@@ -227,11 +227,28 @@
 .rw-app .release-changelog + .release-changelog {
   margin-block-start: var(--sp-m);
 }
+/* Warp strung under the heading: the dashed hairline the drawer's info toggle
+   wears, which marks a sub-head here without giving it the thread the release
+   version above it already owns. */
 .rw-app .release-changelog-group {
-  margin-block: 0 var(--sp-xs);
-  font-size: 0.82rem;
-  font-weight: 650;
+  position: relative;
+  display: inline-block;
+  padding-block-end: 4px;
+  margin-block: 0 var(--sp-s);
+  font-size: 0.72rem;
+  font-weight: 700;
   color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.rw-app .release-changelog-group::after {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 1px;
+  content: "";
+  background: repeating-linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px);
+  opacity: 0.5;
 }
 .rw-app .release-changelog-entries {
   padding-inline-start: 1.25rem;
@@ -240,9 +257,11 @@
 .rw-app .release-changelog-entries li + li {
   margin-block-start: var(--sp-xs);
 }
+/* Hashes and PR numbers are readouts, so they take the same colour the Status
+   tab's commit and the Storage tab's sizes read in. */
 .rw-app .release-changelog-ref {
   font-size: 0.78rem;
-  color: var(--ink-2);
+  color: var(--weft);
   white-space: nowrap;
 }
 .rw-app .changelog-actions {
@@ -257,10 +276,24 @@
    Tinted and boxed so it reads as the one thing on the tab that asks for an
    action, with the shipped list continuing underneath in plain chrome. */
 .rw-app .changelog-update {
+  position: relative;
   padding: var(--sp-m);
+  overflow: clip;
   background: color-mix(in oklab, var(--care) 7%, var(--plate));
   border: 1px solid color-mix(in oklab, var(--care) 34%, var(--seam));
   border-radius: var(--r-m);
+}
+/* The same seam every plate on these tabs wears, thrown in amber rather than
+   thread so the banner stays the one thing here asking to be acted on. */
+.rw-app .changelog-update::before {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 3px;
+  pointer-events: none;
+  content: "";
+  background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--care) 2px 5px, transparent 5px 7px);
+  opacity: 0.55;
 }
 /* The transition and full-changelog link sit on the title's baseline while they
    fit, and drop to their own right-aligned row once the head runs out of
@@ -293,10 +326,24 @@
   flex-direction: column;
   gap: var(--sp-s);
 }
+/* A release is a plate carrying the woven seam, the same build the Status tab's
+   sections are made from - the two tabs are both readouts and should look it. */
 .rw-app .rel {
-  background: var(--well);
-  border: 1px solid var(--seam-soft);
-  border-radius: var(--r-s);
+  position: relative;
+  overflow: clip;
+  background: var(--plate-2);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+}
+.rw-app .rel::before {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 3px;
+  pointer-events: none;
+  content: "";
+  background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--thread) 2px 5px, transparent 5px 7px);
+  opacity: 0.3;
 }
 .rw-app .rel-summary {
   display: flex;
@@ -308,7 +355,7 @@
   color: var(--ink);
   cursor: pointer;
   list-style: none;
-  border-radius: var(--r-s);
+  border-radius: var(--r-m) var(--r-m) 0 0;
 }
 /* the disclosure triangle is drawn by the marker, so Safari's default one goes */
 .rw-app .rel-summary::-webkit-details-marker {
