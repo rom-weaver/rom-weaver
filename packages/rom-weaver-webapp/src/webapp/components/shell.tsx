@@ -433,9 +433,6 @@ const AccentMenuItem = ({ localizer, onChange }: { localizer: Localizer; onChang
 };
 
 type UtilityMenuProps = {
-  confirmExternalNavigation?: (href: string) => Promise<boolean>;
-  donateHref?: string;
-  githubHref?: string;
   localizer: Localizer;
   menuClassName?: string;
   mobile?: boolean;
@@ -451,9 +448,6 @@ type UtilityMenuProps = {
 };
 
 const UtilityMenu = ({
-  confirmExternalNavigation,
-  donateHref,
-  githubHref,
   localizer,
   menuId,
   mobile = false,
@@ -575,39 +569,6 @@ const UtilityMenu = ({
         <Wrench aria-hidden="true" />
         {toolsLabel ?? "Tools"}
       </button>
-      <span aria-hidden="true" className="more-separator" />
-      {githubHref ? (
-        <a
-          className="more-link"
-          href={githubHref}
-          onClick={(event) => {
-            onClose();
-            guardFooterExternalClick(event, githubHref, confirmExternalNavigation);
-          }}
-          rel="noreferrer"
-          role="menuitem"
-          target="_blank"
-        >
-          <Github aria-hidden="true" />
-          {localizer.message("ui.tools.github")}
-        </a>
-      ) : null}
-      {donateHref ? (
-        <a
-          className="more-link more-support"
-          href={donateHref}
-          onClick={(event) => {
-            onClose();
-            guardFooterExternalClick(event, donateHref, confirmExternalNavigation);
-          }}
-          rel="noreferrer"
-          role="menuitem"
-          target="_blank"
-        >
-          <Heart aria-hidden="true" />
-          {localizer.message("ui.footer.donate")}
-        </a>
-      ) : null}
     </div>
   );
 };
@@ -854,7 +815,6 @@ const Masthead = ({
   tabs,
   currentTab,
   dirty,
-  donateHref,
   homeHref,
   onSelectTab,
   onOpenChangelog,
@@ -882,7 +842,6 @@ const Masthead = ({
   tabs: WorkflowTab[];
   currentTab: string;
   dirty?: boolean;
-  donateHref?: string;
   /** The workbench, as a route: a bare "/" maps to no route and so hard-reloads. */
   homeHref: string;
   onSelectTab: (id: string) => void;
@@ -920,8 +879,6 @@ const Masthead = ({
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
-  const githubLabel = localizer.message("ui.tools.github");
-  const supportLabel = localizer.message("ui.footer.donate");
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
   const runtimeState = resolveRuntimeState(hydratedStatus, updateReady);
   const runtimeLabel = localizer.message(RUNTIME_MESSAGES[runtimeState].label);
@@ -1044,37 +1001,6 @@ const Masthead = ({
           tabs={tabs}
         />
         <div className="masthead-tools" ref={toolsRef}>
-          {githubHref ? (
-            <a
-              className="tool mobile-utility-source"
-              href={githubHref}
-              onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <Github aria-hidden="true" />
-              <span aria-hidden="true" className="tip">
-                {githubLabel}
-              </span>
-              <span className="sr-only">{githubLabel}</span>
-            </a>
-          ) : null}
-          {donateHref ? (
-            <a
-              className="tool tool-support mobile-utility-support"
-              href={donateHref}
-              onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <Heart aria-hidden="true" />
-              <span aria-hidden="true" className="tip">
-                {supportLabel}
-              </span>
-              <span className="sr-only">{supportLabel}</span>
-            </a>
-          ) : null}
-          <span aria-hidden="true" className="actions-sep" />
           <button
             aria-haspopup="dialog"
             aria-label={runtimeLabel}
@@ -1119,9 +1045,6 @@ const Masthead = ({
           <MoreMenu
             buttonClassName="tool"
             className="desktop-more"
-            confirmExternalNavigation={confirmExternalNavigation}
-            donateHref={donateHref}
-            githubHref={githubHref}
             localizer={localizer}
             menuId="more-menu"
             moreLabel={moreLabel}
@@ -1142,9 +1065,6 @@ const Masthead = ({
           />
           {utilityOpen ? (
             <UtilityMenu
-              confirmExternalNavigation={confirmExternalNavigation}
-              donateHref={donateHref}
-              githubHref={githubHref}
               localizer={localizer}
               menuClassName="shared-more-menu"
               menuId="more-menu"
@@ -1191,9 +1111,6 @@ const Masthead = ({
             <MoreMenu
               buttonClassName="dock-action"
               className="mobile-more"
-              confirmExternalNavigation={confirmExternalNavigation}
-              donateHref={donateHref}
-              githubHref={githubHref}
               localizer={localizer}
               menuId="more-menu"
               moreLabel={moreLabel}
@@ -1219,6 +1136,50 @@ const Masthead = ({
         tabs={tabs}
       />
     </>
+  );
+};
+
+const SiteFooter = ({
+  confirmExternalNavigation,
+  donateHref,
+  githubHref,
+}: {
+  confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  donateHref?: string;
+  githubHref?: string;
+}) => {
+  const localizer = useUiLocalizer();
+  const githubLabel = localizer.message("ui.tools.github");
+  const supportLabel = localizer.message("ui.footer.donate");
+  return (
+    <footer className="site-footer">
+      <div className="site-footer-actions">
+        {githubHref ? (
+          <a
+            className="footer-link"
+            href={githubHref}
+            onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Github aria-hidden="true" />
+            <span>{githubLabel}</span>
+          </a>
+        ) : null}
+        {donateHref ? (
+          <a
+            className="footer-link footer-support"
+            href={donateHref}
+            onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Heart aria-hidden="true" />
+            <span>{supportLabel}</span>
+          </a>
+        ) : null}
+      </div>
+    </footer>
   );
 };
 
@@ -1277,6 +1238,7 @@ const BannerDismissButton = ({ label, onDismiss }: { label: string; onDismiss: (
 export type { RuntimeState };
 export {
   Masthead,
+  SiteFooter,
   prefersReducedMotion,
   readPwaState,
   Reveal,

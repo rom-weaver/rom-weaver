@@ -479,15 +479,20 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   await page.viewport(1280, 900);
 });
 
-test("mobile More contains every masthead utility action", async () => {
+test("mobile More keeps app utilities and the footer keeps external actions", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".masthead-tools")).toBeTruthy();
-  for (const selector of [".mobile-utility-source", ".mobile-utility-support"]) {
-    const link = document.querySelector(selector);
-    expect(link).not.toBeNull();
-    expect(getComputedStyle(link).display).toBe("none");
+  const footer = document.querySelector(".site-footer");
+  expect(footer).not.toBeNull();
+  for (const [label, href] of [
+    ["View source on GitHub", "https://github.com/rom-weaver/rom-weaver/"],
+    ["Support", "https://ko-fi.com/brandonocasey"],
+  ]) {
+    const link = page.getByRole("link", { name: label });
+    await expect.element(link).toBeInTheDocument();
+    expect([...footer.querySelectorAll("a")].some((node) => node.getAttribute("href") === href)).toBe(true);
   }
   const mastheadStatus = document.querySelector(".masthead-status");
   for (const selector of [".masthead-status", ".mobile-utility-theme", ".mobile-utility-accent"]) {
@@ -497,8 +502,11 @@ test("mobile More contains every masthead utility action", async () => {
   }
 
   await page.getByRole("button", { name: "More" }).click();
-  for (const label of ["View source on GitHub", "Support", "Status", "Theme", "Accent"]) {
+  for (const label of ["Status", "Theme", "Accent"]) {
     await expect.element(page.getByRole("menuitem", { name: label })).toBeInTheDocument();
+  }
+  for (const label of ["View source on GitHub", "Support"]) {
+    await expect.element(page.getByRole("menuitem", { name: label })).not.toBeInTheDocument();
   }
   expect(document.querySelector('.more-menu [role="menuitem"][data-sw] svg')?.outerHTML).toBe(
     document.querySelector(".masthead-status svg")?.outerHTML,
@@ -507,18 +515,13 @@ test("mobile More contains every masthead utility action", async () => {
   expect(menuStatus).not.toBeNull();
   expect(getComputedStyle(menuStatus).color).toBe(getComputedStyle(mastheadStatus).color);
   expect(getComputedStyle(menuStatus.querySelector("svg")).color).toBe(getComputedStyle(mastheadStatus).color);
-  const neutralItem = document.querySelector('.more-menu [role="menuitem"]:not(.more-status):not(.more-support)');
+  const neutralItem = document.querySelector('.more-menu [role="menuitem"]:not(.more-status)');
   const neutralColor = getComputedStyle(neutralItem).color;
   for (const item of document.querySelectorAll('.more-menu [role="menuitem"]')) {
-    if (item.classList.contains("more-status") || item.classList.contains("more-support")) continue;
+    if (item.classList.contains("more-status")) continue;
     expect(getComputedStyle(item).color).toBe(neutralColor);
     expect(getComputedStyle(item.querySelector("svg")).color).toBe(neutralColor);
   }
-  const supportItem = document.querySelector(".more-menu .more-support");
-  expect(getComputedStyle(supportItem).color).toBe(getComputedStyle(document.querySelector(".tool-support")).color);
-  expect(getComputedStyle(supportItem.querySelector("svg")).color).toBe(
-    getComputedStyle(document.querySelector(".tool-support svg")).color,
-  );
   await page.getByRole("menuitem", { name: "Accent" }).click();
   await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
 
