@@ -1,6 +1,9 @@
+import { createLogger } from "../../lib/logging.ts";
+
 const EMULATORJS_MANIFEST_PATH = "emulatorjs/manifest.json";
 const EMULATORJS_DATA_PATH = "emulatorjs/data/";
 const EMULATOR_PREFETCH_DELAY_MS = 5000;
+const logger = createLogger("emulator-prefetch");
 
 type EmulatorAsset = {
   path: string;
@@ -150,7 +153,23 @@ const scheduleEmulatorAssetPrefetch = (options: ScheduleEmulatorAssetPrefetchOpt
             signal: fetchController?.signal,
           }),
         )
-        .catch(() => undefined);
+        .then((result) => {
+          if (fetchController?.signal.aborted) return;
+          if (result.failedFiles.length) {
+            logger.warn("EmulatorJS prefetch incomplete", {
+              downloadedFiles: result.downloadedFiles,
+              failedFiles: result.failedFiles,
+            });
+            return;
+          }
+          logger.debug("EmulatorJS prefetch complete", { downloadedFiles: result.downloadedFiles });
+        })
+        .catch((error) => {
+          if (fetchController?.signal.aborted) return;
+          logger.warn("EmulatorJS prefetch failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
     }, options.delayMs ?? EMULATOR_PREFETCH_DELAY_MS);
   };
 

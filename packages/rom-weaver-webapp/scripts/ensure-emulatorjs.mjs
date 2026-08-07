@@ -9,9 +9,6 @@
 //   node scripts/ensure-emulatorjs.mjs           # fetch anything missing/stale
 //   node scripts/ensure-emulatorjs.mjs --force   # re-fetch every file
 //
-// Set ROM_WEAVER_SKIP_EMULATORJS=1 to skip (the EmulatorJS tester is the only
-// thing that needs it; the rest of the webapp builds fine without it).
-
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -49,11 +46,7 @@ const fetchVerified = async (url, expectedHash) => {
   return body;
 };
 
-const main = async (env = process.env, argv = process.argv.slice(2)) => {
-  if (String(env.ROM_WEAVER_SKIP_EMULATORJS || "") === "1") {
-    log("warn", "ROM_WEAVER_SKIP_EMULATORJS=1 set; skipping the EmulatorJS fetch");
-    return;
-  }
+const main = async (argv = process.argv.slice(2)) => {
   const force = argv.includes("--force");
   const lock = readLock();
   const stale = Object.entries(lock.files).filter(
