@@ -223,11 +223,17 @@ html:has(.docs-workbench) {
 }
 
 /* --- warp rail: the signature --- */
+/* Plated like the guide nav above it, so the two rail items read as one
+   column of panels rather than a card followed by loose text. The whole rail
+   is `display: none` below 860px, so this needs no breakpoint of its own. */
 .rw-app .warp-rail {
-  padding-inline: 2px;
+  padding: 0 2px var(--sp-s);
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
 }
 .rw-app .warp-rail-title {
-  padding: 0 0 var(--sp-s) 2.35rem;
+  padding: var(--sp-m) 0 var(--sp-s) 2.35rem;
 }
 .rw-app .warp-rail-list {
   position: relative;
@@ -537,9 +543,13 @@ html:has(.docs-workbench) {
   background: transparent;
   border: 0;
 }
+/* The inline margin is zeroed deliberately: the UA sheet ships `margin: 1em
+   40px`, and setting only `margin-block` leaves that 40px in place, indenting
+   a note far off the left edge of the table it belongs to. */
 .rw-app .docs-article blockquote {
-  padding: var(--sp-xs) 0 var(--sp-xs) var(--sp-l);
+  padding: var(--sp-xs) 0 var(--sp-xs) var(--sp-m);
   margin-block: var(--sp-xl);
+  margin-inline: 0;
   color: var(--ink-2);
   border-left: 2px solid var(--thread);
 }
