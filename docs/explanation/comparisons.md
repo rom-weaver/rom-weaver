@@ -55,9 +55,10 @@ list of specifications consulted is in
 
 ## At a glance
 
-The patch counts are row counts from the [Applying a patch](#applying-a-patch)
+The patch counts are format counts from the [Applying a patch](#applying-a-patch)
 and [Creating a patch](#creating-a-patch) tables, so every tool is counted the
-same way. Partial support counts as a row.
+same way. Partial support counts. A row naming several formats counts as each
+of them.
 
 | Capability | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 | chdman | Dolphin tool |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -233,11 +234,16 @@ tool here needs you to convert, patch, and convert back by hand.
 | Bake in Game Genie / GameShark codes | ✅ `--code` | ❌ | ❌ | ❌ | ❌ |
 | Undo a PPF3 patch | ✅ `tools ppf-undo` | ❌ | ❌ | ❌ | ❌ |
 | Override a failed checksum | ✅ `--ignore-checksum-validation` | ✅ | ✅ `--ignore-checksum` | ❌ | ❌ |
-| Patch metadata on create | ✅ RUP description, EBP JSON | ✅ RUP description, EBP JSON | ✅ BPS manifest | ❌ | ✅ `-A` app header |
+| Patch metadata on create | ⚠️ SOLID fields only ² | ✅ RUP description, EBP JSON | ✅ BPS manifest | ❌ | ✅ `-A` app header |
 | Machine-readable output | ✅ `--json` | ❌ | ❌ | ❌ | ❌ |
 
 > ¹ These apply exactly one patch per run. Hacks that ship a base patch plus an
 > update need two passes, and you have to keep the intermediate file yourself.
+>
+> ² `--solid-system`, `--solid-game`, `--solid-hack`, `--solid-version`,
+> `--solid-author`, `--solid-contact`, and `--solid-comment`. RUP and EBP
+> patches are written with an empty description and a placeholder JSON block
+> respectively; neither can be set.
 
 ## Beyond patching
 
@@ -249,8 +255,9 @@ tool here needs you to convert, patch, and convert back by hand.
 | Ingest | ✅ sorts a mixed folder into ROMs and patches | ❌ |
 | Bundles | ✅ `rom-weaver-bundle.json` recipes ² | ❌ |
 
-> ¹ `trim --revert` pads a trimmed file back out, and `--revert-marker` stores
-> a footer so the revert is exact rather than a guess at the padding.
+> ¹ `trim --revert` pads a trimmed file back out for NDS, GBA, and 3DS, and
+> `--revert-marker` stores a footer so that revert is exact rather than a guess
+> at the padding. XISO and RVZ scrub are one-way.
 >
 > ² A bundle records the ROM's checksums, the patch order, and the expected
 > result, so someone else can reproduce your build. See
