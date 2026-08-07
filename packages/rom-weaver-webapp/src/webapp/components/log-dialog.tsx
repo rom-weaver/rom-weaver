@@ -30,8 +30,8 @@ import {
   formatEmulatorBytes,
   getCachedEmulatorAssets,
   loadEmulatorPrefetchState,
-  prefetchEmulatorAssets,
   setEmulatorCoresComplete,
+  syncEmulatorAssetsInServiceWorker,
   type EmulatorPrefetchProgress,
   type LoadedEmulatorPrefetchState,
 } from "../pwa/emulator-prefetch.ts";
@@ -648,9 +648,7 @@ const EmulatorPrefetchPanel = ({ active }: { active: boolean }) => {
     setFailures([]);
     setCancelled(false);
     try {
-      const result = await prefetchEmulatorAssets(state.manifest, {
-        baseUrl: state.baseUrl || window.location.href,
-        caches,
+      const result = await syncEmulatorAssetsInServiceWorker(state.manifest, {
         onProgress: setProgress,
         signal: controller.signal,
       });

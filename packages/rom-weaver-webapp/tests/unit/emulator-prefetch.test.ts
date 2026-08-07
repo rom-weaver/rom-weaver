@@ -4,6 +4,7 @@ import {
   prefetchEmulatorAssets,
   probeEmulatorCoresComplete,
   readEmulatorCoresComplete,
+  syncEmulatorAssetsInServiceWorker,
   type EmulatorAssetManifest,
   type EmulatorPrefetchProgress,
 } from "../../src/webapp/pwa/emulator-prefetch.ts";
@@ -116,6 +117,124 @@ describe("emulator prefetch", () => {
     expect(result.failures).toEqual([]);
     expect(result.progress).toMatchObject({ bytesDone: 0, failedFiles: 0, filesDone: 0 });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks the controlling service worker to sync assets and relays progress", async () => {
+    const progress: EmulatorPrefetchProgress[] = [];
+    const controller = {
+      postMessage: vi.fn((message: { action: string }, transfer?: Transferable[]) => {
+        if (message.action !== "sync-emulatorjs-assets") return;
+        const port = transfer?.[0] as MessagePort;
+        queueMicrotask(() => {
+          port.postMessage({
+            progress: { bytesDone: 10, filesDone: 1, totalBytes: 60, totalFiles: 3 },
+            type: "progress",
+          });
+          port.postMessage({
+            result: {
+              cancelled: false,
+              failures: [],
+              progress: { bytesDone: 60, filesDone: 3, totalBytes: 60, totalFiles: 3 },
+            },
+            type: "complete",
+          });
+        });
+      }),
+    };
+
+    const result = await syncEmulatorAssetsInServiceWorker(manifest, {
+      navigator: {
+        serviceWorker: {
+          controller: controller as unknown as ServiceWorker,
+          ready: Promise.resolve({ scope: BASE_URL }),
+        },
+      },
+      onProgress: (next) => progress.push(next),
+    });
+
+    expect(controller.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "sync-emulatorjs-assets", manifest: expect.any(Object) }),
+      expect.any(Array),
+    );
+    expect(progress).toHaveLength(1);
+    expect(result.progress.filesDone).toBe(3);
+  });
+
+  it("cancels an in-flight service-worker sync without rejecting", async () => {
+    const abortController = new AbortController();
+    let port: MessagePort | undefined;
+    const controller = {
+      postMessage: vi.fn((message: { action: string }, transfer?: Transferable[]) => {
+        if (message.action === "sync-emulatorjs-assets") port = transfer?.[0] as MessagePort;
+        if (message.action === "cancel-emulatorjs-assets") {
+          queueMicrotask(() =>
+            port?.postMessage({
+              result: {
+                cancelled: true,
+                failures: [],
+                progress: { bytesDone: 0, filesDone: 0, totalBytes: 60, totalFiles: 3 },
+              },
+              type: "complete",
+            }),
+          );
+        }
+      }),
+    };
+    const promise = syncEmulatorAssetsInServiceWorker(manifest, {
+      navigator: {
+        serviceWorker: {
+          controller: controller as unknown as ServiceWorker,
+          ready: Promise.resolve({ scope: BASE_URL }),
+        },
+      },
+      signal: abortController.signal,
+    });
+
+    abortController.abort();
+    const result = await promise;
+
+    expect(result.cancelled).toBe(true);
+    expect(controller.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "cancel-emulatorjs-assets" }),
+    );
+  });
+
+  it("cancels when the signal was already aborted before the request", async () => {
+    const abortController = new AbortController();
+    abortController.abort();
+    let port: MessagePort | undefined;
+    const controller = {
+      postMessage: vi.fn((message: { action: string }, transfer?: Transferable[]) => {
+        if (message.action === "sync-emulatorjs-assets") port = transfer?.[0] as MessagePort;
+        if (message.action === "cancel-emulatorjs-assets") {
+          queueMicrotask(() =>
+            port?.postMessage({
+              result: {
+                cancelled: true,
+                failures: [],
+                progress: { bytesDone: 0, filesDone: 0, totalBytes: 60, totalFiles: 3 },
+              },
+              type: "complete",
+            }),
+          );
+        }
+      }),
+    };
+
+    const result = await syncEmulatorAssetsInServiceWorker(manifest, {
+      navigator: {
+        serviceWorker: {
+          controller: controller as unknown as ServiceWorker,
+          ready: Promise.resolve({ scope: BASE_URL }),
+        },
+      },
+      signal: abortController.signal,
+    });
+
+    expect(result.cancelled).toBe(true);
+    expect(controller.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "cancel-emulatorjs-assets" }),
+    );
   });
 
   it("keeps the cores probe retryable until the service worker is available", async () => {

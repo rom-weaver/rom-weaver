@@ -1,5 +1,13 @@
 const EMULATORJS_MANIFEST_PATH = "emulatorjs/manifest.json";
 const EMULATORJS_DATA_PATH = "emulatorjs/data/";
+const EMULATORJS_CACHE_PREFIX = "precache-rom-weaver-emulatorjs-";
+
+import {
+  syncEmulatorAssets,
+  type EmulatorAssetCache,
+  type EmulatorAssetSyncResult,
+  validateEmulatorAssetManifest,
+} from "./emulator-asset-sync.ts";
 
 type EmulatorAsset = {
   path: string;
@@ -21,23 +29,14 @@ type EmulatorPrefetchProgress = {
   totalFiles: number;
 };
 
-type EmulatorPrefetchFailure = {
-  message: string;
-  path: string;
-};
-
-type EmulatorPrefetchResult = {
-  cancelled: boolean;
-  failures: readonly EmulatorPrefetchFailure[];
-  progress: EmulatorPrefetchProgress;
-};
+type EmulatorPrefetchResult = EmulatorAssetSyncResult;
 
 type CachedEmulatorAssets = {
   cachedBytes: number;
   cachedFiles: number;
 };
 
-type CacheStorageLike = Pick<CacheStorage, "match">;
+type CacheStorageLike = Pick<CacheStorage, "match"> & Partial<Pick<CacheStorage, "open">>;
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type ServiceWorkerRegistrationLike = Pick<ServiceWorkerRegistration, "scope">;
 type ServiceWorkerContainerLike = Pick<ServiceWorkerContainer, "controller" | "ready">;
@@ -66,6 +65,12 @@ type PrefetchEmulatorAssetsOptions = {
   signal?: AbortSignal;
 };
 
+type SyncEmulatorAssetsOptions = {
+  navigator?: NavigatorLike;
+  onProgress?: (progress: EmulatorPrefetchProgress) => void;
+  signal?: AbortSignal;
+};
+
 const getGlobalNavigator = (): NavigatorLike | undefined => {
   if (typeof navigator === "undefined") return undefined;
   return navigator;
@@ -83,34 +88,17 @@ const normalizeBaseUrl = (value: string | URL) => {
 };
 
 const isSafeAssetPath = (value: unknown): value is string => {
-  if (typeof value !== "string" || !value || value.startsWith("/")) return false;
+  if (typeof value !== "string" || !value || value.startsWith("/") || value.includes("\\")) return false;
   const segments = value.split("/");
   return segments.every((segment) => segment && segment !== "." && segment !== "..");
 };
 
 const parseManifest = (value: unknown): EmulatorAssetManifest => {
-  if (!value || typeof value !== "object") throw new Error("EmulatorJS asset manifest is invalid");
-  const record = value as { files?: unknown; version?: unknown };
-  if (typeof record.version !== "string" || !Array.isArray(record.files)) {
-    throw new Error("EmulatorJS asset manifest is invalid");
-  }
-  const paths = new Set<string>();
-  const files = record.files.map((entry) => {
-    if (!entry || typeof entry !== "object") throw new Error("EmulatorJS asset manifest contains an invalid file");
-    const file = entry as { path?: unknown; sizeBytes?: unknown };
-    if (
-      !isSafeAssetPath(file.path) ||
-      typeof file.sizeBytes !== "number" ||
-      !Number.isSafeInteger(file.sizeBytes) ||
-      file.sizeBytes < 0 ||
-      paths.has(file.path)
-    ) {
-      throw new Error("EmulatorJS asset manifest contains an invalid file");
-    }
-    paths.add(file.path);
-    return { path: file.path, sizeBytes: file.sizeBytes };
-  });
-  return { files, version: record.version };
+  validateEmulatorAssetManifest(value);
+  return {
+    files: value.files.map((file) => ({ path: file.path, sizeBytes: file.sizeBytes })),
+    version: value.version,
+  };
 };
 
 const getManifestUrl = (baseUrl: string | URL) => new URL(EMULATORJS_MANIFEST_PATH, normalizeBaseUrl(baseUrl)).href;
@@ -121,18 +109,18 @@ const getAssetUrl = (baseUrl: string | URL, path: string) => {
   return new URL(EMULATORJS_DATA_PATH + encodedPath, normalizeBaseUrl(baseUrl)).href;
 };
 
-const getTotalSize = (manifest: EmulatorAssetManifest) =>
-  manifest.files.reduce((total, file) => total + file.sizeBytes, 0);
-
 const getCachedAssetPaths = async (
   manifest: EmulatorAssetManifest,
   baseUrl: string | URL,
   cacheStorage: CacheStorageLike,
 ) => {
+  const cache = cacheStorage.open
+    ? await cacheStorage.open(`${EMULATORJS_CACHE_PREFIX}${manifest.version}`)
+    : cacheStorage;
   const cachedPaths = new Set<string>();
   await Promise.all(
     manifest.files.map(async (file) => {
-      if (await cacheStorage.match(getAssetUrl(baseUrl, file.path))) cachedPaths.add(file.path);
+      if (await cache.match(getAssetUrl(baseUrl, file.path))) cachedPaths.add(file.path);
     }),
   );
   return cachedPaths;
@@ -204,65 +192,107 @@ const loadEmulatorPrefetchState = async (
   return { ...runtime, cached, manifest };
 };
 
-const createProgress = (
-  manifest: EmulatorAssetManifest,
-  cachedPaths: ReadonlySet<string>,
-): EmulatorPrefetchProgress => {
-  const cachedFiles = manifest.files.filter((file) => cachedPaths.has(file.path));
-  return {
-    bytesDone: cachedFiles.reduce((total, file) => total + file.sizeBytes, 0),
-    failedFiles: 0,
-    filesDone: cachedFiles.length,
-    skippedFiles: cachedFiles.length,
-    totalBytes: getTotalSize(manifest),
-    totalFiles: manifest.files.length,
-  };
-};
-
 const prefetchEmulatorAssets = async (
   manifest: EmulatorAssetManifest,
   options: PrefetchEmulatorAssetsOptions,
 ): Promise<EmulatorPrefetchResult> => {
   const fetcher = options.fetch ?? getGlobalFetch();
-  const cachedPaths = await getCachedAssetPaths(manifest, options.baseUrl, options.caches);
-  const progress = createProgress(manifest, cachedPaths);
-  const failures: EmulatorPrefetchFailure[] = [];
-  options.onProgress?.({ ...progress });
+  const cache: EmulatorAssetCache = options.caches.open
+    ? await options.caches.open(`${EMULATORJS_CACHE_PREFIX}${manifest.version}`)
+    : {
+        match: (request) => options.caches.match(request),
+        put: async () => undefined,
+      };
+  return syncEmulatorAssets(manifest, {
+    baseUrl: options.baseUrl,
+    cache,
+    fetch: fetcher,
+    onProgress: options.onProgress,
+    signal: options.signal,
+  });
+};
 
-  for (const file of manifest.files) {
-    if (cachedPaths.has(file.path)) continue;
-    if (options.signal?.aborted) {
-      return { cancelled: true, failures, progress: { ...progress } };
-    }
-    const currentProgress = { ...progress, currentFile: file.path };
-    options.onProgress?.(currentProgress);
+const SYNC_EMULATORJS_ASSETS_ACTION = "sync-emulatorjs-assets";
+const CANCEL_EMULATORJS_ASSETS_ACTION = "cancel-emulatorjs-assets";
+
+const syncEmulatorAssetsInServiceWorker = (
+  manifest: EmulatorAssetManifest,
+  options: SyncEmulatorAssetsOptions = {},
+): Promise<EmulatorPrefetchResult> => {
+  const controller = (options.navigator ?? getGlobalNavigator())?.serviceWorker?.controller;
+  if (!controller) return Promise.reject(new Error("The service worker is not controlling this page."));
+  if (typeof MessageChannel !== "function") return Promise.reject(new Error("MessageChannel is unavailable."));
+
+  const syncId = `emulator-assets-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const channel = new MessageChannel();
+  let settled = false;
+
+  return new Promise<EmulatorPrefetchResult>((resolve, reject) => {
+    let cancel = () => undefined;
+    const cleanup = () => {
+      channel.port1.onmessage = null;
+      try {
+        channel.port1.close();
+      } catch {
+        // best-effort cleanup
+      }
+      options.signal?.removeEventListener("abort", cancel);
+    };
+    const finish = (result: EmulatorPrefetchResult) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
+    cancel = () => {
+      try {
+        controller.postMessage({ action: CANCEL_EMULATORJS_ASSETS_ACTION, syncId });
+      } catch (error) {
+        fail(error);
+      }
+    };
+
+    channel.port1.onmessage = (event) => {
+      const data = event.data as {
+        message?: unknown;
+        progress?: EmulatorPrefetchProgress;
+        result?: EmulatorPrefetchResult;
+        type?: unknown;
+      };
+      if (data.type === "progress" && data.progress) {
+        options.onProgress?.(data.progress);
+        return;
+      }
+      if (data.type === "complete" && data.result) {
+        finish(data.result);
+        return;
+      }
+      if (data.type === "error") {
+        fail(data.message || "EmulatorJS asset sync failed");
+      }
+    };
+    channel.port1.start();
+    options.signal?.addEventListener("abort", cancel, { once: true });
     try {
-      const response = await fetcher(getAssetUrl(options.baseUrl, file.path), {
-        credentials: "same-origin",
-        signal: options.signal,
-      });
-      if (options.signal?.aborted) {
-        return { cancelled: true, failures, progress: { ...progress } };
-      }
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      progress.bytesDone += file.sizeBytes;
-      progress.filesDone += 1;
-      progress.currentFile = undefined;
-      options.onProgress?.({ ...progress });
+      controller.postMessage(
+        {
+          action: SYNC_EMULATORJS_ASSETS_ACTION,
+          manifest,
+          syncId,
+        },
+        [channel.port2],
+      );
+      if (options.signal?.aborted) cancel();
     } catch (error) {
-      if (options.signal?.aborted) {
-        return { cancelled: true, failures, progress: { ...progress } };
-      }
-      progress.failedFiles += 1;
-      progress.currentFile = undefined;
-      failures.push({
-        message: error instanceof Error ? error.message : String(error),
-        path: file.path,
-      });
-      options.onProgress?.({ ...progress });
+      fail(error);
     }
-  }
-  return { cancelled: false, failures, progress: { ...progress } };
+  });
 };
 
 const formatEmulatorBytes = (bytes: number) => {
@@ -324,5 +354,6 @@ export {
   readEmulatorCoresComplete,
   setEmulatorCoresComplete,
   subscribeEmulatorCoresComplete,
+  syncEmulatorAssetsInServiceWorker,
 };
 export type { EmulatorAssetManifest, EmulatorPrefetchProgress, LoadedEmulatorPrefetchState };

@@ -65,7 +65,7 @@ const getAssetUrl = (baseUrl: URL, path: string): string => {
   }
 };
 
-function validateManifest(value: unknown): asserts value is EmulatorAssetManifest {
+export function validateEmulatorAssetManifest(value: unknown): asserts value is EmulatorAssetManifest {
   if (!value || typeof value !== "object") throw new Error("EmulatorJS asset manifest is invalid");
   const manifest = value as { files?: unknown; version?: unknown };
   if (typeof manifest.version !== "string" || !Array.isArray(manifest.files)) {
@@ -119,7 +119,7 @@ export const syncEmulatorAssets = async (
   manifest: EmulatorAssetManifest,
   options: EmulatorAssetSyncOptions,
 ): Promise<EmulatorAssetSyncResult> => {
-  validateManifest(manifest);
+  validateEmulatorAssetManifest(manifest);
   const baseUrl = normalizeBaseUrl(options.baseUrl);
   const assets = manifest.files.map((file) => ({ file, url: getAssetUrl(baseUrl, file.path) }));
   const cachedPaths = new Set<string>();
