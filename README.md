@@ -284,6 +284,10 @@ available for Linux, macOS, and Windows. The browser webapp handles patching
 and bundle workflows without an install.
 
 For the current measurements and trade-offs, see the [performance brief](#performance).
+For how rom-weaver lines up against the tools you may already use, the
+[comparison with similar tools](./docs/explanation/comparisons.md) puts it
+beside RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool,
+format by format and feature by feature.
 
 ## Performance
 

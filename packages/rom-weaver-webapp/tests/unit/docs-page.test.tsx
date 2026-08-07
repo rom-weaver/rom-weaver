@@ -192,6 +192,55 @@ echo hi
     );
   });
 
+  it("wraps tables in a focusable scroll container", () => {
+    const route = createDocRoute(
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## Table
+
+| A | B |
+| --- | --- |
+| 1 | 2 |
+`,
+    );
+
+    // The panel clips its corners, so a table wider than the column is
+    // unreachable unless something around it scrolls.
+    expect(route.html).toContain('<div aria-label="Table" class="docs-table-scroll" role="group" tabindex="0"><table>');
+    // The table itself must stay a table: `display: block` is what makes an
+    // element scrollable, and it drops the table out of the a11y tree.
+    expect(route.html).not.toContain("<table tabindex");
+  });
+
+  it("promotes standalone superscripts to note markers, leaving exponents and code alone", () => {
+    const route = createDocRoute(
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## Notes
+
+Cell ¹ and run ¹⁰ and exponent GF(2⁸).
+
+- item with \`²x\` code and marker ¹
+`,
+    );
+
+    expect(route.html).toContain('Cell <sup class="docs-note-ref">1</sup>');
+    // A multi-digit marker is one reference, not two.
+    expect(route.html).toContain('run <sup class="docs-note-ref">10</sup>');
+    // Attached to a character it is an exponent, not a marker.
+    expect(route.html).toContain("GF(2⁸)");
+    // A block-level text token arrives as finished markup; rewriting it would
+    // reach inside the code span.
+    expect(route.html).toContain("<code>²x</code>");
+    expect(route.html).toContain('marker <sup class="docs-note-ref">1</sup>');
+  });
+
   it("drops raw HTML from headings before rendering them", () => {
     const route = createDocRoute(
       { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },

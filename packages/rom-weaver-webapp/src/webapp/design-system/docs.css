@@ -12,13 +12,17 @@ html:has(.docs-workbench) {
 }
 
 .rw-app .docs-workbench {
-  /* The document uses the full panel; code and screenshots keep their own
-     wider limits where their content benefits from them. */
-  --measure-wide: 39rem;
+  /* Two measures, because one number cannot serve both. Reading wants a short
+     line; a seven-column table wants every pixel. So the panel grows with the
+     viewport and each block picks its own limit: prose stops at
+     --measure-prose, code and screenshots at the looser --measure-wide, and
+     tables take the panel. */
+  --measure-prose: 42rem;
+  --measure-wide: 60rem;
   --article-pad: clamp(18px, 3vw, 32px);
-  max-width: 62rem;
+  --docs-rail: 13.5rem;
+  --docs-gap: clamp(18px, 3vw, 30px);
   padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
-  margin-inline: auto;
 }
 
 /* --- search --- */
@@ -26,9 +30,8 @@ html:has(.docs-workbench) {
   position: relative;
   z-index: 70;
   display: grid;
-  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
-  gap: clamp(18px, 3vw, 30px);
-  justify-content: center;
+  grid-template-columns: var(--docs-rail) minmax(0, 1fr);
+  gap: var(--docs-gap);
   margin-block: 0 var(--sp-l);
 }
 .rw-app .docs-search-header .docs-search {
@@ -38,12 +41,11 @@ html:has(.docs-workbench) {
 /* --- layout --- */
 .rw-app .docs-layout {
   display: grid;
-  /* The article column is exactly as wide as the panel can be, so the pair
-     centres as one block instead of stranding a gutter inside the card. */
-  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
-  gap: clamp(18px, 3vw, 30px);
+  /* The article takes whatever the rail leaves, so the panel reaches the edge
+     of the workbench on any screen. Each block inside picks its own measure. */
+  grid-template-columns: var(--docs-rail) minmax(0, 1fr);
+  gap: var(--docs-gap);
   align-items: start;
-  justify-content: center;
 }
 .rw-app .docs-rails {
   position: sticky;
@@ -221,11 +223,17 @@ html:has(.docs-workbench) {
 }
 
 /* --- warp rail: the signature --- */
+/* Plated like the guide nav above it, so the two rail items read as one
+   column of panels rather than a card followed by loose text. The whole rail
+   is `display: none` below 860px, so this needs no breakpoint of its own. */
 .rw-app .warp-rail {
-  padding-inline: 2px;
+  padding: 0 2px var(--sp-s);
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
 }
 .rw-app .warp-rail-title {
-  padding: 0 0 var(--sp-s) 2.35rem;
+  padding: var(--sp-m) 0 var(--sp-s) 2.35rem;
 }
 .rw-app .warp-rail-list {
   position: relative;
@@ -391,6 +399,16 @@ html:has(.docs-workbench) {
   color: var(--ink-2);
   border-bottom: 1px solid var(--seam-soft);
 }
+/* The reading measure. Applied per block rather than to the article, so a
+   table or a screenshot in the same flow can still use the whole panel. */
+.rw-app .docs-article > p,
+.rw-app .docs-article > ul,
+.rw-app .docs-article > ol,
+.rw-app .docs-article > blockquote,
+.rw-app .docs-article > h2,
+.rw-app .docs-article > h3 {
+  max-width: var(--measure-prose);
+}
 .rw-app .docs-article p,
 .rw-app .docs-article li {
   line-height: 1.72;
@@ -525,9 +543,13 @@ html:has(.docs-workbench) {
   background: transparent;
   border: 0;
 }
+/* The inline margin is zeroed deliberately: the UA sheet ships `margin: 1em
+   40px`, and setting only `margin-block` leaves that 40px in place, indenting
+   a note far off the left edge of the table it belongs to. */
 .rw-app .docs-article blockquote {
-  padding: var(--sp-xs) 0 var(--sp-xs) var(--sp-l);
+  padding: var(--sp-xs) 0 var(--sp-xs) var(--sp-m);
   margin-block: var(--sp-xl);
+  margin-inline: 0;
   color: var(--ink-2);
   border-left: 2px solid var(--thread);
 }
@@ -537,9 +559,24 @@ html:has(.docs-workbench) {
 .rw-app .docs-article blockquote > :last-child {
   margin-bottom: 0;
 }
+/* A note marker has to be findable in a dense cell and then findable again at
+   the note itself, so it carries the accent rather than the body colour. The
+   UA's `smaller` on `<sup>` compounds against the table's already reduced font,
+   so the size is set outright. */
+.rw-app .docs-note-ref {
+  padding-inline-start: 0.2em;
+  font-size: 0.9em;
+  font-weight: 700;
+  color: var(--thread-text);
+}
+/* The panel clips its own corners, so a table wider than the column has to
+   scroll here or its last columns are simply unreachable. */
+.rw-app .docs-table-scroll {
+  margin-block: var(--sp-l);
+  overflow-x: auto;
+}
 .rw-app .docs-article table {
   width: 100%;
-  max-width: var(--measure-wide);
   font-size: 0.78rem;
   line-height: 1.5;
   border-spacing: 0;
@@ -1097,10 +1134,6 @@ html:has(.docs-workbench) {
   .rw-app .docs-article pre {
     padding: var(--sp-m);
     overflow-x: visible;
-  }
-  .rw-app .docs-article table {
-    display: block;
-    overflow-x: auto;
   }
   /* No hanging indent for wrapped lines: `text-indent` on a `pre` applies once
      to the block, not per line, so it shifts every real line of the command as
