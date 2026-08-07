@@ -426,6 +426,48 @@ html:has(.docs-workbench) {
   font-weight: 700;
   scroll-margin-top: 5.5rem;
 }
+.rw-app .docs-article h2.docs-toc-title {
+  display: block;
+  max-width: var(--measure-wide);
+  padding: var(--sp-l) var(--sp-l) var(--sp-s);
+  margin: var(--sp-xl) 0 0;
+  font-size: 0.78rem;
+  font-weight: 750;
+  font-stretch: 90%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  scroll-margin-top: 5.5rem;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-bottom: 0;
+  border-radius: var(--r-m) var(--r-m) 0 0;
+}
+.rw-app .docs-article h2.docs-toc-title + ul {
+  max-width: var(--measure-wide);
+  padding: var(--sp-s) var(--sp-l) var(--sp-l);
+  margin: 0 0 var(--sp-xl);
+  list-style: none;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-top: 0;
+  border-radius: 0 0 var(--r-m) var(--r-m);
+}
+.rw-app .docs-article h2.docs-toc-title + ul > li {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.rw-app .docs-article h2.docs-toc-title + ul ul {
+  padding-inline-start: var(--sp-l);
+  margin: var(--sp-xs) 0 var(--sp-s);
+  list-style: none;
+  border-inline-start: 1px solid var(--seam-strong);
+}
+.rw-app .docs-article h2.docs-toc-title + ul ul li {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
 /* the standfirst: the paragraph that answers "is this the right page?" */
 .rw-app .docs-article h1 + p {
   padding-bottom: var(--sp-xl);
@@ -817,20 +859,20 @@ html:has(.docs-workbench) {
 .rw-app .docs-faq-list {
   border-block: 1px solid var(--seam-soft);
 }
-.rw-app .docs-faq-list details + details {
+.rw-app .docs-faq-item + .docs-faq-item {
   border-top: 1px solid var(--seam-soft);
 }
-.rw-app .docs-faq-list summary {
-  box-sizing: border-box;
-  min-height: 44px;
+.rw-app .docs-faq-item {
   padding-block: var(--sp-m);
+}
+.rw-app .docs-faq-item h3 {
+  margin: 0 0 var(--sp-xs);
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--ink);
-  cursor: pointer;
 }
-.rw-app .docs-faq-list p {
-  padding: 0 0 var(--sp-m) var(--sp-l);
+.rw-app .docs-faq-item p {
+  padding: 0 0 0 var(--sp-l);
   margin: 0;
   font-size: 0.78rem;
   line-height: 1.55;

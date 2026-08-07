@@ -20,6 +20,30 @@ The browser keeps large files in OPFS storage.
 `,
 );
 const [indexedRoute] = createDocsSearchIndex([route]);
+const faqRoute = createDocRoute(
+  { file: "faq.md", label: "FAQ", slug: "docs/faq" },
+  `# Frequently asked questions
+
+This page answers common questions.
+
+<!-- START doctoc -->
+## Table of contents
+
+- [Files and privacy](#files-and-privacy)
+- [CLI and support](#cli-and-support)
+
+<!-- END doctoc -->
+
+## Files and privacy
+
+Privacy stays local.
+
+## CLI and support
+
+Report bugs through the security policy.
+`,
+);
+const [indexedFaqRoute] = createDocsSearchIndex([faqRoute]);
 
 describe("docs search", () => {
   it("normalizes punctuation and diacritics into searchable tokens", () => {
@@ -43,6 +67,12 @@ describe("docs search", () => {
 
     expect(result?.entry.id).toBe("browser-storage");
     expect(result?.entry.label).toBe("Browser storage");
+  });
+
+  it("keeps search text aligned when a page has an extra h2 contents block", () => {
+    const [result] = searchDocs([indexedFaqRoute], "security policy");
+
+    expect(result?.entry.id).toBe("cli-and-support");
   });
 
   it("requires every query token and limits results", () => {

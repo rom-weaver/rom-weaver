@@ -116,13 +116,18 @@ const htmlToText = (html) =>
 
 // String-based rather than DOM-based so the index can be prebuilt at build
 // time (scripts/docs-virtual-module.mjs) and the guides' HTML never has to
-// ship a second time just to be searchable. Guide sections are the `<h2>`
-// blocks renderMarkdown (docs-content.mjs) emits, one per `sections` entry and
-// always top-level, so splitting on the tags recovers the same section texts
-// the old DOM walk produced.
+// ship a second time just to be searchable. Guide sections are the top-level
+// `<h2>` blocks whose IDs appear in `sections`; pages can also contain other
+// h2 blocks, such as the FAQ's question-level contents.
 /** @param {SearchSourceRoute} route @returns {SearchRoute} */
 const indexRoute = ({ description, html, label, sections, slug, title }) => {
   const parts = String(html).split(/(?=<h2[\s>])/);
+  const sectionParts = new Map(
+    parts.slice(1).flatMap((part) => {
+      const id = part.match(/^<h2\b[^>]*\bid="([^"]+)"/)?.[1];
+      return id ? [[id, part]] : [];
+    }),
+  );
   const intro = parts[0] ?? "";
   /** @type {SearchEntry[]} */
   const entries = [
@@ -132,15 +137,15 @@ const indexRoute = ({ description, html, label, sections, slug, title }) => {
       text: `${title} ${description} ${htmlToText(intro)}`.trim(),
     },
   ];
-  sections.forEach((section, index) => {
-    const part = parts[index + 1];
-    if (part === undefined) return;
+  for (const section of sections) {
+    const part = sectionParts.get(section.id);
+    if (part === undefined) continue;
     entries.push({
       id: section.id,
       label: section.label,
       text: htmlToText(part),
     });
-  });
+  }
   return { description, label, searchEntries: entries, sections, slug, title };
 };
 

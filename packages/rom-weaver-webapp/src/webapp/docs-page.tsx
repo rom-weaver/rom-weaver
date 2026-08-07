@@ -480,18 +480,18 @@ const DocsFaqPreview = () => (
       <a href="/docs/faq">Read the full FAQ</a>
     </div>
     <div className="docs-faq-list">
-      <details>
-        <summary>Do my files get uploaded?</summary>
+      <div className="docs-faq-item">
+        <h3>Do my files get uploaded?</h3>
         <p>No. The webapp reads, patches, and writes files on your device.</p>
-      </details>
-      <details>
-        <summary>Which patch format should I use?</summary>
+      </div>
+      <div className="docs-faq-item">
+        <h3>Which patch format should I use?</h3>
         <p>Applying a patch? Use the file you were given. Creating one? BPS is a good cartridge default.</p>
-      </details>
-      <details>
-        <summary>Why does my ROM not match?</summary>
+      </div>
+      <div className="docs-faq-item">
+        <h3>Why does my ROM not match?</h3>
         <p>The region, revision, header, byte order, archive entry, or patch order differs from the author's file.</p>
-      </details>
+      </div>
     </div>
   </section>
 );
