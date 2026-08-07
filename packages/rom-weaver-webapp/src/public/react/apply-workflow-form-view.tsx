@@ -216,23 +216,7 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
   </FileCard>
 );
 
-const ApplyDropAfter = ({
-  downloadHref,
-  onLoadApplySample,
-  onLoadBundleSample,
-  pendingDrops,
-  sampleError,
-  sampleLoading,
-  workflowEmpty,
-}: {
-  onLoadApplySample: () => void;
-  onLoadBundleSample: () => void;
-  downloadHref: string;
-  pendingDrops: PendingDrop[];
-  sampleError: string;
-  sampleLoading: boolean;
-  workflowEmpty: boolean;
-}) => {
+const ApplyDropAfter = ({ pendingDrops }: { pendingDrops: PendingDrop[] }) => {
   if (pendingDrops.length) {
     return (
       <div className="cards workflow-file-list" id="rom-weaver-pending-drops">
@@ -244,22 +228,7 @@ const ApplyDropAfter = ({
       </div>
     );
   }
-  if (!workflowEmpty) return null;
-  return (
-    <SampleTutorialStart
-      downloadHref={downloadHref}
-      downloadLabel="Download a test bundle"
-      downloadName={FIRST_WEAVE_ASSET}
-      error={sampleError}
-      guideHref={GUIDED_SAMPLE_HREFS.apply}
-      label="Start guided Apply"
-      loading={sampleLoading}
-      onStart={onLoadApplySample}
-      onSecondaryStart={onLoadBundleSample}
-      secondaryLabel="Create a sharable bundle"
-      secondaryHref={GUIDED_SAMPLE_HREFS.bundle}
-    />
-  );
+  return null;
 };
 
 const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
@@ -1884,17 +1853,7 @@ function ApplyWorkflowFormView({
       <UnifiedDropZone
         accept={fileInputAccept.unifiedApply}
         addLabel="Replace the ROM or add patches"
-        afterDropZone={
-          <ApplyDropAfter
-            downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
-            onLoadApplySample={startApplySample}
-            onLoadBundleSample={startBundleSample}
-            pendingDrops={pendingDrops}
-            sampleError={sampleError}
-            sampleLoading={sampleLoading}
-            workflowEmpty={workflowEmpty}
-          />
-        }
+        afterDropZone={<ApplyDropAfter pendingDrops={pendingDrops} />}
         big={workflowEmpty}
         heroLabel="Drop or click to add ROMs, patches, bundles, or archives"
         heroLabelCoarse="Tap to add ROMs, patches, bundles, or archives"
@@ -1911,6 +1870,23 @@ function ApplyWorkflowFormView({
           </ul>
         }
         inputId="rom-weaver-input-file-unified"
+        headerExtra={
+          workflowEmpty ? (
+            <SampleTutorialStart
+              downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
+              downloadLabel="Download a test bundle"
+              downloadName={FIRST_WEAVE_ASSET}
+              error={sampleError}
+              guideHref={GUIDED_SAMPLE_HREFS.apply}
+              label="Start guided Apply"
+              loading={sampleLoading}
+              onStart={startApplySample}
+              onSecondaryStart={startBundleSample}
+              secondaryLabel="Create a sharable bundle"
+              secondaryHref={GUIDED_SAMPLE_HREFS.bundle}
+            />
+          ) : null
+        }
         onDropStart={() => setDropStarted(true)}
         onFiles={handleUnifiedDrop}
         supported={APPLY_SUPPORTED_FILES}

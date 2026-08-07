@@ -586,44 +586,49 @@
 .rw-app .step.is-input.is-empty .step-body {
   padding-block-end: 0;
 }
-/* The New here? beacon: a small dismissible chip riding the hero's lower-right
-   corner; its popover carries the guided runs and the practice download. The
-   wrapper spends no flow height - the chip lifts up into the hero above it. */
+/* The New here? action shares the 0x01 header so first-time help is visible
+   before the reader starts scanning the drop target. Its popover carries the
+   guided runs and the practice download. */
 .rw-app .first-weave-demo {
   position: relative;
+  z-index: 2;
   display: flex;
-  justify-content: flex-end;
-  height: 0;
+  flex: none;
+  align-items: center;
+  margin-inline-start: auto;
 }
 .rw-app .sample-tutorial-start-chip {
-  position: absolute;
-  right: var(--sp-m);
-  bottom: var(--sp-m);
-  z-index: 3;
+  position: relative;
   display: inline-flex;
   gap: 7px;
   align-items: center;
-  padding: 4px 12px 4px 6px;
-  font-size: 0.74rem;
+  min-height: 40px;
+  padding: 6px 14px 6px 8px;
+  font-size: 0.84rem;
   font-weight: 650;
-  color: var(--ink-2);
+  line-height: 1.2;
+  color: var(--thread-ink);
   cursor: pointer;
-  background: color-mix(in oklab, var(--thread) 8%, var(--plate));
-  border: 1px dashed color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
+  background: var(--thread);
+  border: 1px solid var(--thread);
   border-radius: 999px;
   transition:
-    border-color 0.15s var(--ease),
-    color 0.15s var(--ease);
+    background 0.15s var(--ease),
+    border-color 0.15s var(--ease);
 }
 @media (hover: hover) {
   .rw-app .sample-tutorial-start-chip:hover {
-    color: var(--ink);
-    border-color: var(--thread);
+    background: var(--thread-hi);
+    border-color: var(--thread-hi);
   }
 }
 .rw-app .sample-tutorial-start-chip:active {
-  color: var(--ink);
-  border-color: var(--thread);
+  background: var(--thread-hi);
+  border-color: var(--thread-hi);
+}
+.rw-app .sample-tutorial-start-chip:focus-visible {
+  outline: 2px solid var(--thread-text);
+  outline-offset: 3px;
 }
 /* The beacon breathes until it is engaged, so a first visit notices it. The
    halo is a ring pseudo-element animated on scale/opacity rather than a
@@ -654,14 +659,14 @@
   }
 }
 /* A drag gesture owns the hero - the chip yields until the files land. */
-.rw-app .step-body:has(.drop.dragging) .sample-tutorial-start-chip {
+.rw-app .step:has(.drop.dragging) .sample-tutorial-start-chip {
   pointer-events: none;
   opacity: 0;
 }
 .rw-app .sample-tutorial-start-pop {
   position: absolute;
-  right: var(--sp-m);
-  bottom: calc(var(--sp-m) + 36px);
+  top: calc(100% + var(--sp-s));
+  right: 0;
   z-index: 4;
   display: grid;
   gap: var(--sp-2xs);
@@ -726,8 +731,8 @@
   display: inline-grid;
   flex: none;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   font-family: var(--mono);
   font-size: 0.78rem;
   font-weight: 850;

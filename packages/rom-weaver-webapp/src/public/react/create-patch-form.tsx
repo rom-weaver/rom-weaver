@@ -1056,7 +1056,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
       addLabel: "Add or replace a ROM",
-      afterDropZone: createSourcesActuallyEmpty ? (
+      headerExtra: createSourcesActuallyEmpty ? (
         <SampleTutorialStart
           downloadHref={resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE)}
           downloadName={CREATE_SAMPLE_ARCHIVE}

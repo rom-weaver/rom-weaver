@@ -3,8 +3,8 @@
   .rw-app {
     --ctl: 48px;
     --mobile-input-head-h: 38px;
-    /* Includes the first-weave action below the hero so the empty bench still
-       occupies one phone viewport. */
+    /* Leaves room for the empty hero, its step header, and the ghost steps so
+       the first screen remains balanced around the fixed dock. */
     --hero-chrome: calc(var(--mobile-input-head-h) + 217px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
   }
 

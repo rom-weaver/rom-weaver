@@ -384,17 +384,18 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
   await page.viewport(1280, 900);
 });
 
-test("the New here? beacon stays compact and its popover carries every start action", async () => {
+test("the New here? action is prominent and its popover carries every start action", async () => {
   await page.viewport(1024, 900);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
   const chip = document.querySelector(".sample-tutorial-start-chip");
   const chipBox = chip.getBoundingClientRect();
-  expect(chipBox.height).toBeLessThan(40);
-  // The chip rides the hero's lower corner instead of spending a band below it.
-  const hero = document.querySelector(".drop.hero").getBoundingClientRect();
-  expect(chipBox.bottom).toBeLessThanOrEqual(hero.bottom + 1);
+  expect(chipBox.height).toBeGreaterThanOrEqual(40);
+  const stepHead = document.querySelector(".unified-drop-step > .step-head").getBoundingClientRect();
+  // The action shares the 0x01 header instead of hiding in the hero's lower corner.
+  expect(chipBox.top).toBeGreaterThanOrEqual(stepHead.top);
+  expect(chipBox.bottom).toBeLessThanOrEqual(stepHead.bottom + 1);
   // Closed popover is not mounted at all - it must stay out of the prerendered shell.
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
@@ -407,6 +408,10 @@ test("the New here? beacon stays compact and its popover carries every start act
   expect(pop.top).toBeGreaterThanOrEqual(0);
 
   await page.viewport(360, 740);
+  const narrowHeader = document.querySelector(".unified-drop-step > .step-head").getBoundingClientRect();
+  const narrowChip = document.querySelector(".sample-tutorial-start-chip").getBoundingClientRect();
+  expect(narrowChip.left).toBeGreaterThanOrEqual(narrowHeader.left);
+  expect(narrowChip.right).toBeLessThanOrEqual(narrowHeader.right + 1);
   await expect
     .poll(() => document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().right)
     .toBeLessThanOrEqual(document.documentElement.clientWidth);
