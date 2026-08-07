@@ -79,6 +79,12 @@ const tryWebKitShare = async (blob: Blob, fileName?: string, options?: BrowserDo
   return true;
 };
 
+// WebKit starts the anchor's download asynchronously after the click; revoking on
+// the next task races that load and intermittently fails it with "Cannot load
+// blob: ... due to access control checks". The delay only holds the object URL -
+// the download keeps its own reference to the data once it has started.
+const REVOKE_OBJECT_URL_DELAY_MS = 30_000;
+
 const triggerAnchorDownload = (blob: Blob, resolvedFileName: string | undefined) => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -91,7 +97,7 @@ const triggerAnchorDownload = (blob: Blob, resolvedFileName: string | undefined)
   setTimeout(() => {
     URL.revokeObjectURL(url);
     anchor.remove();
-  }, 0);
+  }, REVOKE_OBJECT_URL_DELAY_MS);
 };
 
 const triggerBrowserDownload = async (
