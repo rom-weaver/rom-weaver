@@ -468,7 +468,7 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   expect(new Set(tabs.map((tab) => tab.getBoundingClientRect().top)).size).toBe(1);
   expect(rail?.scrollHeight).toBe(rail?.clientHeight);
   expect(document.querySelector('[data-logtab="test"]')).toBeNull();
-  expect(document.querySelector("#logpanel-status .emulator-prefetch-panel")).not.toBeNull();
+  expect(document.querySelector("#logpanel-status .emulator-prefetch-panel")).toBeNull();
 
   document.querySelector('[data-logtab="storage"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await expect.poll(() => document.querySelector("#logpanel-storage .opfs-inspector")).toBeTruthy();
