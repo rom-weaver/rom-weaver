@@ -191,8 +191,6 @@ const loadDocsSearchIndex = (): Promise<readonly DocSearchRoute[]> => {
   return docsSearchIndexPromise;
 };
 
-const sectionNumber = (index: number) => String(index + 1).padStart(2, "0");
-
 /**
  * True once the reader has changed guide at least once.
  *
@@ -210,26 +208,21 @@ const useDocsPageTurned = (slug: string) => {
   return turned.current;
 };
 
-/** One outline entry: index, label, and the weft pick that marks the read one. */
+/** One outline entry: label and the weft pick that marks the read one. */
 const OutlineLink = ({
   current,
   href,
-  index,
   label,
   onNavigate,
 }: {
   current: boolean;
   href: string;
-  index: number;
   label: string;
   onNavigate?: () => void;
 }) => (
   <a aria-current={current ? "true" : undefined} href={href} onClick={onNavigate}>
     <span aria-hidden="true" className="warp-pick" />
-    <span aria-hidden="true" className="warp-index">
-      {sectionNumber(index)}
-    </span>
-    <span className="warp-label">{label}</span>
+    {label}
   </a>
 );
 
@@ -263,7 +256,6 @@ const SectionRail = ({
             <OutlineLink
               current={index === initialIndex}
               href={`/${route.slug}#${section.id}`}
-              index={index}
               label={section.label}
               onNavigate={onNavigate}
             />
