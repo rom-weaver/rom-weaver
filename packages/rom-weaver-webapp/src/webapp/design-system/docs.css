@@ -457,6 +457,12 @@ html:has(.docs-workbench) {
   font-size: 0.86rem;
   font-weight: 700;
 }
+.rw-app .docs-article h2.docs-toc-title + ul a {
+  display: block;
+  min-height: 24px;
+  padding-block: var(--sp-xs);
+  line-height: 1.45;
+}
 .rw-app .docs-article h2.docs-toc-title + ul ul {
   padding-inline-start: var(--sp-l);
   margin: var(--sp-xs) 0 var(--sp-s);
