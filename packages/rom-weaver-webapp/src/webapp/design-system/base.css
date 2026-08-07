@@ -258,12 +258,30 @@
 }
 
 .rw-app .app {
+  --app-max: 1220px;
+  --app-max-docs: 96rem;
+
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
   width: 100%;
-  max-width: 1220px;
+  max-width: var(--app-max);
   padding-block-start: var(--safe-t);
   padding-inline: var(--gutter);
+  margin-inline: auto;
+}
+/* Docs run a navigation rail beside the document, so the route needs more room
+   than the workflow forms do. The shell widens for it and the masthead does
+   not, because chrome that changed width per route would make the logo and the
+   icons jump on every navigation. */
+.rw-app .app:has(.docs-workbench) {
+  max-width: var(--app-max-docs);
+}
+.rw-app .app:has(.docs-workbench) > .masthead {
+  width: 100%;
+  /* The shared width minus the shell's own gutters: on every other route the
+     masthead sits inside that padding, so matching the border box here would
+     leave it wider on docs than anywhere else. */
+  max-width: calc(var(--app-max) - var(--gutter) * 2);
   margin-inline: auto;
 }

@@ -12,16 +12,16 @@ html:has(.docs-workbench) {
 }
 
 .rw-app .docs-workbench {
-  /* The document uses the full panel; code and screenshots keep their own
-     wider limits where their content benefits from them. */
-  --measure-wide: 48rem;
+  /* Two measures, because one number cannot serve both. Reading wants a short
+     line; a seven-column table wants every pixel. So the panel grows with the
+     viewport and each block picks its own limit: prose stops at
+     --measure-prose, code and screenshots at the looser --measure-wide, and
+     tables take the panel. */
+  --measure-prose: 42rem;
+  --measure-wide: 60rem;
   --article-pad: clamp(18px, 3vw, 32px);
   --docs-rail: 13.5rem;
   --docs-gap: clamp(18px, 3vw, 30px);
-  /* Derived from the two grid columns rather than a round number, so the
-     workbench never reserves width the columns do not use. A fixed cap wider
-     than the columns strands a gutter down the right of every page. */
-  max-width: calc(var(--docs-rail) + var(--docs-gap) + var(--measure-wide) + var(--article-pad) * 2);
   padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
   margin-inline: auto;
 }
@@ -31,7 +31,7 @@ html:has(.docs-workbench) {
   position: relative;
   z-index: 70;
   display: grid;
-  grid-template-columns: var(--docs-rail) minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
+  grid-template-columns: var(--docs-rail) minmax(0, 1fr);
   gap: var(--docs-gap);
   justify-content: center;
   margin-block: 0 var(--sp-l);
@@ -43,9 +43,9 @@ html:has(.docs-workbench) {
 /* --- layout --- */
 .rw-app .docs-layout {
   display: grid;
-  /* The article column is exactly as wide as the panel can be, so the pair
-     centres as one block instead of stranding a gutter inside the card. */
-  grid-template-columns: var(--docs-rail) minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
+  /* The article takes whatever the rail leaves, so the panel reaches the edge
+     of the workbench on any screen. Each block inside picks its own measure. */
+  grid-template-columns: var(--docs-rail) minmax(0, 1fr);
   gap: var(--docs-gap);
   align-items: start;
   justify-content: center;
@@ -396,6 +396,16 @@ html:has(.docs-workbench) {
   color: var(--ink-2);
   border-bottom: 1px solid var(--seam-soft);
 }
+/* The reading measure. Applied per block rather than to the article, so a
+   table or a screenshot in the same flow can still use the whole panel. */
+.rw-app .docs-article > p,
+.rw-app .docs-article > ul,
+.rw-app .docs-article > ol,
+.rw-app .docs-article > blockquote,
+.rw-app .docs-article > h2,
+.rw-app .docs-article > h3 {
+  max-width: var(--measure-prose);
+}
 .rw-app .docs-article p,
 .rw-app .docs-article li {
   line-height: 1.72;
@@ -544,7 +554,6 @@ html:has(.docs-workbench) {
 }
 .rw-app .docs-article table {
   width: 100%;
-  max-width: var(--measure-wide);
   font-size: 0.78rem;
   line-height: 1.5;
   border-spacing: 0;
