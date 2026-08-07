@@ -16,7 +16,6 @@ vi.mock("../../../src/public/react/components/emulator-document.ts", () => ({
   createEmulatorDocument: () => "<!doctype html><html><body></body></html>",
   createEmulatorGameIdentity: ({ fileName }: { fileName: string }) => ({
     gameId: 1,
-    gameLabel: fileName,
     gameName: `rom-weaver-${fileName}`,
   }),
 }));

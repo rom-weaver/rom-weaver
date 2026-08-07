@@ -19,6 +19,19 @@ type FakeRequest = {
   result: unknown;
 };
 
+type FakeCursor = {
+  continue: () => void;
+  update: (value: unknown) => void;
+  value: unknown;
+};
+
+type FakeCursorRequest = {
+  error: Error | null;
+  onerror: (() => void) | null;
+  onsuccess: (() => void) | null;
+  result: FakeCursor | null;
+};
+
 type FakeTransaction = {
   error: Error | null;
   onabort: (() => void) | null;
@@ -46,6 +59,32 @@ class FakeObjectStore {
       this.values.set(key, value);
       return key;
     });
+  }
+
+  openCursor(): FakeCursorRequest {
+    const entries = [...this.values.entries()];
+    const request: FakeCursorRequest = { error: null, onerror: null, onsuccess: null, result: null };
+    let index = 0;
+    const step = () => {
+      queueMicrotask(() => {
+        const entry = entries[index];
+        index += 1;
+        if (!entry) {
+          request.result = null;
+          request.onsuccess?.();
+          return;
+        }
+        const [key, value] = entry;
+        request.result = {
+          continue: step,
+          update: (next: unknown) => this.values.set(key, next),
+          value,
+        };
+        request.onsuccess?.();
+      });
+    };
+    step();
+    return request;
   }
 
   delete(key: string): FakeRequest {
@@ -80,6 +119,14 @@ class FakeDatabase {
     return new FakeObjectStore(this.values, this.createTransaction("readwrite"));
   }
 
+  seed(key: string, value: unknown) {
+    this.values.set(key, value);
+  }
+
+  stored(key: string) {
+    return this.values.get(key);
+  }
+
   transaction() {
     return this.createTransaction("readonly");
   }
@@ -99,16 +146,16 @@ class FakeDatabase {
   }
 }
 
-const createFakeIndexedDb = () => {
-  const database = new FakeDatabase();
+const createFakeIndexedDb = (database = new FakeDatabase()) => {
   return {
     open: () => {
-      const request: FakeRequest = {
+      const request: FakeRequest & { transaction: FakeTransaction } = {
         error: null,
         onerror: null,
         onsuccess: null,
         onupgradeneeded: null,
         result: database,
+        transaction: database.transaction(),
       };
       queueMicrotask(() => {
         request.onupgradeneeded?.();
@@ -122,7 +169,6 @@ const createFakeIndexedDb = () => {
 const record: EmulatorSaveRecord = {
   gameId: "rom-weaver-nes",
   gameName: "rom-weaver-nes",
-  label: "game.nes",
   sram: new Uint8Array([4, 5, 6]),
   state: new Uint8Array([1, 2, 3]),
   updatedAt: 1,
@@ -147,6 +193,36 @@ describe("emulator saves", () => {
     expect(imported.gameId).toBe(record.gameId);
     expect(imported.state).toEqual(record.state);
     expect(imported.sram).toEqual(record.sram);
+  });
+
+  it("stores only save data and its derived key", async () => {
+    await writeEmulatorSave(record);
+    const [stored] = await listEmulatorSaves();
+    expect(Object.keys(stored || {}).sort()).toEqual(["gameId", "gameName", "sram", "state", "updatedAt"]);
+    expect(JSON.parse(serializeEmulatorSave(record))).not.toHaveProperty("label");
+  });
+
+  it("drops the ROM name a version 1 record carries", async () => {
+    const database = new FakeDatabase();
+    database.seed(record.gameId, { ...record, label: "Some Game (USA).nes" });
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database));
+
+    await listEmulatorSaves();
+    await vi.waitFor(() => {
+      expect(database.stored(record.gameId)).toMatchObject({ gameId: record.gameId });
+      expect(database.stored(record.gameId)).not.toHaveProperty("label");
+    });
+  });
+
+  it("drops the ROM name a version 1 export file carries", async () => {
+    const legacy = JSON.stringify({
+      ...JSON.parse(serializeEmulatorSave(record)),
+      label: "Some Game (USA).nes",
+      version: 1,
+    });
+    const imported = await importEmulatorSave(new Blob([legacy]));
+    expect(imported).not.toHaveProperty("label");
+    expect(imported.state).toEqual(record.state);
   });
 
   it("rejects malformed save files and deletes a whole game record", async () => {
