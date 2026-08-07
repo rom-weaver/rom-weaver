@@ -273,11 +273,15 @@
 /* Docs run a navigation rail beside the document, so the route needs more room
    than the workflow forms do. The shell widens for it and the masthead does
    not, because chrome that changed width per route would make the logo and the
-   icons jump on every navigation. */
-.rw-app .app:has(.docs-workbench) {
+   icons jump on every navigation.
+
+   Keyed on the panel being visible, not on the docs markup existing: a visited
+   view stays mounted under `hidden`, so `:has(.docs-workbench)` would keep the
+   wide shell on every route once docs had been opened once. */
+.rw-app .app:has(#panel-docs:not([hidden])) {
   max-width: var(--app-max-docs);
 }
-.rw-app .app:has(.docs-workbench) > .masthead {
+.rw-app .app:has(#panel-docs:not([hidden])) > .masthead {
   width: 100%;
   /* The shared width minus the shell's own gutters: on every other route the
      masthead sits inside that padding, so matching the border box here would
