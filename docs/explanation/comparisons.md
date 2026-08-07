@@ -54,10 +54,14 @@ list of specifications consulted is in
 
 ## At a glance
 
+The patch counts are row counts from the [Applying a patch](#applying-a-patch)
+and [Creating a patch](#creating-a-patch) tables, so every tool is counted the
+same way. Partial support counts as a row.
+
 | Capability | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 | chdman | Dolphin tool |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Patch families applied | 🟢 21 | 🟡 11 | 🔴 3 | 🟡 7 | 🔴 1 ¹ | 🔴 ² | 🔴 ² |
-| Patch families created | 🟢 18 | 🟡 7 | 🔴 2 | 🟡 6 | 🔴 1 ¹ | 🔴 ² | 🔴 ² |
+| Patch formats applied | 🟢 21 | 🟡 12 | 🔴 3 | 🟡 8 | 🔴 2 ¹ | 🔴 ² | 🔴 ² |
+| Patch formats created | 🟢 18 | 🟡 7 | 🔴 2 | 🟡 7 | 🔴 2 ¹ | 🔴 ² | 🔴 ² |
 | Chain several patches | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
 | ROM header awareness | 🟢 12 families | 🟡 4 formats | 🟡 SNES only | 🔴 | 🔴 | 🔴 | 🔴 |
 | Archive extract | 🟢 23 formats | 🟡 ZIP only | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
@@ -67,15 +71,15 @@ list of specifications consulted is in
 | Runs in a browser | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
 | Command line | 🟢 | 🟡 Node script | 🟢 | 🟡 macOS only | 🟢 | 🟢 | 🟢 |
 
-> ¹ xdelta3 applies and creates exactly one family, VCDIFF, but it is a general
-> delta tool with no ROM knowledge at all — no headers, no byte order, no
-> consoles.
+> ¹ xdelta3's two rows, VCDIFF and xdelta, are one underlying family: plain
+> VCDIFF. It is a general delta tool with no ROM knowledge at all — no headers,
+> no byte order, no consoles.
 >
 > ² chdman and Dolphin tool do not patch. They convert disc images.
 
 ## Applying a patch
 
-rom-weaver reads 21 patch families. No other tool here reads more than 11.
+rom-weaver reads 21 patch formats. No other tool here reads more than 12.
 
 | Format | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 |
 | --- | :---: | :---: | :---: | :---: | :---: |
@@ -309,6 +313,6 @@ out of a feature list.
 | chdman | current MAME docs | The [chdman command list](https://docs.mamedev.org/tools/chdman.html) |
 | Dolphin tool | `master` | `ToolMain.cpp` subcommands, `ConvertCommand.cpp` output formats, `Blob.cpp` readable formats |
 
-All projects move. If a row here is stale, the rom-weaver side is generated
-from [Supported formats](../reference/formats.md), and each other tool's side
-lives in the repository linked from [the tools](#the-tools).
+All projects move. If a row here is stale, check the rom-weaver side against
+[Supported formats](../reference/formats.md), and each other tool's side
+against the repository linked from [the tools](#the-tools).
