@@ -765,10 +765,10 @@ html:has(.docs-workbench) {
 }
 
 /* --- the end of the guide ---
-   The pair of steps runs at every width; the way back up is phone-only, because
-   the desktop sidebar is sticky and the top of the document is never more than a
-   glance away there. The empty gap holds the far step's place on the first and
-   last page, so a lone Next never slides over to where Previous belongs. */
+   All three controls run at every width; below the phone breakpoint the way
+   back up drops onto its own row. The empty gap holds the far step's place on
+   the first and last page, so a lone Next never slides over to where Previous
+   belongs. */
 .rw-app .docs-onward {
   display: flex;
   gap: var(--sp-m);
