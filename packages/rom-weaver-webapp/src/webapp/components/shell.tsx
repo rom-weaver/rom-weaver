@@ -1272,7 +1272,7 @@ const Masthead = ({
         onSelect={onSelectTab}
         tabs={tabs}
       />
-      <div className="project-utility-rail">
+      <footer className="project-utility-rail">
         {githubHref ? (
           <a
             className="project-utility-link"
@@ -1297,7 +1297,7 @@ const Masthead = ({
             <span>{supportLabel}</span>
           </a>
         ) : null}
-      </div>
+      </footer>
     </>
   );
 };

@@ -179,8 +179,8 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       try {
         const navigation = page.goto(`${baseUrl}${testCase.path}`, { waitUntil: "domcontentloaded" });
         if (testCase.replayClick) {
-          const settings = page.getByRole("button", { name: "Settings" });
-          await settings.waitFor({ state: "visible" });
+          const more = page.getByRole("button", { name: "More" });
+          await more.waitFor({ state: "visible" });
           // Standalone iOS paints with device insets before the app bundle can
           // run. Apply representative values to exercise that same first shell
           // geometry instead of only testing the browser-tab zero-inset case.
@@ -213,7 +213,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           if (!(initialShell.prerendered && initialShell.footerInFirstViewport)) {
             throw new Error(`initial shell dock is not visible: ${JSON.stringify(initialShell)}`);
           }
-          await settings.click();
+          await more.click();
           releaseScripts();
         }
         await navigation;
@@ -222,7 +222,10 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           const active = document.querySelector('[role="tab"][aria-selected="true"]');
           return !root?.hasAttribute("aria-busy") && active?.getAttribute("data-mode") === expectedView;
         }, testCase.finalView);
-        if (testCase.replayClick) await page.getByRole("dialog").waitFor({ state: "visible" });
+        if (testCase.replayClick) {
+          await page.getByRole("menuitem", { name: "Settings" }).click();
+          await page.getByRole("dialog").waitFor({ state: "visible" });
+        }
         await page.evaluate(
           () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
         );
@@ -380,6 +383,11 @@ export const checkCssCoverage = (entries) => {
   process.stdout.write(`PASS CSS coverage: ${label}\n`);
 };
 
+const openSettings = async (page) => {
+  await page.getByRole("button", { exact: true, name: "More" }).click();
+  await page.getByRole("menuitem", { exact: true, name: "Settings" }).click();
+};
+
 const runAccessibilityAudit = async (createContext, baseUrl) => {
   const context = await createContext({ ignoreHTTPSErrors: true });
   let page = await context.newPage();
@@ -517,7 +525,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await page.setViewportSize(viewport);
       for (const theme of ["light", "dark"]) {
         await setTheme(theme);
-        await page.getByRole("button", { name: "Settings" }).click();
+        await openSettings(page);
         await page.getByRole("dialog").waitFor({ state: "visible" });
         await scanLiveApp(page, `Settings (${viewport.label}, ${theme})`);
         const betaTools = page.locator("#settings-beta-tools-enabled");
@@ -551,7 +559,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await scanVariants("info popover");
     await infoButton.click();
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    await openSettings(page);
     await page.getByRole("dialog").waitFor({ state: "visible" });
     const codecCombobox = page.locator(".codec-combobox input").first();
     await codecCombobox.click();
@@ -786,7 +794,7 @@ const createWorkerReuseCorpus = () => {
 };
 
 const configureUncompressedOutput = async (page) => {
-  await page.getByRole("button", { name: "Settings" }).click();
+  await openSettings(page);
   await page.locator("#settings-default-compression").selectOption("none");
   await page.getByRole("button", { name: "Save" }).click();
 };
