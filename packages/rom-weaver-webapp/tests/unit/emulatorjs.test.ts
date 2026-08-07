@@ -28,9 +28,17 @@ describe("createEmulatorDocument", () => {
     expect(document).toContain("EJS_threads = true");
     expect(document).toContain("webgl2Enabled: 'enabled'");
     expect(document).toContain("ejs_threads: 'enabled'");
+    expect(document).toContain("EJS_hideSettings = ['ejs_threads']");
     expect(document).toContain("EJS_disableLocalStorage = false");
     expect(document).toContain("EJS_onSaveState");
     expect(document).toContain("EJS_onSaveSave");
+  });
+
+  it("clears a stored threads setting before the loader runs", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
+
+    expect(document).toContain("delete stored.settings.ejs_threads;");
+    expect(document.indexOf("delete stored.settings.ejs_threads;")).toBeLessThan(document.indexOf("loader.js"));
   });
 
   it("requests app-owned SRAM when the emulator starts", () => {

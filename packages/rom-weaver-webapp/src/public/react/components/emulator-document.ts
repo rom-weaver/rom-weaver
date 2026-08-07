@@ -34,6 +34,30 @@ const createEmulatorGameIdentity = ({ checksum, fileName, sizeBytes }: EmulatorG
   };
 };
 
+/**
+ * Drop a previously saved "Threads: Disabled" choice. EmulatorJS stores per
+ * game settings under `ejs-<id>-settings` and a stored value beats
+ * `EJS_defaultOptions`, so anyone who toggled threads off before the
+ * non-threaded cores were dropped would keep asking for a core that is no
+ * longer vendored. Safe to delete once no such saved setting can be in the
+ * wild.
+ */
+const CLEAR_STORED_THREADS_SETTING = `
+      (() => {
+        try {
+          for (let index = 0; index < localStorage.length; index += 1) {
+            const key = localStorage.key(index);
+            if (!key || !/^ejs-.+-settings$/.test(key)) continue;
+            const stored = JSON.parse(localStorage.getItem(key));
+            if (!stored || !stored.settings || !('ejs_threads' in stored.settings)) continue;
+            delete stored.settings.ejs_threads;
+            localStorage.setItem(key, JSON.stringify(stored));
+          }
+        } catch (error) {
+          console.warn('Could not clear the stored EmulatorJS threads setting', error);
+        }
+      })();`;
+
 const createEmulatorBridgeScript = (gameName: string) => `
       (() => {
         const source = "rom-weaver-emulator";
@@ -114,6 +138,10 @@ const createEmulatorDocument = (
       EJS_DEBUG_XX = false;
       EJS_threads = true;
       EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: 'enabled' };
+      // Only the threaded cores are vendored, so the in-emulator "Threads"
+      // toggle has to go: switching it off asks for a <core>-wasm.data that
+      // does not exist and the game dies on a 404.
+      EJS_hideSettings = ['ejs_threads'];
       EJS_disableLocalStorage = false;
       EJS_startOnLoaded = true;
       EJS_gameID = ${options.gameId ?? hashString(gameName)};
@@ -123,6 +151,7 @@ const createEmulatorDocument = (
       EJS_gameUrl = ${toScriptString(gameUrl)};
       EJS_pathtodata = ${toScriptString(dataUrl)};
     </script>
+    <script>${CLEAR_STORED_THREADS_SETTING}</script>
     <script>${createEmulatorBridgeScript(gameName)}</script>
     <script src="${dataUrl}loader.js"></script>
   </body>
