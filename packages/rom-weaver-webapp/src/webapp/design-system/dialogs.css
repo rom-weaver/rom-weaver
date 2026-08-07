@@ -1029,29 +1029,17 @@ html.vt-mode .drop:has(#tools-input-picker) {
   mask-image: var(--weave-mask);
   mask-size: 5.5px 5.5px;
 }
-/* A plate wearing the woven seam the workbench throws across a finished step. */
+/* The same plate the settings groups are built from. The heading's weave swatch
+   is the section's mark; the plate itself stays plain. */
 .rw-app .status-group {
-  position: relative;
   padding: var(--sp-m) var(--sp-l) var(--sp-l);
-  overflow: clip;
   background: var(--plate-2);
   border: 1px solid var(--seam);
   border-radius: var(--r-m);
 }
-/* Faint: the seam says which family the plate belongs to, and the heading under
-   it is what the eye should reach first. */
-.rw-app .status-group::before {
-  position: absolute;
-  inset-inline: 0;
-  top: 0;
-  height: 3px;
-  pointer-events: none;
-  content: "";
-  background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--thread) 2px 5px, transparent 5px 7px);
-  opacity: 0.3;
-}
-/* Tinted from its own state colour, so the chip reads as a filled badge in the
-   app's palette rather than an empty outline. */
+/* No fill: the greyest chips sit at ~4.8:1 on the legend's tinted current row in
+   the light theme, and any tint of their own colour behind them drops that under
+   4.5:1. The row's fill and thread edge-bar mark the current state instead. */
 .rw-app .sw-chip {
   display: inline-flex;
   gap: var(--sp-xs);
@@ -1062,7 +1050,6 @@ html.vt-mode .drop:has(#tools-input-picker) {
   font-weight: 600;
   color: var(--ink-3);
   white-space: nowrap;
-  background: color-mix(in oklab, currentColor 8%, transparent);
   border: 1px solid var(--seam-soft);
   border-radius: 999px;
 }
@@ -1155,9 +1142,6 @@ html.vt-mode .drop:has(#tools-input-picker) {
 }
 .rw-app .sw-legend-row[data-current] dd {
   color: var(--ink-2);
-}
-.rw-app .sw-legend-row[data-current] .sw-chip {
-  background: color-mix(in oklab, currentColor 16%, transparent);
 }
 @media (max-width: 519px) {
   .rw-app .sw-legend-row {

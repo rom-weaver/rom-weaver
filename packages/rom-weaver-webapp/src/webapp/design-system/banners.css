@@ -276,24 +276,10 @@
    Tinted and boxed so it reads as the one thing on the tab that asks for an
    action, with the shipped list continuing underneath in plain chrome. */
 .rw-app .changelog-update {
-  position: relative;
   padding: var(--sp-m);
-  overflow: clip;
   background: color-mix(in oklab, var(--care) 7%, var(--plate));
   border: 1px solid color-mix(in oklab, var(--care) 34%, var(--seam));
   border-radius: var(--r-m);
-}
-/* The same seam every plate on these tabs wears, thrown in amber rather than
-   thread so the banner stays the one thing here asking to be acted on. */
-.rw-app .changelog-update::before {
-  position: absolute;
-  inset-inline: 0;
-  top: 0;
-  height: 3px;
-  pointer-events: none;
-  content: "";
-  background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--care) 2px 5px, transparent 5px 7px);
-  opacity: 0.55;
 }
 /* The transition and full-changelog link sit on the title's baseline while they
    fit, and drop to their own right-aligned row once the head runs out of
@@ -326,24 +312,12 @@
   flex-direction: column;
   gap: var(--sp-s);
 }
-/* A release is a plate carrying the woven seam, the same build the Status tab's
-   sections are made from - the two tabs are both readouts and should look it. */
+/* A release is a plate, the same one the Status tab's sections are built from -
+   the two tabs are both readouts and should look it. */
 .rw-app .rel {
-  position: relative;
-  overflow: clip;
   background: var(--plate-2);
   border: 1px solid var(--seam);
   border-radius: var(--r-m);
-}
-.rw-app .rel::before {
-  position: absolute;
-  inset-inline: 0;
-  top: 0;
-  height: 3px;
-  pointer-events: none;
-  content: "";
-  background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--thread) 2px 5px, transparent 5px 7px);
-  opacity: 0.3;
 }
 .rw-app .rel-summary {
   display: flex;
@@ -355,7 +329,7 @@
   color: var(--ink);
   cursor: pointer;
   list-style: none;
-  border-radius: var(--r-m) var(--r-m) 0 0;
+  border-radius: var(--r-m);
 }
 /* the disclosure triangle is drawn by the marker, so Safari's default one goes */
 .rw-app .rel-summary::-webkit-details-marker {
