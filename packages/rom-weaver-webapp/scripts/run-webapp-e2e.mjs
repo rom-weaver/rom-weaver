@@ -618,8 +618,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await page.getByRole("button", { name: "Create ZIP Bundle", exact: true }).click();
         const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
         await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
-        await downloadButton.hover();
         await waitForStableBox(page, downloadButton);
+        await downloadButton.hover();
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
           downloadButton.click(),
