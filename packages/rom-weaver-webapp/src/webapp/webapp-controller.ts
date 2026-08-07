@@ -463,18 +463,6 @@ const createWebappRootController = (options: ControllerOptions) => {
         draftSettings: { ...state.draftSettings, bundlePackage: value },
       });
     },
-    setPostApplyRomBehavior(value: string) {
-      const state = store.getState();
-      if (state.settings.postApplyRomBehavior === value) return;
-      const validValues = new Set(SETTINGS_FIELD_METADATA.postApplyRomBehavior.validValues || []);
-      if (!validValues.has(value)) return;
-      const behavior = value as SettingsState["postApplyRomBehavior"];
-      const nextSettings = { ...copySettings(state.settings), postApplyRomBehavior: behavior };
-      persistSettings(nextSettings);
-      applyCommittedSettings(nextSettings, {
-        draftSettings: { ...state.draftSettings, postApplyRomBehavior: behavior },
-      });
-    },
     setCreatorModifiedState(file: unknown) {
       updateCreatorSession({ modifiedFilePresent: !!file });
     },

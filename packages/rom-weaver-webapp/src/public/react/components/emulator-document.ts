@@ -55,6 +55,7 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string) => `
         EJS_onGameStart = () => {
           const emulator = window.EJS_emulator;
           if (emulator && typeof emulator.on === "function") emulator.on("saveSaveFiles", (data) => send("save-sram", data));
+          request("request-load-sram");
         };
         window.__romWeaverVisibilityPaused = false;
         window.addEventListener("message", (event) => {

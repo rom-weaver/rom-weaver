@@ -78,10 +78,9 @@ const EmulatorSessionOutput = ({ entry, current }: { entry: EmulatorSessionEntry
 type EmulatorTestViewProps = {
   /** False while another workflow tab is shown; the running game pauses until the view returns. */
   active?: boolean;
-  onOpenStorage?: () => void;
 };
 
-const EmulatorTestView = ({ active = true, onOpenStorage }: EmulatorTestViewProps) => {
+const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerFrameRef = useRef<HTMLDivElement>(null);
@@ -235,18 +234,6 @@ const EmulatorTestView = ({ active = true, onOpenStorage }: EmulatorTestViewProp
           ) : undefined
         }
         big={workflowEmpty}
-        headerExtra={
-          onOpenStorage ? (
-            <button
-              aria-label="Manage saved states and SRAM"
-              className="btn ghost slim emulator-saves-link"
-              onClick={onOpenStorage}
-              type="button"
-            >
-              Manage saves
-            </button>
-          ) : undefined
-        }
         heroLabel="Drop a ROM or choose a file"
         heroLabelCoarse="Choose a ROM file"
         id="emulator-test-input"

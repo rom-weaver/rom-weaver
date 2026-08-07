@@ -3,7 +3,6 @@ import {
   Check,
   Copy,
   Download,
-  Gamepad2,
   HardDrive,
   Newspaper,
   RefreshCw,
@@ -28,7 +27,6 @@ import { CHANNEL_BADGE } from "../build-channel.ts";
 import { ABOUT_URL, GITHUB_URL } from "../project-links.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
-import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
   prefersReducedMotion,
   readPwaState,
@@ -190,26 +188,19 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
 /**
  * Every chrome-level surface the app owns, in one dialog: the tabs ARE the
  * header, so there is no title. Settings leads because it is the tab people
- * come here for; the rest are diagnostics. Test hosts the EmulatorJS
- * offline-asset and save-state tools, which used to live inside Storage.
+ * come here for; the rest are diagnostics. Storage hosts the OPFS inspector.
  */
-const DIALOG_TABS = ["settings", "status", "logs", "storage", "test", "changelog"] as const;
+const DIALOG_TABS = ["settings", "status", "logs", "storage", "changelog"] as const;
 type LogDialogTab = (typeof DIALOG_TABS)[number];
 const TAB_MESSAGES: Record<
   LogDialogTab,
-  | "ui.settings.title"
-  | "ui.log.tabStatus"
-  | "ui.log.tabLogs"
-  | "ui.log.tabStorage"
-  | "ui.log.tabTest"
-  | "ui.log.tabChangelog"
+  "ui.settings.title" | "ui.log.tabStatus" | "ui.log.tabLogs" | "ui.log.tabStorage" | "ui.log.tabChangelog"
 > = {
   changelog: "ui.log.tabChangelog",
   logs: "ui.log.tabLogs",
   settings: "ui.settings.title",
   status: "ui.log.tabStatus",
   storage: "ui.log.tabStorage",
-  test: "ui.log.tabTest",
 };
 const TAB_ICONS = {
   changelog: Newspaper,
@@ -217,7 +208,6 @@ const TAB_ICONS = {
   settings: Settings,
   status: Activity,
   storage: HardDrive,
-  test: Gamepad2,
 } as const;
 
 /** How long to keep looking for a deep-linked field while its lazy panel loads. */
@@ -748,7 +738,12 @@ const LogsStoragePanel = ({
         role="tabpanel"
       >
         {showingOpfs ? (
-          <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
+          <section aria-labelledby="storage-opfs-title" className="storage-section storage-section-opfs">
+            <h3 className="storage-section-title" id="storage-opfs-title">
+              OPFS
+            </h3>
+            <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
+          </section>
         ) : (
           <TraceList
             entries={entries}
@@ -771,7 +766,6 @@ const LogDialog = ({
   level,
   onLevelChange,
   initialTab = "status",
-  emulatorSettingsField,
   onReload,
   onRestoreDefaults,
   onSaveSettings,
@@ -786,8 +780,6 @@ const LogDialog = ({
   level?: string;
   onLevelChange: (level: string) => void;
   initialTab?: LogDialogTab;
-  /** The lazy "After applying" field, mounted only while the Test tab is showing. */
-  emulatorSettingsField?: ReactNode;
   onReload?: () => void;
   onRestoreDefaults?: () => void;
   onSaveSettings?: () => void;
@@ -960,12 +952,6 @@ const LogDialog = ({
             <StatusRows localizer={localizer} runtimeState={runtimeState} />
             <OfflineLegend current={runtimeState} localizer={localizer} />
             <AboutLink localizer={localizer} />
-          </div>
-        ) : null}
-        {tab === "test" ? (
-          <div aria-labelledby="logtab-test" className="dlg-body log-body test-body" id="logpanel-test" role="tabpanel">
-            {emulatorSettingsField ? <div className="test-settings-field">{emulatorSettingsField}</div> : null}
-            <EmulatorSavesPanel active={tab === "test"} />
           </div>
         ) : null}
         {tab === "changelog" ? (
