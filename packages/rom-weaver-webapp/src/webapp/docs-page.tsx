@@ -773,33 +773,13 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [active, highlightQuery, highlightSection, html]);
-  // Land on whatever the fragment names, and mark it so a note the reader
-  // jumped to can be told from its neighbours. `:target` cannot carry this:
-  // the article is replaced wholesale on every render, and the browser does
-  // not re-resolve the target when the element it pointed at is swapped out.
-  // Re-applied whenever the rendered HTML changes for that reason, and on
-  // `hashchange` for a same-document jump that renders nothing.
   useEffect(() => {
-    if (!(active && html)) return;
-    const markHashTarget = () => {
-      document.querySelector("[data-nav-target]")?.removeAttribute("data-nav-target");
-      const id = decodeURIComponent(window.location.hash.slice(1));
-      if (!id) return;
-      const landing = document.getElementById(id);
-      if (!landing) return;
-      landing.setAttribute("data-nav-target", "");
-      landing.scrollIntoView({ block: "start" });
-    };
-    const frame = window.requestAnimationFrame(markHashTarget);
-    window.addEventListener("hashchange", markHashTarget);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("hashchange", markHashTarget);
-    };
-    // Deliberately every render: a fragment navigation re-renders the article,
-    // and the replacement DOM does not carry the mark that was put on the node
-    // it replaced.
-  });
+    if (!(active && html && window.location.hash)) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, html]);
   const onSearchSelect = useCallback((result: DocSearchResult, query: string) => {
     setHighlightQuery(query);
     setHighlightSection(result.entry.id);

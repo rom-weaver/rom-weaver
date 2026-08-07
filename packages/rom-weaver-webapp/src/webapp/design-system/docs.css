@@ -568,32 +568,6 @@ html:has(.docs-workbench) {
   font-size: 0.9em;
   font-weight: 700;
   color: var(--thread-text);
-  /* The note it points at is what gets scrolled to, so it clears the masthead
-     by the same margin the section headings use. */
-  scroll-margin-top: 5.5rem;
-}
-/* The marker already reads as a reference; the body underline would only add
-   noise at this size. Its hit area is padded out to stay tappable. */
-.rw-app .docs-note-ref > a {
-  padding: 0.35em;
-  margin: -0.35em;
-  color: inherit;
-  text-decoration: none;
-}
-@media (hover: hover) {
-  .rw-app .docs-note-ref > a:hover {
-    text-decoration: underline;
-  }
-}
-.rw-app .docs-note-ref > a:active {
-  text-decoration: underline;
-}
-/* Arriving at a note marks the line it names, so the reader lands on the right
-   one when several share a block. */
-.rw-app .docs-article blockquote p:has(> .docs-note-ref[data-nav-target]) {
-  background: color-mix(in oklab, var(--thread) 12%, transparent);
-  border-radius: var(--r-s);
-  box-shadow: 0 0 0 6px color-mix(in oklab, var(--thread) 12%, transparent);
 }
 /* The panel clips its own corners, so a table wider than the column has to
    scroll here or its last columns are simply unreachable. */
