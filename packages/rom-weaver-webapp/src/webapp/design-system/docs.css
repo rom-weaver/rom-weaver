@@ -780,90 +780,71 @@ html:has(.docs-workbench) {
   margin-block-start: var(--sp-xl);
   border-block-start: 1px solid var(--seam-soft);
 }
-/* The step and the way back up share one woven surface. Directional edge marks
-   keep the pair readable as navigation instead of two unrelated cards. */
-.rw-app .docs-to-top {
-  display: inline-flex;
-  flex: 0 0 auto;
-  justify-content: center;
-  padding-inline: var(--sp-l);
-  font-size: 0.7rem;
-  font-weight: 750;
-  font-stretch: 88%;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  background: color-mix(in oklab, var(--thread) 4%, transparent);
-  border-style: dashed;
-  border-radius: var(--r-l);
-}
+/* The step and the way back up are controls, so they dress like `.btn`: flat
+   plate, hairline seam, the same small hover lift - no surface of their own. */
 .rw-app .docs-step,
 .rw-app .docs-step-gap {
   flex: 1 1 0;
 }
 .rw-app .docs-step,
 .rw-app .docs-to-top {
-  position: relative;
   gap: var(--sp-s);
   align-items: center;
   min-height: 56px;
-  overflow: hidden;
   font: inherit;
   color: var(--ink-2);
   text-decoration: none;
   cursor: pointer;
-  background: linear-gradient(135deg, color-mix(in oklab, var(--thread) 7%, var(--plate-2)), var(--well));
-  border: 1px solid var(--seam);
-  box-shadow: 0 12px 28px -24px rgb(0 0 0 / 0.9);
+  background: var(--plate-2);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-m);
   transition:
     border-color 0.18s,
-    background 0.18s,
-    color 0.18s;
+    color 0.18s,
+    transform 0.15s var(--ease);
 }
 .rw-app .docs-step {
   display: inline-flex;
   min-width: 0;
   padding: var(--sp-m) var(--sp-l);
-  border-radius: var(--r-l);
 }
 .rw-app .docs-step[data-direction="next"] {
   justify-content: flex-end;
   text-align: end;
 }
-.rw-app .docs-step::before {
-  position: absolute;
-  inset-block: 0;
-  width: 3px;
-  content: "";
-  background: var(--thread);
-  opacity: 0.45;
-  transition: opacity 0.18s;
+.rw-app .docs-to-top {
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  padding-inline: var(--sp-l);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-stretch: 88%;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: transparent;
 }
-.rw-app .docs-step[data-direction="previous"]::before {
-  inset-inline-start: 0;
-}
-.rw-app .docs-step[data-direction="next"]::before {
-  inset-inline-end: 0;
-}
+/* thread on the marks only, the way the shelf +/- markers carry it */
 .rw-app .docs-step svg,
 .rw-app .docs-to-top svg {
   flex: none;
-  width: 18px;
-  height: 18px;
-  color: var(--weft);
+  width: 16px;
+  height: 16px;
+  color: var(--thread-text);
 }
 .rw-app .docs-step-copy {
   display: grid;
   gap: 1px;
   min-width: 0;
 }
-/* --ink-4 is a hair under 4.5:1 on the light plate at this size, and the
-   direction label is the one word that has to be legible before the page name */
 .rw-app .docs-step-copy small {
-  font-size: 0.62rem;
-  font-weight: 750;
-  color: var(--thread-text);
+  font-size: 0.625rem;
+  font-weight: 700;
+  font-stretch: 86%;
+  color: var(--ink-3);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 .rw-app .docs-step-copy b {
   overflow: hidden;
@@ -882,22 +863,15 @@ html:has(.docs-workbench) {
   .rw-app .docs-step:hover,
   .rw-app .docs-to-top:hover {
     color: var(--ink);
-    background: linear-gradient(135deg, color-mix(in oklab, var(--thread) 12%, var(--plate-2)), var(--well));
-    border-color: var(--seam-strong);
-    box-shadow: 0 16px 30px -22px rgb(0 0 0 / 0.95);
-  }
-  .rw-app .docs-step:hover::before {
-    opacity: 1;
+    border-color: var(--ink-4);
+    transform: translateY(-1px);
   }
 }
 .rw-app .docs-step:active,
 .rw-app .docs-to-top:active {
   color: var(--ink);
-  background: var(--well);
-  border-color: var(--seam-strong);
-}
-.rw-app .docs-step:active::before {
-  opacity: 1;
+  border-color: var(--ink-4);
+  transform: translateY(0) scale(0.99);
 }
 
 /* --- the trail ---
