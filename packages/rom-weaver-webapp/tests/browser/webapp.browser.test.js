@@ -261,7 +261,7 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
       expect(
         Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row .build-tag .sub-chip")).fontSize),
       ).toBeLessThanOrEqual(subtitleSize);
-      expect(getComputedStyle(document.querySelector(".sub-status svg")).width).toBe("16px");
+      expect(getComputedStyle(document.querySelector(".sub-status svg")).width).toBe("13px");
       expect(getComputedStyle(document.querySelector(".sub-status")).cursor).toBe("pointer");
     }
   }
@@ -485,9 +485,11 @@ test("mobile More contains every masthead utility action", async () => {
     expect(getComputedStyle(item.querySelector("svg")).color).toBe(neutralColor);
   }
   const supportItem = document.querySelector(".more-menu .more-support");
-  expect(getComputedStyle(supportItem).color).toBe(getComputedStyle(document.querySelector(".tool-support")).color);
+  expect(getComputedStyle(supportItem).color).toBe(
+    getComputedStyle(document.querySelector(".project-utility-support")).color,
+  );
   expect(getComputedStyle(supportItem.querySelector("svg")).color).toBe(
-    getComputedStyle(document.querySelector(".tool-support svg")).color,
+    getComputedStyle(document.querySelector(".project-utility-support svg")).color,
   );
   await page.getByRole("menuitem", { name: "Accent" }).click();
   await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
