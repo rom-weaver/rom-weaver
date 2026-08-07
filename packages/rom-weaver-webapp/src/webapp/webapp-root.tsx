@@ -23,7 +23,7 @@ import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
-import { Masthead, UpdateBanner } from "./components/shell.tsx";
+import { Masthead, SiteFooter, UpdateBanner } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
@@ -538,7 +538,6 @@ function WebappRoot({
             onAccentChange={actions.onAccentChange}
             commitsSinceVersion={COMMITS_SINCE_VERSION}
             dirty={Boolean(DIRTY_HASH)}
-            donateHref={DONATE_URL}
             onOpenChangelog={openChangelogTab}
             onOpenLog={() => {
               setLogTab("logs");
@@ -662,6 +661,11 @@ function WebappRoot({
               </>
             )}
           </main>
+          <SiteFooter
+            confirmExternalNavigation={actions.onConfirmExternalNavigation}
+            donateHref={DONATE_URL}
+            githubHref={GITHUB_URL}
+          />
           {/* the dock is fixed, so the column reserves its height through the one
               variable masthead.css raises below the dock threshold */}
           <div aria-hidden="true" className="dock-pad" />

@@ -591,8 +591,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   display: none;
 }
 .rw-app .more-menu > button,
-.rw-app .more-accent > button,
-.rw-app .more-link {
+.rw-app .more-accent > button {
   display: flex;
   gap: var(--sp-s);
   align-items: center;
@@ -619,31 +618,17 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   height: 17px;
   color: var(--ink-2);
 }
-.rw-app .more-support,
-.rw-app .more-support svg {
-  color: var(--thread-text);
-}
 @media (hover: hover) {
   .rw-app .more-menu > button:hover,
-  .rw-app .more-accent > button:hover,
-  .rw-app .more-link:hover {
+  .rw-app .more-accent > button:hover {
     color: var(--ink);
     background: var(--well);
   }
-  .rw-app .more-support:hover,
-  .rw-app .more-support:hover svg {
-    color: var(--thread-text);
-  }
 }
 .rw-app .more-menu > button:active,
-.rw-app .more-accent > button:active,
-.rw-app .more-link:active {
+.rw-app .more-accent > button:active {
   color: var(--ink);
   background: var(--plate-2);
-}
-.rw-app .more-support:active,
-.rw-app .more-support:active svg {
-  color: var(--thread-text);
 }
 .rw-app .more-accent-tray {
   display: flex;
@@ -654,30 +639,14 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   border: 1px solid var(--seam);
   border-radius: var(--r-s);
 }
-.rw-app .more-separator {
-  block-size: 1px;
-  margin: var(--sp-xs) 6px;
-  background: var(--seam);
-}
 @media (prefers-reduced-motion: reduce) {
   .rw-app .more-menu {
     animation: none;
   }
 }
-/* external links (github/support) sit apart from the app's own controls */
-.rw-app .actions-sep {
-  flex: none;
-  width: 1px;
-  height: 20px;
-  margin-inline: var(--sp-s);
-  background: var(--seam);
-}
 @media (max-width: 719px) {
   .rw-app .masthead-tools {
     gap: 0;
-  }
-  .rw-app .actions-sep {
-    margin-inline: var(--sp-xs);
   }
   .rw-app .brand {
     gap: var(--sp-s);
@@ -753,41 +722,6 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
 }
 .rw-app .dock-action .tool-text {
   display: inline;
-}
-
-/* support wears the thread at rest - the one action that stays warm. The heart
-   beats a soft double-thump at rest, filled and quickened under the pointer. */
-.rw-app .tool-support {
-  color: var(--thread-text);
-}
-.rw-app .tool-support svg {
-  transform-origin: center;
-  animation: heartbeat 6s var(--ease) infinite 2s;
-}
-@media (hover: hover) {
-  .rw-app .tool-support:hover {
-    color: var(--thread-text);
-  }
-  .rw-app .tool-support:hover svg {
-    fill: currentColor;
-    animation: heartbeat-fast 0.9s ease-in-out infinite;
-  }
-}
-.rw-app .tool-support:active {
-  color: var(--thread-text);
-}
-.rw-app .tool-support:active svg {
-  fill: currentColor;
-}
-.rw-app .tool-support:focus-visible svg {
-  fill: currentColor;
-  animation: heartbeat-fast 0.9s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .rw-app .tool-support svg,
-  .rw-app .tool-support:focus-visible svg {
-    animation: none;
-  }
 }
 
 /* real tooltips - localizable text, not title="" */
@@ -957,11 +891,6 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
     display: inline-flex;
   }
   .rw-app .masthead-settings {
-    display: none;
-  }
-  .rw-app .masthead-tools .mobile-utility-source,
-  .rw-app .masthead-tools .mobile-utility-support,
-  .rw-app .masthead-tools .actions-sep {
     display: none;
   }
   .rw-app .dock .mobile-more {

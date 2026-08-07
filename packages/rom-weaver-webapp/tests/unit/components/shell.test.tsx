@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
-import { Masthead, Reveal, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
+import { Masthead, Reveal, SiteFooter, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
 
 /**
  * App-shell contract: the masthead tablist and the phone dock (both named
@@ -31,7 +31,6 @@ const TABS = [
 const mastheadProps = {
   currentTab: "patcher",
   homeHref: "/apply",
-  donateHref: "https://example.com/donate",
   githubHref: "https://example.com/repo",
   onOpenChangelog: () => undefined,
   onOpenLog: () => undefined,
@@ -78,11 +77,11 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // github + support | status, theme, accent, settings, more - and Reset is
-    // gone: it lives in the workflow panel head now
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
-    expect(container.querySelector(".actions-sep")).toBeTruthy();
-    expect(container.querySelector(".tool-support")).toBeTruthy();
+    // status, theme, accent, settings, more - external actions live in the
+    // shared footer, and Reset lives in the workflow panel head
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(5);
+    expect(container.querySelector(".actions-sep")).toBeNull();
+    expect(container.querySelector(".tool-support")).toBeNull();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     expect(container.querySelector('[aria-label="Reset"]')).toBeNull();
     expect(container.querySelector(".desktop-more .tool")).toBeTruthy();
@@ -213,11 +212,22 @@ describe("Masthead", () => {
     expect(onPreloadLog).toHaveBeenCalledTimes(3);
   });
 
-  it("keeps GitHub and Support in the masthead, with no footer to duplicate them", () => {
-    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} />));
-    expect(getByRole("link", { name: "View source on GitHub" }).closest(".masthead-tools")).toBeTruthy();
+  it("renders GitHub and Support in the shared footer", () => {
+    const { container, getByRole } = render(
+      withSettings(
+        <>
+          <Masthead {...mastheadProps} />
+          <SiteFooter donateHref="https://example.com/donate" githubHref="https://example.com/repo" />
+        </>,
+      ),
+    );
+    const footer = container.querySelector(".site-footer");
+    expect(footer).toBeTruthy();
+    expect(getByRole("link", { name: "View source on GitHub" }).closest(".site-footer")).toBe(footer);
+    expect(getByRole("link", { name: "View source on GitHub" }).getAttribute("href")).toBe("https://example.com/repo");
+    expect(getByRole("link", { name: "Support" }).closest(".site-footer")).toBe(footer);
     expect(getByRole("link", { name: "Support" }).getAttribute("href")).toBe("https://example.com/donate");
-    expect(container.querySelector(".site-footer")).toBeNull();
+    expect(container.querySelector(".masthead-tools a")).toBeNull();
   });
 
   it("commits an accent straight from the masthead tray", () => {
