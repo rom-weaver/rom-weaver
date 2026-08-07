@@ -549,6 +549,16 @@ html:has(.docs-workbench) {
 .rw-app .docs-article blockquote > :last-child {
   margin-bottom: 0;
 }
+/* A note marker has to be findable in a dense cell and then findable again at
+   the note itself, so it carries the accent rather than the body colour. The
+   UA's `smaller` on `<sup>` compounds against the table's already reduced font,
+   so the size is set outright. */
+.rw-app .docs-note-ref {
+  padding-inline-start: 0.2em;
+  font-size: 0.9em;
+  font-weight: 700;
+  color: var(--thread-text);
+}
 /* The panel clips its own corners, so a table wider than the column has to
    scroll here or its last columns are simply unreachable. */
 .rw-app .docs-table-scroll {

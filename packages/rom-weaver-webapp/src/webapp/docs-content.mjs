@@ -92,6 +92,22 @@ const headingSlug = (value) =>
  * while the surrounding tags survive, so clearing the flag hands the text back
  * to marked's own escaping rather than reimplementing it here.
  */
+/**
+ * Unicode superscript note markers, mapped to the digit they stand for.
+ * @type {Readonly<Record<string, string>>}
+ */
+const NOTE_DIGITS = Object.freeze({
+  "¹": "1",
+  "²": "2",
+  "³": "3",
+  "⁴": "4",
+  "⁵": "5",
+  "⁶": "6",
+  "⁷": "7",
+  "⁸": "8",
+  "⁹": "9",
+});
+
 const createHeadingRenderer = () => {
   const renderer = new Renderer();
   renderer.html = () => "";
@@ -155,6 +171,17 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
       code(token) {
         defaultRenderer.parser = this.parser;
         return defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
+      },
+      // Note markers are authored as Unicode superscripts so the Markdown still
+      // reads on GitHub, but that glyph is a fixed half-height and hairline
+      // thin - unreadable inside a 0.78rem table cell, and nothing CSS can
+      // reach. Promote it to a real element the stylesheet can size. Inline
+      // code is a `codespan` token, so this never rewrites code.
+      text(token) {
+        defaultRenderer.parser = this.parser;
+        return defaultRenderer
+          .text(token)
+          .replace(/[¹²³⁴-⁹]/g, (mark) => `<sup class="docs-note-ref">${NOTE_DIGITS[mark]}</sup>`);
       },
       // A table too wide for the column becomes its own scroll region, which a
       // keyboard user can only reach if it can take focus. The scroller is a
