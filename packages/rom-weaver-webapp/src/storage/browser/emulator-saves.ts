@@ -135,12 +135,30 @@ const openDatabase = (): Promise<IDBDatabase> => {
         cursor.continue();
       };
     };
-    // Without this, a second tab holding an older connection open leaves the
-    // upgrade blocked and this promise pending forever.
-    request.onblocked = () =>
+    let settled = false;
+    // Without this, a tab holding an older connection open leaves the upgrade
+    // blocked and this promise pending forever. Rejecting does not cancel the
+    // open, so `onsuccess` still fires once the other tab goes away - close
+    // that connection rather than leaking one per blocked attempt.
+    request.onblocked = () => {
+      settled = true;
       reject(new Error("Emulator save storage is upgrading in another tab. Close the other rom-weaver tabs."));
-    request.onerror = () => reject(requestError(request));
-    request.onsuccess = () => resolve(request.result);
+    };
+    request.onerror = () => {
+      settled = true;
+      reject(requestError(request));
+    };
+    request.onsuccess = () => {
+      const database = request.result;
+      // A connection left open here would block the next version bump.
+      database.onversionchange = () => database.close();
+      if (settled) {
+        database.close();
+        return;
+      }
+      settled = true;
+      resolve(database);
+    };
   });
 };
 
@@ -284,14 +302,31 @@ const normalizeRecord = (value: unknown): EmulatorSaveRecord | undefined => {
   };
 };
 
+const writeRecord = async (record: EmulatorSaveRecord): Promise<void> => {
+  await runTransaction("readwrite", (store) => store.put(copyRecord(record), record.gameId));
+};
+
+/**
+ * Retry the upgrade's cleanup for any record it could not rewrite. The upgrade
+ * swallows its errors and never runs again, so without this a record that
+ * failed to migrate would keep the ROM's name until that game is played again.
+ */
+const purgeLegacyFields = (raw: unknown, record: EmulatorSaveRecord | undefined) => {
+  if (!record) return;
+  if (!raw || typeof raw !== "object") return;
+  if (!("label" in raw)) return;
+  void writeRecord(record).catch((error) => {
+    logger.warn("EmulatorJS save record cleanup failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+};
+
 const readEmulatorSave = async (gameId: string): Promise<EmulatorSaveRecord | undefined> => {
   const result = await readTransaction<unknown>((store) => store.get(gameId));
   const record = normalizeRecord(result);
+  purgeLegacyFields(result, record);
   return record ? copyRecord(record) : undefined;
-};
-
-const writeRecord = async (record: EmulatorSaveRecord): Promise<void> => {
-  await runTransaction("readwrite", (store) => store.put(copyRecord(record), record.gameId));
 };
 
 const updatePart = async (kind: "sram" | "state", update: EmulatorSaveUpdate): Promise<void> => {
@@ -310,7 +345,11 @@ const updatePart = async (kind: "sram" | "state", update: EmulatorSaveUpdate): P
 const listEmulatorSaves = async (): Promise<EmulatorSaveRecord[]> => {
   const result = await readTransaction<unknown[]>((store) => store.getAll());
   return (result || [])
-    .map(normalizeRecord)
+    .map((raw) => {
+      const record = normalizeRecord(raw);
+      purgeLegacyFields(raw, record);
+      return record;
+    })
     .filter((record): record is EmulatorSaveRecord => !!record)
     .map(copyRecord)
     .sort((left, right) => right.updatedAt - left.updatedAt || left.gameId.localeCompare(right.gameId));

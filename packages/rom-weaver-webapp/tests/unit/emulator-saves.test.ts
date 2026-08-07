@@ -146,7 +146,9 @@ class FakeDatabase {
   }
 }
 
-const createFakeIndexedDb = (database = new FakeDatabase()) => {
+// `upgrade: false` stands in for a database already on the current version, so
+// the open runs without the migration the upgrade would otherwise perform.
+const createFakeIndexedDb = (database = new FakeDatabase(), { upgrade = true } = {}) => {
   return {
     open: () => {
       const request: FakeRequest & { transaction: FakeTransaction } = {
@@ -158,7 +160,7 @@ const createFakeIndexedDb = (database = new FakeDatabase()) => {
         transaction: database.transaction(),
       };
       queueMicrotask(() => {
-        request.onupgradeneeded?.();
+        if (upgrade) request.onupgradeneeded?.();
         request.onsuccess?.();
       });
       return request;
@@ -212,6 +214,30 @@ describe("emulator saves", () => {
       expect(database.stored(record.gameId)).toMatchObject({ gameId: record.gameId });
       expect(database.stored(record.gameId)).not.toHaveProperty("label");
     });
+  });
+
+  it("drops the ROM name a record kept when the upgrade could not rewrite it", async () => {
+    const database = new FakeDatabase();
+    database.seed(record.gameId, { ...record, label: "Some Game (USA).nes" });
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database, { upgrade: false }));
+
+    await listEmulatorSaves();
+    await vi.waitFor(() => {
+      expect(database.stored(record.gameId)).toMatchObject({ gameId: record.gameId });
+      expect(database.stored(record.gameId)).not.toHaveProperty("label");
+    });
+  });
+
+  it("lists the most recently saved game first", async () => {
+    const database = new FakeDatabase();
+    // Seeded rather than written so the timestamps differ; `writeEmulatorSave`
+    // stamps `Date.now()`, which ties within a single millisecond.
+    database.seed("rom-weaver-a", { ...record, gameId: "rom-weaver-a", gameName: "rom-weaver-a", updatedAt: 10 });
+    database.seed("rom-weaver-z", { ...record, gameId: "rom-weaver-z", gameName: "rom-weaver-z", updatedAt: 20 });
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database, { upgrade: false }));
+
+    const listed = await listEmulatorSaves();
+    expect(listed.map((entry) => entry.gameId)).toEqual(["rom-weaver-z", "rom-weaver-a"]);
   });
 
   it("drops the ROM name a version 1 export file carries", async () => {
