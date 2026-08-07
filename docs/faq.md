@@ -93,6 +93,9 @@ trying to find out.
 
 - **Should I use the browser or the CLI?**
   [Browser and CLI](explanation/browser-and-cli.md) compares them.
+- **How does rom-weaver compare with the patcher I already use?**
+  [Comparison with similar tools](explanation/comparisons.md) puts it beside
+  RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool.
 - **How do I install the CLI?** [Install the CLI](how-to/install-cli.md).
 - **Where can I report a bug?**
   [GitHub issues](https://github.com/rom-weaver/rom-weaver/issues), with the
