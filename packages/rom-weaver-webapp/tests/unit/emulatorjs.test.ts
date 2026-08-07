@@ -40,6 +40,8 @@ describe("createEmulatorDocument", () => {
     );
 
     expect(gameStart).toContain('request("request-load-sram");');
-    expect(document).toContain("if (emulator.gameManager.FS.analyzePath(path).exists) return;");
+    expect(document).toContain(
+      "if (emulator.gameManager.FS.analyzePath(path).exists) emulator.gameManager.FS.unlink(path);",
+    );
   });
 });

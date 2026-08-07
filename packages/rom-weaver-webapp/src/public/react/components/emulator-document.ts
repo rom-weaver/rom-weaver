@@ -87,7 +87,7 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string) => `
               current += "/" + parts[index];
               if (!emulator.gameManager.FS.analyzePath(current).exists) emulator.gameManager.FS.mkdir(current);
             }
-            if (emulator.gameManager.FS.analyzePath(path).exists) return;
+            if (emulator.gameManager.FS.analyzePath(path).exists) emulator.gameManager.FS.unlink(path);
             emulator.gameManager.FS.writeFile(path, bytes);
             emulator.gameManager.loadSaveFiles();
           }
