@@ -43,7 +43,8 @@
     "cores/snes9x-thread-wasm.data": "a42f3e39f4608ef65edaf7f803f1245bab9103c19417dbc3e4d00c5b09861bb4",
     "cores/yabause-wasm.data": "ab253ac263bd98e3124e2ca45ff581e97673426ed06ecec0025333060cd8127c",
     "cores/yabause-thread-wasm.data": "555fef07c65b1e9bbc1bfefd258af1a6afee163180a0ba8484ede73e01c0ae89",
-    "emulator.css": "0ba5b1ce183b6ecb95c17e54e89fbae77697ebb94ec23caca5fd19f9b569defe",
+    "emulator.min.css": "16406c60b2dc3b04ae9b115e308613e6f567a0cc7068e21d9d0c1e5030fb395e",
+    "emulator.min.js": "6aec3fd7bb2721255801b0a6af02e47e78b05e28a1822b1f213aacbd348abaee",
     "loader.js": "69e0903bf1e2f62ced78895e7e511fa26e11316f7eb734925c35e919ba1287b2",
     "localization/af-FR.json": "98c0a0748b8a79c4888b756cc032721203bd07ab1e01c82ceb78bf507531bae9",
     "localization/ar-AR.json": "7f08398ad9cf828c1c6d8cdaa65f9352d4873691475e14b76cbb11b802f8dc28",
@@ -65,14 +66,6 @@
     "localization/tr-TR.json": "37aa1368de761196f439604a1b04b0d11e2858a3bdcc7c392db37e6306d02ecc",
     "localization/vi-VN.json": "60c6d3a730a067f3f8af8cb12cec96d275221b5c6c89cade8285345e38e99605",
     "localization/zh-CN.json": "a20b7d3c3395d3cce4d697b45555e4228c076f07caba1c2bcf76bb66bedb79d2",
-    "src/compression.js": "bd6723ec29fee8de81118cfbddfcb53301b8f41f7c6fb22c2de44dedbf111c2c",
-    "src/emulator.js": "24ebac4baf739892046b82c3bdf01d5b6795b801b77d289e43a4c7d59f9666be",
-    "src/GameManager.js": "f026130eda3648557498c54c70cbb5b36fd71b088e7e42e5a13e413aab11d888",
-    "src/gamepad.js": "27707ee9256cf3e1a6f32d1c3c42f2aed991d637773699fff566008229cc09c8",
-    "src/nipplejs.js": "cf745190f5dc5db942ad54f5683d56c6d6da445646f4b4fc23c049c9985a04df",
-    "src/shaders.js": "79bcd4c35740b2858fc28f2f1894ddb8f483f1aba6f564869a713515726fe902",
-    "src/socket.io.min.js": "b0e735814f8dcfecd6cdb8a7ce95a297a7e1e5f2727a29e6f5901801d52fa0c5",
-    "src/storage.js": "06759f310bb2d782d2728e1d3417a0d8f613eff935d2959c1a705670041a6f2e",
     "version.json": "d8991427000a96fb97daefdb62178071e9bbff911760706148e584ae8d69f9e7"
   }
 }
