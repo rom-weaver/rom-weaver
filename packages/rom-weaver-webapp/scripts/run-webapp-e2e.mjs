@@ -178,6 +178,13 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       let initialShellLayout = null;
       try {
         const navigation = page.goto(`${baseUrl}${testCase.path}`, { waitUntil: "domcontentloaded" });
+        // The goto stays un-awaited while the replayClick steps run against the
+        // prerendered shell. If one of those steps throws, the finally below
+        // closes the page and this promise rejects with nobody awaiting it -
+        // an unhandled rejection that kills the process, masking the real error
+        // and skipping the retry attempt. The await further down still observes
+        // the original rejection.
+        navigation.catch(() => undefined);
         if (testCase.replayClick) {
           const settings = page.getByRole("button", { name: "Settings" });
           await settings.waitFor({ state: "visible" });
@@ -381,7 +388,16 @@ export const checkCssCoverage = (entries) => {
 };
 
 const runAccessibilityAudit = async (createContext, baseUrl) => {
-  const context = await createContext({ ignoreHTTPSErrors: true });
+  // Reduced motion keeps the guided tour's re-reveal scrolls instant. Its
+  // smooth `scrollBy` otherwise glides the page while Playwright is hovering
+  // the bundle download button, and the hover retries "element is not stable"
+  // until it times out. Chromium only: under the emulation WebKit intermittently
+  // serves stale theme colours to axe after a theme flip (`.mode-label` read
+  // dark-theme text on a light background), so WebKit keeps its default media.
+  const context = await createContext({
+    ignoreHTTPSErrors: true,
+    ...(browserName === "chromium" ? { reducedMotion: "reduce" } : {}),
+  });
   let page = await context.newPage();
   const cssCoverageEntries = [];
   const failures = [];
@@ -423,7 +439,11 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.addScriptTag({ path: AXE_SCRIPT_PATH });
     await page.addStyleTag({
       content:
-        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}" +
+        // iteration-count 1 matters as much as the zeroed duration: a
+        // zero-duration *infinite* animation is degenerate and WebKit can leave
+        // the element compositing a mid-keyframe colour, which axe then reads
+        // as a contrast failure. One zero-length pass ends deterministically.
+        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important;transition-delay:0s!important;}" +
         '.rw-app .btn[data-guide-cta="true"]{animation:none!important;}',
     });
   };
@@ -618,8 +638,13 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await page.getByRole("button", { name: "Create ZIP Bundle", exact: true }).click();
         const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
         await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
-        await downloadButton.hover();
+        // Stability first: the guide re-anchors (and may scroll) while the
+        // control settles from Create into Download, and hovering during that
+        // motion retries "element is not stable" until it times out. The hover
+        // still runs before the click so the :hover lift (translateY) is
+        // latched by then and the click does not move the button mid-press.
         await waitForStableBox(page, downloadButton);
+        await downloadButton.hover();
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
           downloadButton.click(),
