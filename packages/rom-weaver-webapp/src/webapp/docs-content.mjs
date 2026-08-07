@@ -31,12 +31,13 @@ const stripMarkdown = (value) =>
     .trim();
 
 // doctoc owns the in-file table of contents so the guides read well on GitHub.
-// The published pages navigate by the section rail instead, so the generated
-// block is dropped rather than rendered as a second copy of the outline.
+// Published pages navigate by the section rail, except for the FAQ whose
+// question-level outline is part of the page's reading flow.
 const DOCTOC_BLOCK = /<!--\s*START doctoc[\s\S]*?<!--\s*END doctoc\s*-->/i;
 
-/** @param {string} markdown */
-const stripDoctoc = (markdown) => markdown.replace(DOCTOC_BLOCK, "").replace(/\n{3,}/g, "\n\n");
+/** @param {string} markdown @param {boolean} keep */
+const stripDoctoc = (markdown, keep) =>
+  (keep ? markdown : markdown.replace(DOCTOC_BLOCK, "")).replace(/\n{3,}/g, "\n\n");
 
 /** Entities marked emits would otherwise leak their digits into a slug ("&#39;" -> "39"). */
 const HEADING_ENTITIES = /** @type {Record<string, string>} */ ({
@@ -230,12 +231,14 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
         const count = seen.get(base) ?? 0;
         seen.set(base, count + 1);
         const id = count === 0 ? base : `${base}-${count}`;
-        if (depth === 2) {
+        const html = Parser.parseInline(tokens, { renderer: headingRenderer });
+        if (depth === 2 && id !== "table-of-contents") {
           sections.push({ id, label });
-          const html = Parser.parseInline(tokens, { renderer: sectionHeadingRenderer });
-          return `<h2 id="${id}"><a class="docs-section-link" href="/${slug}#${id}">${SECTION_LINK_ICON}<span class="docs-section-title">${html}</span></a></h2>\n`;
+          const sectionHtml = Parser.parseInline(tokens, { renderer: sectionHeadingRenderer });
+          return `<h2 id="${id}"><a class="docs-section-link" href="/${slug}#${id}">${SECTION_LINK_ICON}<span class="docs-section-title">${sectionHtml}</span></a></h2>\n`;
         }
-        return `<h${depth} id="${id}">${Parser.parseInline(tokens, { renderer: headingRenderer })}</h${depth}>\n`;
+        if (depth === 2 && id === "table-of-contents") return `<h2 id="${id}" class="docs-toc-title">${html}</h2>\n`;
+        return `<h${depth} id="${id}">${html}</h${depth}>\n`;
       },
     },
     walkTokens(token) {
@@ -243,7 +246,7 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
       if (token.type === "image") token.href = rewriteDocImage(token.href, sourceFile);
     },
   });
-  return { html: parser.parse(stripDoctoc(markdown), { async: false }), sections };
+  return { html: parser.parse(stripDoctoc(markdown, slug === "docs/faq"), { async: false }), sections };
 };
 
 /**
@@ -254,7 +257,7 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
 const createDocRoute = ({ file, group, label, slug }, markdown) => {
   const title = markdown.match(/^#\s+(.+)$/m)?.[1];
   if (!title) throw new Error(`${file} must have one level-one heading`);
-  const description = stripDoctoc(markdown)
+  const description = stripDoctoc(markdown, false)
     .split(/\n\s*\n/)
     .map(stripMarkdown)
     .find((block) => block && !block.startsWith("#") && !block.startsWith("<!--"));

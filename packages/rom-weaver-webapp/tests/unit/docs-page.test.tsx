@@ -447,6 +447,21 @@ Fixture description.
     expect(index?.querySelector('a[href="/docs/self-hosting"]')?.textContent).toContain("Self-hosting");
     expect(screen.getByRole("link", { name: "Read the full FAQ" }).getAttribute("href")).toBe("/docs/faq");
     expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();
+    expect(document.querySelectorAll(".docs-faq-preview details")).toHaveLength(0);
+    expect(document.querySelectorAll(".docs-faq-preview .docs-faq-item")).toHaveLength(3);
+  });
+
+  it("lays out FAQ answers as headings and links every question from its contents", () => {
+    render(<DocsPage active slug="docs/faq" />);
+
+    const contents = screen.getByRole("heading", { name: "Table of contents" });
+    const contentsLinks = [...(contents.nextElementSibling?.querySelectorAll("a") ?? [])];
+    expect(contentsLinks.length).toBeGreaterThan(routeFor("docs/faq").sections.length);
+    expect(document.querySelectorAll(".docs-article h3").length).toBeGreaterThan(0);
+    for (const link of contentsLinks) {
+      const id = link.getAttribute("href")?.split("#")[1] ?? "";
+      expect(document.getElementById(id)).toBeTruthy();
+    }
   });
 
   it("fuzzy-searches guide text and links directly to the matching section", async () => {
