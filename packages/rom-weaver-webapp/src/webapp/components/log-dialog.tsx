@@ -3,7 +3,6 @@ import {
   Check,
   Copy,
   Download,
-  Gamepad2,
   HardDrive,
   Newspaper,
   RefreshCw,
@@ -200,26 +199,20 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
 /**
  * Every chrome-level surface the app owns, in one dialog: the tabs ARE the
  * header, so there is no title. Settings leads because it is the tab people
- * come here for; the rest are diagnostics. Test hosts the EmulatorJS
- * offline-asset and save-state tools, which used to live inside Storage.
+ * come here for; the rest are diagnostics. Storage hosts the OPFS and
+ * EmulatorJS data together, so the phone rail stays one row.
  */
-const DIALOG_TABS = ["settings", "status", "logs", "storage", "test", "changelog"] as const;
+const DIALOG_TABS = ["settings", "status", "logs", "storage", "changelog"] as const;
 type LogDialogTab = (typeof DIALOG_TABS)[number];
 const TAB_MESSAGES: Record<
   LogDialogTab,
-  | "ui.settings.title"
-  | "ui.log.tabStatus"
-  | "ui.log.tabLogs"
-  | "ui.log.tabStorage"
-  | "ui.log.tabTest"
-  | "ui.log.tabChangelog"
+  "ui.settings.title" | "ui.log.tabStatus" | "ui.log.tabLogs" | "ui.log.tabStorage" | "ui.log.tabChangelog"
 > = {
   changelog: "ui.log.tabChangelog",
   logs: "ui.log.tabLogs",
   settings: "ui.settings.title",
   status: "ui.log.tabStatus",
   storage: "ui.log.tabStorage",
-  test: "ui.log.tabTest",
 };
 const TAB_ICONS = {
   changelog: Newspaper,
@@ -227,7 +220,6 @@ const TAB_ICONS = {
   settings: Settings,
   status: Activity,
   storage: HardDrive,
-  test: Gamepad2,
 } as const;
 
 /** How long to keep looking for a deep-linked field while its lazy panel loads. */
@@ -836,6 +828,7 @@ const LogsStoragePanel = ({
   opfsError,
   opfsLoading,
   scrollTop,
+  storageExtras,
   showingPrevious,
   tab,
   traceRef,
@@ -856,6 +849,7 @@ const LogsStoragePanel = ({
   opfsError: string | null;
   opfsLoading: boolean;
   scrollTop: number;
+  storageExtras?: ReactNode;
   showingPrevious: boolean;
   tab: LogDialogTab;
   traceRef: React.RefObject<HTMLDivElement | null>;
@@ -913,7 +907,10 @@ const LogsStoragePanel = ({
         role="tabpanel"
       >
         {showingOpfs ? (
-          <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
+          <>
+            {storageExtras}
+            <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
+          </>
         ) : (
           <TraceList
             entries={entries}
@@ -951,7 +948,7 @@ const LogDialog = ({
   level?: string;
   onLevelChange: (level: string) => void;
   initialTab?: LogDialogTab;
-  /** The lazy "After applying" field, mounted only while the Test tab is showing. */
+  /** The lazy "After applying" field, mounted only while Storage is showing. */
   emulatorSettingsField?: ReactNode;
   onReload?: () => void;
   onRestoreDefaults?: () => void;
@@ -1125,17 +1122,9 @@ const LogDialog = ({
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
             <StatusRows localizer={localizer} runtimeState={runtimeState} />
             <OfflineLegend current={runtimeState} localizer={localizer} />
-            {/* The EmulatorJS cache is the one thing that can hold the app at
-                "mostly ready", so its readout and download consent live with
-                the offline facts rather than on the Test tab. */}
+            {/* The offline-core download action stays beside the status that explains why it is needed. */}
             <EmulatorPrefetchPanel active={tab === "status"} />
             <AboutLink localizer={localizer} />
-          </div>
-        ) : null}
-        {tab === "test" ? (
-          <div aria-labelledby="logtab-test" className="dlg-body log-body test-body" id="logpanel-test" role="tabpanel">
-            {emulatorSettingsField ? <div className="test-settings-field">{emulatorSettingsField}</div> : null}
-            <EmulatorSavesPanel active={tab === "test"} />
           </div>
         ) : null}
         {tab === "changelog" ? (
@@ -1178,6 +1167,12 @@ const LogDialog = ({
             opfsError={opfsError}
             opfsLoading={opfsLoading}
             scrollTop={scrollTop}
+            storageExtras={
+              <>
+                {emulatorSettingsField ? <div className="storage-settings-field">{emulatorSettingsField}</div> : null}
+                <EmulatorSavesPanel active={tab === "storage"} />
+              </>
+            }
             showingPrevious={showingPrevious}
             tab={tab}
             traceRef={traceRef}

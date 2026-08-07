@@ -31,4 +31,14 @@ describe("createEmulatorDocument", () => {
     expect(document).toContain("EJS_onSaveState");
     expect(document).toContain("EJS_onSaveSave");
   });
+
+  it("requests app-owned SRAM when the emulator starts", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
+    const gameStart = document.slice(
+      document.indexOf("EJS_onGameStart"),
+      document.indexOf("window.__romWeaverVisibilityPaused"),
+    );
+
+    expect(gameStart).toContain('request("request-load-sram");');
+  });
 });

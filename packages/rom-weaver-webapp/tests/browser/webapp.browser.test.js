@@ -453,6 +453,29 @@ test("WebappRoot keeps diagnostics behind More - the Log dialog owns them", asyn
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });
 
+test("mobile diagnostics keep the Storage tools on one tab row", async () => {
+  const height = 844;
+  await page.viewport(393, height);
+  mountWebappRoot();
+
+  await expect.poll(() => document.querySelector(".masthead-status")).toBeTruthy();
+  document.querySelector(".masthead-status")?.click();
+  await expect.poll(() => document.querySelector(".log-dlg .dialog-subrail")).toBeTruthy();
+
+  const rail = document.querySelector(".log-dlg .dialog-subrail");
+  const tabs = Array.from(document.querySelectorAll(".log-dlg .dialog-subrail .subtab"));
+  expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage", "Changelog"]);
+  expect(new Set(tabs.map((tab) => tab.getBoundingClientRect().top)).size).toBe(1);
+  expect(rail?.scrollHeight).toBe(rail?.clientHeight);
+  expect(document.querySelector('[data-logtab="test"]')).toBeNull();
+  expect(document.querySelector("#logpanel-status .emulator-prefetch-panel")).not.toBeNull();
+
+  document.querySelector('[data-logtab="storage"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await expect.poll(() => document.querySelector("#logpanel-storage .emulator-saves-panel")).toBeTruthy();
+  expect(document.querySelector("#logpanel-storage .emulator-prefetch-panel")).toBeNull();
+  await page.viewport(1280, 900);
+});
+
 test("mobile More contains every masthead utility action", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();

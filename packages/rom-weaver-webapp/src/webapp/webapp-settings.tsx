@@ -424,7 +424,7 @@ const SettingsGroup = ({
 
 /**
  * Standalone render of the "After applying" field, reused by the log dialog's
- * Test tab so the EmulatorJS panels sit beside the one setting that decides
+ * Storage panel so the EmulatorJS panels sit beside the one setting that decides
  * whether a completed apply opens there. It shares the exact field markup,
  * id, and change wiring with the copy in the General settings group - both
  * read and write the same `postApplyRomBehavior` draft value, so they can

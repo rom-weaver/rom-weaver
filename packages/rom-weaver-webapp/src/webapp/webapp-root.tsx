@@ -65,8 +65,8 @@ const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) 
 const LogDialog = lazy(loadLogDialog);
 const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
 const SettingsPanel = lazy(loadSettingsPanel);
-// Same chunk as the settings panel above, so mounting the Test tab's "After
-// applying" field never pulls in a second network fetch.
+// Same chunk as the settings panel above, so mounting Storage's "After applying"
+// field never pulls in a second network fetch.
 const PostApplyRomBehaviorField = lazy(() =>
   import("./webapp-settings.tsx").then((module) => ({ default: module.PostApplyRomBehaviorField })),
 );
@@ -380,11 +380,10 @@ function WebappRoot({
     setLogTab("storage");
     setLogOpen(true);
   }, [preloadLogDialog]);
-  // The Test view's saves link lands on the dialog tab that hosts the
-  // EmulatorJS saves panel, not the general Storage inspector.
-  const openEmulatorTestTab = useCallback(() => {
+  // The Test view's saves link lands on Storage, alongside the OPFS inspector.
+  const openEmulatorStorageTab = useCallback(() => {
     preloadLogDialog();
-    setLogTab("test");
+    setLogTab("storage");
     setLogOpen(true);
   }, [preloadLogDialog]);
 
@@ -654,7 +653,7 @@ function WebappRoot({
                 {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
                 {workflowPanel(
                   "test",
-                  <EmulatorTestRoute active={state.currentView === "test"} onOpenStorage={openEmulatorTestTab} />,
+                  <EmulatorTestRoute active={state.currentView === "test"} onOpenStorage={openEmulatorStorageTab} />,
                 )}
                 {workflowPanel(
                   "trim",
@@ -685,7 +684,7 @@ function WebappRoot({
                 <Suspense fallback={null}>
                   <PostApplyRomBehaviorField
                     draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-                    /* The Test tab has no Save bar, so this field commits straight to
+                    /* The Storage tab has no Save bar, so this field commits straight to
                        settings like the masthead quick pickers. */
                     onDraftChange={(_field, value) => {
                       if (typeof value === "string") actions.onPostApplyRomBehaviorChange(value);

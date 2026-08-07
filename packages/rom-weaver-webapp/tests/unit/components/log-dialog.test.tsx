@@ -33,7 +33,7 @@ describe("LogDialog", () => {
     // the tabs are the header - there is no title competing with them
     expect(container.querySelector(".dlg-title")).toBeNull();
     const tabs = Array.from(container.querySelectorAll('.dialog-subrail [role="tab"]'));
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage", "Test", "Changelog"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage", "Changelog"]);
     expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0").length).toBe(1);
     expect(container.querySelector("#logpanel-status")).not.toBeNull();
     expect(container.querySelector(".status-rows")).not.toBeNull();
@@ -175,38 +175,27 @@ describe("LogDialog", () => {
     expect(container.querySelector(".opfs-row")?.textContent).toContain("/user-files");
   });
 
-  it("hosts the saves panel and field on Test, the prefetch readout on Status", () => {
+  it("hosts the EmulatorJS tools and field on Storage", () => {
     vi.mocked(listBrowserOpfs).mockResolvedValue([]);
     const { container: storageContainer } = render(
       <RomWeaverSettingsProvider settings={{}}>
-        <LogDialog initialTab="storage" onClose={() => undefined} onLevelChange={() => undefined} open />
-      </RomWeaverSettingsProvider>,
-    );
-    // the EmulatorJS sections moved out of Storage; it keeps only OPFS
-    expect(storageContainer.querySelector(".emulator-prefetch-panel")).toBeNull();
-    expect(storageContainer.querySelector(".emulator-saves-panel")).toBeNull();
-    cleanup();
-
-    const { container } = render(
-      <RomWeaverSettingsProvider settings={{}}>
         <LogDialog
           emulatorSettingsField={<div className="post-apply-field-stub" />}
-          initialTab="test"
+          initialTab="storage"
           onClose={() => undefined}
           onLevelChange={() => undefined}
           open
         />
       </RomWeaverSettingsProvider>,
     );
-
-    const panel = container.querySelector("#logpanel-test");
-    expect(panel?.getAttribute("aria-labelledby")).toBe("logtab-test");
-    expect(panel?.querySelector(".emulator-saves-panel")).not.toBeNull();
-    expect(panel?.querySelector(".post-apply-field-stub")).not.toBeNull();
-    expect(container.querySelector('[data-logtab="test"]')?.getAttribute("aria-selected")).toBe("true");
+    // Storage keeps the OPFS inspector and the EmulatorJS data together.
+    expect(storageContainer.querySelector(".emulator-saves-panel")).not.toBeNull();
+    expect(storageContainer.querySelector(".storage-settings-field")).not.toBeNull();
+    expect(storageContainer.querySelector(".post-apply-field-stub")).not.toBeNull();
+    expect(storageContainer.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true");
     cleanup();
 
-    // the offline-cache readout lives with the other offline facts on Status
+    // the offline-cache download remains beside the status explanation
     const { container: statusContainer } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <LogDialog initialTab="status" onClose={() => undefined} onLevelChange={() => undefined} open />
