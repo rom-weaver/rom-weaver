@@ -595,6 +595,13 @@
   justify-content: flex-end;
   height: 0;
 }
+/* Pre-hydration twin of the index.html head rule: the prerendered shell always
+   carries the chip, so a visitor who disabled onboarding must not see it while
+   React boots. The head's early script owns the attribute until hydration;
+   webapp-root.tsx keeps it current afterwards. */
+html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
+  display: none;
+}
 .rw-app .sample-tutorial-start-chip {
   position: absolute;
   /* Clear of the hero's corner so the pulse halo renders in full. */

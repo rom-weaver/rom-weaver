@@ -271,6 +271,9 @@ function WebappRoot({
   useLayoutEffect(() => {
     document.documentElement.dataset.betaToolsEnabled = state.settings.betaToolsEnabled ? "true" : "false";
   }, [state.settings.betaToolsEnabled]);
+  useLayoutEffect(() => {
+    document.documentElement.dataset.onboardingEnabled = state.settings.onboardingEnabled ? "true" : "false";
+  }, [state.settings.onboardingEnabled]);
   useEffect(() => {
     if (notFound) return;
     let cancelled = false;

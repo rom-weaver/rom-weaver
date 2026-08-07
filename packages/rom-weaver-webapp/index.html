@@ -33,6 +33,9 @@
       html:not([data-beta-tools-enabled="true"]) .mode[data-beta-tool] {
         display: none;
       }
+      html[data-onboarding-enabled="false"] .first-weave-demo {
+        display: none;
+      }
     </style>
     <script>
       // Resolve data-theme/data-accent before first paint so the prerendered shell
@@ -51,6 +54,11 @@
           const common = settings && settings.common ? settings.common : null;
           document.documentElement.dataset.betaToolsEnabled =
             settings && settings.version === 5 && common && common.betaToolsEnabled === true ? "true" : "false";
+          // Read without a version gate: the field is a plain boolean in
+          // `common` and a missing or reshaped value falls open to showing
+          // the beacon, which is the safe side.
+          document.documentElement.dataset.onboardingEnabled =
+            common && common.onboardingEnabled === false ? "false" : "true";
           const storedAccent = common && typeof common.accent === "string" ? common.accent : "";
           // Must list every value in accent.ts's ACCENTS; a missing one falls
           // through to the channel default and snaps on boot. Pinned by
@@ -64,6 +72,7 @@
         } catch (error) {
           document.documentElement.setAttribute("data-theme", "dark");
           document.documentElement.dataset.betaToolsEnabled = "false";
+          document.documentElement.dataset.onboardingEnabled = "true";
         }
       })();
     </script>
