@@ -134,7 +134,7 @@ ROM file.
 
 ### Checksums
 
-| | RomPatcher.js | rom-weaver |
+| Capability | RomPatcher.js | rom-weaver |
 | --- | --- | --- |
 | Algorithms | CRC32, MD5, SHA-1 | CRC32, CRC32C, CRC16, MD5, SHA-1, SHA-256, BLAKE3, Adler-32 |
 | Shows ROM hashes before patching | yes | yes |
@@ -163,7 +163,7 @@ all N64 byte orders, NDS, Neo Geo Pocket, and MSX.
 
 Header checksum repair after patching splits the same way.
 
-| | RomPatcher.js | rom-weaver |
+| Behavior | RomPatcher.js | rom-weaver |
 | --- | --- | --- |
 | Repairs | Game Boy, Mega Drive | SNES, NES, Game Boy/GBA, Mega Drive, SMS/Game Gear, N64, Atari 7800, Lynx, PCE/TurboGrafx-16, Virtual Boy, Neo Geo Pocket, MSX, NDS |
 | Header strip mode | manual on/off | `auto`, `keep`, or `strip`, decided per patch from its source checksum |
@@ -207,7 +207,7 @@ These have no RomPatcher.js equivalent at all.
 
 ### Delivery and platforms
 
-| | RomPatcher.js | rom-weaver |
+| Property | RomPatcher.js | rom-weaver |
 | --- | --- | --- |
 | Browser | yes, plain JavaScript | yes, WebAssembly |
 | Command line | Node script | native binary, 9 platforms |
