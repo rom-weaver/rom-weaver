@@ -46,8 +46,6 @@ describe("LogDialog", () => {
     const branchLink = container.querySelector<HTMLAnchorElement>('.status-row a[href$="/tree/dev"]');
     expect(branchLink?.textContent).toBe("dev");
     expect(branchLink?.target).toBe("_blank");
-    // every offline state is named, so the badge above reads against the rest
-    expect(container.querySelectorAll(".sw-legend-row").length).toBe(7);
     // the settings panel belongs to its own tab, so it is not mounted on Status
     expect(container.querySelector(".settings-panel-stub")).toBeNull();
   });
@@ -175,7 +173,7 @@ describe("LogDialog", () => {
     expect(container.querySelector(".opfs-row")?.textContent).toContain("/user-files");
   });
 
-  it("hosts the saves panel and field on Test, the prefetch readout on Status", () => {
+  it("hosts the saves panel and field on Test, not Storage", () => {
     vi.mocked(listBrowserOpfs).mockResolvedValue([]);
     const { container: storageContainer } = render(
       <RomWeaverSettingsProvider settings={{}}>
@@ -183,7 +181,6 @@ describe("LogDialog", () => {
       </RomWeaverSettingsProvider>,
     );
     // the EmulatorJS sections moved out of Storage; it keeps only OPFS
-    expect(storageContainer.querySelector(".emulator-prefetch-panel")).toBeNull();
     expect(storageContainer.querySelector(".emulator-saves-panel")).toBeNull();
     cleanup();
 
@@ -204,15 +201,6 @@ describe("LogDialog", () => {
     expect(panel?.querySelector(".emulator-saves-panel")).not.toBeNull();
     expect(panel?.querySelector(".post-apply-field-stub")).not.toBeNull();
     expect(container.querySelector('[data-logtab="test"]')?.getAttribute("aria-selected")).toBe("true");
-    cleanup();
-
-    // the offline-cache readout lives with the other offline facts on Status
-    const { container: statusContainer } = render(
-      <RomWeaverSettingsProvider settings={{}}>
-        <LogDialog initialTab="status" onClose={() => undefined} onLevelChange={() => undefined} open />
-      </RomWeaverSettingsProvider>,
-    );
-    expect(statusContainer.querySelector("#logpanel-status .emulator-prefetch-panel")).not.toBeNull();
   });
 
   it("shows active virtual input files with their size", async () => {

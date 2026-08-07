@@ -26,15 +26,6 @@ import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogE
 import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "../build-version.ts";
 import { CHANNEL_BADGE } from "../build-channel.ts";
 import { ABOUT_URL, GITHUB_URL } from "../project-links.ts";
-import {
-  formatEmulatorBytes,
-  getCachedEmulatorAssets,
-  loadEmulatorPrefetchState,
-  prefetchEmulatorAssets,
-  setEmulatorCoresComplete,
-  type EmulatorPrefetchProgress,
-  type LoadedEmulatorPrefetchState,
-} from "../pwa/emulator-prefetch.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
 import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
@@ -45,7 +36,6 @@ import {
   RUNTIME_MESSAGES,
   RUNTIME_STATES,
   RuntimeGlyph,
-  useEmulatorCoresComplete,
 } from "./shell.tsx";
 import type { RuntimeState } from "./shell.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -608,161 +598,6 @@ const OpfsInspector = ({
   );
 };
 
-const EmulatorPrefetchPanel = ({ active }: { active: boolean }) => {
-  const [state, setState] = useState<LoadedEmulatorPrefetchState | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [failures, setFailures] = useState<readonly { message: string; path: string }[]>([]);
-  const [progress, setProgress] = useState<EmulatorPrefetchProgress | null>(null);
-  const [cancelled, setCancelled] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setFailures([]);
-    setProgress(null);
-    setCancelled(false);
-    try {
-      setState(await loadEmulatorPrefetchState());
-    } catch (loadError) {
-      setState(null);
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!active) return;
-    void refresh();
-    return () => abortRef.current?.abort();
-  }, [active, refresh]);
-
-  const start = useCallback(async () => {
-    if (!(state?.available && state.manifest) || busy) return;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setBusy(true);
-    setFailures([]);
-    setCancelled(false);
-    try {
-      const result = await prefetchEmulatorAssets(state.manifest, {
-        baseUrl: state.baseUrl || window.location.href,
-        caches,
-        onProgress: setProgress,
-        signal: controller.signal,
-      });
-      setProgress(result.progress);
-      setFailures(result.failures);
-      setCancelled(result.cancelled);
-      if (state.baseUrl) {
-        const cached = await getCachedEmulatorAssets(state.manifest, state.baseUrl, caches);
-        setState((current) => (current ? { ...current, cached } : current));
-        setEmulatorCoresComplete(cached.cachedFiles >= state.manifest.files.length);
-      }
-    } catch (prefetchError) {
-      setError(prefetchError instanceof Error ? prefetchError.message : String(prefetchError));
-    } finally {
-      abortRef.current = null;
-      setBusy(false);
-    }
-  }, [busy, state]);
-
-  const cancel = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
-
-  const manifest = state?.manifest;
-  const totalBytes = manifest?.files.reduce((total, file) => total + file.sizeBytes, 0) || 0;
-  const shownProgress =
-    progress ||
-    (manifest
-      ? {
-          bytesDone: state?.cached.cachedBytes || 0,
-          failedFiles: 0,
-          filesDone: state?.cached.cachedFiles || 0,
-          skippedFiles: state?.cached.cachedFiles || 0,
-          totalBytes,
-          totalFiles: manifest.files.length,
-        }
-      : null);
-
-  return (
-    <section aria-labelledby="emulator-prefetch-title" className="emulator-prefetch-panel">
-      <div className="emulator-prefetch-heading">
-        <h3 id="emulator-prefetch-title">EmulatorJS offline assets</h3>
-        <p>Download emulator cores once so they remain available without a network.</p>
-      </div>
-      {loading ? <p aria-live="polite">Checking emulator cache…</p> : null}
-      {error ? (
-        <p className="emulator-prefetch-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {!(loading || error) && state ? (
-        <>
-          {manifest ? (
-            <>
-              <p className="emulator-prefetch-summary" aria-live="polite">
-                {state.cached.cachedFiles} of {manifest.files.length} assets cached,{" "}
-                {formatEmulatorBytes(state.cached.cachedBytes)}.
-              </p>
-              <div className="emulator-prefetch-actions">
-                <button
-                  className="btn primary"
-                  disabled={!state.available || busy}
-                  onClick={() => void start()}
-                  type="button"
-                >
-                  Download all emulator cores for offline
-                </button>
-                <span className="emulator-prefetch-total">Total: {formatEmulatorBytes(totalBytes)}</span>
-                {busy ? (
-                  <button className="btn slim ghost" onClick={cancel} type="button">
-                    Cancel
-                  </button>
-                ) : null}
-              </div>
-              {state.available ? null : <p className="emulator-prefetch-reason">{state.reason}</p>}
-              {shownProgress && (busy || progress) ? (
-                <p aria-live="polite" className="emulator-prefetch-progress">
-                  {shownProgress.filesDone} of {shownProgress.totalFiles} assets,{" "}
-                  {formatEmulatorBytes(shownProgress.bytesDone)} downloaded
-                  {shownProgress.failedFiles ? "; " + shownProgress.failedFiles + " failed" : ""}.
-                </p>
-              ) : null}
-              {cancelled ? <p className="emulator-prefetch-note">Download cancelled. Run it again to resume.</p> : null}
-              {!busy && progress && !cancelled && failures.length === 0 ? (
-                <p className="emulator-prefetch-note">All available emulator assets are cached.</p>
-              ) : null}
-              {failures.length > 0 ? (
-                <ul className="emulator-prefetch-failures">
-                  {failures.map((failure) => (
-                    <li key={failure.path}>
-                      {failure.path}: {failure.message}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <div className="emulator-prefetch-actions">
-                <button className="btn primary" disabled type="button">
-                  Download all emulator cores for offline
-                </button>
-              </div>
-              <p className="emulator-prefetch-reason">{state.reason}</p>
-            </>
-          )}
-        </>
-      ) : null}
-    </section>
-  );
-};
-
 /**
  * The virtualized trace listing. Only rows near the viewport are mounted; the
  * fixed CSS row height keeps the native scrollbar exact without a list library.
@@ -985,8 +820,7 @@ const LogDialog = ({
     [onTabChange],
   );
   useSettingsFieldFocus(open && tab === "settings", settingsFocusHint);
-  const emulatorCoresComplete = useEmulatorCoresComplete(serviceWorkerStatus);
-  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady, emulatorCoresComplete);
+  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady);
   const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
   const [opfsError, setOpfsError] = useState<string | null>(null);
@@ -1125,10 +959,6 @@ const LogDialog = ({
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
             <StatusRows localizer={localizer} runtimeState={runtimeState} />
             <OfflineLegend current={runtimeState} localizer={localizer} />
-            {/* The EmulatorJS cache is the one thing that can hold the app at
-                "mostly ready", so its readout and download consent live with
-                the offline facts rather than on the Test tab. */}
-            <EmulatorPrefetchPanel active={tab === "status"} />
             <AboutLink localizer={localizer} />
           </div>
         ) : null}

@@ -124,10 +124,13 @@ const getAppBasePath = () => {
 };
 
 const APP_BASE_PATH = getAppBasePath().replace(/\/?$/, "/");
+const EMULATORJS_MANIFEST_PATH = `${APP_BASE_PATH}emulatorjs/manifest.json`;
 const EMULATORJS_DATA_PATH_PREFIX = `${APP_BASE_PATH}emulatorjs/data/`;
 
-const isEmulatorJsDataRequest = (request: Request, url: URL) =>
-  request.method === "GET" && isSameOriginRequest(url) && url.pathname.startsWith(EMULATORJS_DATA_PATH_PREFIX);
+const isEmulatorJsAssetRequest = (request: Request, url: URL) =>
+  request.method === "GET" &&
+  isSameOriginRequest(url) &&
+  (url.pathname === EMULATORJS_MANIFEST_PATH || url.pathname.startsWith(EMULATORJS_DATA_PATH_PREFIX));
 
 const isManifestRequest = (request: Request, url: URL) =>
   request.destination === "manifest" || MANIFEST_PATH_REGEX.test(url.pathname);
@@ -151,7 +154,7 @@ const isDevSourceRequest = (request: Request, url: URL) => {
 
 const shouldUseNetworkFirst = (request: Request, url: URL) => {
   if (request.method !== "GET" || !isSameOriginRequest(url)) return false;
-  if (isEmulatorJsDataRequest(request, url)) return false;
+  if (isEmulatorJsAssetRequest(request, url)) return false;
   return isHtmlRequest(request, url) || isManifestRequest(request, url) || isDevSourceRequest(request, url);
 };
 
@@ -251,7 +254,7 @@ registerRoute(
 
 // `maximumFileSizeToCacheInBytes` below governs only the precache. Runtime
 // EmulatorJS assets use this dedicated cache and are intentionally unaffected.
-const serveEmulatorJsData = async ({ request }: { request: Request }) => {
+const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
   const credentialless = await ensureCoepModeHydrated();
   const cache = await caches.open(EMULATORJS_CACHE_NAME);
   const cachedResponse = await cache.match(request);
@@ -264,7 +267,7 @@ const serveEmulatorJsData = async ({ request }: { request: Request }) => {
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
 
-registerRoute(({ request, url }) => isEmulatorJsDataRequest(request, url), serveEmulatorJsData);
+registerRoute(({ request, url }) => isEmulatorJsAssetRequest(request, url), serveEmulatorJsAsset);
 
 logServiceWorker("script initialized", {
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,

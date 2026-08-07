@@ -30,16 +30,6 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-#~ msgid "ui.runtime.partial"
-#~ msgstr "Casi listo sin conexión"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.runtime.partialDesc"
-#~ msgstr "La aplicación está en caché, pero faltan algunos núcleos del emulador. Usa el botón de descarga de abajo para estar totalmente listo para jugar sin conexión."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
 
@@ -450,18 +440,8 @@ msgstr "Sin conexión activo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.activePartial"
-msgstr "Sin conexión activo, faltan núcleos"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.ready"
 msgstr "Lista sin conexión"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.readyPartial"
-msgstr "Sin conexión listo, faltan núcleos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -715,11 +695,6 @@ msgstr "Prueba"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.readyPartialDesc"
-msgstr "La aplicación está en caché para la próxima visita, pero faltan algunos núcleos del emulador. Usa el botón de descarga de abajo para estar totalmente listo para jugar sin conexión."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.corsHint"
 msgstr "El servidor de archivos debe permitir descargas de origen cruzado (CORS)."
 
@@ -782,11 +757,6 @@ msgstr "Tema"
 #: src/presentation/localization/messages.ts
 msgid "ui.rom.baseConflict"
 msgstr "Estos parches esperan ROMs distintas: cada tarjeta de parche muestra la que necesita."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.activePartialDesc"
-msgstr "Esta página funciona desde la copia sin conexión, pero algunos núcleos del emulador no están en caché. Usa el botón de descarga de abajo para estar totalmente listo para jugar sin conexión."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
