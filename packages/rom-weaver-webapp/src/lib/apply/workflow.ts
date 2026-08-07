@@ -16,6 +16,7 @@ import { buildSessionOutputFiles } from "../../lib/output/output-build-service.t
 import { requireOutputName } from "../../lib/output/output-name-validation.ts";
 import { reportProgress } from "../../lib/progress/progress-reporting.ts";
 import { getNamedSourcePath } from "../../storage/shared/binary/source-file-utils.ts";
+import { copyRuntimeOutputToPath } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PatchApplySummary, PatchFileInstance } from "../../types/workflow-internal.ts";
@@ -31,6 +32,8 @@ import { parsePatchForApply, resolvePatchTargets, toPublicOutput } from "./patch
 type PublicOutputWithApplySummary = ApplyWorkflowResult["output"] & {
   _applySummary?: PatchApplySummary;
 };
+
+type AppliedWorkerOutput = PublicOutputWithApplySummary;
 
 const getApplyLogLevel = (options: PatchInput["options"]) => options?.logging?.level;
 const getApplyThreads = (options: PatchInput["options"]) => options?.workers?.threads;
@@ -506,7 +509,7 @@ const applyPatchesToAsset = async ({
     workerOutput.fileName || asset.fileName || "patched.bin",
     canReuseWorkerOutputPath(workerOutput) ? { materializeBlob: false, preferExternalFilePath: true } : undefined,
   );
-  return { applyTimeMs, file };
+  return { applyTimeMs, file, output: workerOutput };
 };
 
 const applyPreparedPatches = async ({
@@ -532,6 +535,7 @@ const applyPreparedPatches = async ({
 }) => {
   const targets: InputAsset[] = [];
   const patchedById = new Map<string, PatchFileInstance>();
+  const workerOutputsById = new Map<string, AppliedWorkerOutput>();
   let applyTimeMs = 0;
   let hasApplyTimeMs = false;
   if (!patches.length) {
@@ -543,7 +547,7 @@ const applyPreparedPatches = async ({
       inputCount: inputAssets.length,
       reason: "no patches provided",
     });
-    return { applyTimeMs, hasApplyTimeMs, patchedById, targets };
+    return { applyTimeMs, hasApplyTimeMs, patchedById, targets, workerOutputsById };
   }
   reportProgress(options, { label: "Applying patch...", percent: null, stage: "apply" });
   targets.push(
@@ -598,8 +602,61 @@ const applyPreparedPatches = async ({
     }
     if (assetCount > 1) patched.file.fileName = asset.fileName;
     patchedById.set(asset.id, patched.file);
+    workerOutputsById.set(asset.id, patched.output);
   }
-  return { applyTimeMs, hasApplyTimeMs, patchedById, targets };
+  return { applyTimeMs, hasApplyTimeMs, patchedById, targets, workerOutputsById };
+};
+
+const retainUncompressedWorkerOutputs = async ({
+  inputAssets,
+  options,
+  workerOutputsById,
+}: {
+  inputAssets: InputAsset[];
+  options: ApplyPatchOptions;
+  workerOutputsById: Map<string, AppliedWorkerOutput>;
+}): Promise<void> => {
+  const retain = options.retainUncompressedOutput;
+  if (!retain || options.output?.compression === "none") return;
+  for (const [assetId, workerOutput] of workerOutputsById) {
+    if (!canReuseWorkerOutputPath(workerOutput)) continue;
+    const asset = inputAssets.find((candidate) => candidate.id === assetId);
+    const fileName = asset?.fileName || workerOutput.fileName || "patched.bin";
+    const size = Math.max(0, Math.floor(workerOutput.size || asset?.size || 0));
+    const romType = workerOutput.romType || asset?.romType;
+    try {
+      await retain({
+        fileName,
+        output: workerOutput,
+        platform: romType?.platform,
+        retain: () => copyRuntimeOutputToPath(workerOutput, fileName),
+        romType,
+        size,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      try {
+        options.onLog?.({
+          details: { error: message, fileName, size },
+          level: "warn",
+          message: "Uncompressed emulator output retention failed; continuing.",
+          namespace: "workflow:apply",
+          timestamp: new Date().toISOString(),
+        });
+      } catch {
+        // Retention must remain non-fatal even when a host log sink fails.
+      }
+      try {
+        traceWorkflowStage(options, "stage.fail", "emulator.retention", "output", {
+          error: message,
+          fileName,
+          size,
+        });
+      } catch {
+        // Retention must remain non-fatal even when a trace sink fails.
+      }
+    }
+  }
 };
 
 const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Promise<ApplyWorkflowResult> => {
@@ -624,7 +681,7 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   const patchSize = patchFiles.reduce((total, patchFile) => total + patchFile.fileSize, 0);
 
   const patchTargets = input.patchTargets || getApplyPatchTargets(options);
-  const { applyTimeMs, hasApplyTimeMs, patchedById, targets } = await applyPreparedPatches({
+  const { applyTimeMs, hasApplyTimeMs, patchedById, targets, workerOutputsById } = await applyPreparedPatches({
     assetCount: inputAssets.length,
     assets: inputAssets,
     inputAssets,
@@ -635,6 +692,7 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
     patchTargets,
     runtime,
   });
+  await retainUncompressedWorkerOutputs({ inputAssets, options, workerOutputsById });
 
   const {
     compressionTimeMs,
@@ -696,4 +754,4 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   };
 };
 
-export { runApplyWorkflow };
+export { retainUncompressedWorkerOutputs, runApplyWorkflow };

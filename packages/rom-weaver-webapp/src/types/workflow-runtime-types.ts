@@ -3,7 +3,7 @@ import type {
   RomSpecificCompressionFormat,
 } from "../lib/compression/container-format-registry.ts";
 import type { InputAsset } from "../lib/input/input-assets.ts";
-import type { VfsOutputRef } from "../storage/vfs/types.ts";
+import type { RetainedRuntimeOutput, VfsOutputRef } from "../storage/vfs/types.ts";
 import type { ROM_WEAVER_COMPRESSION_METADATA } from "../wasm/generated/rom-weaver-format-metadata.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../workers/protocol/patch-engine.ts";
 import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
@@ -70,9 +70,21 @@ type WorkflowRuntimeHooks = {
   };
 };
 
+type UncompressedOutputRetentionRequest = {
+  fileName: string;
+  output: Pick<VfsOutputRef, "mediaType" | "path" | "size" | "vfs">;
+  platform?: string;
+  retain: () => Promise<RetainedRuntimeOutput>;
+  romType?: RomTypeTag;
+  size: number;
+};
+
+type UncompressedOutputRetention = (request: UncompressedOutputRetentionRequest) => Promise<void> | void;
+
 type ApplyWorkflowOptions = ApplySettings &
   WorkflowRuntimeHooks & {
     patchTargets?: Array<"auto" | string>;
+    retainUncompressedOutput?: UncompressedOutputRetention;
     sidecarPatchOutputLabels?: Record<number, string>;
   };
 
@@ -344,4 +356,6 @@ export type {
   TrimInput,
   TrimResult,
   TrimWorkflowOptions,
+  UncompressedOutputRetention,
+  UncompressedOutputRetentionRequest,
 };

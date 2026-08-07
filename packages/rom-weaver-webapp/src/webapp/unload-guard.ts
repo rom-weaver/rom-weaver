@@ -113,6 +113,7 @@ const getPendingChangeState = ({
     romFilePresent,
   }),
   settings: settingsDraftHasChanges(webappState),
+  test: false,
   tools: !!toolsActive,
   trim: trimHasPendingChanges(trimState),
 });

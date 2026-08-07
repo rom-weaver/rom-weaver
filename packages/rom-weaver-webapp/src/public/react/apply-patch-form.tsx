@@ -3,13 +3,18 @@ import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.t
 import { emitTraceLog } from "../../lib/logging.ts";
 import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
+import { waitForBrowserOpfsBootCleanup } from "../../storage/browser/browser-opfs-cleanup.ts";
 import type {
   ApplyWorkflowBundleSources,
   ApplyWorkflowInputState,
   ApplyWorkflowPatchState,
 } from "../../types/apply-workflow.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
-import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
+import type {
+  ApplyWorkflowResult,
+  ProgressEvent,
+  UncompressedOutputRetentionRequest,
+} from "../../types/workflow-runtime-types.ts";
 import type { PatchValidationPlan } from "../../wasm/index.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
@@ -44,6 +49,9 @@ import type { BinarySource } from "./patcher-form.ts";
 import { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt } from "./public-types.ts";
 import { useApplySettings, useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
+import { getEmulatorJsCore } from "./components/emulatorjs.ts";
+import { addEntry } from "./emulator-session-store.ts";
+import { shouldRetainEmulatorOutput } from "./emulator-retention-policy.ts";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
 import { type BundleSessionControllers, useBundleApplySession } from "./use-bundle-apply-session.ts";
 import { useUnifiedApplyDrop } from "./use-unified-apply-drop.ts";
@@ -210,9 +218,17 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     onCancelSelection: (request) => handleSelectionCancelledRef.current(request),
   });
   const [applyReady, setApplyReady] = useState(false);
+  const [completedOutput, setCompletedOutput] = useState<BrowserApplyResult["output"] | null>(null);
   const [resolvedOutputCompression, setResolvedOutputCompression] = useState<CompressionFormat | undefined>(undefined);
   const [resolvedOutputName, setResolvedOutputName] = useState("");
   const [resolvedOutputNameKey, setResolvedOutputNameKey] = useState("");
+  const handleApplyComplete = useCallback(
+    (result: BrowserApplyResult) => {
+      setCompletedOutput(result.output);
+      onApplyComplete?.(result);
+    },
+    [onApplyComplete],
+  );
   const workflowIdRef = useRef(createReactWorkflowId("react-apply"));
   const mutationQueueRef = useRef(Promise.resolve<void>(undefined));
   const selectFileRef = useRef(selectFile);
@@ -297,6 +313,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   const handleLocalInputsChange = useCallback(
     (nextInputs: BinarySource[]) => {
+      setCompletedOutput(null);
       syncInputSelectionRefs(nextInputs);
       onInputsChange?.(nextInputs);
     },
@@ -380,6 +397,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   const handleLocalPatchesChange = useCallback(
     (nextPatches: BinarySource[]) => {
+      setCompletedOutput(null);
       if (!nextPatches.length) {
         setLocalBundleSession(null);
         setBundleDismissed(true);
@@ -495,6 +513,28 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     void workflow?.dispose();
   }, [workflowHandle]);
 
+  const retainUncompressedOutput = useCallback(async (request: UncompressedOutputRetentionRequest) => {
+    if (!shouldRetainEmulatorOutput(request)) return;
+    const core = getEmulatorJsCore(request.platform, request.fileName);
+    if (!core) return;
+    await waitForBrowserOpfsBootCleanup();
+    const artifact = await request.retain();
+    try {
+      addEntry({
+        artifact,
+        core,
+        fileName: request.fileName,
+        id: `apply-${request.fileName}`,
+        platform: request.platform,
+        sizeBytes: artifact.size,
+        source: "apply",
+      });
+    } catch (error) {
+      await artifact.dispose().catch(() => undefined);
+      throw error;
+    }
+  }, []);
+
   const getWorkflow = useCallback(
     () =>
       workflowHandle.get(() =>
@@ -504,6 +544,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               new ApplyWorkflow({
                 ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
                 id: workflowIdRef.current,
+                retainUncompressedOutput,
                 selectFile: async (request) => {
                   const handlers = prepareHandlersRef.current;
                   const promptInputSelection = handlers?.selection?.promptInputSelection !== false;
@@ -521,7 +562,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               }),
         ),
       ),
-    [resolvedAssetBaseUrl, workflowHandle],
+    [resolvedAssetBaseUrl, retainUncompressedOutput, workflowHandle],
   );
 
   useEffect(
@@ -1001,8 +1042,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         if (abortSignal?.aborted) abortWorkflow();
         else abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
         try {
+          setCompletedOutput(null);
           const result = (await workflow.run()) as BrowserApplyResult;
-          onApplyComplete?.(result);
+          handleApplyComplete(result);
           return normalizeApplyResult(result);
         } finally {
           abortSignal?.removeEventListener("abort", abortWorkflow);
@@ -1063,7 +1105,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [
       emitWorkflowProgress,
-      onApplyComplete,
+      handleApplyComplete,
       threads,
       queueMutation,
       syncSelectionRefs,
@@ -1550,6 +1592,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
+        emulatorOutput={completedOutput}
         bundleExport={bundleExport}
         bundleMetaById={bundleMetaById}
         bundleSessionMatches={bundleSessionMatches}
@@ -1571,6 +1614,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           setBundlePackage: changeBundlePackage,
         }}
         onBundleMetaChange={updateBundleMeta}
+        onSelectView={props.onSelectView}
         onTrace={emitApplyFormInputTrace}
         onUnifiedDrop={handleUnifiedDrop}
         patchEnablement={{

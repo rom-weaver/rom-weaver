@@ -30,6 +30,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.runtime.partial"
+#~ msgstr "Fast offline-bereit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.runtime.partialDesc"
+#~ msgstr "Die App ist zwischengespeichert, aber einige Emulator-Kerne fehlen noch. Mit dem Download-Knopf unten wird das Offline-Spielen vollständig bereit."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
 
@@ -440,8 +450,18 @@ msgstr "Offline aktiv"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.activePartial"
+msgstr "Offline aktiv, Kerne fehlen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.ready"
 msgstr "Offline bereit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.readyPartial"
+msgstr "Offline bereit, Kerne fehlen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -502,6 +522,11 @@ msgstr "Das Parsen des Patches ist fehlgeschlagen."
 #: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis"
+msgstr "Eine gepatchte ROM im Emulator spielen, direkt im Browser,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -685,6 +710,16 @@ msgstr "Tippen, um Dateien zu wählen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.tabTest"
+msgstr "Test"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.readyPartialDesc"
+msgstr "Die App ist für den nächsten Besuch zwischengespeichert, aber einige Emulator-Kerne fehlen. Mit dem Download-Knopf unten wird das Offline-Spielen vollständig bereit."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.corsHint"
 msgstr "Der Datei-Host muss Cross-Origin-Downloads (CORS) erlauben."
 
@@ -750,6 +785,11 @@ msgstr "Diese Patches erwarten unterschiedliche ROMs - jede Patch-Karte zeigt di
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.activePartialDesc"
+msgstr "Diese Seite läuft aus der Offline-Kopie, aber einige Emulator-Kerne sind nicht zwischengespeichert. Mit dem Download-Knopf unten wird das Offline-Spielen vollständig bereit."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.env.threads"
 msgstr "Threads"
 
@@ -802,6 +842,11 @@ msgstr "Was die Offline-Zustände bedeuten"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Neuigkeiten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis2"
+msgstr "mit Spielständen, die auf diesem Gerät bleiben —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

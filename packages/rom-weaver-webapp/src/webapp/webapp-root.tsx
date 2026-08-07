@@ -1,4 +1,4 @@
-import { BookOpen, GitCompare, House, RotateCcw, Scissors, Wrench } from "lucide-react";
+import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, Scissors, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -37,6 +37,7 @@ import {
   ApplyPatchRoute,
   CreatePatchRoute,
   DocsPageRoute,
+  EmulatorTestRoute,
   preloadWorkflowRoute,
   ToolsRouteForm,
   TrimPatchRoute,
@@ -51,6 +52,7 @@ const WORKFLOW_TABS = [
   // moves into More on the phone dock; it is never persisted as the tab to
   // resume - see `isResumableWorkflowView`.
   { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
+  { href: "test", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
   // Beta-only utility route. The shell keeps it out of both primary navs and
   // exposes it from More when the beta-tools setting is enabled.
@@ -63,6 +65,11 @@ const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) 
 const LogDialog = lazy(loadLogDialog);
 const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
 const SettingsPanel = lazy(loadSettingsPanel);
+// Same chunk as the settings panel above, so mounting the Test tab's "After
+// applying" field never pulls in a second network fetch.
+const PostApplyRomBehaviorField = lazy(() =>
+  import("./webapp-settings.tsx").then((module) => ({ default: module.PostApplyRomBehaviorField })),
+);
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
 const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
   import("../platform/browser/browser-api.ts").then(({ preloadBrowserRuntime: preload }) => preload(options));
@@ -71,8 +78,10 @@ const logger = createLogger("webapp-root");
 
 const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
-  const route =
-    view === "creator" ? WORKFLOW_SEO_ROUTES.creator : view === "patcher" ? WORKFLOW_SEO_ROUTES.patcher : null;
+  let route = null;
+  if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
+  else if (view === "patcher") route = WORKFLOW_SEO_ROUTES.patcher;
+  else if (view === "test") route = WORKFLOW_SEO_ROUTES.test;
   if (!route) {
     const tab = WORKFLOW_TABS.find((entry) => entry.id === view);
     document.title = tab ? `rom-weaver - ${tab.label}` : "rom-weaver";
@@ -366,6 +375,18 @@ function WebappRoot({
     setLogTab("status");
     setLogOpen(true);
   }, [openChangelogTab, pageUpdate.ready, preloadLogDialog]);
+  const openStorageTab = useCallback(() => {
+    preloadLogDialog();
+    setLogTab("storage");
+    setLogOpen(true);
+  }, [preloadLogDialog]);
+  // The Test view's saves link lands on the dialog tab that hosts the
+  // EmulatorJS saves panel, not the general Storage inspector.
+  const openEmulatorTestTab = useCallback(() => {
+    preloadLogDialog();
+    setLogTab("test");
+    setLogOpen(true);
+  }, [preloadLogDialog]);
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
@@ -532,11 +553,7 @@ function WebappRoot({
               setLogOpen(true);
             }}
             onOpenStatus={openStatusTab}
-            onOpenStorage={() => {
-              preloadLogDialog();
-              setLogTab("storage");
-              setLogOpen(true);
-            }}
+            onOpenStorage={openStorageTab}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
@@ -618,6 +635,7 @@ function WebappRoot({
                     onBundlePackageChange={actions.onPatcherBundlePackageChange}
                     onInputsChange={actions.onPatcherInputsChange}
                     onPatchesChange={actions.onPatcherPatchesChange}
+                    onSelectView={() => actions.onSelectView("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
                     pageDrop={activePageDrop}
                     startup={state.startup}
@@ -634,6 +652,10 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
+                {workflowPanel(
+                  "test",
+                  <EmulatorTestRoute active={state.currentView === "test"} onOpenStorage={openEmulatorTestTab} />,
+                )}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute
@@ -659,6 +681,20 @@ function WebappRoot({
         {logOpen ? (
           <Suspense fallback={null}>
             <LogDialog
+              emulatorSettingsField={
+                <Suspense fallback={null}>
+                  <PostApplyRomBehaviorField
+                    draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
+                    /* The Test tab has no Save bar, so this field commits straight to
+                       settings like the masthead quick pickers. */
+                    onDraftChange={(_field, value) => {
+                      if (typeof value === "string") actions.onPostApplyRomBehaviorChange(value);
+                    }}
+                    uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
+                    validation={state.validation}
+                  />
+                </Suspense>
+              }
               initialTab={logTab}
               level={state.settings.logLevel}
               onClose={closeDialog}

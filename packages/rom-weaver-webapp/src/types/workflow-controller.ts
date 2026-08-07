@@ -1,8 +1,10 @@
 import type { SelectFile, SelectionRole } from "./selection.ts";
+import type { UncompressedOutputRetention } from "./workflow-runtime-types.ts";
 
 type WorkflowOptions<TSettings> = {
   assetBaseUrl?: string;
   id?: string;
+  retainUncompressedOutput?: UncompressedOutputRetention;
   selectFile?: SelectFile;
   settings?: Partial<TSettings>;
   signal?: AbortSignal;

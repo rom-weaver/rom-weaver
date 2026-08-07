@@ -83,6 +83,18 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/create");
   });
 
+  it("routes and persists the Test workflow", () => {
+    window.history.replaceState({}, "", "/test");
+    const controller = createController();
+
+    expect(controller.getState().currentView).toBe("test");
+    expect(readWorkflowViewFromPath()).toBe("test");
+    expect(controller.selectView("patcher")).toBe("patcher");
+    expect(window.location.pathname).toBe("/apply");
+    expect(controller.selectView("test")).toBe("test");
+    expect(window.location.pathname).toBe("/test");
+  });
+
   it("resolves a candidate URL without changing the current browser path", () => {
     expect(readWorkflowViewFromPath("/docs/apply-rom-patches")).toBe("docs");
     expect(readWorkflowViewFromPath("/create")).toBe("creator");

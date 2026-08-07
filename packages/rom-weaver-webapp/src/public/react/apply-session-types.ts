@@ -135,6 +135,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
   | "onInputsChange"
   | "onPatchesChange"
   | "onSettingsChange"
+  | "onSelectView"
   | "onProgress"
   | "onApplyComplete"
   | "onError"

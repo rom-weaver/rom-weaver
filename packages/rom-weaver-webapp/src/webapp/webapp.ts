@@ -7,7 +7,7 @@ import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
 import { ONBOARDING_DISMISS_EVENT, requestGuidedSampleStart } from "../public/react/guided-sample-start.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
-import { resetBrowserTransientOpfs } from "../storage/browser/browser-opfs-cleanup.ts";
+import { resetBrowserTransientOpfs, startBrowserOpfsBootCleanup } from "../storage/browser/browser-opfs-cleanup.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
@@ -64,7 +64,7 @@ let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
 let pageResetKey = 0;
 if (typeof window !== "undefined") {
-  void resetBrowserTransientOpfs().catch((error: unknown) => {
+  void startBrowserOpfsBootCleanup().catch((error: unknown) => {
     logger.warn("Initial OPFS cleanup failed", { message: error instanceof Error ? error.message : String(error) });
   });
 }
@@ -343,7 +343,7 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
 // Views the build emits a prerendered shell for. Trim and Tools deliberately
 // inherit the patcher's markup, so they hydrate as "patcher" - that is what is
 // actually in the document.
-const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs"]);
+const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs", "test"]);
 
 // Hydration has to start from the view the *served document* was rendered as,
 // or React discards the whole shell - never from controller state, which may
@@ -435,6 +435,7 @@ const renderWebappRoot = (): undefined => {
       onLogLevelChange: (level) => webappController.setLogLevel(level),
       onOpenSettings: () => webappController.openSettings(),
       onPatcherBundlePackageChange: (value) => webappController.setBundlePackage(value),
+      onPostApplyRomBehaviorChange: (value) => webappController.setPostApplyRomBehavior(value),
       onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),
       onPatcherPatchesChange: (patches) => webappController.setPatcherPatchState(patches),
       onPatcherSettingsChange: (settings) => webappController.setPatcherSettingsState(settings),

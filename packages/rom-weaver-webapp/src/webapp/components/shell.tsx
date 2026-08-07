@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Newspaper,
   PackageCheck,
+  PackageOpen,
   Palette,
   ScrollText,
   Settings,
@@ -19,7 +20,7 @@ import {
 } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import { ACCENTS, useAccent } from "../accent.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -28,6 +29,11 @@ import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/
 import { useRomWeaverSettings, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
+import {
+  probeEmulatorCoresComplete,
+  readEmulatorCoresComplete,
+  subscribeEmulatorCoresComplete,
+} from "../pwa/emulator-prefetch.ts";
 
 const Github = createLucideIcon("github", [
   [
@@ -697,34 +703,81 @@ const useHydratedServiceWorkerStatus = (status: ServiceWorkerStatus | null | und
  * means this very page came out of it, ready means the copy is there and the
  * next load will. The order below is the order the legend lists them in.
  */
-type RuntimeState = "active" | "ready" | "update" | "installing" | "disabled";
+type RuntimeState = "active" | "active-partial" | "ready" | "ready-partial" | "update" | "installing" | "disabled";
 
-const RUNTIME_STATES: readonly RuntimeState[] = ["active", "ready", "update", "installing", "disabled"];
+const RUNTIME_STATES: readonly RuntimeState[] = [
+  "active",
+  "active-partial",
+  "ready",
+  "ready-partial",
+  "update",
+  "installing",
+  "disabled",
+];
 
 const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: MessageId }> = {
   active: { description: "ui.runtime.activeDesc", label: "ui.runtime.active" },
+  "active-partial": { description: "ui.runtime.activePartialDesc", label: "ui.runtime.activePartial" },
   disabled: { description: "ui.runtime.disabledDesc", label: "ui.runtime.disabled" },
   installing: { description: "ui.runtime.installingDesc", label: "ui.runtime.installing" },
   ready: { description: "ui.runtime.readyDesc", label: "ui.runtime.ready" },
+  "ready-partial": { description: "ui.runtime.readyPartialDesc", label: "ui.runtime.readyPartial" },
   update: { description: "ui.runtime.updateDesc", label: "ui.runtime.update" },
 };
 
-/** An update outranks everything: it is the only state that asks for an action. */
-const resolveRuntimeState = (status: ServiceWorkerStatus | null | undefined, updateReady: boolean): RuntimeState => {
+/**
+ * An update outranks everything: it is the only state that asks for an action.
+ * The `-partial` variants refine a working cache: the app itself is offline,
+ * but not every EmulatorJS core is cached yet (null means the cache state is
+ * still unknown, which keeps the plain active/ready reading).
+ */
+const resolveRuntimeState = (
+  status: ServiceWorkerStatus | null | undefined,
+  updateReady: boolean,
+  emulatorCoresComplete: boolean | null = null,
+): RuntimeState => {
   if (updateReady) return "update";
   if (status === "off") return "disabled";
-  if (status === "active") return "active";
-  if (status === "ready") return "ready";
+  if (status === "active" || status === "ready") {
+    return emulatorCoresComplete === false ? `${status}-partial` : status;
+  }
   return "installing";
 };
 
 const RUNTIME_ICONS = {
   active: CloudCheck,
+  "active-partial": PackageOpen,
   disabled: CloudOff,
   installing: LoaderCircle,
   ready: PackageCheck,
+  "ready-partial": PackageOpen,
   update: CloudDownload,
 } satisfies Record<RuntimeState, typeof CloudCheck>;
+
+/**
+ * Live view of the EmulatorJS offline-cache flag, probed in the background.
+ * Re-runs when the service-worker status changes so a first-visit probe that
+ * ran before the controller claimed the page gets its retry.
+ */
+const useEmulatorCoresComplete = (status?: ServiceWorkerStatus | null): boolean | null => {
+  const value = useSyncExternalStore(
+    subscribeEmulatorCoresComplete,
+    readEmulatorCoresComplete,
+    readEmulatorCoresComplete,
+  );
+  useEffect(() => {
+    // No service worker means nothing can be cached; skip until that changes.
+    if (status === "off") return undefined;
+    const idle = typeof requestIdleCallback === "function" ? requestIdleCallback : undefined;
+    if (idle) {
+      const handle = idle(() => void probeEmulatorCoresComplete());
+      return () => cancelIdleCallback(handle);
+    }
+    const timeout = setTimeout(() => void probeEmulatorCoresComplete(), 2000);
+    return () => clearTimeout(timeout);
+  }, [status]);
+  return value;
+};
 
 /** Uses the shared Lucide set for every service-worker state. */
 const RuntimeGlyph = ({ state }: { state: RuntimeState }) => {
@@ -923,7 +976,8 @@ const Masthead = ({
   const githubLabel = localizer.message("ui.tools.github");
   const supportLabel = localizer.message("ui.footer.donate");
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
-  const runtimeState = resolveRuntimeState(hydratedStatus, updateReady);
+  const emulatorCoresComplete = useEmulatorCoresComplete(hydratedStatus);
+  const runtimeState = resolveRuntimeState(hydratedStatus, updateReady, emulatorCoresComplete);
   const runtimeLabel = localizer.message(RUNTIME_MESSAGES[runtimeState].label);
   const activeMoreRef = utilityPlacement === "mobile" ? mobileMoreRef : desktopMoreRef;
   const toggleUtility = (placement: "desktop" | "mobile") => {
@@ -1285,4 +1339,5 @@ export {
   RUNTIME_STATES,
   RuntimeGlyph,
   UpdateBanner,
+  useEmulatorCoresComplete,
 };

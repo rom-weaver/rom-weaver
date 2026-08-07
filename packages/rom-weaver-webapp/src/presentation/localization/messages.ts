@@ -108,6 +108,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.log.tabLogs": msg({ id: "ui.log.tabLogs", message: "Logs" }),
   "ui.log.tabStatus": msg({ id: "ui.log.tabStatus", message: "Status" }),
   "ui.log.tabStorage": msg({ id: "ui.log.tabStorage", message: "Storage" }),
+  "ui.log.tabTest": msg({ id: "ui.log.tabTest", message: "Test" }),
   "ui.log.tabsLabel": msg({ id: "ui.log.tabsLabel", message: "Sections" }),
   "ui.masthead.slogan": msg({
     id: "ui.masthead.slogan",
@@ -128,6 +129,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Apply patches to any ROM, compressed or raw," }),
   "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "and download the result or a shareable bundle —" }),
+  "ui.hero.testThesis": msg({
+    id: "ui.hero.testThesis",
+    message: "Play a patched ROM in an emulator, right in the browser,",
+  }),
+  "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "with saves that stay on this device —" }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
     message: "Revert a patched ROM to its original dump,",
@@ -204,7 +210,19 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.runtime.installingDesc",
     message: "Caching the app so it can run offline…",
   }),
+  "ui.runtime.activePartial": msg({ id: "ui.runtime.activePartial", message: "Offline active, cores missing" }),
+  "ui.runtime.activePartialDesc": msg({
+    id: "ui.runtime.activePartialDesc",
+    message:
+      "This page runs from the offline copy, but some emulator cores are not cached. Use the download button below to get fully ready for offline play.",
+  }),
   "ui.runtime.ready": msg({ id: "ui.runtime.ready", message: "Offline ready" }),
+  "ui.runtime.readyPartial": msg({ id: "ui.runtime.readyPartial", message: "Offline ready, cores missing" }),
+  "ui.runtime.readyPartialDesc": msg({
+    id: "ui.runtime.readyPartialDesc",
+    message:
+      "The app is cached for the next visit, but some emulator cores are not. Use the download button below to get fully ready for offline play.",
+  }),
   "ui.runtime.readyDesc": msg({
     id: "ui.runtime.readyDesc",
     message: "rom-weaver is cached in this browser. The next visit loads from that copy, with or without a network.",

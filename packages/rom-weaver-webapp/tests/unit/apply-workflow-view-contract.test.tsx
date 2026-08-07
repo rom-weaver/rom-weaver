@@ -12,6 +12,7 @@ import type { PatcherOutputState, PatchStackItemState } from "../../src/public/r
 import type { PatcherUiState, RomInputRowState } from "../../src/public/react/patcher-ui-state.ts";
 import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-state.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import { setPostApplyRomBehaviorOverride } from "../../src/public/react/use-apply-download-orchestration.ts";
 
 /**
  * Apply-view markup contract. The browser suites drive the form through
@@ -83,20 +84,26 @@ const patchItem = (fileName: string): PatchStackItemState =>
   }) as unknown as PatchStackItemState;
 
 const renderView = ({
+  emulatorOutput,
   onUnifiedDrop,
+  outputOverrides,
   patches = [] as PatchStackItemState[],
   patchEnablement,
   pendingDrops,
+  settings = {},
   ui,
 }: {
+  emulatorOutput?: unknown;
   onUnifiedDrop?: Parameters<typeof ApplyWorkflowFormView>[0]["onUnifiedDrop"];
+  outputOverrides?: Partial<PatcherOutputState>;
   patches?: PatchStackItemState[];
   patchEnablement?: Parameters<typeof ApplyWorkflowFormView>[0]["patchEnablement"];
   pendingDrops?: Parameters<typeof ApplyWorkflowFormView>[0]["pendingDrops"];
+  settings?: Parameters<typeof RomWeaverSettingsProvider>[0]["settings"];
   ui: PatcherUiState;
 }) => {
   const controllers = {
-    output: storeOf(outputState()) as unknown as PatcherOutputController,
+    output: storeOf(outputState(outputOverrides)) as unknown as PatcherOutputController,
     patchStack: {
       ...storeOf({ items: patches }),
       removeItem: () => undefined,
@@ -105,9 +112,10 @@ const renderView = ({
     ui: storeOf(ui) as unknown as PatcherUiController,
   };
   return render(
-    <RomWeaverSettingsProvider settings={{}}>
+    <RomWeaverSettingsProvider settings={settings}>
       <ApplyWorkflowFormView
         controllers={controllers}
+        emulatorOutput={emulatorOutput as never}
         onUnifiedDrop={onUnifiedDrop}
         patchEnablement={patchEnablement}
         pendingDrops={pendingDrops}
@@ -271,6 +279,28 @@ describe("apply workflow view - empty bench", () => {
 });
 
 describe("apply workflow view - staged bench", () => {
+  it("shows the emulator action only when the input resolves to a supported core", () => {
+    const output = {
+      fileName: "game.nes",
+      getBlob: async () => new Blob(["rom"]),
+      id: "output-1",
+    };
+    const supported = renderView({
+      emulatorOutput: output,
+      outputOverrides: { pendingDownloadFileName: "game.nes" },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+    expect(supported.container.querySelector("#rom-weaver-button-test-emulator")).toBeTruthy();
+    supported.unmount();
+
+    const unsupported = renderView({
+      emulatorOutput: output,
+      outputOverrides: { pendingDownloadFileName: "game.bin" },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
+    });
+    expect(unsupported.container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+  });
+
   it("keeps likely drawers visible while ROMs and patches are still staging", () => {
     const rom = romRow("game.zip");
     rom.info.validationPhase = "extract";
@@ -390,6 +420,41 @@ describe("apply workflow view - staged bench", () => {
     expect(cueRow?.querySelector(".tree-time")?.textContent).toBe("5.19s");
     expect(container.querySelector(".extract-d .tree-row:nth-child(2) .tree-name")?.textContent).toBe("game.gdi");
     expect(container.querySelector(".extract-d .tree-row:nth-child(2) .tree-size")?.textContent).toBe("2 B");
+  });
+});
+
+describe("apply workflow view - post-apply behavior select", () => {
+  // The override is module-level session state (no host-app write path exists
+  // for the public form), so it must be reset between tests.
+  afterEach(() => setPostApplyRomBehaviorOverride(null));
+
+  it("defaults the select from the postApplyRomBehavior setting", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = renderView({ settings: { postApplyRomBehavior: "auto-test" }, ui });
+    const select = container.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    expect(select.value).toBe("auto-test");
+  });
+
+  it("falls back to auto-download when no setting is provided", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = renderView({ ui });
+    const select = container.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
+    expect(select.value).toBe("auto-download");
+  });
+
+  it("overrides the session value on change without touching the persisted setting", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = renderView({ settings: { postApplyRomBehavior: "auto-download" }, ui });
+    const select = container.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "auto-test-download" } });
+    expect(select.value).toBe("auto-test-download");
+
+    // A second view mounted in the same session (e.g. after a re-render
+    // elsewhere) picks up the override rather than the original setting.
+    const { container: second } = renderView({ settings: { postApplyRomBehavior: "auto-download" }, ui });
+    const secondSelect = second.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
+    expect(secondSelect.value).toBe("auto-test-download");
   });
 });
 

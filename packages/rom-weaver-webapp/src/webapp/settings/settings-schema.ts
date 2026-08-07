@@ -33,7 +33,16 @@ import {
 
 const logger = createLogger("settings");
 
-const SETTINGS_STORAGE_VERSION = 5;
+const SETTINGS_STORAGE_VERSION = 6;
+// Versions whose payload loads under the current schema, so stored settings
+// survive the upgrade; the next save rewrites the payload at the current
+// version. A version bump must keep its predecessors loadable - list the old
+// version here (additive changes load as-is because the loader defaults every
+// missing field) or reshape the payload before the field reads. Wiping is a
+// last resort for payloads that cannot be mapped. v6 only added
+// postApplyRomBehavior, so v5 loads unchanged; v4 and older never shipped
+// publicly and are not worth mapping.
+const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5]);
 
 type GroupedStoredSettings = {
   apply?: {
@@ -76,6 +85,7 @@ const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "language",
   "logLevel",
   "bundlePackage",
+  "postApplyRomBehavior",
   "compressionProfile",
 ] as const satisfies readonly SettingsFieldKey[];
 const CHD_CODEC_FIELDS = ["chdCreateCdCodecs", "chdCreateDvdCodecs"] as const satisfies readonly SettingsFieldKey[];
@@ -388,6 +398,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     onboardingEnabled: commonSettings.onboardingEnabled,
     accent: commonSettings.accent,
     bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
+    postApplyRomBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyRomBehavior : undefined,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
@@ -426,7 +437,10 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
       resetStoredSettings(storageObject, "settings payload is not an object");
       return settings;
     }
-    if (parsedSettings.version !== SETTINGS_STORAGE_VERSION) {
+    if (
+      parsedSettings.version !== SETTINGS_STORAGE_VERSION &&
+      !COMPATIBLE_PRIOR_STORAGE_VERSIONS.has(parsedSettings.version as number)
+    ) {
       resetStoredSettings(storageObject, `expected version ${SETTINGS_STORAGE_VERSION}`);
       return settings;
     }
@@ -448,6 +462,14 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const bundlePackage = readStoredField(storedStringSchema, loadedSettings.bundlePackage);
     if (bundlePackage !== undefined)
       settings.bundlePackage = normalizeChoiceField("bundlePackage", bundlePackage, settings.bundlePackage);
+
+    const postApplyRomBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyRomBehavior);
+    if (postApplyRomBehavior !== undefined)
+      settings.postApplyRomBehavior = normalizeChoiceField(
+        "postApplyRomBehavior",
+        postApplyRomBehavior,
+        settings.postApplyRomBehavior,
+      );
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
@@ -573,10 +595,10 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       };
       return;
     }
-    if (fieldKey === "bundlePackage") {
+    if (fieldKey === "bundlePackage" || fieldKey === "postApplyRomBehavior") {
       storedSettings.apply = {
         ...storedSettings.apply,
-        output: { ...storedSettings.apply?.output, bundlePackage: value },
+        output: { ...storedSettings.apply?.output, [fieldKey]: value },
       };
       return;
     }

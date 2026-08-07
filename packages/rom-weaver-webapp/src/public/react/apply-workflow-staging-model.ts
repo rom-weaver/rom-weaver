@@ -297,6 +297,8 @@ const normalizeApplyResult = (result: BrowserApplyResult): ApplyWorkflowResult =
     cleanup: output.dispose,
     dispose: output.dispose,
     fileName: output.fileName,
+    getBlob: output.getBlob,
+    id: output.id,
     mediaType: undefined,
     path: "" as ApplyWorkflowResult["output"]["path"],
     prepareDownload: output.prepareDownload,

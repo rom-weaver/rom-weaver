@@ -33,7 +33,7 @@ describe("LogDialog", () => {
     // the tabs are the header - there is no title competing with them
     expect(container.querySelector(".dlg-title")).toBeNull();
     const tabs = Array.from(container.querySelectorAll('.dialog-subrail [role="tab"]'));
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage", "Changelog"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage", "Test", "Changelog"]);
     expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0").length).toBe(1);
     expect(container.querySelector("#logpanel-status")).not.toBeNull();
     expect(container.querySelector(".status-rows")).not.toBeNull();
@@ -47,7 +47,7 @@ describe("LogDialog", () => {
     expect(branchLink?.textContent).toBe("dev");
     expect(branchLink?.target).toBe("_blank");
     // every offline state is named, so the badge above reads against the rest
-    expect(container.querySelectorAll(".sw-legend-row").length).toBe(5);
+    expect(container.querySelectorAll(".sw-legend-row").length).toBe(7);
     // the settings panel belongs to its own tab, so it is not mounted on Status
     expect(container.querySelector(".settings-panel-stub")).toBeNull();
   });
@@ -173,6 +173,46 @@ describe("LogDialog", () => {
 
     await waitFor(() => expect(container.querySelectorAll(".opfs-row")).toHaveLength(1));
     expect(container.querySelector(".opfs-row")?.textContent).toContain("/user-files");
+  });
+
+  it("hosts the saves panel and field on Test, the prefetch readout on Status", () => {
+    vi.mocked(listBrowserOpfs).mockResolvedValue([]);
+    const { container: storageContainer } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog initialTab="storage" onClose={() => undefined} onLevelChange={() => undefined} open />
+      </RomWeaverSettingsProvider>,
+    );
+    // the EmulatorJS sections moved out of Storage; it keeps only OPFS
+    expect(storageContainer.querySelector(".emulator-prefetch-panel")).toBeNull();
+    expect(storageContainer.querySelector(".emulator-saves-panel")).toBeNull();
+    cleanup();
+
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog
+          emulatorSettingsField={<div className="post-apply-field-stub" />}
+          initialTab="test"
+          onClose={() => undefined}
+          onLevelChange={() => undefined}
+          open
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const panel = container.querySelector("#logpanel-test");
+    expect(panel?.getAttribute("aria-labelledby")).toBe("logtab-test");
+    expect(panel?.querySelector(".emulator-saves-panel")).not.toBeNull();
+    expect(panel?.querySelector(".post-apply-field-stub")).not.toBeNull();
+    expect(container.querySelector('[data-logtab="test"]')?.getAttribute("aria-selected")).toBe("true");
+    cleanup();
+
+    // the offline-cache readout lives with the other offline facts on Status
+    const { container: statusContainer } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog initialTab="status" onClose={() => undefined} onLevelChange={() => undefined} open />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(statusContainer.querySelector("#logpanel-status .emulator-prefetch-panel")).not.toBeNull();
   });
 
   it("shows active virtual input files with their size", async () => {

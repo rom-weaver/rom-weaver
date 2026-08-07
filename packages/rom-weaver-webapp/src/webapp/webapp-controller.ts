@@ -30,7 +30,7 @@ import {
 } from "./webapp-state-types.ts";
 
 const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
-const VALID_WORKFLOW_VIEWS: readonly WebappView[] = ["patcher", "creator", "docs", "trim", "tools"];
+const VALID_WORKFLOW_VIEWS: readonly WebappView[] = ["patcher", "creator", "docs", "trim", "tools", "test"];
 const ACTIVE_VIEW_STORAGE_KEY = "rom-weaver-active-view";
 
 const normalizeWorkflowView = (value: unknown): WebappView | null => {
@@ -73,6 +73,7 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   creator: "create",
   docs: "docs",
   patcher: "apply",
+  test: "test",
   tools: "tools",
   trim: "trim",
 };
@@ -83,6 +84,8 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "create.html": "creator",
   docs: "docs",
   "docs.html": "docs",
+  test: "test",
+  "test.html": "test",
   tools: "tools",
   trim: "trim",
   // Keep old links usable when a host has not applied the server redirect.
@@ -458,6 +461,18 @@ const createWebappRootController = (options: ControllerOptions) => {
       persistSettings(nextSettings);
       applyCommittedSettings(nextSettings, {
         draftSettings: { ...state.draftSettings, bundlePackage: value },
+      });
+    },
+    setPostApplyRomBehavior(value: string) {
+      const state = store.getState();
+      if (state.settings.postApplyRomBehavior === value) return;
+      const validValues = new Set(SETTINGS_FIELD_METADATA.postApplyRomBehavior.validValues || []);
+      if (!validValues.has(value)) return;
+      const behavior = value as SettingsState["postApplyRomBehavior"];
+      const nextSettings = { ...copySettings(state.settings), postApplyRomBehavior: behavior };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings: { ...state.draftSettings, postApplyRomBehavior: behavior },
       });
     },
     setCreatorModifiedState(file: unknown) {

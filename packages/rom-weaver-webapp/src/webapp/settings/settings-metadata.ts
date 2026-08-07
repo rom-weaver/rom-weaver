@@ -18,6 +18,7 @@ import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/setting
 import { ACCENTS } from "../accent.ts";
 import { DEFAULT_CHANNEL_ACCENT } from "../build-channel.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
+import type { PostApplyRomBehavior } from "../../types/settings.ts";
 import { getDefaultWebappLogLevel } from "../development-defaults.ts";
 import {
   COMPRESSION_PROFILES,
@@ -36,6 +37,7 @@ type SettingsState = {
   language: string;
   logLevel: string;
   bundlePackage: string;
+  postApplyRomBehavior: PostApplyRomBehavior;
   betaToolsEnabled: boolean;
   onboardingEnabled: boolean;
   fixChecksum: boolean;
@@ -155,6 +157,7 @@ const SETTINGS_FIELD_ORDER = [
   "fixChecksum",
   "requireInputChecksumMatch",
   "bundlePackage",
+  "postApplyRomBehavior",
   "compressionProfile",
   "chdCreateCdCodecs",
   "chdCreateDvdCodecs",
@@ -232,6 +235,24 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestion: "Choose a package to show bundle download by default when applying a ROM hack.",
     validationLabel: "Bundle",
     validValues: ["", "zip:patches", "zip:rom", "7z:patches", "7z:rom"],
+  },
+  postApplyRomBehavior: {
+    // Auto-download preserves the pre-setting behavior: a completed apply
+    // downloads its output without a second click.
+    defaultValue: "auto-download",
+    id: "settings-post-apply-rom-behavior",
+    key: "postApplyRomBehavior",
+    kind: "select",
+    label: "After applying",
+    options: [
+      { label: "Download automatically", value: "auto-download" },
+      { label: "Test automatically", value: "auto-test" },
+      { label: "Test and download", value: "auto-test-download" },
+      { label: "Do nothing", value: "none" },
+    ],
+    suggestion: "Choose whether a completed patch should download or open in the Test tab automatically.",
+    validationLabel: "After applying",
+    validValues: ["auto-download", "auto-test", "auto-test-download", "none"],
   },
   chdCreateCdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateCdCodecs"),

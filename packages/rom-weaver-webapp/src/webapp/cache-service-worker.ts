@@ -13,6 +13,8 @@ import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 
+declare const __EMULATORJS_VERSION__: string;
+
 declare let self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<string | { revision?: string | null; url: string }>;
 };
@@ -45,6 +47,8 @@ setCacheNameDetails({
 
 const PRECACHE_NAME = cacheNames.precache;
 const RUNTIME_CACHE_NAME = cacheNames.runtime;
+const EMULATORJS_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-emulatorjs-`;
+const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
 const SW_LOG_PREFIX = "[rom-weaver-sw]";
 // In-memory COEP mode. Volatile: resets to the credentialless default whenever the worker thread is
 // terminated and respawned (notably on mobile Safari). The durable copy below survives that so a page
@@ -111,6 +115,20 @@ const persistCoepMode = async (credentialless: boolean): Promise<void> => {
 
 const isSameOriginRequest = (url: URL) => url.origin === self.location.origin;
 
+const getAppBasePath = () => {
+  try {
+    return new URL("./", self.registration.scope).pathname;
+  } catch {
+    return "/";
+  }
+};
+
+const APP_BASE_PATH = getAppBasePath().replace(/\/?$/, "/");
+const EMULATORJS_DATA_PATH_PREFIX = `${APP_BASE_PATH}emulatorjs/data/`;
+
+const isEmulatorJsDataRequest = (request: Request, url: URL) =>
+  request.method === "GET" && isSameOriginRequest(url) && url.pathname.startsWith(EMULATORJS_DATA_PATH_PREFIX);
+
 const isManifestRequest = (request: Request, url: URL) =>
   request.destination === "manifest" || MANIFEST_PATH_REGEX.test(url.pathname);
 
@@ -133,6 +151,7 @@ const isDevSourceRequest = (request: Request, url: URL) => {
 
 const shouldUseNetworkFirst = (request: Request, url: URL) => {
   if (request.method !== "GET" || !isSameOriginRequest(url)) return false;
+  if (isEmulatorJsDataRequest(request, url)) return false;
   return isHtmlRequest(request, url) || isManifestRequest(request, url) || isDevSourceRequest(request, url);
 };
 
@@ -230,7 +249,26 @@ registerRoute(
   },
 );
 
+// `maximumFileSizeToCacheInBytes` below governs only the precache. Runtime
+// EmulatorJS assets use this dedicated cache and are intentionally unaffected.
+const serveEmulatorJsData = async ({ request }: { request: Request }) => {
+  const credentialless = await ensureCoepModeHydrated();
+  const cache = await caches.open(EMULATORJS_CACHE_NAME);
+  const cachedResponse = await cache.match(request);
+  if (cachedResponse) {
+    return withCrossOriginIsolationHeaders(cachedResponse, credentialless) || cachedResponse;
+  }
+
+  const fetchedResponse = await fetch(toCredentiallessNoCorsRequest(request, credentialless));
+  if (fetchedResponse.ok) await cache.put(request, fetchedResponse.clone());
+  return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
+};
+
+registerRoute(({ request, url }) => isEmulatorJsDataRequest(request, url), serveEmulatorJsData);
+
 logServiceWorker("script initialized", {
+  emulatorJsCacheName: EMULATORJS_CACHE_NAME,
+  emulatorJsVersion: __EMULATORJS_VERSION__,
   coepCredentialless,
   precacheName: PRECACHE_NAME,
   precacheVersion: PRECACHE_VERSION,
@@ -261,15 +299,16 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((cacheNames) =>
-        cacheNames.filter(
-          (cacheName) =>
-            cacheName.startsWith(`precache-${PRECACHE_ID}-`) && !cacheName.endsWith(`-${PRECACHE_VERSION}`),
-        ),
+        cacheNames.filter((cacheName) => {
+          if (cacheName.startsWith(EMULATORJS_CACHE_PREFIX)) return cacheName !== EMULATORJS_CACHE_NAME;
+          return cacheName.startsWith(`precache-${PRECACHE_ID}-`) && !cacheName.endsWith(`-${PRECACHE_VERSION}`);
+        }),
       )
       .then((cachesToDelete) => {
-        logServiceWorker("activate event; deleting old precaches", {
+        logServiceWorker("activate event; deleting stale caches", {
           cachesToDelete,
           count: cachesToDelete.length,
+          emulatorJsCacheName: EMULATORJS_CACHE_NAME,
           precacheVersion: PRECACHE_VERSION,
         });
         return Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName)));

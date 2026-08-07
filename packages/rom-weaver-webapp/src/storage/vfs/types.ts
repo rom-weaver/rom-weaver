@@ -23,6 +23,11 @@ type VfsOutputRef = {
   vfs: LargeFileVfs;
 };
 
+type RetainedRuntimeOutput = Pick<VfsOutputRef, "fileName" | "mediaType" | "path" | "size" | "vfs"> & {
+  dispose: () => Promise<void>;
+  getBlob: () => Promise<Blob>;
+};
+
 type VfsStat = {
   path: AbsoluteVfsPath;
   size: number;
@@ -67,4 +72,4 @@ type LargeFileVfs = {
   ) => Promise<number>;
 };
 
-export type { LargeFileVfs, VfsFileRef, VfsOutputRef, VfsStat };
+export type { LargeFileVfs, RetainedRuntimeOutput, VfsFileRef, VfsOutputRef, VfsStat };

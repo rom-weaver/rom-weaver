@@ -84,6 +84,7 @@ type ApplyPatchFormProps = {
   bundleSession?: BundleApplySession | null;
   onInputsChange?: (inputs: BinarySource[]) => void;
   onPatchesChange?: (patches: BinarySource[]) => void;
+  onSelectView?: (view: "test") => void;
   onSettingsChange?: (settings: ApplyPatchFormSettings) => void;
   /** Fires when the output-card bundle dropdown changes, to persist the "Bundle" setting ("" hides it). */
   onBundlePackageChange?: (value: string) => void;

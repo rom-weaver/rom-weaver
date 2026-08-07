@@ -20,6 +20,8 @@ type StringNumber = number | string;
 
 type BundlePackage = "" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
 
+type PostApplyRomBehavior = "none" | "auto-download" | "auto-test" | "auto-test-download";
+
 type WorkerSettings = {
   threads?: StringNumber | "auto";
 };
@@ -102,4 +104,12 @@ type CreateSettings = CommonSettings & {
   };
 };
 
-export type { ApplySettings, CommonSettings, CompressionFormat, CreateSettings, PatchFormat, WorkerSettings };
+export type {
+  ApplySettings,
+  CommonSettings,
+  CompressionFormat,
+  CreateSettings,
+  PatchFormat,
+  PostApplyRomBehavior,
+  WorkerSettings,
+};

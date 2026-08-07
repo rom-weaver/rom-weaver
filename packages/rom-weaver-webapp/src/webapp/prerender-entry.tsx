@@ -38,6 +38,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onLogLevelChange: noop,
   onOpenSettings: noop,
   onPatcherBundlePackageChange: noop,
+  onPostApplyRomBehaviorChange: noop,
   onPatcherInputsChange: noop,
   onPatcherPatchesChange: noop,
   onPatcherSettingsChange: noop,
@@ -54,7 +55,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
 });
 
 const renderLandingShellHtml = async (
-  currentView: Extract<WebappRootProps["state"]["currentView"], "patcher" | "creator" | "docs"> = "patcher",
+  currentView: Extract<WebappRootProps["state"]["currentView"], "patcher" | "creator" | "docs" | "test"> = "patcher",
   notFound = false,
   docsSlug = "docs",
 ): Promise<string> => {

@@ -414,6 +414,7 @@ const stagedPatchItem = (fileName) => ({
 const PAGE_TABS = [
   { href: "apply", icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Apply" },
   { href: "create", icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
+  { href: "test", icon: createElement("span", { "aria-hidden": "true" }), id: "test", label: "Test" },
   { href: "trim", icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
 ];
 

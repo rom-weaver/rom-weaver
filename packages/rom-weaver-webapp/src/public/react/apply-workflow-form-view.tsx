@@ -2,11 +2,13 @@ import { Archive, Disc3, Download, ListChecks, Package, TriangleAlert } from "lu
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
+import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
+import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import {
   buildOutputCompressionPanel,
   FieldInfoToggle,
@@ -45,11 +47,83 @@ import type {
 } from "./patcher-form.ts";
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
+import { addEntry, getApplyEntry, setCurrentGame } from "./emulator-session-store.ts";
+import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-rom.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
-import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
+import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import { setPostApplyRomBehaviorOverride, usePostApplyRomBehaviorValue } from "./use-apply-download-orchestration.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
+import type { PostApplyRomBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
+
+const EmulatorJsAction = ({
+  core,
+  fileName,
+  onSelectView,
+  output,
+  platform,
+}: {
+  core: string | undefined;
+  fileName?: string;
+  onSelectView?: (view: "test") => void;
+  output?: BrowserApplyResult["output"] | null;
+  platform?: string;
+}) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  if (!(core && output)) return null;
+  const openInEmulator = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const retained = getApplyEntry(fileName) || getApplyEntry();
+      if (retained) {
+        setCurrentGame(retained.id);
+        onSelectView?.("test");
+        return;
+      }
+      const blob = await output.getBlob?.();
+      if (!blob) throw new Error("The finished output cannot be opened in EmulatorJS.");
+      const loaded = await loadEmulatorRom(blob, output.fileName);
+      addEntry({
+        blob: loaded.blob,
+        core,
+        fileName: renameRomToOutput(output.fileName, loaded.fileName),
+        id: output.id,
+        platform,
+        sizeBytes: loaded.blob.size,
+        source: "apply",
+      });
+      setCurrentGame(output.id);
+      onSelectView?.("test");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not prepare the output for EmulatorJS.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <div className="emulatorjs-test">
+      <button
+        aria-busy={loading}
+        className="btn ghost slim"
+        disabled={loading}
+        id="rom-weaver-button-test-emulator"
+        onClick={() => void openInEmulator()}
+        type="button"
+      >
+        {loading ? "Preparing EmulatorJS…" : "Test in emulator"}
+      </button>
+      <span className="emulatorjs-note">Open the ROM in the Test tab.</span>
+      {error ? (
+        <p className="emulatorjs-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+};
 
 const usePendingCardMorph = (pendingCount: number, _resolvedCount: number) => {
   const knownCards = useRef(new WeakSet<Element>());
@@ -1116,6 +1190,48 @@ const OutputHeaderField = ({
   );
 };
 
+/**
+ * Mirrors `postApplyRomBehavior`'s options from
+ * `src/webapp/settings/settings-metadata.ts`: `public/react` is the
+ * embeddable form and must not import from `webapp/`, which owns the
+ * Settings dialog, so the option list is duplicated here rather than shared.
+ */
+const POST_APPLY_ROM_BEHAVIOR_OPTIONS: ReadonlyArray<{ label: string; value: PostApplyRomBehavior }> = [
+  { label: "Download automatically", value: "auto-download" },
+  { label: "Test automatically", value: "auto-test" },
+  { label: "Test and download", value: "auto-test-download" },
+  { label: "Do nothing", value: "none" },
+];
+
+/**
+ * "After applying" select for the Apply step's output options. The public form
+ * has no write path into the host app's persisted settings, so a choice here
+ * only overrides the behavior for this session (see
+ * `use-apply-download-orchestration.ts`'s `postApplyRomBehaviorOverride`); the
+ * select still defaults from the live `postApplyRomBehavior` setting.
+ */
+const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean; settingValue: unknown }) => {
+  const value = usePostApplyRomBehaviorValue(settingValue);
+  return (
+    <OutputField label="After applying">
+      <select
+        aria-label="After applying"
+        className="select"
+        disabled={disabled}
+        id="rom-weaver-select-post-apply-behavior"
+        onChange={(event) => setPostApplyRomBehaviorOverride(event.currentTarget.value as PostApplyRomBehavior)}
+        value={value}
+      >
+        {POST_APPLY_ROM_BEHAVIOR_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </OutputField>
+  );
+};
+
 /** Export while running shows the live bar; otherwise the create/download button. */
 const BundleExportAction = ({
   bundleActionLabel,
@@ -1203,9 +1319,11 @@ const ApplyOutputAction = ({
   controllers,
   disabledPatchCount,
   enabledPatchCount,
+  emulatorOutput,
   errorNotice,
   localizer,
   noticeController,
+  onSelectView,
   outputState,
   patches,
   romInputs,
@@ -1220,6 +1338,8 @@ const ApplyOutputAction = ({
   controllers: { output: PatcherOutputController };
   disabledPatchCount: number;
   enabledPatchCount: number;
+  emulatorOutput?: BrowserApplyResult["output"] | null;
+  onSelectView?: (view: "test") => void;
   errorNotice: NoticeState | null;
   localizer: ReturnType<typeof useUiLocalizer>;
   noticeController?: NoticeController;
@@ -1242,6 +1362,19 @@ const ApplyOutputAction = ({
       controller={controllers.output}
       disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
       totalTime={applyTotalTime || undefined}
+    />
+    <EmulatorJsAction
+      core={getEmulatorJsCore(
+        romInputs[0]?.info.romType?.platform,
+        romInputs[0]?.info.fileName ||
+          romInputs[0]?.info.archiveName ||
+          outputState.pendingDownloadFileName ||
+          undefined,
+      )}
+      fileName={romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || undefined}
+      onSelectView={onSelectView}
+      output={emulatorOutput}
+      platform={romInputs[0]?.info.romType?.platform}
     />
     {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
     {bundleTools?.outputVerification ? (
@@ -1501,6 +1634,7 @@ const buildRomRowDeps = (input: {
 
 function ApplyWorkflowFormView({
   controllers,
+  emulatorOutput,
   bundleExpectedRomChecks,
   bundleExport,
   bundleMetaById,
@@ -1508,6 +1642,7 @@ function ApplyWorkflowFormView({
   bundleRomExpectation,
   bundleTools,
   onBundleMetaChange,
+  onSelectView,
   onUnifiedDrop,
   patchEnablement,
   pendingDrops = [],
@@ -1519,6 +1654,7 @@ function ApplyWorkflowFormView({
     ui: PatcherUiController;
     notice?: NoticeController;
   };
+  emulatorOutput?: BrowserApplyResult["output"] | null;
   /** Bundle export controls live directly in the Output options drawer. */
   bundleExport?: BundleExportState;
   /** Bundle notices + the export reveal state. */
@@ -1532,6 +1668,7 @@ function ApplyWorkflowFormView({
   /** Shown while the bundle session waits for the user to supply the expected ROM. */
   bundleRomExpectation?: BundleRomExpectation;
   onBundleMetaChange?: (id: string, updates: Partial<BundlePatchMeta>) => void;
+  onSelectView?: (view: "test") => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[]) => void;
   patchEnablement?: PatchEnablement;
@@ -1577,6 +1714,7 @@ function ApplyWorkflowFormView({
   const disabledPatchCount = disabledPatchFlags.filter(Boolean).length;
   const enabledPatchCount = patches.length - disabledPatchCount;
   const localizer = useUiLocalizer();
+  const settings = useRomWeaverSettings();
   // Inputs/patches still resolving - surfaced only on the selvage status strip.
   const inputsStaging =
     romInputs.some((row) => !!row.progress) || patches.some((item) => !!item.progress) || uiState.patchInput.loading;
@@ -1653,6 +1791,12 @@ function ApplyWorkflowFormView({
   const bundleOutputFields = (
     <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} outputHeaderField={outputHeaderField} />
   );
+  const outputExtraFields = (
+    <>
+      {bundleOutputFields}
+      <PostApplyBehaviorField disabled={outputState.disabled} settingValue={settings.postApplyRomBehavior} />
+    </>
+  );
 
   // Unified drop: bare files stage immediately; each archive shows an
   // "identifying" placeholder until its ROM-vs-patch bucket is classified.
@@ -1712,9 +1856,11 @@ function ApplyWorkflowFormView({
       controllers={{ output: controllers.output }}
       disabledPatchCount={disabledPatchCount}
       enabledPatchCount={enabledPatchCount}
+      emulatorOutput={emulatorOutput}
       errorNotice={errorNotice}
       localizer={localizer}
       noticeController={noticeController}
+      onSelectView={onSelectView}
       outputState={outputState}
       patches={patches}
       romInputs={romInputs}
@@ -1871,7 +2017,7 @@ function ApplyWorkflowFormView({
             action={renderOutputAction}
             compress={buildOutputCompressionPanel({
               disabled: outputState.disabled,
-              extraChildren: bundleOutputFields,
+              extraChildren: outputExtraFields,
               fields: outputState.compress?.fields,
               format: compressHeaderFormat,
               formatId: "rom-weaver-select-output-format-compress",
