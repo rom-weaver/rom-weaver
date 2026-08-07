@@ -184,12 +184,28 @@ echo hi
     expect(route.html).toContain('href="/docs/patch-formats#ips"');
     expect(route.html).toContain('href="/docs/fixture#a-and-b"');
     expect(route.html).toContain('<pre tabindex="0"><code class="language-sh">');
-    expect(route.html).toContain(
-      '<h2 id="a-and-b"><span aria-hidden="true" class="docs-section-index">01</span><span class="docs-section-title">A &amp; <code>B</code></span>',
+    expect(route.html).toContain('<h2 id="a-and-b"><a class="docs-section-link" href="/docs/fixture#a-and-b">');
+    expect(route.html).toContain('<h2 id="a-and-b-1"><a class="docs-section-link" href="/docs/fixture#a-and-b-1">');
+    expect(route.html).toContain('<span class="docs-section-title">A &amp; <code>B</code></span></a></h2>');
+    expect(route.html).toContain('class="docs-section-link-icon"');
+  });
+
+  // A markdown link inside a section heading would nest an <a> inside the
+  // heading's own self-link, and the HTML parser splits nested anchors.
+  it("unwraps markdown links inside section headings to their label text", () => {
+    const route = createDocRoute(
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## See [chd](../explanation/compression-formats.md) details
+`,
     );
-    expect(route.html).toContain(
-      '<h2 id="a-and-b-1"><span aria-hidden="true" class="docs-section-index">02</span><span class="docs-section-title">A &amp; <code>B</code></span>',
-    );
+
+    expect(route.sections).toEqual([{ id: "see-chd-details", label: "See chd details" }]);
+    expect(route.html).toContain('<span class="docs-section-title">See chd details</span>');
+    expect(route.html.slice(route.html.indexOf("<h2"))).not.toContain("compression-formats");
   });
 
   it("wraps tables in a focusable scroll container", () => {
@@ -289,13 +305,13 @@ Fixture description.
     expect(routeFor("docs/create-bundles").sections.map((section) => section.id)).toEqual(BUNDLE_GUIDE_ANCHORS);
   });
 
-  it("publishes the browser bundle guide as one numbered topic", () => {
+  it("publishes the browser bundle guide as one topic with self-linked sections", () => {
     render(<DocsPage active slug="docs/create-bundles" />);
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Create and share a patch bundle in the browser" }),
     ).toBeTruthy();
-    expect(document.querySelectorAll(".docs-article > h2 .docs-section-index")).toHaveLength(
+    expect(document.querySelectorAll(".docs-article > h2 > .docs-section-link")).toHaveLength(
       routeFor("docs/create-bundles").sections.length,
     );
     expect(document.querySelectorAll(".docs-article details.docs-disclosure")).toHaveLength(0);

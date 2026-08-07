@@ -368,21 +368,57 @@ html:has(.docs-workbench) {
   font-stretch: 92%;
 }
 .rw-app .docs-article h2 {
-  display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
-  gap: var(--sp-s);
-  align-items: baseline;
-  margin: clamp(44px, 7vw, 68px) 0 var(--sp-m);
+  position: relative;
+  margin: clamp(26px, 4.5vw, 40px) 0 var(--sp-m);
   font-size: clamp(1.3rem, 1.08rem + 0.9vw, 1.6rem);
   font-weight: 720;
   font-stretch: 96%;
   scroll-margin-top: 5.5rem;
 }
-.rw-app .docs-section-index {
-  font: 600 0.7rem / 1 var(--mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--weft);
-  letter-spacing: 0;
+/* The heading is its own permalink, GitHub style: plain ink at rest, accent
+   underline plus a link glyph hanging in the left gutter on hover/press. The
+   glyph's em offset must stay inside the article's 18px padding floor - the
+   panel behind it clips at `overflow: hidden`. */
+.rw-app .docs-article a.docs-section-link {
+  font-weight: inherit;
+  color: inherit;
+  text-decoration: none;
+}
+.rw-app .docs-section-title {
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: color-mix(in oklab, var(--thread) 55%, transparent);
+  text-underline-offset: 0.22em;
+}
+.rw-app .docs-section-link-icon {
+  position: absolute;
+  top: 0.26em;
+  left: -0.84em;
+  width: 0.62em;
+  height: 0.62em;
+  color: var(--thread-text);
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+/* Touch has no hover to reveal the glyph, so it stays faintly visible. */
+@media (hover: none) {
+  .rw-app .docs-section-link-icon {
+    opacity: 0.45;
+  }
+}
+@media (hover: hover) {
+  .rw-app .docs-article a.docs-section-link:hover .docs-section-title {
+    text-decoration-line: underline;
+  }
+  .rw-app .docs-article a.docs-section-link:hover .docs-section-link-icon {
+    opacity: 1;
+  }
+}
+.rw-app .docs-article a.docs-section-link:active .docs-section-title {
+  text-decoration-line: underline;
+}
+.rw-app .docs-article a.docs-section-link:active .docs-section-link-icon,
+.rw-app .docs-article a.docs-section-link:focus-visible .docs-section-link-icon {
+  opacity: 1;
 }
 .rw-app .docs-article h3 {
   margin: var(--sp-xl) 0 var(--sp-s);
