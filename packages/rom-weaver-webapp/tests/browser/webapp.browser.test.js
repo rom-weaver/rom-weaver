@@ -189,20 +189,19 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
-test("WebappRoot keeps Trim gated and Tools behind More", async () => {
+test("WebappRoot keeps Trim gated and Docs behind More", async () => {
   mountWebappRoot();
-  // Docs is reference rather than a workflow, but it rides in the rail so the
-  // readers it is written for do not have to go hunting for it.
   await expect
     .poll(() =>
       [...document.querySelectorAll('.mode-rail [role="tab"]')]
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply", "Create", "Docs", "Test"]);
+    .toEqual(["Apply", "Create"]);
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "Tools" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Settings" })).toBeInTheDocument();
 });
 
 test("enabled Tools stays behind More on desktop and phone", async () => {
@@ -217,15 +216,9 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
     await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
     expect(document.querySelector(`[role="tab"][data-mode="tools"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="tools"]`)).toBeNull();
-    if (width >= 1000) {
-      expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");
-      expect(getComputedStyle(document.querySelector(".desktop-more .tool-text")).display).toBe("none");
-      expect(document.querySelector(".masthead-settings .tip")?.textContent).toBe("Settings");
-      expect(document.querySelector(".desktop-more .tip")?.textContent).toBe("More");
-      await page.getByRole("button", { name: "Settings" }).hover();
-      await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
-    }
-    await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+    expect(document.querySelector(".masthead-settings")).toBeNull();
+    await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
+    await expect.element(page.getByRole("menuitem", { name: "Settings" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
   }
   await page.viewport(1280, 900);
@@ -250,8 +243,9 @@ test("the runtime status keeps its glyph everywhere and sheds its words when the
   await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
   await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
-  expect(document.querySelector(".brand-sub-row .sub-status")).toBeNull();
-  expect(document.querySelector(".masthead-tools .sub-status")).toBeTruthy();
+  expect(document.querySelector(".brand-sub-row .sub-status")).toBeTruthy();
+  expect(document.querySelector(".brand-sub-row .sub-status")?.dataset.sw).toBe("installing");
+  expect(document.querySelector(".masthead-tools .sub-status")).toBeNull();
   expect(document.querySelector(".masthead-status-text")).toBeNull();
   for (const [width, height] of [
     [1280, 900],
@@ -444,7 +438,7 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
 });
 
 test("WebappRoot keeps diagnostics behind More - the Log dialog owns them", async () => {
-  // Settings stays direct; Docs is a top-level route and diagnostics share More.
+  // Settings and Docs share More with diagnostics.
   mountWebappRoot();
   await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
@@ -458,10 +452,12 @@ test("mobile More contains every masthead utility action", async () => {
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".masthead-tools")).toBeTruthy();
-  for (const selector of [".mobile-utility-source", ".mobile-utility-support"]) {
-    const link = document.querySelector(selector);
-    expect(link).not.toBeNull();
-    expect(getComputedStyle(link).display).toBe("none");
+  expect(document.querySelector(".mobile-utility-source")).toBeNull();
+  expect(document.querySelector(".mobile-utility-support")).toBeNull();
+  const projectUtilityRail = document.querySelector(".project-utility-rail");
+  expect(projectUtilityRail).not.toBeNull();
+  for (const link of projectUtilityRail?.querySelectorAll("a") ?? []) {
+    expect(getComputedStyle(link).display).not.toBe("none");
   }
   const mastheadStatus = document.querySelector(".masthead-status");
   for (const selector of [".masthead-status", ".mobile-utility-theme", ".mobile-utility-accent"]) {
@@ -471,7 +467,7 @@ test("mobile More contains every masthead utility action", async () => {
   }
 
   await page.getByRole("button", { name: "More" }).click();
-  for (const label of ["View source on GitHub", "Support", "Status", "Theme", "Accent"]) {
+  for (const label of ["Docs", "Settings", "View source on GitHub", "Support", "Status", "Theme", "Accent"]) {
     await expect.element(page.getByRole("menuitem", { name: label })).toBeInTheDocument();
   }
   expect(document.querySelector('.more-menu [role="menuitem"][data-sw] svg')?.outerHTML).toBe(
