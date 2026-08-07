@@ -30,7 +30,7 @@ Every table on this page uses these three marks.
 | Mark | Meaning |
 | :---: | --- |
 | 🟢 | Supported. |
-| 🟡 | Partly supported. The limit is written next to the mark or under the table. |
+| 🟡 | Partly supported. The limit is written next to the mark, or in a numbered note under the table. |
 | 🔴 | Not supported. |
 
 ## The tools
@@ -56,8 +56,8 @@ list of specifications consulted is in
 
 | Capability | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 | chdman | Dolphin tool |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Patch families applied | 🟢 21 | 🟡 11 | 🔴 3 | 🟡 7 | 🔴 1 | 🔴 | 🔴 |
-| Patch families created | 🟢 18 | 🟡 7 | 🔴 2 | 🟡 6 | 🔴 1 | 🔴 | 🔴 |
+| Patch families applied | 🟢 21 | 🟡 11 | 🔴 3 | 🟡 7 | 🔴 1 ¹ | 🔴 ² | 🔴 ² |
+| Patch families created | 🟢 18 | 🟡 7 | 🔴 2 | 🟡 6 | 🔴 1 ¹ | 🔴 ² | 🔴 ² |
 | Chain several patches | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
 | ROM header awareness | 🟢 13 families | 🟡 4 formats | 🟡 SNES only | 🔴 | 🔴 | 🔴 | 🔴 |
 | Archive extract | 🟢 22 formats | 🟡 ZIP only | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
@@ -67,8 +67,11 @@ list of specifications consulted is in
 | Runs in a browser | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
 | Command line | 🟢 | 🟡 Node script | 🟢 | 🟡 macOS only | 🟢 | 🟢 | 🟢 |
 
-xdelta3 applies and creates exactly one family, VCDIFF, but it is a general
-delta tool with no ROM knowledge at all. chdman and Dolphin tool do not patch.
+> ¹ xdelta3 applies and creates exactly one family, VCDIFF, but it is a general
+> delta tool with no ROM knowledge at all — no headers, no byte order, no
+> consoles.
+>
+> ² chdman and Dolphin tool do not patch. They convert disc images.
 
 ## Applying a patch
 
@@ -87,8 +90,8 @@ rom-weaver reads 21 patch families. No other tool here reads more than 11.
 | APSGBA | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
 | BDF/BSDIFF40 | 🟢 | 🟢 | 🔴 | 🟢 | 🔴 |
 | MOD (PMSR) | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| VCDIFF | 🟢 | 🟡 | 🔴 | 🟢 | 🟢 |
-| xdelta | 🟢 | 🟡 | 🔴 | 🟢 | 🟢 |
+| VCDIFF | 🟢 | 🟡 ¹ | 🔴 | 🟢 ² | 🟢 |
+| xdelta | 🟢 | 🟡 ¹ | 🔴 | 🟢 ² | 🟢 |
 | SOLID | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 | GDIFF | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 | PAT (FireFlower) | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
@@ -98,11 +101,12 @@ rom-weaver reads 21 patch families. No other tool here reads more than 11.
 | HDiffPatch/HPatchZ | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 | DCP (Dreamcast) | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 
-🟡 for RomPatcher.js on VCDIFF and xdelta means it decodes plain VCDIFF but
-throws on two optional parts of the spec: a secondary compressor and a custom
-code table. Most `.xdelta` patches from xdelta3 use the `djw` secondary
-compressor, so they fail. rom-weaver and MultiPatch decode both — MultiPatch
-links the real xdelta3 library.
+> ¹ RomPatcher.js decodes plain VCDIFF but throws on two optional parts of the
+> spec: a secondary compressor and a custom code table. Most `.xdelta` patches
+> from xdelta3 use the `djw` secondary compressor, so they fail.
+>
+> ² MultiPatch links the real xdelta3 library, so it decodes both. So does
+> rom-weaver.
 
 rom-weaver has gaps too. It detects NINJA1 headers but cannot apply them, it
 does not support PDS, and it does not support HDiffPatch directory patches
@@ -115,8 +119,8 @@ does not support PDS, and it does not support HDiffPatch directory patches
 | IPS | 🟢 | 🟢 | 🟢 | 🟢 | 🔴 |
 | IPS32 | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 | EBP | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| BPS | 🟢 | 🟢 | 🟢 | 🟢 | 🔴 |
-| UPS | 🟢 | 🟢 | 🔴 | 🟢 | 🔴 |
+| BPS | 🟢 | 🟢 | 🟢 ¹ | 🟢 | 🔴 |
+| UPS | 🟢 | 🟢 | 🔴 ² | 🟢 | 🔴 |
 | PPF | 🟢 | 🟢 | 🔴 | 🟢 | 🔴 |
 | RUP | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
 | APS (N64) | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
@@ -128,9 +132,11 @@ does not support PDS, and it does not support HDiffPatch directory patches
 | SOLID, GDIFF, PAT, DLDI, DPS | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 | BSP, HDiffPatch, DCP | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
 
-Flips ships a UPS encoder in its library but exposes no way to reach it, so UPS
-is apply-only in practice. Flips is the only tool here offering two BPS
-strategies on the command line: `--bps-delta` and `--bps-linear`.
+> ¹ Flips is the only tool here offering two BPS strategies on the command
+> line: `--bps-delta` and `--bps-linear`.
+>
+> ² Flips ships a UPS encoder in its library but exposes no way to reach it, so
+> UPS is apply-only in practice.
 
 ## Containers and disc images
 
@@ -142,11 +148,11 @@ strategies on the command line: `--bps-delta` and `--bps-linear`.
 | RAR | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 | TAR (plain, gz, bz2, xz) | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 | Gzip, Bzip2, XZ, Zstandard | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| CHD | 🟢 | 🟢 | 🔴 | 🟢 | 🔴 |
+| CHD | 🟢 | 🟢 | 🔴 | 🟢 ¹ | 🔴 |
 | RVZ | 🟢 | 🟢 | 🔴 | 🔴 | 🟢 |
 | Z3DS | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| GCZ | 🟢 | 🔴 | 🔴 | 🔴 | 🟢 |
-| WIA | 🟢 | 🔴 | 🔴 | 🔴 | 🟢 |
+| GCZ | 🟢 | 🔴 ² | 🔴 | 🔴 | 🟢 |
+| WIA | 🟢 | 🔴 ² | 🔴 | 🔴 | 🟢 |
 | TGC | 🟢 | 🔴 | 🔴 | 🔴 | 🟡 read only |
 | NFS | 🟢 | 🔴 | 🔴 | 🔴 | 🟡 read only |
 | WBFS | 🟢 | 🔴 | 🔴 | 🔴 | 🟡 read only |
@@ -154,9 +160,11 @@ strategies on the command line: `--bps-delta` and `--bps-linear`.
 | PBP | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 | XISO | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 
-Two honest gaps for rom-weaver: Dolphin tool writes GCZ and WIA, and rom-weaver
-only reads them. chdman also reads `.cue`, `.gdi`, `.toc`, and raw images as
-CHD build inputs, which is a different job from extracting an existing archive.
+> ¹ chdman also reads `.cue`, `.gdi`, `.toc`, and raw images as CHD build
+> inputs, which is a different job from extracting an existing archive.
+>
+> ² An honest gap: Dolphin tool writes GCZ and WIA, and rom-weaver only reads
+> them.
 
 The practical difference: rom-weaver can take a `.chd` or `.rvz` disc image,
 patch the ROM inside, and pack the result back up in one command. Every other
@@ -166,47 +174,49 @@ tool here needs you to convert, patch, and convert back by hand.
 
 | Capability | rom-weaver | RomPatcher.js | Flips | MultiPatch | chdman | Dolphin tool |
 | --- | --- | --- | :---: | :---: | :---: | :---: |
-| Algorithms | 🟢 CRC32, CRC32C, CRC16, MD5, SHA-1, SHA-256, BLAKE3, Adler-32 | 🟡 CRC32, MD5, SHA-1 | 🔴 | 🔴 | 🟡 SHA-1 | 🟡 CRC32, MD5, SHA-1 |
+| Algorithms | 🟢 CRC32, CRC32C, CRC16, MD5, SHA-1, SHA-256, BLAKE3, Adler-32 | 🟡 CRC32, MD5, SHA-1 | 🔴 | 🔴 | 🟡 SHA-1 ¹ | 🟡 CRC32, MD5, SHA-1 ¹ |
 | Shows ROM hashes | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
 | Verifies checksums in the patch | 🟢 | 🟢 | 🟢 | 🟢 | 🔴 | 🔴 |
 | Assert an expected input hash | 🟢 `--expect-in` | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
 | Assert an expected output hash | 🟢 `--expect-out` | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
 | Hash a byte range | 🟢 `--start`/`--length` | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
 | Hash a file inside an archive | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Header and byte-order variants | 🟢 all detected headers, plus trim boundaries | 🟡 N64 only | 🔴 | 🔴 | 🔴 | 🔴 |
+| Header and byte-order variants | 🟢 all detected headers, plus trim boundaries ² | 🟡 N64 only | 🔴 | 🔴 | 🔴 | 🔴 |
 
-chdman `verify` and Dolphin tool `verify` check an image against its own stored
-hashes. Neither hashes an arbitrary file.
-
-The last row matters when a patch's readme lists a CRC32 you cannot reproduce.
-rom-weaver reports the hash of the raw file, the headerless file, the
-repaired-header file, and each N64 byte order at once, so you can see which one
-the author meant. See
-[Fix a checksum error](../how-to/fix-checksum-errors.md).
+> ¹ chdman `verify` and Dolphin tool `verify` check an image against its own
+> stored hashes. Neither hashes an arbitrary file.
+>
+> ² This matters when a patch's readme lists a CRC32 you cannot reproduce.
+> rom-weaver reports the hash of the raw file, the headerless file, the
+> repaired-header file, and each N64 byte order at once, so you can see which
+> one the author meant. See
+> [Fix a checksum error](../how-to/fix-checksum-errors.md).
 
 ## Headers and byte order
 
 | Behavior | rom-weaver | RomPatcher.js | Flips | MultiPatch |
 | --- | --- | --- | --- | :---: |
-| Header detection | 🟢 13 families | 🟡 4 formats | 🟡 SNES copier only | 🔴 |
+| Header detection | 🟢 13 families ¹ | 🟡 4 formats ² | 🟡 SNES copier only ³ | 🔴 |
 | Checksum repair | 🟢 13 platforms | 🟡 Game Boy, Mega Drive | 🔴 | 🔴 |
 | Header strip mode | 🟢 `auto`, `keep`, or `strip`, per patch | 🟡 manual on/off | 🟡 auto-detect, `--exact` to force | 🔴 |
 | Output header mode | 🟢 separate `auto`, `keep`, or `strip` | 🟡 follows the input choice | 🟡 restores what it stripped | 🔴 |
 | N64 byte order | 🟢 converts to match the patch, writes back in the original order | 🟡 detects `.z64` for its CRC display | 🔴 | 🔴 |
 
-rom-weaver detects headers for A78, LNX, NES and FDS, SNES copier and SMC
-variants, PCE copier formats, Game Boy and GBA, Mega Drive, SMS and Game Gear,
-all N64 byte orders, NDS, Neo Geo Pocket, and MSX. RomPatcher.js covers iNES
-(`.nes`), fwNES (`.fds`), LNX (`.lnx`), and SNES copier (`.sfc`, `.smc`,
-`.swc`, `.fig`). Flips handles the 512-byte SNES copier header and nothing
-else.
+> ¹ A78, LNX, NES and FDS, SNES copier and SMC variants, PCE copier formats,
+> Game Boy and GBA, Mega Drive, SMS and Game Gear, all N64 byte orders, NDS,
+> Neo Geo Pocket, and MSX.
+>
+> ² iNES (`.nes`), fwNES (`.fds`), LNX (`.lnx`), and SNES copier (`.sfc`,
+> `.smc`, `.swc`, `.fig`), picked by file extension and file size.
+>
+> ³ The 512-byte SNES copier header and nothing else.
 
 ## Patching features
 
 | Feature | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 |
 | --- | --- | :---: | :---: | :---: | :---: |
 | Apply one patch | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
-| Chain several patches in order | 🟢 repeat `--patch` | 🔴 | 🔴 | 🔴 | 🔴 |
+| Chain several patches in order | 🟢 repeat `--patch` | 🔴 ¹ | 🔴 ¹ | 🔴 ¹ | 🔴 ¹ |
 | Validate without writing | 🟢 `patch validate` | 🔴 | 🟡 `--info` | 🔴 | 🟡 `printhdr` |
 | Check each patch independently | 🟢 `--independent` | 🔴 | 🔴 | 🔴 | 🔴 |
 | Find patches beside the ROM in an archive | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
@@ -216,24 +226,25 @@ else.
 | Patch metadata on create | 🟢 RUP description, EBP JSON | 🟢 RUP description, EBP JSON | 🟢 BPS manifest | 🔴 | 🟢 `-A` app header |
 | Machine-readable output | 🟢 `--json` | 🔴 | 🔴 | 🔴 | 🔴 |
 
-Every tool here except rom-weaver applies exactly one patch per run. Hacks that
-ship a base patch plus an update need two passes, and you have to keep the
-intermediate file.
+> ¹ These apply exactly one patch per run. Hacks that ship a base patch plus an
+> update need two passes, and you have to keep the intermediate file yourself.
 
 ## Beyond patching
 
 | Command | rom-weaver | Anything else here |
 | --- | --- | --- |
-| Trim and restore | 🟢 NDS, GBA, 3DS, XISO, and RVZ scrub | 🔴 |
+| Trim and restore | 🟢 NDS, GBA, 3DS, XISO, and RVZ scrub ¹ | 🔴 |
 | Compress | 🟢 ZIP, 7z, CHD, RVZ, Z3DS | 🟡 chdman for CHD, Dolphin tool for RVZ/GCZ/WIA/ISO |
 | Probe | 🟢 format, platform, and header, including from stdin | 🟡 chdman `info`, Dolphin tool `header` |
 | Ingest | 🟢 sorts a mixed folder into ROMs and patches | 🔴 |
-| Bundles | 🟢 `rom-weaver-bundle.json` recipes | 🔴 |
+| Bundles | 🟢 `rom-weaver-bundle.json` recipes ² | 🔴 |
 
-`trim --revert` pads a trimmed file back out, and `--revert-marker` stores a
-footer so the revert is exact. A bundle records the ROM's checksums, the patch
-order, and the expected result, so someone else can reproduce your build; see
-[What a bundle is](bundles.md).
+> ¹ `trim --revert` pads a trimmed file back out, and `--revert-marker` stores
+> a footer so the revert is exact rather than a guess at the padding.
+>
+> ² A bundle records the ROM's checksums, the patch order, and the expected
+> result, so someone else can reproduce your build. See
+> [What a bundle is](bundles.md).
 
 ## Delivery and platforms
 
@@ -244,12 +255,12 @@ order, and the expected result, so someone else can reproduce your build; see
 | Desktop GUI | 🔴 | 🔴 | 🟢 GTK, Win32 | 🟢 Cocoa | 🔴 | 🔴 | 🔴 |
 | Embed in your own page | 🔴 | 🟢 a stated goal | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
 | Multi-threaded | 🟢 `-j` sets the ceiling | 🟡 one worker per job | 🔴 | 🔴 | 🔴 | 🟢 | 🟢 |
-| Large files | 🟢 streams; disc images are normal | 🟡 warns above 64 MB | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
+| Large files | 🟢 streams; disc images are normal | 🟡 warns above 64 MB ¹ | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
 | Install | 🟢 npm, Homebrew, Docker, or a binary | 🟡 copy files, or `npm install` | 🟡 binary or build | 🟡 app download | 🟡 package or build | 🟡 part of MAME tools | 🟡 part of Dolphin |
 | Language | Rust | JavaScript | C++ | Objective-C, C++ | C | C++ | C++ |
 
-The 64 MB warning in RomPatcher.js is advisory, not a block. It reflects that
-it loads whole files into JavaScript arrays.
+> ¹ The warning is advisory, not a block. It reflects that RomPatcher.js loads
+> whole files into JavaScript arrays.
 
 ## Which one should you use?
 
