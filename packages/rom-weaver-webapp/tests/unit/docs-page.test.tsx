@@ -495,6 +495,15 @@ Fixture description.
     expect(onward?.querySelector(".docs-to-top")).toBeTruthy();
   });
 
+  it("links each guide footer to its editable GitHub source", () => {
+    render(<DocsPage active slug="docs/apply-rom-patches" />);
+
+    const sourceLink = screen.getByRole("link", { name: "Suggest changes on GitHub" });
+    expect(sourceLink.getAttribute("href")).toBe(
+      "https://github.com/rom-weaver/rom-weaver/edit/main/docs/how-to/apply-rom-patches.md",
+    );
+  });
+
   it("holds the previous step's place on the first page rather than sliding next into it", () => {
     // The hub is route zero, so it has no previous. The empty span keeps Next
     // where Next belongs instead of letting it take the left-hand slot.

@@ -11,6 +11,7 @@ import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { findSearchToken, searchDocs } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
+import { GITHUB_URL } from "./project-links.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
 
 type DocRoute = (typeof DOC_ROUTES)[number];
@@ -76,6 +77,7 @@ const useDocShelfState = () => {
 
 /** The landing route: an index of the guides rather than one of them. */
 const HUB_SLUG = "docs";
+const GITHUB_BASE_URL = GITHUB_URL.replace(/\/$/, "");
 
 const syncDocsSeoMetadata = (route: DocRoute) => {
   const { canonicalUrl, metadata, title } = createDocsSeoMetadata(route, CHANNEL_BADGE);
@@ -616,20 +618,31 @@ const OnwardLink = ({ direction, route }: { direction: "next" | "previous"; rout
  * to go somewhere, and these two say where you are in the sequence.
  */
 const ArticleEnd = ({ slug }: { slug: string }) => {
+  const route = findDocsRoute(slug);
   const previous = docsNeighbour(slug, -1);
   const next = docsNeighbour(slug, 1);
   return (
-    <nav aria-label="Guide pages" className="docs-onward">
-      {previous ? <OnwardLink direction="previous" route={previous} /> : <span className="docs-step-gap" />}
-      {/* A button, not an `#top` anchor: the guide routes are paths, and a hash here
-          would leave a destination in the address bar that is not one. `scrollTo`
-          still picks up the page's own `scroll-behavior`. */}
-      <button className="docs-to-top" onClick={() => window.scrollTo({ top: 0 })} type="button">
-        <ArrowUpToLine aria-hidden="true" />
-        Back to top
-      </button>
-      {next ? <OnwardLink direction="next" route={next} /> : <span className="docs-step-gap" />}
-    </nav>
+    <footer className="docs-footer">
+      <nav aria-label="Guide pages" className="docs-onward">
+        {previous ? <OnwardLink direction="previous" route={previous} /> : <span className="docs-step-gap" />}
+        {/* A button, not an `#top` anchor: the guide routes are paths, and a hash here
+            would leave a destination in the address bar that is not one. `scrollTo`
+            still picks up the page's own `scroll-behavior`. */}
+        <button className="docs-to-top" onClick={() => window.scrollTo({ top: 0 })} type="button">
+          <ArrowUpToLine aria-hidden="true" />
+          Back to top
+        </button>
+        {next ? <OnwardLink direction="next" route={next} /> : <span className="docs-step-gap" />}
+      </nav>
+      <a
+        className="docs-source-link"
+        href={`${GITHUB_BASE_URL}/edit/main/${route.source}`}
+        rel="noreferrer"
+        target="_blank"
+      >
+        Suggest changes on GitHub
+      </a>
+    </footer>
   );
 };
 

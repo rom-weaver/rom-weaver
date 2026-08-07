@@ -873,6 +873,44 @@ html:has(.docs-workbench) {
   border-color: var(--ink-4);
   transform: translateY(0) scale(0.99);
 }
+.rw-app .docs-source-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 44px;
+  padding: var(--sp-s) var(--sp-l);
+  margin: 0 auto var(--sp-l);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-stretch: 88%;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-m);
+  transition:
+    border-color 0.18s,
+    color 0.18s,
+    transform 0.15s var(--ease);
+}
+.rw-app .docs-source-link:focus-visible {
+  outline: 2px solid var(--thread);
+  outline-offset: 3px;
+}
+@media (hover: hover) {
+  .rw-app .docs-source-link:hover {
+    color: var(--ink);
+    border-color: var(--ink-4);
+    transform: translateY(-1px);
+  }
+}
+.rw-app .docs-source-link:active {
+  color: var(--ink);
+  border-color: var(--ink-4);
+  transform: translateY(0) scale(0.99);
+}
 
 /* --- the trail ---
    Desktop keeps the sidebar and never shows this. */
