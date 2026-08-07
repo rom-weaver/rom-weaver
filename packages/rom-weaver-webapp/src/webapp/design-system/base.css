@@ -281,10 +281,13 @@
 .rw-app .app:has(#panel-docs:not([hidden])) {
   max-width: var(--app-max-docs);
 }
-.rw-app .app:has(#panel-docs:not([hidden])) > .masthead {
+/* Every direct child that is chrome rather than document: the masthead and the
+   banners that drop in above it. */
+.rw-app .app:has(#panel-docs:not([hidden])) > .masthead,
+.rw-app .app:has(#panel-docs:not([hidden])) > .reveal {
   width: 100%;
-  /* The shared width minus the shell's own gutters: on every other route the
-     masthead sits inside that padding, so matching the border box here would
+  /* The shared width minus the shell's own gutters: on every other route this
+     chrome sits inside that padding, so matching the border box here would
      leave it wider on docs than anywhere else. */
   max-width: calc(var(--app-max) - var(--gutter) * 2);
   margin-inline: auto;
