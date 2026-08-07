@@ -751,7 +751,7 @@ const guardFooterExternalClick = (
  * straight to the pull request.
  */
 const CHANNEL_LETTERS: Record<string, string> = { beta: "B", dev: "D", nightly: "N", preview: "P" };
-const CHANNEL_PREFIXES: Record<string, string> = { beta: "beta", nightly: "nightly" };
+const CHANNEL_PREFIXES: Record<string, string> = { beta: "beta", dev: "dev", nightly: "nightly" };
 const CHANNEL_MESSAGES: Record<string, MessageId> = {
   beta: "ui.channel.beta",
   dev: "ui.channel.dev",
