@@ -196,8 +196,7 @@ const applySettingsToRuntime = (settings: SettingsState) => {
 
 const isNotFoundPage = document.documentElement.dataset.page === "not-found";
 // Which static document the host actually served, captured before the
-// controller runs: restoring a persisted tab rewrites the path, which would
-// otherwise erase the only evidence of what is in the DOM.
+// controller normalizes the app root to its canonical workflow route.
 const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "patcher";
 const webappController = createWebappRootController({
   initialHistoryMode: isNotFoundPage ? "none" : "replace",
@@ -347,7 +346,7 @@ const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs", "test"]);
 
 // Hydration has to start from the view the *served document* was rendered as,
 // or React discards the whole shell - never from controller state, which may
-// already have restored a persisted tab the document knows nothing about.
+// already have normalized the address bar.
 const readHydrationView = (): WebappView =>
   PRERENDERED_VIEWS.has(servedDocumentView) ? servedDocumentView : "patcher";
 

@@ -39,6 +39,22 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/apply");
   });
 
+  it("starts at Apply from the site root instead of restoring a saved Test tab", () => {
+    const storage = createStorage();
+    storage.setItem("rom-weaver-active-view", "test");
+
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+
+    expect(controller.getState().currentView).toBe("patcher");
+    expect(window.location.pathname).toBe("/apply");
+  });
+
   it("can preserve a non-workflow path for an alternate app shell", () => {
     window.history.replaceState({}, "", "/missing");
     const controller = createWebappRootController({
@@ -83,7 +99,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/create");
   });
 
-  it("routes and persists the Test workflow", () => {
+  it("routes the Test workflow", () => {
     window.history.replaceState({}, "", "/test");
     const controller = createController();
 
@@ -265,39 +281,5 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(state.toolsSession.active).toBe(false);
     expect(state.trimSession.sourceFilePresent).toBe(false);
     expect(state.validation).toEqual({ invalidFields: [], messages: [] });
-  });
-
-  // Reading a guide must not decide where the site root lands: docs is a
-  // document route, not a workflow tab with state to resume.
-  it("never stores the guides as the tab to resume", () => {
-    const storage = createStorage();
-    const controller = createWebappRootController({
-      onApplySettings: vi.fn(),
-      onCreatorViewRequested: vi.fn(() => true),
-      onFocusField: vi.fn(),
-      onLocalizationChange: vi.fn(),
-      storage,
-    });
-
-    controller.selectView("creator");
-    expect(storage.getItem("rom-weaver-active-view")).toBe("creator");
-
-    controller.selectView("docs");
-    expect(controller.getState().currentView).toBe("docs");
-    expect(storage.getItem("rom-weaver-active-view")).toBe("creator");
-  });
-
-  it("ignores a guides value stored before that rule existed", () => {
-    const storage = createStorage();
-    storage.setItem("rom-weaver-active-view", "docs");
-    const controller = createWebappRootController({
-      onApplySettings: vi.fn(),
-      onCreatorViewRequested: vi.fn(() => true),
-      onFocusField: vi.fn(),
-      onLocalizationChange: vi.fn(),
-      storage,
-    });
-
-    expect(controller.getState().currentView).toBe("patcher");
   });
 });

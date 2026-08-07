@@ -50,8 +50,7 @@ const WORKFLOW_TABS = [
   { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
   // Reference rather than a workflow. It stays direct in the desktop rail and
-  // moves into More on the phone dock; it is never persisted as the tab to
-  // resume - see `isResumableWorkflowView`.
+  // moves into More on the phone dock.
   { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "test", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },

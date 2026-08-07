@@ -31,7 +31,6 @@ import {
 
 const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
 const VALID_WORKFLOW_VIEWS: readonly WebappView[] = ["patcher", "creator", "docs", "trim", "tools", "test"];
-const ACTIVE_VIEW_STORAGE_KEY = "rom-weaver-active-view";
 
 const normalizeWorkflowView = (value: unknown): WebappView | null => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -42,32 +41,6 @@ const isBetaWorkflowView = (view: WebappView): boolean => view === "trim" || vie
 
 const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
-
-// The guides are a document route people reach by URL or search, not a
-// workflow with in-progress state to come back to. Storing one would make the
-// site root resume it, so reading a guide would quietly redirect `/` to /docs.
-// Read is guarded too, to retire a value stored before this rule existed.
-const isResumableWorkflowView = (view: WebappView): boolean => view !== "docs";
-
-/** Restore the last-used workflow tab so a reload returns to the same tab. */
-const loadPersistedWorkflowView = (storage?: ControllerOptions["storage"]): WebappView => {
-  try {
-    const stored = storage && typeof storage.getItem === "function" ? storage.getItem(ACTIVE_VIEW_STORAGE_KEY) : null;
-    const view = normalizeWorkflowView(stored);
-    return view && isResumableWorkflowView(view) ? view : DEFAULT_WORKFLOW_VIEW;
-  } catch {
-    return DEFAULT_WORKFLOW_VIEW;
-  }
-};
-
-const persistWorkflowView = (storage: ControllerOptions["storage"] | undefined, view: WebappView): void => {
-  if (!isResumableWorkflowView(view)) return;
-  try {
-    if (storage && typeof storage.setItem === "function") storage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
-  } catch {
-    // Ignore storage write failures (private mode, quota, etc.).
-  }
-};
 
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   creator: "create",
@@ -226,11 +199,8 @@ const createWebappRootController = (options: ControllerOptions) => {
   const settings = loadSettings(options.storage);
   // Before the React tree renders, so the accent tokens resolve on first paint.
   applyAccent(settings.accent);
-  // The URL path wins (deep links / reload), then the last persisted tab, then the default.
-  const initialView = normalizeWorkflowViewForSettings(
-    readWorkflowViewFromPath() || loadPersistedWorkflowView(options.storage),
-    settings,
-  );
+  // The URL path is the source of truth. The app root has no workflow path, so it uses Apply.
+  const initialView = normalizeWorkflowViewForSettings(readWorkflowViewFromPath() || DEFAULT_WORKFLOW_VIEW, settings);
   writeWorkflowViewToPath(initialView, options.initialHistoryMode ?? "replace");
   const store = createStore<WebappState>(() => ({
     creatorSession: createEmptyCreatorSessionState(),
@@ -290,7 +260,6 @@ const createWebappRootController = (options: ControllerOptions) => {
     if (optionsForApply?.validation) nextState.validation = optionsForApply.validation;
     setState(nextState);
     if (nextCurrentView !== currentView) {
-      persistWorkflowView(options.storage, nextCurrentView);
       writeWorkflowViewToPath(nextCurrentView, "replace");
     }
     emitCommittedSettings();
@@ -300,7 +269,6 @@ const createWebappRootController = (options: ControllerOptions) => {
 
   const commitMode = (mode: WebappView, historyMode: RouteHistoryMode = "push") => {
     setState({ currentView: mode });
-    persistWorkflowView(options.storage, mode);
     writeWorkflowViewToPath(mode, historyMode);
   };
 
