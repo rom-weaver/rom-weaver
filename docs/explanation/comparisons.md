@@ -59,8 +59,8 @@ list of specifications consulted is in
 | Patch families applied | 🟢 21 | 🟡 11 | 🔴 3 | 🟡 7 | 🔴 1 ¹ | 🔴 ² | 🔴 ² |
 | Patch families created | 🟢 18 | 🟡 7 | 🔴 2 | 🟡 6 | 🔴 1 ¹ | 🔴 ² | 🔴 ² |
 | Chain several patches | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| ROM header awareness | 🟢 13 families | 🟡 4 formats | 🟡 SNES only | 🔴 | 🔴 | 🔴 | 🔴 |
-| Archive extract | 🟢 22 formats | 🟡 ZIP only | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
+| ROM header awareness | 🟢 12 families | 🟡 4 formats | 🟡 SNES only | 🔴 | 🔴 | 🔴 | 🔴 |
+| Archive extract | 🟢 23 formats | 🟡 ZIP only | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
 | Archive or image create | 🟢 5 formats | 🔴 | 🔴 | 🔴 | 🔴 | 🟡 CHD only | 🟡 4 formats |
 | Standalone checksum tool | 🟢 8 algorithms | 🟡 3, display only | 🔴 | 🔴 | 🔴 | 🟡 CHD self-check | 🟡 image verify |
 | Trim ROM padding | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
@@ -196,8 +196,8 @@ tool here needs you to convert, patch, and convert back by hand.
 
 | Behavior | rom-weaver | RomPatcher.js | Flips | MultiPatch |
 | --- | --- | --- | --- | :---: |
-| Header detection | 🟢 13 families ¹ | 🟡 4 formats ² | 🟡 SNES copier only ³ | 🔴 |
-| Checksum repair | 🟢 13 platforms | 🟡 Game Boy, Mega Drive | 🔴 | 🔴 |
+| Header detection | 🟢 12 families ¹ | 🟡 4 formats ² | 🟡 SNES copier only ³ | 🔴 |
+| Checksum repair | 🟢 12 platforms ⁴ | 🟡 Game Boy, Mega Drive | 🔴 | 🔴 |
 | Header strip mode | 🟢 `auto`, `keep`, or `strip`, per patch | 🟡 manual on/off | 🟡 auto-detect, `--exact` to force | 🔴 |
 | Output header mode | 🟢 separate `auto`, `keep`, or `strip` | 🟡 follows the input choice | 🟡 restores what it stripped | 🔴 |
 | N64 byte order | 🟢 converts to match the patch, writes back in the original order | 🟡 detects `.z64` for its CRC display | 🔴 | 🔴 |
@@ -210,6 +210,11 @@ tool here needs you to convert, patch, and convert back by hand.
 > `.smc`, `.swc`, `.fig`), picked by file extension and file size.
 >
 > ³ The 512-byte SNES copier header and nothing else.
+>
+> ⁴ SNES, NES, Game Boy/GBA, Mega Drive, SMS/Game Gear, N64, Atari 7800/Lynx,
+> PCE/TurboGrafx-16, Virtual Boy, Neo Geo Pocket, MSX, and NDS. FDS, Atari
+> Jaguar, ColecoVision, Watara Supervision, and Intellivision headers are
+> validated but not rewritten.
 
 ## Patching features
 
