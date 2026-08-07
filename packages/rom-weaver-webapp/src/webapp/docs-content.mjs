@@ -160,6 +160,11 @@ const rewriteDocImage = (href, sourceFile) => {
  */
 const renderMarkdown = (markdown, slug, sourceFile) => {
   const seen = new Map();
+  // Note markers restart their numbering at every table, so their ids are
+  // scoped to the section they sit in, and a marker inside a note block is the
+  // definition rather than a reference to one.
+  let currentSectionId = "";
+  let inNoteBlock = false;
   /** @type {DocSection[]} */
   const sections = [];
   const defaultRenderer = new Renderer();
@@ -172,16 +177,37 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
         defaultRenderer.parser = this.parser;
         return defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
       },
+      // A note block is the only place a marker defines rather than refers to a
+      // note, so the two cases are told apart by where they render.
+      blockquote(token) {
+        defaultRenderer.parser = this.parser;
+        inNoteBlock = true;
+        const html = defaultRenderer.blockquote(token);
+        inNoteBlock = false;
+        return html;
+      },
       // Note markers are authored as Unicode superscripts so the Markdown still
       // reads on GitHub, but that glyph is a fixed half-height and hairline
       // thin - unreadable inside a 0.78rem table cell, and nothing CSS can
-      // reach. Promote it to a real element the stylesheet can size. Inline
-      // code is a `codespan` token, so this never rewrites code.
+      // reach. Promote it to a real element: sized by the stylesheet, and a
+      // link to the note it points at. Ids are scoped to the enclosing section
+      // because the numbering restarts at every table. Inline code is a
+      // `codespan` token, so this never rewrites code.
       text(token) {
         defaultRenderer.parser = this.parser;
-        return defaultRenderer
-          .text(token)
-          .replace(/[¹²³⁴-⁹]/g, (mark) => `<sup class="docs-note-ref">${NOTE_DIGITS[mark]}</sup>`);
+        // Only a superscript standing on its own is a note marker. One sitting
+        // against a character is an exponent - `GF(2⁸)` in the architecture
+        // notes - and must be left as written.
+        return defaultRenderer.text(token).replace(/(?<![0-9A-Za-z])[¹²³⁴-⁹]/g, (mark) => {
+          const digit = NOTE_DIGITS[mark];
+          const id = `note-${currentSectionId || "top"}-${digit}`;
+          return inNoteBlock
+            ? `<sup class="docs-note-ref" id="${id}">${digit}</sup>`
+            : // Carries the page path, like the section rail's links do. The
+              // document sets `<base href="/">`, so a bare `#id` would resolve
+              // against the site root and navigate away from the page.
+              `<sup class="docs-note-ref"><a aria-label="Note ${digit}" href="/${slug}#${id}">${digit}</a></sup>`;
+        });
       },
       // A table too wide for the column becomes its own scroll region, which a
       // keyboard user can only reach if it can take focus. The scroller is a
@@ -200,6 +226,7 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
         const id = count === 0 ? base : `${base}-${count}`;
         const html = Parser.parseInline(tokens, { renderer: headingRenderer });
         if (depth === 2) {
+          currentSectionId = id;
           sections.push({ id, label });
           const index = String(sections.length).padStart(2, "0");
           return `<h2 id="${id}"><span aria-hidden="true" class="docs-section-index">${index}</span><span class="docs-section-title">${html}</span></h2>\n`;

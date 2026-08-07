@@ -10,6 +10,12 @@ const getSoftNavigationUrl = (event: MouseEvent, anchor: HTMLAnchorElement, curr
 
   const url = new URL(anchor.href, currentUrl.href);
   if (url.origin !== currentUrl.origin || url.protocol !== currentUrl.protocol) return null;
+  // A fragment on the page already open is the browser's job: it is a
+  // same-document jump, needs no route work, and only the browser sets
+  // `:target`, which `pushState` leaves untouched. Compared exactly, because
+  // any other path - even the same page with a trailing slash - is a real
+  // navigation the router should still absorb.
+  if (url.hash && url.pathname === currentUrl.pathname) return null;
   if (!readWorkflowViewFromPath(url.pathname)) return null;
   return url;
 };
