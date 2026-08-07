@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.3](https://github.com/rom-weaver/rom-weaver/compare/v0.12.2...v0.12.3) (2026-08-07)
+
+
+### Bug Fixes
+
+* **webapp:** keep docs search visible ([#465](https://github.com/rom-weaver/rom-weaver/issues/465)) ([5160760](https://github.com/rom-weaver/rom-weaver/commit/5160760314f09c08da8fed2056cebf0c053c8120))
+
 ## [0.12.2](https://github.com/rom-weaver/rom-weaver/compare/v0.12.1...v0.12.2) (2026-08-05)
 
 
