@@ -11,11 +11,6 @@ import type { WorkboxPlugin } from "workbox-core/types.js";
 import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
-import {
-  syncEmulatorAssets,
-  type EmulatorAssetManifest,
-  validateEmulatorAssetManifest,
-} from "./pwa/emulator-asset-sync.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 
 declare const __EMULATORJS_VERSION__: string;
@@ -54,8 +49,6 @@ const PRECACHE_NAME = cacheNames.precache;
 const RUNTIME_CACHE_NAME = cacheNames.runtime;
 const EMULATORJS_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
-const SYNC_EMULATORJS_ASSETS_ACTION = "sync-emulatorjs-assets";
-const CANCEL_EMULATORJS_ASSETS_ACTION = "cancel-emulatorjs-assets";
 const SW_LOG_PREFIX = "[rom-weaver-sw]";
 // In-memory COEP mode. Volatile: resets to the credentialless default whenever the worker thread is
 // terminated and respawned (notably on mobile Safari). The durable copy below survives that so a page
@@ -132,7 +125,6 @@ const getAppBasePath = () => {
 
 const APP_BASE_PATH = getAppBasePath().replace(/\/?$/, "/");
 const EMULATORJS_DATA_PATH_PREFIX = `${APP_BASE_PATH}emulatorjs/data/`;
-const activeEmulatorSyncs = new Map<string, AbortController>();
 
 const isEmulatorJsDataRequest = (request: Request, url: URL) =>
   request.method === "GET" && isSameOriginRequest(url) && url.pathname.startsWith(EMULATORJS_DATA_PATH_PREFIX);
@@ -274,40 +266,6 @@ const serveEmulatorJsData = async ({ request }: { request: Request }) => {
 
 registerRoute(({ request, url }) => isEmulatorJsDataRequest(request, url), serveEmulatorJsData);
 
-const runEmulatorJsAssetSync = async (
-  syncId: string,
-  manifest: EmulatorAssetManifest,
-  port: MessagePort,
-): Promise<void> => {
-  const abortController = new AbortController();
-  activeEmulatorSyncs.set(syncId, abortController);
-  try {
-    validateEmulatorAssetManifest(manifest);
-    if (manifest.version !== __EMULATORJS_VERSION__) {
-      throw new Error(
-        `EmulatorJS asset manifest version ${manifest.version} does not match service worker version ${__EMULATORJS_VERSION__}`,
-      );
-    }
-    const cache = await caches.open(EMULATORJS_CACHE_NAME);
-    const result = await syncEmulatorAssets(manifest, {
-      baseUrl: self.registration.scope,
-      cache,
-      fetch: fetch.bind(self),
-      onProgress: (progress) => port.postMessage({ progress, type: "progress" }),
-      signal: abortController.signal,
-    });
-    port.postMessage({ result, type: "complete" });
-  } catch (error) {
-    port.postMessage({
-      message: formatError(error),
-      type: "error",
-    });
-  } finally {
-    activeEmulatorSyncs.delete(syncId);
-    port.close();
-  }
-};
-
 logServiceWorker("script initialized", {
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsVersion: __EMULATORJS_VERSION__,
@@ -371,25 +329,6 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("message", (event) => {
   if (!event.data) return;
-
-  if (event.data.action === CANCEL_EMULATORJS_ASSETS_ACTION) {
-    const syncId = typeof event.data.syncId === "string" ? event.data.syncId : "";
-    activeEmulatorSyncs.get(syncId)?.abort();
-    logServiceWorker("message received; cancelling EmulatorJS asset sync", { syncId });
-    return;
-  }
-
-  if (event.data.action === SYNC_EMULATORJS_ASSETS_ACTION) {
-    const syncId = typeof event.data.syncId === "string" ? event.data.syncId : "";
-    const port = event.ports?.[0];
-    if (!(syncId && port)) {
-      logServiceWorker("EmulatorJS asset sync rejected; sync id or response port is missing");
-      return;
-    }
-    logServiceWorker("message received; starting EmulatorJS asset sync", { syncId });
-    event.waitUntil(runEmulatorJsAssetSync(syncId, event.data.manifest as EmulatorAssetManifest, port));
-    return;
-  }
 
   // "SKIP_WAITING" (type) is what virtual:pwa-register posts on updateServiceWorker(true);
   // "skip-waiting" (action) is the app's own convention. Accept both.

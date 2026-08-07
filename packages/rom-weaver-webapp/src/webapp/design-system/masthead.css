@@ -253,10 +253,6 @@
 .rw-app .sub-status[data-sw="ready"] {
   color: var(--ink-2);
 }
-.rw-app .sub-status[data-sw="active-partial"],
-.rw-app .sub-status[data-sw="ready-partial"] {
-  color: var(--care-text);
-}
 .rw-app .sub-status[data-sw="update"] {
   color: var(--care-text);
 }
@@ -275,8 +271,6 @@
 .rw-app .more-status[data-sw="active"] {
   color: var(--verified);
 }
-.rw-app .more-status[data-sw="active-partial"],
-.rw-app .more-status[data-sw="ready-partial"],
 .rw-app .more-status[data-sw="update"] {
   color: var(--care-text);
 }
