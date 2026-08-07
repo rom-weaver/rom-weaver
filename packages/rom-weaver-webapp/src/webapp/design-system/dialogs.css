@@ -362,23 +362,37 @@
 .rw-app .storage-section-opfs {
   flex: 1 1 auto;
 }
-.rw-app .storage-section-title {
+/* Compound so it outranks the shared `.dlg-section-title` margin declared later
+   in this file - the storage head is the one that carries the panel's gutter. */
+.rw-app .dlg-section-title.storage-section-title {
   flex: none;
-  padding: var(--sp-m) var(--sp-l) var(--sp-xs);
-  margin: 0;
-  font-size: 0.84rem;
+  margin: var(--sp-m) var(--sp-l) var(--sp-xs);
 }
 .rw-app .opfs-inspector {
   flex: 1 1 auto;
   min-height: 0;
-  padding: var(--sp-m) var(--sp-l);
+  padding: var(--sp-m) var(--sp-l) var(--sp-l);
   overflow: auto;
   background: var(--well);
 }
-.rw-app .opfs-summary {
-  padding-block-end: var(--sp-s);
-  font-size: 0.74rem;
+/* The count and the bytes are one readout, so they share a strip rather than
+   sitting as a lone grey line above the list. */
+.rw-app .opfs-readout {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 3px var(--sp-s);
+  margin-block-end: var(--sp-s);
+  font-size: 0.72rem;
   color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-block-end: 1px solid var(--seam);
+}
+.rw-app .opfs-total {
+  color: var(--weft);
+  letter-spacing: 0.01em;
 }
 .rw-app .opfs-list {
   display: flex;
@@ -389,20 +403,58 @@
 }
 .rw-app .opfs-row {
   display: grid;
-  grid-template-columns: 6.5rem minmax(0, 1fr) max-content;
+  grid-template-columns: 4.6rem minmax(0, 1fr) max-content;
   gap: var(--sp-m);
-  align-items: baseline;
-  min-height: 25px;
+  align-items: center;
+  min-height: 28px;
+  padding-inline: var(--sp-s);
   font-size: 0.74rem;
-  border-block-end: 1px solid var(--seam);
+  border-block-end: 1px solid var(--seam-soft);
 }
-.rw-app .opfs-kind,
-.rw-app .opfs-size {
+/* The kind is a fixed vocabulary, so it reads as a tag like every other badge
+   in the app rather than as the first word of the path. */
+.rw-app .opfs-kind {
+  justify-self: start;
+  padding: 1px 7px;
+  font-size: 0.66rem;
+  font-stretch: 86%;
   color: var(--ink-3);
+  letter-spacing: 0.02em;
+  background: var(--plate-2);
+  border: 1px solid var(--seam-soft);
+  border-radius: 5px;
+}
+/* Virtual entries are staged in memory, not on disk - the only row kind whose
+   bytes are not actually in OPFS, so it is the only one that takes the thread. */
+.rw-app .opfs-kind[data-kind="virtual"] {
+  color: var(--thread-text);
+  border-color: color-mix(in oklab, var(--thread) 40%, transparent);
+}
+.rw-app .opfs-size {
+  color: var(--weft);
 }
 .rw-app .opfs-path {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+/* An empty store is a dressed loom, not a blank panel - the same warp-strung
+   recipe every other waiting surface in the app wears. */
+.rw-app .opfs-empty {
+  padding: var(--sp-l) var(--sp-m);
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  text-align: center;
+  background: var(--warp-lines) var(--empty-fill);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+}
+.rw-app .opfs-error {
+  padding: var(--sp-s) var(--sp-m);
+  font-size: 0.78rem;
+  color: var(--fault);
+  background: color-mix(in oklab, var(--fault) 9%, transparent);
+  border: 1px solid color-mix(in oklab, var(--fault) 32%, var(--seam));
+  border-radius: var(--r-s);
 }
 .rw-app .log-refresh {
   flex: 0 0 30px;
@@ -642,11 +694,10 @@
   font-size: 0.82rem;
 }
 /* About folded into the Status tab: licence, attribution, privacy - the build
-   facts above it are the status rows, never repeated here. */
+   facts above it are the status rows, never repeated here. The plates above
+   carry their own edges now, so the rule here would be a second one. */
 .rw-app .status-about {
-  padding-block-start: var(--sp-m);
-  margin-block-start: var(--sp-l);
-  border-block-start: 1px solid var(--seam);
+  padding-inline: var(--sp-2xs);
 }
 .rw-app .status-about .about-link {
   display: inline-flex;
@@ -941,9 +992,54 @@ html.vt-mode .drop:has(#tools-input-picker) {
 }
 
 /* ── status tab ── */
+/* The tab is a readout, so it is built the way the workbench builds a form:
+   plates carrying their own woven seam, not label rows loose on the dialog. */
 .rw-app .status-panel {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-l);
 }
+/* ── the shared dialog section head ──
+   The workbench marks a section by laying a thread block under its heading and
+   masking it with the plain weave (see `.step-num` in workbench.css). The same
+   block at label scale is what tells a reader these panels belong to the same
+   app as the form behind them. */
+.rw-app .dlg-section-title {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+  align-self: flex-start;
+  margin: 0 0 var(--sp-m);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--thread-text);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+/* A swatch of the plain weave, at a fixed size beside the heading rather than
+   stretched behind it: a heading two words long and one six words long then
+   carry the same mark, and the mask tiles enough times to read as cloth. */
+.rw-app .dlg-section-title::before {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  content: "";
+  background: var(--thread);
+  border-radius: 3px;
+  mask-image: var(--weave-mask);
+  mask-size: 5.5px 5.5px;
+}
+/* The same plate the settings groups are built from. The heading's weave swatch
+   is the section's mark; the plate itself stays plain. */
+.rw-app .status-group {
+  padding: var(--sp-m) var(--sp-l) var(--sp-l);
+  background: var(--plate-2);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+}
+/* No fill: the greyest chips sit at ~4.8:1 on the legend's tinted current row in
+   the light theme, and any tint of their own colour behind them drops that under
+   4.5:1. The row's fill and thread edge-bar mark the current state instead. */
 .rw-app .sw-chip {
   display: inline-flex;
   gap: var(--sp-xs);
@@ -982,12 +1078,6 @@ html.vt-mode .drop:has(#tools-input-picker) {
    Label-and-value rows, the same shape the build facts above use, so the two
    lists share their layout and differ only in how wide the label column has to
    be for the widest state name. */
-.rw-app .sw-legend {
-  padding-block-start: var(--sp-m);
-  margin-block-start: var(--sp-l);
-  border-block-start: 1px solid var(--seam);
-}
-.rw-app .sw-legend-title,
 .rw-app .status-row dt {
   font-size: 0.74rem;
   font-weight: 650;
@@ -995,15 +1085,15 @@ html.vt-mode .drop:has(#tools-input-picker) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.rw-app .sw-legend-title {
-  margin: 0 0 var(--sp-s);
-}
 .rw-app .status-rows,
 .rw-app .sw-legend dl {
   display: flex;
   flex-direction: column;
   gap: var(--sp-s);
   margin: 0;
+}
+.rw-app .sw-legend dl {
+  gap: var(--sp-xs);
 }
 .rw-app .status-row,
 .rw-app .sw-legend-row {
@@ -1014,8 +1104,15 @@ html.vt-mode .drop:has(#tools-input-picker) {
 .rw-app .status-row {
   grid-template-columns: 7.5rem minmax(0, 1fr);
 }
+/* Each state is its own row-plate, so the list reads as a set of states rather
+   than as a paragraph with chips in the margin. */
 .rw-app .sw-legend-row {
+  position: relative;
   grid-template-columns: 10.5rem minmax(0, 1fr);
+  padding: var(--sp-s) var(--sp-m);
+  background: var(--plate);
+  border: 1px solid var(--seam-soft);
+  border-radius: var(--r-s);
 }
 .rw-app .status-row dd,
 .rw-app .sw-legend-row dd {
@@ -1026,12 +1123,25 @@ html.vt-mode .drop:has(#tools-input-picker) {
   font-size: 0.78rem;
   color: var(--ink-3);
 }
-/* the one you have, named in the same list as the four you could have */
+/* The one you have, named in the same list as the four you could have. It takes
+   the thread edge-bar the archive picker marks a chosen row with, so the answer
+   to "which of these am I" is an edge and a fill, not a shade of grey. */
+.rw-app .sw-legend-row[data-current] {
+  background: color-mix(in oklab, var(--thread) 7%, var(--plate));
+  border-color: color-mix(in oklab, var(--thread) 40%, var(--seam));
+}
+.rw-app .sw-legend-row[data-current]::before {
+  position: absolute;
+  inset-block: -1px;
+  inset-inline-start: -1px;
+  width: 4px;
+  content: "";
+  background: var(--thread);
+  border-start-start-radius: var(--r-s);
+  border-end-start-radius: var(--r-s);
+}
 .rw-app .sw-legend-row[data-current] dd {
   color: var(--ink-2);
-}
-.rw-app .sw-legend-row[data-current] .sw-chip {
-  background: color-mix(in oklab, currentColor 12%, transparent);
 }
 @media (max-width: 519px) {
   .rw-app .sw-legend-row {
@@ -1043,9 +1153,11 @@ html.vt-mode .drop:has(#tools-input-picker) {
   font-size: 0.84rem;
   overflow-wrap: anywhere;
 }
+/* Hashes and refs sit in a well the way every other readout in the app does. */
 .rw-app .status-row code {
   padding: 1px 6px;
-  font-size: 0.78rem;
+  font-family: var(--mono);
+  font-size: 0.74rem;
   background: var(--well);
   border: 1px solid var(--seam-soft);
   border-radius: 4px;
@@ -1054,6 +1166,13 @@ html.vt-mode .drop:has(#tools-input-picker) {
   color: var(--thread-text);
   text-decoration: underline dotted;
   text-underline-offset: 2px;
+}
+/* The version is the one plain-text readout here, so it takes the hash colour
+   itself rather than a well it does not need. */
+.rw-app .status-row .status-build-id {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--weft);
 }
 
 /* phones: the inspector and settings take the whole screen */

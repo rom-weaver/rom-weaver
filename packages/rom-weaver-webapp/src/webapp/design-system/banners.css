@@ -227,11 +227,28 @@
 .rw-app .release-changelog + .release-changelog {
   margin-block-start: var(--sp-m);
 }
+/* Warp strung under the heading: the dashed hairline the drawer's info toggle
+   wears, which marks a sub-head here without giving it the thread the release
+   version above it already owns. */
 .rw-app .release-changelog-group {
-  margin-block: 0 var(--sp-xs);
-  font-size: 0.82rem;
-  font-weight: 650;
+  position: relative;
+  display: inline-block;
+  padding-block-end: 4px;
+  margin-block: 0 var(--sp-s);
+  font-size: 0.72rem;
+  font-weight: 700;
   color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.rw-app .release-changelog-group::after {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 1px;
+  content: "";
+  background: repeating-linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px);
+  opacity: 0.5;
 }
 .rw-app .release-changelog-entries {
   padding-inline-start: 1.25rem;
@@ -240,9 +257,11 @@
 .rw-app .release-changelog-entries li + li {
   margin-block-start: var(--sp-xs);
 }
+/* Hashes and PR numbers are readouts, so they take the same colour the Status
+   tab's commit and the Storage tab's sizes read in. */
 .rw-app .release-changelog-ref {
   font-size: 0.78rem;
-  color: var(--ink-2);
+  color: var(--weft);
   white-space: nowrap;
 }
 .rw-app .changelog-actions {
@@ -293,10 +312,12 @@
   flex-direction: column;
   gap: var(--sp-s);
 }
+/* A release is a plate, the same one the Status tab's sections are built from -
+   the two tabs are both readouts and should look it. */
 .rw-app .rel {
-  background: var(--well);
-  border: 1px solid var(--seam-soft);
-  border-radius: var(--r-s);
+  background: var(--plate-2);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
 }
 .rw-app .rel-summary {
   display: flex;
@@ -308,7 +329,7 @@
   color: var(--ink);
   cursor: pointer;
   list-style: none;
-  border-radius: var(--r-s);
+  border-radius: var(--r-m);
 }
 /* the disclosure triangle is drawn by the marker, so Safari's default one goes */
 .rw-app .rel-summary::-webkit-details-marker {
