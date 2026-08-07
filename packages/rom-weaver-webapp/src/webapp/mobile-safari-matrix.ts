@@ -209,7 +209,9 @@ const downloadReport = () => {
   anchor.download = `rom-weaver-${state.profile}-report-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   anchor.href = url;
   anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  // WebKit loads the blob after the click returns; a same-task revoke races it.
+  // See REVOKE_OBJECT_URL_DELAY_MS in platform/browser/browser-download.ts.
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
   appendLog("report downloaded");
 };
 
