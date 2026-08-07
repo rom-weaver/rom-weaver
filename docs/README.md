@@ -111,8 +111,8 @@ Background that makes the rest make sense.
 - [Release provenance](explanation/release-provenance.md): what download
   verification proves and why the checks are shaped the way they are.
 - [Comparison with similar tools](explanation/comparisons.md): where rom-weaver
-  overlaps with RomPatcher.js, Flips, xdelta3, chdman, and Dolphin tool, and
-  which one fits your job.
+  overlaps with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin
+  tool, and which one fits your job.
 
 ## Quick answers
 
