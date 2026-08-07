@@ -354,6 +354,23 @@
 .rw-app .storage-body {
   flex-direction: column;
 }
+.rw-app .storage-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.rw-app .storage-section-emulator {
+  flex: none;
+}
+.rw-app .storage-section-opfs {
+  flex: 1 1 auto;
+}
+.rw-app .storage-section-title {
+  flex: none;
+  padding: var(--sp-m) var(--sp-l) var(--sp-xs);
+  margin: 0;
+  font-size: 0.84rem;
+}
 /* Mirrors the padding + separator each EmulatorJS panel below it supplies for
    itself, so the "After applying" field reads as one more row in the same
    storage stack. */

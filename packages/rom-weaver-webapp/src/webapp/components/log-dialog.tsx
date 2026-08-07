@@ -908,8 +908,18 @@ const LogsStoragePanel = ({
       >
         {showingOpfs ? (
           <>
-            {storageExtras}
-            <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
+            <section aria-labelledby="storage-emulator-title" className="storage-section storage-section-emulator">
+              <h3 className="storage-section-title" id="storage-emulator-title">
+                EmulatorJS
+              </h3>
+              {storageExtras}
+            </section>
+            <section aria-labelledby="storage-opfs-title" className="storage-section storage-section-opfs">
+              <h3 className="storage-section-title" id="storage-opfs-title">
+                OPFS
+              </h3>
+              <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
+            </section>
           </>
         ) : (
           <TraceList

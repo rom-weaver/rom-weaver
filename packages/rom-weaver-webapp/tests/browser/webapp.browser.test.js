@@ -473,6 +473,8 @@ test("mobile diagnostics keep the Storage tools on one tab row", async () => {
   document.querySelector('[data-logtab="storage"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await expect.poll(() => document.querySelector("#logpanel-storage .emulator-saves-panel")).toBeTruthy();
   expect(document.querySelector("#logpanel-storage .emulator-prefetch-panel")).toBeNull();
+  expect(document.querySelector("#storage-emulator-title")?.textContent).toBe("EmulatorJS");
+  expect(document.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
   await page.viewport(1280, 900);
 });
 

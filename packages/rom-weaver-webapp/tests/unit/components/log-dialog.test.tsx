@@ -189,6 +189,8 @@ describe("LogDialog", () => {
       </RomWeaverSettingsProvider>,
     );
     // Storage keeps the OPFS inspector and the EmulatorJS data together.
+    expect(storageContainer.querySelector("#storage-emulator-title")?.textContent).toBe("EmulatorJS");
+    expect(storageContainer.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
     expect(storageContainer.querySelector(".emulator-saves-panel")).not.toBeNull();
     expect(storageContainer.querySelector(".storage-settings-field")).not.toBeNull();
     expect(storageContainer.querySelector(".post-apply-field-stub")).not.toBeNull();
