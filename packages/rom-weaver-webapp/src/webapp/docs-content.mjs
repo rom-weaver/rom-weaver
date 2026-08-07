@@ -83,20 +83,11 @@ const headingSlug = (value) =>
     .replace(/\s+/g, "-");
 
 /**
- * Raw HTML remains available to the trusted, repository-owned document body,
- * but headings feed both HTML and navigation metadata, so only Markdown inline
- * formatting is rendered there.
- *
- * The inline lexer marks text inside a `<script>` or `<pre>` as `escaped`,
- * which tells the default renderer to emit the source verbatim. That only holds
- * while the surrounding tags survive, so clearing the flag hands the text back
- * to marked's own escaping rather than reimplementing it here.
- */
-/**
  * Unicode superscript note markers, mapped to the digit they stand for.
  * @type {Readonly<Record<string, string>>}
  */
 const NOTE_DIGITS = Object.freeze({
+  "⁰": "0",
   "¹": "1",
   "²": "2",
   "³": "3",
@@ -108,6 +99,16 @@ const NOTE_DIGITS = Object.freeze({
   "⁹": "9",
 });
 
+/**
+ * Raw HTML remains available to the trusted, repository-owned document body,
+ * but headings feed both HTML and navigation metadata, so only Markdown inline
+ * formatting is rendered there.
+ *
+ * The inline lexer marks text inside a `<script>` or `<pre>` as `escaped`,
+ * which tells the default renderer to emit the source verbatim. That only holds
+ * while the surrounding tags survive, so clearing the flag hands the text back
+ * to marked's own escaping rather than reimplementing it here.
+ */
 const createHeadingRenderer = () => {
   const renderer = new Renderer();
   renderer.html = () => "";
@@ -175,16 +176,23 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
       // Note markers are authored as Unicode superscripts so the Markdown still
       // reads on GitHub, but that glyph is a fixed half-height and hairline
       // thin - unreadable inside a 0.78rem table cell, and nothing CSS can
-      // reach. Promote it to a real element the stylesheet can size. Inline
-      // code is a `codespan` token, so this never rewrites code.
+      // reach. Promote it to a real element the stylesheet can size.
       text(token) {
         defaultRenderer.parser = this.parser;
+        const html = defaultRenderer.text(token);
+        // A block-level text token (a list item, say) renders its children
+        // first, so `html` is finished markup - rewriting it would reach inside
+        // the `<code>` of a codespan. Only leaf text is the plain string this
+        // rewrite is safe on; the children are visited as their own tokens.
+        if ("tokens" in token && token.tokens?.length) return html;
         // Only a superscript standing on its own is a note marker. One sitting
         // against a character is an exponent - `GF(2⁸)` in the architecture
         // notes - and must be left as written.
-        return defaultRenderer
-          .text(token)
-          .replace(/(?<![0-9A-Za-z])[¹²³⁴-⁹]/g, (mark) => `<sup class="docs-note-ref">${NOTE_DIGITS[mark]}</sup>`);
+        return html.replace(
+          /(?<![0-9A-Za-z])[⁰¹²³⁴-⁹]+/g,
+          (marks) =>
+            `<sup class="docs-note-ref">${marks.replace(/[⁰¹²³⁴-⁹]/g, (mark) => NOTE_DIGITS[mark] ?? mark)}</sup>`,
+        );
       },
       // A table too wide for the column becomes its own scroll region, which a
       // keyboard user can only reach if it can take focus. The scroller is a
@@ -193,7 +201,10 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
       // of the accessibility tree.
       table(token) {
         defaultRenderer.parser = this.parser;
-        return `<div class="docs-table-scroll" tabindex="0">${defaultRenderer.table(token)}</div>\n`;
+        // `group` rather than `region`: the container needs a name to announce
+        // when it takes focus, but one landmark per table would bury the page's
+        // real ones.
+        return `<div aria-label="Table" class="docs-table-scroll" role="group" tabindex="0">${defaultRenderer.table(token)}</div>\n`;
       },
       heading({ depth, tokens }) {
         const label = plainHeading(tokens);
