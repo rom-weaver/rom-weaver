@@ -35,15 +35,15 @@ const createEmulatorGameIdentity = ({ checksum, fileName, sizeBytes }: EmulatorG
 };
 
 /**
- * Drop a previously saved "Threads: Disabled" choice. EmulatorJS stores per
- * game settings under `ejs-<id>-settings` and a stored value beats
- * `EJS_defaultOptions`, so anyone who toggled threads off before the
- * non-threaded cores were dropped would keep asking for a core that is no
- * longer vendored. Safe to delete once no such saved setting can be in the
+ * Drop a previously saved "Disabled" choice for either hidden setting.
+ * EmulatorJS stores per game settings under `ejs-<id>-settings` and a stored
+ * value beats `EJS_defaultOptions`, so hiding a row does not undo a choice
+ * already made in it. Safe to delete once no such saved setting can be in the
  * wild.
  */
-const CLEAR_STORED_THREADS_SETTING = `
+const CLEAR_HIDDEN_SETTINGS = `
       (() => {
+        const hidden = ['ejs_threads', 'webgl2Enabled'];
         // One try per key: a single unparseable or hand-edited entry must not
         // stop the other games from being cleaned up.
         for (let index = 0; index < localStorage.length; index += 1) {
@@ -51,11 +51,13 @@ const CLEAR_STORED_THREADS_SETTING = `
           if (!key || !/^ejs-.+-settings$/.test(key)) continue;
           try {
             const stored = JSON.parse(localStorage.getItem(key));
-            if (!stored || !(stored.settings instanceof Object) || !('ejs_threads' in stored.settings)) continue;
-            delete stored.settings.ejs_threads;
+            if (!stored || !(stored.settings instanceof Object)) continue;
+            const stale = hidden.filter((name) => name in stored.settings);
+            if (!stale.length) continue;
+            for (const name of stale) delete stored.settings[name];
             localStorage.setItem(key, JSON.stringify(stored));
           } catch (error) {
-            console.warn('Could not clear the stored EmulatorJS threads setting for ' + key, error);
+            console.warn('Could not clear the hidden EmulatorJS settings for ' + key, error);
           }
         }
       })();`;
@@ -140,10 +142,11 @@ const createEmulatorDocument = (
       EJS_DEBUG_XX = false;
       EJS_threads = true;
       EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: 'enabled' };
-      // Only the threaded cores are vendored, so the in-emulator "Threads"
-      // toggle has to go: switching it off asks for a <core>-wasm.data that
-      // does not exist and the game dies on a 404.
-      EJS_hideSettings = ['ejs_threads'];
+      // Only the threaded WebGL 2 cores are vendored, so both in-emulator
+      // toggles that rename the core have to go: switching either off asks for
+      // a <core>-wasm.data or <core>-legacy-wasm.data that does not exist and
+      // the game dies on a 404.
+      EJS_hideSettings = ['ejs_threads', 'webgl2Enabled'];
       EJS_disableLocalStorage = false;
       EJS_startOnLoaded = true;
       EJS_gameID = ${options.gameId ?? hashString(gameName)};
@@ -153,7 +156,7 @@ const createEmulatorDocument = (
       EJS_gameUrl = ${toScriptString(gameUrl)};
       EJS_pathtodata = ${toScriptString(dataUrl)};
     </script>
-    <script>${CLEAR_STORED_THREADS_SETTING}</script>
+    <script>${CLEAR_HIDDEN_SETTINGS}</script>
     <script>${createEmulatorBridgeScript(gameName)}</script>
     <script src="${dataUrl}loader.js"></script>
   </body>
