@@ -89,8 +89,8 @@
 .rw-app .brand-word {
   display: inline;
   margin: 0;
-  font-size: clamp(1.18rem, 1.02rem + 0.8vw, 1.5rem);
-  font-weight: 650;
+  font-size: clamp(1.28rem, 1.04rem + 1vw, 1.7rem);
+  font-weight: 720;
   line-height: 1;
   vertical-align: middle;
   color: var(--ink);
@@ -98,7 +98,7 @@
   white-space: nowrap;
 }
 .rw-app .brand-word b {
-  font-weight: 650;
+  font-weight: 720;
   color: var(--thread-text);
 }
 .rw-app .brand-hy {
@@ -357,7 +357,7 @@
    flags that load-time main-thread animation. */
 @media (min-width: 1160px) {
   .rw-app .brand-word {
-    font-size: clamp(1.18rem, 1.08rem + 0.5vw, 1.75rem);
+    font-size: clamp(1.35rem, 1.08rem + 0.6vw, 1.85rem);
   }
   .rw-app .brand-sub-row {
     column-gap: 0;
@@ -678,6 +678,62 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   margin-inline: var(--sp-s);
   background: var(--seam);
 }
+/* Project links stay visible without joining the workflow navigation. They
+   read as a small footer on desktop and sit above the fixed dock on touch. */
+.rw-app .project-utility-rail {
+  position: fixed;
+  inset-block-end: max(var(--sp-l), var(--safe-b));
+  inset-inline-start: max(var(--gutter), var(--safe-l));
+  z-index: 900;
+  display: inline-flex;
+  gap: var(--sp-2xs);
+  align-items: center;
+  padding: 4px;
+  background: color-mix(in oklab, var(--plate) 92%, transparent);
+  border: 1px solid var(--seam-soft);
+  border-radius: var(--r-s);
+  box-shadow: 0 8px 18px -15px var(--scrim);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.rw-app .project-utility-link {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-block-size: 32px;
+  padding: 4px 9px;
+  font-size: 0.7rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  text-decoration: none;
+  border-radius: var(--r-s);
+}
+.rw-app .project-utility-link svg {
+  width: 15px;
+  height: 15px;
+}
+.rw-app .project-utility-support,
+.rw-app .project-utility-support svg {
+  color: var(--thread-text);
+}
+@media (hover: hover) {
+  .rw-app .project-utility-link:hover {
+    color: var(--ink);
+    background: var(--well);
+  }
+  .rw-app .project-utility-support:hover,
+  .rw-app .project-utility-support:hover svg {
+    color: var(--thread-text);
+  }
+}
+.rw-app .project-utility-link:active {
+  color: var(--ink);
+  background: var(--plate-2);
+}
+.rw-app .project-utility-support:active,
+.rw-app .project-utility-support:active svg {
+  color: var(--thread-text);
+}
 @media (max-width: 719px) {
   .rw-app .masthead-tools {
     gap: 0;
@@ -689,7 +745,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
     gap: var(--sp-s);
   }
   .rw-app .brand-word {
-    font-size: 1.1rem;
+    font-size: 1.2rem;
   }
   .rw-app .brand-mark {
     width: 30px;
@@ -751,6 +807,36 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   flex: none;
   width: 16px;
   height: 16px;
+}
+/* Offline belongs with the build identity. The icon and short label make the
+   state legible without competing with the primary navigation. */
+.rw-app .brand-sub-row .masthead-status {
+  gap: 4px;
+  min-inline-size: 0;
+  width: auto;
+  block-size: 22px;
+  min-block-size: 22px;
+  padding-inline: 7px;
+  color: var(--ink-3);
+  text-decoration: none;
+  background: color-mix(in oklab, var(--thread) 7%, transparent);
+  border: 1px solid color-mix(in oklab, var(--thread) 25%, var(--seam));
+  border-radius: 999px;
+}
+.rw-app .brand-sub-row .masthead-status svg {
+  width: 13px;
+  height: 13px;
+}
+.rw-app .sub-status-label {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.rw-app .brand-sub-row .sub-status[data-sw="active"],
+.rw-app .brand-sub-row .sub-status[data-sw="ready"],
+.rw-app .brand-sub-row .sub-status[data-sw="active-partial"],
+.rw-app .brand-sub-row .sub-status[data-sw="ready-partial"] {
+  color: var(--thread-text);
 }
 /* Desktop keeps the important destinations compact; the tooltip and aria-label
    carry their names without turning the actions cluster into another nav. */
@@ -982,6 +1068,51 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
     inset-block-start: auto;
     inset-block-end: calc(var(--dock-h) + var(--sp-xs));
     inset-inline-end: max(var(--sp-s), var(--safe-r));
+  }
+}
+
+@media (min-width: 721px) and (max-width: 999px) {
+  .rw-app .masthead {
+    column-gap: var(--sp-xl);
+    padding-inline: clamp(20px, 5vw, 48px);
+  }
+  .rw-app .brand-word {
+    font-size: clamp(1.4rem, 1rem + 1vw, 1.75rem);
+  }
+  .rw-app .brand-mark {
+    width: clamp(40px, 5vw, 48px);
+  }
+  .rw-app .dock {
+    padding-inline: max(24px, var(--safe-r)) max(24px, var(--safe-l));
+  }
+  .rw-app .dock-tab,
+  .rw-app .dock-action {
+    min-height: 54px;
+    padding-block: 7px 5px;
+  }
+  .rw-app .dock-tab svg,
+  .rw-app .dock-action svg {
+    width: 22px;
+    height: 22px;
+  }
+  .rw-app .project-utility-rail {
+    inset-block-end: calc(var(--dock-h) + var(--sp-xs));
+    inset-inline-start: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+@media (max-width: 720px) {
+  .rw-app .project-utility-rail {
+    inset-block-end: calc(var(--dock-h) + var(--sp-2xs));
+    inset-inline-start: 50%;
+    max-inline-size: calc(100vw - 2 * var(--sp-s));
+    transform: translateX(-50%);
+  }
+  .rw-app .project-utility-link {
+    min-block-size: 30px;
+    padding-inline: 8px;
+    font-size: 0.66rem;
   }
 }
 

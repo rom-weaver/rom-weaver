@@ -64,7 +64,7 @@ describe("Masthead", () => {
 
     for (const [list, selectedClass, labels] of [
       [rail, "mode", ["Apply", "Create", "Docs", "Test", "Trim"]],
-      [dock, "dock-tab", ["Apply", "Create", "Docs", "Test", "Trim"]],
+      [dock, "dock-tab", ["Apply", "Create", "Test", "Trim"]],
     ] as const) {
       const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);
       expect(tabs.map((tab) => tab.textContent)).toEqual(labels);
@@ -78,11 +78,9 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // github + support | status, theme, accent, settings, more - and Reset is
-    // gone: it lives in the workflow panel head now
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
-    expect(container.querySelector(".actions-sep")).toBeTruthy();
-    expect(container.querySelector(".tool-support")).toBeTruthy();
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(3);
+    expect(container.querySelector(".actions-sep")).toBeNull();
+    expect(container.querySelector(".tool-support")).toBeNull();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     expect(container.querySelector('[aria-label="Reset"]')).toBeNull();
     expect(container.querySelector(".desktop-more .tool")).toBeTruthy();
@@ -90,7 +88,7 @@ describe("Masthead", () => {
 
   it("keeps utility destinations behind More on both layouts", () => {
     const onOpenStorage = vi.fn();
-    const { container, getByRole, queryByRole } = render(
+    const { container, getByRole } = render(
       withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} serviceWorkerStatus="active" />),
     );
     const more = container.querySelector(".desktop-more .tool") as HTMLButtonElement;
@@ -105,7 +103,8 @@ describe("Masthead", () => {
     expect(menuStatus.classList.contains("more-status")).toBe(true);
     expect(menuStatus.getAttribute("data-sw")).toBe("active");
     expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
-    expect(queryByRole("menuitem", { name: "Docs" })).toBeNull();
+    expect(getByRole("menuitem", { name: "Docs" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "Settings" })).toBeTruthy();
     expect(getByRole("menuitem", { name: "Tools" })).toBeTruthy();
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
     expect(onOpenStorage).toHaveBeenCalledTimes(1);
@@ -215,7 +214,9 @@ describe("Masthead", () => {
 
   it("keeps GitHub and Support in the masthead, with no footer to duplicate them", () => {
     const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} />));
-    expect(getByRole("link", { name: "View source on GitHub" }).closest(".masthead-tools")).toBeTruthy();
+    expect(getByRole("link", { name: "View source on GitHub" }).closest(".project-utility-rail")).toBeTruthy();
+    expect(getByRole("link", { name: "View source on GitHub" }).getAttribute("href")).toBe("https://example.com/repo");
+    expect(getByRole("link", { name: "Support" }).closest(".project-utility-rail")).toBeTruthy();
     expect(getByRole("link", { name: "Support" }).getAttribute("href")).toBe("https://example.com/donate");
     expect(container.querySelector(".site-footer")).toBeNull();
   });
@@ -245,10 +246,14 @@ describe("Masthead", () => {
     expect(container.querySelector(".accent-tray")).toBeNull();
   });
 
-  it("preloads Settings before interaction completes", () => {
+  it("preloads Settings from More instead of the phone dock", () => {
     const onPreloadSettings = vi.fn();
-    const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />));
-    const settings = container.querySelector(".dock-settings") as HTMLButtonElement;
+    const { container, getByRole } = render(
+      withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />),
+    );
+    expect(container.querySelector(".dock-settings")).toBeNull();
+    fireEvent.click(container.querySelector(".desktop-more .tool") as HTMLButtonElement);
+    const settings = getByRole("menuitem", { name: "Settings" });
     fireEvent.pointerEnter(settings);
     fireEvent.focus(settings);
     fireEvent.pointerDown(settings);

@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   CloudCheck,
   CloudDownload,
   CloudOff,
@@ -6,8 +7,8 @@ import {
   HardDrive,
   Heart,
   LoaderCircle,
+  Menu,
   Moon,
-  MoreHorizontal,
   Newspaper,
   PackageCheck,
   PackageOpen,
@@ -254,7 +255,9 @@ const PhoneDock = ({
   tabs: WorkflowTab[];
 }) => {
   const dockRef = useRef<HTMLDivElement | null>(null);
-  const dockTabs = tabs.filter((tab) => tab.id !== "tools");
+  // Docs is a reference shelf, not a primary phone workflow. Keep it in More
+  // so the dock stays focused on the four things users do with files.
+  const dockTabs = tabs.filter((tab) => tab.id !== "tools" && tab.id !== "docs");
   const interactiveTabs = betaToolsEnabled ? dockTabs : dockTabs.filter((tab) => !isBetaWorkflowTab(tab));
   const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusedId = interactiveTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
@@ -447,13 +450,19 @@ type UtilityMenuProps = {
   mobile?: boolean;
   onAccentChange?: (accent: string) => void;
   onOpenChangelog: () => void;
+  onOpenDocs?: () => void;
   onOpenLog: () => void;
+  onOpenSettings?: () => void;
+  onPreloadSettings?: () => void;
   onOpenStatus: () => void;
   onOpenStorage?: () => void;
   onOpenTools?: () => void;
   runtimeState: RuntimeState;
   toolsEnabled?: boolean;
   toolsLabel?: string;
+  docsLabel?: string;
+  settingsLabel?: string;
+  settingsOpen?: boolean;
 };
 
 const UtilityMenu = ({
@@ -466,13 +475,19 @@ const UtilityMenu = ({
   onClose,
   onAccentChange,
   onOpenChangelog,
+  onOpenDocs,
   onOpenLog,
+  onOpenSettings,
+  onPreloadSettings,
   onOpenStatus,
   onOpenStorage,
   onOpenTools,
   runtimeState,
   toolsEnabled,
   toolsLabel,
+  docsLabel,
+  settingsLabel,
+  settingsOpen,
   menuClassName,
   open,
   triggerRef,
@@ -546,6 +561,28 @@ const UtilityMenu = ({
           <AccentMenuItem localizer={localizer} onChange={onAccentChange} />
         </>
       ) : null}
+      {onOpenDocs ? (
+        <button onClick={() => select(onOpenDocs)} role="menuitem" type="button">
+          <BookOpen aria-hidden="true" />
+          {docsLabel}
+        </button>
+      ) : null}
+      {onOpenSettings ? (
+        <button
+          aria-expanded={settingsOpen}
+          aria-haspopup="dialog"
+          onClick={() => select(onOpenSettings)}
+          onFocus={onPreloadSettings}
+          onPointerDown={onPreloadSettings}
+          onPointerEnter={onPreloadSettings}
+          role="menuitem"
+          type="button"
+        >
+          <Settings aria-hidden="true" />
+          {settingsLabel}
+        </button>
+      ) : null}
+      {onOpenDocs || onOpenSettings ? <span aria-hidden="true" className="more-separator" /> : null}
       {/* Each item wears the icon its tab wears inside the dialog it opens. */}
       <button
         className="more-status"
@@ -656,7 +693,7 @@ const MoreMenu = ({
       ref={triggerRef}
       type="button"
     >
-      <MoreHorizontal aria-hidden="true" />
+      <Menu aria-hidden="true" />
       <span className="tool-text">{moreLabel}</span>
       {buttonClassName === "tool" ? (
         <span aria-hidden="true" className="tip">
@@ -970,6 +1007,7 @@ const Masthead = ({
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const moreLabel = localizer.message("ui.tools.more");
   const toolsLabel = tabs.find((tab) => tab.id === "tools")?.label ?? "Tools";
+  const docsLabel = tabs.find((tab) => tab.id === "docs")?.label ?? "Docs";
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
@@ -1086,6 +1124,27 @@ const Masthead = ({
                   </button>
                 </span>
               ) : null}
+              {version || threads ? (
+                <span aria-hidden="true" className="sub-separator">
+                  /
+                </span>
+              ) : null}
+              <span className="sub-item">
+                <button
+                  aria-haspopup="dialog"
+                  aria-label={runtimeLabel}
+                  className="sub-chip sub-link masthead-status sub-status"
+                  data-sw={runtimeState}
+                  onClick={onOpenStatus}
+                  type="button"
+                >
+                  <RuntimeGlyph state={runtimeState} />
+                  <span aria-hidden="true" className="sub-status-label">
+                    {localizer.message("ui.status.offline")}
+                  </span>
+                  <span className="sr-only sub-status-text">{runtimeLabel}</span>
+                </button>
+              </span>
             </span>
           </span>
         </span>
@@ -1098,48 +1157,6 @@ const Masthead = ({
           tabs={tabs}
         />
         <div className="masthead-tools" ref={toolsRef}>
-          {githubHref ? (
-            <a
-              className="tool mobile-utility-source"
-              href={githubHref}
-              onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <Github aria-hidden="true" />
-              <span aria-hidden="true" className="tip">
-                {githubLabel}
-              </span>
-              <span className="sr-only">{githubLabel}</span>
-            </a>
-          ) : null}
-          {donateHref ? (
-            <a
-              className="tool tool-support mobile-utility-support"
-              href={donateHref}
-              onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <Heart aria-hidden="true" />
-              <span aria-hidden="true" className="tip">
-                {supportLabel}
-              </span>
-              <span className="sr-only">{supportLabel}</span>
-            </a>
-          ) : null}
-          <span aria-hidden="true" className="actions-sep" />
-          <button
-            aria-haspopup="dialog"
-            aria-label={runtimeLabel}
-            className="tool masthead-status sub-status"
-            data-sw={runtimeState}
-            onClick={onOpenStatus}
-            type="button"
-          >
-            <RuntimeGlyph state={runtimeState} />
-            <span className="sr-only sub-status-text">{runtimeLabel}</span>
-          </button>
           <span className="mobile-utility-theme">
             <ThemeToggle localizer={localizer} />
           </span>
@@ -1151,25 +1168,6 @@ const Masthead = ({
             onToggle={() => setAccentOpen((open) => !open)}
             open={accentOpen}
           />
-          <button
-            aria-expanded={settingsOpen}
-            aria-haspopup="dialog"
-            aria-label={settingsLabel}
-            className="tool masthead-settings"
-            onClick={onOpenSettings}
-            onFocus={onPreloadSettings}
-            onPointerDown={onPreloadSettings}
-            onPointerEnter={onPreloadSettings}
-            type="button"
-          >
-            <Settings aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              {settingsLabel}
-            </span>
-            <span aria-hidden="true" className="tip">
-              {settingsLabel}
-            </span>
-          </button>
           <MoreMenu
             buttonClassName="tool"
             className="desktop-more"
@@ -1181,7 +1179,10 @@ const Masthead = ({
             moreLabel={moreLabel}
             onClose={closeUtility}
             onOpenChangelog={onOpenChangelog}
+            onOpenDocs={() => onSelectTab("docs")}
             onOpenLog={onOpenLog}
+            onOpenSettings={onOpenSettings}
+            onPreloadSettings={onPreloadSettings}
             onOpenStatus={onOpenStatus}
             onOpenStorage={onOpenStorage ?? onOpenLog}
             onOpenTools={() => onSelectTab("tools")}
@@ -1190,6 +1191,9 @@ const Masthead = ({
             open={utilityOpen && utilityPlacement === "desktop"}
             renderMenu={false}
             runtimeState={runtimeState}
+            docsLabel={docsLabel}
+            settingsLabel={settingsLabel}
+            settingsOpen={settingsOpen}
             toolsEnabled={betaToolsEnabled}
             toolsLabel={toolsLabel}
             triggerRef={desktopMoreRef}
@@ -1206,12 +1210,18 @@ const Masthead = ({
               onClose={closeUtility}
               onAccentChange={onAccentChange}
               onOpenChangelog={onOpenChangelog}
+              onOpenDocs={() => onSelectTab("docs")}
               onOpenLog={onOpenLog}
+              onOpenSettings={onOpenSettings}
+              onPreloadSettings={onPreloadSettings}
               onOpenStatus={onOpenStatus}
               onOpenStorage={onOpenStorage ?? onOpenLog}
               onOpenTools={() => onSelectTab("tools")}
               open
               runtimeState={runtimeState}
+              docsLabel={docsLabel}
+              settingsLabel={settingsLabel}
+              settingsOpen={settingsOpen}
               toolsEnabled={betaToolsEnabled}
               toolsLabel={toolsLabel}
               triggerRef={activeMoreRef}
@@ -1219,8 +1229,7 @@ const Masthead = ({
           ) : null}
         </div>
         {/* The parser-time resolver in index.html rewrites the thread count and
-            runtime status before the shell paints, and removes itself. Keep its
-            marker after the action group so both slots exist when it runs. */}
+            runtime status before the shell paints, and removes itself. */}
         <span className="shell-identity" hidden />
       </header>
       <PhoneDock
@@ -1228,50 +1237,67 @@ const Masthead = ({
         controlsPanels={tabsControlPanels}
         current={currentTab}
         mobileActions={
-          <>
-            <button
-              aria-expanded={settingsOpen}
-              aria-haspopup="dialog"
-              className="dock-action dock-settings"
-              onClick={onOpenSettings}
-              onFocus={onPreloadSettings}
-              onPointerDown={onPreloadSettings}
-              onPointerEnter={onPreloadSettings}
-              type="button"
-            >
-              <Settings aria-hidden="true" />
-              <span>{settingsLabel}</span>
-            </button>
-            <MoreMenu
-              buttonClassName="dock-action"
-              className="mobile-more"
-              confirmExternalNavigation={confirmExternalNavigation}
-              donateHref={donateHref}
-              githubHref={githubHref}
-              localizer={localizer}
-              menuId="more-menu"
-              moreLabel={moreLabel}
-              onClose={closeUtility}
-              onOpenChangelog={onOpenChangelog}
-              onOpenLog={onOpenLog}
-              onOpenStatus={onOpenStatus}
-              onOpenStorage={onOpenStorage ?? onOpenLog}
-              onOpenTools={() => onSelectTab("tools")}
-              onPreloadLog={onPreloadLog}
-              onToggle={() => toggleUtility("mobile")}
-              open={utilityOpen && utilityPlacement === "mobile"}
-              renderMenu={false}
-              runtimeState={runtimeState}
-              toolsEnabled={betaToolsEnabled}
-              toolsLabel={toolsLabel}
-              triggerRef={mobileMoreRef}
-            />
-          </>
+          <MoreMenu
+            buttonClassName="dock-action"
+            className="mobile-more"
+            confirmExternalNavigation={confirmExternalNavigation}
+            donateHref={donateHref}
+            githubHref={githubHref}
+            localizer={localizer}
+            menuId="more-menu"
+            moreLabel={moreLabel}
+            onClose={closeUtility}
+            onOpenChangelog={onOpenChangelog}
+            onOpenDocs={() => onSelectTab("docs")}
+            onOpenLog={onOpenLog}
+            onOpenSettings={onOpenSettings}
+            onPreloadSettings={onPreloadSettings}
+            onOpenStatus={onOpenStatus}
+            onOpenStorage={onOpenStorage ?? onOpenLog}
+            onOpenTools={() => onSelectTab("tools")}
+            onPreloadLog={onPreloadLog}
+            onToggle={() => toggleUtility("mobile")}
+            open={utilityOpen && utilityPlacement === "mobile"}
+            renderMenu={false}
+            runtimeState={runtimeState}
+            docsLabel={docsLabel}
+            settingsLabel={settingsLabel}
+            settingsOpen={settingsOpen}
+            toolsEnabled={betaToolsEnabled}
+            toolsLabel={toolsLabel}
+            triggerRef={mobileMoreRef}
+          />
         }
         navLabel={navLabel}
         onSelect={onSelectTab}
         tabs={tabs}
       />
+      <div className="project-utility-rail">
+        {githubHref ? (
+          <a
+            className="project-utility-link"
+            href={githubHref}
+            onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Github aria-hidden="true" />
+            <span>{githubLabel}</span>
+          </a>
+        ) : null}
+        {donateHref ? (
+          <a
+            className="project-utility-link project-utility-support"
+            href={donateHref}
+            onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Heart aria-hidden="true" />
+            <span>{supportLabel}</span>
+          </a>
+        ) : null}
+      </div>
     </>
   );
 };

@@ -101,11 +101,9 @@
   /* warp strung across a waiting surface - the meter's empty-track recipe,
      much fainter and sparser, because these sit behind copy. An empty target
      isn't blank: the loom is dressed and waiting for weft. */
-  --warp-lines: repeating-linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--thread) 7%, transparent) 0 1px,
-    transparent 1px 13px
-  );
+  --warp-lines:
+    repeating-linear-gradient(90deg, color-mix(in oklab, var(--thread) 7%, transparent) 0 1px, transparent 1px 13px),
+    repeating-linear-gradient(0deg, color-mix(in oklab, var(--thread) 3%, transparent) 0 1px, transparent 1px 13px);
   /* flex column so the workbench fills the viewport height */
   display: flex;
   flex-direction: column;

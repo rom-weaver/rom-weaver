@@ -762,6 +762,24 @@
   color: var(--ink-2);
 }
 
+@media (min-width: 721px) and (max-width: 999px) {
+  .rw-app .step.is-input.is-empty .drop.hero {
+    min-height: clamp(420px, calc(100svh - var(--hero-chrome)), 680px);
+  }
+  .rw-app .hero-lead .lead-title {
+    max-width: 28ch;
+    font-size: clamp(1.65rem, 3vw, 2.4rem);
+  }
+  .rw-app .sample-tutorial-start-chip {
+    right: var(--pad);
+    bottom: var(--sp-l);
+  }
+  .rw-app .sample-tutorial-start-pop {
+    right: var(--pad);
+    min-width: 264px;
+  }
+}
+
 /* Guided samples trace the same numbered loom stages as the workbench. The
    dimmer never traps input: each live section remains available while its
    fixed guide card explains the controls as one calm chapter. */
