@@ -294,7 +294,6 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                     referrerPolicy="no-referrer"
                     srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {
                       gameId: currentIdentity.gameId,
-                      gameLabel: currentIdentity.gameLabel,
                     })}
                     title={`EmulatorJS test for ${currentGame.fileName}`}
                   />

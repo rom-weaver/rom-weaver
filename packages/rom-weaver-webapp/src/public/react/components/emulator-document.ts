@@ -2,7 +2,6 @@ const toScriptString = (value: string) => JSON.stringify(value).replace(/</g, "\
 
 type EmulatorDocumentOptions = {
   gameId?: number;
-  gameLabel?: string;
 };
 
 type EmulatorGameIdentityInput = {
@@ -20,23 +19,26 @@ const hashString = (value: string): number => {
   return hash >>> 0 || 1;
 };
 
+/**
+ * The identity is derived, never descriptive: nothing that names the game
+ * leaves this function. The file name only seeds a hash when no checksum is
+ * available, so the emulator and the save store see an opaque key.
+ */
 const createEmulatorGameIdentity = ({ checksum, fileName, sizeBytes }: EmulatorGameIdentityInput) => {
   const seed = checksum ? `checksum:${checksum}` : `file:${fileName}:${sizeBytes}`;
   const normalizedChecksum = checksum?.replace(/[^a-z0-9]/gi, "").toLowerCase();
   const key = normalizedChecksum || hashString(seed).toString(16).padStart(8, "0");
   return {
     gameId: hashString(seed),
-    gameLabel: fileName,
     gameName: `rom-weaver-${key.slice(0, 64)}`,
   };
 };
 
-const createEmulatorBridgeScript = (gameName: string, gameLabel: string) => `
+const createEmulatorBridgeScript = (gameName: string) => `
       (() => {
         const source = "rom-weaver-emulator";
         const gameId = ${toScriptString(gameName)};
         const gameName = gameId;
-        const gameLabel = ${toScriptString(gameLabel)};
         const toBytes = (value) => {
           if (value instanceof ArrayBuffer) return new Uint8Array(value.slice(0));
           if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
@@ -45,9 +47,9 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string) => `
         const send = (kind, data) => {
           const bytes = toBytes(data);
           if (!bytes) return;
-          window.parent.postMessage({ source, kind, gameId, gameName, gameLabel, data: bytes }, "*");
+          window.parent.postMessage({ source, kind, gameId, gameName, data: bytes }, "*");
         };
-        const request = (kind) => window.parent.postMessage({ source, kind, gameId, gameName, gameLabel }, "*");
+        const request = (kind) => window.parent.postMessage({ source, kind, gameId, gameName }, "*");
         EJS_onSaveState = (payload) => send("save-state", payload && payload.state);
         EJS_onLoadState = () => request("request-load-state");
         EJS_onSaveSave = (payload) => send("save-sram", payload && payload.save);
@@ -121,7 +123,7 @@ const createEmulatorDocument = (
       EJS_gameUrl = ${toScriptString(gameUrl)};
       EJS_pathtodata = ${toScriptString(dataUrl)};
     </script>
-    <script>${createEmulatorBridgeScript(gameName, options.gameLabel || gameName)}</script>
+    <script>${createEmulatorBridgeScript(gameName)}</script>
     <script src="${dataUrl}loader.js"></script>
   </body>
 </html>`;
