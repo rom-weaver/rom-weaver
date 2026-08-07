@@ -92,11 +92,22 @@ const headingSlug = (value) =>
  * while the surrounding tags survive, so clearing the flag hands the text back
  * to marked's own escaping rather than reimplementing it here.
  */
-const createHeadingRenderer = () => {
+/**
+ * @param {{ unwrapLinks?: boolean }} [options] `unwrapLinks` renders a link as
+ * its label text. Section headings need it because they are wrapped in their
+ * own self-link, and a nested `<a>` would make the HTML parser split the outer
+ * one mid-heading.
+ */
+const createHeadingRenderer = ({ unwrapLinks = false } = {}) => {
   const renderer = new Renderer();
   renderer.html = () => "";
   renderer.text = (token) =>
     Renderer.prototype.text.call(renderer, "escaped" in token && token.escaped ? { ...token, escaped: false } : token);
+  if (unwrapLinks) {
+    renderer.link = function unwrapLink(token) {
+      return this.parser.parseInline(token.tokens);
+    };
+  }
   return renderer;
 };
 
@@ -138,6 +149,12 @@ const rewriteDocImage = (href, sourceFile) => {
   return href;
 };
 
+// Lucide's `link` glyph (https://lucide.dev/icons/link), inlined because this
+// HTML is a marked render-time string, so the lucide-react component the rest
+// of the app uses cannot mount here.
+const SECTION_LINK_ICON =
+  '<svg aria-hidden="true" class="docs-section-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+
 /**
  * @param {string} markdown @param {string} slug @param {string} sourceFile
  * @returns {{ html: string, sections: DocSection[] }}
@@ -150,6 +167,7 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
   // `Parser.parseInline` rebinds `renderer.parser` on every call, so the
   // heading renderer stays local to one render rather than being shared.
   const headingRenderer = createHeadingRenderer();
+  const sectionHeadingRenderer = createHeadingRenderer({ unwrapLinks: true });
   const parser = new Marked({
     renderer: {
       code(token) {
@@ -168,13 +186,12 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
         const count = seen.get(base) ?? 0;
         seen.set(base, count + 1);
         const id = count === 0 ? base : `${base}-${count}`;
-        const html = Parser.parseInline(tokens, { renderer: headingRenderer });
         if (depth === 2) {
           sections.push({ id, label });
-          const index = String(sections.length).padStart(2, "0");
-          return `<h2 id="${id}"><span aria-hidden="true" class="docs-section-index">${index}</span><span class="docs-section-title">${html}</span></h2>\n`;
+          const html = Parser.parseInline(tokens, { renderer: sectionHeadingRenderer });
+          return `<h2 id="${id}"><a class="docs-section-link" href="/${slug}#${id}">${SECTION_LINK_ICON}<span class="docs-section-title">${html}</span></a></h2>\n`;
         }
-        return `<h${depth} id="${id}">${html}</h${depth}>\n`;
+        return `<h${depth} id="${id}">${Parser.parseInline(tokens, { renderer: headingRenderer })}</h${depth}>\n`;
       },
     },
     walkTokens(token) {
