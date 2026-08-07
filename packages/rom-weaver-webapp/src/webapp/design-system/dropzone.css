@@ -636,6 +636,9 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 .rw-app .sample-tutorial-start-chip[aria-expanded="false"]::after {
   position: absolute;
   inset: -3px;
+  /* The ring hit-tests as part of the button and rides the scale animation -
+     without this, mid-pulse it steals hero-dropzone clicks near the chip. */
+  pointer-events: none;
   content: "";
   border: 2px solid color-mix(in oklab, var(--thread) 45%, transparent);
   border-radius: 999px;
