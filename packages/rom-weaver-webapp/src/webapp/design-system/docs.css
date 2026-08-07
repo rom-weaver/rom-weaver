@@ -23,7 +23,6 @@ html:has(.docs-workbench) {
   --docs-rail: 13.5rem;
   --docs-gap: clamp(18px, 3vw, 30px);
   padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
-  margin-inline: auto;
 }
 
 /* --- search --- */
@@ -33,7 +32,6 @@ html:has(.docs-workbench) {
   display: grid;
   grid-template-columns: var(--docs-rail) minmax(0, 1fr);
   gap: var(--docs-gap);
-  justify-content: center;
   margin-block: 0 var(--sp-l);
 }
 .rw-app .docs-search-header .docs-search {
@@ -48,7 +46,6 @@ html:has(.docs-workbench) {
   grid-template-columns: var(--docs-rail) minmax(0, 1fr);
   gap: var(--docs-gap);
   align-items: start;
-  justify-content: center;
 }
 .rw-app .docs-rails {
   position: sticky;
@@ -551,6 +548,12 @@ html:has(.docs-workbench) {
 }
 .rw-app .docs-article blockquote > :last-child {
   margin-bottom: 0;
+}
+/* The panel clips its own corners, so a table wider than the column has to
+   scroll here or its last columns are simply unreachable. */
+.rw-app .docs-table-scroll {
+  margin-block: var(--sp-l);
+  overflow-x: auto;
 }
 .rw-app .docs-article table {
   width: 100%;
@@ -1111,10 +1114,6 @@ html:has(.docs-workbench) {
   .rw-app .docs-article pre {
     padding: var(--sp-m);
     overflow-x: visible;
-  }
-  .rw-app .docs-article table {
-    display: block;
-    overflow-x: auto;
   }
   /* No hanging indent for wrapped lines: `text-indent` on a `pre` applies once
      to the block, not per line, so it shifts every real line of the command as

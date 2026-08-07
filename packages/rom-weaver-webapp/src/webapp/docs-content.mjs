@@ -156,11 +156,14 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
         defaultRenderer.parser = this.parser;
         return defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
       },
-      // Narrow viewports turn a wide table into its own scroll region, which a
-      // keyboard user can only reach if it can take focus.
+      // A table too wide for the column becomes its own scroll region, which a
+      // keyboard user can only reach if it can take focus. The scroller is a
+      // wrapper rather than the table itself: `display: block` on a `<table>`
+      // is what makes an element scrollable, and it also drops the table out
+      // of the accessibility tree.
       table(token) {
         defaultRenderer.parser = this.parser;
-        return defaultRenderer.table(token).replace("<table>", '<table tabindex="0">');
+        return `<div class="docs-table-scroll" tabindex="0">${defaultRenderer.table(token)}</div>\n`;
       },
       heading({ depth, tokens }) {
         const label = plainHeading(tokens);
