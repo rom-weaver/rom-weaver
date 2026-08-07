@@ -65,11 +65,6 @@ const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) 
 const LogDialog = lazy(loadLogDialog);
 const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
 const SettingsPanel = lazy(loadSettingsPanel);
-// Same chunk as the settings panel above, so mounting Storage's "After applying"
-// field never pulls in a second network fetch.
-const PostApplyRomBehaviorField = lazy(() =>
-  import("./webapp-settings.tsx").then((module) => ({ default: module.PostApplyRomBehaviorField })),
-);
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
 const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
   import("../platform/browser/browser-api.ts").then(({ preloadBrowserRuntime: preload }) => preload(options));
@@ -380,12 +375,6 @@ function WebappRoot({
     setLogTab("storage");
     setLogOpen(true);
   }, [preloadLogDialog]);
-  // The Test view's saves link lands on Storage, alongside the OPFS inspector.
-  const openEmulatorStorageTab = useCallback(() => {
-    preloadLogDialog();
-    setLogTab("storage");
-    setLogOpen(true);
-  }, [preloadLogDialog]);
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
@@ -651,10 +640,7 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
-                {workflowPanel(
-                  "test",
-                  <EmulatorTestRoute active={state.currentView === "test"} onOpenStorage={openEmulatorStorageTab} />,
-                )}
+                {workflowPanel("test", <EmulatorTestRoute active={state.currentView === "test"} />)}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute
@@ -680,20 +666,6 @@ function WebappRoot({
         {logOpen ? (
           <Suspense fallback={null}>
             <LogDialog
-              emulatorSettingsField={
-                <Suspense fallback={null}>
-                  <PostApplyRomBehaviorField
-                    draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-                    /* The Storage tab has no Save bar, so this field commits straight to
-                       settings like the masthead quick pickers. */
-                    onDraftChange={(_field, value) => {
-                      if (typeof value === "string") actions.onPostApplyRomBehaviorChange(value);
-                    }}
-                    uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
-                    validation={state.validation}
-                  />
-                </Suspense>
-              }
               initialTab={logTab}
               level={state.settings.logLevel}
               onClose={closeDialog}

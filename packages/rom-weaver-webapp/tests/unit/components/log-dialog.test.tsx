@@ -175,25 +175,17 @@ describe("LogDialog", () => {
     expect(container.querySelector(".opfs-row")?.textContent).toContain("/user-files");
   });
 
-  it("hosts the EmulatorJS tools and field on Storage", () => {
+  it("hosts the OPFS inspector on Storage", () => {
     vi.mocked(listBrowserOpfs).mockResolvedValue([]);
     const { container: storageContainer } = render(
       <RomWeaverSettingsProvider settings={{}}>
-        <LogDialog
-          emulatorSettingsField={<div className="post-apply-field-stub" />}
-          initialTab="storage"
-          onClose={() => undefined}
-          onLevelChange={() => undefined}
-          open
-        />
+        <LogDialog initialTab="storage" onClose={() => undefined} onLevelChange={() => undefined} open />
       </RomWeaverSettingsProvider>,
     );
-    // Storage keeps the OPFS inspector and the EmulatorJS data together.
-    expect(storageContainer.querySelector("#storage-emulator-title")?.textContent).toBe("EmulatorJS");
     expect(storageContainer.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
-    expect(storageContainer.querySelector(".emulator-saves-panel")).not.toBeNull();
-    expect(storageContainer.querySelector(".storage-settings-field")).not.toBeNull();
-    expect(storageContainer.querySelector(".post-apply-field-stub")).not.toBeNull();
+    expect(storageContainer.querySelector("#storage-emulator-title")).toBeNull();
+    expect(storageContainer.querySelector(".emulator-saves-panel")).toBeNull();
+    expect(storageContainer.querySelector(".storage-settings-field")).toBeNull();
     expect(storageContainer.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true");
     cleanup();
 

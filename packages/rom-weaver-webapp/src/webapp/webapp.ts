@@ -435,7 +435,6 @@ const renderWebappRoot = (): undefined => {
       onLogLevelChange: (level) => webappController.setLogLevel(level),
       onOpenSettings: () => webappController.openSettings(),
       onPatcherBundlePackageChange: (value) => webappController.setBundlePackage(value),
-      onPostApplyRomBehaviorChange: (value) => webappController.setPostApplyRomBehavior(value),
       onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),
       onPatcherPatchesChange: (patches) => webappController.setPatcherPatchState(patches),
       onPatcherSettingsChange: (settings) => webappController.setPatcherSettingsState(settings),

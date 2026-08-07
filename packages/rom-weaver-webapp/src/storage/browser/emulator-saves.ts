@@ -75,7 +75,6 @@ type EmulatorSaveMessage = {
   data?: ArrayBuffer | ArrayBufferView | null;
 };
 
-const listeners = new Set<() => void>();
 let bridgeInstalled = false;
 
 const storageUnavailable = () => new Error("Emulator save storage is unavailable in this browser.");
@@ -270,7 +269,6 @@ const updatePart = async (kind: "sram" | "state", update: EmulatorSaveUpdate): P
     updatedAt: Date.now(),
   };
   await writeRecord(next);
-  notifyListeners();
 };
 
 const listEmulatorSaves = async (): Promise<EmulatorSaveRecord[]> => {
@@ -292,22 +290,10 @@ const deleteEmulatorSave = async (gameId: string): Promise<void> => {
       });
     });
   }
-  notifyListeners();
 };
 
 const saveEmulatorState = (update: EmulatorSaveUpdate) => updatePart("state", update);
 const saveEmulatorSram = (update: EmulatorSaveUpdate) => updatePart("sram", update);
-
-const notifyListeners = () => {
-  for (const listener of listeners) listener();
-};
-
-const subscribeEmulatorSaves = (listener: () => void) => {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-};
 
 const bytesToBase64 = (bytes: Uint8Array): string => {
   let binary = "";
@@ -391,7 +377,6 @@ const writeEmulatorSave = async (record: EmulatorSaveRecord): Promise<void> => {
   const normalized = normalizeRecord(record);
   if (!normalized) throw new Error("The EmulatorJS save record is incomplete.");
   await writeRecord({ ...normalized, updatedAt: Date.now() });
-  notifyListeners();
 };
 
 const importEmulatorSave = async (file: Blob): Promise<EmulatorSaveRecord> => {
@@ -454,8 +439,6 @@ export {
   importEmulatorSave,
   listEmulatorSaves,
   parseSerializedEmulatorSave,
-  readEmulatorSave,
   serializeEmulatorSave,
-  subscribeEmulatorSaves,
   writeEmulatorSave,
 };

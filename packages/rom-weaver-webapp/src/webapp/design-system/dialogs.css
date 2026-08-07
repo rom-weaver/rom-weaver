@@ -359,9 +359,6 @@
   flex-direction: column;
   min-height: 0;
 }
-.rw-app .storage-section-emulator {
-  flex: none;
-}
 .rw-app .storage-section-opfs {
   flex: 1 1 auto;
 }
@@ -370,16 +367,6 @@
   padding: var(--sp-m) var(--sp-l) var(--sp-xs);
   margin: 0;
   font-size: 0.84rem;
-}
-/* Mirrors the padding + separator each EmulatorJS panel below it supplies for
-   itself, so the "After applying" field reads as one more row in the same
-   storage stack. */
-.rw-app .storage-settings-field {
-  padding: var(--sp-m) var(--sp-l);
-  border-block-end: 1px solid var(--seam);
-}
-.rw-app .storage-settings-field .setgroup {
-  margin-block-end: 0;
 }
 .rw-app .emulator-prefetch-panel {
   flex: none;
@@ -428,81 +415,6 @@
   margin-block: var(--sp-s) 0;
   font-size: 0.74rem;
   overflow-wrap: anywhere;
-}
-.rw-app .emulator-saves-panel {
-  flex: none;
-  padding: var(--sp-m) var(--sp-l);
-  border-block-end: 1px solid var(--seam);
-}
-.rw-app .emulator-saves-heading {
-  display: flex;
-  gap: var(--sp-m);
-  align-items: flex-start;
-  justify-content: space-between;
-}
-.rw-app .emulator-saves-heading h3 {
-  margin: 0;
-  font-size: 0.84rem;
-}
-.rw-app .emulator-saves-heading p,
-.rw-app .emulator-saves-panel > p {
-  margin: var(--sp-2xs) 0 0;
-  font-size: 0.76rem;
-  color: var(--ink-3);
-}
-.rw-app .emulator-saves-actions,
-.rw-app .emulator-save-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-xs);
-  align-items: center;
-}
-.rw-app .emulator-saves-actions .btn,
-.rw-app .emulator-save-actions .btn {
-  height: auto;
-  min-height: 30px;
-  padding-block: 5px;
-  text-align: start;
-}
-.rw-app .emulator-saves-actions svg,
-.rw-app .emulator-save-actions svg {
-  width: 14px;
-  height: 14px;
-}
-.rw-app .emulator-saves-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-xs);
-  padding: 0;
-  margin: var(--sp-m) 0 0;
-  list-style: none;
-}
-.rw-app .emulator-save-row {
-  display: flex;
-  gap: var(--sp-m);
-  align-items: center;
-  justify-content: space-between;
-  padding-block: var(--sp-xs);
-  border-block-start: 1px solid var(--seam);
-}
-.rw-app .emulator-save-info {
-  display: grid;
-  gap: var(--sp-2xs);
-  min-width: 0;
-}
-.rw-app .emulator-save-info strong,
-.rw-app .emulator-save-info span {
-  overflow-wrap: anywhere;
-}
-.rw-app .emulator-save-info span {
-  font-size: 0.74rem;
-  color: var(--ink-3);
-}
-.rw-app .emulator-saves-error {
-  color: var(--fault) !important;
-}
-.rw-app .emulator-saves-empty {
-  margin-block-start: var(--sp-s) !important;
 }
 .rw-app .opfs-inspector {
   flex: 1 1 auto;

@@ -181,11 +181,6 @@
   height: 34px;
   color: var(--thread-text);
 }
-.rw-app .emulator-saves-link {
-  flex: 0 0 auto;
-  align-self: center;
-  margin-inline-start: auto;
-}
 .rw-app .emulator-session-list {
   gap: var(--sp-s);
   margin-block-start: var(--sp-s);

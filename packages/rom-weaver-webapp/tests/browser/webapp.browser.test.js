@@ -453,7 +453,7 @@ test("WebappRoot keeps diagnostics behind More - the Log dialog owns them", asyn
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });
 
-test("mobile diagnostics keep the Storage tools on one tab row", async () => {
+test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   const height = 844;
   await page.viewport(393, height);
   mountWebappRoot();
@@ -471,9 +471,10 @@ test("mobile diagnostics keep the Storage tools on one tab row", async () => {
   expect(document.querySelector("#logpanel-status .emulator-prefetch-panel")).not.toBeNull();
 
   document.querySelector('[data-logtab="storage"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  await expect.poll(() => document.querySelector("#logpanel-storage .emulator-saves-panel")).toBeTruthy();
+  await expect.poll(() => document.querySelector("#logpanel-storage .opfs-inspector")).toBeTruthy();
+  expect(document.querySelector("#logpanel-storage .emulator-saves-panel")).toBeNull();
+  expect(document.querySelector("#logpanel-storage .storage-settings-field")).toBeNull();
   expect(document.querySelector("#logpanel-storage .emulator-prefetch-panel")).toBeNull();
-  expect(document.querySelector("#storage-emulator-title")?.textContent).toBe("EmulatorJS");
   expect(document.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
   await page.viewport(1280, 900);
 });

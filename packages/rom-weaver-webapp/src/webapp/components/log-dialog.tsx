@@ -36,7 +36,6 @@ import {
 } from "../pwa/emulator-prefetch.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
-import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
   prefersReducedMotion,
   readPwaState,
@@ -199,8 +198,7 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
 /**
  * Every chrome-level surface the app owns, in one dialog: the tabs ARE the
  * header, so there is no title. Settings leads because it is the tab people
- * come here for; the rest are diagnostics. Storage hosts the OPFS and
- * EmulatorJS data together, so the phone rail stays one row.
+ * come here for; the rest are diagnostics. Storage hosts the OPFS inspector.
  */
 const DIALOG_TABS = ["settings", "status", "logs", "storage", "changelog"] as const;
 type LogDialogTab = (typeof DIALOG_TABS)[number];
@@ -828,7 +826,6 @@ const LogsStoragePanel = ({
   opfsError,
   opfsLoading,
   scrollTop,
-  storageExtras,
   showingPrevious,
   tab,
   traceRef,
@@ -849,7 +846,6 @@ const LogsStoragePanel = ({
   opfsError: string | null;
   opfsLoading: boolean;
   scrollTop: number;
-  storageExtras?: ReactNode;
   showingPrevious: boolean;
   tab: LogDialogTab;
   traceRef: React.RefObject<HTMLDivElement | null>;
@@ -907,20 +903,12 @@ const LogsStoragePanel = ({
         role="tabpanel"
       >
         {showingOpfs ? (
-          <>
-            <section aria-labelledby="storage-emulator-title" className="storage-section storage-section-emulator">
-              <h3 className="storage-section-title" id="storage-emulator-title">
-                EmulatorJS
-              </h3>
-              {storageExtras}
-            </section>
-            <section aria-labelledby="storage-opfs-title" className="storage-section storage-section-opfs">
-              <h3 className="storage-section-title" id="storage-opfs-title">
-                OPFS
-              </h3>
-              <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
-            </section>
-          </>
+          <section aria-labelledby="storage-opfs-title" className="storage-section storage-section-opfs">
+            <h3 className="storage-section-title" id="storage-opfs-title">
+              OPFS
+            </h3>
+            <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
+          </section>
         ) : (
           <TraceList
             entries={entries}
@@ -943,7 +931,6 @@ const LogDialog = ({
   level,
   onLevelChange,
   initialTab = "status",
-  emulatorSettingsField,
   onReload,
   onRestoreDefaults,
   onSaveSettings,
@@ -958,8 +945,6 @@ const LogDialog = ({
   level?: string;
   onLevelChange: (level: string) => void;
   initialTab?: LogDialogTab;
-  /** The lazy "After applying" field, mounted only while Storage is showing. */
-  emulatorSettingsField?: ReactNode;
   onReload?: () => void;
   onRestoreDefaults?: () => void;
   onSaveSettings?: () => void;
@@ -1177,12 +1162,6 @@ const LogDialog = ({
             opfsError={opfsError}
             opfsLoading={opfsLoading}
             scrollTop={scrollTop}
-            storageExtras={
-              <>
-                {emulatorSettingsField ? <div className="storage-settings-field">{emulatorSettingsField}</div> : null}
-                <EmulatorSavesPanel active={tab === "storage"} />
-              </>
-            }
             showingPrevious={showingPrevious}
             tab={tab}
             traceRef={traceRef}
