@@ -233,7 +233,7 @@ html:has(.docs-workbench) {
   border-radius: var(--r-m);
 }
 .rw-app .warp-rail-title {
-  padding: var(--sp-m) 0 var(--sp-s) 2.35rem;
+  padding: var(--sp-m) 0 var(--sp-s) 1.15rem;
 }
 .rw-app .warp-rail-list {
   position: relative;
@@ -255,10 +255,7 @@ html:has(.docs-workbench) {
 }
 .rw-app .warp-rail-list a {
   position: relative;
-  display: grid;
-  grid-template-columns: 1.2rem minmax(0, 1fr);
-  gap: 0.45rem;
-  align-items: baseline;
+  display: block;
   padding: 0.3rem 0 0.3rem 1.15rem;
   font-size: 0.755rem;
   font-weight: 600;
@@ -286,36 +283,17 @@ html:has(.docs-workbench) {
 .rw-app .warp-rail:not(.is-initializing) .warp-pick {
   transition: transform 0.3s var(--ease);
 }
-.rw-app .warp-index {
-  font-family: var(--mono);
-  font-size: 0.66rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-4);
-  letter-spacing: 0;
-}
-.rw-app .warp-label {
-  min-width: 0;
-}
 @media (hover: hover) {
   .rw-app .warp-rail-list a:hover {
     color: var(--ink);
-  }
-  .rw-app .warp-rail-list a:hover .warp-index {
-    color: var(--weft);
   }
 }
 .rw-app .warp-rail-list a:active {
   color: var(--ink);
 }
-.rw-app .warp-rail-list a:active .warp-index {
-  color: var(--weft);
-}
 .rw-app .warp-rail-list a[aria-current="true"] {
   font-weight: 700;
   color: var(--ink);
-}
-.rw-app .warp-rail-list a[aria-current="true"] .warp-index {
-  color: var(--weft);
 }
 .rw-app .warp-rail-list a[aria-current="true"] .warp-pick {
   transform: scaleX(1);
