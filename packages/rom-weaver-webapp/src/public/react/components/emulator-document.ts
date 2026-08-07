@@ -109,7 +109,8 @@ const createEmulatorDocument = (
     <div id="game"></div>
     <script>
       EJS_DEBUG_XX = false;
-      EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: 'disabled' };
+      EJS_threads = true;
+      EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: 'enabled' };
       EJS_disableLocalStorage = false;
       EJS_startOnLoaded = true;
       EJS_gameID = ${options.gameId ?? hashString(gameName)};

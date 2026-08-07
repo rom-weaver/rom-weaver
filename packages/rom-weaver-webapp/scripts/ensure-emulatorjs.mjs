@@ -13,7 +13,7 @@
 // thing that needs it; the rest of the webapp builds fine without it).
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -40,6 +40,23 @@ export const isFileCurrent = (targetPath, expectedHash) => {
   return sha256(readFileSync(targetPath)) === expectedHash;
 };
 
+const removeUnlistedFiles = (directory, lockedPaths, relativeDirectory = "") => {
+  if (!existsSync(directory)) return;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = join(directory, entry.name);
+    const relativePath = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      removeUnlistedFiles(entryPath, lockedPaths, relativePath);
+      if (!readdirSync(entryPath).length) rmSync(entryPath, { recursive: true });
+      continue;
+    }
+    if (!lockedPaths.has(relativePath)) {
+      unlinkSync(entryPath);
+      log("trace", `removed unlisted asset ${relativePath}`);
+    }
+  }
+};
+
 const fetchVerified = async (url, expectedHash) => {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
@@ -56,6 +73,7 @@ const main = async (env = process.env, argv = process.argv.slice(2)) => {
   }
   const force = argv.includes("--force");
   const lock = readLock();
+  removeUnlistedFiles(dataDir, new Set(Object.keys(lock.files)));
   const stale = Object.entries(lock.files).filter(
     ([relativePath, hash]) => force || !isFileCurrent(join(dataDir, relativePath), hash),
   );
