@@ -14,9 +14,14 @@ html:has(.docs-workbench) {
 .rw-app .docs-workbench {
   /* The document uses the full panel; code and screenshots keep their own
      wider limits where their content benefits from them. */
-  --measure-wide: 39rem;
+  --measure-wide: 48rem;
   --article-pad: clamp(18px, 3vw, 32px);
-  max-width: 62rem;
+  --docs-rail: 13.5rem;
+  --docs-gap: clamp(18px, 3vw, 30px);
+  /* Derived from the two grid columns rather than a round number, so the
+     workbench never reserves width the columns do not use. A fixed cap wider
+     than the columns strands a gutter down the right of every page. */
+  max-width: calc(var(--docs-rail) + var(--docs-gap) + var(--measure-wide) + var(--article-pad) * 2);
   padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
   margin-inline: auto;
 }
@@ -26,8 +31,8 @@ html:has(.docs-workbench) {
   position: relative;
   z-index: 70;
   display: grid;
-  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
-  gap: clamp(18px, 3vw, 30px);
+  grid-template-columns: var(--docs-rail) minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
+  gap: var(--docs-gap);
   justify-content: center;
   margin-block: 0 var(--sp-l);
 }
@@ -40,8 +45,8 @@ html:has(.docs-workbench) {
   display: grid;
   /* The article column is exactly as wide as the panel can be, so the pair
      centres as one block instead of stranding a gutter inside the card. */
-  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
-  gap: clamp(18px, 3vw, 30px);
+  grid-template-columns: var(--docs-rail) minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
+  gap: var(--docs-gap);
   align-items: start;
   justify-content: center;
 }
