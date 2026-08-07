@@ -25,13 +25,14 @@ tell which one fits your job.
 
 ## Legend
 
-Every table on this page uses these three marks.
+Every table on this page uses these three marks. Each one has its own shape as
+well as its own colour, so the tables still read without colour vision.
 
 | Mark | Meaning |
 | :---: | --- |
-| 🟢 | Supported. |
-| 🟡 | Partly supported. The limit is written next to the mark, or in a numbered note under the table. |
-| 🔴 | Not supported. |
+| ✅ | Supported. |
+| ⚠️ | Partly supported. The limit is written next to the mark, or in a numbered note under the table. |
+| ❌ | Not supported. |
 
 ## The tools
 
@@ -60,16 +61,16 @@ same way. Partial support counts as a row.
 
 | Capability | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 | chdman | Dolphin tool |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Patch formats applied | 🟢 21 | 🟡 12 | 🔴 3 | 🟡 8 | 🔴 2 ¹ | 🔴 ² | 🔴 ² |
-| Patch formats created | 🟢 18 | 🟡 7 | 🔴 2 | 🟡 7 | 🔴 2 ¹ | 🔴 ² | 🔴 ² |
-| Chain several patches | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| ROM header awareness | 🟢 12 families | 🟡 4 formats | 🟡 SNES only | 🔴 | 🔴 | 🔴 | 🔴 |
-| Archive extract | 🟢 23 formats | 🟡 ZIP only | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Archive or image create | 🟢 5 formats | 🔴 | 🔴 | 🔴 | 🔴 | 🟡 CHD only | 🟡 4 formats |
-| Standalone checksum tool | 🟢 8 algorithms | 🟡 3, display only | 🔴 | 🔴 | 🔴 | 🟡 CHD self-check | 🟡 image verify |
-| Trim ROM padding | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Runs in a browser | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Command line | 🟢 | 🟡 Node script | 🟢 | 🟡 macOS only | 🟢 | 🟢 | 🟢 |
+| Patch formats applied | ✅ 21 | ⚠️ 12 | ❌ 3 | ⚠️ 8 | ❌ 2 ¹ | ❌ ² | ❌ ² |
+| Patch formats created | ✅ 18 | ⚠️ 7 | ❌ 2 | ⚠️ 7 | ❌ 2 ¹ | ❌ ² | ❌ ² |
+| Chain several patches | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| ROM header awareness | ✅ 12 families | ⚠️ 4 formats | ⚠️ SNES only | ❌ | ❌ | ❌ | ❌ |
+| Archive extract | ✅ 23 formats | ⚠️ ZIP only | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Archive or image create | ✅ 5 formats | ❌ | ❌ | ❌ | ❌ | ⚠️ CHD only | ⚠️ 4 formats |
+| Standalone checksum tool | ✅ 8 algorithms | ⚠️ 3, display only | ❌ | ❌ | ❌ | ⚠️ CHD self-check | ⚠️ image verify |
+| Trim ROM padding | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Runs in a browser | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Command line | ✅ | ⚠️ Node script | ✅ | ⚠️ macOS only | ✅ | ✅ | ✅ |
 
 > ¹ xdelta3's two rows, VCDIFF and xdelta, are one underlying family: plain
 > VCDIFF. It is a general delta tool with no ROM knowledge at all — no headers,
@@ -83,27 +84,27 @@ rom-weaver reads 21 patch formats. No other tool here reads more than 12.
 
 | Format | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 |
 | --- | :---: | :---: | :---: | :---: | :---: |
-| IPS | 🟢 | 🟢 | 🟢 | 🟢 | 🔴 |
-| IPS32 | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| EBP | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| BPS | 🟢 | 🟢 | 🟢 | 🟢 | 🔴 |
-| UPS | 🟢 | 🟢 | 🟢 | 🟢 | 🔴 |
-| PPF | 🟢 | 🟢 | 🔴 | 🟢 | 🔴 |
-| RUP | 🟢 | 🟢 | 🔴 | 🟢 | 🔴 |
-| APS (N64) | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| APSGBA | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| BDF/BSDIFF40 | 🟢 | 🟢 | 🔴 | 🟢 | 🔴 |
-| MOD (PMSR) | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| VCDIFF | 🟢 | 🟡 ¹ | 🔴 | 🟢 ² | 🟢 |
-| xdelta | 🟢 | 🟡 ¹ | 🔴 | 🟢 ² | 🟢 |
-| SOLID | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| GDIFF | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| PAT (FireFlower) | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| DLDI | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| DPS | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| BSP | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| HDiffPatch/HPatchZ | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| DCP (Dreamcast) | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
+| IPS | ✅ | ✅ | ✅ | ✅ | ❌ |
+| IPS32 | ✅ | ❌ | ❌ | ❌ | ❌ |
+| EBP | ✅ | ✅ | ❌ | ❌ | ❌ |
+| BPS | ✅ | ✅ | ✅ | ✅ | ❌ |
+| UPS | ✅ | ✅ | ✅ | ✅ | ❌ |
+| PPF | ✅ | ✅ | ❌ | ✅ | ❌ |
+| RUP | ✅ | ✅ | ❌ | ✅ | ❌ |
+| APS (N64) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| APSGBA | ✅ | ✅ | ❌ | ❌ | ❌ |
+| BDF/BSDIFF40 | ✅ | ✅ | ❌ | ✅ | ❌ |
+| MOD (PMSR) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| VCDIFF | ✅ | ⚠️ ¹ | ❌ | ✅ ² | ✅ |
+| xdelta | ✅ | ⚠️ ¹ | ❌ | ✅ ² | ✅ |
+| SOLID | ✅ | ❌ | ❌ | ❌ | ❌ |
+| GDIFF | ✅ | ❌ | ❌ | ❌ | ❌ |
+| PAT (FireFlower) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| DLDI | ✅ | ❌ | ❌ | ❌ | ❌ |
+| DPS | ✅ | ❌ | ❌ | ❌ | ❌ |
+| BSP | ✅ | ❌ | ❌ | ❌ | ❌ |
+| HDiffPatch/HPatchZ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| DCP (Dreamcast) | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 > ¹ RomPatcher.js decodes plain VCDIFF but throws on two optional parts of the
 > spec: a secondary compressor and a custom code table. Most `.xdelta` patches
@@ -120,21 +121,21 @@ does not support PDS, and it does not support HDiffPatch directory patches
 
 | Format | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 |
 | --- | :---: | :---: | :---: | :---: | :---: |
-| IPS | 🟢 | 🟢 | 🟢 | 🟢 | 🔴 |
-| IPS32 | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| EBP | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| BPS | 🟢 | 🟢 | 🟢 ¹ | 🟢 | 🔴 |
-| UPS | 🟢 | 🟢 | 🔴 ² | 🟢 | 🔴 |
-| PPF | 🟢 | 🟢 | 🔴 | 🟢 | 🔴 |
-| RUP | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| APS (N64) | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| APSGBA | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| BDF/BSDIFF40 | 🟢 | 🔴 | 🔴 | 🟢 | 🔴 |
-| MOD (PMSR) | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| VCDIFF | 🟢 | 🔴 | 🔴 | 🟢 | 🟢 |
-| xdelta | 🟢 | 🔴 | 🔴 | 🟢 | 🟢 |
-| SOLID, GDIFF, PAT, DLDI, DPS | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| BSP, HDiffPatch, DCP | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
+| IPS | ✅ | ✅ | ✅ | ✅ | ❌ |
+| IPS32 | ✅ | ❌ | ❌ | ❌ | ❌ |
+| EBP | ✅ | ✅ | ❌ | ❌ | ❌ |
+| BPS | ✅ | ✅ | ✅ ¹ | ✅ | ❌ |
+| UPS | ✅ | ✅ | ❌ ² | ✅ | ❌ |
+| PPF | ✅ | ✅ | ❌ | ✅ | ❌ |
+| RUP | ✅ | ✅ | ❌ | ❌ | ❌ |
+| APS (N64) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| APSGBA | ✅ | ❌ | ❌ | ❌ | ❌ |
+| BDF/BSDIFF40 | ✅ | ❌ | ❌ | ✅ | ❌ |
+| MOD (PMSR) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| VCDIFF | ✅ | ❌ | ❌ | ✅ | ✅ |
+| xdelta | ✅ | ❌ | ❌ | ✅ | ✅ |
+| SOLID, GDIFF, PAT, DLDI, DPS | ✅ | ❌ | ❌ | ❌ | ❌ |
+| BSP, HDiffPatch, DCP | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 > ¹ Flips is the only tool here offering two BPS strategies on the command
 > line: `--bps-delta` and `--bps-linear`.
@@ -146,23 +147,23 @@ does not support PDS, and it does not support HDiffPatch directory patches
 
 | Format | rom-weaver extract | rom-weaver create | RomPatcher.js | chdman | Dolphin tool |
 | --- | :---: | :---: | :---: | :---: | :---: |
-| ZIP | 🟢 | 🟢 | 🟡 extract only | 🔴 | 🔴 |
-| ZIPX | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| 7z | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| RAR | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| TAR (plain, gz, bz2, xz) | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Gzip, Bzip2, XZ, Zstandard | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| CHD | 🟢 | 🟢 | 🔴 | 🟢 ¹ | 🔴 |
-| RVZ | 🟢 | 🟢 | 🔴 | 🔴 | 🟢 |
-| Z3DS | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 |
-| GCZ | 🟢 | 🔴 ² | 🔴 | 🔴 | 🟢 |
-| WIA | 🟢 | 🔴 ² | 🔴 | 🔴 | 🟢 |
-| TGC | 🟢 | 🔴 | 🔴 | 🔴 | 🟡 read only |
-| NFS | 🟢 | 🔴 | 🔴 | 🔴 | 🟡 read only |
-| WBFS | 🟢 | 🔴 | 🔴 | 🔴 | 🟡 read only |
-| CSO/CISO | 🟢 | 🔴 | 🔴 | 🔴 | 🟡 read only |
-| PBP | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| XISO | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
+| ZIP | ✅ | ✅ | ⚠️ extract only | ❌ | ❌ |
+| ZIPX | ✅ | ❌ | ❌ | ❌ | ❌ |
+| 7z | ✅ | ✅ | ❌ | ❌ | ❌ |
+| RAR | ✅ | ❌ | ❌ | ❌ | ❌ |
+| TAR (plain, gz, bz2, xz) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Gzip, Bzip2, XZ, Zstandard | ✅ | ❌ | ❌ | ❌ | ❌ |
+| CHD | ✅ | ✅ | ❌ | ✅ ¹ | ❌ |
+| RVZ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Z3DS | ✅ | ✅ | ❌ | ❌ | ❌ |
+| GCZ | ✅ | ❌ ² | ❌ | ❌ | ✅ |
+| WIA | ✅ | ❌ ² | ❌ | ❌ | ✅ |
+| TGC | ✅ | ❌ | ❌ | ❌ | ⚠️ read only |
+| NFS | ✅ | ❌ | ❌ | ❌ | ⚠️ read only |
+| WBFS | ✅ | ❌ | ❌ | ❌ | ⚠️ read only |
+| CSO/CISO | ✅ | ❌ | ❌ | ❌ | ⚠️ read only |
+| PBP | ✅ | ❌ | ❌ | ❌ | ❌ |
+| XISO | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 > ¹ chdman also reads `.cue`, `.gdi`, `.toc`, and raw images as CHD build
 > inputs, which is a different job from extracting an existing archive.
@@ -178,14 +179,14 @@ tool here needs you to convert, patch, and convert back by hand.
 
 | Capability | rom-weaver | RomPatcher.js | Flips | MultiPatch | chdman | Dolphin tool |
 | --- | --- | --- | :---: | :---: | :---: | :---: |
-| Algorithms | 🟢 CRC32, CRC32C, CRC16, MD5, SHA-1, SHA-256, BLAKE3, Adler-32 | 🟡 CRC32, MD5, SHA-1 | 🔴 | 🔴 | 🟡 SHA-1 ¹ | 🟡 CRC32, MD5, SHA-1 ¹ |
-| Shows ROM hashes | 🟢 | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Verifies checksums in the patch | 🟢 | 🟢 | 🟢 | 🟢 | 🔴 | 🔴 |
-| Assert an expected input hash | 🟢 `--expect-in` | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Assert an expected output hash | 🟢 `--expect-out` | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Hash a byte range | 🟢 `--start`/`--length` | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Hash a file inside an archive | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Header and byte-order variants | 🟢 all detected headers, plus trim boundaries ² | 🟡 N64 only | 🔴 | 🔴 | 🔴 | 🔴 |
+| Algorithms | ✅ CRC32, CRC32C, CRC16, MD5, SHA-1, SHA-256, BLAKE3, Adler-32 | ⚠️ CRC32, MD5, SHA-1 | ❌ | ❌ | ⚠️ SHA-1 ¹ | ⚠️ CRC32, MD5, SHA-1 ¹ |
+| Shows ROM hashes | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Verifies checksums in the patch | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Assert an expected input hash | ✅ `--expect-in` | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Assert an expected output hash | ✅ `--expect-out` | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Hash a byte range | ✅ `--start`/`--length` | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Hash a file inside an archive | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Header and byte-order variants | ✅ all detected headers, plus trim boundaries ² | ⚠️ N64 only | ❌ | ❌ | ❌ | ❌ |
 
 > ¹ chdman `verify` and Dolphin tool `verify` check an image against its own
 > stored hashes. Neither hashes an arbitrary file.
@@ -200,11 +201,11 @@ tool here needs you to convert, patch, and convert back by hand.
 
 | Behavior | rom-weaver | RomPatcher.js | Flips | MultiPatch |
 | --- | --- | --- | --- | :---: |
-| Header detection | 🟢 12 families ¹ | 🟡 4 formats ² | 🟡 SNES copier only ³ | 🔴 |
-| Checksum repair | 🟢 12 platforms ⁴ | 🟡 Game Boy, Mega Drive | 🔴 | 🔴 |
-| Header strip mode | 🟢 `auto`, `keep`, or `strip`, per patch | 🟡 manual on/off | 🟡 auto-detect, `--exact` to force | 🔴 |
-| Output header mode | 🟢 separate `auto`, `keep`, or `strip` | 🟡 follows the input choice | 🟡 restores what it stripped | 🔴 |
-| N64 byte order | 🟢 converts to match the patch, writes back in the original order | 🟡 detects `.z64` for its CRC display | 🔴 | 🔴 |
+| Header detection | ✅ 12 families ¹ | ⚠️ 4 formats ² | ⚠️ SNES copier only ³ | ❌ |
+| Checksum repair | ✅ 12 platforms ⁴ | ⚠️ Game Boy, Mega Drive | ❌ | ❌ |
+| Header strip mode | ✅ `auto`, `keep`, or `strip`, per patch | ⚠️ manual on/off | ⚠️ auto-detect, `--exact` to force | ❌ |
+| Output header mode | ✅ separate `auto`, `keep`, or `strip` | ⚠️ follows the input choice | ⚠️ restores what it stripped | ❌ |
+| N64 byte order | ✅ converts to match the patch, writes back in the original order | ⚠️ detects `.z64` for its CRC display | ❌ | ❌ |
 
 > ¹ A78, LNX, NES and FDS, SNES copier and SMC variants, PCE copier formats,
 > Game Boy and GBA, Mega Drive, SMS and Game Gear, all N64 byte orders, NDS,
@@ -224,16 +225,16 @@ tool here needs you to convert, patch, and convert back by hand.
 
 | Feature | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 |
 | --- | --- | :---: | :---: | :---: | :---: |
-| Apply one patch | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
-| Chain several patches in order | 🟢 repeat `--patch` | 🔴 ¹ | 🔴 ¹ | 🔴 ¹ | 🔴 ¹ |
-| Validate without writing | 🟢 `patch validate` | 🔴 | 🟡 `--info` | 🔴 | 🟡 `printhdr` |
-| Check each patch independently | 🟢 `--independent` | 🔴 | 🔴 | 🔴 | 🔴 |
-| Find patches beside the ROM in an archive | 🟢 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Bake in Game Genie / GameShark codes | 🟢 `--code` | 🔴 | 🔴 | 🔴 | 🔴 |
-| Undo a PPF3 patch | 🟢 `tools ppf-undo` | 🔴 | 🔴 | 🔴 | 🔴 |
-| Override a failed checksum | 🟢 `--ignore-checksum-validation` | 🟢 | 🟢 `--ignore-checksum` | 🔴 | 🔴 |
-| Patch metadata on create | 🟢 RUP description, EBP JSON | 🟢 RUP description, EBP JSON | 🟢 BPS manifest | 🔴 | 🟢 `-A` app header |
-| Machine-readable output | 🟢 `--json` | 🔴 | 🔴 | 🔴 | 🔴 |
+| Apply one patch | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Chain several patches in order | ✅ repeat `--patch` | ❌ ¹ | ❌ ¹ | ❌ ¹ | ❌ ¹ |
+| Validate without writing | ✅ `patch validate` | ❌ | ⚠️ `--info` | ❌ | ⚠️ `printhdr` |
+| Check each patch independently | ✅ `--independent` | ❌ | ❌ | ❌ | ❌ |
+| Find patches beside the ROM in an archive | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Bake in Game Genie / GameShark codes | ✅ `--code` | ❌ | ❌ | ❌ | ❌ |
+| Undo a PPF3 patch | ✅ `tools ppf-undo` | ❌ | ❌ | ❌ | ❌ |
+| Override a failed checksum | ✅ `--ignore-checksum-validation` | ✅ | ✅ `--ignore-checksum` | ❌ | ❌ |
+| Patch metadata on create | ✅ RUP description, EBP JSON | ✅ RUP description, EBP JSON | ✅ BPS manifest | ❌ | ✅ `-A` app header |
+| Machine-readable output | ✅ `--json` | ❌ | ❌ | ❌ | ❌ |
 
 > ¹ These apply exactly one patch per run. Hacks that ship a base patch plus an
 > update need two passes, and you have to keep the intermediate file yourself.
@@ -242,11 +243,11 @@ tool here needs you to convert, patch, and convert back by hand.
 
 | Command | rom-weaver | Anything else here |
 | --- | --- | --- |
-| Trim and restore | 🟢 NDS, GBA, 3DS, XISO, and RVZ scrub ¹ | 🔴 |
-| Compress | 🟢 ZIP, 7z, CHD, RVZ, Z3DS | 🟡 chdman for CHD, Dolphin tool for RVZ/GCZ/WIA/ISO |
-| Probe | 🟢 format, platform, and header, including from stdin | 🟡 chdman `info`, Dolphin tool `header` |
-| Ingest | 🟢 sorts a mixed folder into ROMs and patches | 🔴 |
-| Bundles | 🟢 `rom-weaver-bundle.json` recipes ² | 🔴 |
+| Trim and restore | ✅ NDS, GBA, 3DS, XISO, and RVZ scrub ¹ | ❌ |
+| Compress | ✅ ZIP, 7z, CHD, RVZ, Z3DS | ⚠️ chdman for CHD, Dolphin tool for RVZ/GCZ/WIA/ISO |
+| Probe | ✅ format, platform, and header, including from stdin | ⚠️ chdman `info`, Dolphin tool `header` |
+| Ingest | ✅ sorts a mixed folder into ROMs and patches | ❌ |
+| Bundles | ✅ `rom-weaver-bundle.json` recipes ² | ❌ |
 
 > ¹ `trim --revert` pads a trimmed file back out, and `--revert-marker` stores
 > a footer so the revert is exact rather than a guess at the padding.
@@ -259,13 +260,13 @@ tool here needs you to convert, patch, and convert back by hand.
 
 | Property | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 | chdman | Dolphin tool |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Browser | 🟢 WebAssembly | 🟢 plain JavaScript | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Command line | 🟢 native, 9 platforms | 🟡 Node script | 🟢 | 🟡 macOS only | 🟢 | 🟢 | 🟢 |
-| Desktop GUI | 🔴 | 🔴 | 🟢 GTK, Win32 | 🟢 Cocoa | 🔴 | 🔴 | 🔴 |
-| Embed in your own page | 🔴 | 🟢 a stated goal | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Multi-threaded | 🟢 `-j` sets the ceiling | 🟡 one worker per job | 🔴 | 🔴 | 🔴 | 🟢 | 🟢 |
-| Large files | 🟢 streams; disc images are normal | 🟡 warns above 64 MB ¹ | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
-| Install | 🟢 npm, Homebrew, Docker, or a binary | 🟡 copy files, or `npm install` | 🟡 binary or build | 🟡 app download | 🟡 package or build | 🟡 part of MAME tools | 🟡 part of Dolphin |
+| Browser | ✅ WebAssembly | ✅ plain JavaScript | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Command line | ✅ native, 9 platforms | ⚠️ Node script | ✅ | ⚠️ macOS only | ✅ | ✅ | ✅ |
+| Desktop GUI | ❌ | ❌ | ✅ GTK, Win32 | ✅ Cocoa | ❌ | ❌ | ❌ |
+| Embed in your own page | ❌ | ✅ a stated goal | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Multi-threaded | ✅ `-j` sets the ceiling | ⚠️ one worker per job | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Large files | ✅ streams; disc images are normal | ⚠️ warns above 64 MB ¹ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Install | ✅ npm, Homebrew, Docker, or a binary | ⚠️ copy files, or `npm install` | ⚠️ binary or build | ⚠️ app download | ⚠️ package or build | ⚠️ part of MAME tools | ⚠️ part of Dolphin |
 | Language | Rust | JavaScript | C++ | Objective-C, C++ | C | C++ | C++ |
 
 > ¹ The warning is advisory, not a block. It reflects that RomPatcher.js loads
