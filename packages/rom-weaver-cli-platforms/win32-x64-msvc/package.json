@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/win32-x64-msvc",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "description": "Windows x64 binary for rom-weaver",
   "author": "Brandon Casey",
   "repository": {
