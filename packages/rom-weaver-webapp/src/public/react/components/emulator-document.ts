@@ -44,17 +44,19 @@ const createEmulatorGameIdentity = ({ checksum, fileName, sizeBytes }: EmulatorG
  */
 const CLEAR_STORED_THREADS_SETTING = `
       (() => {
-        try {
-          for (let index = 0; index < localStorage.length; index += 1) {
-            const key = localStorage.key(index);
-            if (!key || !/^ejs-.+-settings$/.test(key)) continue;
+        // One try per key: a single unparseable or hand-edited entry must not
+        // stop the other games from being cleaned up.
+        for (let index = 0; index < localStorage.length; index += 1) {
+          const key = localStorage.key(index);
+          if (!key || !/^ejs-.+-settings$/.test(key)) continue;
+          try {
             const stored = JSON.parse(localStorage.getItem(key));
-            if (!stored || !stored.settings || !('ejs_threads' in stored.settings)) continue;
+            if (!stored || !(stored.settings instanceof Object) || !('ejs_threads' in stored.settings)) continue;
             delete stored.settings.ejs_threads;
             localStorage.setItem(key, JSON.stringify(stored));
+          } catch (error) {
+            console.warn('Could not clear the stored EmulatorJS threads setting for ' + key, error);
           }
-        } catch (error) {
-          console.warn('Could not clear the stored EmulatorJS threads setting', error);
         }
       })();`;
 
