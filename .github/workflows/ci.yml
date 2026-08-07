@@ -946,15 +946,26 @@ jobs:
       - name: Build
         run: npm --prefix packages/rom-weaver-webapp run build
 
+      # Consumed by `docker-prebuilt` and `webapp-size`, so both validate the
+      # exact bundle produced here. Upload before the audits so a Lighthouse
+      # failure cannot hide the artifact or prevent the size job from running.
+      - name: Upload webapp bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: webapp-dist
+          path: packages/rom-weaver-webapp/dist
+          if-no-files-found: error
+          include-hidden-files: true
+
       # Audits the bundle built above, served by the repository's own preview
       # server (HTTP/2, brotli sidecars, production cache headers), never the
       # Cloudflare preview deployment. Gating a required check on a deploy would
       # invert the `continue-on-error` boundary the deploy jobs are built around
       # - a Cloudflare outage must not turn this red - and the deploy is not
       # ordered before this job in any case.
-      - name: Performance gates
+      - name: Lighthouse gates
         id: performance
-        run: npm --prefix packages/rom-weaver-webapp run test:performance
+        run: npm --prefix packages/rom-weaver-webapp run audit:lighthouse
 
       - name: Upload Lighthouse reports
         id: lighthouse-reports
@@ -1018,19 +1029,34 @@ jobs:
             --field description="$description" \
             --field target_url="$LIGHTHOUSE_REPORT_URL"
 
-      # Consumed by `docker-prebuilt`, so the image's release path is smoked
-      # against a real bundle. Deliberately the same name, path and options as
-      # the release fan-out's upload (release.yml) - the point is for CI to
-      # exercise the artifact the publish job will hand the image, so any
-      # divergence here defeats it. `include-hidden-files` included: see the
-      # reasoning there.
-      - name: Upload webapp bundle
-        uses: actions/upload-artifact@v7
+  # Check the exact bundle uploaded by `webapp-static`. This is separate from
+  # Lighthouse so a size failure cannot stop the audit or any of the browser
+  # jobs; the `webapp` aggregate still makes the failure required.
+  webapp-size:
+    name: Webapp (size)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [changes, webapp-static]
+    if: >-
+      ${{ !cancelled() && github.ref_type != 'tag'
+      && needs.changes.outputs.webapp == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node
+          cargo-cache: "false"
+
+      - name: Download webapp bundle
+        uses: actions/download-artifact@v8
         with:
           name: webapp-dist
           path: packages/rom-weaver-webapp/dist
-          if-no-files-found: error
-          include-hidden-files: true
+
+      - name: Asset size gates
+        run: npm --prefix packages/rom-weaver-webapp run check:size
 
   # The longest webapp suite, split across two runners. The runner script gives
   # each test file its own Vitest process and caps in-process concurrency at
@@ -1187,7 +1213,7 @@ jobs:
     name: Webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, webapp-static, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
+    needs: [changes, webapp-static, webapp-size, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
@@ -1199,6 +1225,7 @@ jobs:
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.webapp }}'
           'webapp-static=${{ needs.webapp-static.result }}'
+          'webapp-size=${{ needs.webapp-size.result }}'
           'webapp-browser=${{ needs.webapp-browser.result }}'
           'webapp-e2e=${{ needs.webapp-e2e.result }}'
           'webapp-webkit-e2e=${{ needs.webapp-webkit-e2e.result }}'
