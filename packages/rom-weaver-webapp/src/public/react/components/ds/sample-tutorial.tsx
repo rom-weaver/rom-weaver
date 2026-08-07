@@ -367,7 +367,7 @@ const SampleTutorialStart = ({
             }}
             type="button"
           >
-            Don't show this again
+            Don't show this again (re-enable in Settings)
           </button>
         </div>
       ) : null}
