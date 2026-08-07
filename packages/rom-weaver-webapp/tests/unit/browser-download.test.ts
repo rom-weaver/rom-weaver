@@ -93,4 +93,28 @@ describe("triggerBrowserDownload (iOS standalone PWA share path)", () => {
     expect(share).not.toHaveBeenCalled();
     expect(click).toHaveBeenCalledTimes(1);
   });
+
+  // WebKit begins the anchor download asynchronously after click(); a same-task
+  // revoke races it and intermittently fails the load. The URL must outlive the
+  // click by a wide margin.
+  it("keeps the object URL alive well past the click before revoking", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("navigator", {
+        maxTouchPoints: 0,
+        platform: "MacIntel",
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+      });
+      vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+      const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+      await triggerBrowserDownload(new Blob(["rom"]), "output.sfc");
+      vi.advanceTimersByTime(10_000);
+      expect(revoke).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(30_000);
+      expect(revoke).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
