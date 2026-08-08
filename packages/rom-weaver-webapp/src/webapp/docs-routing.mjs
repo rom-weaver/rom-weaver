@@ -77,6 +77,11 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "explanation/bundles.md", label: "What a bundle is", slug: "docs/bundles" }),
   Object.freeze({ file: "explanation/browser-and-cli.md", label: "Browser and CLI", slug: "docs/browser-and-cli" }),
   Object.freeze({
+    file: "explanation/comparisons.md",
+    label: "Comparison with similar tools",
+    slug: "docs/comparisons",
+  }),
+  Object.freeze({
     file: "explanation/release-provenance.md",
     label: "Release provenance",
     slug: "docs/release-provenance",

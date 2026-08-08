@@ -184,12 +184,77 @@ echo hi
     expect(route.html).toContain('href="/docs/patch-formats#ips"');
     expect(route.html).toContain('href="/docs/fixture#a-and-b"');
     expect(route.html).toContain('<pre tabindex="0"><code class="language-sh">');
-    expect(route.html).toContain(
-      '<h2 id="a-and-b"><span aria-hidden="true" class="docs-section-index">01</span><span class="docs-section-title">A &amp; <code>B</code></span>',
+    expect(route.html).toContain('<h2 id="a-and-b"><a class="docs-section-link" href="/docs/fixture#a-and-b">');
+    expect(route.html).toContain('<h2 id="a-and-b-1"><a class="docs-section-link" href="/docs/fixture#a-and-b-1">');
+    expect(route.html).toContain('<span class="docs-section-title">A &amp; <code>B</code></span></a></h2>');
+    expect(route.html).toContain('class="docs-section-link-icon"');
+  });
+
+  // A markdown link inside a section heading would nest an <a> inside the
+  // heading's own self-link, and the HTML parser splits nested anchors.
+  it("unwraps markdown links inside section headings to their label text", () => {
+    const route = createDocRoute(
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## See [chd](../explanation/compression-formats.md) details
+`,
     );
-    expect(route.html).toContain(
-      '<h2 id="a-and-b-1"><span aria-hidden="true" class="docs-section-index">02</span><span class="docs-section-title">A &amp; <code>B</code></span>',
+
+    expect(route.sections).toEqual([{ id: "see-chd-details", label: "See chd details" }]);
+    expect(route.html).toContain('<span class="docs-section-title">See chd details</span>');
+    expect(route.html.slice(route.html.indexOf("<h2"))).not.toContain("compression-formats");
+  });
+
+  it("wraps tables in a focusable scroll container", () => {
+    const route = createDocRoute(
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## Table
+
+| A | B |
+| --- | --- |
+| 1 | 2 |
+`,
     );
+
+    // The panel clips its corners, so a table wider than the column is
+    // unreachable unless something around it scrolls.
+    expect(route.html).toContain('<div aria-label="Table" class="docs-table-scroll" role="group" tabindex="0"><table>');
+    // The table itself must stay a table: `display: block` is what makes an
+    // element scrollable, and it drops the table out of the a11y tree.
+    expect(route.html).not.toContain("<table tabindex");
+  });
+
+  it("promotes standalone superscripts to note markers, leaving exponents and code alone", () => {
+    const route = createDocRoute(
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      `# Fixture
+
+Fixture description.
+
+## Notes
+
+Cell ¹ and run ¹⁰ and exponent GF(2⁸).
+
+- item with \`²x\` code and marker ¹
+`,
+    );
+
+    expect(route.html).toContain('Cell <sup class="docs-note-ref">1</sup>');
+    // A multi-digit marker is one reference, not two.
+    expect(route.html).toContain('run <sup class="docs-note-ref">10</sup>');
+    // Attached to a character it is an exponent, not a marker.
+    expect(route.html).toContain("GF(2⁸)");
+    // A block-level text token arrives as finished markup; rewriting it would
+    // reach inside the code span.
+    expect(route.html).toContain("<code>²x</code>");
+    expect(route.html).toContain('marker <sup class="docs-note-ref">1</sup>');
   });
 
   it("drops raw HTML from headings before rendering them", () => {
@@ -240,13 +305,13 @@ Fixture description.
     expect(routeFor("docs/create-bundles").sections.map((section) => section.id)).toEqual(BUNDLE_GUIDE_ANCHORS);
   });
 
-  it("publishes the browser bundle guide as one numbered topic", () => {
+  it("publishes the browser bundle guide as one topic with self-linked sections", () => {
     render(<DocsPage active slug="docs/create-bundles" />);
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Create and share a patch bundle in the browser" }),
     ).toBeTruthy();
-    expect(document.querySelectorAll(".docs-article > h2 .docs-section-index")).toHaveLength(
+    expect(document.querySelectorAll(".docs-article > h2 > .docs-section-link")).toHaveLength(
       routeFor("docs/create-bundles").sections.length,
     );
     expect(document.querySelectorAll(".docs-article details.docs-disclosure")).toHaveLength(0);
@@ -382,6 +447,21 @@ Fixture description.
     expect(index?.querySelector('a[href="/docs/self-hosting"]')?.textContent).toContain("Self-hosting");
     expect(screen.getByRole("link", { name: "Read the full FAQ" }).getAttribute("href")).toBe("/docs/faq");
     expect(screen.getByText("Do my files get uploaded?")).toBeTruthy();
+    expect(document.querySelectorAll(".docs-faq-preview details")).toHaveLength(0);
+    expect(document.querySelectorAll(".docs-faq-preview .docs-faq-item")).toHaveLength(3);
+  });
+
+  it("lays out FAQ answers as headings and links every question from its contents", () => {
+    render(<DocsPage active slug="docs/faq" />);
+
+    const contents = screen.getByRole("heading", { name: "Table of contents" });
+    const contentsLinks = [...(contents.nextElementSibling?.querySelectorAll("a") ?? [])];
+    expect(contentsLinks.length).toBeGreaterThan(routeFor("docs/faq").sections.length);
+    expect(document.querySelectorAll(".docs-article h3").length).toBeGreaterThan(0);
+    for (const link of contentsLinks) {
+      const id = link.getAttribute("href")?.split("#")[1] ?? "";
+      expect(document.getElementById(id)).toBeTruthy();
+    }
   });
 
   it("fuzzy-searches guide text and links directly to the matching section", async () => {

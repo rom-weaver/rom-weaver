@@ -223,6 +223,7 @@ changes ─────┼── rust-macos ────┼── rust (aggregat
              └── cli-platforms ─┘   (9 release targets; 1 on a review PR)
 
          ┌── webapp-static ───────┐
+         │        └── webapp-size ─┤
          ├── webapp-browser ──────┼── webapp (aggregate check name)
          │   (2 shards)           │
          ├── webapp-wasm-browser ─┤ (runtime inputs only)
@@ -438,14 +439,17 @@ security ── advisories (warn only, always green)
   without any commit of ours, and letting that turn every open pull request red
   blocks unrelated work. Findings surface as warnings via
   `scripts/warn-only.mjs`; the job stays green.
-- **`webapp-static`**, **`webapp-browser`**, **`webapp-wasm-browser`**,
-  **`webapp-e2e`**, and **`webapp-webkit-e2e`** consume the prebuilt module and
-  compile no Rust. Independent suites run in parallel: `webapp-static` is the
-  node-only work (build script tests, lint, unit tests, vite build, performance
-  budgets; no Playwright install), `webapp-browser` is the two-shard browser
-  suite and uses Chrome from the Ubuntu runner image, `webapp-wasm-browser` is
-  the direct WASM/browser contract selected only for conservative runtime
-  inputs, and `webapp-e2e` runs the channel-icon check plus Chromium journeys.
+- **`webapp-static`**, **`webapp-size`**, **`webapp-browser`**,
+  **`webapp-wasm-browser`**, **`webapp-e2e`**, and **`webapp-webkit-e2e`** consume
+  the prebuilt module and compile no Rust. The browser and E2E suites run in
+  parallel: `webapp-static` is the node-only work (build script tests, lint,
+  unit tests, vite build, and Lighthouse; no Playwright install),
+  `webapp-size` follows it and checks the exact uploaded bundle,
+  `webapp-browser` is the two-shard browser suite and uses Chrome from the
+  Ubuntu runner image,
+  `webapp-wasm-browser` is the direct WASM/browser contract selected only for
+  conservative runtime inputs, and `webapp-e2e` runs the channel-icon check
+  plus Chromium journeys.
   The WebKit leg runs the
   supported Safari-family implementation on macOS. It must stay on `macos-15`
   or newer: Playwright freezes WebKit at revision 2251 on `mac14`/`mac14-arm64`
@@ -482,13 +486,15 @@ security ── advisories (warn only, always green)
 
 ### Performance budgets
 
-`webapp-static` runs the freshly built production bundle through the checked-in
-budgets in `packages/rom-weaver-webapp/performance-budgets.json`
-(`npm run test:performance`). Crossing an `expected` value emits a warning
-annotation; crossing the wider `maximum`/`minimum` fails the required `Webapp`
-check. Sizes are bytes, Lighthouse scores are 0-1, timings are milliseconds.
-The two halves run with `run-s --continue-on-error`, so a size failure still
-reports the Lighthouse table rather than hiding it.
+`webapp-static` uploads its freshly built production bundle, then runs the
+Lighthouse gates from the checked-in budgets in
+`packages/rom-weaver-webapp/performance-budgets.json`.
+`webapp-size` downloads that exact artifact and runs `check:size` against the
+asset-size budgets. Crossing an `expected` value emits a warning annotation;
+crossing the wider `maximum`/`minimum` fails the required `Webapp` check. Sizes
+are bytes, Lighthouse scores are 0-1, and timings are milliseconds. The size
+job is separate, so its failure does not stop Lighthouse, browser, E2E, or
+Docker jobs from running.
 
 The Chromium webapp E2E pass reuses its live axe-core crawl to collect CSS
 coverage from the served production bundle. It visits the not-found page,

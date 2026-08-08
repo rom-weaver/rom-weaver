@@ -12,13 +12,17 @@ html:has(.docs-workbench) {
 }
 
 .rw-app .docs-workbench {
-  /* The document uses the full panel; code and screenshots keep their own
-     wider limits where their content benefits from them. */
-  --measure-wide: 39rem;
+  /* Two measures, because one number cannot serve both. Reading wants a short
+     line; a seven-column table wants every pixel. So the panel grows with the
+     viewport and each block picks its own limit: prose stops at
+     --measure-prose, code and screenshots at the looser --measure-wide, and
+     tables take the panel. */
+  --measure-prose: 42rem;
+  --measure-wide: 60rem;
   --article-pad: clamp(18px, 3vw, 32px);
-  max-width: 62rem;
+  --docs-rail: 13.5rem;
+  --docs-gap: clamp(18px, 3vw, 30px);
   padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
-  margin-inline: auto;
 }
 
 /* --- search --- */
@@ -26,9 +30,8 @@ html:has(.docs-workbench) {
   position: relative;
   z-index: 70;
   display: grid;
-  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
-  gap: clamp(18px, 3vw, 30px);
-  justify-content: center;
+  grid-template-columns: var(--docs-rail) minmax(0, 1fr);
+  gap: var(--docs-gap);
   margin-block: 0 var(--sp-l);
 }
 .rw-app .docs-search-header .docs-search {
@@ -38,12 +41,11 @@ html:has(.docs-workbench) {
 /* --- layout --- */
 .rw-app .docs-layout {
   display: grid;
-  /* The article column is exactly as wide as the panel can be, so the pair
-     centres as one block instead of stranding a gutter inside the card. */
-  grid-template-columns: 13.5rem minmax(0, calc(var(--measure-wide) + var(--article-pad) * 2));
-  gap: clamp(18px, 3vw, 30px);
+  /* The article takes whatever the rail leaves, so the panel reaches the edge
+     of the workbench on any screen. Each block inside picks its own measure. */
+  grid-template-columns: var(--docs-rail) minmax(0, 1fr);
+  gap: var(--docs-gap);
   align-items: start;
-  justify-content: center;
 }
 .rw-app .docs-rails {
   position: sticky;
@@ -221,11 +223,17 @@ html:has(.docs-workbench) {
 }
 
 /* --- warp rail: the signature --- */
+/* Plated like the guide nav above it, so the two rail items read as one
+   column of panels rather than a card followed by loose text. The whole rail
+   is `display: none` below 860px, so this needs no breakpoint of its own. */
 .rw-app .warp-rail {
-  padding-inline: 2px;
+  padding: 0 2px var(--sp-s);
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
 }
 .rw-app .warp-rail-title {
-  padding: 0 0 var(--sp-s) 2.35rem;
+  padding: var(--sp-m) 0 var(--sp-s) 1.15rem;
 }
 .rw-app .warp-rail-list {
   position: relative;
@@ -247,10 +255,7 @@ html:has(.docs-workbench) {
 }
 .rw-app .warp-rail-list a {
   position: relative;
-  display: grid;
-  grid-template-columns: 1.2rem minmax(0, 1fr);
-  gap: 0.45rem;
-  align-items: baseline;
+  display: block;
   padding: 0.3rem 0 0.3rem 1.15rem;
   font-size: 0.755rem;
   font-weight: 600;
@@ -278,36 +283,17 @@ html:has(.docs-workbench) {
 .rw-app .warp-rail:not(.is-initializing) .warp-pick {
   transition: transform 0.3s var(--ease);
 }
-.rw-app .warp-index {
-  font-family: var(--mono);
-  font-size: 0.66rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-4);
-  letter-spacing: 0;
-}
-.rw-app .warp-label {
-  min-width: 0;
-}
 @media (hover: hover) {
   .rw-app .warp-rail-list a:hover {
     color: var(--ink);
-  }
-  .rw-app .warp-rail-list a:hover .warp-index {
-    color: var(--weft);
   }
 }
 .rw-app .warp-rail-list a:active {
   color: var(--ink);
 }
-.rw-app .warp-rail-list a:active .warp-index {
-  color: var(--weft);
-}
 .rw-app .warp-rail-list a[aria-current="true"] {
   font-weight: 700;
   color: var(--ink);
-}
-.rw-app .warp-rail-list a[aria-current="true"] .warp-index {
-  color: var(--weft);
 }
 .rw-app .warp-rail-list a[aria-current="true"] .warp-pick {
   transform: scaleX(1);
@@ -360,27 +346,111 @@ html:has(.docs-workbench) {
   font-stretch: 92%;
 }
 .rw-app .docs-article h2 {
-  display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
-  gap: var(--sp-s);
-  align-items: baseline;
-  margin: clamp(44px, 7vw, 68px) 0 var(--sp-m);
+  position: relative;
+  margin: clamp(26px, 4.5vw, 40px) 0 var(--sp-m);
   font-size: clamp(1.3rem, 1.08rem + 0.9vw, 1.6rem);
   font-weight: 720;
   font-stretch: 96%;
   scroll-margin-top: 5.5rem;
 }
-.rw-app .docs-section-index {
-  font: 600 0.7rem / 1 var(--mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--weft);
-  letter-spacing: 0;
+/* The heading is its own permalink, GitHub style: plain ink at rest, accent
+   underline plus a link glyph hanging in the left gutter on hover/press. The
+   glyph's em offset must stay inside the article's 18px padding floor - the
+   panel behind it clips at `overflow: hidden`. */
+.rw-app .docs-article a.docs-section-link {
+  font-weight: inherit;
+  color: inherit;
+  text-decoration: none;
+}
+.rw-app .docs-section-title {
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: color-mix(in oklab, var(--thread) 55%, transparent);
+  text-underline-offset: 0.22em;
+}
+.rw-app .docs-section-link-icon {
+  position: absolute;
+  top: 0.26em;
+  left: -0.84em;
+  width: 0.62em;
+  height: 0.62em;
+  color: var(--thread-text);
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+/* Touch has no hover to reveal the glyph, so it stays faintly visible. */
+@media (hover: none) {
+  .rw-app .docs-section-link-icon {
+    opacity: 0.45;
+  }
+}
+@media (hover: hover) {
+  .rw-app .docs-article a.docs-section-link:hover .docs-section-title {
+    text-decoration-line: underline;
+  }
+  .rw-app .docs-article a.docs-section-link:hover .docs-section-link-icon {
+    opacity: 1;
+  }
+}
+.rw-app .docs-article a.docs-section-link:active .docs-section-title {
+  text-decoration-line: underline;
+}
+.rw-app .docs-article a.docs-section-link:active .docs-section-link-icon,
+.rw-app .docs-article a.docs-section-link:focus-visible .docs-section-link-icon {
+  opacity: 1;
 }
 .rw-app .docs-article h3 {
   margin: var(--sp-xl) 0 var(--sp-s);
   font-size: 1.02rem;
   font-weight: 700;
   scroll-margin-top: 5.5rem;
+}
+.rw-app .docs-article h2.docs-toc-title {
+  display: block;
+  max-width: var(--measure-wide);
+  padding: var(--sp-l) var(--sp-l) var(--sp-s);
+  margin: var(--sp-xl) 0 0;
+  font-size: 0.78rem;
+  font-weight: 750;
+  font-stretch: 90%;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  scroll-margin-top: 5.5rem;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-bottom: 0;
+  border-radius: var(--r-m) var(--r-m) 0 0;
+}
+.rw-app .docs-article h2.docs-toc-title + ul {
+  max-width: var(--measure-wide);
+  padding: var(--sp-s) var(--sp-l) var(--sp-l);
+  margin: 0 0 var(--sp-xl);
+  list-style: none;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-top: 0;
+  border-radius: 0 0 var(--r-m) var(--r-m);
+}
+.rw-app .docs-article h2.docs-toc-title + ul > li {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.rw-app .docs-article h2.docs-toc-title + ul a {
+  display: block;
+  min-height: 24px;
+  padding-block: var(--sp-xs);
+  line-height: 1.45;
+}
+.rw-app .docs-article h2.docs-toc-title + ul ul {
+  padding-inline-start: var(--sp-l);
+  margin: var(--sp-xs) 0 var(--sp-s);
+  list-style: none;
+  border-inline-start: 1px solid var(--seam-strong);
+}
+.rw-app .docs-article h2.docs-toc-title + ul ul li {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 500;
 }
 /* the standfirst: the paragraph that answers "is this the right page?" */
 .rw-app .docs-article h1 + p {
@@ -390,6 +460,16 @@ html:has(.docs-workbench) {
   line-height: 1.6;
   color: var(--ink-2);
   border-bottom: 1px solid var(--seam-soft);
+}
+/* The reading measure. Applied per block rather than to the article, so a
+   table or a screenshot in the same flow can still use the whole panel. */
+.rw-app .docs-article > p,
+.rw-app .docs-article > ul,
+.rw-app .docs-article > ol,
+.rw-app .docs-article > blockquote,
+.rw-app .docs-article > h2,
+.rw-app .docs-article > h3 {
+  max-width: var(--measure-prose);
 }
 .rw-app .docs-article p,
 .rw-app .docs-article li {
@@ -525,9 +605,13 @@ html:has(.docs-workbench) {
   background: transparent;
   border: 0;
 }
+/* The inline margin is zeroed deliberately: the UA sheet ships `margin: 1em
+   40px`, and setting only `margin-block` leaves that 40px in place, indenting
+   a note far off the left edge of the table it belongs to. */
 .rw-app .docs-article blockquote {
-  padding: var(--sp-xs) 0 var(--sp-xs) var(--sp-l);
+  padding: var(--sp-xs) 0 var(--sp-xs) var(--sp-m);
   margin-block: var(--sp-xl);
+  margin-inline: 0;
   color: var(--ink-2);
   border-left: 2px solid var(--thread);
 }
@@ -537,9 +621,24 @@ html:has(.docs-workbench) {
 .rw-app .docs-article blockquote > :last-child {
   margin-bottom: 0;
 }
+/* A note marker has to be findable in a dense cell and then findable again at
+   the note itself, so it carries the accent rather than the body colour. The
+   UA's `smaller` on `<sup>` compounds against the table's already reduced font,
+   so the size is set outright. */
+.rw-app .docs-note-ref {
+  padding-inline-start: 0.2em;
+  font-size: 0.9em;
+  font-weight: 700;
+  color: var(--thread-text);
+}
+/* The panel clips its own corners, so a table wider than the column has to
+   scroll here or its last columns are simply unreachable. */
+.rw-app .docs-table-scroll {
+  margin-block: var(--sp-l);
+  overflow-x: auto;
+}
 .rw-app .docs-article table {
   width: 100%;
-  max-width: var(--measure-wide);
   font-size: 0.78rem;
   line-height: 1.5;
   border-spacing: 0;
@@ -744,20 +843,20 @@ html:has(.docs-workbench) {
 .rw-app .docs-faq-list {
   border-block: 1px solid var(--seam-soft);
 }
-.rw-app .docs-faq-list details + details {
+.rw-app .docs-faq-item + .docs-faq-item {
   border-top: 1px solid var(--seam-soft);
 }
-.rw-app .docs-faq-list summary {
-  box-sizing: border-box;
-  min-height: 44px;
+.rw-app .docs-faq-item {
   padding-block: var(--sp-m);
+}
+.rw-app .docs-faq-item h3 {
+  margin: 0 0 var(--sp-xs);
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--ink);
-  cursor: pointer;
 }
-.rw-app .docs-faq-list p {
-  padding: 0 0 var(--sp-m) var(--sp-l);
+.rw-app .docs-faq-item p {
+  padding: 0 0 0 var(--sp-l);
   margin: 0;
   font-size: 0.78rem;
   line-height: 1.55;
@@ -1097,10 +1196,6 @@ html:has(.docs-workbench) {
   .rw-app .docs-article pre {
     padding: var(--sp-m);
     overflow-x: visible;
-  }
-  .rw-app .docs-article table {
-    display: block;
-    overflow-x: auto;
   }
   /* No hanging indent for wrapped lines: `text-indent` on a `pre` applies once
      to the block, not per line, so it shifts every real line of the command as
