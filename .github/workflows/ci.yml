@@ -907,6 +907,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: [changes, wasm]
+    outputs:
+      bundle: ${{ steps.webapp-bundle.outcome }}
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     permissions:
       contents: read
@@ -948,8 +950,9 @@ jobs:
 
       # Consumed by `docker-prebuilt` and `webapp-size`, so both validate the
       # exact bundle produced here. Upload before the audits so a Lighthouse
-      # failure cannot hide the artifact or prevent the size job from running.
+      # failure cannot hide the artifact from the size job.
       - name: Upload webapp bundle
+        id: webapp-bundle
         uses: actions/upload-artifact@v7
         with:
           name: webapp-dist
@@ -1045,18 +1048,25 @@ jobs:
         uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-build-env
+        if: needs.webapp-static.outputs.bundle == 'success'
         with:
           tools: node
           cargo-cache: "false"
 
       - name: Download webapp bundle
+        if: needs.webapp-static.outputs.bundle == 'success'
         uses: actions/download-artifact@v8
         with:
           name: webapp-dist
           path: packages/rom-weaver-webapp/dist
 
       - name: Asset size gates
+        if: needs.webapp-static.outputs.bundle == 'success'
         run: npm --prefix packages/rom-weaver-webapp run check:size
+
+      - name: Report skipped size gate
+        if: needs.webapp-static.outputs.bundle != 'success'
+        run: echo "Asset size gates skipped because webapp-static did not upload webapp-dist"
 
   # The longest webapp suite, split across two runners. The runner script gives
   # each test file its own Vitest process and caps in-process concurrency at
