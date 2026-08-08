@@ -77,14 +77,36 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // status, theme, accent, settings, more - external actions live in the
-    // shared footer, and Reset lives in the workflow panel head
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(5);
+    // status, theme, accent, settings - external actions live in the shared
+    // footer, Reset lives in the workflow panel head, and More is nav level
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(4);
     expect(container.querySelector(".actions-sep")).toBeNull();
     expect(container.querySelector(".tool-support")).toBeNull();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     expect(container.querySelector('[aria-label="Reset"]')).toBeNull();
-    expect(container.querySelector(".desktop-more .tool")).toBeTruthy();
+    // More is a sibling of the rail inside the nav, never a tab in the tablist
+    expect(container.querySelector(".modes .desktop-more .mode-more")).toBeTruthy();
+    expect(container.querySelector('.mode-rail [aria-haspopup="menu"]')).toBeNull();
+  });
+
+  it("only lands focus on the first menu item when More is opened by keyboard", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
+
+    // A pointer open parks focus on the menu box, so no row wears a focus ring.
+    fireEvent.pointerDown(more);
+    fireEvent.click(more);
+    const menu = container.querySelector('[role="menu"]') as HTMLElement;
+    expect(menu.getAttribute("tabindex")).toBe("-1");
+    expect(document.activeElement).toBe(menu);
+
+    fireEvent.pointerDown(more);
+    fireEvent.click(more);
+
+    // Enter and Space fire click with no preceding pointerdown.
+    fireEvent.click(more);
+    const firstItem = container.querySelector('[role="menu"] [role="menuitem"]');
+    expect(document.activeElement).toBe(firstItem);
   });
 
   it("keeps utility destinations behind More on both layouts", () => {
@@ -92,7 +114,7 @@ describe("Masthead", () => {
     const { container, getByRole, queryByRole } = render(
       withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} serviceWorkerStatus="active" />),
     );
-    const more = container.querySelector(".desktop-more .tool") as HTMLButtonElement;
+    const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
     expect(more.getAttribute("aria-expanded")).toBe("false");
     expect(container.querySelector('[role="menu"]')).toBeNull();
 
@@ -210,7 +232,7 @@ describe("Masthead", () => {
   it("preloads the Log dialog before interaction completes", () => {
     const onPreloadLog = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
-    const more = container.querySelector(".desktop-more .tool") as HTMLButtonElement;
+    const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
     fireEvent.pointerEnter(more);
     fireEvent.focus(more);
     fireEvent.pointerDown(more);
@@ -263,7 +285,7 @@ describe("Masthead", () => {
   it("preloads Settings before interaction completes", () => {
     const onPreloadSettings = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />));
-    const settings = container.querySelector(".dock-settings") as HTMLButtonElement;
+    const settings = container.querySelector(".masthead-settings") as HTMLButtonElement;
     fireEvent.pointerEnter(settings);
     fireEvent.focus(settings);
     fireEvent.pointerDown(settings);

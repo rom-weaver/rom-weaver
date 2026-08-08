@@ -1,4 +1,4 @@
-import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, Scissors, Wrench } from "lucide-react";
+import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, Scissors, Settings, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -179,6 +179,39 @@ const ResetButton = ({ onReset }: { onReset: () => void }) => {
     <button className="reset-btn" onClick={onReset} type="button">
       <RotateCcw aria-hidden="true" />
       <span>{localizer.message("ui.settings.reset")}</span>
+    </button>
+  );
+};
+
+/**
+ * Phone-only settings entry. The dock is primary navigation and settings is not
+ * a destination, so it rides the panel's own heading band instead - the desktop
+ * masthead already carries the same control.
+ */
+const PanelSettingsButton = ({
+  onOpenSettings,
+  onPreloadSettings,
+  settingsOpen,
+}: {
+  onOpenSettings: () => void;
+  onPreloadSettings?: () => void;
+  settingsOpen?: boolean;
+}) => {
+  const localizer = useUiLocalizer();
+  const label = localizer.message("ui.settings.title");
+  return (
+    <button
+      aria-expanded={settingsOpen}
+      aria-haspopup="dialog"
+      className="panel-settings-btn"
+      onClick={onOpenSettings}
+      onFocus={onPreloadSettings}
+      onPointerDown={onPreloadSettings}
+      onPointerEnter={onPreloadSettings}
+      type="button"
+    >
+      <Settings aria-hidden="true" />
+      <span>{label}</span>
     </button>
   );
 };
@@ -507,6 +540,11 @@ function WebappRoot({
       >
         {view === "docs" ? null : (
           <div className="workflow-panel-head">
+            <PanelSettingsButton
+              onOpenSettings={() => openSettingsTab()}
+              onPreloadSettings={preloadSettingsPanel}
+              settingsOpen={state.settingsDialogOpen}
+            />
             <ResetButton onReset={actions.onReset} />
           </div>
         )}

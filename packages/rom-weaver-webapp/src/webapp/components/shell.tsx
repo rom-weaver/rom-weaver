@@ -134,6 +134,7 @@ const ModeRail = ({
   navLabel,
   onSelect,
   controlsPanels = true,
+  trailing,
 }: {
   betaToolsEnabled?: boolean;
   tabs: WorkflowTab[];
@@ -141,6 +142,8 @@ const ModeRail = ({
   navLabel: string;
   onSelect: (id: string) => void;
   controlsPanels?: boolean;
+  /** Nav-level utility slot, kept outside the tablist so More is not a tab. */
+  trailing?: ReactNode;
 }) => {
   const railRef = useRef<HTMLDivElement | null>(null);
   const thumbRef = useRef<HTMLSpanElement | null>(null);
@@ -191,34 +194,37 @@ const ModeRail = ({
 
   return (
     <nav aria-label={navLabel} className="modes">
-      <div
-        aria-label={navLabel}
-        aria-orientation="horizontal"
-        className="mode-rail"
-        onKeyDown={handleKeyDown}
-        ref={railRef}
-        role="tablist"
-      >
-        <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
-        {railTabs.map((tab) => (
-          <a
-            aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
-            aria-selected={tab.id === current}
-            className="mode"
-            data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
-            data-mode={tab.id}
-            href={tab.href}
-            id={`tab-${tab.id}`}
-            key={tab.id}
-            onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
-            role="tab"
-            tabIndex={tab.id === focusedId ? 0 : -1}
-          >
-            {tab.icon}
-            <span className="mode-label">{tab.label}</span>
-          </a>
-        ))}
+      <div className="mode-rail-scroll">
+        <div
+          aria-label={navLabel}
+          aria-orientation="horizontal"
+          className="mode-rail"
+          onKeyDown={handleKeyDown}
+          ref={railRef}
+          role="tablist"
+        >
+          <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
+          {railTabs.map((tab) => (
+            <a
+              aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
+              aria-selected={tab.id === current}
+              className="mode"
+              data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
+              data-mode={tab.id}
+              href={tab.href}
+              id={`tab-${tab.id}`}
+              key={tab.id}
+              onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
+              role="tab"
+              tabIndex={tab.id === focusedId ? 0 : -1}
+            >
+              {tab.icon}
+              <span className="mode-label">{tab.label}</span>
+            </a>
+          ))}
+        </div>
       </div>
+      {trailing}
     </nav>
   );
 };
@@ -433,6 +439,8 @@ const AccentMenuItem = ({ localizer, onChange }: { localizer: Localizer; onChang
 };
 
 type UtilityMenuProps = {
+  /** True only when the trigger was activated by keyboard. */
+  autoFocusFirst?: boolean;
   localizer: Localizer;
   menuClassName?: string;
   mobile?: boolean;
@@ -440,6 +448,7 @@ type UtilityMenuProps = {
   onOpenChangelog: () => void;
   onOpenLog: () => void;
   onOpenStatus: () => void;
+  onOpenSettings?: () => void;
   onOpenStorage?: () => void;
   onOpenTools?: () => void;
   runtimeState: RuntimeState;
@@ -448,6 +457,7 @@ type UtilityMenuProps = {
 };
 
 const UtilityMenu = ({
+  autoFocusFirst = false,
   localizer,
   menuId,
   mobile = false,
@@ -455,6 +465,7 @@ const UtilityMenu = ({
   onAccentChange,
   onOpenChangelog,
   onOpenLog,
+  onOpenSettings,
   onOpenStatus,
   onOpenStorage,
   onOpenTools,
@@ -477,11 +488,21 @@ const UtilityMenu = ({
     if (toolsButtonRef.current) toolsButtonRef.current.hidden = !(toolsEnabled && onOpenTools);
   }, [onOpenTools, toolsEnabled]);
 
+  /* Only a keyboard open lands on the first item. A pointer or touch open parks
+     focus on the menu box instead: the browser paints a focus ring on whatever
+     it is given programmatically, and a highlighted first row reads as a
+     selection the user never made. The box takes no ring (see masthead.css) and
+     still receives Escape and the arrow keys, and ArrowDown from it steps onto
+     the first item exactly as it did before. */
   useEffect(() => {
     if (!open) return;
+    if (!autoFocusFirst) {
+      menuRef.current?.focus();
+      return;
+    }
     const firstItem = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
     firstItem?.focus();
-  }, [open]);
+  }, [autoFocusFirst, open]);
 
   const menuItems = () =>
     Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []).filter(
@@ -527,9 +548,18 @@ const UtilityMenu = ({
       }}
       ref={menuRef}
       role="menu"
+      tabIndex={-1}
     >
       {mobile ? (
         <>
+          {/* Docs has no panel head to hang the page-level gear on, so the
+              mobile menu keeps a settings route of its own. */}
+          {onOpenSettings ? (
+            <button onClick={() => select(onOpenSettings)} role="menuitem" type="button">
+              <Settings aria-hidden="true" />
+              {localizer.message("ui.settings.title")}
+            </button>
+          ) : null}
           <ThemeMenuItem localizer={localizer} onClose={onClose} />
           <AccentMenuItem localizer={localizer} onChange={onAccentChange} />
         </>
@@ -592,38 +622,53 @@ const MoreMenu = ({
   moreLabel: string;
   onClose: () => void;
   onPreloadLog?: () => void;
-  onToggle: () => void;
+  onToggle: (viaKeyboard: boolean) => void;
   open: boolean;
   renderMenu?: boolean;
   triggerRef: RefObject<HTMLButtonElement | null>;
-}) => (
-  <span className={className}>
-    <button
-      aria-controls={menuId}
-      aria-expanded={open}
-      aria-haspopup="menu"
-      aria-label={moreLabel}
-      className={buttonClassName}
-      onClick={onToggle}
-      onFocus={onPreloadLog}
-      onPointerDown={onPreloadLog}
-      onPointerEnter={onPreloadLog}
-      ref={triggerRef}
-      type="button"
-    >
-      <MoreHorizontal aria-hidden="true" />
-      <span className="tool-text">{moreLabel}</span>
-      {buttonClassName === "tool" ? (
-        <span aria-hidden="true" className="tip">
-          {moreLabel}
-        </span>
+}) => {
+  /* Pointer input always fires `pointerdown` before `click`; a keyboard Enter or
+     Space fires only `click`. That gap is the whole modality test - it needs no
+     event details, and it reads the same for mouse, touch and pen. */
+  const viaPointer = useRef(false);
+  return (
+    <span className={className}>
+      <button
+        aria-controls={menuId}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={moreLabel}
+        className={buttonClassName}
+        onBlur={() => {
+          viaPointer.current = false;
+        }}
+        onClick={() => {
+          onToggle(!viaPointer.current);
+          viaPointer.current = false;
+        }}
+        onFocus={onPreloadLog}
+        onPointerDown={() => {
+          viaPointer.current = true;
+          onPreloadLog?.();
+        }}
+        onPointerEnter={onPreloadLog}
+        ref={triggerRef}
+        type="button"
+      >
+        <MoreHorizontal aria-hidden="true" />
+        <span className="tool-text">{moreLabel}</span>
+        {buttonClassName === "tool" ? (
+          <span aria-hidden="true" className="tip">
+            {moreLabel}
+          </span>
+        ) : null}
+      </button>
+      {renderMenu ? (
+        <UtilityMenu menuId={menuId} onClose={onClose} open={open} triggerRef={triggerRef} {...menuProps} />
       ) : null}
-    </button>
-    {renderMenu ? (
-      <UtilityMenu menuId={menuId} onClose={onClose} open={open} triggerRef={triggerRef} {...menuProps} />
-    ) : null}
-  </span>
-);
+    </span>
+  );
+};
 
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
@@ -870,6 +915,7 @@ const Masthead = ({
   const [accentOpen, setAccentOpen] = useState(false);
   const [utilityOpen, setUtilityOpen] = useState(false);
   const [utilityPlacement, setUtilityPlacement] = useState<"desktop" | "mobile">("desktop");
+  const [utilityViaKeyboard, setUtilityViaKeyboard] = useState(false);
   const desktopMoreRef = useRef<HTMLButtonElement | null>(null);
   const mobileMoreRef = useRef<HTMLButtonElement | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
@@ -883,8 +929,9 @@ const Masthead = ({
   const runtimeState = resolveRuntimeState(hydratedStatus, updateReady);
   const runtimeLabel = localizer.message(RUNTIME_MESSAGES[runtimeState].label);
   const activeMoreRef = utilityPlacement === "mobile" ? mobileMoreRef : desktopMoreRef;
-  const toggleUtility = (placement: "desktop" | "mobile") => {
+  const toggleUtility = (placement: "desktop" | "mobile", viaKeyboard: boolean) => {
     setUtilityPlacement(placement);
+    setUtilityViaKeyboard(viaKeyboard);
     setUtilityOpen((open) => !open);
   };
   const closeUtility = () => {
@@ -999,6 +1046,30 @@ const Masthead = ({
           navLabel={navLabel}
           onSelect={onSelectTab}
           tabs={tabs}
+          trailing={
+            <MoreMenu
+              autoFocusFirst={utilityViaKeyboard}
+              buttonClassName="mode-more"
+              className="desktop-more"
+              localizer={localizer}
+              menuId="more-menu"
+              moreLabel={moreLabel}
+              onClose={closeUtility}
+              onOpenChangelog={onOpenChangelog}
+              onOpenLog={onOpenLog}
+              onOpenStatus={onOpenStatus}
+              onOpenStorage={onOpenStorage ?? onOpenLog}
+              onOpenTools={() => onSelectTab("tools")}
+              onPreloadLog={onPreloadLog}
+              onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
+              open={utilityOpen && utilityPlacement === "desktop"}
+              renderMenu={utilityOpen && utilityPlacement === "desktop"}
+              runtimeState={runtimeState}
+              toolsEnabled={betaToolsEnabled}
+              toolsLabel={toolsLabel}
+              triggerRef={desktopMoreRef}
+            />
+          }
         />
         <div className="masthead-tools" ref={toolsRef}>
           <button
@@ -1042,37 +1113,18 @@ const Masthead = ({
               {settingsLabel}
             </span>
           </button>
-          <MoreMenu
-            buttonClassName="tool"
-            className="desktop-more"
-            localizer={localizer}
-            menuId="more-menu"
-            moreLabel={moreLabel}
-            onClose={closeUtility}
-            onOpenChangelog={onOpenChangelog}
-            onOpenLog={onOpenLog}
-            onOpenStatus={onOpenStatus}
-            onOpenStorage={onOpenStorage ?? onOpenLog}
-            onOpenTools={() => onSelectTab("tools")}
-            onPreloadLog={onPreloadLog}
-            onToggle={() => toggleUtility("desktop")}
-            open={utilityOpen && utilityPlacement === "desktop"}
-            renderMenu={false}
-            runtimeState={runtimeState}
-            toolsEnabled={betaToolsEnabled}
-            toolsLabel={toolsLabel}
-            triggerRef={desktopMoreRef}
-          />
-          {utilityOpen ? (
+          {utilityOpen && utilityPlacement === "mobile" ? (
             <UtilityMenu
+              autoFocusFirst={utilityViaKeyboard}
               localizer={localizer}
               menuClassName="shared-more-menu"
               menuId="more-menu"
-              mobile={utilityPlacement === "mobile"}
+              mobile
               onClose={closeUtility}
               onAccentChange={onAccentChange}
               onOpenChangelog={onOpenChangelog}
               onOpenLog={onOpenLog}
+              onOpenSettings={onOpenSettings}
               onOpenStatus={onOpenStatus}
               onOpenStorage={onOpenStorage ?? onOpenLog}
               onOpenTools={() => onSelectTab("tools")}
@@ -1094,42 +1146,27 @@ const Masthead = ({
         controlsPanels={tabsControlPanels}
         current={currentTab}
         mobileActions={
-          <>
-            <button
-              aria-expanded={settingsOpen}
-              aria-haspopup="dialog"
-              className="dock-action dock-settings"
-              onClick={onOpenSettings}
-              onFocus={onPreloadSettings}
-              onPointerDown={onPreloadSettings}
-              onPointerEnter={onPreloadSettings}
-              type="button"
-            >
-              <Settings aria-hidden="true" />
-              <span>{settingsLabel}</span>
-            </button>
-            <MoreMenu
-              buttonClassName="dock-action"
-              className="mobile-more"
-              localizer={localizer}
-              menuId="more-menu"
-              moreLabel={moreLabel}
-              onClose={closeUtility}
-              onOpenChangelog={onOpenChangelog}
-              onOpenLog={onOpenLog}
-              onOpenStatus={onOpenStatus}
-              onOpenStorage={onOpenStorage ?? onOpenLog}
-              onOpenTools={() => onSelectTab("tools")}
-              onPreloadLog={onPreloadLog}
-              onToggle={() => toggleUtility("mobile")}
-              open={utilityOpen && utilityPlacement === "mobile"}
-              renderMenu={false}
-              runtimeState={runtimeState}
-              toolsEnabled={betaToolsEnabled}
-              toolsLabel={toolsLabel}
-              triggerRef={mobileMoreRef}
-            />
-          </>
+          <MoreMenu
+            buttonClassName="dock-action"
+            className="mobile-more"
+            localizer={localizer}
+            menuId="more-menu"
+            moreLabel={moreLabel}
+            onClose={closeUtility}
+            onOpenChangelog={onOpenChangelog}
+            onOpenLog={onOpenLog}
+            onOpenStatus={onOpenStatus}
+            onOpenStorage={onOpenStorage ?? onOpenLog}
+            onOpenTools={() => onSelectTab("tools")}
+            onPreloadLog={onPreloadLog}
+            onToggle={(viaKeyboard) => toggleUtility("mobile", viaKeyboard)}
+            open={utilityOpen && utilityPlacement === "mobile"}
+            renderMenu={false}
+            runtimeState={runtimeState}
+            toolsEnabled={betaToolsEnabled}
+            toolsLabel={toolsLabel}
+            triggerRef={mobileMoreRef}
+          />
         }
         navLabel={navLabel}
         onSelect={onSelectTab}

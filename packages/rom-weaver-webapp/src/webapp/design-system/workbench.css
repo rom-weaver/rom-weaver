@@ -172,6 +172,7 @@
   inset-inline-end: 0;
   z-index: 5;
   display: flex;
+  gap: var(--sp-m);
   align-items: center;
   block-size: calc(1lh + 4px);
   /* The box is the heading's own line: the step type's `1lh`, plus the 2px the
@@ -224,6 +225,50 @@
 }
 .rw-app .reset-btn:active {
   color: var(--fault);
+}
+/* Phone only: the desktop masthead already carries a settings control, and two
+   entries in one viewport would be the duplication this move set out to end. */
+.rw-app .panel-settings-btn {
+  position: relative;
+  display: none;
+  gap: 5px;
+  align-items: center;
+  min-block-size: 24px;
+  padding: 0;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: color 0.18s;
+}
+.rw-app .panel-settings-btn svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+.rw-app .panel-settings-btn::after {
+  position: absolute;
+  inset: -4px -8px;
+  content: "";
+}
+@media (hover: hover) {
+  .rw-app .panel-settings-btn:hover {
+    color: var(--thread-ink);
+  }
+}
+.rw-app .panel-settings-btn:active {
+  color: var(--thread-ink);
+}
+@media (max-width: 999px) {
+  .rw-app .panel-settings-btn {
+    display: inline-flex;
+  }
 }
 /* Tools puts its command rail above the first step, so `0x01` starts one rail
    lower. The rail is a fixed box: 34px tab + 10px padding either side + 1px seam
