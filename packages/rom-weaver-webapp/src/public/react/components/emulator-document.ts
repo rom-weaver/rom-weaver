@@ -85,6 +85,10 @@ const createEmulatorBridgeScript = (gameName: string) => `
         EJS_onGameStart = () => {
           const emulator = window.EJS_emulator;
           if (emulator && typeof emulator.on === "function") emulator.on("saveSaveFiles", (data) => send("save-sram", data));
+          // The core opens its menu bar as part of starting and leaves it up for
+          // three seconds. Closing it here means the game is the first thing on
+          // screen; the menu button still opens it on demand.
+          if (emulator && emulator.menu && typeof emulator.menu.close === "function") emulator.menu.close();
           request("request-load-sram");
         };
         window.__romWeaverVisibilityPaused = false;
