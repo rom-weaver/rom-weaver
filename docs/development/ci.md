@@ -51,7 +51,7 @@ what it caches. To run these checks yourself, see
 | `dependabot-auto-merge.yml` | Dependabot PR open/reopen/sync | No | Arm native squash auto-merge for patch and minor updates after required checks pass |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
-| `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman, dolphin-tool, 7zz, and Info-ZIP, with an exact cached CLI |
+| `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman, dolphin-tool, 7-Zip, and Info-ZIP, with an exact cached CLI |
 | `e2e-nightly.yml` | manual | No | Exhaustive browser E2E, service-worker checks, and published-install smoke tests |
 | `cache-cleanup.yml` | every 6 h, manual | No | Reap closed-PR and superseded Actions caches |
 | `cloudflare-preview-cleanup.yml` | every 6 h, manual | No | Reap stale Cloudflare Pages preview deployments |
