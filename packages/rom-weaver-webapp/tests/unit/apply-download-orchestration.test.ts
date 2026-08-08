@@ -4,10 +4,13 @@ import type { EmulatorSessionEntry } from "../../src/public/react/emulator-sessi
 import {
   claimPostApplyRun,
   deriveApplyCompletion,
+  getApplyPlayButtonOverride,
   getPostApplyRomBehaviorOverride,
   runPostApplyRomBehavior,
+  setApplyPlayButtonOverride,
   setPostApplyRomBehaviorOverride,
   subscribePostApplyRomBehaviorOverride,
+  syncApplyPlayButtonSetting,
   syncPostApplyRomBehaviorSetting,
 } from "../../src/public/react/use-apply-download-orchestration.ts";
 import type { ApplyWorkflowResult } from "../../src/types/workflow-runtime-types.ts";
@@ -161,5 +164,29 @@ describe("postApplyRomBehavior session override", () => {
     unsubscribe();
     setPostApplyRomBehaviorOverride("auto-download");
     expect(notifications).toBe(2);
+  });
+});
+
+describe("play button session override", () => {
+  afterEach(() => setApplyPlayButtonOverride(null));
+
+  it("defaults to null (follow the setting)", () => {
+    expect(getApplyPlayButtonOverride()).toBeNull();
+  });
+
+  it("stores false until cleared", () => {
+    setApplyPlayButtonOverride(false);
+    expect(getApplyPlayButtonOverride()).toBe(false);
+    setApplyPlayButtonOverride(null);
+    expect(getApplyPlayButtonOverride()).toBeNull();
+  });
+
+  it("clears the override when the committed setting changes", () => {
+    syncApplyPlayButtonSetting(true);
+    setApplyPlayButtonOverride(false);
+    syncApplyPlayButtonSetting(true);
+    expect(getApplyPlayButtonOverride()).toBe(false);
+    syncApplyPlayButtonSetting(false);
+    expect(getApplyPlayButtonOverride()).toBeNull();
   });
 });

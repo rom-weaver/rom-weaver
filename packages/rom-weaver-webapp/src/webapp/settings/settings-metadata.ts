@@ -247,7 +247,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getSettingsLabel("applyPlayButtonEnabled"),
     labelDataLocalize: "Show the play button after applying",
     layout: "large",
-    suggestion: "Turn this off to hide the play button on a finished apply. The Test tab still plays ROMs.",
+    suggestion: "Turn this off to hide the play button on a finished apply. Nothing else changes.",
   },
   postApplyRomBehavior: {
     // Auto-download preserves the pre-setting behavior: a completed apply

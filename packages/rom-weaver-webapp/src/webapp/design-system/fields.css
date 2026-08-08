@@ -199,6 +199,11 @@
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
   gap: var(--sp-m);
 }
+/* A checkbox joins the options grid as a cell of its own; the notice-tuned
+   margins would push it off the row the selects sit on. */
+.rw-app .optsgrid > .checkrow {
+  margin-block: 0;
+}
 .rw-app .patch-description-field {
   grid-column: 1 / -1;
 }

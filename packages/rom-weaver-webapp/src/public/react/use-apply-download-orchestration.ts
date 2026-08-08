@@ -246,42 +246,57 @@ const normalizePostApplyRomBehavior = (value: unknown): PostApplyRomBehavior => 
   return "auto-download";
 };
 
+/** A checkbox in the Apply step's output options reads the setting as "on unless stored false". */
+const normalizeApplyPlayButton = (value: unknown): boolean => value !== false;
+
 /**
- * Session-local override for `postApplyRomBehavior`: the public form has no
- * write path back into the host app's persisted settings (`settings-context`
- * is read-only), so the Apply step's "After applying" select overrides the
- * behavior for this session only, without touching the stored setting. Null
+ * Session-local override for a setting the Apply step's output options repeat:
+ * the public form has no write path back into the host app's persisted
+ * settings (`settings-context` is read-only), so a choice made there overrides
+ * the setting for this session only, without touching the stored value. Null
  * means "follow the setting". Module-level (not React state) so the setter is
  * reachable from any renderer of the Apply view without threading a prop
  * through the session hooks that don't otherwise need it.
+ *
+ * `syncSetting` clears the override when the stored value changes: without it,
+ * saving in Settings would stay dead for the rest of the session once the
+ * output control had been touched.
  */
-let postApplyRomBehaviorOverride: PostApplyRomBehavior | null = null;
-const postApplyRomBehaviorOverrideListeners = new Set<() => void>();
-
-const getPostApplyRomBehaviorOverride = (): PostApplyRomBehavior | null => postApplyRomBehaviorOverride;
-
-const setPostApplyRomBehaviorOverride = (value: PostApplyRomBehavior | null): void => {
-  if (postApplyRomBehaviorOverride === value) return;
-  postApplyRomBehaviorOverride = value;
-  for (const listener of postApplyRomBehaviorOverrideListeners) listener();
+const createSettingSessionOverride = <T>(normalize: (value: unknown) => T) => {
+  let override: T | null = null;
+  let settingSnapshot: T | null = null;
+  const listeners = new Set<() => void>();
+  const get = (): T | null => override;
+  const set = (value: T | null): void => {
+    if (override === value) return;
+    override = value;
+    for (const listener of listeners) listener();
+  };
+  const subscribe = (listener: () => void): (() => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  const syncSetting = (settingValue: unknown): void => {
+    const normalized = normalize(settingValue);
+    if (settingSnapshot === normalized) return;
+    const isFirstObservation = settingSnapshot === null;
+    settingSnapshot = normalized;
+    if (!isFirstObservation) set(null);
+  };
+  return { get, set, subscribe, syncSetting };
 };
 
-const subscribePostApplyRomBehaviorOverride = (listener: () => void): (() => void) => {
-  postApplyRomBehaviorOverrideListeners.add(listener);
-  return () => postApplyRomBehaviorOverrideListeners.delete(listener);
-};
+const postApplyRomBehaviorStore = createSettingSessionOverride(normalizePostApplyRomBehavior);
+const getPostApplyRomBehaviorOverride = postApplyRomBehaviorStore.get;
+const setPostApplyRomBehaviorOverride = postApplyRomBehaviorStore.set;
+const subscribePostApplyRomBehaviorOverride = postApplyRomBehaviorStore.subscribe;
+const syncPostApplyRomBehaviorSetting = postApplyRomBehaviorStore.syncSetting;
 
-// Saving a different value in Settings supersedes the session override:
-// without this, the persisted setting would stay dead for the rest of the
-// session once the Apply select had been touched.
-let postApplyRomBehaviorSettingSnapshot: PostApplyRomBehavior | null = null;
-const syncPostApplyRomBehaviorSetting = (settingValue: unknown): void => {
-  const normalized = normalizePostApplyRomBehavior(settingValue);
-  if (postApplyRomBehaviorSettingSnapshot === normalized) return;
-  const isFirstObservation = postApplyRomBehaviorSettingSnapshot === null;
-  postApplyRomBehaviorSettingSnapshot = normalized;
-  if (!isFirstObservation) setPostApplyRomBehaviorOverride(null);
-};
+const applyPlayButtonStore = createSettingSessionOverride(normalizeApplyPlayButton);
+const getApplyPlayButtonOverride = applyPlayButtonStore.get;
+const setApplyPlayButtonOverride = applyPlayButtonStore.set;
+const subscribeApplyPlayButtonOverride = applyPlayButtonStore.subscribe;
+const syncApplyPlayButtonSetting = applyPlayButtonStore.syncSetting;
 
 /** The "After applying" select's controlled value: the override once set, else the live setting. */
 const usePostApplyRomBehaviorValue = (settingValue: unknown): PostApplyRomBehavior => {
@@ -294,6 +309,19 @@ const usePostApplyRomBehaviorValue = (settingValue: unknown): PostApplyRomBehavi
     syncPostApplyRomBehaviorSetting(settingValue);
   }, [settingValue]);
   return normalizePostApplyRomBehavior(override ?? settingValue);
+};
+
+/** The "Show the play button" checkbox's controlled value, and the button's own gate. */
+const useApplyPlayButtonValue = (settingValue: unknown): boolean => {
+  const override = useSyncExternalStore(
+    subscribeApplyPlayButtonOverride,
+    getApplyPlayButtonOverride,
+    getApplyPlayButtonOverride,
+  );
+  useEffect(() => {
+    syncApplyPlayButtonSetting(settingValue);
+  }, [settingValue]);
+  return normalizeApplyPlayButton(override ?? settingValue);
 };
 
 type PostApplyRomBehaviorOptions = {
@@ -713,11 +741,15 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
 export {
   claimPostApplyRun,
   deriveApplyCompletion,
+  getApplyPlayButtonOverride,
   getPostApplyRomBehaviorOverride,
   runPostApplyRomBehavior,
+  setApplyPlayButtonOverride,
   setPostApplyRomBehaviorOverride,
   subscribePostApplyRomBehaviorOverride,
+  syncApplyPlayButtonSetting,
   syncPostApplyRomBehaviorSetting,
   useApplyDownloadOrchestration,
+  useApplyPlayButtonValue,
   usePostApplyRomBehaviorValue,
 };

@@ -53,7 +53,12 @@ import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-r
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
-import { setPostApplyRomBehaviorOverride, usePostApplyRomBehaviorValue } from "./use-apply-download-orchestration.ts";
+import {
+  setApplyPlayButtonOverride,
+  setPostApplyRomBehaviorOverride,
+  useApplyPlayButtonValue,
+  usePostApplyRomBehaviorValue,
+} from "./use-apply-download-orchestration.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import type { PostApplyRomBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -80,7 +85,8 @@ const EmulatorJsAction = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const settings = useRomWeaverSettings();
-  if (!(core && output) || settings.applyPlayButtonEnabled === false) return null;
+  const shown = useApplyPlayButtonValue(settings.applyPlayButtonEnabled);
+  if (!(core && output && shown)) return null;
   const openInEmulator = async () => {
     setLoading(true);
     setError("");
@@ -1228,6 +1234,27 @@ const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean;
   );
 };
 
+/**
+ * "Show the play button" checkbox for the Apply step's output options, the
+ * session-only twin of the persisted `applyPlayButtonEnabled` setting (same
+ * read-only-settings limit as the select above).
+ */
+const PlayButtonField = ({ disabled, settingValue }: { disabled: boolean; settingValue: unknown }) => {
+  const checked = useApplyPlayButtonValue(settingValue);
+  return (
+    <label className="checkrow">
+      <input
+        checked={checked}
+        disabled={disabled}
+        id="rom-weaver-checkbox-play-button"
+        onChange={(event) => setApplyPlayButtonOverride(event.currentTarget.checked)}
+        type="checkbox"
+      />
+      <span>Show the play button</span>
+    </label>
+  );
+};
+
 /** Export while running shows the live bar; otherwise the create/download button. */
 const BundleExportAction = ({
   bundleActionLabel,
@@ -1791,6 +1818,7 @@ function ApplyWorkflowFormView({
     <>
       {bundleOutputFields}
       <PostApplyBehaviorField disabled={outputState.disabled} settingValue={settings.postApplyRomBehavior} />
+      <PlayButtonField disabled={outputState.disabled} settingValue={settings.applyPlayButtonEnabled} />
     </>
   );
 
