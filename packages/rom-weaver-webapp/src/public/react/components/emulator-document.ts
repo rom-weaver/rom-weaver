@@ -138,7 +138,22 @@ const createEmulatorDocument = (
 <html lang="en">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>html,body,#game{width:100%;height:100%;margin:0;background:#000;overflow:hidden}#game{display:block}</style>
+    <style>
+      html,body,#game{width:100%;height:100%;margin:0;background:#000;overflow:hidden}
+      #game{display:block}
+      /*
+       * The core's start button is the app's Play control on touch: it is the
+       * only one whose tap lands inside this frame, which is what unlocks
+       * audio. Dressed to match .btn so it does not read as a foreign poster.
+       */
+      .ejs_start_button{
+        padding:10px 22px;font:inherit;font-size:0.94rem;font-weight:650;
+        letter-spacing:0.02em;color:#f4f1ea;background:#1b1b1f;
+        border:1px solid #4a4a52;border-radius:8px;box-shadow:none;
+        animation:none;text-shadow:none;
+      }
+      .ejs_start_button_border{border:1px solid #4a4a52}
+    </style>
   </head>
   <body>
     <div id="game"></div>
@@ -164,6 +179,9 @@ const createEmulatorDocument = (
       // popup, which reads as a game that never started. Letting the core show
       // its own start button puts that first tap inside the iframe instead.
       EJS_startOnLoaded = !(navigator.maxTouchPoints > 0);
+      // Names that button "Play", so the frame presents one Play control rather
+      // than the core's generic "Start Game" on top of the app's own.
+      EJS_startButtonName = 'Play';
       EJS_gameID = ${options.gameId ?? hashString(gameName)};
       EJS_player = '#game';
       EJS_core = ${toScriptString(core)};

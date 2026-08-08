@@ -85,7 +85,13 @@ describe("EmulatorTestView", () => {
 
     render(withSettings(<EmulatorTestView />));
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Play" })[1]);
+    // The loaded game shows "Loaded" rather than a second Play: its Play lives
+    // in the player, since only a tap inside that frame unlocks audio on touch.
+    const playButtons = screen.getAllByRole("button", { name: "Play" });
+    expect(playButtons).toHaveLength(1);
+    expect(screen.getByText("Loaded")).toBeTruthy();
+
+    fireEvent.click(playButtons[0]);
 
     expect(getEmulatorSessionState().currentGameId).toBe("second");
     expect(screen.getByTitle("EmulatorJS test for second.sfc")).toBeTruthy();
