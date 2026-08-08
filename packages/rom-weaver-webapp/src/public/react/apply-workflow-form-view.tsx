@@ -1,6 +1,7 @@
-import { Archive, Disc3, Download, ListChecks, Package, TriangleAlert } from "lucide-react";
+import { Archive, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
+import { POST_APPLY_ROM_BEHAVIOR_OPTIONS } from "../../lib/apply/post-apply-behavior.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
@@ -57,6 +58,12 @@ import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import type { PostApplyRomBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
+/**
+ * The finished apply's companion to the download button: the patched ROM is
+ * already in memory, so playing it is one press. Styled as the run button's
+ * quieter twin (see `.emulatorjs-test` in result.css) rather than a stray ghost
+ * control, and the mono chip names the core that will run it.
+ */
 const EmulatorJsAction = ({
   core,
   fileName,
@@ -72,7 +79,8 @@ const EmulatorJsAction = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  if (!(core && output)) return null;
+  const settings = useRomWeaverSettings();
+  if (!(core && output) || settings.applyPlayButtonEnabled === false) return null;
   const openInEmulator = async () => {
     setLoading(true);
     setError("");
@@ -107,15 +115,16 @@ const EmulatorJsAction = ({
     <div className="emulatorjs-test">
       <button
         aria-busy={loading}
-        className="btn ghost slim"
+        className="btn play"
         disabled={loading}
         id="rom-weaver-button-test-emulator"
         onClick={() => void openInEmulator()}
         type="button"
       >
-        {loading ? "Preparing EmulatorJS…" : "Test in emulator"}
+        <Gamepad2 aria-hidden="true" />
+        <span className="play-label">{loading ? "Preparing emulator…" : "Play in the Test tab"}</span>
+        <span className="play-core mono">{core}</span>
       </button>
-      <span className="emulatorjs-note">Open the ROM in the Test tab.</span>
       {error ? (
         <p className="emulatorjs-error" role="alert">
           {error}
@@ -1189,19 +1198,6 @@ const OutputHeaderField = ({
     </OutputField>
   );
 };
-
-/**
- * Mirrors `postApplyRomBehavior`'s options from
- * `src/webapp/settings/settings-metadata.ts`: `public/react` is the
- * embeddable form and must not import from `webapp/`, which owns the
- * Settings dialog, so the option list is duplicated here rather than shared.
- */
-const POST_APPLY_ROM_BEHAVIOR_OPTIONS: ReadonlyArray<{ label: string; value: PostApplyRomBehavior }> = [
-  { label: "Download automatically", value: "auto-download" },
-  { label: "Test automatically", value: "auto-test" },
-  { label: "Test and download", value: "auto-test-download" },
-  { label: "Do nothing", value: "none" },
-];
 
 /**
  * "After applying" select for the Apply step's output options. The public form

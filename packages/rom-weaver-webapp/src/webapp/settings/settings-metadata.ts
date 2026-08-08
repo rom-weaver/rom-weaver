@@ -1,3 +1,4 @@
+import { POST_APPLY_ROM_BEHAVIOR_OPTIONS } from "../../lib/apply/post-apply-behavior.ts";
 import {
   type CompressionCodecOption,
   getCompressionCodecLevelMax,
@@ -39,6 +40,7 @@ type SettingsState = {
   bundlePackage: string;
   postApplyRomBehavior: PostApplyRomBehavior;
   betaToolsEnabled: boolean;
+  applyPlayButtonEnabled: boolean;
   onboardingEnabled: boolean;
   fixChecksum: boolean;
   requireInputChecksumMatch: boolean;
@@ -153,6 +155,7 @@ const SETTINGS_FIELD_ORDER = [
   "language",
   "logLevel",
   "betaToolsEnabled",
+  "applyPlayButtonEnabled",
   "onboardingEnabled",
   "fixChecksum",
   "requireInputChecksumMatch",
@@ -236,6 +239,16 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validationLabel: "Bundle",
     validValues: ["", "zip:patches", "zip:rom", "7z:patches", "7z:rom"],
   },
+  applyPlayButtonEnabled: {
+    defaultValue: true,
+    id: "settings-apply-play-button-enabled",
+    key: "applyPlayButtonEnabled",
+    kind: "checkbox",
+    label: getSettingsLabel("applyPlayButtonEnabled"),
+    labelDataLocalize: "Show the play button after applying",
+    layout: "large",
+    suggestion: "Turn this off to hide the play button on a finished apply. The Test tab still plays ROMs.",
+  },
   postApplyRomBehavior: {
     // Auto-download preserves the pre-setting behavior: a completed apply
     // downloads its output without a second click.
@@ -244,12 +257,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     key: "postApplyRomBehavior",
     kind: "select",
     label: "After applying",
-    options: [
-      { label: "Download automatically", value: "auto-download" },
-      { label: "Test automatically", value: "auto-test" },
-      { label: "Test and download", value: "auto-test-download" },
-      { label: "Do nothing", value: "none" },
-    ],
+    options: [...POST_APPLY_ROM_BEHAVIOR_OPTIONS],
     suggestion: "Choose whether a completed patch should download or open in the Test tab automatically.",
     validationLabel: "After applying",
     validValues: ["auto-download", "auto-test", "auto-test-download", "none"],

@@ -301,6 +301,22 @@ describe("apply workflow view - staged bench", () => {
     expect(unsupported.container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });
 
+  it("hides only the play button when the play-button setting is off", () => {
+    const { container } = renderView({
+      emulatorOutput: { fileName: "game.nes", getBlob: async () => new Blob(["rom"]), id: "output-1" },
+      outputOverrides: { pendingDownloadFileName: "game.nes" },
+      settings: { applyPlayButtonEnabled: false },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+    // The Test tab still exists, so every post-apply behavior stays reachable.
+    const behaviors = Array.from(
+      container.querySelectorAll("#rom-weaver-select-post-apply-behavior option"),
+      (option) => option.getAttribute("value"),
+    );
+    expect(behaviors).toEqual(["auto-download", "auto-test", "auto-test-download", "none"]);
+  });
+
   it("keeps likely drawers visible while ROMs and patches are still staging", () => {
     const rom = romRow("game.zip");
     rom.info.validationPhase = "extract";

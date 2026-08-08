@@ -395,6 +395,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   const validation = isRecord(applySettings.validation) ? applySettings.validation : {};
   return {
     betaToolsEnabled: commonSettings.betaToolsEnabled,
+    applyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
     onboardingEnabled: commonSettings.onboardingEnabled,
     accent: commonSettings.accent,
     bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
@@ -476,6 +477,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const onboardingEnabled = readStoredField(storedBooleanSchema, loadedSettings.onboardingEnabled);
     if (onboardingEnabled !== undefined) settings.onboardingEnabled = onboardingEnabled;
+
+    const applyPlayButtonEnabled = readStoredField(storedBooleanSchema, loadedSettings.applyPlayButtonEnabled);
+    if (applyPlayButtonEnabled !== undefined) settings.applyPlayButtonEnabled = applyPlayButtonEnabled;
 
     const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
     if (defaultCompression !== undefined) {
@@ -574,6 +578,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     if (
       fieldKey === "accent" ||
       fieldKey === "betaToolsEnabled" ||
+      fieldKey === "applyPlayButtonEnabled" ||
       fieldKey === "onboardingEnabled" ||
       fieldKey === "language" ||
       fieldKey === "logLevel"
@@ -649,6 +654,8 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
   applyBooleanFields(rawDraft, validation.settings, BOOLEAN_SETTINGS_FIELDS);
   validation.settings.requireInputChecksumMatch =
     readStoredField(storedBooleanSchema, rawDraft.requireInputChecksumMatch) !== false;
+  validation.settings.applyPlayButtonEnabled =
+    readStoredField(storedBooleanSchema, rawDraft.applyPlayButtonEnabled) !== false;
 
   for (const fieldKey of FORMAT_CODEC_FIELDS)
     assignSetting(

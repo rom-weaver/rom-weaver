@@ -55,6 +55,7 @@ describe("getDefaultSettings", () => {
     expect(settings.postApplyRomBehavior).toBe("auto-download");
     expect(settings.requireInputChecksumMatch).toBe(true);
     expect(settings.betaToolsEnabled).toBe(false);
+    expect(settings.applyPlayButtonEnabled).toBe(true);
     expect(settings.threads).toBe("auto");
   });
 
@@ -108,6 +109,13 @@ describe("validateSettingsDraft", () => {
       expect(result.invalidFields).not.toContain(getSettingsFieldId("postApplyRomBehavior"));
     },
   );
+
+  it("keeps the play button shown unless the draft says otherwise", () => {
+    const shown = validateSettingsDraft(validDraft({ applyPlayButtonEnabled: undefined }));
+    expect(shown.settings.applyPlayButtonEnabled).toBe(true);
+    const hidden = validateSettingsDraft(validDraft({ applyPlayButtonEnabled: false }));
+    expect(hidden.settings.applyPlayButtonEnabled).toBe(false);
+  });
 
   it("rejects an unknown post-apply behavior", () => {
     const result = validateSettingsDraft(validDraft({ postApplyRomBehavior: "open-in-new-window" }));
@@ -206,6 +214,25 @@ describe("serializeSettingsForStorage", () => {
     const parsed = JSON.parse(json as string);
     expect(parsed.apply.output.postApplyRomBehavior).toBe("auto-test-download");
     expect(loadSettings(makeStorage(json)).postApplyRomBehavior).toBe("auto-test-download");
+  });
+
+  it("serializes and loads the hidden play button under common", () => {
+    const settings = { ...getDefaultSettings(), applyPlayButtonEnabled: false };
+    const json = serializeSettingsForStorage(settings);
+    const parsed = JSON.parse(json as string);
+    expect(parsed.common.applyPlayButtonEnabled).toBe(false);
+    expect(loadSettings(makeStorage(json)).applyPlayButtonEnabled).toBe(false);
+  });
+
+  it("leaves post-apply behavior untouched by the play button setting", () => {
+    const settings = {
+      ...getDefaultSettings(),
+      applyPlayButtonEnabled: false,
+      postApplyRomBehavior: "auto-test-download" as const,
+    };
+    const loaded = loadSettings(makeStorage(serializeSettingsForStorage(settings)));
+    expect(loaded.applyPlayButtonEnabled).toBe(false);
+    expect(loaded.postApplyRomBehavior).toBe("auto-test-download");
   });
 });
 

@@ -645,6 +645,11 @@ msgstr "Schnellstart-Tipps („New here?“) anzeigen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.applyPlayButtonEnabled"
+msgstr "Test-Tab und Play-Schaltfläche anzeigen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Zum Hauptinhalt springen"
 

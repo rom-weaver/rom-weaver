@@ -39,6 +39,7 @@ type LoggingSettings = {
 type CommonSettings = {
   betaToolsEnabled?: boolean;
   defaultCompression?: DefaultCompression;
+  applyPlayButtonEnabled?: boolean;
   input?: InputSettings;
   logging?: LoggingSettings;
   bundlePackage?: BundlePackage;
