@@ -3,6 +3,7 @@ import { stripCompressionCodecLevelOverrides } from "../../../../lib/compression
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { type CompressField, type CompressFieldInfo, OUTPUT_FORMAT_INFO } from "../../compress-options.ts";
 import { CodecCombobox } from "./codec-combobox.tsx";
+import { DrawerReadout } from "./drawer.tsx";
 import { type FormatOption, type OutputCompressPanel, OutputField } from "./output-card.tsx";
 
 /**
@@ -144,18 +145,20 @@ type OutputCompressionPanelConfig = {
    * apply output's "ROM header" select). */
   extraChildren?: ReactNode;
   fields?: CompressField[] | null;
+  /** Value of the header's format chip - the short format label, not a sentence. */
   format?: string;
   formatId?: string;
   formatInfo?: CompressFieldInfo | null;
   formatLabel?: string;
   formatOptions?: FormatOption[];
   formatValue?: string;
+  /** Context the format implies rather than an editable option (e.g. the CHD disc type). */
+  note?: string;
   onFieldChange?: (key: string, value: string, updates?: Record<string, string>) => void;
   onFormatChange?: (value: string) => void;
   /** Extra drawer-header readout chips for non-compression options (e.g. the apply
    * output's bundle package). */
   readouts?: ReactNode;
-  summary?: ReactNode;
   timing?: ReactNode;
 };
 
@@ -173,6 +176,36 @@ const getOutputCompressionFormatLabel = (
     ? noneLabel
     : formatOptions.find((option) => option.value === formatValue)?.label;
 
+/**
+ * The collapsed header's chip row: the output format, any format-implied note,
+ * then one labelled chip per option, the caller's extra chips, and the timing.
+ * Chips are derived from the same field models the drawer body renders, so a
+ * header value can never drift from its control.
+ */
+const OutputOptionReadouts = ({
+  fields,
+  format,
+  note,
+  readouts,
+  timing,
+}: Pick<OutputCompressionPanelConfig, "fields" | "format" | "note" | "readouts" | "timing">) => (
+  <>
+    {/* The chip key stays "Type" even where the control is labelled at length
+        ("Compression type"), because a chip has no room for the long form. */}
+    {format ? <DrawerReadout label="Type">{format}</DrawerReadout> : null}
+    {note ? <DrawerReadout muted>{note}</DrawerReadout> : null}
+    {fields?.map((field) =>
+      field.chip.value ? (
+        <DrawerReadout key={field.key} label={field.chip.label}>
+          {field.chip.value}
+        </DrawerReadout>
+      ) : null,
+    )}
+    {readouts}
+    {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
+  </>
+);
+
 const buildOutputCompressionPanel = ({
   disabled,
   extraChildren,
@@ -183,10 +216,10 @@ const buildOutputCompressionPanel = ({
   formatLabel = "Type",
   formatOptions,
   formatValue,
+  note,
   onFieldChange,
   onFormatChange,
   readouts,
-  summary,
   timing,
 }: OutputCompressionPanelConfig): OutputCompressPanel => ({
   children:
@@ -198,7 +231,6 @@ const buildOutputCompressionPanel = ({
     ) : (
       (extraChildren ?? null)
     ),
-  format,
   formatId,
   formatInfo:
     formatOptions?.length && onFormatChange ? (
@@ -208,9 +240,7 @@ const buildOutputCompressionPanel = ({
   formatOptions,
   formatValue,
   onFormatChange,
-  readouts,
-  summary,
-  timing,
+  readouts: <OutputOptionReadouts fields={fields} format={format} note={note} readouts={readouts} timing={timing} />,
 });
 
 export {

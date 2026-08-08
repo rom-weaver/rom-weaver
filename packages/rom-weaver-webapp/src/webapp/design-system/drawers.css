@@ -286,6 +286,12 @@
 .rw-app .cks > .cks-head .rb.time {
   color: var(--thread-text);
 }
+/* Secondary chips (a format-implied note, a hidden bundle) recede beside the
+   values the user picked. Previously only `.step-meta` styled `.muted`, so the
+   drawer headers rendered it at full emphasis. */
+.rw-app .cks > .cks-head .rb.muted {
+  color: var(--ink-3);
+}
 /* Dimmed with the rest of a disabled card. Kept beside the chip's own colour:
    from file-cards.css this layer would win on order, not specificity. */
 .rw-app .card.is-disabled .cks > .cks-head .rb {
@@ -316,6 +322,54 @@
     color-mix(in oklab, var(--verified) 70%, transparent) 0 3px,
     transparent 3px 5px
   );
+}
+/* Output options carry every option as a label+value chip, so the values read
+   without opening the drawer. The chips are sized against the card rather than
+   the viewport - the same card sits in narrow and wide layouts. */
+.rw-app .outopts {
+  container: outopts / inline-size;
+}
+.rw-app .outopts > .cks-head {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.rw-app .outopts > .cks-head .readouts {
+  /* Their own row under the label until the header is wide enough to share one. */
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  max-width: 100%;
+  /* Line the chips up with the label, past the chevron. */
+  padding-inline-start: calc(0.82rem + var(--sp-xs));
+}
+@container outopts (min-width: 30rem) {
+  .rw-app .outopts > .cks-head .readouts {
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    max-width: 72%;
+    padding-inline-start: 0;
+  }
+}
+/* Once chips wrap, every one of them may shrink - not just the last. */
+.rw-app .outopts > .cks-head .readouts > .rb:not(:last-child) {
+  flex: 0 1 auto;
+}
+/* Only the label+value chips become flex containers. A chip that is bare text
+   must stay a plain box, or its own `text-overflow: ellipsis` stops applying and
+   long values are clipped mid-glyph instead. */
+.rw-app .outopts > .cks-head .rb:has(.k) {
+  display: inline-flex;
+  gap: var(--sp-xs);
+  align-items: baseline;
+}
+.rw-app .outopts > .cks-head .rb .k {
+  flex: none;
+  color: var(--ink-3);
+}
+.rw-app .outopts > .cks-head .rb .t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .rw-app .cks > .cks-head .rb-mark.bad {
   color: var(--fault);

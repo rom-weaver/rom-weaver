@@ -2048,12 +2048,14 @@ function ApplyWorkflowFormView({
               formatLabel: "Compression type",
               formatOptions: compressionTypeOptions,
               formatValue: outputState.compressionFormat,
+              note: outputState.compress?.note,
               onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
               onFormatChange: (value) => controllers.output.setOutputCompression(value),
               readouts: bundleExport ? (
-                <DrawerReadout muted={!bundleFormatValue}>bundle:{bundleFormatValue || "hide"}</DrawerReadout>
+                <DrawerReadout label="Bundle" muted={!bundleFormatValue}>
+                  {bundleFormatValue || "hidden"}
+                </DrawerReadout>
               ) : null,
-              summary: outputState.compress?.summary,
               timing: outputState.compressTiming || undefined,
             })}
             disabled={outputState.disabled}

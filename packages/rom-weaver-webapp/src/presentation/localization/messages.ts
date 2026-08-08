@@ -182,6 +182,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.settings.chdCd": msg({ id: "ui.settings.chdCd", message: "CD" }),
   "ui.settings.chdDvd": msg({ id: "ui.settings.chdDvd", message: "DVD" }),
+  "ui.settings.codec": msg({ id: "ui.settings.codec", message: "Codec" }),
   "ui.settings.defaults": msg({ id: "ui.settings.defaults", message: "Defaults" }),
   "ui.settings.reset": msg({ id: "ui.settings.reset", message: "Reset" }),
   "ui.settings.rvzBlockSize": msg({ id: "ui.settings.rvzBlockSize", message: "Block size" }),

@@ -1139,20 +1139,17 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       compress: buildOutputCompressionPanel({
         disabled: outputDisabled,
         fields: createCompressPanel?.fields,
-        format:
-          createCompression === "none"
-            ? getOutputCompressionFormatLabel(createCompression, createCompressionOptions)
-            : `patch in ${getOutputCompressionFormatLabel(createCompression, createCompressionOptions)}`,
+        format: getOutputCompressionFormatLabel(createCompression, createCompressionOptions),
         formatId: "patch-builder-select-output-compression",
         formatOptions: createCompressionOptions,
         formatValue: createCompression,
+        note: createCompressPanel?.note,
         onFieldChange: (key, value, updates) => updateSettings({ ...settings, ...(updates || { [key]: value }) }),
         onFormatChange: (value) =>
           updateSettings({
             ...settings,
             output: { ...settings.output, compression: value as "7z" | "none" | "zip" },
           }),
-        summary: createCompression === "none" ? undefined : createCompressPanel?.summary,
         timing: compressTimingText || undefined,
       }),
       disabled: outputDisabled,
