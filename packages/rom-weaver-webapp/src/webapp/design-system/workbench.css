@@ -12,6 +12,14 @@
 .rw-app .panel {
   overflow: clip;
 }
+/*
+ * `overflow: clip` clips fixed descendants as well as in-flow ones, which hides
+ * the emulator's pseudo-fullscreen player entirely. Lift the clip only while
+ * that player is up, so the panel keeps clipping the rest of the time.
+ */
+.rw-app .panel:has(.emulator-player-frame.is-pseudo-fullscreen) {
+  overflow: visible;
+}
 /* Breathing room below the form so the bottom action (run/progress/download)
    isn't hugging the edge. Mobile adds much more (phone-dock.css) so the last
    card can scroll clear of the browser's collapsing bottom toolbar. */

@@ -133,6 +133,14 @@
   background: var(--well);
 }
 /*
+ * `overflow: clip` clips fixed descendants too, and a fixed player leaves the
+ * flow so this card collapses to nothing - which clipped the pseudo-fullscreen
+ * player down to a sliver. Drop the clip while it is up.
+ */
+.rw-app .emulator-player:has(> .emulator-player-frame.is-pseudo-fullscreen) {
+  overflow: visible;
+}
+/*
  * No auto start margin here: `.step-meta` already claims one, and two auto
  * margins in a flex row split the free space between them, stranding the file
  * name mid-header instead of leaving it beside the title.
@@ -172,6 +180,12 @@
  */
 @media (pointer: coarse) {
   .rw-app .emulator-player-frame {
+    /*
+     * Floor the player at half the viewport. The picture is width-limited in
+     * portrait, so this buys black around it rather than a larger game - the
+     * point is that the player never reads as a strip on the page.
+     */
+    min-height: max(0px, calc(50svh - var(--emulator-controls-band, 240px)));
     max-height: min(46svh, 420px);
     padding-block-end: var(--emulator-controls-band, 240px);
   }
@@ -190,7 +204,7 @@
 .rw-app .emulator-player-frame.is-pseudo-fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 10002;
   box-sizing: border-box;
   width: 100dvw;
   height: 100dvh;
