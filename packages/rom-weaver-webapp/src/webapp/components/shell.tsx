@@ -134,6 +134,7 @@ const ModeRail = ({
   navLabel,
   onSelect,
   controlsPanels = true,
+  trailing,
 }: {
   betaToolsEnabled?: boolean;
   tabs: WorkflowTab[];
@@ -141,6 +142,8 @@ const ModeRail = ({
   navLabel: string;
   onSelect: (id: string) => void;
   controlsPanels?: boolean;
+  /** Nav-level utility slot, kept outside the tablist so More is not a tab. */
+  trailing?: ReactNode;
 }) => {
   const railRef = useRef<HTMLDivElement | null>(null);
   const thumbRef = useRef<HTMLSpanElement | null>(null);
@@ -191,34 +194,37 @@ const ModeRail = ({
 
   return (
     <nav aria-label={navLabel} className="modes">
-      <div
-        aria-label={navLabel}
-        aria-orientation="horizontal"
-        className="mode-rail"
-        onKeyDown={handleKeyDown}
-        ref={railRef}
-        role="tablist"
-      >
-        <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
-        {railTabs.map((tab) => (
-          <a
-            aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
-            aria-selected={tab.id === current}
-            className="mode"
-            data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
-            data-mode={tab.id}
-            href={tab.href}
-            id={`tab-${tab.id}`}
-            key={tab.id}
-            onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
-            role="tab"
-            tabIndex={tab.id === focusedId ? 0 : -1}
-          >
-            {tab.icon}
-            <span className="mode-label">{tab.label}</span>
-          </a>
-        ))}
+      <div className="mode-rail-scroll">
+        <div
+          aria-label={navLabel}
+          aria-orientation="horizontal"
+          className="mode-rail"
+          onKeyDown={handleKeyDown}
+          ref={railRef}
+          role="tablist"
+        >
+          <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
+          {railTabs.map((tab) => (
+            <a
+              aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
+              aria-selected={tab.id === current}
+              className="mode"
+              data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
+              data-mode={tab.id}
+              href={tab.href}
+              id={`tab-${tab.id}`}
+              key={tab.id}
+              onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
+              role="tab"
+              tabIndex={tab.id === focusedId ? 0 : -1}
+            >
+              {tab.icon}
+              <span className="mode-label">{tab.label}</span>
+            </a>
+          ))}
+        </div>
       </div>
+      {trailing}
     </nav>
   );
 };
@@ -440,6 +446,7 @@ type UtilityMenuProps = {
   onOpenChangelog: () => void;
   onOpenLog: () => void;
   onOpenStatus: () => void;
+  onOpenSettings?: () => void;
   onOpenStorage?: () => void;
   onOpenTools?: () => void;
   runtimeState: RuntimeState;
@@ -455,6 +462,7 @@ const UtilityMenu = ({
   onAccentChange,
   onOpenChangelog,
   onOpenLog,
+  onOpenSettings,
   onOpenStatus,
   onOpenStorage,
   onOpenTools,
@@ -530,6 +538,14 @@ const UtilityMenu = ({
     >
       {mobile ? (
         <>
+          {/* Docs has no panel head to hang the page-level gear on, so the
+              mobile menu keeps a settings route of its own. */}
+          {onOpenSettings ? (
+            <button onClick={() => select(onOpenSettings)} role="menuitem" type="button">
+              <Settings aria-hidden="true" />
+              {localizer.message("ui.settings.title")}
+            </button>
+          ) : null}
           <ThemeMenuItem localizer={localizer} onClose={onClose} />
           <AccentMenuItem localizer={localizer} onChange={onAccentChange} />
         </>
@@ -999,6 +1015,29 @@ const Masthead = ({
           navLabel={navLabel}
           onSelect={onSelectTab}
           tabs={tabs}
+          trailing={
+            <MoreMenu
+              buttonClassName="mode-more"
+              className="desktop-more"
+              localizer={localizer}
+              menuId="more-menu"
+              moreLabel={moreLabel}
+              onClose={closeUtility}
+              onOpenChangelog={onOpenChangelog}
+              onOpenLog={onOpenLog}
+              onOpenStatus={onOpenStatus}
+              onOpenStorage={onOpenStorage ?? onOpenLog}
+              onOpenTools={() => onSelectTab("tools")}
+              onPreloadLog={onPreloadLog}
+              onToggle={() => toggleUtility("desktop")}
+              open={utilityOpen && utilityPlacement === "desktop"}
+              renderMenu={utilityOpen && utilityPlacement === "desktop"}
+              runtimeState={runtimeState}
+              toolsEnabled={betaToolsEnabled}
+              toolsLabel={toolsLabel}
+              triggerRef={desktopMoreRef}
+            />
+          }
         />
         <div className="masthead-tools" ref={toolsRef}>
           <button
@@ -1042,37 +1081,17 @@ const Masthead = ({
               {settingsLabel}
             </span>
           </button>
-          <MoreMenu
-            buttonClassName="tool"
-            className="desktop-more"
-            localizer={localizer}
-            menuId="more-menu"
-            moreLabel={moreLabel}
-            onClose={closeUtility}
-            onOpenChangelog={onOpenChangelog}
-            onOpenLog={onOpenLog}
-            onOpenStatus={onOpenStatus}
-            onOpenStorage={onOpenStorage ?? onOpenLog}
-            onOpenTools={() => onSelectTab("tools")}
-            onPreloadLog={onPreloadLog}
-            onToggle={() => toggleUtility("desktop")}
-            open={utilityOpen && utilityPlacement === "desktop"}
-            renderMenu={false}
-            runtimeState={runtimeState}
-            toolsEnabled={betaToolsEnabled}
-            toolsLabel={toolsLabel}
-            triggerRef={desktopMoreRef}
-          />
-          {utilityOpen ? (
+          {utilityOpen && utilityPlacement === "mobile" ? (
             <UtilityMenu
               localizer={localizer}
               menuClassName="shared-more-menu"
               menuId="more-menu"
-              mobile={utilityPlacement === "mobile"}
+              mobile
               onClose={closeUtility}
               onAccentChange={onAccentChange}
               onOpenChangelog={onOpenChangelog}
               onOpenLog={onOpenLog}
+              onOpenSettings={onOpenSettings}
               onOpenStatus={onOpenStatus}
               onOpenStorage={onOpenStorage ?? onOpenLog}
               onOpenTools={() => onSelectTab("tools")}
@@ -1094,42 +1113,27 @@ const Masthead = ({
         controlsPanels={tabsControlPanels}
         current={currentTab}
         mobileActions={
-          <>
-            <button
-              aria-expanded={settingsOpen}
-              aria-haspopup="dialog"
-              className="dock-action dock-settings"
-              onClick={onOpenSettings}
-              onFocus={onPreloadSettings}
-              onPointerDown={onPreloadSettings}
-              onPointerEnter={onPreloadSettings}
-              type="button"
-            >
-              <Settings aria-hidden="true" />
-              <span>{settingsLabel}</span>
-            </button>
-            <MoreMenu
-              buttonClassName="dock-action"
-              className="mobile-more"
-              localizer={localizer}
-              menuId="more-menu"
-              moreLabel={moreLabel}
-              onClose={closeUtility}
-              onOpenChangelog={onOpenChangelog}
-              onOpenLog={onOpenLog}
-              onOpenStatus={onOpenStatus}
-              onOpenStorage={onOpenStorage ?? onOpenLog}
-              onOpenTools={() => onSelectTab("tools")}
-              onPreloadLog={onPreloadLog}
-              onToggle={() => toggleUtility("mobile")}
-              open={utilityOpen && utilityPlacement === "mobile"}
-              renderMenu={false}
-              runtimeState={runtimeState}
-              toolsEnabled={betaToolsEnabled}
-              toolsLabel={toolsLabel}
-              triggerRef={mobileMoreRef}
-            />
-          </>
+          <MoreMenu
+            buttonClassName="dock-action"
+            className="mobile-more"
+            localizer={localizer}
+            menuId="more-menu"
+            moreLabel={moreLabel}
+            onClose={closeUtility}
+            onOpenChangelog={onOpenChangelog}
+            onOpenLog={onOpenLog}
+            onOpenStatus={onOpenStatus}
+            onOpenStorage={onOpenStorage ?? onOpenLog}
+            onOpenTools={() => onSelectTab("tools")}
+            onPreloadLog={onPreloadLog}
+            onToggle={() => toggleUtility("mobile")}
+            open={utilityOpen && utilityPlacement === "mobile"}
+            renderMenu={false}
+            runtimeState={runtimeState}
+            toolsEnabled={betaToolsEnabled}
+            toolsLabel={toolsLabel}
+            triggerRef={mobileMoreRef}
+          />
         }
         navLabel={navLabel}
         onSelect={onSelectTab}

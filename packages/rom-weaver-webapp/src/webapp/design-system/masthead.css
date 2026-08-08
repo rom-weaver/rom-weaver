@@ -391,14 +391,22 @@
    band a long locale with all five tabs really can overflow, so selecting a tab
    always scrolls it into view. */
 .rw-app .modes {
+  display: inline-flex;
   grid-column: 2;
+  gap: var(--sp-2xs);
+  align-items: center;
   justify-self: center;
   min-width: 0;
   max-width: 100%;
+}
+/* The scroll lives on this wrapper, not on `.modes`: the nav-level More menu is
+   a sibling of the rail and an overflow ancestor would clip it. */
+.rw-app .mode-rail-scroll {
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
-.rw-app .modes::-webkit-scrollbar {
+.rw-app .mode-rail-scroll::-webkit-scrollbar {
   display: none;
 }
 .rw-app .mode-rail {
@@ -564,6 +572,44 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   position: relative;
   display: inline-flex;
 }
+/* Nav-level utility: wears the rail's type so it reads as part of primary
+   navigation, but stays unboxed so it never looks like a sixth tab. */
+.rw-app .mode-more {
+  display: inline-flex;
+  gap: var(--sp-xs);
+  align-items: center;
+  padding: var(--sp-s) var(--sp-m);
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-s);
+  transition:
+    color 0.2s var(--ease),
+    background 0.2s var(--ease);
+}
+.rw-app .mode-more svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+}
+@media (hover: hover) {
+  .rw-app .mode-more:hover {
+    color: var(--ink);
+    background: var(--well);
+  }
+}
+.rw-app .mode-more:active,
+.rw-app .mode-more[aria-expanded="true"] {
+  color: var(--ink);
+  background: var(--well);
+}
 .rw-app .mobile-more {
   position: relative;
   display: none;
@@ -720,7 +766,10 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
 .rw-app .tool-text {
   display: none;
 }
-.rw-app .dock-action .tool-text {
+/* `.mode-more` is nav level, so it is named like the tabs beside it rather than
+   tooltipped like the actions cluster it left. */
+.rw-app .dock-action .tool-text,
+.rw-app .mode-more .tool-text {
   display: inline;
 }
 

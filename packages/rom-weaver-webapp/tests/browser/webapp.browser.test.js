@@ -219,9 +219,11 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
     expect(document.querySelector(`.dock-tab[data-mode="tools"]`)).toBeNull();
     if (width >= 1000) {
       expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");
-      expect(getComputedStyle(document.querySelector(".desktop-more .tool-text")).display).toBe("none");
       expect(document.querySelector(".masthead-settings .tip")?.textContent).toBe("Settings");
-      expect(document.querySelector(".desktop-more .tip")?.textContent).toBe("More");
+      // More sits in the nav now, so it is named like the tabs beside it
+      // rather than tooltipped like the actions cluster it left.
+      expect(getComputedStyle(document.querySelector(".mode-more .tool-text")).display).toBe("inline");
+      expect(document.querySelector(".mode-more .tip")).toBeNull();
       await page.getByRole("button", { name: "Settings" }).hover();
       await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
     }
