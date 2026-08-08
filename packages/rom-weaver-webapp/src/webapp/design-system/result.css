@@ -182,6 +182,35 @@
   aspect-ratio: auto;
   padding-block-end: 0;
 }
+/*
+ * iOS WebKit offers the Fullscreen API on <video> only, so the player fills the
+ * viewport itself there. Fixed rather than :fullscreen, and it carries its own
+ * exit button because the header control ends up behind it.
+ */
+.rw-app .emulator-player-frame.is-pseudo-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  box-sizing: border-box;
+  width: 100dvw;
+  height: 100dvh;
+  max-height: none;
+  aspect-ratio: auto;
+  padding-block-end: 0;
+}
+.rw-app .emulator-pseudo-exit {
+  position: absolute;
+  inset-block-start: max(var(--sp-s), env(safe-area-inset-top));
+  inset-inline-end: max(var(--sp-s), env(safe-area-inset-right));
+  z-index: 1;
+  inline-size: 30px;
+  padding-inline: 0;
+  background: var(--plate);
+}
+.rw-app .emulator-pseudo-exit svg {
+  width: 15px;
+  height: 15px;
+}
 /* Absolute so the frame's reserved band counts as emulator surface, not padding. */
 .rw-app .emulator-player-frame iframe {
   position: absolute;

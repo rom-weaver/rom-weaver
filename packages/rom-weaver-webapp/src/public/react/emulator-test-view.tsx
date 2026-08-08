@@ -88,6 +88,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const [error, setError] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
   const currentGame = entries.find((entry) => entry.id === currentGameId) || null;
   const currentIdentity = useMemo(
     () =>
@@ -165,6 +166,20 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   }, [currentGame]);
 
   useEffect(() => {
+    if (typeof document === "undefined" || !pseudoFullscreen) return undefined;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [pseudoFullscreen]);
+
+  // Leaving the game must not strand the page in the pseudo-fullscreen state.
+  useEffect(() => {
+    if (!currentGame) setPseudoFullscreen(false);
+  }, [currentGame]);
+
+  useEffect(() => {
     if (typeof document === "undefined") return undefined;
     const handleFullscreenChange = () => setFullscreen(document.fullscreenElement === playerFrameRef.current);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -173,11 +188,19 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
 
   const toggleFullscreen = useCallback(() => {
     if (typeof document === "undefined") return;
+    const frame = playerFrameRef.current;
+    // iOS WebKit exposes the Fullscreen API on <video> only, so requesting it on
+    // the player throws and the button does nothing. Fall back to filling the
+    // viewport ourselves there.
+    if (!frame || typeof frame.requestFullscreen !== "function") {
+      setPseudoFullscreen((active) => !active);
+      return;
+    }
     if (document.fullscreenElement) {
       void document.exitFullscreen().catch(() => undefined);
       return;
     }
-    void playerFrameRef.current?.requestFullscreen().catch(() => undefined);
+    void frame.requestFullscreen().catch(() => undefined);
   }, []);
 
   const handleFiles = useCallback(async (files: File[]) => {
@@ -264,12 +287,16 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                       Stop
                     </button>
                     <button
-                      aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      aria-label={fullscreen || pseudoFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                       className="btn ghost slim emulator-fullscreen-btn"
                       onClick={toggleFullscreen}
                       type="button"
                     >
-                      {fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}
+                      {fullscreen || pseudoFullscreen ? (
+                        <Minimize aria-hidden="true" />
+                      ) : (
+                        <Maximize aria-hidden="true" />
+                      )}
                     </button>
                   </>
                 ) : null}
@@ -286,7 +313,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                 </p>
               ) : currentGame && currentCore && gameUrl && currentIdentity ? (
                 <div
-                  className="emulator-player-frame"
+                  className={pseudoFullscreen ? "emulator-player-frame is-pseudo-fullscreen" : "emulator-player-frame"}
                   ref={playerFrameRef}
                   style={{ "--emulator-aspect": getEmulatorJsAspectRatio(currentCore) } as CSSProperties}
                 >
@@ -301,6 +328,16 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                     })}
                     title={`EmulatorJS test for ${currentGame.fileName}`}
                   />
+                  {pseudoFullscreen ? (
+                    <button
+                      aria-label="Exit fullscreen"
+                      className="btn ghost slim emulator-pseudo-exit"
+                      onClick={() => setPseudoFullscreen(false)}
+                      type="button"
+                    >
+                      <Minimize aria-hidden="true" />
+                    </button>
+                  ) : null}
                 </div>
               ) : currentGame && currentCore && preparing ? (
                 <p className="emulator-player-empty">Preparing the ROM…</p>
