@@ -1,5 +1,5 @@
 import { ArrowLeft, Gamepad2, Maximize, Minimize } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
 import {
@@ -16,7 +16,7 @@ import { StepSection } from "./components/ds/layout.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
-import { getEmulatorJsCore } from "./components/emulatorjs.ts";
+import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
 
@@ -285,7 +285,11 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                   {error}
                 </p>
               ) : currentGame && currentCore && gameUrl && currentIdentity ? (
-                <div className="emulator-player-frame" ref={playerFrameRef}>
+                <div
+                  className="emulator-player-frame"
+                  ref={playerFrameRef}
+                  style={{ "--emulator-aspect": getEmulatorJsAspectRatio(currentCore) } as CSSProperties}
+                >
                   <iframe
                     allow="autoplay; fullscreen; gamepad"
                     allowFullScreen
