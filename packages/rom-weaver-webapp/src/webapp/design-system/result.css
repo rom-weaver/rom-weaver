@@ -133,14 +133,6 @@
   background: var(--well);
 }
 /*
- * `overflow: clip` clips fixed descendants too, and a fixed player leaves the
- * flow so this card collapses to nothing - which clipped the pseudo-fullscreen
- * player down to a sliver. Drop the clip while it is up.
- */
-.rw-app .emulator-player:has(> .emulator-player-frame.is-pseudo-fullscreen) {
-  overflow: visible;
-}
-/*
  * No auto start margin here: `.step-meta` already claims one, and two auto
  * margins in a flex row split the free space between them, stranding the file
  * name mid-header instead of leaving it beside the title.
@@ -201,13 +193,30 @@
  * viewport itself there. Fixed rather than :fullscreen, and it carries its own
  * exit button because the header control ends up behind it.
  */
-.rw-app .emulator-player-frame.is-pseudo-fullscreen {
+.rw-app .emulator-fullscreen-dialog {
+  display: contents;
+}
+.rw-app .emulator-fullscreen-dialog[open] {
   position: fixed;
   inset: 0;
-  z-index: 10002;
   box-sizing: border-box;
+  display: block;
   width: 100dvw;
+  max-width: none;
   height: 100dvh;
+  max-height: none;
+  padding: 0;
+  background: #000;
+  border: 0;
+}
+.rw-app .emulator-fullscreen-dialog::backdrop {
+  background: #000;
+}
+.rw-app .emulator-player-frame.is-pseudo-fullscreen {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   max-height: none;
   aspect-ratio: auto;
   padding-block-end: 0;

@@ -84,6 +84,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerFrameRef = useRef<HTMLDivElement>(null);
+  const fullscreenDialogRef = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [preparing, setPreparing] = useState(false);
@@ -164,6 +165,19 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
       cancelled = true;
     };
   }, [currentGame]);
+
+  useEffect(() => {
+    const dialog = fullscreenDialogRef.current;
+    if (!dialog || typeof dialog.showModal !== "function") return undefined;
+    // The top layer is what escapes the panel's `overflow: clip`; a plain fixed
+    // player is clipped away by it. The dialog wraps the player at all times so
+    // opening it never reparents the iframe, which would reload the game.
+    if (pseudoFullscreen && !dialog.open) dialog.showModal();
+    if (!pseudoFullscreen && dialog.open) dialog.close();
+    const handleClose = () => setPseudoFullscreen(false);
+    dialog.addEventListener("close", handleClose);
+    return () => dialog.removeEventListener("close", handleClose);
+  }, [pseudoFullscreen]);
 
   useEffect(() => {
     if (typeof document === "undefined" || !pseudoFullscreen) return undefined;
@@ -312,33 +326,37 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                   {error}
                 </p>
               ) : currentGame && currentCore && gameUrl && currentIdentity ? (
-                <div
-                  className={pseudoFullscreen ? "emulator-player-frame is-pseudo-fullscreen" : "emulator-player-frame"}
-                  ref={playerFrameRef}
-                  style={{ "--emulator-aspect": getEmulatorJsAspectRatio(currentCore) } as CSSProperties}
-                >
-                  <iframe
-                    allow="autoplay; fullscreen; gamepad"
-                    allowFullScreen
-                    key={`${currentGame.id}:${gameUrl}`}
-                    ref={iframeRef}
-                    referrerPolicy="no-referrer"
-                    srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {
-                      gameId: currentIdentity.gameId,
-                    })}
-                    title={`EmulatorJS test for ${currentGame.fileName}`}
-                  />
-                  {pseudoFullscreen ? (
-                    <button
-                      aria-label="Exit fullscreen"
-                      className="btn ghost slim emulator-pseudo-exit"
-                      onClick={() => setPseudoFullscreen(false)}
-                      type="button"
-                    >
-                      <Minimize aria-hidden="true" />
-                    </button>
-                  ) : null}
-                </div>
+                <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
+                  <div
+                    className={
+                      pseudoFullscreen ? "emulator-player-frame is-pseudo-fullscreen" : "emulator-player-frame"
+                    }
+                    ref={playerFrameRef}
+                    style={{ "--emulator-aspect": getEmulatorJsAspectRatio(currentCore) } as CSSProperties}
+                  >
+                    <iframe
+                      allow="autoplay; fullscreen; gamepad"
+                      allowFullScreen
+                      key={`${currentGame.id}:${gameUrl}`}
+                      ref={iframeRef}
+                      referrerPolicy="no-referrer"
+                      srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {
+                        gameId: currentIdentity.gameId,
+                      })}
+                      title={`EmulatorJS test for ${currentGame.fileName}`}
+                    />
+                    {pseudoFullscreen ? (
+                      <button
+                        aria-label="Exit fullscreen"
+                        className="btn ghost slim emulator-pseudo-exit"
+                        onClick={() => setPseudoFullscreen(false)}
+                        type="button"
+                      >
+                        <Minimize aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                </dialog>
               ) : currentGame && currentCore && preparing ? (
                 <p className="emulator-player-empty">Preparing the ROM…</p>
               ) : currentGame ? (
