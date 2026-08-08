@@ -221,10 +221,11 @@
   aspect-ratio: auto;
   padding-block-end: 0;
 }
+/* Start side: the core parks its own menu button in the end corner. */
 .rw-app .emulator-pseudo-exit {
   position: absolute;
   inset-block-start: max(var(--sp-s), env(safe-area-inset-top));
-  inset-inline-end: max(var(--sp-s), env(safe-area-inset-right));
+  inset-inline-start: max(var(--sp-s), env(safe-area-inset-left));
   z-index: 1;
   inline-size: 30px;
   padding-inline: 0;

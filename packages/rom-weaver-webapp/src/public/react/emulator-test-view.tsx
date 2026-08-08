@@ -292,9 +292,11 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           <StepSection
             headerExtra={
               <div className="emulator-player-actions">
-                <a className="btn ghost slim" href="apply">
-                  <ArrowLeft aria-hidden="true" /> Back to Apply
-                </a>
+                {currentGame?.source === "apply" ? (
+                  <a className="btn ghost slim" href="apply">
+                    <ArrowLeft aria-hidden="true" /> Back to Apply
+                  </a>
+                ) : null}
                 {canPlay ? (
                   <>
                     <button className="btn ghost slim" onClick={() => setCurrentGame(null)} type="button">
@@ -316,7 +318,6 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                 ) : null}
               </div>
             }
-            meta={currentGame ? currentGame.fileName : undefined}
             num="0x02"
             title="Play"
           >
