@@ -65,6 +65,13 @@
   align-items: baseline;
   padding: var(--step-pt) var(--pad) 2px;
 }
+/*
+ * Only the emulator step puts buttons in its header. They cannot shrink, so on
+ * a narrow screen the row needs somewhere to go rather than overflowing.
+ */
+.rw-app .step-head:has(> .emulator-player-actions) {
+  flex-wrap: wrap;
+}
 .rw-app .step-head-action {
   display: none;
 }

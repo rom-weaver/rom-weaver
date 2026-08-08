@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmulatorDocument } from "../../src/public/react/components/emulator-document.ts";
-import { getEmulatorJsCore } from "../../src/public/react/components/emulatorjs.ts";
+import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "../../src/public/react/components/emulatorjs.ts";
 
 describe("getEmulatorJsCore", () => {
   it("prefers the detected platform", () => {
@@ -17,6 +17,27 @@ describe("getEmulatorJsCore", () => {
 
   it("returns undefined for unknown files", () => {
     expect(getEmulatorJsCore(undefined, "patched.bin")).toBeUndefined();
+  });
+});
+
+describe("getEmulatorJsAspectRatio", () => {
+  it("gives handhelds their own shape", () => {
+    expect(getEmulatorJsAspectRatio("gba")).toBe("3 / 2");
+    expect(getEmulatorJsAspectRatio("gb")).toBe("10 / 9");
+  });
+
+  it("keeps the stacked DS screens portrait", () => {
+    expect(getEmulatorJsAspectRatio("nds")).toBe("2 / 3");
+  });
+
+  it("falls back to 4:3 for consoles and unknown cores", () => {
+    expect(getEmulatorJsAspectRatio("nes")).toBe("4 / 3");
+    expect(getEmulatorJsAspectRatio(undefined)).toBe("4 / 3");
+  });
+
+  it("covers every core the app can select", () => {
+    const cores = ["atari7800", "gb", "gba", "lynx", "n64", "nds", "nes", "psx"];
+    for (const core of cores) expect(getEmulatorJsAspectRatio(core)).toMatch(/^\d+ \/ \d+$/);
   });
 });
 

@@ -1,5 +1,5 @@
 import { ArrowLeft, Gamepad2, Maximize, Minimize } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
 import {
@@ -16,7 +16,7 @@ import { StepSection } from "./components/ds/layout.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
-import { getEmulatorJsCore } from "./components/emulatorjs.ts";
+import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
 
@@ -84,10 +84,12 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerFrameRef = useRef<HTMLDivElement>(null);
+  const fullscreenDialogRef = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
   const currentGame = entries.find((entry) => entry.id === currentGameId) || null;
   const currentIdentity = useMemo(
     () =>
@@ -165,6 +167,33 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   }, [currentGame]);
 
   useEffect(() => {
+    const dialog = fullscreenDialogRef.current;
+    if (!dialog || typeof dialog.showModal !== "function") return undefined;
+    // The top layer is what escapes the panel's `overflow: clip`; a plain fixed
+    // player is clipped away by it. The dialog wraps the player at all times so
+    // opening it never reparents the iframe, which would reload the game.
+    if (pseudoFullscreen && !dialog.open) dialog.showModal();
+    if (!pseudoFullscreen && dialog.open) dialog.close();
+    const handleClose = () => setPseudoFullscreen(false);
+    dialog.addEventListener("close", handleClose);
+    return () => dialog.removeEventListener("close", handleClose);
+  }, [pseudoFullscreen]);
+
+  useEffect(() => {
+    if (typeof document === "undefined" || !pseudoFullscreen) return undefined;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [pseudoFullscreen]);
+
+  // Leaving the game must not strand the page in the pseudo-fullscreen state.
+  useEffect(() => {
+    if (!currentGame) setPseudoFullscreen(false);
+  }, [currentGame]);
+
+  useEffect(() => {
     if (typeof document === "undefined") return undefined;
     const handleFullscreenChange = () => setFullscreen(document.fullscreenElement === playerFrameRef.current);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -173,11 +202,19 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
 
   const toggleFullscreen = useCallback(() => {
     if (typeof document === "undefined") return;
+    const frame = playerFrameRef.current;
+    // iOS WebKit exposes the Fullscreen API on <video> only, so requesting it on
+    // the player throws and the button does nothing. Fall back to filling the
+    // viewport ourselves there.
+    if (!frame || typeof frame.requestFullscreen !== "function") {
+      setPseudoFullscreen((active) => !active);
+      return;
+    }
     if (document.fullscreenElement) {
       void document.exitFullscreen().catch(() => undefined);
       return;
     }
-    void playerFrameRef.current?.requestFullscreen().catch(() => undefined);
+    void frame.requestFullscreen().catch(() => undefined);
   }, []);
 
   const handleFiles = useCallback(async (files: File[]) => {
@@ -212,6 +249,30 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
       setBusy(false);
     }
   }, []);
+
+  /*
+   * Select a playable entry on arrival so the player exists before the first
+   * tap. iOS only unlocks audio for a gesture inside the iframe, so the tap
+   * that starts the game has to land on the core's own start button; without
+   * this, coming from Apply costs a Play tap first just to create the frame.
+   * Each entry is offered once, so Stop is not undone.
+   */
+  const autoSelectedRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Any selection counts as offered, including the one handleFiles makes, or
+    // Stop would be undone the moment it cleared the current game.
+    if (currentGameId) {
+      autoSelectedRef.current = currentGameId;
+      return;
+    }
+    const playable = entries
+      .slice()
+      .reverse()
+      .find((entry) => entry.core || getEmulatorJsCore(entry.platform, entry.fileName));
+    if (!playable || autoSelectedRef.current === playable.id) return;
+    autoSelectedRef.current = playable.id;
+    setCurrentGame(playable.id);
+  }, [currentGameId, entries]);
 
   const currentCore = currentGame
     ? currentGame.core || getEmulatorJsCore(currentGame.platform, currentGame.fileName)
@@ -255,27 +316,32 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           <StepSection
             headerExtra={
               <div className="emulator-player-actions">
-                <a className="btn ghost slim" href="apply">
-                  <ArrowLeft aria-hidden="true" /> Back to Apply
-                </a>
+                {currentGame?.source === "apply" ? (
+                  <a className="btn ghost slim" href="apply">
+                    <ArrowLeft aria-hidden="true" /> Back to Apply
+                  </a>
+                ) : null}
                 {canPlay ? (
                   <>
                     <button className="btn ghost slim" onClick={() => setCurrentGame(null)} type="button">
                       Stop
                     </button>
                     <button
-                      aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      aria-label={fullscreen || pseudoFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                       className="btn ghost slim emulator-fullscreen-btn"
                       onClick={toggleFullscreen}
                       type="button"
                     >
-                      {fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}
+                      {fullscreen || pseudoFullscreen ? (
+                        <Minimize aria-hidden="true" />
+                      ) : (
+                        <Maximize aria-hidden="true" />
+                      )}
                     </button>
                   </>
                 ) : null}
               </div>
             }
-            meta={currentGame ? currentGame.fileName : undefined}
             num="0x02"
             title="Play"
           >
@@ -285,19 +351,37 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                   {error}
                 </p>
               ) : currentGame && currentCore && gameUrl && currentIdentity ? (
-                <div className="emulator-player-frame" ref={playerFrameRef}>
-                  <iframe
-                    allow="autoplay; fullscreen; gamepad"
-                    allowFullScreen
-                    key={`${currentGame.id}:${gameUrl}`}
-                    ref={iframeRef}
-                    referrerPolicy="no-referrer"
-                    srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {
-                      gameId: currentIdentity.gameId,
-                    })}
-                    title={`EmulatorJS test for ${currentGame.fileName}`}
-                  />
-                </div>
+                <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
+                  <div
+                    className={
+                      pseudoFullscreen ? "emulator-player-frame is-pseudo-fullscreen" : "emulator-player-frame"
+                    }
+                    ref={playerFrameRef}
+                    style={{ "--emulator-aspect": getEmulatorJsAspectRatio(currentCore) } as CSSProperties}
+                  >
+                    <iframe
+                      allow="autoplay; fullscreen; gamepad"
+                      allowFullScreen
+                      key={`${currentGame.id}:${gameUrl}`}
+                      ref={iframeRef}
+                      referrerPolicy="no-referrer"
+                      srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {
+                        gameId: currentIdentity.gameId,
+                      })}
+                      title={`EmulatorJS test for ${currentGame.fileName}`}
+                    />
+                    {pseudoFullscreen ? (
+                      <button
+                        aria-label="Exit fullscreen"
+                        className="btn ghost slim emulator-pseudo-exit"
+                        onClick={() => setPseudoFullscreen(false)}
+                        type="button"
+                      >
+                        <Minimize aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                </dialog>
               ) : currentGame && currentCore && preparing ? (
                 <p className="emulator-player-empty">Preparing the ROM…</p>
               ) : currentGame ? (

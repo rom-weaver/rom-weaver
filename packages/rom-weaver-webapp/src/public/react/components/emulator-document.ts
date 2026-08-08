@@ -85,6 +85,10 @@ const createEmulatorBridgeScript = (gameName: string) => `
         EJS_onGameStart = () => {
           const emulator = window.EJS_emulator;
           if (emulator && typeof emulator.on === "function") emulator.on("saveSaveFiles", (data) => send("save-sram", data));
+          // The core opens its menu bar as part of starting and leaves it up for
+          // three seconds. Closing it here means the game is the first thing on
+          // screen; the menu button still opens it on demand.
+          if (emulator && emulator.menu && typeof emulator.menu.close === "function") emulator.menu.close();
           request("request-load-sram");
         };
         window.__romWeaverVisibilityPaused = false;
@@ -147,8 +151,19 @@ const createEmulatorDocument = (
       // a <core>-wasm.data or <core>-legacy-wasm.data that does not exist and
       // the game dies on a 404.
       EJS_hideSettings = ['ejs_threads', 'webgl2Enabled'];
+      // The core's context menu opens on the contextmenu event, which a touch
+      // long-press fires. Holding the d-pad therefore covers the game with the
+      // Restart/Save State panel, so touch keeps the menu button as its only
+      // route in.
+      if (navigator.maxTouchPoints > 0) EJS_Buttons = { rightClick: false };
       EJS_disableLocalStorage = false;
-      EJS_startOnLoaded = true;
+      // Autostart only where audio may begin without a gesture. iOS keeps the
+      // AudioContext suspended until the *iframe itself* is tapped - the Play
+      // button lives in the parent document, so its activation does not carry
+      // over. Autostarting there lands on the core's "Click to resume Emulator"
+      // popup, which reads as a game that never started. Letting the core show
+      // its own start button puts that first tap inside the iframe instead.
+      EJS_startOnLoaded = !(navigator.maxTouchPoints > 0);
       EJS_gameID = ${options.gameId ?? hashString(gameName)};
       EJS_player = '#game';
       EJS_core = ${toScriptString(core)};
