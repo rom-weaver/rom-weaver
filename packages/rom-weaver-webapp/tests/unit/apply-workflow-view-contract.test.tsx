@@ -12,7 +12,10 @@ import type { PatcherOutputState, PatchStackItemState } from "../../src/public/r
 import type { PatcherUiState, RomInputRowState } from "../../src/public/react/patcher-ui-state.ts";
 import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-state.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
-import { setPostApplyRomBehaviorOverride } from "../../src/public/react/use-apply-download-orchestration.ts";
+import {
+  setApplyPlayButtonOverride,
+  setPostApplyRomBehaviorOverride,
+} from "../../src/public/react/use-apply-download-orchestration.ts";
 
 /**
  * Apply-view markup contract. The browser suites drive the form through
@@ -301,6 +304,23 @@ describe("apply workflow view - staged bench", () => {
     expect(unsupported.container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });
 
+  it("hides only the play button when the play-button setting is off", () => {
+    const { container } = renderView({
+      emulatorOutput: { fileName: "game.nes", getBlob: async () => new Blob(["rom"]), id: "output-1" },
+      outputOverrides: { pendingDownloadFileName: "game.nes" },
+      settings: { applyPlayButtonEnabled: false },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+    // Nothing else the setting could reach is touched, so every post-apply
+    // behavior stays selectable.
+    const behaviors = Array.from(
+      container.querySelectorAll("#rom-weaver-select-post-apply-behavior option"),
+      (option) => option.getAttribute("value"),
+    );
+    expect(behaviors).toEqual(["auto-download", "auto-test", "auto-test-download", "none"]);
+  });
+
   it("keeps likely drawers visible while ROMs and patches are still staging", () => {
     const rom = romRow("game.zip");
     rom.info.validationPhase = "extract";
@@ -455,6 +475,43 @@ describe("apply workflow view - post-apply behavior select", () => {
     const { container: second } = renderView({ settings: { postApplyRomBehavior: "auto-download" }, ui });
     const secondSelect = second.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
     expect(secondSelect.value).toBe("auto-test-download");
+  });
+});
+
+describe("apply workflow view - play button checkbox", () => {
+  // Session state, same as the select's override above.
+  afterEach(() => setApplyPlayButtonOverride(null));
+
+  const playButtonView = (settings: Record<string, unknown>) =>
+    renderView({
+      emulatorOutput: { fileName: "game.nes", getBlob: async () => new Blob(["rom"]), id: "output-1" },
+      outputOverrides: { disabled: false, pendingDownloadFileName: "game.nes" },
+      settings,
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+
+  it("defaults the checkbox from the applyPlayButtonEnabled setting", () => {
+    const shown = playButtonView({});
+    expect((shown.container.querySelector("#rom-weaver-checkbox-play-button") as HTMLInputElement).checked).toBe(true);
+    shown.unmount();
+
+    const { container } = playButtonView({ applyPlayButtonEnabled: false });
+    expect((container.querySelector("#rom-weaver-checkbox-play-button") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("hides the play button for the session when unticked", () => {
+    const { container } = playButtonView({});
+    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeTruthy();
+    const checkbox = container.querySelector("#rom-weaver-checkbox-play-button") as HTMLInputElement;
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+
+    // A second view mounted in the same session follows the override, not the
+    // untouched persisted setting.
+    const { container: second } = playButtonView({});
+    expect((second.querySelector("#rom-weaver-checkbox-play-button") as HTMLInputElement).checked).toBe(false);
+    expect(second.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });
 });
 

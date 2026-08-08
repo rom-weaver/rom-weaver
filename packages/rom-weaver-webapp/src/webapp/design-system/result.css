@@ -272,20 +272,55 @@
   font-size: 0.78rem;
   color: var(--fault);
 }
+/* The play button sits under the run button as its quieter twin: same full
+   width and uppercase weave, dyed with the accent thread instead of filled by
+   it, so the download stays the loudest thing on a finished apply. */
 .rw-app .emulatorjs-test {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-xs) var(--sp-m);
-  align-items: center;
-  margin-top: var(--sp-s);
+  display: grid;
+  gap: var(--sp-xs);
 }
+.rw-app .btn.play {
+  width: 100%;
+  height: auto;
+  min-height: 40px;
+  padding-block: 6px;
+  color: var(--thread-text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: color-mix(in oklab, var(--thread) 9%, transparent);
+  border-color: color-mix(in oklab, var(--thread) 42%, var(--seam-strong));
+}
+.rw-app .btn.play svg {
+  width: 17px;
+  height: 17px;
+}
+@media (hover: hover) {
+  .rw-app .btn.play:hover {
+    background: color-mix(in oklab, var(--thread) 16%, transparent);
+    border-color: color-mix(in oklab, var(--thread) 70%, transparent);
+  }
+}
+.rw-app .btn.play:active {
+  background: color-mix(in oklab, var(--thread) 16%, transparent);
+  border-color: color-mix(in oklab, var(--thread) 70%, transparent);
+}
+.rw-app .btn.play .play-core {
+  padding: 2px 7px;
+  font-size: 0.7rem;
+  color: var(--ink-3);
+  text-transform: none;
+  letter-spacing: 0;
+  background: var(--well);
+  border: 1px solid var(--seam-soft);
+  border-radius: var(--r-s);
+}
+/* Still worn by the Test view's "Preparing the ROM…" line. */
 .rw-app .emulatorjs-note {
   margin: 0;
   font-size: 0.78rem;
   color: var(--ink-3);
 }
 .rw-app .emulatorjs-test .emulatorjs-error {
-  flex-basis: 100%;
   margin: 0;
 }
 .rw-app .emulatorjs-error {

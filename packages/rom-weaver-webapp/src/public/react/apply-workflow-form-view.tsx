@@ -1,6 +1,7 @@
-import { Archive, Disc3, Download, ListChecks, Package, TriangleAlert } from "lucide-react";
+import { Archive, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
+import { POST_APPLY_ROM_BEHAVIOR_OPTIONS } from "../../lib/apply/post-apply-behavior.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
@@ -52,11 +53,22 @@ import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-r
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
-import { setPostApplyRomBehaviorOverride, usePostApplyRomBehaviorValue } from "./use-apply-download-orchestration.ts";
+import {
+  setApplyPlayButtonOverride,
+  setPostApplyRomBehaviorOverride,
+  useApplyPlayButtonValue,
+  usePostApplyRomBehaviorValue,
+} from "./use-apply-download-orchestration.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import type { PostApplyRomBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
+/**
+ * The finished apply's companion to the download button: the patched ROM is
+ * already in memory, so playing it is one press. Styled as the run button's
+ * quieter twin (see `.emulatorjs-test` in result.css) rather than a stray ghost
+ * control, and the mono chip names the core that will run it.
+ */
 const EmulatorJsAction = ({
   core,
   fileName,
@@ -72,7 +84,9 @@ const EmulatorJsAction = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  if (!(core && output)) return null;
+  const settings = useRomWeaverSettings();
+  const shown = useApplyPlayButtonValue(settings.applyPlayButtonEnabled);
+  if (!(core && output && shown)) return null;
   const openInEmulator = async () => {
     setLoading(true);
     setError("");
@@ -107,15 +121,16 @@ const EmulatorJsAction = ({
     <div className="emulatorjs-test">
       <button
         aria-busy={loading}
-        className="btn ghost slim"
+        className="btn play"
         disabled={loading}
         id="rom-weaver-button-test-emulator"
         onClick={() => void openInEmulator()}
         type="button"
       >
-        {loading ? "Preparing EmulatorJS…" : "Test in emulator"}
+        <Gamepad2 aria-hidden="true" />
+        <span className="play-label">{loading ? "Preparing emulator…" : "Play in the Test tab"}</span>
+        <span className="play-core mono">{core}</span>
       </button>
-      <span className="emulatorjs-note">Open the ROM in the Test tab.</span>
       {error ? (
         <p className="emulatorjs-error" role="alert">
           {error}
@@ -1191,19 +1206,6 @@ const OutputHeaderField = ({
 };
 
 /**
- * Mirrors `postApplyRomBehavior`'s options from
- * `src/webapp/settings/settings-metadata.ts`: `public/react` is the
- * embeddable form and must not import from `webapp/`, which owns the
- * Settings dialog, so the option list is duplicated here rather than shared.
- */
-const POST_APPLY_ROM_BEHAVIOR_OPTIONS: ReadonlyArray<{ label: string; value: PostApplyRomBehavior }> = [
-  { label: "Download automatically", value: "auto-download" },
-  { label: "Test automatically", value: "auto-test" },
-  { label: "Test and download", value: "auto-test-download" },
-  { label: "Do nothing", value: "none" },
-];
-
-/**
  * "After applying" select for the Apply step's output options. The public form
  * has no write path into the host app's persisted settings, so a choice here
  * only overrides the behavior for this session (see
@@ -1229,6 +1231,27 @@ const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean;
         ))}
       </select>
     </OutputField>
+  );
+};
+
+/**
+ * "Show the play button" checkbox for the Apply step's output options, the
+ * session-only twin of the persisted `applyPlayButtonEnabled` setting (same
+ * read-only-settings limit as the select above).
+ */
+const PlayButtonField = ({ disabled, settingValue }: { disabled: boolean; settingValue: unknown }) => {
+  const checked = useApplyPlayButtonValue(settingValue);
+  return (
+    <label className="checkrow">
+      <input
+        checked={checked}
+        disabled={disabled}
+        id="rom-weaver-checkbox-play-button"
+        onChange={(event) => setApplyPlayButtonOverride(event.currentTarget.checked)}
+        type="checkbox"
+      />
+      <span>Show the play button</span>
+    </label>
   );
 };
 
@@ -1795,6 +1818,7 @@ function ApplyWorkflowFormView({
     <>
       {bundleOutputFields}
       <PostApplyBehaviorField disabled={outputState.disabled} settingValue={settings.postApplyRomBehavior} />
+      <PlayButtonField disabled={outputState.disabled} settingValue={settings.applyPlayButtonEnabled} />
     </>
   );
 

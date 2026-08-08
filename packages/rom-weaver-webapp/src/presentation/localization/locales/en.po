@@ -645,6 +645,11 @@ msgstr "Show the \"New here?\" quick-start tips"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.applyPlayButtonEnabled"
+msgstr "Show the play button after applying"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Skip to main content"
 
