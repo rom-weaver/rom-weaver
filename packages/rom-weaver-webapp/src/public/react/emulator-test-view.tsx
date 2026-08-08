@@ -54,16 +54,24 @@ const EmulatorSessionOutput = ({ entry, current }: { entry: EmulatorSessionEntry
       onRemove={() => disposeEntry(entry.id)}
       removeLabel={`Remove ${entry.fileName}`}
       menu={
-        <button
-          aria-describedby={reason ? `emulator-session-reason-${entry.id}` : undefined}
-          aria-pressed={current}
-          className="btn ghost slim"
-          disabled={!core}
-          onClick={() => setCurrentGame(entry.id)}
-          type="button"
-        >
-          Play
-        </button>
+        /*
+         * The loaded game's Play control lives in the player, because on touch
+         * only a tap inside that frame unlocks audio. Repeating it here would
+         * offer a second Play that cannot start anything.
+         */
+        current ? (
+          <span className="rb">Loaded</span>
+        ) : (
+          <button
+            aria-describedby={reason ? `emulator-session-reason-${entry.id}` : undefined}
+            className="btn ghost slim"
+            disabled={!core}
+            onClick={() => setCurrentGame(entry.id)}
+            type="button"
+          >
+            Play
+          </button>
+        )
       }
     >
       {reason ? (
