@@ -250,6 +250,30 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     }
   }, []);
 
+  /*
+   * Select a playable entry on arrival so the player exists before the first
+   * tap. iOS only unlocks audio for a gesture inside the iframe, so the tap
+   * that starts the game has to land on the core's own start button; without
+   * this, coming from Apply costs a Play tap first just to create the frame.
+   * Each entry is offered once, so Stop is not undone.
+   */
+  const autoSelectedRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Any selection counts as offered, including the one handleFiles makes, or
+    // Stop would be undone the moment it cleared the current game.
+    if (currentGameId) {
+      autoSelectedRef.current = currentGameId;
+      return;
+    }
+    const playable = entries
+      .slice()
+      .reverse()
+      .find((entry) => entry.core || getEmulatorJsCore(entry.platform, entry.fileName));
+    if (!playable || autoSelectedRef.current === playable.id) return;
+    autoSelectedRef.current = playable.id;
+    setCurrentGame(playable.id);
+  }, [currentGameId, entries]);
+
   const currentCore = currentGame
     ? currentGame.core || getEmulatorJsCore(currentGame.platform, currentGame.fileName)
     : null;
