@@ -89,6 +89,26 @@ describe("Masthead", () => {
     expect(container.querySelector('.mode-rail [aria-haspopup="menu"]')).toBeNull();
   });
 
+  it("only lands focus on the first menu item when More is opened by keyboard", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
+
+    // A pointer open parks focus on the menu box, so no row wears a focus ring.
+    fireEvent.pointerDown(more);
+    fireEvent.click(more);
+    const menu = container.querySelector('[role="menu"]') as HTMLElement;
+    expect(menu.getAttribute("tabindex")).toBe("-1");
+    expect(document.activeElement).toBe(menu);
+
+    fireEvent.pointerDown(more);
+    fireEvent.click(more);
+
+    // Enter and Space fire click with no preceding pointerdown.
+    fireEvent.click(more);
+    const firstItem = container.querySelector('[role="menu"] [role="menuitem"]');
+    expect(document.activeElement).toBe(firstItem);
+  });
+
   it("keeps utility destinations behind More on both layouts", () => {
     const onOpenStorage = vi.fn();
     const { container, getByRole, queryByRole } = render(

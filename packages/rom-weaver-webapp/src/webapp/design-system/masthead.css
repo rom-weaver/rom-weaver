@@ -636,6 +636,14 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
 .rw-app .more-menu[hidden] {
   display: none;
 }
+/* The box is only ever focused programmatically, to hold the keyboard contract
+   when a pointer open must not highlight a row (shell.tsx). Same reasoning as
+   the dialog rule in base.css: never draw a ring on it. The items themselves
+   keep theirs. */
+.rw-app .more-menu:focus,
+.rw-app .more-menu:focus-visible {
+  outline: none;
+}
 .rw-app .more-menu > button,
 .rw-app .more-accent > button {
   display: flex;
