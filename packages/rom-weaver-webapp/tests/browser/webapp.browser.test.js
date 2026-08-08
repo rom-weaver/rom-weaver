@@ -220,9 +220,13 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
     if (width >= 1000) {
       expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");
       expect(document.querySelector(".masthead-settings .tip")?.textContent).toBe("Settings");
-      // More sits in the nav now, so it is named like the tabs beside it
-      // rather than tooltipped like the actions cluster it left.
-      expect(getComputedStyle(document.querySelector(".mode-more .tool-text")).display).toBe("inline");
+      // More sits in the nav now, so it is named like the tabs beside it rather
+      // than tooltipped like the actions cluster it left. The label is a flex
+      // item inside `.mode-more`, so its computed display blockifies - that it
+      // is not `none` is the assertion, alongside the missing tooltip.
+      const moreLabel = document.querySelector(".mode-more .tool-text");
+      expect(getComputedStyle(moreLabel).display).not.toBe("none");
+      expect(moreLabel.textContent).toBe("More");
       expect(document.querySelector(".mode-more .tip")).toBeNull();
       await page.getByRole("button", { name: "Settings" }).hover();
       await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
