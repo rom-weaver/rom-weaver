@@ -1330,6 +1330,7 @@ mod patch_basis_decision;
 #[path = "patch_commands.rs"]
 mod patch_commands;
 mod patch_create;
+mod patch_n64_order_decision;
 mod patch_validate;
 mod tools;
 pub use patch_commands::{PatchCreateFormatPolicyMetadata, patch_create_format_policy_metadata};

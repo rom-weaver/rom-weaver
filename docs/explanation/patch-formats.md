@@ -166,10 +166,26 @@ stale. Some formats stay beyond this last step: bsdiff and gdiff rebuild the
 whole ROM from the patch, so their two results cannot be lined up for a fair
 comparison, and rom-weaver leaves those dumps alone.
 
+Nintendo 64 dumps pose the same question in a different shape. They circulate in
+three byte orders, and a patch fits only the one its author had. Checksums settle
+it the same way. Without one, two things can still rule an order out:
+
+- A change covering the first four bytes has to leave a valid N64 magic, and
+  each order spells that magic differently.
+- The trimmed-edge rule above works here too, because a wrong order moves the
+  edge onto a different byte of the same four.
+
+Failing both, rom-weaver applies the patch all three ways and keeps the one whose
+result still carries a correct internal boot checksum. That works where the
+copier-header version cannot rely on it: an N64 hack has to fix that checksum or
+the console refuses to boot, so the patch usually carries a new one.
+
 None of this is proof, and rom-weaver treats it that way: when the evidence does
-not separate the two forms it changes nothing and leaves the dump as it found
-it. Publishing the expected checksums beside an IPS download is still the only
-way to make the question answerable.
+not separate the candidates it changes nothing and leaves the dump as it found
+it. Anything it does settle this way is named in the result, so a decision made
+on evidence never looks like a decision made on proof. Publishing the expected
+checksums beside an IPS download is still the only way to make the question
+answerable.
 
 ### Interleaved Genesis dumps are not a header question
 

@@ -85,8 +85,10 @@ rom-weaver patch apply \
 N64 ROMs circulate in three interleavings, and a patch only applies to the one
 it was made against. The default `--n64-byte-order auto` matches your ROM to
 the patch's source CRC32 and writes the output back in the order the input
-arrived in, so usually there is nothing to do. Force a specific order only
-when auto has nothing to match against:
+arrived in, so usually there is nothing to do. An IPS patch carries no checksum;
+auto then reads the shape of its changes, and says so in the report when that
+settles it. Force a specific order when auto reports nothing and the result
+looks wrong:
 
 ```bash
 rom-weaver patch apply \

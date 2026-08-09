@@ -273,6 +273,21 @@ two symmetric policies (`crates/rom-weaver-cli/src/patch_apply.rs`):
   positional and repeatable - each occurrence binds to the preceding `--patch`
   and carries forward (`align_patch_header_modes` re-derives the interleave from
   raw clap indices).
+- **`--n64-byte-order auto|keep|<order>`** - which of the three N64
+  interleavings each patch applies against. The same shape as the header
+  decision: auto matches the patch's source CRC32 against all three variants
+  first, and a **first** patch with no checksum falls to
+  `patch_n64_order_decision.rs`. All three orders permute bytes *inside* each
+  aligned 4-byte word, so `rom_weaver_patches::n64_order_probe` reads each
+  candidate through a word map derived from `transform_n64_word` rather than
+  writing three converted copies. Two rules: a record covering the first word
+  must leave a valid N64 magic (each order spells it differently), and untrimmed
+  record edges rule an order out. If both are silent, the tiebreaker applies the
+  patch all three ways and keeps the one whose result still carries a correct
+  internal boot checksum - gated on the patch actually rewriting that checksum
+  (0x10..0x18), because nothing else can separate the orders. Chain steps 2..n
+  and `patch validate` keep the checksum-only rule; only the first apply step has
+  a report label to declare an inferred order in.
 - **`--output-header auto|keep|strip`** - whether the single final output
   carries the header. Auto keeps emulator-required format headers (iNES/FDS/
   LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor) - except an

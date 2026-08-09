@@ -196,7 +196,10 @@ stream-compressed positional bundle needs a canonical name such as
   header fields after patching.
 - `--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped` puts an
   N64 ROM in the interleaving a patch expects. Auto matches the patch's source
-  CRC32, and the output is written back in the order the input arrived in.
+  CRC32; for the first patch, a patch that carries no checksum falls back to the
+  shape of its changes. An order settled that way is named in the report label.
+  The output is written back in the order the input arrived in. See
+  [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
 
 ### Extras
 

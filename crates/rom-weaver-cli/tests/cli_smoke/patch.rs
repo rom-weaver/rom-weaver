@@ -9877,5 +9877,368 @@ fn patch_apply_auto_header_still_tiebreaks_when_checksums_are_ignored() {
     assert_eq!(
         fs::read(temp.child("output.sfc").path()).expect("output"),
         expected
+/// Shortest N64 ROM that carries a boot checksum: it covers 0x1000..0x101000.
+const N64_BOOT_CHECKSUM_END: usize = 0x101000;
+
+/// A big-endian N64 ROM with a deterministic pseudo-random body, long enough to
+/// carry a boot checksum. The stored checksum at 0x10..0x18 is left wrong;
+/// `repair_n64_rom` fixes it with rom-weaver's own repair pass.
+fn n64_big_endian_rom(seed: u64) -> Vec<u8> {
+    // Mix the seed before use: a bare `seed | 1` collides on consecutive seeds,
+    // which would quietly hand two fixtures the same body.
+    let mut state = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+    let mut rom = vec![0x80, 0x37, 0x12, 0x40];
+    rom.extend((0..N64_BOOT_CHECKSUM_END - 4).map(|_| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 24) as u8
+    }));
+    rom
+}
+
+/// Put a correct boot checksum in a fixture with rom-weaver's own repair pass,
+/// so no copy of the checksum algorithm lives in the tests. The patch is a
+/// record that rewrites one byte with the value already there, because
+/// `--repair-checksum` only runs as part of an apply.
+fn repair_n64_rom(temp: &TempDir, rom: &[u8], name: &str) -> Vec<u8> {
+    let source = temp.child(format!("{name}-stale.z64"));
+    let patch = temp.child(format!("{name}-noop.ips"));
+    let output = temp.child(format!("{name}.z64"));
+    fs::write(source.path(), rom).expect("fixture");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0x40,
+                data: vec![rom[0x40]],
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+    let report = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--repair-checksum",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&report);
+    assert_eq!(json["status"], "succeeded");
+    let repaired = fs::read(output.path()).expect("repaired fixture");
+    // Only the stored checksum may move; anything else means another platform's
+    // repair pass also claimed the fixture and the test would be measuring that.
+    for (offset, (before, after)) in rom.iter().zip(&repaired).enumerate() {
+        assert!(
+            before == after || (0x10..0x18).contains(&offset),
+            "repair changed offset {offset:#x} outside the stored checksum"
+        );
+    }
+    repaired
+}
+
+#[test]
+fn patch_apply_auto_n64_order_infers_from_the_internal_boot_checksum() {
+    // The realistic checksumless case: an IPS hack authored against the .z64
+    // dump, handed to a user who has the .v64. The patch fixes the boot checksum
+    // the way an N64 hack has to, and only the author's order leaves that
+    // checksum correct - so applying all three ways and asking which result the
+    // console would still boot names the order.
+    let temp = setup_temp_dir();
+    let original = repair_n64_rom(&temp, &n64_big_endian_rom(1), "original");
+    let mut modified = original.clone();
+    // Inside 0x1000..0x101000, so the boot checksum changes with it and the
+    // patch has to carry a new one.
+    modified[0x2000..0x2020].copy_from_slice(&[0xC3; 32]);
+    let modified = repair_n64_rom(&temp, &modified, "modified");
+    assert_ne!(
+        original[0x10..0x18],
+        modified[0x10..0x18],
+        "the fixture must change the stored checksum"
+    );
+
+    let patch = temp.child("update.ips");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("original.z64").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.z64").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let input = temp.child("input.v64");
+    fs::write(input.path(), byte_swap_pairs(&original)).expect("fixture");
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("output.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch N64 byte order inferred as big-endian"),
+        "label must report the inferred order: {label}"
+    );
+    assert!(
+        label.contains("boot checksum"),
+        "label must give the reason: {label}"
+    );
+    // Applied against the big-endian bytes and written back in the order the
+    // input arrived in.
+    assert_eq!(
+        fs::read(temp.child("output.v64").path()).expect("output"),
+        byte_swap_pairs(&modified)
+    );
+}
+
+#[test]
+fn patch_apply_auto_n64_order_keeps_the_order_when_the_input_is_not_the_base() {
+    // The same patch against a ROM it was never made for. No order leaves a
+    // correct boot checksum, so nothing is inferred and the bytes stay where the
+    // user put them - the outcome that keeps a wrong guess from corrupting a
+    // dump silently.
+    let temp = setup_temp_dir();
+    let original = repair_n64_rom(&temp, &n64_big_endian_rom(2), "original");
+    let mut modified = original.clone();
+    modified[0x2000..0x2020].copy_from_slice(&[0xC3; 32]);
+    let modified = repair_n64_rom(&temp, &modified, "modified");
+
+    let patch = temp.child("update.ips");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("original.z64").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.z64").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let stranger = byte_swap_pairs(&repair_n64_rom(&temp, &n64_big_endian_rom(3), "stranger"));
+    let input = temp.child("input.v64");
+    fs::write(input.path(), &stranger).expect("fixture");
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("output.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("patch N64 byte order inferred"),
+        "no order may be inferred from a ROM the patch was not made for: {label}"
+    );
+    // Kept the input's order, so the records landed exactly where they were
+    // addressed.
+    let mut expected = stranger;
+    expected[0x10..0x18].copy_from_slice(&modified[0x10..0x18]);
+    expected[0x2000..0x2020].copy_from_slice(&[0xC3; 32]);
+    assert_eq!(
+        fs::read(temp.child("output.v64").path()).expect("output"),
+        expected
+    );
+}
+
+/// A short big-endian N64 ROM plus an IPS patch that rewrites the first 16
+/// header bytes, magic included. The magic it writes is what names the order the
+/// patch was authored in.
+fn n64_header_rewrite_fixture(temp: &TempDir) -> (Vec<u8>, Vec<u8>) {
+    let mut z64 = vec![0x80, 0x37, 0x12, 0x40];
+    z64.extend((0..0x100 - 4).map(|index| (index as u8).wrapping_mul(7).wrapping_add(3)));
+    let mut header = vec![0x80, 0x37, 0x12, 0x40];
+    header.extend_from_slice(&[0x00, 0x00, 0x00, 0x0F]);
+    header.extend_from_slice(&[0x00, 0x00, 0x04, 0x00]);
+    header.extend_from_slice(&[0x00, 0x00, 0x14, 0x44]);
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: header.clone(),
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+    fs::write(temp.child("input.v64").path(), byte_swap_pairs(&z64)).expect("fixture");
+    let mut applied = z64;
+    applied[..header.len()].copy_from_slice(&header);
+    (applied, header)
+}
+
+#[test]
+fn patch_apply_auto_n64_order_infers_from_a_written_magic() {
+    // A patch whose first record rewrites the ROM header carries the magic it
+    // was authored against. Only one order spells that magic, so this settles
+    // the question outright - no speculative applies needed.
+    let temp = setup_temp_dir();
+    let (applied_z64, _) = n64_header_rewrite_fixture(&temp);
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.v64").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch N64 byte order inferred as big-endian"),
+        "label must report the inferred order: {label}"
+    );
+    assert!(
+        label.contains("magic"),
+        "label must give the reason: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.v64").path()).expect("output"),
+        byte_swap_pairs(&applied_z64)
+    );
+}
+
+#[test]
+fn patch_apply_n64_order_keep_overrides_the_inference() {
+    // `keep` is an instruction, not a hint. Even with a magic that names another
+    // order, the bytes stay exactly where the user asked for them.
+    let temp = setup_temp_dir();
+    let (_, header) = n64_header_rewrite_fixture(&temp);
+    let input = fs::read(temp.child("input.v64").path()).expect("input");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.v64").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--n64-byte-order",
+            "keep",
+            "--output",
+            temp.child("output.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("patch N64 byte order inferred"),
+        "keep must not infer anything: {label}"
+    );
+    let mut expected = input;
+    expected[..header.len()].copy_from_slice(&header);
+    assert_eq!(
+        fs::read(temp.child("output.v64").path()).expect("output"),
+        expected
+    );
+}
+
+#[test]
+fn patch_apply_auto_n64_order_leaves_a_checksummed_patch_alone() {
+    // Checksum proof still owns the decision when a format carries it: this BPS
+    // patch names its source exactly, and the structural fallback must not run
+    // at all. Regression guard for the fallback reaching past its case.
+    let temp = setup_temp_dir();
+    let z64 = [
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let mut modified_z64 = z64;
+    modified_z64[12..].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
+    fs::write(temp.child("original.z64").path(), z64).expect("fixture");
+    fs::write(temp.child("modified.z64").path(), modified_z64).expect("fixture");
+    fs::write(temp.child("input.v64").path(), byte_swap_pairs(&z64)).expect("fixture");
+    create_bps_patch(
+        temp.child("original.z64").path(),
+        temp.child("modified.z64").path(),
+        temp.child("update.bps").path(),
+    );
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.v64").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.bps").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("patch N64 byte order inferred"),
+        "a checksum-proved order is not an inference: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.v64").path()).expect("output"),
+        byte_swap_pairs(&modified_z64)
     );
 }

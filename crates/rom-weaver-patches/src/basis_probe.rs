@@ -14,16 +14,15 @@
 //! whether record edges look trimmed. Every rule is one-sided evidence, so the
 //! scorer reports [`BasisDecision::Inconclusive`] rather than guess.
 
-use std::{
-    fs::File,
-    io::{Read, Seek, SeekFrom},
-    path::Path,
-};
+use std::path::Path;
 
 use rom_weaver_core::Result;
 use tracing::{debug, trace};
 
-use crate::ips::{IpsProbeRecord, probe_ips_records};
+use crate::{
+    ips::{IpsProbeRecord, probe_ips_records},
+    probe_reader::ProbeReader,
+};
 
 /// Records compared for trimmed edges. Every real IPS patch is far under this;
 /// the cap only bounds the seek count on a pathological patch. Exceeding it is
@@ -122,30 +121,6 @@ impl BasisDecision {
     }
 }
 
-/// Reads single source bytes at scattered offsets.
-struct SourceBytes {
-    file: File,
-    len: u64,
-}
-
-impl SourceBytes {
-    fn open(path: &Path) -> Result<Self> {
-        let file = File::open(path)?;
-        let len = file.metadata()?.len();
-        Ok(Self { file, len })
-    }
-
-    fn byte_at(&mut self, offset: u64) -> Result<Option<u8>> {
-        if offset >= self.len {
-            return Ok(None);
-        }
-        self.file.seek(SeekFrom::Start(offset))?;
-        let mut byte = [0_u8; 1];
-        self.file.read_exact(&mut byte)?;
-        Ok(Some(byte[0]))
-    }
-}
-
 /// Score both candidate bases for `patch_path` applied to `input_path`.
 ///
 /// `header_len` is the copier header the headerless candidate strips, and
@@ -161,18 +136,18 @@ pub fn probe_patch_basis(
     let Some(patch) = probe_ips_records(patch_path)? else {
         return Ok(None);
     };
-    let mut source = SourceBytes::open(input_path)?;
-    if header_len == 0 || header_len >= source.len {
+    let mut source = ProbeReader::open(input_path)?;
+    if header_len == 0 || header_len >= source.len() {
         trace!(
             input = %input_path.display(),
             header_len,
-            source_len = source.len,
+            source_len = source.len(),
             "basis probe: header does not leave a usable headerless candidate"
         );
         return Ok(None);
     }
-    let raw_len = source.len;
-    let headerless_len = source.len - header_len;
+    let raw_len = source.len();
+    let headerless_len = source.len() - header_len;
 
     let mut raw = BasisEvidence {
         source_len: raw_len,
@@ -238,7 +213,7 @@ fn accumulate_edges(
     evidence: &mut BasisEvidence,
     record: &IpsProbeRecord,
     base_offset: u64,
-    source: &mut SourceBytes,
+    source: &mut ProbeReader,
 ) -> Result<()> {
     let Some(end) = record.offset.checked_add(record.len) else {
         return Ok(());
