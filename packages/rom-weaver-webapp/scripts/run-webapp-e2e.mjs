@@ -573,6 +573,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.getByRole("button", { name: "Settings" }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
+    // Codec fields live in the collapsed Advanced group now.
+    await page.locator(".settings-advanced > summary").click();
     const codecCombobox = page.locator(".codec-combobox input").first();
     await codecCombobox.click();
     await page.locator(".codec-combobox-list").waitFor({ state: "visible" });
@@ -813,6 +815,8 @@ const createWorkerReuseCorpus = () => {
 
 const configureUncompressedOutput = async (page) => {
   await page.getByRole("button", { name: "Settings" }).click();
+  // Compression fields live in the collapsed Advanced group.
+  await page.locator(".settings-advanced > summary").click();
   await page.locator("#settings-default-compression").selectOption("none");
   await page.getByRole("button", { name: "Save" }).click();
 };
