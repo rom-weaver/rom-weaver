@@ -1525,13 +1525,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       patches: this.patches.map((patch) => patch.source) as never,
       patchOptions: this.patches.map((patch) => ({
         basis: patch.state.basisChoice,
-        // User drawer choice wins; otherwise only a checksum-proven auto decision acts.
-        // Ambiguous (undecided) defaults to keep, matching RomPatcher.js.
+        // User drawer choice wins; otherwise only a checksum-proven decision acts.
+        // An undecided one is left unset so the engine's own inference runs.
         header:
           patch.state.headerChoice ??
           (patch.state.headerResolution?.decided ? patch.state.headerResolution.mode : undefined),
         n64ByteOrder: patch.state.n64ByteOrderChoice,
-        resolvedN64ByteOrder: patch.state.n64Resolution?.mode,
+        resolvedN64ByteOrder: patch.state.n64Resolution?.decided ? patch.state.n64Resolution.mode : undefined,
         validateInputChecksum: patch.state.validateInputChecksum,
         validateOutputChecksum: patch.state.validateOutputChecksum,
       })),
