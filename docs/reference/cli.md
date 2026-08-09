@@ -186,8 +186,9 @@ stream-compressed positional bundle needs a canonical name such as
 
 - `--patch-header auto|keep|strip` decides whether each patch applies to the
   ROM with or without its copier header. Auto works it out per patch from the
-  patch's own source checksum, and for a patch that carries none from where its
-  records land. See
+  patch's own source checksum under any algorithm, and for a patch that carries
+  none from where its records land, from which form the format itself accepts,
+  and from which result the console still recognises. See
   [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
 - `--output-header auto|keep|strip` decides whether the finished ROM keeps its
   header. Auto keeps the ones emulators need and drops the ones they do not.
