@@ -238,3 +238,35 @@ fn a_header_covering_the_whole_input_leaves_no_candidate() {
     let probe = probe_patch_basis(&patch_path, &rom_path, HEADER_LEN as u64, true).expect("probe");
     assert!(probe.is_none());
 }
+
+#[test]
+fn overlapping_records_void_the_edge_rule() {
+    // The edge rule only describes records a trimming differ produced, and such
+    // a differ never writes one byte twice. The same fixture as above, with the
+    // records packed close enough to overlap, must decide nothing.
+    let temp = TestDir::new();
+    let rom = headered_rom(6);
+    let record_len = 8_usize;
+    let mut records = Vec::new();
+    let mut matched_on_raw = 0;
+    for index in 0..12_u32 {
+        // Half a record apart, so every record shares bytes with its neighbour.
+        let offset = 0x1000 + index * 4;
+        let at = offset as usize;
+        let raw_first = rom[at];
+        let headerless_first = rom[HEADER_LEN + at];
+        let headerless_last = rom[HEADER_LEN + at + record_len - 1];
+        let mut data = vec![0_u8; record_len];
+        data[0] = if matched_on_raw < 2 && raw_first != headerless_first {
+            matched_on_raw += 1;
+            raw_first
+        } else {
+            headerless_first ^ 0xFF
+        };
+        data[record_len - 1] = headerless_last ^ 0xFF;
+        records.push((offset, data));
+    }
+    assert_eq!(matched_on_raw, 2, "fixture must plant two raw-edge matches");
+    let patch = build_ips(&records, None);
+    assert_eq!(decide(&temp, &rom, &patch, HEADER_LEN, true), None);
+}

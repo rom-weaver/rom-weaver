@@ -156,7 +156,8 @@ patch instead:
   because nobody edits copier padding.
 - A change is normally trimmed so its first and last byte differ from what was
   there before. Edges that already match the bytes underneath them point at the
-  wrong form.
+  wrong form. Changes that overlap each other did not come from a trimming
+  differ at all, so this rule says nothing about them.
 
 When the shape settles nothing - and for every format with no shape to read -
 rom-weaver applies the patch both ways and keeps the version the console still

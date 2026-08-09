@@ -20,7 +20,7 @@ use rom_weaver_core::Result;
 use tracing::{debug, trace};
 
 use crate::{
-    ips::{IpsProbeRecord, probe_ips_records},
+    ips::{IpsProbeRecord, probe_ips_records, records_overlap},
     probe_reader::ProbeReader,
 };
 
@@ -86,6 +86,9 @@ pub struct BasisProbe {
     pub raw: BasisEvidence,
     pub headerless: BasisEvidence,
     pub records: usize,
+    /// Whether any two compared records cover a shared byte, which voids the
+    /// edge rule's one assumption.
+    pub overlapping_records: bool,
     /// Whether the stripped header is copier junk rather than an emulator-read
     /// format header. Only junk headers support the header-write rule: nobody
     /// patches copier padding, but iNES header edits are routine.
@@ -182,6 +185,7 @@ pub fn probe_patch_basis(
         raw,
         headerless,
         records: patch.records.len(),
+        overlapping_records: records_overlap(&patch.records[..compared]),
         header_is_copier_junk,
     };
     debug!(
@@ -284,6 +288,12 @@ pub fn decide_basis(probe: &BasisProbe) -> BasisDecision {
 /// at the right basis a record's edge bytes differ from the source. At the
 /// wrong basis they match by coincidence often enough to show up.
 fn decide_by_edges(probe: &BasisProbe) -> BasisDecision {
+    if probe.overlapping_records {
+        return BasisDecision::Inconclusive {
+            reason: "records overlap, so their edges are not a trimming differ's".to_string(),
+        };
+    }
+
     let raw = probe.raw;
     let headerless = probe.headerless;
     if raw.comparable_records < MIN_RECORDS_FOR_EDGE_RULE

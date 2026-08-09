@@ -47,7 +47,7 @@ use rom_weaver_core::Result;
 use tracing::{debug, trace};
 
 use crate::{
-    ips::{IPS_PROBE_PREFIX_BYTES, IpsProbeRecord, probe_ips_records},
+    ips::{IPS_PROBE_PREFIX_BYTES, IpsProbeRecord, probe_ips_records, records_overlap},
     probe_reader::ProbeReader,
 };
 
@@ -275,29 +275,6 @@ fn effective_output_len(
         .unwrap_or(0);
     let grown = input_len.max(written_end);
     truncate_size.map_or(grown, |truncate_size| grown.min(truncate_size))
-}
-
-/// Whether any two records cover a shared byte.
-///
-/// The edge rule below reads each record's first and last byte against the
-/// bytes underneath it, which only means anything for records a trimming differ
-/// produced - and such a differ never emits two records over one byte. Overlap
-/// says the records came from somewhere else, so their edges prove nothing.
-fn records_overlap(records: &[IpsProbeRecord]) -> bool {
-    let mut spans = records
-        .iter()
-        .filter(|record| record.len > 0)
-        .filter_map(|record| Some((record.offset, record.offset.checked_add(record.len)?)))
-        .collect::<Vec<_>>();
-    spans.sort_unstable();
-    let mut covered_to = 0_u64;
-    for (start, end) in spans {
-        if start < covered_to {
-            return true;
-        }
-        covered_to = covered_to.max(end);
-    }
-    false
 }
 
 /// Whether a record writes any byte of `range`.

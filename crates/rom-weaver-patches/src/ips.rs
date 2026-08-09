@@ -526,6 +526,29 @@ pub(crate) struct IpsProbeRecord {
     pub(crate) last: u8,
 }
 
+/// Whether any two records cover a shared byte.
+///
+/// The edge rule below reads each record's first and last byte against the
+/// bytes underneath it, which only means anything for records a trimming differ
+/// produced - and such a differ never emits two records over one byte. Overlap
+/// says the records came from somewhere else, so their edges prove nothing.
+pub(crate) fn records_overlap(records: &[IpsProbeRecord]) -> bool {
+    let mut spans = records
+        .iter()
+        .filter(|record| record.len > 0)
+        .filter_map(|record| Some((record.offset, record.offset.checked_add(record.len)?)))
+        .collect::<Vec<_>>();
+    spans.sort_unstable();
+    let mut covered_to = 0_u64;
+    for (start, end) in spans {
+        if start < covered_to {
+            return true;
+        }
+        covered_to = covered_to.max(end);
+    }
+    false
+}
+
 /// How many leading output bytes [`IpsProbeData::prefix_writes`] captures. Four
 /// covers a magic number, the one header field whose correct contents a probe
 /// can know without knowing the game.
