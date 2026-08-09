@@ -8,6 +8,7 @@ import type { RomInputRowState } from "./patcher-ui-state.ts";
 const getPublicOutputSize = (output: { size?: number }) => output.size || 0;
 
 const isWorkflowDisposedError = (error: unknown) => getErrorCode(error) === "WORKFLOW_DISPOSED";
+const isWorkflowCancellationError = (error: unknown) => getErrorCode(error) === "CANCELLED";
 
 const waitForNextUiPaint = () =>
   new Promise<void>((resolve) => {
@@ -108,6 +109,7 @@ export {
   getPublicOutputSize,
   getRequestedOutputName,
   isWorkflowDisposedError,
+  isWorkflowCancellationError,
   resolveLocalStateUpdate,
   resolvePendingDownloadFileName,
   toError,

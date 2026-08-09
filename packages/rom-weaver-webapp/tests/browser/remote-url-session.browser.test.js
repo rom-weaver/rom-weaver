@@ -1,10 +1,11 @@
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { expect, test, vi } from "vitest";
 import { fetchRemoteFiles, RemoteFetchError } from "../../src/lib/remote/remote-file-fetch.ts";
 import { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
+import { readUrlSessionRequest } from "../../src/webapp/url-session/url-session-request.ts";
 import { useUrlSessionBoot } from "../../src/webapp/url-session/use-url-session-boot.ts";
 import {
   clickApplyButton,
@@ -23,6 +24,73 @@ installPatcherTestHooks();
 const UrlSessionBootHarness = ({ deliverFiles, request }) => {
   useUrlSessionBoot(request, deliverFiles);
   return null;
+};
+
+const UrlSessionRetryHarness = ({ deliverFiles, request }) => {
+  const [generation, setGeneration] = useState(0);
+  const { cancel, retry, state } = useUrlSessionBoot(request, deliverFiles, undefined, {
+    deliveryGeneration: generation,
+    isDeliveryCurrent: (candidate) => candidate === generation,
+  });
+  return createElement(
+    "div",
+    null,
+    createElement("span", { id: "url-session-phase" }, state.phase),
+    createElement("button", { id: "url-session-cancel", onClick: cancel, type: "button" }, "Cancel"),
+    state.phase === "error"
+      ? createElement(
+          "button",
+          {
+            id: "url-session-retry",
+            onClick: () => {
+              setGeneration((previous) => previous + 1);
+              retry();
+            },
+            type: "button",
+          },
+          "Retry",
+        )
+      : null,
+  );
+};
+
+const UrlSessionReplacementHarness = ({ request }) => {
+  const [generation, setGeneration] = useState(0);
+  const [delivered, setDelivered] = useState(0);
+  const [advisory, setAdvisory] = useState("");
+  useUrlSessionBoot(request, (files) => setDelivered(files.length), undefined, {
+    deliveryGeneration: generation,
+    isDeliveryCurrent: (candidate) => candidate === generation,
+    onSessionDelivered: (warnings) => setAdvisory(warnings.join("\n")),
+  });
+  return createElement(
+    "div",
+    null,
+    createElement("span", { id: "url-session-delivered" }, String(delivered)),
+    createElement("span", { id: "url-session-advisory" }, advisory),
+    createElement(
+      "button",
+      {
+        id: "url-session-manual-replacement",
+        onClick: () => {
+          setGeneration((previous) => previous + 1);
+          setAdvisory("");
+        },
+        type: "button",
+      },
+      "Manual replacement",
+    ),
+  );
+};
+
+const UrlSessionApplyHarness = ({ initialWarnings, request }) => {
+  const [pageDrop, setPageDrop] = useState(null);
+  const [sessionAdvisory, setSessionAdvisory] = useState(null);
+  useUrlSessionBoot(request, (files) => setPageDrop({ files, id: 1 }), undefined, {
+    initialWarnings,
+    onSessionDelivered: (warnings, kind) => setSessionAdvisory({ key: `${kind}-session`, kind, warnings }),
+  });
+  return createElement(ApplyPatchForm, { pageDrop, sessionAdvisory });
 };
 
 test("url boot cleans a delivered OPFS file when no workflow adopts it", async () => {
@@ -127,6 +195,120 @@ test("url boot cancellation removes a partial OPFS download before delivery", as
     await expect.poll(async () => browserVfs.stat(filePath)).toBeNull();
   } finally {
     truncateSpy.mockRestore();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fatal URL session fetches keep retry behavior", async () => {
+  const originalFetch = globalThis.fetch;
+  let attempts = 0;
+  let delivered = [];
+  globalThis.fetch = () => {
+    attempts += 1;
+    return attempts === 1
+      ? Promise.resolve(new Response("missing", { status: 503 }))
+      : Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
+  };
+  try {
+    mount(
+      createElement(UrlSessionRetryHarness, {
+        deliverFiles: (files) => {
+          delivered = files;
+        },
+        request: { kind: "direct", patchUrls: [], romUrl: "https://files.example/retry.bin" },
+      }),
+    );
+    await expect.poll(() => document.getElementById("url-session-phase")?.textContent).toBe("error");
+    document.getElementById("url-session-retry")?.click();
+    await expect.poll(() => delivered.length).toBe(1);
+    expect(attempts).toBe(2);
+    expect(document.getElementById("url-session-phase")?.textContent).toBe("done");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("manual replacement cancels pending URL delivery and advisory state", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchStarted = false;
+  let resolveFetch;
+  globalThis.fetch = (_input, init) => {
+    fetchStarted = true;
+    return new Promise((resolve, reject) => {
+      resolveFetch = resolve;
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("download aborted", "AbortError")), {
+        once: true,
+      });
+    });
+  };
+  try {
+    mount(
+      createElement(UrlSessionReplacementHarness, {
+        request: { kind: "direct", patchUrls: [], romUrl: "https://files.example/replaced.bin" },
+      }),
+    );
+    await expect.poll(() => fetchStarted).toBe(true);
+    document.getElementById("url-session-manual-replacement")?.click();
+    resolveFetch?.(new Response(new Uint8Array([1, 2, 3])));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.getElementById("url-session-delivered")?.textContent).toBe("0");
+    expect(document.getElementById("url-session-advisory")?.textContent).toBe("");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("warning-only direct URL parameters reach Apply after file delivery and can be dismissed", async () => {
+  const parsed = readUrlSessionRequest(
+    `?rom=file:///private/secret.bin&patch=${encodeURIComponent(`${location.origin}/${RAW_PATCH}`)}`,
+    location.href,
+  );
+  expect(parsed.request?.kind).toBe("direct");
+  expect(parsed.warnings).toHaveLength(1);
+  mount(createElement(UrlSessionApplyHarness, { initialWarnings: parsed.warnings, request: parsed.request }));
+
+  await expect
+    .poll(() => document.getElementById("rom-weaver-row-error-message")?.textContent || "", { timeout: 30000 })
+    .toContain("shared session loaded with warnings");
+  const notice = document.getElementById("rom-weaver-row-error-message");
+  expect(notice?.querySelector(".notice-copy")?.childNodes[0]?.textContent).toContain(
+    "shared session loaded with warnings",
+  );
+  expect(notice?.querySelector("details pre")?.textContent).toContain("file:///private/secret.bin");
+  expect(notice?.querySelector(".notice-x")?.getAttribute("aria-label")).toBe("Dismiss");
+  notice?.querySelector(".notice-x")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await expect.poll(() => document.getElementById("rom-weaver-row-error-message")).toBeNull();
+});
+
+test("warning-only bundle URL parameters reach Apply after successful session delivery", async () => {
+  const bundleUrl = `${location.origin}/virtual/warning-bundle.json`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const url = typeof input === "string" ? input : input?.url || String(input);
+    if (url === bundleUrl) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ patches: [{ url: `${location.origin}/${RAW_PATCH}` }], version: 1 }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        }),
+      );
+    }
+    return originalFetch(input, init);
+  };
+  try {
+    mount(
+      createElement(UrlSessionApplyHarness, {
+        initialWarnings: ["ignored bundle member https://cdn.example/index.json?token=secret"],
+        request: { bundleUrl, kind: "bundle" },
+      }),
+    );
+    await expect
+      .poll(() => document.getElementById("rom-weaver-row-error-message")?.textContent || "", { timeout: 30000 })
+      .toContain("bundle loaded with warnings");
+    const notice = document.getElementById("rom-weaver-row-error-message");
+    expect(notice?.querySelector(".notice-copy")?.childNodes[0]?.textContent).not.toContain("token=secret");
+    expect(notice?.querySelector("details pre")?.textContent).toContain("?…");
+  } finally {
     globalThis.fetch = originalFetch;
   }
 });

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { createLogger } from "../../lib/logging.ts";
+import { sanitizeUrlText } from "../../lib/url-text.ts";
+import { getErrorTechnicalDetails } from "../../presentation/errors.ts";
 import type { RemoteFetchEntry, RemoteFetchErrorKind } from "../../lib/remote/remote-file-fetch.ts";
 import { fetchRemoteFiles, RemoteFetchError } from "../../lib/remote/remote-file-fetch.ts";
 import type { UrlSessionRequest } from "./url-session-request.ts";
@@ -21,6 +23,15 @@ type UrlSessionBootState = {
   errorDetail: string;
 };
 
+type UrlSessionBootOptions = {
+  /** Generation captured when this request starts; stale deliveries are discarded. */
+  deliveryGeneration?: number;
+  /** Returns false when a newer local session has replaced this request. */
+  isDeliveryCurrent?: (generation: number) => boolean;
+  initialWarnings?: readonly string[];
+  onSessionDelivered?: (warnings: string[], kind: "bundle" | "url", generation: number) => void;
+};
+
 const IDLE_STATE: UrlSessionBootState = {
   bundleName: "",
   errorDetail: "",
@@ -39,25 +50,47 @@ const IDLE_STATE: UrlSessionBootState = {
  */
 function useUrlSessionBoot(
   request: UrlSessionRequest | null,
-  deliverFiles: (files: File[]) => void,
-  onBundleSession?: (session: BundleApplySession) => void,
-): { state: UrlSessionBootState; retry: () => void } {
+  deliverFiles: (files: File[], generation?: number) => void,
+  onBundleSession?: (session: BundleApplySession, generation?: number) => void,
+  options: UrlSessionBootOptions = {},
+): { cancel: () => void; retry: () => void; state: UrlSessionBootState } {
   const [state, setState] = useState<UrlSessionBootState>(IDLE_STATE);
   const [attempt, setAttempt] = useState(0);
   const deliverRef = useRef(deliverFiles);
   deliverRef.current = deliverFiles;
   const bundleSessionRef = useRef(onBundleSession);
   bundleSessionRef.current = onBundleSession;
+  const sessionDeliveredRef = useRef(options.onSessionDelivered);
+  sessionDeliveredRef.current = options.onSessionDelivered;
+  const isDeliveryCurrentRef = useRef(options.isDeliveryCurrent);
+  isDeliveryCurrentRef.current = options.isDeliveryCurrent;
+  const deliveryGenerationRef = useRef(options.deliveryGeneration ?? 0);
+  deliveryGenerationRef.current = options.deliveryGeneration ?? 0;
+  const cancelRunRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!request) return undefined;
     let cancelled = false;
     let cleanupSessionFiles: (() => Promise<void>) | undefined;
+    let cleanupPromise: Promise<void> | null = null;
     const controller = new AbortController();
+    const runGeneration = deliveryGenerationRef.current;
+    const isCurrent = () => !cancelled && (isDeliveryCurrentRef.current?.(runGeneration) ?? true);
+    const cancelRun = () => {
+      cancelled = true;
+      controller.abort();
+      void cleanupFiles();
+    };
+    const cleanupFiles = () => {
+      if (!cleanupSessionFiles) return Promise.resolve();
+      cleanupPromise ??= cleanupSessionFiles();
+      return cleanupPromise;
+    };
+    cancelRunRef.current = cancelRun;
     const loadedByEntry = new Map<number | string, number>();
     const totalsByEntry = new Map<number | string, number | null>();
     const reportProgress = () => {
-      if (cancelled) return;
+      if (!isCurrent()) return;
       let loadedBytes = 0;
       for (const value of loadedByEntry.values()) loadedBytes += value;
       let totalBytes: number | null = 0;
@@ -88,12 +121,20 @@ function useUrlSessionBoot(
         cleanupSessionFiles = async () => {
           await Promise.all(files.map((entry) => entry.cleanup()));
         };
-        if (cancelled) {
-          await cleanupSessionFiles();
+        if (!isCurrent()) {
+          await cleanupFiles();
           return;
         }
         // One delivery preserves patch order through the drop router.
-        deliverRef.current(files.map((entry) => entry.file));
+        deliverRef.current(
+          files.map((entry) => entry.file),
+          runGeneration,
+        );
+        if (!isCurrent()) {
+          await cleanupFiles();
+          return;
+        }
+        sessionDeliveredRef.current?.([...(options.initialWarnings || [])], "url", runGeneration);
       });
     } else {
       run = loadBundleUrlSessionModule()
@@ -112,42 +153,57 @@ function useUrlSessionBoot(
         )
         .then(async ({ cleanup, files, session }) => {
           cleanupSessionFiles = cleanup;
-          if (cancelled) {
-            await cleanup();
+          if (!isCurrent()) {
+            await cleanupFiles();
+            return;
+          }
+          deliverRef.current(files, runGeneration);
+          if (!isCurrent()) {
+            await cleanupFiles();
             return;
           }
           // A retry after failure must re-seed the form, so the session identity carries the attempt.
-          bundleSessionRef.current?.({ ...session, key: `${session.key}#${attempt}` });
-          deliverRef.current(files);
+          const deliveredSession = { ...session, key: `${session.key}#${attempt}` };
+          bundleSessionRef.current?.(deliveredSession, runGeneration);
+          sessionDeliveredRef.current?.(
+            [...(options.initialWarnings || []), ...deliveredSession.warnings],
+            "bundle",
+            runGeneration,
+          );
         });
     }
     run
       .then(() => {
-        if (cancelled) return;
+        if (!isCurrent()) return;
         setState((previous) => ({ ...previous, phase: "done" }));
         logger.info("url session loaded");
       })
       .catch((error: unknown) => {
-        if (cancelled) return;
+        if (!isCurrent()) return;
         const kind = error instanceof RemoteFetchError ? error.kind : null;
         if (kind === "aborted" || controller.signal.aborted) return;
-        logger.error(`url session failed: ${String(error)}`);
+        logger.error("url session failed", {
+          message: sanitizeUrlText(error instanceof Error ? error.message : error),
+        });
         setState((previous) => ({
           ...previous,
-          errorDetail: error instanceof Error ? error.message : String(error),
+          errorDetail: getErrorTechnicalDetails(error),
           errorKind: kind,
           phase: "error",
         }));
       });
     return () => {
-      cancelled = true;
-      controller.abort();
-      void cleanupSessionFiles?.();
+      if (cancelRunRef.current === cancelRun) cancelRunRef.current = null;
+      cancelRun();
     };
-  }, [attempt, request]);
+  }, [attempt, options.initialWarnings, request]);
 
   const retry = useCallback(() => setAttempt((previous) => previous + 1), []);
-  return { retry, state };
+  const cancel = useCallback(() => {
+    cancelRunRef.current?.();
+    setState(IDLE_STATE);
+  }, []);
+  return { cancel, retry, state };
 }
 
 export type { UrlSessionBootState };

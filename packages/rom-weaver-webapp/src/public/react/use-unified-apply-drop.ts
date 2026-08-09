@@ -4,6 +4,7 @@ import { loadLocalBundleSession } from "../../lib/bundle/local-bundle-session.ts
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { classifyDroppedFiles, isArchiveFileName, isPatchFileName, isRomFileName } from "./file-classification.ts";
+import type { ApplySessionSource } from "./patcher-form.ts";
 
 /**
  * Drop orchestration for the Apply tab.
@@ -34,6 +35,7 @@ type UnifiedDropController = {
   discardCompletedOutput?: () => void;
   provideRomInputFiles?: (files: File[]) => void;
   providePatchInputFiles?: (files: File[]) => void;
+  setDropSource?: (source: ApplySessionSource) => void;
 };
 
 // The canonical name is the trusted fast-path: it marks a bundle by name
@@ -55,13 +57,14 @@ const isRootJsonArchiveEntry = (name: string) => {
 
 type UnifiedApplyDrop = {
   pendingDrops: PendingDrop[];
-  onDrop: (files: File[], isCancelled?: () => boolean, signal?: AbortSignal) => void;
+  onDrop: (files: File[], isCancelled?: () => boolean, signal?: AbortSignal, source?: ApplySessionSource) => void;
 };
 type ActiveDropKind = "bundle" | "patch" | "rom" | "unknown";
 type DropRouteLifecycle = {
   beforeNonBundleDelivery?: () => Promise<void>;
   onBundleDetected?: () => void;
   rememberBundleSourceCleanup?: (cleanup: () => Promise<void>) => void;
+  source?: ApplySessionSource;
 };
 
 const getDropKind = (files: File[], classification: ReturnType<typeof classifyDroppedFiles>): ActiveDropKind => {
@@ -151,10 +154,13 @@ const routeUnifiedDrop = async (
       throw new Error("A checks-only bundle drop contains more than one possible ROM");
     }
     try {
-      onBundleSession?.(loaded.session);
       const romFile = loaded.romFile || companionRoms[0];
+      controller.setDropSource?.(lifecycle?.source || "manual");
       if (romFile) controller.provideRomInputFiles?.([romFile]);
       controller.providePatchInputFiles?.(loaded.patchFiles);
+      // Deliver the files first. The session warning is advisory, so Apply only shows it after the
+      // bundle's sources have reached the normal input pipeline.
+      onBundleSession?.(loaded.session);
       lifecycle?.rememberBundleSourceCleanup?.(loaded.cleanup);
       logger.debug("bundle source cleanup registered with form owner", {
         hasRom: !!romFile,
@@ -221,6 +227,7 @@ const routeUnifiedDrop = async (
     romArchiveCount: romArchives.length,
     romInputCount: romInputs.length,
   });
+  if (romInputs.length || patchInputs.length) controller.setDropSource?.(lifecycle?.source || "manual");
   if (romInputs.length) controller.provideRomInputFiles?.(romInputs);
   if (patchInputs.length) controller.providePatchInputFiles?.(patchInputs);
 };
@@ -236,6 +243,7 @@ const useUnifiedApplyDrop = (
   const nextIdRef = useRef(0);
   const activeDropsRef = useRef(new Map<AbortController, ActiveDropKind>());
   const bundleSourceCleanupsRef = useRef(new Set<() => Promise<void>>());
+  const bundleSessionSequenceRef = useRef(0);
   const dropQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pendingTimersRef = useRef(new Set<ReturnType<typeof setTimeout>>());
   const mountedRef = useRef(true);
@@ -271,8 +279,16 @@ const useUnifiedApplyDrop = (
   const rememberBundleSourceCleanup = useCallback((cleanup: () => Promise<void>) => {
     bundleSourceCleanupsRef.current.add(cleanup);
   }, []);
+  const deliverBundleSession = useCallback(
+    (session: BundleApplySession) => {
+      bundleSessionSequenceRef.current += 1;
+      onBundleSession?.({ ...session, key: `${session.key}#${bundleSessionSequenceRef.current}` });
+    },
+    [onBundleSession],
+  );
   const onDrop = useCallback(
-    (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal) => {
+    (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal, source: ApplySessionSource = "manual") => {
+      controller.setDropSource?.(source);
       const classification = classifyDroppedFiles(files);
       // The classifier deliberately treats unknown bare extensions as ROM/input fallbacks. Use its
       // bucket here too so replacement/cancellation policy cannot disagree with the eventual route;
@@ -360,10 +376,11 @@ const useUnifiedApplyDrop = (
         activeDropsRef.current.set(dropController, "bundle");
       };
       const runRoute = () =>
-        routeUnifiedDrop(files, controller, onBundleSession, isCancelled, updatePending, dropController.signal, {
+        routeUnifiedDrop(files, controller, deliverBundleSession, isCancelled, updatePending, dropController.signal, {
           ...(mayContainBundle ? { beforeNonBundleDelivery: () => previousRoute } : {}),
           rememberBundleSourceCleanup,
           onBundleDetected: promoteToBundle,
+          source,
         });
       // Input callbacks mutate ordered ROM/patch stacks. Serialize delivery so a small later patch cannot
       // overtake an earlier archive/bundle that is still being identified or downloaded. Potential
@@ -383,10 +400,11 @@ const useUnifiedApplyDrop = (
         .finally(() => {
           outerSignal?.removeEventListener("abort", abortDrop);
           activeDropsRef.current.delete(dropController);
+          controller.setDropSource?.("manual");
           clearPending();
         });
     },
-    [controller, onError, onBundleSession, rememberBundleSourceCleanup],
+    [controller, deliverBundleSession, onError, rememberBundleSourceCleanup],
   );
 
   return { onDrop, pendingDrops };

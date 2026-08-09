@@ -24,8 +24,14 @@ const UrlSessionBanner = ({ state, onRetry }: { state: UrlSessionBootState; onRe
         {state.phase === "error" ? (
           <>
             <span className="updates-text">
-              <b>{localizer.message("ui.urlSession.error")}</b> <span className="mono">{state.errorDetail}</span>
+              <b>{localizer.message("ui.urlSession.errorAction")}</b>
               {state.errorKind === "blocked" ? <> {localizer.message("ui.urlSession.corsHint")}</> : null}
+              {state.errorDetail ? (
+                <details className="notice-details">
+                  <summary>{localizer.message("ui.common.technicalDetails")}</summary>
+                  <pre>{state.errorDetail}</pre>
+                </details>
+              ) : null}
             </span>
             <button className="btn slim primary" onClick={onRetry} type="button">
               {localizer.message("ui.common.retry")}

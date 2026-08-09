@@ -97,6 +97,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.common.close": msg({ id: "ui.common.close", message: "Close" }),
   "ui.common.copy": msg({ id: "ui.common.copy", message: "Copy" }),
   "ui.common.dismiss": msg({ id: "ui.common.dismiss", message: "Dismiss" }),
+  "ui.common.technicalDetails": msg({ id: "ui.common.technicalDetails", message: "Technical details" }),
   "ui.common.retry": msg({ id: "ui.common.retry", message: "Retry" }),
   "ui.common.skipToMain": msg({ id: "ui.common.skipToMain", message: "Skip to main content" }),
   "ui.drop.release": msg({ id: "ui.drop.release", message: "Release to add files" }),
@@ -260,8 +261,39 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.urlSession.corsHint",
     message: "The file host must allow cross-origin downloads (CORS).",
   }),
-  "ui.urlSession.error": msg({ id: "ui.urlSession.error", message: "Shared session download failed" }),
+  "ui.urlSession.errorAction": msg({
+    id: "ui.urlSession.errorAction",
+    message: "The shared session could not be loaded. Check the shared files and retry.",
+  }),
+  "ui.urlSession.error": msg({
+    id: "ui.urlSession.error",
+    message: "Shared session download failed",
+  }),
   "ui.urlSession.loading": msg({ id: "ui.urlSession.loading", message: "Loading shared session…" }),
+  "ui.urlSession.warning": msg({
+    id: "ui.urlSession.warning",
+    message: "The shared session loaded with warnings. Review Technical details, then check the files before applying.",
+  }),
+  "ui.bundle.warning": msg({
+    id: "ui.bundle.warning",
+    message: "The bundle loaded with warnings. Review Technical details, then check the files before applying.",
+  }),
+  "ui.apply.bundleErrorAction": msg({
+    id: "ui.apply.bundleErrorAction",
+    message: "The bundle could not be loaded. Check the bundle and try again.",
+  }),
+  "ui.apply.inputErrorAction": msg({
+    id: "ui.apply.inputErrorAction",
+    message: "The ROM could not be read. Check the file and try again.",
+  }),
+  "ui.apply.outputErrorAction": msg({
+    id: "ui.apply.outputErrorAction",
+    message: "The output could not be written. Check the settings and try again.",
+  }),
+  "ui.apply.patchErrorAction": msg({
+    id: "ui.apply.patchErrorAction",
+    message: "The patch could not be read. Check the file and try again.",
+  }),
 };
 
 export { MESSAGES };

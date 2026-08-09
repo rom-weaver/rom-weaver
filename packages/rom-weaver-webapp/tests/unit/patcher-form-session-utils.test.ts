@@ -5,6 +5,7 @@ import {
   getLogicalRomInputCount,
   getMultiInputOutputError,
   getRequestedOutputName,
+  isWorkflowCancellationError,
   isWorkflowDisposedError,
   resolveLocalStateUpdate,
   resolvePendingDownloadFileName,
@@ -96,5 +97,10 @@ describe("misc helpers", () => {
   it("isWorkflowDisposedError matches the disposed code only", () => {
     expect(isWorkflowDisposedError(Object.assign(new Error("x"), { code: "WORKFLOW_DISPOSED" }))).toBe(true);
     expect(isWorkflowDisposedError(new Error("x"))).toBe(false);
+  });
+
+  it("recognizes cancellation without treating other failures as aborted", () => {
+    expect(isWorkflowCancellationError(Object.assign(new Error("x"), { code: "CANCELLED" }))).toBe(true);
+    expect(isWorkflowCancellationError(Object.assign(new Error("x"), { code: "INVALID_INPUT" }))).toBe(false);
   });
 });

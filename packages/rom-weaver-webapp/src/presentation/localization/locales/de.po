@@ -700,8 +700,23 @@ msgstr "Tippen, um Dateien zu wählen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.common.technicalDetails"
+msgstr "Technische Details"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.tabTest"
 msgstr "Test"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.bundleErrorAction"
+msgstr "Das Bundle konnte nicht geladen werden. Prüfe das Bundle und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundle.warning"
+msgstr "Das Bundle wurde mit Warnungen geladen. Prüfe die technischen Details und die Dateien, bevor du es anwendest."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -710,8 +725,23 @@ msgstr "Der Datei-Host muss Cross-Origin-Downloads (CORS) erlauben."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.outputErrorAction"
+msgstr "Die Ausgabe konnte nicht geschrieben werden. Prüfe die Einstellungen und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.patchErrorAction"
+msgstr "Der Patch konnte nicht gelesen werden. Prüfe die Datei und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "Das Patch-Ziel passt nicht zur gewählten Eingabe."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.inputErrorAction"
+msgstr "Die ROM konnte nicht gelesen werden. Prüfe die Datei und versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -752,6 +782,16 @@ msgstr "Der Service Worker ist aus — rom-weaver braucht bei jedem Besuch das N
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.activeDesc"
 msgstr "Der Service Worker hat diese Seite aus dem Cache ausgeliefert, rom-weaver läuft also ohne Netzwerk."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.urlSession.errorAction"
+msgstr "Die geteilte Sitzung konnte nicht geladen werden. Prüfe die Dateien und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.urlSession.warning"
+msgstr "Die geteilte Sitzung wurde mit Warnungen geladen. Prüfe die technischen Details und die Dateien, bevor du sie anwendest."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

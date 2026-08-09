@@ -1,9 +1,15 @@
 import type { MessageId } from "./localization/catalog.ts";
 import { createLocalizer, type Localizer } from "./localization/index.ts";
+import { sanitizeUrlText } from "../lib/url-text.ts";
 
 type CodedErrorLike = Error & {
   code?: unknown;
   details?: Record<string, unknown>;
+};
+
+type NoticeError = {
+  message: string;
+  technicalDetails?: string;
 };
 
 const isCodedError = (error: unknown): error is CodedErrorLike =>
@@ -63,6 +69,64 @@ const getStructuredErrorDetail = (error: unknown): string => {
   return detailParts.join(", ");
 };
 
+const getErrorTechnicalDetails = (error: unknown, displayedMessage = ""): string => {
+  const details: string[] = [];
+  const seen = new Set<string>();
+  const add = (value: string) => {
+    const sanitized = sanitizeUrlText(value).trim();
+    if (!sanitized || seen.has(sanitized)) return;
+    seen.add(sanitized);
+    details.push(sanitized);
+  };
+  let current: unknown = error;
+  let depth = 0;
+  while (current !== undefined && current !== null && depth < 8) {
+    if (typeof current === "object") {
+      const record = current as {
+        code?: unknown;
+        details?: unknown;
+        kind?: unknown;
+        status?: unknown;
+        url?: unknown;
+      };
+      if (typeof record.code === "string" && record.code) add(`code=${record.code}`);
+      if (typeof record.kind === "string" && record.kind) add(`kind=${record.kind}`);
+      if (typeof record.status === "number" && Number.isFinite(record.status)) add(`status=${record.status}`);
+      if (typeof record.url === "string" && record.url) add(`url=${record.url}`);
+      if (record.details && typeof record.details === "object") {
+        const structured = getStructuredErrorDetail(current);
+        if (structured) add(structured);
+      }
+    }
+    const message = getErrorMessage(current).trim();
+    if (message && normalizeComparableErrorMessage(message) !== normalizeComparableErrorMessage(displayedMessage))
+      add(message);
+    current = getErrorCause(current);
+    depth += 1;
+  }
+  return details.join("\n");
+};
+
+const formatNoticeError = (
+  error: unknown,
+  localizer: Localizer = createLocalizer(),
+  fallbackMessage?: string,
+): NoticeError => {
+  const code = getErrorCode(error);
+  const message =
+    (fallbackMessage && sanitizeUrlText(fallbackMessage)) ||
+    (code ? getUserFacingErrorMessage(error, localizer) : sanitizeUrlText(getErrorMessage(error)));
+  const technicalDetails = getErrorTechnicalDetails(error, message);
+  return technicalDetails ? { message, technicalDetails } : { message };
+};
+
+const formatNoticeWarningDetails = (warnings: readonly string[]): string =>
+  warnings
+    .map((warning) => sanitizeUrlText(warning).trim())
+    .filter(Boolean)
+    .map((warning) => `- ${warning}`)
+    .join("\n");
+
 const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = createLocalizer()): string => {
   const code = getErrorCode(error);
   if (!code) return getErrorMessage(error);
@@ -88,4 +152,10 @@ const formatCodedErrorForDisplay = (error: unknown, localizer: Localizer = creat
   return `${code}: ${message}`;
 };
 
-export { formatCodedErrorForDisplay, getErrorCode };
+export {
+  formatCodedErrorForDisplay,
+  formatNoticeError,
+  formatNoticeWarningDetails,
+  getErrorCode,
+  getErrorTechnicalDetails,
+};

@@ -154,7 +154,7 @@ const useWorkbenchActivity = (workflowId: string, { busy, queued, completed }: W
  */
 const usePageDropForwarder = (
   pageDrop: PageFileDrop | null | undefined,
-  handler: (files: File[]) => void,
+  handler: (files: File[], source?: PageFileDrop["source"]) => void,
   handledPageDropIdRef: { current: number | null },
 ) => {
   const handlerRef = useLatestRef(handler);
@@ -164,7 +164,7 @@ const usePageDropForwarder = (
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      handlerRef.current(pageDrop.files);
+      handlerRef.current(pageDrop.files, pageDrop.source);
     });
     return () => {
       cancelled = true;

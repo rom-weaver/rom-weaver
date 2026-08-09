@@ -45,7 +45,7 @@ import { useBundleExport } from "./bundle-export.tsx";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
-import type { BinarySource } from "./patcher-form.ts";
+import type { ApplySessionSource, BinarySource } from "./patcher-form.ts";
 import { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt } from "./public-types.ts";
 import { useApplySettings, useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
@@ -208,7 +208,15 @@ const setWorkflowSettingsIfChanged = async ({
 };
 
 function ApplyPatchForm(props: ApplyPatchFormProps) {
-  const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, threads } = props;
+  const {
+    onApplyComplete,
+    onError: onApplyError,
+    onInputsChange,
+    onManualSessionStart,
+    onPatchesChange,
+    onProgress: onProgressChange,
+    threads,
+  } = props;
   const providerSettings = useApplySettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
@@ -310,12 +318,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     setResolvedOutputName(outputName);
     setResolvedOutputNameKey(getOutputSourceKey(snapshot.inputs, snapshot.patches));
   }, []);
+  const dropSourceRef = useRef<ApplySessionSource>("manual");
 
   const handleLocalInputsChange = useCallback(
     (nextInputs: BinarySource[]) => {
       setCompletedOutput(null);
       syncInputSelectionRefs(nextInputs);
-      onInputsChange?.(nextInputs);
+      onInputsChange?.(nextInputs, dropSourceRef.current);
     },
     [onInputsChange, syncInputSelectionRefs],
   );
@@ -344,6 +353,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     setBundleDismissed(false);
   }, [bundleSessionKey]);
   const activeBundleSession = bundleDismissed ? null : localBundleSession || props.bundleSession || null;
+  const sessionAdvisory =
+    props.sessionAdvisory ||
+    (activeBundleSession?.warnings.length
+      ? {
+          key: activeBundleSession.key,
+          kind: "bundle" as const,
+          warnings: activeBundleSession.warnings,
+        }
+      : null);
   const bundleControllersRef = useRef<BundleSessionControllers>({ output: null, patchStack: null });
   const { bundleDefaultsPending, handleBundlePatchesChange, bundleMetaById, updateBundleMeta } = useBundleApplySession({
     bundleSession: activeBundleSession,
@@ -410,7 +428,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       );
       handleBundlePatchesChange(nextPatches);
       syncPatchSelectionRefs(nextPatches);
-      onPatchesChange?.(nextPatches);
+      onPatchesChange?.(nextPatches, dropSourceRef.current);
     },
     [handleBundlePatchesChange, onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
   );
@@ -1456,6 +1474,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, withPreparedWorkflow],
   );
 
+  const handleManualSessionStart = useCallback(() => {
+    dropSourceRef.current = "manual";
+    onManualSessionStart?.();
+  }, [onManualSessionStart]);
+
   const { localUiController, localStackController, localOutputController, localNoticeController } =
     useLocalApplyPatchFormSession({
       ...propsWithSettings,
@@ -1463,6 +1486,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       applyReady: applyReady && !bundleDefaultsPending,
       disabledPatchIds,
       downloadOutput,
+      onManualSessionStart: handleManualSessionStart,
+      sessionAdvisory,
       onApplyComplete: () => undefined,
       onInputsChange: handleLocalInputsChange,
       onPatchesChange: handleLocalPatchesChange,
@@ -1475,7 +1500,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       stagePatches,
       validatePatches,
     });
-  const resolvedUiController = localUiController;
+  const setDropSource = useCallback((source: ApplySessionSource) => {
+    dropSourceRef.current = source;
+  }, []);
+  const resolvedUiController = useMemo(
+    () => ({ ...localUiController, setDropSource }),
+    [localUiController, setDropSource],
+  );
   const resolvedStackController = localStackController;
   const resolvedOutputController = localOutputController;
   bundleControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
@@ -1548,16 +1579,39 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
   // forwarder: bare files stage immediately, archives show an instant placeholder
   // until their ROM-vs-patch bucket is classified.
-  const { onDrop: handleUnifiedDrop, pendingDrops } = useUnifiedApplyDrop(
+  const handleUnifiedDropError = useCallback(
+    (error: Error) => {
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      localNoticeController.showError?.(normalized);
+      onApplyError?.(normalized);
+    },
+    [localNoticeController, onApplyError],
+  );
+  const handleLocalBundleSession = useCallback((session: BundleApplySession) => {
+    setBundleDismissed(false);
+    setLocalBundleSession(session);
+  }, []);
+  const { onDrop: runUnifiedDrop, pendingDrops } = useUnifiedApplyDrop(
     resolvedUiController,
-    setLocalBundleSession,
-    props.onError,
+    handleLocalBundleSession,
+    handleUnifiedDropError,
+  );
+  const handleUnifiedDrop = useCallback(
+    (files: File[], isCancelled?: () => boolean, signal?: AbortSignal, source: ApplySessionSource = "manual") => {
+      if (source === "manual") handleManualSessionStart();
+      runUnifiedDrop(files, isCancelled, signal, source);
+    },
+    [handleManualSessionStart, runUnifiedDrop],
   );
 
   // Forward a page-level drop (dragging anywhere on the page) to the same unified
   // drop handler so the whole tab is a drop target, not just the dropzone box.
   const handledPageDropIdRef = useRef<number | null>(null);
-  usePageDropForwarder(props.pageDrop, (files) => handleUnifiedDrop(files), handledPageDropIdRef);
+  usePageDropForwarder(
+    props.pageDrop,
+    (files, source) => handleUnifiedDrop(files, undefined, undefined, source || "manual"),
+    handledPageDropIdRef,
+  );
 
   handleSelectionCancelledRef.current = (request) => {
     const normalizedSourceName = request.sourceName.trim().toLowerCase();

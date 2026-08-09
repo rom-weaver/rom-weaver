@@ -24,6 +24,7 @@ import {
   shouldWarnBeforeUnload,
 } from "./unload-guard.ts";
 import { readUrlSessionRequest } from "./url-session/url-session-request.ts";
+import { sanitizeUrlText } from "../lib/url-text.ts";
 import { createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath } from "./webapp-controller.ts";
 import { readPwaState } from "./components/shell.tsx";
 import { getSoftNavigationUrl } from "./soft-navigation.ts";
@@ -182,7 +183,7 @@ const urlSessionParse =
     ? { request: null, warnings: [] }
     : readUrlSessionRequest(window.location.search, readAppBaseUrl());
 for (const warning of urlSessionParse.warnings) {
-  logger.warn(`url session: ${warning}`);
+  logger.warn(`url session: ${sanitizeUrlText(warning)}`);
 }
 
 const applySettingsToRuntime = (settings: SettingsState) => {

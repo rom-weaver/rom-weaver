@@ -1,7 +1,12 @@
 import type { ChecksumVariant } from "../../types/checksum.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
-import type { ApplyPatchFormProps, ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
+import type {
+  ApplyPatchFormProps,
+  ApplyPatchFormSettings,
+  ApplySessionAdvisory,
+  BinarySource,
+} from "./patcher-form.ts";
 import type { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { InputProgress, RomInputRowState } from "./patcher-ui-state.ts";
 
@@ -103,6 +108,7 @@ type LocalPatcherSessionState = {
   completedCompressionTimeMs: number | null;
   completedSizeSummary: ReturnType<typeof createOutputSizeSummary>;
   failureMessage: string;
+  failureTechnicalDetails: string;
   inputStaging: boolean;
   outputErrorMessage: string;
   outputName: string;
@@ -133,6 +139,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
   | "containerInputsEnabled"
   | "compressionOptions"
   | "onInputsChange"
+  | "onManualSessionStart"
   | "onPatchesChange"
   | "onSettingsChange"
   | "onSelectView"
@@ -140,6 +147,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
   | "onApplyComplete"
   | "onError"
 > & {
+  sessionAdvisory?: ApplySessionAdvisory | null;
   applyPatches: (input: {
     inputs: BinarySource[];
     patches: BinarySource[];

@@ -18,7 +18,7 @@ import type {
 } from "./apply-session-types.ts";
 import { getBinarySourceFileName, toInputProgress } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
-import { isWorkflowDisposedError, toError } from "./patcher-form-session-utils.ts";
+import { isWorkflowCancellationError, isWorkflowDisposedError, toError } from "./patcher-form-session-utils.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
 import { createWaitingWorkflowProgress } from "./workflow-run-hooks.ts";
@@ -335,7 +335,7 @@ const useInputStaging = (context: InputStagingContext) => {
         .catch((error) => {
           if (patchStageGenerationRef.current !== generation) return;
           const normalized = toError(error);
-          if (isWorkflowDisposedError(normalized)) return;
+          if (isWorkflowDisposedError(normalized) || isWorkflowCancellationError(normalized)) return;
           failVerifyingPatches(snapshot, normalized);
           logUiError("Patch validation failed", normalized);
         })
@@ -478,7 +478,7 @@ const useInputStaging = (context: InputStagingContext) => {
         .catch((error) => {
           if (patchStageGenerationRef.current !== generation) return;
           const normalizedError = toError(error);
-          if (isWorkflowDisposedError(normalizedError)) return;
+          if (isWorkflowDisposedError(normalizedError) || isWorkflowCancellationError(normalizedError)) return;
           failVerifyingPatches(snapshot, normalizedError);
           logUiError("Patch staging failed", normalizedError);
           setSectionErrorMessage("patch", normalizedError);
@@ -700,7 +700,7 @@ const useInputStaging = (context: InputStagingContext) => {
         })
         .catch((error) => {
           const normalizedError = toError(error);
-          if (isWorkflowDisposedError(normalizedError)) return;
+          if (isWorkflowDisposedError(normalizedError) || isWorkflowCancellationError(normalizedError)) return;
           // A patch-only archive optimistically staged in the ROM bucket aborts its ROM staging so the
           // reclassify (driven by the is_rom=false progress it already emitted) can re-home it to the
           // patch bucket. That teardown is expected, not a failure - do not surface it.

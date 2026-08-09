@@ -9,6 +9,7 @@ import { buildBundleApplySessionPlan } from "../../lib/bundle/bundle-session-mod
 import { createLogger } from "../../lib/logging.ts";
 import type { RemoteFetchEntry } from "../../lib/remote/remote-file-fetch.ts";
 import { fetchRemoteFiles } from "../../lib/remote/remote-file-fetch.ts";
+import { sanitizeUrlText } from "../../lib/url-text.ts";
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 
 const logger = createLogger("bundle-url-session");
@@ -82,7 +83,7 @@ const loadBundleUrlSession = async (
   hooks: LoadBundleUrlSessionHooks = {},
 ): Promise<LoadedBundleUrlSession> => {
   const { onBundleName, onProgress, signal } = hooks;
-  logger.info(`loading bundle session: ${bundleUrl}`);
+  logger.info(`loading bundle session: ${sanitizeUrlText(bundleUrl)}`);
   const [bundleFetch] = await fetchRemoteFiles(
     [
       {
@@ -120,7 +121,7 @@ const loadBundleUrlSession = async (
   try {
     const plan = buildBundleApplySessionPlan(result, bundleFetch.finalUrl || bundleUrl);
     onBundleName?.(plan.name || "");
-    for (const warning of plan.warnings) logger.warn(`bundle warning: ${warning}`);
+    for (const warning of plan.warnings) logger.warn(`bundle warning: ${sanitizeUrlText(warning)}`);
     const acquisition = await acquireBundleFiles(plan, extractedFiles, onProgress, signal);
     remoteSourceFetches = acquisition.remoteSourceFetches;
     const { acquiredPatchFiles, entries } = acquisition;

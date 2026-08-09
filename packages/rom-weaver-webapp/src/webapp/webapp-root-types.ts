@@ -1,5 +1,6 @@
 import type { PageUpdateState } from "./page-update-state.ts";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
+import type { ApplySessionAdvisory, ApplySessionSource } from "../public/react/patcher-form.ts";
 import type { ServiceWorkerStatus } from "./pwa/service-worker-cache-state.ts";
 import type { UrlSessionParseResult } from "./url-session/url-session-request.ts";
 import type {
@@ -59,6 +60,8 @@ type WebappRootProps = {
   confirmationDialog: ConfirmationDialogState;
   /** Boot-time `?bundle=` / `?rom=&patch=` session request, when present. */
   urlSession?: UrlSessionParseResult | null;
+  /** Warnings retained until the URL session has delivered its files to Apply. */
+  urlSessionAdvisory?: ApplySessionAdvisory | null;
   actions: {
     onStartGuide: (guide: GuidedSample) => void;
     onSelectView: (view: WebappView) => void;
@@ -82,8 +85,8 @@ type WebappRootProps = {
     onCreatorPatchTypeChange: (patchType: string) => void;
     onCreatorSettingsChange: (settings: unknown) => void;
     onPatcherBundlePackageChange: (value: string) => void;
-    onPatcherInputsChange: (inputs: readonly unknown[]) => void;
-    onPatcherPatchesChange: (patches: readonly unknown[]) => void;
+    onPatcherInputsChange: (inputs: readonly unknown[], source?: ApplySessionSource) => void;
+    onPatcherPatchesChange: (patches: readonly unknown[], source?: ApplySessionSource) => void;
     onPatcherSettingsChange: (settings: unknown) => void;
     onTrimSourceChange: (file: unknown) => void;
     onTrimOutputFormatChange: (format: string) => void;

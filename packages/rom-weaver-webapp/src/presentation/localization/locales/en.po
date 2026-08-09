@@ -700,8 +700,23 @@ msgstr "Tap to choose files"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.common.technicalDetails"
+msgstr "Technical details"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.tabTest"
 msgstr "Test"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.bundleErrorAction"
+msgstr "The bundle could not be loaded. Check the bundle and try again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundle.warning"
+msgstr "The bundle loaded with warnings. Review Technical details, then check the files before applying."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -710,8 +725,23 @@ msgstr "The file host must allow cross-origin downloads (CORS)."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.outputErrorAction"
+msgstr "The output could not be written. Check the settings and try again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.patchErrorAction"
+msgstr "The patch could not be read. Check the file and try again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "The patch target did not match the selected input."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.inputErrorAction"
+msgstr "The ROM could not be read. Check the file and try again."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -752,6 +782,16 @@ msgstr "The service worker is off, so rom-weaver needs the network each visit. P
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.activeDesc"
 msgstr "The service worker served this page from the cache, so rom-weaver is running with no network."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.urlSession.errorAction"
+msgstr "The shared session could not be loaded. Check the shared files and retry."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.urlSession.warning"
+msgstr "The shared session loaded with warnings. Review Technical details, then check the files before applying."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -11,6 +11,7 @@ import { registerBrowserSourceCleanup } from "../../storage/browser/browser-sour
 import { joinVfsPath } from "../../storage/vfs/path.ts";
 import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import { createLogger } from "../logging.ts";
+import { sanitizeUrlText } from "../url-text.ts";
 
 const logger = createLogger("remote-fetch");
 
@@ -208,7 +209,7 @@ async function drainResponseBody(
 
 async function fetchRemoteFile(url: string, options: FetchRemoteFileOptions = {}): Promise<RemoteFile> {
   const { fallbackFileName, maxBytes = DEFAULT_MAX_BYTES, onProgress, signal } = options;
-  logger.debug(`fetching remote file: ${url}`);
+  logger.debug(`fetching remote file: ${sanitizeUrlText(url)}`);
   const response = await openRemoteResponse(url, signal);
   const totalBytes = readDeclaredLength(response);
   if (totalBytes !== null && totalBytes > maxBytes) {
@@ -257,7 +258,7 @@ async function fetchRemoteFile(url: string, options: FetchRemoteFileOptions = {}
     // path directly instead of registering another virtual file view of the same bytes.
     Object.defineProperty(file, "filePath", { value: filePath });
     const cleanup = registerBrowserSourceCleanup(file, () => browserVfs.remove(filePath));
-    logger.debug(`fetched remote file: ${url} (${loadedBytes} bytes as ${fileName})`);
+    logger.debug(`fetched remote file: ${sanitizeUrlText(url)} (${loadedBytes} bytes as ${fileName})`);
     return {
       cleanup,
       file,

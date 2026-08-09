@@ -700,8 +700,23 @@ msgstr "Toca para elegir archivos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.common.technicalDetails"
+msgstr "Detalles técnicos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.tabTest"
 msgstr "Prueba"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.bundleErrorAction"
+msgstr "No se pudo cargar el bundle. Revisa el bundle y vuelve a intentarlo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundle.warning"
+msgstr "El bundle se cargó con avisos. Revisa los detalles técnicos y los archivos antes de aplicarlo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -710,8 +725,23 @@ msgstr "El servidor de archivos debe permitir descargas de origen cruzado (CORS)
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.outputErrorAction"
+msgstr "No se pudo escribir la salida. Revisa los ajustes y vuelve a intentarlo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.patchErrorAction"
+msgstr "No se pudo leer el parche. Revisa el archivo y vuelve a intentarlo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "El destino del parche no coincide con la entrada seleccionada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.inputErrorAction"
+msgstr "No se pudo leer la ROM. Revisa el archivo y vuelve a intentarlo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -752,6 +782,16 @@ msgstr "El service worker está desactivado, así que rom-weaver necesita la red
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.activeDesc"
 msgstr "El service worker sirvió esta página desde la caché, así que rom-weaver funciona sin red."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.urlSession.errorAction"
+msgstr "No se pudo cargar la sesión compartida. Revisa los archivos y vuelve a intentarlo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.urlSession.warning"
+msgstr "La sesión compartida se cargó con avisos. Revisa los detalles técnicos y los archivos antes de aplicarla."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

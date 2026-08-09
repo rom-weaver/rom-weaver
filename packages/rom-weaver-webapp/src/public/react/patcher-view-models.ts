@@ -32,11 +32,15 @@ interface UiViewStateInput {
   checksumOverrideChecked: boolean;
   disabled: boolean;
   effectiveOutputNoticeMessage: string;
+  failureTechnicalDetails: string;
   hasStrictInputChecksumMismatch: boolean;
   inputNoticeMessage: string;
+  inputNoticeTechnicalDetails: string;
   inputStaging: boolean;
   outputRuntimeNoticeMessage: string;
+  outputNoticeTechnicalDetails: string;
   patchNoticeMessage: string;
+  patchNoticeTechnicalDetails: string;
   patchProgress: InputProgress | null;
   patchProgressByKey: Record<string, InputProgress>;
   patchStaging: boolean;
@@ -49,11 +53,15 @@ const buildUiViewState = ({
   checksumOverrideChecked,
   disabled,
   effectiveOutputNoticeMessage,
+  failureTechnicalDetails,
   hasStrictInputChecksumMismatch,
   inputNoticeMessage,
+  inputNoticeTechnicalDetails,
   inputStaging,
   outputRuntimeNoticeMessage,
+  outputNoticeTechnicalDetails,
   patchNoticeMessage,
+  patchNoticeTechnicalDetails,
   patchProgress,
   patchProgressByKey,
   patchStaging,
@@ -72,12 +80,15 @@ const buildUiViewState = ({
       dismissible: true,
       level: "error" as const,
       message: inputNoticeMessage,
+      technicalDetails: inputNoticeTechnicalDetails || undefined,
       visible: !!inputNoticeMessage,
     },
     outputNotice: {
       dismissible: !!outputRuntimeNoticeMessage,
       level: "error" as const,
       message: effectiveOutputNoticeMessage,
+      technicalDetails:
+        outputNoticeTechnicalDetails || (effectiveOutputNoticeMessage ? failureTechnicalDetails : undefined),
       visible: !!effectiveOutputNoticeMessage,
     },
     patchInput: {
@@ -87,6 +98,7 @@ const buildUiViewState = ({
       dismissible: true,
       level: "error" as const,
       message: patchNoticeMessage,
+      technicalDetails: patchNoticeTechnicalDetails || undefined,
       visible: !!patchNoticeMessage,
     },
     romInputs,
@@ -264,16 +276,36 @@ const buildOutputViewState = ({
 });
 
 interface NoticeViewStateInput {
+  advisory?: NoticeState | null;
   failureMessage: string;
+  failureTechnicalDetails: string;
   failurePlacement: "input" | "output" | "patch" | null;
 }
 
 // Pure projection of the top-level (unplaced) failure notice.
-const buildNoticeViewState = ({ failureMessage, failurePlacement }: NoticeViewStateInput): NoticeState => ({
-  dismissible: true,
-  level: "error",
-  message: failureMessage,
-  visible: !!failureMessage && !failurePlacement,
-});
+const buildNoticeViewState = ({
+  advisory,
+  failureMessage,
+  failurePlacement,
+  failureTechnicalDetails,
+}: NoticeViewStateInput): NoticeState => {
+  if (failureMessage && !failurePlacement) {
+    return {
+      dismissible: true,
+      level: "error",
+      message: failureMessage,
+      technicalDetails: failureTechnicalDetails || undefined,
+      visible: true,
+    };
+  }
+  return (
+    advisory || {
+      dismissible: false,
+      level: "error",
+      message: "",
+      visible: false,
+    }
+  );
+};
 
 export { buildNoticeViewState, buildOutputViewState, buildStackViewState, buildUiViewState, formatHeaderAutoLabel };

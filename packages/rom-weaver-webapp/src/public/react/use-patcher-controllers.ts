@@ -26,6 +26,7 @@ interface InputUiControllerContext {
   actions: Pick<
     SessionState,
     | "setErrorMessage"
+    | "setFailureTechnicalDetails"
     | "setOutputErrorMessage"
     | "setPatchProgress"
     | "setPatchProgressByKey"
@@ -37,6 +38,7 @@ interface InputUiControllerContext {
     emitSessionTrace: (message: string, details?: Record<string, unknown>) => void;
     invalidateCompletedOutputState: () => void;
     invalidatePatchStage: () => void;
+    onManualSessionStart?: () => void;
     setChecksumOverrideChecked: Dispatch<SetStateAction<boolean>>;
     setFailurePlacement: Dispatch<SetStateAction<FailurePlacement>>;
     updateInputs: (nextInputs: BinarySource[]) => void;
@@ -59,6 +61,7 @@ const useInputUiController = (context: InputUiControllerContext) => {
     () => ({
       clearRomInput: () => {
         const { actions, state } = contextRef.current;
+        actions.onManualSessionStart?.();
         actions.emitSessionTrace("clearRomInput requested", {
           previousCount: state.effectiveInputs.length,
         });
@@ -76,11 +79,13 @@ const useInputUiController = (context: InputUiControllerContext) => {
         if (key === "inputNotice" && state.failurePlacement === "input") {
           actions.setFailurePlacement(null);
           actions.setErrorMessage("");
+          actions.setFailureTechnicalDetails("");
           return;
         }
         if (key === "patchNotice" && state.failurePlacement === "patch") {
           actions.setFailurePlacement(null);
           actions.setErrorMessage("");
+          actions.setFailureTechnicalDetails("");
           return;
         }
         if (key === "outputNotice") {
@@ -88,6 +93,7 @@ const useInputUiController = (context: InputUiControllerContext) => {
           if (state.failurePlacement === "output") {
             actions.setFailurePlacement(null);
             actions.setErrorMessage("");
+            actions.setFailureTechnicalDetails("");
           }
         }
       },
@@ -138,6 +144,7 @@ const useInputUiController = (context: InputUiControllerContext) => {
         const { actions, state } = contextRef.current;
         const index = state.romInputs.findIndex((entry) => entry.id === id);
         if (index === -1) return;
+        actions.onManualSessionStart?.();
         actions.emitSessionTrace("removeRomInput requested", {
           id,
           index,
@@ -171,6 +178,7 @@ interface PatchStackControllerContext {
     createStageSnapshot: () => ApplyWorkflowStageSnapshot;
     getPatchKey: (source: BinarySource, sources?: BinarySource[]) => string;
     onError?: (error: Error) => void;
+    onManualSessionStart?: () => void;
     setPatchInfoByKey: SessionState["setPatchInfoByKey"];
     setPatchOption?: LocalApplyPatchFormSessionOptions["setPatchOption"];
     setPatchTarget?: LocalApplyPatchFormSessionOptions["setPatchTarget"];
@@ -213,6 +221,7 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
       replaceItem: (index: number, source: BinarySource) => {
         const { actions, state } = contextRef.current;
         if (index < 0 || index >= state.activePatches.length) return;
+        actions.onManualSessionStart?.();
         // Replacing from a patch archive: mark it with the replaced card's name so the selection
         // picker pre-selects the same-named leaf (the user still confirms or picks a different one).
         const replacedName = getReactBinarySourceFileName(state.activePatches[index] ?? null, "");
@@ -232,6 +241,7 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
         const { actions, state } = contextRef.current;
         const count = state.activePatches.length;
         if (from === to || from < 0 || from >= count || to < 0 || to >= count) return;
+        actions.onManualSessionStart?.();
         logger.debug("patch reorder", { count, from, to });
         actions.updatePatches(reorder(state.activePatches, from, to));
       },

@@ -61,6 +61,70 @@ const withBundleFetchStub = async (bundle, run) => {
 
 const getPatchToggles = () => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .patch-enable input"));
 
+test("canonical local bundle parse failures reach the Apply notice with retry guidance", async () => {
+  const bundleFile = new File(["{ not valid json"], "rom-weaver-bundle.json", { type: "application/json" });
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleFile], id: 1 } }));
+
+  await expect
+    .poll(() => document.getElementById("rom-weaver-row-error-message")?.textContent || "", { timeout: 30000 })
+    .toContain("bundle");
+  const notice = document.getElementById("rom-weaver-row-error-message");
+  expect(notice?.textContent).toContain("try again");
+  expect(notice?.querySelector("details summary")?.textContent).toBe("Technical details");
+
+  notice?.querySelector(".notice-x")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await expect.poll(() => document.getElementById("rom-weaver-row-error-message")).toBeNull();
+});
+
+test("bundle advisories are dismissible and a new session replaces a dismissed warning", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const render = (key, warning) =>
+    mount(
+      createElement(ApplyPatchForm, {
+        pageDrop: { files: [romFile, patchFile], id: Number(key.slice(-1)) || 1 },
+        sessionAdvisory: { key, kind: "bundle", warnings: [warning] },
+      }),
+    );
+
+  render("local-bundle-1", "ignored member https://cdn.example/bundle.json?token=secret");
+  await expect
+    .poll(() => document.getElementById("rom-weaver-row-error-message")?.textContent || "", { timeout: 30000 })
+    .toContain("bundle loaded with warnings");
+  const firstNotice = document.getElementById("rom-weaver-row-error-message");
+  expect(firstNotice?.textContent).not.toContain("token=secret");
+  firstNotice?.querySelector(".notice-x")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await expect.poll(() => document.getElementById("rom-weaver-row-error-message")).toBeNull();
+
+  render("local-bundle-2", "new warning");
+  await expect
+    .poll(() => document.getElementById("rom-weaver-row-error-message")?.textContent || "", { timeout: 30000 })
+    .toContain("bundle loaded with warnings");
+});
+
+test("mounted Apply replacement restores a dismissed advisory for the new session", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const root = mount(
+    createElement(ApplyPatchForm, {
+      pageDrop: { files: [romFile, patchFile], id: 1 },
+      sessionAdvisory: { key: "mounted-bundle-1", kind: "bundle", warnings: ["first warning"] },
+    }),
+  );
+  await expect
+    .poll(() => document.getElementById("rom-weaver-row-error-message")?.textContent || "", { timeout: 30000 })
+    .toContain("bundle loaded with warnings");
+  document.getElementById("rom-weaver-row-error-message")?.querySelector(".notice-x")?.click();
+  await expect.poll(() => document.getElementById("rom-weaver-row-error-message")).toBeNull();
+
+  root.render(
+    createElement(ApplyPatchForm, {
+      sessionAdvisory: { key: "mounted-bundle-2", kind: "bundle", warnings: ["second warning"] },
+    }),
+  );
+  await expect
+    .poll(() => document.getElementById("rom-weaver-row-error-message")?.textContent || "", { timeout: 30000 })
+    .toContain("bundle loaded with warnings");
+});
+
 // Pack files into a zip through the real compression runtime (what a patch
 // distributor would publish as a without-ROM bundle).
 const buildZip = async (entries, outputName) => {

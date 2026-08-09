@@ -22,6 +22,22 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+.rw-app .notice-details {
+  margin-block-start: var(--sp-s);
+  font-size: 0.78rem;
+}
+.rw-app .notice-details summary {
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.rw-app .notice-details pre {
+  max-width: 100%;
+  margin-block: var(--sp-s) 0;
+  overflow-x: auto;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
 .rw-app .notice.warn {
   color: var(--ink);
   background: color-mix(in oklab, var(--care) 12%, var(--plate-2));

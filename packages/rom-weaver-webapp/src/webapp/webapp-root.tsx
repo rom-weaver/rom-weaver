@@ -12,6 +12,7 @@ import { runFlatViewTransition } from "../public/react/components/ds/flat-transi
 import { ConfirmDialog } from "../public/react/components/ds/index.ts";
 import { notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
 import type { PageFileDrop } from "../public/react/public-types.ts";
+import type { ApplySessionAdvisory, ApplySessionSource } from "../public/react/patcher-form.ts";
 // Deliberately NOT the ../public/react/index.tsx barrel: that barrel re-exports
 // every workflow form, so a static import of it pulls all four route chunks
 // back into the entry and defeats the split below.
@@ -262,6 +263,7 @@ function WebappRoot({
   actions,
   serviceWorkerCache,
   urlSession,
+  urlSessionAdvisory,
   docsSlug = "docs",
   notFound = false,
 }: WebappRootProps) {
@@ -299,6 +301,7 @@ function WebappRoot({
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
+  const activeSessionGenerationRef = useRef(0);
   const threads = state.settings.threads;
   useLayoutEffect(() => notifyGuidedSampleView(state.currentView), [state.currentView]);
   useLayoutEffect(() => {
@@ -419,13 +422,15 @@ function WebappRoot({
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
   const deliverUrlSessionFiles = useCallback(
-    (files: File[]) => {
+    (files: File[], generation = activeSessionGenerationRef.current, source: ApplySessionSource = "url-session") => {
+      if (generation !== activeSessionGenerationRef.current) return;
       actions.onSelectView("patcher");
       pageDropIdRef.current += 1;
       setPageDrop({
         drop: {
           files,
           id: pageDropIdRef.current,
+          source,
         },
         view: "patcher",
       });
@@ -436,7 +441,7 @@ function WebappRoot({
     () =>
       subscribeHostIngest((paths) => {
         void resolveHostIngestFiles(paths)
-          .then(deliverUrlSessionFiles)
+          .then((files) => deliverUrlSessionFiles(files, activeSessionGenerationRef.current, "manual"))
           .catch((error) => logger.error("host OPFS ingest failed", { error: String(error) }));
       }),
     [deliverUrlSessionFiles],
@@ -444,11 +449,86 @@ function WebappRoot({
   // The `?bundle=` boot's decorated session (enablement seed + output defaults + patch metadata);
   // the apply form consumes it once its patch list matches the bundle's delivery.
   const [bundleSession, setBundleSession] = useState<BundleApplySession | null>(null);
+  const [deliveredUrlSessionAdvisory, setDeliveredUrlSessionAdvisory] = useState<ApplySessionAdvisory | null>(
+    urlSessionAdvisory || null,
+  );
+  const urlSessionDeliveryKeyRef = useRef(0);
+  const urlSessionKey = urlSession?.request
+    ? urlSession.request.kind === "bundle"
+      ? `bundle:${urlSession.request.bundleUrl}`
+      : `url:${urlSession.request.romUrl || ""}:${urlSession.request.patchUrls.join("|")}`
+    : "";
+  useEffect(() => {
+    setDeliveredUrlSessionAdvisory((current) => {
+      if (!(current && urlSessionKey) || current.key.startsWith(`${urlSessionKey}#`)) return current;
+      return null;
+    });
+  }, [urlSessionKey]);
+  const handleUrlSessionDelivered = useCallback(
+    (warnings: string[], kind: "bundle" | "url", generation: number) => {
+      if (generation !== activeSessionGenerationRef.current) return;
+      urlSessionDeliveryKeyRef.current += 1;
+      setDeliveredUrlSessionAdvisory({
+        key: `${urlSessionKey}#${generation}#${urlSessionDeliveryKeyRef.current}`,
+        kind,
+        warnings,
+      });
+    },
+    [urlSessionKey],
+  );
+  const isActiveSessionGeneration = useCallback(
+    (generation: number) => generation === activeSessionGenerationRef.current,
+    [],
+  );
+  const handleUrlBundleSession = useCallback((session: BundleApplySession, generation?: number) => {
+    if (generation !== undefined && generation !== activeSessionGenerationRef.current) return;
+    setBundleSession(session);
+  }, []);
   const urlSessionBoot = useUrlSessionBoot(
     notFound ? null : (urlSession?.request ?? null),
     deliverUrlSessionFiles,
-    setBundleSession,
+    handleUrlBundleSession,
+    {
+      deliveryGeneration: activeSessionGenerationRef.current,
+      initialWarnings: urlSession?.warnings,
+      isDeliveryCurrent: isActiveSessionGeneration,
+      onSessionDelivered: handleUrlSessionDelivered,
+    },
   );
+  const { cancel: cancelUrlSession, retry: urlSessionRetry } = urlSessionBoot;
+
+  const resetActiveSession = useCallback(
+    (shouldCancelUrlSession: boolean) => {
+      activeSessionGenerationRef.current += 1;
+      setBundleSession(null);
+      setDeliveredUrlSessionAdvisory(null);
+      setPageDrop(null);
+      if (shouldCancelUrlSession) cancelUrlSession();
+    },
+    [cancelUrlSession],
+  );
+  const handleManualSessionStart = useCallback(() => {
+    resetActiveSession(true);
+  }, [resetActiveSession]);
+  const handlePatcherInputsChange = useCallback(
+    (inputs: readonly unknown[], source: ApplySessionSource = "manual") => {
+      if (source === "manual") resetActiveSession(true);
+      actions.onPatcherInputsChange(inputs, source);
+    },
+    [actions, resetActiveSession],
+  );
+  const handlePatcherPatchesChange = useCallback(
+    (patches: readonly unknown[], source: ApplySessionSource = "manual") => {
+      if (source === "manual") resetActiveSession(true);
+      actions.onPatcherPatchesChange(patches, source);
+    },
+    [actions, resetActiveSession],
+  );
+
+  const retryUrlSession = useCallback(() => {
+    resetActiveSession(false);
+    urlSessionRetry();
+  }, [resetActiveSession, urlSessionRetry]);
 
   useEffect(() => {
     setVisitedViews((previous) => (previous.includes(state.currentView) ? previous : [...previous, state.currentView]));
@@ -516,6 +596,7 @@ function WebappRoot({
           drop: {
             files,
             id: pageDropIdRef.current,
+            source: "manual",
           },
           view: droppedView,
         });
@@ -631,7 +712,7 @@ function WebappRoot({
             open={pageUpdate.ready && !updateDismissed}
             title={pageUpdate.title}
           />
-          <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
+          <UrlSessionBanner onRetry={retryUrlSession} state={urlSessionBoot.state} />
           <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
             {notFound ? (
@@ -664,9 +745,11 @@ function WebappRoot({
                   "patcher",
                   <ApplyPatchRoute
                     bundleSession={bundleSession}
+                    onManualSessionStart={handleManualSessionStart}
+                    sessionAdvisory={deliveredUrlSessionAdvisory}
                     onBundlePackageChange={actions.onPatcherBundlePackageChange}
-                    onInputsChange={actions.onPatcherInputsChange}
-                    onPatchesChange={actions.onPatcherPatchesChange}
+                    onInputsChange={handlePatcherInputsChange}
+                    onPatchesChange={handlePatcherPatchesChange}
                     onSelectView={() => actions.onSelectView("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
                     pageDrop={activePageDrop}

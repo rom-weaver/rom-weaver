@@ -19,6 +19,8 @@ const Notice = ({
   className,
   dismissLabel = "Dismiss",
   onDismiss,
+  technicalDetailsLabel = "Technical details",
+  technicalDetails,
 }: {
   level: NoticeLevel;
   id?: string;
@@ -26,12 +28,22 @@ const Notice = ({
   className?: string;
   dismissLabel?: string;
   onDismiss?: () => void;
+  technicalDetailsLabel?: ReactNode;
+  technicalDetails?: ReactNode;
 }) => {
   const Icon = level === "error" ? CircleX : TriangleAlert;
   return (
     <div className={join("notice", level, className)} id={id} role={level === "error" ? "alert" : "status"}>
       <Icon aria-hidden="true" />
-      <span className="body notice-copy">{children}</span>
+      <div className="body notice-copy">
+        {children}
+        {technicalDetails ? (
+          <details className="notice-details">
+            <summary>{technicalDetailsLabel}</summary>
+            <pre>{technicalDetails}</pre>
+          </details>
+        ) : null}
+      </div>
       {onDismiss ? (
         <button aria-label={dismissLabel} className="x notice-x" onClick={onDismiss} title={dismissLabel} type="button">
           <X aria-hidden="true" />

@@ -13,6 +13,7 @@ type NoticeState = {
   level: NoticeLevel;
   visible: boolean;
   dismissible?: boolean;
+  technicalDetails?: string;
 };
 
 type PatcherSectionNoticeKey = "inputNotice" | "patchNotice" | "outputNotice";

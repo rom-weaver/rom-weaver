@@ -4,7 +4,7 @@ import {
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
 } from "../../lib/compression/container-format-registry.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
-import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
+import { formatNoticeError, formatNoticeWarningDetails } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult } from "../../types/workflow-runtime-types.ts";
@@ -37,6 +37,7 @@ import {
   getLogicalRomInputCount,
   getMultiInputOutputError,
   getRequestedOutputName,
+  isWorkflowCancellationError,
   isWorkflowDisposedError,
   resolvePendingDownloadFileName,
   toError,
@@ -95,6 +96,7 @@ const useLocalApplyPatchFormSession = ({
   onProgress,
   onApplyComplete,
   onError,
+  onManualSessionStart,
   applyPatches,
   applyReady = false,
   downloadOutput,
@@ -107,6 +109,7 @@ const useLocalApplyPatchFormSession = ({
   validatePatches,
   setPatchTarget,
   setPatchOption,
+  sessionAdvisory,
 }: LocalApplyPatchFormSessionOptions) => {
   const [internalInputs, setInternalInputs] = useState(defaultInputs);
   const [internalPatches, setInternalPatches] = useState(defaultPatches);
@@ -121,6 +124,7 @@ const useLocalApplyPatchFormSession = ({
     setCompletedCompressionTimeMs,
     setCompletedSizeSummary,
     setErrorMessage,
+    setFailureTechnicalDetails,
     setInputStaging,
     setOutputErrorMessage,
     setOutputName,
@@ -135,12 +139,14 @@ const useLocalApplyPatchFormSession = ({
   } = session;
   const [outputCompressionEdited, setOutputCompressionEdited] = useState(false);
   const [failurePlacement, setFailurePlacement] = useState<"input" | "output" | "patch" | null>(null);
+  const [dismissedAdvisoryKey, setDismissedAdvisoryKey] = useState<string | null>(null);
   const {
     busy,
     completedApplyTimeMs,
     completedCompressionTimeMs,
     completedSizeSummary,
     failureMessage,
+    failureTechnicalDetails,
     inputStaging,
     outputErrorMessage,
     outputName,
@@ -208,6 +214,24 @@ const useLocalApplyPatchFormSession = ({
     };
   }, [retainedSources]);
   const activeSettings = settings === undefined ? internalSettings : settings;
+  const advisoryIdentity = useMemo(() => {
+    if (!(sessionAdvisory && sessionAdvisory.warnings.length)) return "";
+    return `${sessionAdvisory.key}:${sessionAdvisory.kind}:${sessionAdvisory.warnings.join("\n")}`;
+  }, [sessionAdvisory]);
+  const advisoryNotice = useMemo<NoticeState | null>(() => {
+    if (!(sessionAdvisory?.warnings.length && advisoryIdentity) || dismissedAdvisoryKey === advisoryIdentity)
+      return null;
+    const message = createBrowserLocalizer((activeSettings as { language?: string }).language).message(
+      sessionAdvisory.kind === "bundle" ? "ui.bundle.warning" : "ui.urlSession.warning",
+    );
+    return {
+      dismissible: true,
+      level: "warning",
+      message,
+      technicalDetails: formatNoticeWarningDetails(sessionAdvisory.warnings),
+      visible: true,
+    };
+  }, [activeSettings, advisoryIdentity, dismissedAdvisoryKey, sessionAdvisory]);
   const emitSessionTrace = useCallback(
     (message: string, details?: Record<string, unknown>) =>
       emitTraceLog(
@@ -237,23 +261,46 @@ const useLocalApplyPatchFormSession = ({
     resolvedOutputCompression,
     romInputs,
   });
-  const formatSessionError = useCallback(
-    (error: Error) =>
-      formatCodedErrorForDisplay(error, createBrowserLocalizer((activeSettings as { language?: string }).language)),
+  const formatSessionNotice = useCallback(
+    (error: Error, fallbackMessage?: string) =>
+      formatNoticeError(
+        error,
+        createBrowserLocalizer((activeSettings as { language?: string }).language),
+        fallbackMessage,
+      ),
+    [activeSettings],
+  );
+  const getSessionMessage = useCallback(
+    (
+      id:
+        | "ui.apply.bundleErrorAction"
+        | "ui.apply.inputErrorAction"
+        | "ui.apply.outputErrorAction"
+        | "ui.apply.patchErrorAction",
+    ) => createBrowserLocalizer((activeSettings as { language?: string }).language).message(id),
     [activeSettings],
   );
   const setSectionErrorMessage = useCallback(
     (placement: "input" | "output" | "patch", error: Error) => {
+      const fallbackMessage =
+        placement === "input"
+          ? getSessionMessage("ui.apply.inputErrorAction")
+          : placement === "patch"
+            ? getSessionMessage("ui.apply.patchErrorAction")
+            : getSessionMessage("ui.apply.outputErrorAction");
+      const notice = formatSessionNotice(error, fallbackMessage);
       setFailurePlacement(placement);
-      setErrorMessage(formatSessionError(error));
+      setErrorMessage(notice.message);
+      setFailureTechnicalDetails(notice.technicalDetails || "");
     },
-    [formatSessionError, setErrorMessage],
+    [formatSessionNotice, getSessionMessage, setErrorMessage, setFailureTechnicalDetails],
   );
   const clearDismissibleErrors = useCallback(() => {
     setFailurePlacement(null);
     setErrorMessage("");
+    setFailureTechnicalDetails("");
     setOutputErrorMessage("");
-  }, [setErrorMessage, setOutputErrorMessage]);
+  }, [setErrorMessage, setFailureTechnicalDetails, setOutputErrorMessage]);
   const outputSourceKey = useMemo(
     () =>
       JSON.stringify({
@@ -486,11 +533,15 @@ const useLocalApplyPatchFormSession = ({
         checksumOverrideChecked,
         disabled,
         effectiveOutputNoticeMessage,
+        failureTechnicalDetails,
         hasStrictInputChecksumMismatch,
         inputNoticeMessage,
+        inputNoticeTechnicalDetails: failurePlacement === "input" ? failureTechnicalDetails : "",
         inputStaging,
+        outputNoticeTechnicalDetails: failurePlacement === "output" ? failureTechnicalDetails : "",
         outputRuntimeNoticeMessage,
         patchNoticeMessage,
+        patchNoticeTechnicalDetails: failurePlacement === "patch" ? failureTechnicalDetails : "",
         patchProgress,
         patchProgressByKey,
         patchStaging,
@@ -501,6 +552,8 @@ const useLocalApplyPatchFormSession = ({
       checksumOverrideChecked,
       disabled,
       inputStaging,
+      failurePlacement,
+      failureTechnicalDetails,
       hasStrictInputChecksumMismatch,
       effectiveOutputNoticeMessage,
       inputNoticeMessage,
@@ -572,8 +625,8 @@ const useLocalApplyPatchFormSession = ({
     ],
   );
   const localNoticeState = useMemo<NoticeState>(
-    () => buildNoticeViewState({ failureMessage, failurePlacement }),
-    [failureMessage, failurePlacement],
+    () => buildNoticeViewState({ advisory: advisoryNotice, failureMessage, failurePlacement, failureTechnicalDetails }),
+    [advisoryNotice, failureMessage, failurePlacement, failureTechnicalDetails],
   );
 
   const updateSettings = useCallback(
@@ -1017,7 +1070,7 @@ const useLocalApplyPatchFormSession = ({
             onState: () => undefined,
           }).catch((error) => {
             const normalizedError = toError(error);
-            if (isWorkflowDisposedError(normalizedError)) return;
+            if (isWorkflowDisposedError(normalizedError) || isWorkflowCancellationError(normalizedError)) return;
             emitSessionTrace("input staging clear failed", {
               message: normalizedError.message,
               name: normalizedError.name,
@@ -1143,8 +1196,10 @@ const useLocalApplyPatchFormSession = ({
       emitSessionTrace,
       invalidateCompletedOutputState,
       invalidatePatchStage: patchStageMachine.invalidateStage,
+      onManualSessionStart,
       setChecksumOverrideChecked,
       setErrorMessage,
+      setFailureTechnicalDetails,
       setFailurePlacement,
       setOutputErrorMessage,
       setPatchProgress,
@@ -1170,6 +1225,7 @@ const useLocalApplyPatchFormSession = ({
       createStageSnapshot,
       getPatchKey,
       onError,
+      onManualSessionStart,
       setPatchInfoByKey,
       setPatchOption,
       setPatchTarget,
@@ -1311,13 +1367,33 @@ const useLocalApplyPatchFormSession = ({
   const localNoticeController = useMemo(
     (): NoticeController => ({
       dismiss: () => {
-        setFailurePlacement(null);
-        setErrorMessage("");
+        if (failureMessage) {
+          setFailurePlacement(null);
+          setErrorMessage("");
+          setFailureTechnicalDetails("");
+          return;
+        }
+        if (advisoryIdentity) setDismissedAdvisoryKey(advisoryIdentity);
       },
       getState: localNoticeStoreController.getState,
+      showError: (error, fallbackMessage) => {
+        const notice = formatSessionNotice(error, fallbackMessage || getSessionMessage("ui.apply.bundleErrorAction"));
+        if (advisoryIdentity) setDismissedAdvisoryKey(advisoryIdentity);
+        setFailurePlacement(null);
+        setErrorMessage(notice.message);
+        setFailureTechnicalDetails(notice.technicalDetails || "");
+      },
       subscribe: localNoticeStoreController.subscribe,
     }),
-    [localNoticeStoreController, setErrorMessage],
+    [
+      advisoryIdentity,
+      failureMessage,
+      formatSessionNotice,
+      getSessionMessage,
+      localNoticeStoreController,
+      setErrorMessage,
+      setFailureTechnicalDetails,
+    ],
   );
 
   return {

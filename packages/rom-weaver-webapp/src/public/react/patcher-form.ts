@@ -5,11 +5,20 @@ import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-ru
 import type { PatcherOutputState, PatchStackItemState, PatchStackState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherSectionNoticeKey, PatcherUiState, StoreController } from "./patcher-ui-state.ts";
 
+type ApplySessionAdvisory = {
+  key: string;
+  kind: "bundle" | "url";
+  warnings: readonly string[];
+};
+
+type ApplySessionSource = "manual" | "url-session";
+
 type ApplyPatchFormSettings = ApplySettings;
 type BinarySource = File | FileSystemFileHandle;
 type PageFileDrop = {
   files: File[];
   id: number;
+  source?: ApplySessionSource;
 };
 type StartupState = {
   status: "loading" | "ready" | "error";
@@ -23,6 +32,7 @@ type PatcherUiController = StoreController<PatcherUiState> & {
   provideRomInputFile?: (file: BinarySource | null) => void;
   provideRomInputFiles?: (files: FileList | BinarySource[] | null) => void;
   removeRomInput?: (id: string) => void;
+  setDropSource?: (source: ApplySessionSource) => void;
   toggleRomInputChecksums?: (id: string) => void;
   providePatchInputFiles?: (fileList: FileList | BinarySource[] | null) => void;
   setChecksumOverride?: (checked: boolean) => void;
@@ -64,6 +74,7 @@ type PatcherOutputController = StoreController<PatcherOutputState> & {
 
 type NoticeController = StoreController<NoticeState> & {
   dismiss?: () => void;
+  showError?: (error: Error, fallbackMessage?: string) => void;
 };
 
 type ApplyPatchFormProps = {
@@ -80,10 +91,13 @@ type ApplyPatchFormProps = {
   containerInputsEnabled?: boolean;
   compressionOptions?: string[];
   startup?: StartupState;
+  /** Warnings from a successfully delivered URL session, shown in Apply. */
+  sessionAdvisory?: ApplySessionAdvisory | null;
   /** A `?bundle=` boot session: seeds enablement/output defaults once its files land. */
   bundleSession?: BundleApplySession | null;
-  onInputsChange?: (inputs: BinarySource[]) => void;
-  onPatchesChange?: (patches: BinarySource[]) => void;
+  onInputsChange?: (inputs: BinarySource[], source?: ApplySessionSource) => void;
+  onManualSessionStart?: () => void;
+  onPatchesChange?: (patches: BinarySource[], source?: ApplySessionSource) => void;
   onSelectView?: (view: "test") => void;
   onSettingsChange?: (settings: ApplyPatchFormSettings) => void;
   /** Fires when the output-card bundle dropdown changes, to persist the "Bundle" setting ("" hides it). */
@@ -100,6 +114,8 @@ export type {
   ApplyPatchFormSettings,
   BinarySource,
   NoticeController,
+  ApplySessionAdvisory,
+  ApplySessionSource,
   PageFileDrop,
   PatcherOutputController,
   PatcherStackController,

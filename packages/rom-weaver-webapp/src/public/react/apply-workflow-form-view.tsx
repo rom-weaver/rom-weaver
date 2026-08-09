@@ -489,13 +489,28 @@ type BundleExportState = {
   setRomName: (value: string) => void;
 };
 
-const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
+const SectionNotice = ({
+  dismissLabel,
+  id,
+  onDismiss,
+  state,
+  technicalDetailsLabel,
+}: {
+  dismissLabel?: string;
+  id?: string;
+  onDismiss?: () => void;
+  state: NoticeState;
+  technicalDetailsLabel?: ReactNode;
+}) => {
   if (!state.visible) return null;
   return (
     <Notice
+      dismissLabel={dismissLabel}
       id={id}
       level={state.level === "warning" ? "warn" : "error"}
       onDismiss={state.dismissible ? onDismiss : undefined}
+      technicalDetailsLabel={technicalDetailsLabel}
+      technicalDetails={state.technicalDetails}
     >
       {state.message}
     </Notice>
@@ -1294,18 +1309,25 @@ const BundleExportAction = ({
 };
 
 const ApplyErrorNotice = ({
+  dismissLabel,
   notice,
   noticeController,
+  technicalDetailsLabel,
 }: {
+  dismissLabel?: string;
   notice: NoticeState | null;
   noticeController?: NoticeController;
+  technicalDetailsLabel?: ReactNode;
 }) => {
   if (!notice?.visible) return null;
   return (
     <Notice
+      dismissLabel={dismissLabel}
       id="rom-weaver-row-error-message"
       level={notice.level === "warning" ? "warn" : "error"}
       onDismiss={notice.dismissible ? () => noticeController?.dismiss?.() : undefined}
+      technicalDetailsLabel={technicalDetailsLabel}
+      technicalDetails={notice.technicalDetails}
     >
       {notice.message}
     </Notice>
@@ -1374,7 +1396,12 @@ const ApplyOutputAction = ({
   uiState: ReturnType<PatcherUiController["getState"]>;
 }) => (
   <>
-    <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
+    <ApplyErrorNotice
+      dismissLabel={localizer.message("ui.common.dismiss")}
+      notice={errorNotice}
+      noticeController={noticeController}
+      technicalDetailsLabel={localizer.message("ui.common.technicalDetails")}
+    />
     <ChecksumOverrideRow state={uiState.checksumOverride} uiController={uiController} />
     <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
       <p aria-live="polite" className="patch-off-note">
@@ -1941,13 +1968,21 @@ function ApplyWorkflowFormView({
         supported={APPLY_SUPPORTED_FILES}
       />
       {workflowEmpty ? (
-        <GhostSteps
-          steps={[
-            { num: "0x02", title: localizer.message("ui.step.rom") },
-            { num: "0x03", title: localizer.message("ui.step.patches") },
-            { num: "0x04", title: localizer.message("ui.step.apply") },
-          ]}
-        />
+        <>
+          <ApplyErrorNotice
+            dismissLabel={localizer.message("ui.common.dismiss")}
+            notice={errorNotice}
+            noticeController={noticeController}
+            technicalDetailsLabel={localizer.message("ui.common.technicalDetails")}
+          />
+          <GhostSteps
+            steps={[
+              { num: "0x02", title: localizer.message("ui.step.rom") },
+              { num: "0x03", title: localizer.message("ui.step.patches") },
+              { num: "0x04", title: localizer.message("ui.step.apply") },
+            ]}
+          />
+        </>
       ) : (
         <>
           <WorkflowRomInputStep
@@ -2001,9 +2036,11 @@ function ApplyWorkflowFormView({
                   </Notice>
                 ) : null}
                 <SectionNotice
+                  dismissLabel={localizer.message("ui.common.dismiss")}
                   id="rom-weaver-input-notice-message"
                   onDismiss={dismissSectionNotice("inputNotice")}
                   state={uiState.inputNotice}
+                  technicalDetailsLabel={localizer.message("ui.common.technicalDetails")}
                 />
               </>
             }
@@ -2030,9 +2067,11 @@ function ApplyWorkflowFormView({
             romActualsById={romActualsById}
             notice={
               <SectionNotice
+                dismissLabel={localizer.message("ui.common.dismiss")}
                 id="rom-weaver-patch-notice-message"
                 onDismiss={dismissSectionNotice("patchNotice")}
                 state={uiState.patchNotice}
+                technicalDetailsLabel={localizer.message("ui.common.technicalDetails")}
               />
             }
             woven={wovenSteps}
@@ -2081,9 +2120,11 @@ function ApplyWorkflowFormView({
             meta={renderApplyTimingMeta(applyDone, outputState.applyTiming, outputState.compressTiming)}
             notice={
               <SectionNotice
+                dismissLabel={localizer.message("ui.common.dismiss")}
                 id="rom-weaver-output-notice-message"
                 onDismiss={dismissSectionNotice("outputNotice")}
                 state={uiState.outputNotice}
+                technicalDetailsLabel={localizer.message("ui.common.technicalDetails")}
               />
             }
             num="0x04"
