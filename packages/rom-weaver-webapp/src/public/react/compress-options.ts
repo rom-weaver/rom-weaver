@@ -26,7 +26,7 @@ import {
   getGeneratedCompressionCodecLevelMin,
 } from "../../lib/compression/compression-metadata.ts";
 import { getChdAutoCreateMode, getDiscFormatLabel } from "../../lib/input/rom-specific-file-utils.ts";
-import { getSettingsLabel } from "../../presentation/settings.ts";
+import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/settings.ts";
 import type { SourceMetadata } from "../../types/workflow-source.ts";
 
 type SettingsLike = Record<string, unknown>;
@@ -47,11 +47,19 @@ type CompressFieldInfo = {
   levelMap?: CompressFieldLevelMapRow[];
 };
 
+/**
+ * The field condensed for the collapsed options header: a short key and the
+ * value that will actually be used, so an unset field reads as its default
+ * rather than as blank.
+ */
+type CompressFieldChip = { label: string; value: string };
+
 type CompressField =
   | {
       kind: "select";
       key: string;
       label: string;
+      chip: CompressFieldChip;
       value: string;
       options: CompressFieldOption[];
       info?: CompressFieldInfo;
@@ -60,6 +68,7 @@ type CompressField =
       kind: "codec";
       key: string;
       label: string;
+      chip: CompressFieldChip;
       value: string;
       options: CompressionCodecOption[];
       suggestions?: CompressionCodecOption[];
@@ -72,13 +81,15 @@ type CompressField =
       kind: "text";
       key: string;
       label: string;
+      chip: CompressFieldChip;
       value: string;
       placeholder?: string;
       mono?: boolean;
       info?: CompressFieldInfo;
     };
 
-type CompressPanelModel = { summary: string; fields: CompressField[] };
+/** `note` is context the format implies rather than an editable option (the CHD disc type). */
+type CompressPanelModel = { fields: CompressField[]; note?: string };
 
 // Compression-profile scale (shared "Level" control), index 0..6.
 const PROFILE_LABELS = [...COMPRESSION_PROFILE_LABELS];
@@ -192,12 +203,20 @@ const profileIndex = (settings: SettingsLike): number => {
   return byLabel >= 0 ? byLabel : PROFILE_VALUES.length - 1;
 };
 
+const OVERRIDDEN_PROFILE_LABEL = "Overridden";
+
 const getProfileOptions = (overridden: boolean): CompressFieldOption[] => [
-  ...(overridden ? [{ disabled: true, label: "Overridden", value: OVERRIDDEN_PROFILE_VALUE }] : []),
+  ...(overridden ? [{ disabled: true, label: OVERRIDDEN_PROFILE_LABEL, value: OVERRIDDEN_PROFILE_VALUE }] : []),
   ...PROFILE_LABELS.map((label, index) => ({ label, value: PROFILE_VALUES[index] as string })),
 ];
 
 const levelField = (settings: SettingsLike, overridden = false): CompressField => ({
+  chip: {
+    label: getSettingsLabel("compressionProfile"),
+    // An explicit codec:level entry wins over the profile, so the profile name
+    // would misreport what the run uses.
+    value: overridden ? OVERRIDDEN_PROFILE_LABEL : (PROFILE_LABELS[profileIndex(settings)] as string),
+  },
   info: FIELD_INFO.compressionProfile,
   key: "compressionProfile",
   kind: "select",
@@ -234,6 +253,12 @@ const codecProfileSummary = (fieldKey: string, codecSummary: string, settings: S
     .join(",");
 };
 
+/** Header chip for a codec field: a short key plus the codec list with its levels resolved. */
+const codecChip = (fieldKey: string, codecSummary: string, settings: SettingsLike): CompressFieldChip => ({
+  label: getUiSettingsLabel("codec"),
+  value: codecProfileSummary(fieldKey, codecSummary, settings),
+});
+
 /** Build the compress-panel model for a normalized output format, or null when the format isn't compressed. */
 const resolveChdPanelMode = (settings: SettingsLike, source?: unknown): "cd" | "dvd" | null => {
   const configuredMode = str(settings, "chdOutputMode", "auto").toLowerCase();
@@ -254,6 +279,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     return {
       fields: [
         {
+          chip: codecChip("zipCodec", codecSummary, settings),
           info: FIELD_INFO.zipCodec,
           key: "zipCodec",
           kind: "codec",
@@ -264,7 +290,6 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
         },
         level,
       ],
-      summary: codecProfileSummary("zipCodec", codecSummary, settings),
     };
   }
   if (normalized === "7z") {
@@ -275,6 +300,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     return {
       fields: [
         {
+          chip: codecChip("sevenZipCodec", codecSummary, settings),
           info: FIELD_INFO.sevenZipCodec,
           key: "sevenZipCodec",
           kind: "codec",
@@ -285,7 +311,6 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
         },
         level,
       ],
-      summary: codecProfileSummary("sevenZipCodec", codecSummary, settings),
     };
   }
   if (normalized === "rvz") {
@@ -296,6 +321,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     return {
       fields: [
         {
+          chip: codecChip("rvzCodec", codecSummary, settings),
           info: FIELD_INFO.rvzCodec,
           key: "rvzCodec",
           kind: "codec",
@@ -305,6 +331,10 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
           value: codec,
         },
         {
+          chip: {
+            label: getUiSettingsLabel("rvzBlockSize"),
+            value: str(settings, "rvzBlockSize") || String(COMPRESSION_DEFAULTS.rvzBlockSize),
+          },
           info: FIELD_INFO.rvzBlockSize,
           key: "rvzBlockSize",
           kind: "text",
@@ -315,7 +345,6 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
         },
         level,
       ],
-      summary: codecProfileSummary("rvzCodec", codecSummary, settings),
     };
   }
   if (normalized === "chd") {
@@ -336,6 +365,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     return {
       fields: [
         {
+          chip: codecChip(codecKey, codecSummary, settings),
           info: FIELD_INFO[codecKey],
           key: codecKey,
           kind: "codec",
@@ -352,18 +382,17 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
         },
         level,
       ],
-      summary: discLabel
-        ? `${discLabel} · ${codecProfileSummary(codecKey, codecSummary, settings)}`
-        : codecProfileSummary(codecKey, codecSummary, settings),
+      note: discLabel ?? undefined,
     };
   }
   if (normalized === "z3ds") {
     const level = levelField(settings);
     const z3dsMaxLevel = getGeneratedCompressionCodecLevelMax(COMPRESSION_DEFAULTS.z3dsCodec) ?? ZSTD_PROFILE_MAX;
     const z3dsMinLevel = getGeneratedCompressionCodecLevelMin(COMPRESSION_DEFAULTS.z3dsCodec) ?? ZSTD_PROFILE_MIN;
+    // z3ds has no editable codec field, so its resolved codec is a note rather than a chip.
     return {
       fields: [level],
-      summary: `${COMPRESSION_DEFAULTS.z3dsCodec}:${getProfileLevelForCodec(settings, z3dsMinLevel, z3dsMaxLevel)}`,
+      note: `${COMPRESSION_DEFAULTS.z3dsCodec}:${getProfileLevelForCodec(settings, z3dsMinLevel, z3dsMaxLevel)}`,
     };
   }
   return null;

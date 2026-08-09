@@ -10,9 +10,26 @@ import { join } from "./cx.ts";
  * `<details>`-based sections so the open/close animates everywhere.
  */
 
-/** Recessed readout chip for a drawer header (counts, sizes, timings). */
-const DrawerReadout = ({ children, muted, time }: { children: ReactNode; muted?: boolean; time?: boolean }) => (
-  <span className={join("rb mono", muted && "muted", time && "time")}>{children}</span>
+/**
+ * Recessed readout chip for a drawer header (counts, sizes, timings). Pass
+ * `label` to name the value inside the chip, so the reading survives without
+ * opening the drawer.
+ */
+const DrawerReadout = ({
+  children,
+  label,
+  muted,
+  time,
+}: {
+  children: ReactNode;
+  label?: ReactNode;
+  muted?: boolean;
+  time?: boolean;
+}) => (
+  <span className={join("rb mono", muted && "muted", time && "time")}>
+    {label ? <span className="k">{label}</span> : null}
+    {label ? <span className="t">{children}</span> : children}
+  </span>
 );
 
 /** Pass/fail mark riding beside the readout chips (bare icon, not a pill). */

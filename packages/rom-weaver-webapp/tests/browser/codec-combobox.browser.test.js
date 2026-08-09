@@ -13,6 +13,11 @@ import { buildCompressPanel, OVERRIDDEN_PROFILE_VALUE } from "../../src/public/r
 let mountedRoot = null;
 let rootElement = null;
 
+// The codec list with its levels resolved, as the collapsed options header
+// reports it: the codec field's chip, or the panel note when the format has no
+// editable codec field (z3ds).
+const resolvedCodec = (panel) => panel?.fields.find((field) => field.kind === "codec")?.chip.value ?? panel?.note;
+
 const optionTexts = () =>
   Array.from(document.querySelectorAll(".codec-combobox-option")).map((option) => option.textContent || "");
 const selectedOptionTexts = () =>
@@ -227,7 +232,7 @@ test("codec combobox portals suggestions above nearby action controls", async ()
 test("compress panel keeps cleared codec values editable", () => {
   const zipPanel = buildCompressPanel("zip", { compressionProfile: "max", zipCodec: "" });
   expect(zipPanel?.fields.find((field) => field.key === "zipCodec")?.value).toBe("");
-  expect(zipPanel?.summary).toBe("deflate:9");
+  expect(resolvedCodec(zipPanel)).toBe("deflate:9");
 
   const chdPanel = buildCompressPanel(
     "chd",
@@ -239,14 +244,16 @@ test("compress panel keeps cleared codec values editable", () => {
     {},
   );
   expect(chdPanel?.fields.find((field) => field.key === "chdCreateCdCodecs")?.value).toBe("");
-  expect(chdPanel?.summary).toBe("cdlz:9,cdzl:9,cdfl:8");
+  expect(resolvedCodec(chdPanel)).toBe("cdlz:9,cdzl:9,cdfl:8");
 
-  expect(buildCompressPanel("zip", { compressionProfile: "max", zipCodec: "store" })?.summary).toBe("store");
-  expect(buildCompressPanel("7z", { compressionProfile: "high", sevenZipCodec: "lzma2" })?.summary).toBe("lzma2:7");
-  expect(buildCompressPanel("rvz", { compressionProfile: "max", rvzCodec: "zstd" })?.summary).toBe("zstd:22");
-  expect(buildCompressPanel("z3ds", { compressionProfile: "max" })?.summary).toBe("zstd:22");
-  expect(buildCompressPanel("zip", { compressionProfile: "min", zipCodec: "zstd" })?.summary).toBe("zstd:-7");
-  expect(buildCompressPanel("z3ds", { compressionProfile: "min" })?.summary).toBe("zstd:-7");
+  expect(resolvedCodec(buildCompressPanel("zip", { compressionProfile: "max", zipCodec: "store" }))).toBe("store");
+  expect(resolvedCodec(buildCompressPanel("7z", { compressionProfile: "high", sevenZipCodec: "lzma2" }))).toBe(
+    "lzma2:7",
+  );
+  expect(resolvedCodec(buildCompressPanel("rvz", { compressionProfile: "max", rvzCodec: "zstd" }))).toBe("zstd:22");
+  expect(resolvedCodec(buildCompressPanel("z3ds", { compressionProfile: "max" }))).toBe("zstd:22");
+  expect(resolvedCodec(buildCompressPanel("zip", { compressionProfile: "min", zipCodec: "zstd" }))).toBe("zstd:-7");
+  expect(resolvedCodec(buildCompressPanel("z3ds", { compressionProfile: "min" }))).toBe("zstd:-7");
 });
 
 test("chd compress panel uses source mode discovered before extraction finishes", () => {
@@ -260,9 +267,9 @@ test("chd compress panel uses source mode discovered before extraction finishes"
   const dvdPanel = buildCompressPanel("chd", settings, { fileName: "game.chd", metadata: { mode: "dvd" } });
 
   expect(cdPanel?.fields[0]?.key).toBe("chdCreateCdCodecs");
-  expect(cdPanel?.summary).toBe("cdlz:9,cdzl:9,cdfl:8");
+  expect(resolvedCodec(cdPanel)).toBe("cdlz:9,cdzl:9,cdfl:8");
   expect(dvdPanel?.fields[0]?.key).toBe("chdCreateDvdCodecs");
-  expect(dvdPanel?.summary).toBe("zstd:22,lzma:9,zlib:9,huff,flac:8");
+  expect(resolvedCodec(dvdPanel)).toBe("zstd:22,lzma:9,zlib:9,huff,flac:8");
 });
 
 test("input progress preserves listed chd mode before extraction finishes", () => {
@@ -294,7 +301,7 @@ test("compress panel shows codec level overrides and clears them when level chan
   });
   const zstdProfileLevelField = zstdProfilePanel?.fields.find((field) => field.key === "compressionProfile");
   expect(zstdProfileLevelField?.value).toBe("max");
-  expect(zstdProfilePanel?.summary).toBe("zstd:22");
+  expect(resolvedCodec(zstdProfilePanel)).toBe("zstd:22");
   expect(resolveCompressionLevels({ compressionProfile: "max", zipCodec: "zstd" }).zipLevel).toBe(22);
   expect(resolveCompressionLevels({ compressionProfile: "min", zipCodec: "zstd" }).zipLevel).toBe(-7);
   expect(resolveCompressionLevels({ compressionProfile: "min", rvzCodec: "zstd" }).rvzCompressionLevel).toBe(-7);
@@ -309,7 +316,7 @@ test("compress panel shows codec level overrides and clears them when level chan
   });
   const levelField = zipPanel?.fields.find((field) => field.key === "compressionProfile");
   expect(levelField?.value).toBe(OVERRIDDEN_PROFILE_VALUE);
-  expect(zipPanel?.summary).toBe("zstd:12");
+  expect(resolvedCodec(zipPanel)).toBe("zstd:12");
 
   let changed = null;
   mountedRoot?.unmount?.();
@@ -355,7 +362,7 @@ test("chd accepts a level override for one codec and clears it when level change
   );
   const levelField = chdPanel?.fields.find((field) => field.key === "compressionProfile");
   expect(levelField?.value).toBe(OVERRIDDEN_PROFILE_VALUE);
-  expect(chdPanel?.summary).toBe("cdlz:4,cdzl:9,cdfl:8");
+  expect(resolvedCodec(chdPanel)).toBe("cdlz:4,cdzl:9,cdfl:8");
   expect(
     OutputCompressionManager.getChdCodecsForMode("cd", {
       chdCreateCdCodecs: "cdlz:4,cdzl,cdfl",
@@ -403,5 +410,5 @@ test("chd accepts a level override for one codec and clears it when level change
     },
     {},
   );
-  expect(highPanel?.summary).toBe("cdlz:7,cdzl:7,cdfl:7");
+  expect(resolvedCodec(highPanel)).toBe("cdlz:7,cdzl:7,cdfl:7");
 });

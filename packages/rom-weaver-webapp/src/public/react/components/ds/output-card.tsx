@@ -2,23 +2,23 @@ import { SlidersHorizontal, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
 import { join } from "./cx.ts";
-import { Drawer, DrawerReadout } from "./drawer.tsx";
+import { Drawer } from "./drawer.tsx";
 
 /**
  * Output section: the filename field grouped with a format selector, an
  * optional collapsible "Options" drawer (codec/level/archive overrides), and a
  * caller-supplied action (run button or inline progress). Shared by apply,
  * create, and trim outputs.
+ *
+ * The drawer header carries every option as a labelled chip, so the values stay
+ * readable while the drawer is shut.
  */
 
 type FormatOption = { value: string; label: string };
 type OutputCompressPanel = {
-  summary?: ReactNode;
-  /** Extra readout chips for the drawer header, beside the format/summary chips. */
+  /** The full header chip row - one labelled chip per option, built by `buildOutputCompressionPanel`. */
   readouts?: ReactNode;
-  timing?: ReactNode;
   children: ReactNode;
-  format?: string;
   formatValue?: string;
   formatOptions?: FormatOption[];
   formatLabel?: string;
@@ -133,14 +133,7 @@ const OutputCard = ({
           className="optsblock outopts"
           label="Options"
           labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
-          readouts={
-            <>
-              {compress.format ? <DrawerReadout>{compress.format}</DrawerReadout> : null}
-              {compress.summary ? <DrawerReadout>{compress.summary}</DrawerReadout> : null}
-              {compress.readouts}
-              {compress.timing ? <DrawerReadout time>{compress.timing}</DrawerReadout> : null}
-            </>
-          }
+          readouts={compress.readouts}
         >
           <div className="optsgrid">
             {compress.formatOptions?.length && compress.onFormatChange ? (
