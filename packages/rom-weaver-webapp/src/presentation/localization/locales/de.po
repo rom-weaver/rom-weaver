@@ -35,6 +35,11 @@ msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird.
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.ignoredPatches"
+msgstr "{count, plural, one {# Patch-Datei wurde hier ignoriert ({names})} other {# Patch-Dateien wurden hier ignoriert ({names})}} - Patches werden im Tab „Apply“ angewendet."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
 msgstr "{count, plural, one {# Patch ist aus - ankreuzen zum Einschließen} other {# Patches sind aus - ankreuzen zum Einschließen}}"
 
@@ -207,6 +212,11 @@ msgstr "Commit"
 #: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "Die Kompression ist fehlgeschlagen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.UNSUPPORTED_FORMAT"
+msgstr "Konvertiere die Datei in ein unterstütztes Format oder lege das Archiv ab, aus dem sie stammt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -455,6 +465,16 @@ msgstr "Offline-Modus aus"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.hint.UNKNOWN"
+msgstr "Öffne die Logs für die vollständige Ablaufverfolgung und starte den Lauf erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.openApply"
+msgstr "Tab „Apply“ öffnen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
 
@@ -492,6 +512,11 @@ msgstr "Die Ausgabe wird nicht überprüft - die Patches sind in falscher Reihen
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewLabel"
 msgstr "Angezeigtes Protokoll"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.movedTo"
+msgstr "Patch {from} auf Position {to} verschoben"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -552,6 +577,11 @@ msgstr "Neu laden"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.reloadNow"
 msgstr "Jetzt neu laden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.WORKER_FAILED"
+msgstr "Lade die Seite neu und starte den Lauf erneut. Falls es weiterhin fehlschlägt, öffne die Logs für die vollständige Ablaufverfolgung."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -655,6 +685,11 @@ msgstr "Test-Schaltfläche nach dem Anwenden anzeigen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.hint.STORAGE_UNAVAILABLE"
+msgstr "Der Website-Speicher ist blockiert. Private Fenster und blockierte Website-Daten verhindern den Betrieb von rom-weaver."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Zum Hauptinhalt springen"
 
@@ -705,6 +740,11 @@ msgstr "Test"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.hint.OUTPUT_WRITE_FAILED"
+msgstr "Der Browser konnte die Ausgabe nicht schreiben. Gib Speicherplatz frei und starte den Lauf erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.corsHint"
 msgstr "Der Datei-Host muss Cross-Origin-Downloads (CORS) erlauben."
 
@@ -712,6 +752,16 @@ msgstr "Der Datei-Host muss Cross-Origin-Downloads (CORS) erlauben."
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "Das Patch-Ziel passt nicht zur gewählten Eingabe."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.PATCH_TARGET_MISMATCH"
+msgstr "Der Patch zielt auf ein anderes ROM. Prüfe die Hinweise des Patches auf den genauen erwarteten Dump."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.UNKNOWN"
+msgstr "Der Lauf ist unerwartet fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -772,6 +822,11 @@ msgstr "Diese Patches erwarten unterschiedliche ROMs - jede Patch-Karte zeigt di
 #: src/presentation/localization/messages.ts
 msgid "ui.status.build"
 msgstr "Dieser Build"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.CHECKSUM_MISMATCH"
+msgstr "Dieses ROM ist nicht der Dump, für den der Patch erstellt wurde. Probiere eine andere Region oder Revision, oder denselben Dump mit bzw. ohne Copier-Header."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

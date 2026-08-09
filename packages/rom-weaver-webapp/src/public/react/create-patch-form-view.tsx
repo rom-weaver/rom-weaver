@@ -19,6 +19,8 @@ type CreatePatchFormViewModel = {
   dialog?: ReactNode;
   /** Unified ROM/archive drop zone (step 0x01). */
   dropZone: ComponentProps<typeof UnifiedDropZone>;
+  /** Notice about files the drop discarded (e.g. patches on this ROM-only tab). */
+  dropNotice?: ReactNode;
   /** Modified source step (0x03). */
   modifiedStep: ComponentProps<typeof WorkflowRomInputStep>;
   /** Original source step (0x02). */
@@ -33,6 +35,7 @@ type CreatePatchFormViewModel = {
 
 const CreatePatchFormView = ({
   dialog,
+  dropNotice,
   dropZone,
   modifiedStep,
   originalStep,
@@ -44,6 +47,7 @@ const CreatePatchFormView = ({
   return (
     <section className="panel" id="patch-builder-container">
       <UnifiedDropZone {...dropZone} lead={{ line1: "ui.hero.createThesis", line2: "ui.hero.createThesis2" }} />
+      {dropNotice}
       {sourcesEmpty ? (
         <GhostSteps
           steps={[

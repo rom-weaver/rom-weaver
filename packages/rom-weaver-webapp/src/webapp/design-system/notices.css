@@ -22,6 +22,35 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+/* Recovery controls and the error-code tag sit on their own line under the copy,
+   so the sentence a reader needs stays first. */
+.rw-app .notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+  align-items: center;
+  margin-block-start: var(--sp-s);
+}
+.rw-app .notice-code {
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  color: currentColor;
+  appearance: none;
+  cursor: pointer;
+  background: color-mix(in oklab, currentColor 8%, transparent);
+  border: 1px solid color-mix(in oklab, currentColor 25%, transparent);
+  border-radius: var(--r-s);
+  opacity: 0.75;
+}
+@media (hover: hover) {
+  .rw-app .notice-code:hover {
+    opacity: 1;
+  }
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .notice-code:active {
+  opacity: 1;
+}
 .rw-app .notice.warn {
   color: var(--ink);
   background: color-mix(in oklab, var(--care) 12%, var(--plate-2));
@@ -95,4 +124,13 @@
    contrast caught exactly that). */
 :root[data-theme="light"] .checkrow.warn {
   color: #7a5300;
+}
+/* Why the run button is unavailable. Persistent, not a tooltip: a disabled
+   control never fires hover on touch and title text is invisible to keyboards. */
+.rw-app .run-blocked-reason {
+  margin-block-start: var(--sp-s);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--ink-3);
+  text-align: center;
 }

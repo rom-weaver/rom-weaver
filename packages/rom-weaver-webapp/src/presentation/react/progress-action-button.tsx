@@ -14,6 +14,8 @@ type ProgressViewModel = ReturnType<typeof createProgressViewModel>;
 type ProgressActionButtonProps = {
   label: string;
   disabled: boolean;
+  /** Id of the element explaining why the button is disabled. */
+  ariaDescribedBy?: string;
   onClick: () => void;
   progress: ProgressViewModel | null;
   id?: string;
@@ -145,6 +147,9 @@ const RunProgressPanel = ({
             type="button"
           >
             <X aria-hidden="true" />
+            <span aria-hidden="true" className="cancel-text">
+              Cancel
+            </span>
           </button>
         </div>
       ) : null}
@@ -153,6 +158,7 @@ const RunProgressPanel = ({
 };
 
 function ProgressActionButton({
+  ariaDescribedBy,
   label,
   disabled,
   onClick,
@@ -182,6 +188,7 @@ function ProgressActionButton({
 
   return (
     <button
+      aria-describedby={ariaDescribedBy}
       className={join("btn primary run", isDownload && "download-btn dl")}
       disabled={disabled}
       id={id}

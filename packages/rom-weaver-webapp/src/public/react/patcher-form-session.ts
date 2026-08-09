@@ -4,7 +4,7 @@ import {
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
 } from "../../lib/compression/container-format-registry.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
-import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
+import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult } from "../../types/workflow-runtime-types.ts";
@@ -120,6 +120,7 @@ const useLocalApplyPatchFormSession = ({
     setCompletedApplyTimeMs,
     setCompletedCompressionTimeMs,
     setCompletedSizeSummary,
+    setErrorCode,
     setErrorMessage,
     setInputStaging,
     setOutputErrorMessage,
@@ -140,6 +141,7 @@ const useLocalApplyPatchFormSession = ({
     completedApplyTimeMs,
     completedCompressionTimeMs,
     completedSizeSummary,
+    failureCode,
     failureMessage,
     inputStaging,
     outputErrorMessage,
@@ -246,14 +248,16 @@ const useLocalApplyPatchFormSession = ({
     (placement: "input" | "output" | "patch", error: Error) => {
       setFailurePlacement(placement);
       setErrorMessage(formatSessionError(error));
+      setErrorCode(getErrorCode(error));
     },
-    [formatSessionError, setErrorMessage],
+    [formatSessionError, setErrorCode, setErrorMessage],
   );
   const clearDismissibleErrors = useCallback(() => {
     setFailurePlacement(null);
     setErrorMessage("");
+    setErrorCode("");
     setOutputErrorMessage("");
-  }, [setErrorMessage, setOutputErrorMessage]);
+  }, [setErrorCode, setErrorMessage, setOutputErrorMessage]);
   const outputSourceKey = useMemo(
     () =>
       JSON.stringify({
@@ -375,6 +379,10 @@ const useLocalApplyPatchFormSession = ({
     strictInputChecksumValidation && stagedPatchInfos.some((info) => info.checksumPreflightMismatch === true);
   const strictInputChecksumBlocked = hasStrictInputChecksumMismatch && !checksumOverrideChecked;
   const multiInputOutputError = getMultiInputOutputError(displayedCompression, getLogicalRomInputCount(romInputs));
+  // Only the section that owns the failure shows its code tag.
+  const inputNoticeCode = failurePlacement === "input" ? failureCode : "";
+  const outputNoticeCode = failurePlacement === "output" ? failureCode : "";
+  const patchNoticeCode = failurePlacement === "patch" ? failureCode : "";
   const inputNoticeMessage = failurePlacement === "input" ? failureMessage : "";
   const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
   const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");
@@ -487,9 +495,12 @@ const useLocalApplyPatchFormSession = ({
         disabled,
         effectiveOutputNoticeMessage,
         hasStrictInputChecksumMismatch,
+        inputNoticeCode,
         inputNoticeMessage,
         inputStaging,
+        outputNoticeCode,
         outputRuntimeNoticeMessage,
+        patchNoticeCode,
         patchNoticeMessage,
         patchProgress,
         patchProgressByKey,
@@ -500,7 +511,10 @@ const useLocalApplyPatchFormSession = ({
       busy,
       checksumOverrideChecked,
       disabled,
+      inputNoticeCode,
       inputStaging,
+      outputNoticeCode,
+      patchNoticeCode,
       hasStrictInputChecksumMismatch,
       effectiveOutputNoticeMessage,
       inputNoticeMessage,
@@ -572,8 +586,8 @@ const useLocalApplyPatchFormSession = ({
     ],
   );
   const localNoticeState = useMemo<NoticeState>(
-    () => buildNoticeViewState({ failureMessage, failurePlacement }),
-    [failureMessage, failurePlacement],
+    () => buildNoticeViewState({ failureCode, failureMessage, failurePlacement }),
+    [failureCode, failureMessage, failurePlacement],
   );
 
   const updateSettings = useCallback(

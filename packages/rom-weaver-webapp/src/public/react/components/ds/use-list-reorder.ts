@@ -57,6 +57,11 @@ type UseListReorderArgs = {
   disabled?: boolean;
   /** Commit a reorder from one index to another. */
   onReorder: (from: number, to: number) => void;
+  /**
+   * Screen-reader wording for a committed move. Both indexes are zero-based;
+   * the caller adds one to reach the position a user sees on the handle.
+   */
+  describeMove?: (from: number, to: number) => string;
 };
 
 const getGridReorderTarget = (row: RowSnapshot, snapshot: RowSnapshot[], from: number, dx: number, dy: number) => {
@@ -101,7 +106,7 @@ const getLinearReorderTarget = (row: RowSnapshot, snapshot: RowSnapshot[], from:
   return target;
 };
 
-const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
+const useListReorder = ({ count, describeMove, disabled, onReorder }: UseListReorderArgs) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rowsRef = useRef<Map<number, HTMLElement>>(new Map());
   const snapshotRef = useRef<RowSnapshot[]>([]);
@@ -117,6 +122,16 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
   const suppressClickRef = useRef(false);
   const cleanupPointerListenersRef = useRef<(() => void) | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  // Committed moves change nothing a screen reader notices on its own: the rows
+  // keep their text and focus stays on the handle. The announcement below is the
+  // only feedback a non-sighted user gets, so every commit path writes it.
+  const [announcement, setAnnouncement] = useState("");
+  const announceMove = (from: number, to: number) => {
+    const text = describeMove?.(from, to) ?? `Item ${from + 1} moved to position ${to + 1}`;
+    // Repeating the same move (e.g. two identical swaps) must still be spoken,
+    // so a trailing space breaks the string equality live regions dedupe on.
+    setAnnouncement((previous) => (previous === text ? `${text} ` : text));
+  };
 
   // Snap a row to its natural slot with no transition (the base `.file` transition
   // would otherwise animate the removal of its drag transform - a second, unwanted move).
@@ -220,6 +235,7 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
       logger.debug("reorder commit", { from: current.from, to: current.to });
       captureFlip(rowsRef.current.get(current.from) ?? null);
       onReorder(current.from, current.to);
+      announceMove(current.from, current.to);
     } else if (!commit) {
       logger.trace("drag cancelled", { from: current.from });
     }
@@ -333,11 +349,13 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
       logger.debug("reorder via keyboard", { from: index, to: index - 1 });
       captureFlip();
       onReorder(index, index - 1);
+      announceMove(index, index - 1);
     } else if (event.key === "ArrowDown" && index < count - 1) {
       event.preventDefault();
       logger.debug("reorder via keyboard", { from: index, to: index + 1 });
       captureFlip();
       onReorder(index, index + 1);
+      announceMove(index, index + 1);
     }
   };
 
@@ -355,6 +373,10 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
     onPointerDown: begin(index),
     onPointerMove: move,
     onPointerUp: finish(true),
+    // Without this the browser claims the touch for scrolling and never sends
+    // pointermove, so a drag on a phone does nothing. The stylesheet sets it
+    // too; carrying it here means any host element gets it, styled or not.
+    style: { touchAction: "none" } as const,
   });
 
   // Vertical space the dragged row occupies (its height plus one inter-row gap):
@@ -435,6 +457,8 @@ const useListReorder = ({ count, disabled, onReorder }: UseListReorderArgs) => {
   };
 
   return {
+    /** Live-region text for the last committed move. Render it in an `aria-live` node. */
+    announcement,
     containerRef,
     displayIndex,
     /** Whether a drag is currently active. */

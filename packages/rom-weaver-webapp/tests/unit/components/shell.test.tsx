@@ -62,7 +62,9 @@ describe("Masthead", () => {
     expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
 
     for (const [list, selectedClass, labels] of [
-      [rail, "mode", ["Apply", "Create", "Docs", "Test", "Trim"]],
+      // Trim carries a "Beta" tag in the rail: beta tabs are shown locked now
+      // rather than hidden, so the label reads "TrimBeta".
+      [rail, "mode", ["Apply", "Create", "Docs", "Test", "TrimBeta"]],
       [dock, "dock-tab", ["Apply", "Create", "Docs", "Test", "Trim"]],
     ] as const) {
       const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);

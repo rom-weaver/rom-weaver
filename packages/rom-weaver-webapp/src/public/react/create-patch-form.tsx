@@ -14,6 +14,7 @@ import { resolveAssetUrl } from "./asset-url.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
+import { IgnoredPatchDropNotice } from "./components/ds/ignored-patch-notice.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
 import {
@@ -52,7 +53,7 @@ import {
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
-import { routeByOrder } from "./unified-drop-routing.ts";
+import { collectIgnoredPatchDrops, routeByOrder } from "./unified-drop-routing.ts";
 import { getDefaultCreateOutputName, getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
@@ -377,6 +378,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const [messagePlacement, setMessagePlacement] = useState<CreateMessagePlacement | null>(null);
   const [originalState, setOriginalState] = useState<CreateDisplaySourceState | null>(null);
   const [modifiedState, setModifiedState] = useState<CreateDisplaySourceState | null>(null);
+  // Patch files the last drop discarded - this tab has no patch bucket.
+  const [ignoredPatchNames, setIgnoredPatchNames] = useState<string[]>([]);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
     useDisposableWorkflowOutput<CompletedCreateOutput>();
   const { abortActiveOperation, activeAbortControllerRef, rememberAbortController } = useActiveAbortController();
@@ -635,6 +638,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   // bucket on this tab). See routeByOrder.
   const handledPageDropIdRef = useRef<number | null>(null);
   const handleUnifiedDrop = (files: File[]) => {
+    setIgnoredPatchNames(collectIgnoredPatchDrops(files).map((file) => file.name));
     // When both ROMs arrive together, treat the longer file name as the modified
     // ROM - hacks/edits usually carry the more descriptive name - so it lands in
     // the later (modified) slot. Stable sort keeps drop order for equal lengths.
@@ -1040,6 +1044,20 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
 
   const createModel = (): CreatePatchFormViewModel => ({
+    dropNotice: (
+      <IgnoredPatchDropNotice
+        fileNames={ignoredPatchNames}
+        onDismiss={() => setIgnoredPatchNames([])}
+        onOpenApplyTab={
+          props.onOpenApplyTab
+            ? () => {
+                setIgnoredPatchNames([]);
+                props.onOpenApplyTab?.();
+              }
+            : undefined
+        }
+      />
+    ),
     dialog: (
       <>
         {candidateSelectionDialog}

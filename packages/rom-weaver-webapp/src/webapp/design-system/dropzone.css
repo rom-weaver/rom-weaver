@@ -1258,3 +1258,11 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   font-size: 0.72rem;
   color: var(--ink-3);
 }
+/* Folder entries the browser refused to hand over. Silence made the loss look
+   like the drop simply missed them. */
+.rw-app .drop-skipped {
+  display: block;
+  margin-block-start: var(--sp-s);
+  font-size: 0.76rem;
+  color: var(--care);
+}

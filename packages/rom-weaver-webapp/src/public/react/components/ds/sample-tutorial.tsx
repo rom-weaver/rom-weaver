@@ -219,6 +219,32 @@ const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, prefer:
   return rect.top - desiredTop;
 };
 
+const ONBOARDING_DISMISS_KEY_PREFIX = "rom-weaver-onboarding-dismissed:";
+
+/**
+ * Per-guide dismissal. One "don't show this again" used to switch the setting
+ * off for every tab, so dismissing the Create beacon silently removed the Apply
+ * one the user had never seen. `settings.onboardingEnabled` stays the master
+ * switch that turns them all off (and back on).
+ */
+const readGuideDismissed = (guideKey: string): boolean => {
+  try {
+    return localStorage.getItem(`${ONBOARDING_DISMISS_KEY_PREFIX}${guideKey}`) === "1";
+  } catch {
+    return false;
+  }
+};
+
+const writeGuideDismissed = (guideKey: string, dismissed: boolean): void => {
+  try {
+    const key = `${ONBOARDING_DISMISS_KEY_PREFIX}${guideKey}`;
+    if (dismissed) localStorage.setItem(key, "1");
+    else localStorage.removeItem(key);
+  } catch {
+    // local storage is best-effort
+  }
+};
+
 const SampleTutorialStart = ({
   downloadHref,
   downloadLabel,
@@ -257,7 +283,9 @@ const SampleTutorialStart = ({
   const [open, setOpen] = useState(false);
   // Dismissal also hides the beacon immediately (and for the whole session in
   // embeds where no shell listens for the persistence event).
-  const [dismissed, setDismissed] = useState(false);
+  // Keyed on the guide this beacon starts, so each tab is dismissed on its own.
+  const guideKey = startAction;
+  const [dismissed, setDismissed] = useState(() => readGuideDismissed(guideKey));
   const settings = useRomWeaverSettings() as { onboardingEnabled?: unknown };
   // The resolved href depends on where the app is served, which the prerender
   // cannot know. Render the root-relative form the server emits, then upgrade
@@ -265,13 +293,17 @@ const SampleTutorialStart = ({
   const [href, setHref] = useState(`/${downloadName}`);
   useEffect(() => setHref(downloadHref), [downloadHref]);
 
-  // Re-enabling the setting revives a locally dismissed beacon: in the webapp
-  // a dismissal flips onboardingEnabled off, so the transition back to true is
-  // exactly the Settings checkbox being saved. Hosts that pass a static value
-  // (or none) never fire this, and there the local flag rules the session.
+  // Re-enabling the Settings toggle revives every locally dismissed beacon.
+  // Only a false→true transition counts: the setting defaults to true, so
+  // reacting to the value itself would wipe the per-guide flag on every mount.
+  const previousOnboardingEnabled = useRef(settings.onboardingEnabled);
   useEffect(() => {
-    if (settings.onboardingEnabled === true) setDismissed(false);
-  }, [settings.onboardingEnabled]);
+    const revived = settings.onboardingEnabled === true && previousOnboardingEnabled.current === false;
+    previousOnboardingEnabled.current = settings.onboardingEnabled;
+    if (!revived) return;
+    writeGuideDismissed(guideKey, false);
+    setDismissed(false);
+  }, [guideKey, settings.onboardingEnabled]);
 
   useEffect(() => {
     if (!open) return;
@@ -360,14 +392,15 @@ const SampleTutorialStart = ({
           <button
             className="sample-tutorial-start-dismiss"
             onClick={() => {
-              startLogger.debug("onboarding beacon dismissed");
+              startLogger.debug("onboarding beacon dismissed", { guide: guideKey });
               setOpen(false);
               setDismissed(true);
-              requestOnboardingDismiss();
+              writeGuideDismissed(guideKey, true);
+              requestOnboardingDismiss(guideKey);
             }}
             type="button"
           >
-            Don't show this again (re-enable in Settings)
+            Don't show this guide again (re-enable in Settings)
           </button>
         </div>
       ) : null}

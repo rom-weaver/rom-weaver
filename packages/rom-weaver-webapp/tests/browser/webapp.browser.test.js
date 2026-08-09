@@ -192,14 +192,19 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 test("WebappRoot keeps Trim gated and Tools behind More", async () => {
   mountWebappRoot();
   // Docs is reference rather than a workflow, but it rides in the rail so the
-  // readers it is written for do not have to go hunting for it.
+  // readers it is written for do not have to go hunting for it. Trim is beta:
+  // it stays in the rail, marked and disabled, because hiding it made the app
+  // look like it had fewer features than its own docs describe.
   await expect
     .poll(() =>
       [...document.querySelectorAll('.mode-rail [role="tab"]')]
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply", "Create", "Docs", "Test"]);
+    .toEqual(["Apply", "Create", "Docs", "Test", "TrimBeta"]);
+  await expect
+    .poll(() => document.querySelector('.mode-rail [data-mode="trim"]')?.getAttribute("title"))
+    .toBe("Beta - enable in Settings");
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "Tools" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();

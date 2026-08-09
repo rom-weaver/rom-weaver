@@ -1,6 +1,7 @@
 import { CircleX, TriangleAlert, X } from "lucide-react";
 import type { CSSProperties, ReactNode, RefObject } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { copyToClipboard } from "../../../../lib/clipboard.ts";
 import { join } from "./cx.ts";
 import { prefersReducedMotion } from "./flat-transition.ts";
 
@@ -12,11 +13,38 @@ import { prefersReducedMotion } from "./flat-transition.ts";
 
 type NoticeLevel = "error" | "warn";
 
+/**
+ * The machine error code, demoted to a tag under the copy. It is worthless to a
+ * reader mid-task but the first thing a bug report needs, so it is small, last,
+ * and copies to the clipboard on click.
+ */
+const NoticeCode = ({ code }: { code: string }) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="notice-code mono"
+      onClick={() => {
+        void copyToClipboard(code).then(
+          () => setCopied(true),
+          () => setCopied(false),
+        );
+      }}
+      title={`Copy the error code ${code}`}
+      type="button"
+    >
+      {code}
+      <span className="sr-only">{copied ? " copied" : " - click to copy"}</span>
+    </button>
+  );
+};
+
 const Notice = ({
   level,
   id,
   children,
   className,
+  code,
+  actions,
   dismissLabel = "Dismiss",
   onDismiss,
 }: {
@@ -24,6 +52,10 @@ const Notice = ({
   id?: string;
   children: ReactNode;
   className?: string;
+  /** Machine error code, rendered as a small copyable tag below the copy. */
+  code?: string;
+  /** Recovery controls (Retry, open Status, …) rendered under the copy. */
+  actions?: ReactNode;
   dismissLabel?: string;
   onDismiss?: () => void;
 }) => {
@@ -31,7 +63,15 @@ const Notice = ({
   return (
     <div className={join("notice", level, className)} id={id} role={level === "error" ? "alert" : "status"}>
       <Icon aria-hidden="true" />
-      <span className="body notice-copy">{children}</span>
+      <span className="body notice-copy">
+        {children}
+        {actions || code ? (
+          <span className="notice-actions">
+            {actions}
+            {code ? <NoticeCode code={code} /> : null}
+          </span>
+        ) : null}
+      </span>
       {onDismiss ? (
         <button aria-label={dismissLabel} className="x notice-x" onClick={onDismiss} title={dismissLabel} type="button">
           <X aria-hidden="true" />
@@ -119,6 +159,9 @@ const InlineProgress = ({
       <div className="prog-actions">
         <button aria-label={cancelLabel} className="cancel" onClick={onCancel} title={cancelLabel} type="button">
           <X aria-hidden="true" />
+          <span aria-hidden="true" className="cancel-text">
+            Cancel
+          </span>
         </button>
       </div>
     </div>
@@ -161,6 +204,9 @@ const FileProgress = ({
           type="button"
         >
           <X aria-hidden="true" />
+          <span aria-hidden="true" className="cancel-text">
+            Cancel
+          </span>
         </button>
       </div>
     ) : null}
@@ -204,15 +250,39 @@ const RunButtonDownloadSummary = ({ download }: { download: DownloadMeta }) => (
  * that makes it visible, and its scroll margin (buttons.css) is what clears the
  * dock, so a button already in view does not move at all.
  */
+const isFullyInViewport = (element: HTMLElement): boolean => {
+  const rect = element.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  return rect.top >= 0 && rect.bottom <= viewportHeight;
+};
+
 const useRevealFinishedDownload = (button: RefObject<HTMLButtonElement | null>, download?: DownloadMeta) => {
   const offered = useRef(Boolean(download));
+  // Set by any scroll after the run starts. Moving the page during a long run is
+  // a deliberate choice (reading the log, checking another card); yanking the
+  // view back to the button at the end would undo it.
+  const userScrolled = useRef(false);
+  useEffect(() => {
+    const onScroll = () => {
+      userScrolled.current = true;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   useEffect(() => {
     const offering = Boolean(download);
     const wasOffering = offered.current;
     offered.current = offering;
-    if (!offering || wasOffering) return;
-    button.current?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "nearest" });
+    if (!offering || wasOffering || userScrolled.current) return;
+    const element = button.current;
+    if (!element || isFullyInViewport(element)) return;
+    element.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "nearest" });
   }, [button, download]);
+  // Pressing the button is the run's start: it was on screen at that instant, so
+  // any scroll after it is the user moving away on purpose.
+  return () => {
+    userScrolled.current = false;
+  };
 };
 
 /**
@@ -240,14 +310,17 @@ const RunButton = ({
   type?: "button" | "submit";
 }) => {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
-  useRevealFinishedDownload(buttonRef, download);
+  const markRunStart = useRevealFinishedDownload(buttonRef, download);
   return (
     <button
       aria-label={ariaLabel}
       className={join("btn primary run", download && "download-btn dl")}
       disabled={disabled}
       id={id}
-      onClick={onClick}
+      onClick={() => {
+        markRunStart();
+        onClick?.();
+      }}
       ref={buttonRef}
       type={type}
     >

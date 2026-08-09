@@ -523,7 +523,58 @@
   }
 }
 
+/* Settings filter + the collapsed Advanced half of the panel. */
+.rw-app .settings-filter {
+  margin-block-end: var(--sp-s);
+}
+.rw-app .settings-filter-input {
+  width: 100%;
+  padding: var(--sp-xs) var(--sp-s);
+  color: var(--ink);
+  background: var(--well);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-s);
+}
+.rw-app .settings-advanced > summary {
+  padding-block: var(--sp-xs);
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
 /* Archive candidate picker */
+.rw-app .pick-filter {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+  margin-block-start: var(--sp-s);
+}
+.rw-app .pick-filter-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--sp-xs) var(--sp-s);
+  color: var(--ink);
+  background: var(--well);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-s);
+}
+.rw-app .pick-filter-count {
+  flex: none;
+  font-size: 0.72rem;
+  color: var(--ink-3);
+}
+.rw-app .pick-empty {
+  padding: var(--sp-m);
+  font-size: 0.82rem;
+  color: var(--ink-3);
+}
+/* Long lists lean on the browser's own off-screen skipping instead of scroll
+   maths, so rows keep their natural (variable) heights. The intrinsic size is
+   the typical row height - only a scrollbar-length estimate, never layout. */
+.rw-app .picklist.long .pick-row {
+  contain-intrinsic-size: auto 52px;
+  content-visibility: auto;
+}
 .rw-app .picklist {
   display: flex;
   flex-direction: column;

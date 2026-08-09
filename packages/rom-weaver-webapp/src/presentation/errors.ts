@@ -75,17 +75,48 @@ const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = create
   return localized === messageId ? getErrorMessage(error) : localized;
 };
 
-const formatCodedErrorForDisplay = (error: unknown, localizer: Localizer = createLocalizer()): string => {
+/**
+ * The remediation line for an error code: what the reader can actually do next.
+ * Codes without a hint in the catalog get an empty string - the localizer
+ * returns the id itself when a message is missing.
+ */
+const getErrorRemediationHint = (error: unknown, localizer: Localizer = createLocalizer()): string => {
   const code = getErrorCode(error);
+  if (!code) return "";
+  const messageId = `error.hint.${code}` as MessageId;
+  const localized = localizer.message(messageId);
+  return localized === messageId ? "" : localized;
+};
+
+type CodedErrorParts = {
+  /** Machine code, for a bug report. Rendered as a small tag, never as the headline. */
+  code: string;
+  /** The plain-language failure, first in the reading order. */
+  message: string;
+  /** What to do next, when the code has known remediation. */
+  hint: string;
+  /** Raw underlying message or structured context, for the log and the tag's tooltip. */
+  detail: string;
+};
+
+/**
+ * Split a coded error into the parts a Notice renders separately. The code used
+ * to lead the sentence, which told the reader nothing they could act on.
+ */
+const getCodedErrorParts = (error: unknown, localizer: Localizer = createLocalizer()): CodedErrorParts => {
   const message = getUserFacingErrorMessage(error, localizer);
-  if (!code) return message;
-  const structuredDetail = getStructuredErrorDetail(error);
-  const detail = getDistinctErrorMessages(error).find(
-    (candidate) => normalizeComparableErrorMessage(candidate) !== normalizeComparableErrorMessage(message),
-  );
-  if (detail) return `${code}: ${message} Details: ${detail}`;
-  if (structuredDetail) return `${code}: ${message} Details: ${structuredDetail}`;
-  return `${code}: ${message}`;
+  const detail =
+    getDistinctErrorMessages(error).find(
+      (candidate) => normalizeComparableErrorMessage(candidate) !== normalizeComparableErrorMessage(message),
+    ) ||
+    getStructuredErrorDetail(error) ||
+    "";
+  return { code: getErrorCode(error), detail, hint: getErrorRemediationHint(error, localizer), message };
+};
+
+const formatCodedErrorForDisplay = (error: unknown, localizer: Localizer = createLocalizer()): string => {
+  const { detail, hint, message } = getCodedErrorParts(error, localizer);
+  return [message, hint, detail ? `Details: ${detail}` : ""].filter(Boolean).join(" ");
 };
 
 export { formatCodedErrorForDisplay, getErrorCode };

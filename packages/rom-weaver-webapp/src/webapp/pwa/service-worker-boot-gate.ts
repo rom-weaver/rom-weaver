@@ -41,6 +41,13 @@ type ServiceWorkerBootGate = {
 };
 
 const RELOAD_COUNT_KEY = "rom-weaver-coi-gate-reloads";
+/**
+ * Why the app booted, recorded by the gate. Anything other than
+ * `cross-origin-isolated` means SharedArrayBuffer is unavailable and the wasm
+ * pool runs single-threaded - a large, silent slowdown the UI must admit to.
+ */
+let lastBootReason = "";
+const getServiceWorkerBootReason = () => lastBootReason;
 const POLL_MS = 200;
 
 const createServiceWorkerBootGate = ({
@@ -85,6 +92,7 @@ const createServiceWorkerBootGate = ({
   const start = (onReady: () => void) => {
     if (!gated) {
       // Reached a good (isolated, or isolation-not-needed) document - reset the retry budget.
+      lastBootReason = isCrossOriginIsolated() ? "cross-origin-isolated" : "isolation-unavailable";
       clearReloadCount();
       onReady();
       return;
@@ -107,6 +115,7 @@ const createServiceWorkerBootGate = ({
       if (released) return;
       released = true;
       gated = false;
+      lastBootReason = reason;
       cleanup();
       clearReloadCount();
       logger.debug("Cross-origin isolation gate released; booting webapp", {
@@ -164,4 +173,4 @@ const createServiceWorkerBootGate = ({
   };
 };
 
-export { createServiceWorkerBootGate };
+export { createServiceWorkerBootGate, getServiceWorkerBootReason };

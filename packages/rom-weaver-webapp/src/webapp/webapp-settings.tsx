@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { isCompressionCodecFieldKey } from "../lib/compression/codec-fields.ts";
 import { CodecCombobox } from "../public/react/components/ds/codec-combobox.tsx";
 import { CompressInfoContent } from "../public/react/components/ds/compress-panel.tsx";
@@ -48,29 +48,39 @@ type FieldRenderProps = SettingsFieldShared & {
   fieldKey: SettingsFieldKey;
 };
 
-const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }> = [
+/**
+ * One flat wall of thirteen controls made the two settings most people ever
+ * change (theme, language) sit beside codec tuning. Basic groups stay open;
+ * everything a run works fine without is collapsed under Advanced, and the
+ * filter above reaches into both.
+ */
+type SettingsSection = { advanced?: boolean; fields: SettingsFieldKey[]; title: string };
+
+const settingsPanelSections: SettingsSection[] = [
   {
-    fields: [
-      "accent",
-      "language",
-      "logLevel",
-      "bundlePackage",
-      "betaToolsEnabled",
-      "applyPlayButtonEnabled",
-      "onboardingEnabled",
-      "fixChecksum",
-      "requireInputChecksumMatch",
-      "postApplyRomBehavior",
-    ],
+    fields: ["accent", "language", "betaToolsEnabled", "applyPlayButtonEnabled", "onboardingEnabled"],
     title: "General",
   },
-  { fields: ["defaultCompression", "compressionProfile", "threads"], title: "Compression" },
   {
+    advanced: true,
+    fields: ["logLevel", "bundlePackage", "fixChecksum", "requireInputChecksumMatch", "postApplyRomBehavior"],
+    title: "Workflow",
+  },
+  { advanced: true, fields: ["defaultCompression", "compressionProfile", "threads"], title: "Compression" },
+  {
+    advanced: true,
     fields: ["zipCodec", "sevenZipCodec", "rvzCodec", "chdCreateCdCodecs", "chdCreateDvdCodecs"],
     title: "Codecs",
   },
-  { fields: ["rvzBlockSize"], title: "RVZ" },
+  { advanced: true, fields: ["rvzBlockSize"], title: "RVZ" },
 ];
+
+/** Matches a field against the filter box by its own label and its group's title. */
+const fieldMatchesQuery = (fieldKey: SettingsFieldKey, sectionTitle: string, query: string): boolean => {
+  if (!query) return true;
+  const haystack = `${SETTINGS_FIELD_METADATA[fieldKey].label || ""} ${fieldKey} ${sectionTitle}`.toLowerCase();
+  return haystack.includes(query);
+};
 
 // Per-format groups render in the same single-column stack (`.setcols`); the general
 // groups above them stay full-width in the grouped settings layout.
@@ -393,18 +403,23 @@ const SettingsGroup = ({
   uiState,
   validation,
   onDraftChange,
-}: { section: { fields: SettingsFieldKey[]; title: string } } & SettingsFieldShared) => {
+  query = "",
+}: { section: SettingsSection; query?: string } & SettingsFieldShared) => {
   const shared = { draftSettings, onDraftChange, uiState, validation };
   const fields = section.fields.filter(
-    (fieldKey) => SETTINGS_PANEL_FIELD_ORDER.includes(fieldKey) && SETTINGS_FIELD_METADATA[fieldKey].kind !== "hidden",
+    (fieldKey) =>
+      SETTINGS_PANEL_FIELD_ORDER.includes(fieldKey) &&
+      SETTINGS_FIELD_METADATA[fieldKey].kind !== "hidden" &&
+      fieldMatchesQuery(fieldKey, section.title, query),
   );
-  if (!fields.length) return null;
+  const showTheme = section.title === "General" && (!query || "theme".includes(query) || query.includes("theme"));
+  if (!(fields.length || showTheme)) return null;
   const toggles = fields.filter((fieldKey) => TOGGLE_KINDS.has(SETTINGS_FIELD_METADATA[fieldKey].kind));
   const rows = fields.filter((fieldKey) => !TOGGLE_KINDS.has(SETTINGS_FIELD_METADATA[fieldKey].kind));
   return (
     <div className="setgroup">
       <div className="gtitle">{section.title}</div>
-      {section.title === "General" ? <ThemeSetting /> : null}
+      {showTheme ? <ThemeSetting /> : null}
       {rows.map((fieldKey) =>
         SETTINGS_FIELD_METADATA[fieldKey].kind === "range" ? (
           <SettingsRange fieldKey={fieldKey} key={fieldKey} {...shared} />
@@ -425,18 +440,40 @@ const SettingsGroup = ({
 
 function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: SettingsPanelProps): ReactNode {
   const shared = { draftSettings, onDraftChange, uiState: uiState ?? getSettingsUiState(draftSettings), validation };
-  const fullWidthSections = settingsPanelSections.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
-  const gridSections = settingsPanelSections.filter((section) => FORMAT_GROUP_TITLES.has(section.title));
+  const [filter, setFilter] = useState("");
+  const query = filter.trim().toLowerCase();
+  const basicSections = settingsPanelSections.filter((section) => !section.advanced);
+  const advancedSections = settingsPanelSections.filter((section) => section.advanced);
+  const advancedFullWidth = advancedSections.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
+  const advancedGrid = advancedSections.filter((section) => FORMAT_GROUP_TITLES.has(section.title));
   return (
     <div className="settings-panel">
-      {fullWidthSections.map((section) => (
-        <SettingsGroup key={section.title} section={section} {...shared} />
-      ))}
-      <div className="setcols">
-        {gridSections.map((section) => (
-          <SettingsGroup key={section.title} section={section} {...shared} />
-        ))}
+      <div className="settings-filter">
+        <input
+          aria-label="Filter settings"
+          className="settings-filter-input"
+          onChange={(event) => setFilter(event.target.value)}
+          placeholder="Filter settings"
+          type="search"
+          value={filter}
+        />
       </div>
+      {basicSections.map((section) => (
+        <SettingsGroup key={section.title} query={query} section={section} {...shared} />
+      ))}
+      {/* A filter that could not reach into a closed group would be a filter
+          that lies, so any query opens Advanced. */}
+      <details className="settings-advanced" open={Boolean(query)}>
+        <summary>Advanced</summary>
+        {advancedFullWidth.map((section) => (
+          <SettingsGroup key={section.title} query={query} section={section} {...shared} />
+        ))}
+        <div className="setcols">
+          {advancedGrid.map((section) => (
+            <SettingsGroup key={section.title} query={query} section={section} {...shared} />
+          ))}
+        </div>
+      </details>
       {validation.messages.length ? (
         <div aria-live="polite" className="validation bad" id="settings-validation-message" role="alert">
           {validation.messages.join(" ")}

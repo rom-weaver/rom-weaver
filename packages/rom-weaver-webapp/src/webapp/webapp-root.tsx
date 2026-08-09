@@ -10,7 +10,7 @@ import { getDefaultBrowserThreadCount } from "../platform/shared/compression-opt
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
 import { ConfirmDialog } from "../public/react/components/ds/index.ts";
-import { notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
+import { notifyGuidedSampleView, STATUS_VIEW_EVENT } from "../public/react/guided-sample-start.ts";
 import type { PageFileDrop } from "../public/react/public-types.ts";
 // Deliberately NOT the ../public/react/index.tsx barrel: that barrel re-exports
 // every workflow form, so a static import of it pulls all four route chunks
@@ -43,6 +43,7 @@ import {
   ToolsRouteForm,
   TrimPatchRoute,
 } from "./workflow-routes.tsx";
+import { SingleThreadBanner } from "./components/single-thread-banner.tsx";
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS = [
@@ -410,6 +411,13 @@ function WebappRoot({
     setLogTab("status");
     setLogOpen(true);
   }, [openChangelogTab, pageUpdate.ready, preloadLogDialog]);
+  // A failed startup can only be diagnosed from Status, and the failing workflow
+  // panel has no route to it - the form asks for it through this event.
+  useEffect(() => {
+    const open = () => openStatusTab();
+    window.addEventListener(STATUS_VIEW_EVENT, open);
+    return () => window.removeEventListener(STATUS_VIEW_EVENT, open);
+  }, [openStatusTab]);
   const openStorageTab = useCallback(() => {
     preloadLogDialog();
     setLogTab("storage");
@@ -588,6 +596,7 @@ function WebappRoot({
             onOpenStorage={openStorageTab}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
+            onEnableBetaTools={() => openSettingsTab(SETTINGS_FIELD_METADATA.betaToolsEnabled.id)}
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
             onPreloadSettings={preloadSettingsPanel}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
@@ -660,6 +669,7 @@ function WebappRoot({
               </section>
             ) : (
               <>
+                <SingleThreadBanner onOpenStatus={openStatusTab} />
                 {workflowPanel(
                   "patcher",
                   <ApplyPatchRoute
@@ -677,6 +687,7 @@ function WebappRoot({
                   "creator",
                   <CreatePatchRoute
                     onModifiedChange={actions.onCreatorModifiedChange}
+                    onOpenApplyTab={() => actions.onSelectView("patcher")}
                     onOriginalChange={actions.onCreatorOriginalChange}
                     onPatchTypeChange={actions.onCreatorPatchTypeChange}
                     onSettingsChange={actions.onCreatorSettingsChange}
@@ -688,6 +699,7 @@ function WebappRoot({
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute
+                    onOpenApplyTab={() => actions.onSelectView("patcher")}
                     onOutputFormatChange={actions.onTrimOutputFormatChange}
                     onSettingsChange={actions.onTrimSettingsChange}
                     onSourceChange={actions.onTrimSourceChange}

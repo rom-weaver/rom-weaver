@@ -49,6 +49,8 @@ test("browser auto thread default still falls back to one when threaded wasm is 
 
 test("worker thread settings placeholder keeps auto and shows the resolved count", async () => {
   mountSettingsPanel();
+  // Threads is an advanced setting now, so it starts inside the collapsed group.
+  await page.getByText("Advanced").click();
 
   await expect
     .element(page.getByRole("textbox", { name: "Threads" }))

@@ -18,7 +18,7 @@ import {
 
 installPatcherTestHooks();
 
-test("apply progress cancel button invokes primary cancel without visible cancel text", async () => {
+test("apply progress cancel button invokes primary cancel and is labelled", async () => {
   const cancelPrimaryAction = vi.fn();
   const runPrimaryAction = vi.fn();
   const state = {
@@ -49,7 +49,9 @@ test("apply progress cancel button invokes primary cancel without visible cancel
     .toBe(true);
   const cancelButton = document.querySelector("button[aria-label='Cancel applying']");
   expect(cancelButton).toBeInstanceOf(HTMLButtonElement);
-  expect(cancelButton.textContent).toBe("");
+  // The button now carries a visible "Cancel" word beside the icon (an icon-only
+  // X was unreadable); the operation it cancels stays on the accessible label.
+  expect(cancelButton.textContent).toBe("Cancel");
   cancelButton.click();
 
   expect(cancelPrimaryAction).toHaveBeenCalledTimes(1);

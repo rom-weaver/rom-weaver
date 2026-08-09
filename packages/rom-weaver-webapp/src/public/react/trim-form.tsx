@@ -21,6 +21,7 @@ import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
 import { type FileProgressProps, Notice } from "./components/ds/feedback.tsx";
+import { IgnoredPatchDropNotice } from "./components/ds/ignored-patch-notice.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
@@ -42,7 +43,7 @@ import {
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
 import { TrimPatchFormView, type TrimPatchFormViewModel } from "./trim-form-view.tsx";
-import { routeSingleRom } from "./unified-drop-routing.ts";
+import { collectIgnoredPatchDrops, routeSingleRom } from "./unified-drop-routing.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
@@ -518,6 +519,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const [messagePlacement, setMessagePlacement] = useState<TrimMessagePlacement | null>(null);
   const [errorCode, setErrorCode] = useState("");
   const [sourceState, setSourceState] = useState<TrimWorkflowSourceState | null>(null);
+  // Patch files the last drop discarded - this tab has no patch bucket.
+  const [ignoredPatchNames, setIgnoredPatchNames] = useState<string[]>([]);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
     useDisposableWorkflowOutput<CompletedTrimOutput>();
   const { abortActiveOperation, activeAbortControllerRef, rememberAbortController } = useActiveAbortController();
@@ -693,6 +696,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   // and any extra files (Trim has one source). See routeSingleRom.
   const handledPageDropIdRef = useRef<number | null>(null);
   const handleUnifiedDrop = (files: File[]) => {
+    setIgnoredPatchNames(collectIgnoredPatchDrops(files).map((file) => file.name));
     const source = routeSingleRom(files);
     if (source) updateSource(source);
   };
@@ -1130,6 +1134,20 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   });
 
   const createModel = (): TrimPatchFormViewModel => ({
+    dropNotice: (
+      <IgnoredPatchDropNotice
+        fileNames={ignoredPatchNames}
+        onDismiss={() => setIgnoredPatchNames([])}
+        onOpenApplyTab={
+          props.onOpenApplyTab
+            ? () => {
+                setIgnoredPatchNames([]);
+                props.onOpenApplyTab?.();
+              }
+            : undefined
+        }
+      />
+    ),
     confirm: {
       body: `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`,
       cancelLabel: "Cancel",

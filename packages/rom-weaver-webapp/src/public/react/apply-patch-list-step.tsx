@@ -1427,7 +1427,13 @@ const ApplyPatchListStep = ({
   // moved while it is staging; other busy/locked rows remain non-reorderable.
   const reorderable = total > 1;
   const canReorder = reorderable && patches.every((item) => item.progress || item.canRemove);
-  const reorderList = useListReorder({ count: total, disabled: !canReorder, onReorder: patchStack.reorder });
+  const localizer = useUiLocalizer();
+  const reorderList = useListReorder({
+    count: total,
+    describeMove: (from, to) => localizer.message("ui.patch.movedTo", { from: from + 1, to: to + 1 }),
+    disabled: !canReorder,
+    onReorder: patchStack.reorder,
+  });
   const disabledCount = (disabledFlags || []).filter(Boolean).length;
   const enabledBytes = patches.reduce(
     (sum, item, index) => (disabledFlags?.[index] ? sum : sum + (item.fileSize || 0)),
@@ -1442,7 +1448,6 @@ const ApplyPatchListStep = ({
     .filter((patchIndex) => !disabledFlags?.[patchIndex]);
   const chainInputIndex = enabledIndexes[0] ?? -1;
   const chainOutputIndex = enabledIndexes.at(-1) ?? -1;
-  const localizer = useUiLocalizer();
   return (
     <StepSection
       fault={fault}
@@ -1508,6 +1513,9 @@ const ApplyPatchListStep = ({
           />
         ))}
       </div>
+      <p aria-live="polite" className="sr-only" id="rom-weaver-patch-reorder-live">
+        {reorderList.announcement}
+      </p>
       {(() => {
         // One list-level order warning: the first enabled patch whose input matches a patch it
         // does not follow. Fixing one link re-plans the chain; any remaining break surfaces next.
