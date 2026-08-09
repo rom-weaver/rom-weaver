@@ -15,6 +15,11 @@ type OutputOption = {
 
 type OutputOptionLabelMap = Record<string, string>;
 
+type ApplyOutputLabels = {
+  compressed?: (format: string) => string;
+  plain?: string;
+};
+
 type OutputNameSettings = Pick<NonNullable<ApplySettings["output"]>, "extension" | "outputName" | "suffix">;
 
 type GeneratedPatchNameSource = {
@@ -165,7 +170,37 @@ const createOutputOptions = (
     value: option,
   }));
 
-const createApplyOutputOptions = createOutputOptions;
+const APPLY_OUTPUT_FORMAT_NAMES: Record<string, string> = {
+  "7z": "7z",
+  chd: "CHD disc image",
+  rvz: "RVZ disc image",
+  zip: "ZIP",
+  z3ds: "3DS image",
+};
+
+const getApplyOutputFormatName = (option: string): string =>
+  APPLY_OUTPUT_FORMAT_NAMES[option] || String(option).replace(/^\./, "").toUpperCase();
+
+/**
+ * Apply's primary format selector names the result a person gets, while the
+ * Options drawer keeps the exact format, codec, and level controls.
+ */
+const createApplyOutputOptions = (
+  compressionOptions: readonly string[] | readonly OutputOption[],
+  _source?: GeneratedOutputSource,
+  labels: ApplyOutputLabels = {},
+): OutputOption[] =>
+  compressionOptions.map((option) => {
+    const value = typeof option === "string" ? option : option.value;
+    return {
+      label:
+        value === "none"
+          ? labels.plain || "Plain ROM"
+          : labels.compressed?.(getApplyOutputFormatName(value)) ||
+            `Smaller ${getApplyOutputFormatName(value)} download`,
+      value,
+    };
+  });
 
 /**
  * Compression-type options for the output "Options" panel. The uncompressed

@@ -172,7 +172,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await waitForInputStackFile("game.bin");
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
   // The output section (and its apply button) renders once the workflow has files.
-  await expect.element(page.getByRole("button", { name: /apply & download/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: /^apply$/i })).toBeInTheDocument();
 
   await page.getByRole("button", { name: "Clear ROM input" }).click();
   await expect

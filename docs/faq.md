@@ -19,7 +19,7 @@ trying to find out.
   - [Why does the expected filename not match?](#why-does-the-expected-filename-not-match)
   - [Why does the checksum not match?](#why-does-the-checksum-not-match)
   - [Does patch order matter?](#does-patch-order-matter)
-  - [Why is Apply and Download disabled?](#why-is-apply-and-download-disabled)
+  - [Why is Apply disabled?](#why-is-apply-disabled)
 - [Creating a patch](#creating-a-patch)
   - [What are Original and Modified?](#what-are-original-and-modified)
   - [How do I know the patch really works?](#how-do-i-know-the-patch-really-works)
@@ -96,7 +96,7 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 Yes - [why patch order matters](explanation/how-patching-works.md#why-patch-order-matters).
 
-### Why is Apply and Download disabled?
+### Why is Apply disabled?
 
 Something is still reading, or a check has not passed. See
 [choose the output and apply](how-to/apply-rom-patches.md#choose-the-output-and-apply).

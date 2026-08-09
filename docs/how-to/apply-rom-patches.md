@@ -112,7 +112,7 @@ In **0x04 Apply**:
    the extension.
 3. Open **Options** only if you need compression or output-header controls.
    The defaults are right for most patches.
-4. Choose **APPLY & DOWNLOAD**.
+4. Choose **Apply**.
 5. Wait for the button to finish, then save the browser download.
 
 To share the staged recipe, use the separate **Share this setup** job below the
@@ -121,16 +121,16 @@ job in detail.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-light.avif" width="1170" height="654">
-    <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-light.avif" width="2242" height="560">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-light.webp" width="1170" height="654">
-    <img src="/docs/screenshots/apply-output-desktop-light.webp" width="2242" height="560" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the light theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-light.avif" width="1170" height="1187">
+    <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-light.avif" width="2242" height="941">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-light.webp" width="1170" height="1187">
+    <img src="/docs/screenshots/apply-output-desktop-light.webp" width="2242" height="941" alt="Cropped Apply output card with filename, format, options, and Apply button in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-dark.avif" width="1170" height="654">
-    <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-dark.avif" width="2242" height="560">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-dark.webp" width="1170" height="654">
-    <img src="/docs/screenshots/apply-output-desktop-dark.webp" width="2242" height="560" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the dark theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-dark.avif" width="1170" height="1187">
+    <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-dark.avif" width="2242" height="941">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-dark.webp" width="1170" height="1187">
+    <img src="/docs/screenshots/apply-output-desktop-dark.webp" width="2242" height="941" alt="Cropped Apply output card with filename, format, options, and Apply button in the dark theme">
   </picture>
   <figcaption>The output card is shown at readable size instead of shrinking the entire page into one image.</figcaption>
 </figure>
@@ -144,7 +144,7 @@ not sent to rom-weaver - see
 A [bundle](../explanation/bundles.md) is a saved patching recipe. Add the
 bundle archive to **0x01 Inputs**. If it is patch-only, rom-weaver
 shows which ROM it expects. Add your matching ROM. Review optional patch
-switches, then use **APPLY & DOWNLOAD** just as you would for loose files.
+switches, then use **Apply** just as you would for loose files.
 
 A release author can also give you a link that opens the bundle directly in
 Apply. The same local checks still happen before anything is written.

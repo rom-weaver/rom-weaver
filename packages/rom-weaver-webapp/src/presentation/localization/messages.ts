@@ -163,6 +163,20 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.output.bundleDiverged",
     message: "Output won't be verified - the patch chain differs from the bundle.",
   }),
+  "ui.output.afterApplying": msg({ id: "ui.output.afterApplying", message: "After applying" }),
+  "ui.output.afterApplying.autoDownload": msg({
+    id: "ui.output.afterApplying.autoDownload",
+    message: "Download automatically",
+  }),
+  "ui.output.afterApplying.autoTest": msg({
+    id: "ui.output.afterApplying.autoTest",
+    message: "Test automatically",
+  }),
+  "ui.output.afterApplying.autoTestDownload": msg({
+    id: "ui.output.afterApplying.autoTestDownload",
+    message: "Test and download",
+  }),
+  "ui.output.afterApplying.none": msg({ id: "ui.output.afterApplying.none", message: "Do nothing" }),
   "ui.output.differentChain": msg({
     id: "ui.output.differentChain",
     message: "Output won't be verified - the expected output describes a different patch chain.",
@@ -174,6 +188,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.output.outOfOrder": msg({
     id: "ui.output.outOfOrder",
     message: "Output won't be verified - the patches are out of order.",
+  }),
+  "ui.output.plainRom": msg({ id: "ui.output.plainRom", message: "Plain ROM" }),
+  "ui.output.smallerDownload": msg({ id: "ui.output.smallerDownload", message: "Smaller {format} download" }),
+  "ui.output.uncompressedDisc": msg({ id: "ui.output.uncompressedDisc", message: "Uncompressed {format}" }),
+  "ui.output.uncompressedIsoImage": msg({
+    id: "ui.output.uncompressedIsoImage",
+    message: "Uncompressed ISO image",
   }),
   "ui.patch.offCount": msg({
     id: "ui.patch.offCount",

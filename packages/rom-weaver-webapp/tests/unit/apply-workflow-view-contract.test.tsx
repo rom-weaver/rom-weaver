@@ -32,7 +32,7 @@ const storeOf = <State,>(state: State) => ({
 
 const outputState = (overrides: Partial<PatcherOutputState> = {}): PatcherOutputState =>
   ({
-    applyButton: { disabled: true, label: "APPLY & DOWNLOAD", loading: false, progress: null, title: "" },
+    applyButton: { disabled: true, label: "Apply", loading: false, progress: null, title: "" },
     applyTiming: "",
     compress: null,
     compressTiming: "",
@@ -48,7 +48,7 @@ const outputState = (overrides: Partial<PatcherOutputState> = {}): PatcherOutput
     ...overrides,
   }) as unknown as PatcherOutputState;
 
-const romRow = (fileName: string): RomInputRowState => {
+const romRow = (fileName: string, infoOverrides: Partial<RomInputRowState["info"]> = {}): RomInputRowState => {
   return {
     groupId: "",
     id: `rom:${fileName}`,
@@ -60,6 +60,7 @@ const romRow = (fileName: string): RomInputRowState => {
       fileName,
       md5: "",
       romInfo: "",
+      ...infoOverrides,
       sha1: "",
       validationPhase: "idle",
     },
@@ -475,6 +476,148 @@ describe("apply workflow view - post-apply behavior select", () => {
     const { container: second } = renderView({ settings: { postApplyRomBehavior: "auto-download" }, ui });
     const secondSelect = second.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
     expect(secondSelect.value).toBe("auto-test-download");
+  });
+});
+
+describe("apply workflow view - outcome output choices", () => {
+  it("uses plain outcomes in the main selector and keeps format details in Options", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.gba")] };
+    const { container } = renderView({
+      outputOverrides: {
+        compressionFormat: "zip",
+        disabled: false,
+        options: [
+          { label: ".gba", value: "none" },
+          { label: ".zip", value: "zip" },
+        ],
+      },
+      ui,
+    });
+
+    const output = container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement;
+    expect(Array.from(output.options, (option) => option.textContent)).toEqual(["Plain ROM", "Smaller ZIP download"]);
+    const details = container.querySelector("#rom-weaver-select-output-format-compress") as HTMLSelectElement;
+    expect(Array.from(details.options, (option) => option.textContent)).toEqual(["None", ".zip"]);
+    expect(container.querySelector(".outopts #rom-weaver-select-post-apply-behavior")).toBeNull();
+    expect(container.querySelector(".apply-primary-action-row #rom-weaver-select-post-apply-behavior")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-button-apply")?.textContent).toContain("Apply");
+  });
+
+  it("uses the detected disc medium for an uncompressed disc output", () => {
+    const ui = {
+      ...createEmptyPatcherUiState(),
+      romInputs: [
+        romRow("game.cue"),
+        romRow("game.iso", { romType: { discFormat: "CD", platform: "Sony PlayStation" } }),
+      ],
+    };
+    const { container } = renderView({
+      outputOverrides: {
+        compressionFormat: "zip",
+        disabled: false,
+        options: [
+          { label: ".bin", value: "none" },
+          { label: ".zip", value: "zip" },
+        ],
+      },
+      ui,
+    });
+
+    const output = container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement;
+    expect(Array.from(output.options, (option) => option.textContent)).toEqual([
+      "Uncompressed CD-ROM",
+      "Smaller ZIP download",
+    ]);
+  });
+
+  it("uses the explicit ISO output extension when generic input metadata has no disc verdict", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game-image")] };
+    const { container } = renderView({
+      outputOverrides: {
+        compressionFormat: "zip",
+        disabled: false,
+        options: [
+          { label: ".iso", value: "none" },
+          { label: ".zip", value: "zip" },
+        ],
+      },
+      ui,
+    });
+
+    const output = container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement;
+    expect(output.options[0]?.textContent).toBe("Uncompressed ISO image");
+  });
+
+  it("keeps an ambiguous BIN output as a plain ROM without a disc verdict", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = renderView({
+      outputOverrides: {
+        compressionFormat: "zip",
+        disabled: false,
+        options: [
+          { label: ".bin", value: "none" },
+          { label: ".zip", value: "zip" },
+        ],
+      },
+      ui,
+    });
+
+    const output = container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement;
+    expect(output.options[0]?.textContent).toBe("Plain ROM");
+  });
+
+  it("uses the existing CHD mode when a disc medium is not identified", () => {
+    const ui = {
+      ...createEmptyPatcherUiState(),
+      romInputs: [{ ...romRow("game.cue"), chdMode: "cd" }],
+    };
+    const { container } = renderView({
+      outputOverrides: {
+        compressionFormat: "zip",
+        disabled: false,
+        options: [
+          { label: ".bin", value: "none" },
+          { label: ".zip", value: "zip" },
+        ],
+      },
+      ui,
+    });
+
+    const output = container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement;
+    expect(output.options[0]?.textContent).toBe("Uncompressed CD-ROM");
+  });
+
+  it("localizes the outcome choices and After applying label", () => {
+    const ui = {
+      ...createEmptyPatcherUiState(),
+      romInputs: [romRow("game.iso", { romType: { discFormat: "CD", platform: "Sony PlayStation" } })],
+    };
+    const { container } = renderView({
+      outputOverrides: {
+        compressionFormat: "zip",
+        disabled: false,
+        options: [
+          { label: ".gba", value: "none" },
+          { label: ".zip", value: "zip" },
+        ],
+      },
+      settings: { language: "es" },
+      ui,
+    });
+
+    const output = container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement;
+    expect(Array.from(output.options, (option) => option.textContent)).toEqual([
+      "CD-ROM sin comprimir",
+      "Descarga ZIP más pequeña",
+    ]);
+    const postApply = container.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
+    expect(postApply.getAttribute("aria-label")).toBe("Después de aplicar");
+    expect(Array.from(postApply.options, (option) => option.textContent)).toEqual([
+      "Descargar automáticamente",
+      "Probar automáticamente",
+      "Probar y descargar",
+      "No hacer nada",
+    ]);
   });
 });
 

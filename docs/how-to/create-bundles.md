@@ -102,7 +102,7 @@ After a successful Apply:
 </figure>
 
 Bundle creation does not apply the patches. It packages the recipe you have
-staged. **APPLY & DOWNLOAD** remains the primary action for building the
+staged. **Apply** remains the primary action for building the
 patched output.
 
 The job remains available after a successful Apply. A saved bundle-package
@@ -121,7 +121,7 @@ Test the archive you will publish, not only the loose files used to make it:
 3. For a patch-only bundle, add a fresh copy of the documented Original.
 4. Confirm the displayed patch order, names, required switches, and optional
    switches match the release.
-5. Run **APPLY & DOWNLOAD**.
+5. Run **Apply**.
 6. Compare the result checksum with your intended Modified file.
 7. Launch the result in the emulator or hardware you support.
 8. Repeat for every optional combination you promise works.

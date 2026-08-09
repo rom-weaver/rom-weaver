@@ -38,7 +38,7 @@ const inertOutputController: PatcherOutputController = {
   ...createStaticStoreController({
     applyButton: {
       disabled: true,
-      label: "Apply patch",
+      label: "Apply",
       loading: false,
       progress: null,
       title: "",

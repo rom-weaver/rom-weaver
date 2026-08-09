@@ -75,6 +75,11 @@ msgstr "Akzentfarbe"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.afterApplying"
+msgstr "Nach dem Anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "Alles lokal in deinem Browser — deine Dateien verlassen nie deinen Rechner."
 
@@ -245,6 +250,11 @@ msgstr "Verwerfen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.afterApplying.none"
+msgstr "Nichts tun"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.nav.docs"
 msgstr "Doku"
 
@@ -262,6 +272,11 @@ msgstr "{format}-Bundle herunterladen"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.downloadRom"
 msgstr "{format}-ROM-Bundle herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.afterApplying.autoDownload"
+msgstr "Automatisch herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,6 +530,11 @@ msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.plainRom"
+msgstr "Unkomprimierte ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
 msgstr "Eine gepatchte ROM im Emulator spielen, direkt im Browser,"
 
@@ -670,6 +690,11 @@ msgstr "Zum Hauptinhalt springen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.smallerDownload"
+msgstr "Kleinerer {format}-Download"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.tabStatus"
 msgstr "Status"
 
@@ -712,6 +737,16 @@ msgstr "Tippen, um Dateien zu wählen"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabTest"
 msgstr "Test"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.afterApplying.autoTestDownload"
+msgstr "Testen und herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.afterApplying.autoTest"
+msgstr "Automatisch testen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -797,6 +832,16 @@ msgstr "Threads"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis"
 msgstr "Verwandle eine Original-ROM und ihre modifizierte Version, ob komprimiert oder unkomprimiert,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.uncompressedDisc"
+msgstr "Unkomprimiertes {format}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.uncompressedIsoImage"
+msgstr "Unkomprimiertes ISO-Image"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

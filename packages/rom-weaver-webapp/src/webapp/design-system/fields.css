@@ -808,6 +808,23 @@
   height: 32px;
   font-size: var(--dropdown-fs, 0.82rem);
 }
+.rw-app .apply-primary-action-row {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: stretch;
+}
+.rw-app .apply-primary-action-row > .btn.run,
+.rw-app .apply-primary-action-row > .runprog {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rw-app .apply-primary-action-row > .after-apply-field {
+  flex: 0 0 240px;
+  min-width: 180px;
+}
+.rw-app .after-apply-field .select {
+  min-width: 0;
+}
 .rw-app .btn.run,
 .rw-app .runprog {
   margin-block-start: 2px;
