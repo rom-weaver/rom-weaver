@@ -1194,18 +1194,19 @@ impl CliApp {
         let first_patch = resolved_patches
             .first()
             .map(|(_, resolved)| resolved.as_path());
-        let strip_header = match chain_header_modes.first().copied().unwrap_or_default() {
-            PatchApplyHeaderMode::Strip => true,
-            PatchApplyHeaderMode::Keep => false,
-            PatchApplyHeaderMode::Auto => self.auto_header_strip_decision(
-                resolved_input,
-                first_patch,
-                expected_input_checksums,
-                cached_input_checksums,
-                context,
-                temp_paths,
-            ),
-        };
+        let (strip_header, inferred_basis_note) =
+            match chain_header_modes.first().copied().unwrap_or_default() {
+                PatchApplyHeaderMode::Strip => (true, None),
+                PatchApplyHeaderMode::Keep => (false, None),
+                PatchApplyHeaderMode::Auto => self.auto_header_strip_decision(
+                    resolved_input,
+                    first_patch,
+                    expected_input_checksums,
+                    cached_input_checksums,
+                    context,
+                    temp_paths,
+                ),
+            };
         let PreparedApplyInput {
             apply_input,
             stripped_header,
@@ -1232,7 +1233,9 @@ impl CliApp {
                 ))
             })?;
 
-        let mut checksum_verification_labels = Vec::new();
+        // An inferred basis changes output bytes on evidence rather than proof,
+        // so it is always reported.
+        let mut checksum_verification_labels = Vec::from_iter(inferred_basis_note);
         if let Some(expected_size) = expected_input_size {
             let label = Self::validate_patch_input_size(&apply_input, Some(expected_size), None)
                 .map_err(|error| {
@@ -1551,13 +1554,13 @@ impl CliApp {
         cached_input_checksums: &BTreeMap<String, String>,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
-    ) -> bool {
+    ) -> (bool, Option<String>) {
         let Ok(header_match) = Self::detect_strippable_rom_header(resolved_input) else {
             trace!(
                 input = %resolved_input.display(),
                 "auto header: no strippable ROM header detected; keeping input as-is"
             );
-            return false;
+            return (false, None);
         };
         let header_len = header_match.stripped_bytes().unwrap_or(ROM_HEADER_BYTES);
         let required_crc32 = expected_input_checksums.get("crc32").cloned().or_else(|| {
@@ -1570,11 +1573,18 @@ impl CliApp {
                 "auto header: strippable header present but no required input checksum; falling back to structural evidence"
             );
             let Some(patch) = first_resolved_patch else {
-                return false;
+                return (false, None);
             };
-            return self
-                .structural_strip_decision(resolved_input, patch, header_match, context, temp_paths)
-                .unwrap_or(false);
+            return match self.structural_strip_decision(
+                resolved_input,
+                patch,
+                header_match,
+                context,
+                temp_paths,
+            ) {
+                Some((strip, note)) => (strip, Some(note)),
+                None => (false, None),
+            };
         };
         if cached_input_checksums
             .get("crc32")
@@ -1584,7 +1594,7 @@ impl CliApp {
                 required_crc32 = %required_crc32,
                 "auto header: required checksum matches the raw (headered) input; keeping header"
             );
-            return false;
+            return (false, None);
         }
         let headerless_crc32 = (|| -> Result<Option<String>> {
             let mut reader = BufReader::new(File::open(resolved_input)?);
@@ -1599,21 +1609,21 @@ impl CliApp {
                     required_crc32 = %required_crc32,
                     "auto header: required input checksum matches the headerless bytes; stripping header before apply and re-adding it after"
                 );
-                true
+                (true, None)
             }
             Ok(_) => {
                 trace!(
                     required_crc32 = %required_crc32,
                     "auto header: required checksum matches neither the raw nor the headerless bytes; keeping header"
                 );
-                false
+                (false, None)
             }
             Err(error) => {
                 trace!(
                     %error,
                     "auto header: could not hash the headerless bytes; keeping header"
                 );
-                false
+                (false, None)
             }
         }
     }

@@ -36,6 +36,12 @@ const MIN_RECORDS_FOR_EDGE_RULE: usize = 8;
 
 /// Untrimmed-edge records the losing basis needs before that rule decides.
 /// One coincidental match is ordinary; several is a pattern.
+///
+/// A wrong basis produces a coincidental edge match on roughly 1 record in 128,
+/// so this rule stays silent below a few hundred records and only speaks up on
+/// the large patches typical of a translation or overhaul hack. That is the
+/// intended reach: it is the weakest of the rules and the safe outcome of
+/// silence is [`BasisDecision::Inconclusive`].
 const MIN_UNTRIMMED_MARGIN: usize = 2;
 
 /// Which bytes of the input a patch is applied to.
@@ -73,8 +79,6 @@ pub struct BasisEvidence {
     /// Comparable records whose first or last byte already equals the source
     /// byte. A differ that trims unchanged edges never emits these.
     pub untrimmed_records: usize,
-    /// Whether an IPS truncate footer equals this candidate's length.
-    pub truncate_matches: bool,
 }
 
 /// Both candidates plus the inputs the decision rules need.
@@ -172,12 +176,10 @@ pub fn probe_patch_basis(
 
     let mut raw = BasisEvidence {
         source_len: raw_len,
-        truncate_matches: patch.truncate_size == Some(raw_len),
         ..BasisEvidence::default()
     };
     let mut headerless = BasisEvidence {
         source_len: headerless_len,
-        truncate_matches: patch.truncate_size == Some(headerless_len),
         ..BasisEvidence::default()
     };
 
@@ -267,32 +269,13 @@ pub fn decide_basis(probe: &BasisProbe) -> BasisDecision {
         };
     }
 
-    // A truncate footer states the final size outright, so a match on exactly
-    // one candidate names the basis the author worked from.
-    match (
-        probe.raw.truncate_matches,
-        probe.headerless.truncate_matches,
-    ) {
-        (true, false) => {
-            return BasisDecision::decided(
-                PatchBasis::Raw,
-                format!(
-                    "truncate size matches the raw input length ({} bytes)",
-                    probe.raw.source_len
-                ),
-            );
-        }
-        (false, true) => {
-            return BasisDecision::decided(
-                PatchBasis::Headerless,
-                format!(
-                    "truncate size matches the headerless length ({} bytes)",
-                    probe.headerless.source_len
-                ),
-            );
-        }
-        _ => {}
-    }
+    // No truncate rule lives here on purpose. An IPS truncate footer states the
+    // OUTPUT size, not the size of the bytes the author patched, and a creator
+    // only emits one when the patch shrinks the file. So `truncate ==
+    // source_len` is false for the author's real basis by construction, and a
+    // raw-basis patch that shrinks a headered dump to its headerless length
+    // matches the headerless candidate exactly - the rule would fire backwards
+    // on the one shape it looked designed for.
 
     // Records that start past the end leave unwritten bytes behind them, which
     // no patcher emits. Only the headerless candidate can produce them - it is

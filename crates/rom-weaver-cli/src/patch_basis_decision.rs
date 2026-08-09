@@ -33,8 +33,11 @@ const MAX_TIEBREAK_INPUT_BYTES: u64 = 64 * 1024 * 1024;
 
 impl CliApp {
     /// Decide whether to strip the header before applying a patch that carries
-    /// no source checksum. `Some(true)` strips, `Some(false)` keeps, and `None`
-    /// means no rule fired and the caller should keep its own default.
+    /// no source checksum. `None` means no rule fired and the caller should keep
+    /// its own default.
+    ///
+    /// The returned note goes in the operation report. This decision changes
+    /// output bytes on evidence rather than proof, so it must never be silent.
     pub(super) fn structural_strip_decision(
         &self,
         input: &Path,
@@ -42,9 +45,16 @@ impl CliApp {
         header: KnownRomHeaderMatch,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
-    ) -> Option<bool> {
-        let basis = self.structural_basis_decision(input, patch, header, context, temp_paths)?;
-        Some(basis == PatchBasis::Headerless)
+    ) -> Option<(bool, String)> {
+        let (basis, reason) =
+            self.structural_basis_decision(input, patch, header, context, temp_paths)?;
+        Some((
+            basis == PatchBasis::Headerless,
+            format!(
+                "patch header basis inferred as {} ({reason})",
+                basis.label()
+            ),
+        ))
     }
 
     fn structural_basis_decision(
@@ -54,7 +64,7 @@ impl CliApp {
         header: KnownRomHeaderMatch,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
-    ) -> Option<PatchBasis> {
+    ) -> Option<(PatchBasis, String)> {
         let header_len = header.stripped_bytes()?;
         // Only copier padding supports the header-write rule. Format headers
         // (iNES and friends) are ROM data an author may legitimately edit.
@@ -83,14 +93,14 @@ impl CliApp {
                 reason = decision.reason(),
                 "auto header: structural evidence chose the apply basis"
             );
-            return Some(basis);
+            return Some((basis, decision.reason().to_string()));
         }
         trace!(
             patch = %patch.display(),
             reason = decision.reason(),
             "auto header: record geometry inconclusive; trying the ROM-header tiebreaker"
         );
-        self.basis_tiebreak_by_rom_header(input, patch, context, temp_paths)
+        self.basis_tiebreak_by_rom_header(input, patch, header_len as u64, context, temp_paths)
     }
 
     /// Apply the patch both ways and keep the basis whose output still looks
@@ -101,13 +111,20 @@ impl CliApp {
     /// structure the platform's own routine looks for. The comparison is
     /// against the *input's* recognised platforms, so a ROM that never had a
     /// valid checksum still works as its own baseline.
+    ///
+    /// Every side of the comparison - baseline and both candidates - is scored
+    /// as headerless bytes of the same length. The platform routines pick their
+    /// header offset from the file length (SNES reads a copier header only when
+    /// `len % 1024 == 512`), so scoring a headered output against a headerless
+    /// one compares file shapes rather than patch correctness.
     fn basis_tiebreak_by_rom_header(
         &self,
         input: &Path,
         patch: &Path,
+        header_len: u64,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
-    ) -> Option<PatchBasis> {
+    ) -> Option<(PatchBasis, String)> {
         let input_len = probe_step("stat input", fs::metadata(input))?.len();
         if input_len > MAX_TIEBREAK_INPUT_BYTES {
             debug!(
@@ -126,10 +143,18 @@ impl CliApp {
             return None;
         };
 
+        let headerless_input = basis_temp_path(context, "basis-headerless", temp_paths);
+        probe_step(
+            "strip header",
+            Self::strip_header_to_temp(input, &headerless_input),
+        )?;
+
+        // The baseline is the headerless input, matching the shape both
+        // candidates are scored in.
         let scratch = basis_temp_path(context, "basis-scratch", temp_paths);
         let baseline = probe_step(
             "validate input checksums",
-            Self::validate_checksum_file(input, Some(input), &scratch),
+            Self::validate_checksum_file(&headerless_input, Some(input), &scratch),
         )?;
         let baseline_profiles = matched_profiles(&baseline);
         if baseline_profiles.is_empty() {
@@ -140,13 +165,7 @@ impl CliApp {
             return None;
         }
 
-        let headerless_input = basis_temp_path(context, "basis-headerless", temp_paths);
-        probe_step(
-            "strip header",
-            Self::strip_header_to_temp(input, &headerless_input),
-        )?;
-
-        let raw_score = Self::score_basis_apply(
+        let (raw_score, raw_len) = Self::score_basis_apply(
             BasisApplyScore {
                 handler: handler.as_ref(),
                 patch,
@@ -154,11 +173,12 @@ impl CliApp {
                 hint: input,
                 baseline: &baseline_profiles,
                 label: PatchBasis::Raw.label(),
+                strip_bytes: header_len,
             },
             context,
             temp_paths,
         )?;
-        let headerless_score = Self::score_basis_apply(
+        let (headerless_score, headerless_len) = Self::score_basis_apply(
             BasisApplyScore {
                 handler: handler.as_ref(),
                 patch,
@@ -166,10 +186,23 @@ impl CliApp {
                 hint: input,
                 baseline: &baseline_profiles,
                 label: PatchBasis::Headerless.label(),
+                strip_bytes: 0,
             },
             context,
             temp_paths,
         )?;
+
+        // Different lengths mean the platform routines saw different files, not
+        // differently-patched ones. Nothing comparable survives that.
+        if raw_len != headerless_len {
+            debug!(
+                patch = %patch.display(),
+                raw_len,
+                headerless_len,
+                "auto header: candidate outputs differ in length; not comparable, keeping the header"
+            );
+            return None;
+        }
 
         let chosen = match raw_score.cmp(&headerless_score) {
             Ordering::Greater => PatchBasis::Raw,
@@ -191,16 +224,21 @@ impl CliApp {
             headerless = ?headerless_score,
             "auto header: ROM-header tiebreaker chose the apply basis"
         );
-        Some(chosen)
+        Some((
+            chosen,
+            "applying it the other way breaks the internal ROM header".to_string(),
+        ))
     }
 
     /// Apply `patch` to one candidate and score how well the result still
-    /// matches the platforms the unpatched input matched.
+    /// matches the platforms the unpatched input matched. Returns the score and
+    /// the length of the bytes it scored, which the caller uses to confirm both
+    /// candidates were comparable.
     fn score_basis_apply(
         inputs: BasisApplyScore<'_>,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
-    ) -> Option<BasisScore> {
+    ) -> Option<(BasisScore, u64)> {
         let BasisApplyScore {
             handler,
             patch,
@@ -208,6 +246,7 @@ impl CliApp {
             hint,
             baseline,
             label,
+            strip_bytes,
         } = inputs;
         let output = basis_temp_path(context, &format!("basis-{label}-output"), temp_paths);
         let request = PatchApplyRequest {
@@ -229,10 +268,25 @@ impl CliApp {
             trace!(%error, basis = label, "auto header: speculative apply failed");
             return None;
         }
+        // Score every candidate as headerless bytes so the platform routines
+        // read the same file shape for each.
+        let scored = if strip_bytes > 0 {
+            let normalized =
+                basis_temp_path(context, &format!("basis-{label}-normalized"), temp_paths);
+            probe_step(
+                "normalize output",
+                copy_without_prefix(&output, &normalized, strip_bytes),
+            )?;
+            normalized
+        } else {
+            output
+        };
+        let scored_len = probe_step("stat scored output", fs::metadata(&scored))?.len();
+
         let scratch = basis_temp_path(context, &format!("basis-{label}-scratch"), temp_paths);
         let outcome = probe_step(
             "validate applied output",
-            Self::validate_checksum_file(&output, Some(hint), &scratch),
+            Self::validate_checksum_file(&scored, Some(hint), &scratch),
         )?;
         let matched = matched_profiles(&outcome);
         let score = BasisScore {
@@ -249,9 +303,10 @@ impl CliApp {
         trace!(
             basis = label,
             ?score,
+            scored_len,
             "auto header: scored a speculative apply"
         );
-        Some(score)
+        Some((score, scored_len))
     }
 }
 
@@ -264,6 +319,19 @@ struct BasisApplyScore<'a> {
     hint: &'a Path,
     baseline: &'a [&'static str],
     label: &'static str,
+    /// Bytes to drop off the front of this candidate's output before scoring,
+    /// so both candidates are read as headerless bytes.
+    strip_bytes: u64,
+}
+
+/// Copy `source` minus its first `skip` bytes into `destination`.
+fn copy_without_prefix(source: &Path, destination: &Path, skip: u64) -> Result<u64> {
+    let mut reader = BufReader::new(File::open(source)?);
+    reader.seek(SeekFrom::Start(skip))?;
+    let mut writer = BufWriter::new(File::create(destination)?);
+    let copied = std::io::copy(&mut reader, &mut writer)?;
+    writer.flush()?;
+    Ok(copied)
 }
 
 /// How well one candidate's output held up. Field order is the comparison

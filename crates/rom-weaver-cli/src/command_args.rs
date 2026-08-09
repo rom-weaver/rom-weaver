@@ -1001,9 +1001,12 @@ Some ROMs carry a small header added by old copier hardware, and a patch may
 have been made either with it or without it. Getting this wrong makes the patch
 fail or produce a broken ROM.
 
-  auto    Work it out per patch (the default). The header is stripped or put
-          back only when the patch's own source checksum proves which form it
-          expects. With no such proof, the bytes are left alone.
+  auto    Work it out per patch (the default). A patch carrying its own source
+          checksum (BPS, UPS, RUP) settles it outright. A patch without one
+          (IPS) is judged on where its records land, and if that is still
+          unclear by applying it both ways and keeping the result the console
+          still recognises as its own ROM. Any remaining doubt leaves the
+          bytes alone.
   keep    Apply to the bytes as they are.
   strip   Remove the header first.
 

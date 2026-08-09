@@ -14,6 +14,7 @@ separates them and which one to publish in.
 - [xdelta and VCDIFF](#xdelta-and-vcdiff)
 - [PPF](#ppf)
 - [Other supported formats](#other-supported-formats)
+- [How rom-weaver picks a patch's bytes](#how-rom-weaver-picks-a-patchs-bytes)
 - [Which format should I choose?](#which-format-should-i-choose)
 
 <!-- END doctoc -->
@@ -64,8 +65,10 @@ see the [browser](../how-to/create-rom-patches.md) or
 
 IPS is one of the oldest and most widely supported patch formats. It is a plain
 list of "at this offset, write these bytes." Nothing else. In particular, it
-stores no checksum of the original, so an IPS patcher cannot tell a correct
-starting file from a wrong one.
+stores no checksum of the original, so an IPS patcher cannot confirm it was
+handed the right starting file. rom-weaver reads the record layout for hints
+(see [How rom-weaver picks a patch's bytes](#how-rom-weaver-picks-a-patchs-bytes)),
+but hints are not proof.
 
 Pick IPS when reaching old tools matters more than catching user error, and
 always publish the expected checksums beside the download.
@@ -118,6 +121,38 @@ every one of these.
 
 The [full format table](../reference/formats.md#patch-formats) is the authoritative list of
 names, extensions, and what rom-weaver can currently apply and create.
+
+## How rom-weaver picks a patch's bytes
+
+Some ROM dumps carry a copier header: a small block of padding old duplicating
+hardware wrote in front of the real data. A patch author either included it or
+did not, and the patch has to be applied to the matching form. Applied to the
+wrong one, every change lands at the wrong place. The result usually still
+boots, which is what makes the mistake expensive.
+
+A format that stores a checksum of its original settles this outright. BPS, UPS
+and RUP do. rom-weaver hashes the dump both ways and takes whichever matches, so
+the answer is proof, not preference.
+
+IPS stores no such checksum, so rom-weaver reads the shape of the patch instead:
+
+- Changes that reach past the end of the shorter form cannot have been written
+  for it.
+- Changes that fall inside the copier header were addressing real ROM data,
+  because nobody edits copier padding.
+- A change is normally trimmed so its first and last byte differ from what was
+  there before. Edges that already match the bytes underneath them point at the
+  wrong form.
+
+When the shape settles nothing, rom-weaver applies the patch both ways and keeps
+the version the console still recognises as its own ROM, judged by the internal
+header every platform keeps. Its own checksum is a weak signal here, because a
+ROM hack routinely leaves it stale.
+
+None of this is proof, and rom-weaver treats it that way: when the evidence does
+not separate the two forms it changes nothing and leaves the dump as it found
+it. Publishing the expected checksums beside an IPS download is still the only
+way to make the question answerable.
 
 ## Which format should I choose?
 

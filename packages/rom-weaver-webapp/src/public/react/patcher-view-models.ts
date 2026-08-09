@@ -17,6 +17,16 @@ import { createWaitingWorkflowProgress } from "./workflow-run-hooks.ts";
 
 type OutputSizeSummary = ReturnType<typeof createOutputSizeSummary>;
 
+/**
+ * Label for the "auto" choice in the header control.
+ *
+ * Only a checksum match lets the page predict the outcome. Without one the
+ * engine decides during the apply, from where the patch's records land, so
+ * naming an outcome here would be a guess the run can contradict.
+ */
+const formatHeaderAutoLabel = (decided: boolean | undefined, mode: string | undefined): string =>
+  decided ? `header auto (${mode || "keep"})` : "header auto";
+
 interface UiViewStateInput {
   busy: boolean;
   checksumOverrideChecked: boolean;
@@ -266,4 +276,4 @@ const buildNoticeViewState = ({ failureMessage, failurePlacement }: NoticeViewSt
   visible: !!failureMessage && !failurePlacement,
 });
 
-export { buildNoticeViewState, buildOutputViewState, buildStackViewState, buildUiViewState };
+export { buildNoticeViewState, buildOutputViewState, buildStackViewState, buildUiViewState, formatHeaderAutoLabel };

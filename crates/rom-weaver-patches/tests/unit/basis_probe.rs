@@ -135,32 +135,6 @@ fn records_past_the_headerless_end_choose_the_raw_basis() {
 }
 
 #[test]
-fn a_truncate_footer_naming_the_headerless_length_decides_the_basis() {
-    let temp = TestDir::new();
-    let patch = build_ips(
-        &[(0x2000, vec![0xAA; 8])],
-        Some(u32::try_from(BODY_LEN).expect("length fits")),
-    );
-    assert_eq!(
-        decide(&temp, &headered_rom(4), &patch, HEADER_LEN, true),
-        Some(PatchBasis::Headerless)
-    );
-}
-
-#[test]
-fn a_truncate_footer_naming_the_raw_length_decides_the_basis() {
-    let temp = TestDir::new();
-    let patch = build_ips(
-        &[(0x2000, vec![0xAA; 8])],
-        Some(u32::try_from(HEADER_LEN + BODY_LEN).expect("length fits")),
-    );
-    assert_eq!(
-        decide(&temp, &headered_rom(5), &patch, HEADER_LEN, true),
-        Some(PatchBasis::Raw)
-    );
-}
-
-#[test]
 fn untrimmed_record_edges_rule_out_the_basis_they_match() {
     // A differ trims unchanged bytes off both ends of every record, so at the
     // right basis a record's edge bytes always differ from the source. Here

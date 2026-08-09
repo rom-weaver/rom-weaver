@@ -24,6 +24,16 @@ impl CliApp {
         scratch: &Path,
     ) -> Result<HeaderRepairOutcome> {
         fs::copy(path, scratch)?;
+        // `fs::copy` carries the source mode across, and preserved dumps are
+        // routinely read-only. The repair routine opens for writing, so a
+        // read-only original would otherwise make every ROM look unreadable.
+        let mut permissions = fs::metadata(scratch)?.permissions();
+        #[expect(
+            clippy::permissions_set_readonly_false,
+            reason = "this is a private scratch copy the repair pass must write to; its mode is never observed"
+        )]
+        permissions.set_readonly(false);
+        fs::set_permissions(scratch, permissions)?;
         let outcome = Self::repair_checksum_file_in_place(scratch, hint_path)?;
         trace!(
             rom = %path.display(),
@@ -156,3 +166,7 @@ impl CliApp {
         Ok(outcome)
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/header_repair.rs"]
+mod tests;

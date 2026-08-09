@@ -243,7 +243,16 @@ two symmetric policies (`crates/rom-weaver-cli/src/patch_apply.rs`):
   embedded source CRC32 (or the first patch's `[crc32:..]` filename token) is
   compared against the current bytes vs their headerless/re-headered
   counterpart, and the header is stripped or restored between steps
-  (`chain_header_transition`) only when the proof matches. The flag is
+  (`chain_header_transition`) only when the proof matches. A **first** patch
+  with no checksum to offer (IPS) falls to `patch_basis_decision.rs`: it scores
+  record geometry (`rom_weaver_patches::basis_probe` - records past the shorter
+  candidate's end, records inside the copier header, untrimmed record edges),
+  then, if that is inconclusive, applies the patch both ways and keeps the basis
+  whose output the platform still recognises, via a validate-only wrapper over
+  the `header_repair_systems` routines. Both speculative outputs are normalized
+  to headerless bytes of equal length before scoring, because those routines
+  pick their header offset from the file length. Chain steps 2..n keep the
+  checksum-only rule. The flag is
   positional and repeatable - each occurrence binds to the preceding `--patch`
   and carries forward (`align_patch_header_modes` re-derives the interleave from
   raw clap indices).

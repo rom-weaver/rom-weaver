@@ -41,6 +41,7 @@ import { useListReorder } from "./components/ds/use-list-reorder.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
 import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
+import { formatHeaderAutoLabel } from "./patcher-view-models.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -305,7 +306,7 @@ const PatchHeaderModeSelect = ({
 }) => {
   if (!item.showHeaderOption) return null;
   const headerNoun = item.headerStrippedBytes ? `${item.headerStrippedBytes} B header` : "header";
-  const autoLabel = `header auto (${item.headerAutoDecided ? item.headerAutoMode || "keep" : "keep"})`;
+  const autoLabel = formatHeaderAutoLabel(item.headerAutoDecided, item.headerAutoMode);
   return (
     <span className="target-grp header-grp">
       <Scissors aria-hidden="true" />

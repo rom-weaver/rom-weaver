@@ -527,12 +527,12 @@ pub(crate) struct IpsProbeRecord {
 }
 
 /// Everything [`crate::basis_probe`] reads out of an IPS patch.
+///
+/// The truncate footer is deliberately absent: it states the output size, not
+/// the size of the bytes the author patched, so it cannot identify a basis.
 #[derive(Debug)]
 pub(crate) struct IpsProbeData {
     pub(crate) records: Vec<IpsProbeRecord>,
-    /// Only trusted for plain IPS: the EBP flavor puts JSON where IPS puts a
-    /// truncate size, so a misidentified flavor would invent a bogus size.
-    pub(crate) truncate_size: Option<u64>,
 }
 
 /// Which IPS flavor a patch is, from its magic plus the EBP extension. EBP
@@ -594,16 +594,9 @@ pub(crate) fn probe_ips_records(path: &Path) -> Result<Option<IpsProbeData>> {
         patch = %path.display(),
         ?flavor,
         records = patch.records.len(),
-        truncate_size = ?patch.truncate_size,
         "basis probe: read IPS record geometry"
     );
-    Ok(Some(IpsProbeData {
-        records,
-        truncate_size: match flavor {
-            IpsFlavor::Ips => patch.truncate_size,
-            IpsFlavor::Ips32 | IpsFlavor::Ebp => None,
-        },
-    }))
+    Ok(Some(IpsProbeData { records }))
 }
 
 #[cfg(test)]

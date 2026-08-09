@@ -66,9 +66,8 @@ fails the run unless the finished ROM matches.
 ## Apply a patch made for a headerless ROM
 
 Headers are worked out automatically: `--patch-header auto` matches each patch
-to the headered or headerless form of your ROM using the patch's own source
-checksum, and `--output-header auto` keeps the header only when emulators need
-it. Override them when a patch author tells you to, and repair internal
+to the headered or headerless form of your ROM, and `--output-header auto` keeps
+the header only when emulators need it. Override them when a patch author tells you to, and repair internal
 checksums the patch left stale:
 
 ```bash

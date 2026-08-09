@@ -9130,3 +9130,281 @@ fn patch_apply_auto_header_tiebreaks_on_the_internal_rom_header() {
     assert_eq!(applied, expected);
     assert_eq!(&applied[TITLE_AT..TITLE_AT + title.len()], title);
 }
+
+/// A deterministic pseudo-random SNES-shaped ROM body carrying a readable
+/// internal title at the LoROM header offset, so the per-platform routines
+/// recognise it.
+fn snes_rom_body() -> Vec<u8> {
+    let title = b"ROM WEAVER TEST TITLE";
+    let mut state = 7_u64;
+    let mut body = (0..65536_usize)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 24) as u8
+        })
+        .collect::<Vec<u8>>();
+    body[0x7FC0..0x7FC0 + title.len()].copy_from_slice(title);
+    body
+}
+
+/// Build an IPS patch with rom-weaver's own creator from a headered original,
+/// so the patch's basis is unambiguously the raw bytes, then apply it with
+/// `--patch-header auto` and return the applied output.
+fn apply_auto_header_ips(temp: &TempDir, headered: &[u8], modified: &[u8]) -> Vec<u8> {
+    fs::write(temp.child("headered.smc").path(), headered).expect("fixture");
+    fs::write(temp.child("modified.smc").path(), modified).expect("fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("headered.smc").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.smc").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("headered.smc").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("applied.smc").path().to_str().expect("path"),
+            "--output-header",
+            "keep",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(parse_single_json_line(&output)["status"], "succeeded");
+    fs::read(temp.child("applied.smc").path()).expect("output")
+}
+
+#[test]
+fn patch_apply_auto_header_keeps_the_header_for_an_expanding_raw_ips_patch() {
+    // The tiebreaker compares two speculative applies. Both must be scored as
+    // the same shape: the per-platform routines pick their header offset from
+    // the file length (SNES reads a copier header only when `len % 1024 ==
+    // 512`), so an expansion patch that lands the raw output on a different
+    // residue than the headerless one once made the tiebreaker compare file
+    // shapes instead of patch correctness, and strip a raw-basis patch.
+    let temp = setup_temp_dir();
+    let mut headered = vec![0_u8; 512];
+    headered.extend_from_slice(&snes_rom_body());
+    let mut modified = headered.clone();
+    for index in 0..12_usize {
+        let at = 0x1000 + index * 0x1000;
+        modified[at..at + 32].copy_from_slice(&[0xC0 + index as u8; 32]);
+    }
+    // The appended run starts with zeros so the differ leaves a gap record on
+    // both candidates, keeping the cheap geometry rules silent and forcing the
+    // tiebreaker to decide.
+    modified.extend_from_slice(&[0x00; 1000]);
+    modified.extend_from_slice(&[0xEE; 2984]);
+    assert_eq!(
+        modified.len() % 1024,
+        400,
+        "fixture must not land on the copier residue"
+    );
+
+    assert_eq!(apply_auto_header_ips(&temp, &headered, &modified), modified);
+}
+
+#[test]
+fn patch_apply_auto_header_keeps_the_header_for_a_shrinking_raw_ips_patch() {
+    // An IPS truncate footer states the OUTPUT size, not the size of the bytes
+    // the author patched. A raw-basis patch that shrinks a headered dump to
+    // exactly its headerless length must not be read as evidence of a
+    // headerless basis.
+    let temp = setup_temp_dir();
+    let mut headered = vec![0_u8; 512];
+    headered.extend_from_slice(&snes_rom_body());
+    let mut modified = headered[..65536].to_vec();
+    modified[0x3000..0x3010].copy_from_slice(&[0xC7; 16]);
+    assert_eq!(
+        modified.len(),
+        headered.len() - 512,
+        "fixture must shrink to the headerless length"
+    );
+
+    assert_eq!(apply_auto_header_ips(&temp, &headered, &modified), modified);
+}
+
+#[test]
+fn patch_apply_auto_header_reports_an_inferred_basis() {
+    // Inferring the basis changes output bytes on evidence rather than proof,
+    // so the report has to say so - a silent guess is indistinguishable from a
+    // checksum-proved decision.
+    let temp = setup_temp_dir();
+    let base = vec![0xA5_u8; 32768];
+    let mut modified = base.clone();
+    modified[0] = b'Z';
+    fs::write(temp.child("base.sfc").path(), &base).expect("fixture");
+    fs::write(temp.child("modified.sfc").path(), &modified).expect("fixture");
+    fs::write(temp.child("input.smc").path(), with_header(&base)).expect("fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("base.sfc").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.sfc").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch header basis inferred as headerless"),
+        "label must report the inferred basis: {label}"
+    );
+    assert!(
+        label.contains("copier header"),
+        "label must give the reason: {label}"
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_tiebreaker_can_choose_the_raw_basis() {
+    // The mirror of the headerless tiebreak: the record lands on the internal
+    // ROM header only when applied to the headerless bytes, so raw wins. Raw
+    // and "gave up" produce identical bytes, so this asserts the report note -
+    // without it a tiebreaker hardcoded to one answer would still pass.
+    const TITLE_AT: usize = 0x7FC0;
+    let temp = setup_temp_dir();
+    let title = b"ROM WEAVER TEST TITLE";
+    let mut body = vec![0xA5_u8; 65536];
+    body[TITLE_AT..TITLE_AT + title.len()].copy_from_slice(title);
+    fs::write(temp.child("input.smc").path(), with_header(&body)).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: TITLE_AT as u32,
+                data: vec![0x00; title.len()],
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.smc").path().to_str().expect("path"),
+            "--output-header",
+            "keep",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch header basis inferred as raw"),
+        "label must report the raw basis: {label}"
+    );
+    // Raw basis: the record wrote ROM payload and the internal header survived.
+    let applied = fs::read(temp.child("output.smc").path()).expect("output");
+    assert_eq!(
+        &applied[512 + TITLE_AT..512 + TITLE_AT + title.len()],
+        title
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_infers_a_basis_from_a_read_only_input() {
+    // Preserved dumps are routinely read-only, and the apply path must infer a
+    // basis from one just like any other input. The permission handling this
+    // relies on is covered directly in the `header_repair` unit tests; this is
+    // the end-to-end scenario.
+    const TITLE_AT: usize = 0x7FC0;
+    const RECORD_AT: usize = 0x81C0;
+    let temp = setup_temp_dir();
+    let title = b"ROM WEAVER TEST TITLE";
+    let mut body = vec![0xA5_u8; 65536];
+    body[TITLE_AT..TITLE_AT + title.len()].copy_from_slice(title);
+    let input = temp.child("input.smc");
+    fs::write(input.path(), with_header(&body)).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: RECORD_AT as u32,
+                data: vec![0x00; title.len()],
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+    let mut permissions = fs::metadata(input.path()).expect("metadata").permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(input.path(), permissions).expect("read-only input");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch header basis inferred as headerless"),
+        "a read-only input must not disable the tiebreaker: {label}"
+    );
+}
