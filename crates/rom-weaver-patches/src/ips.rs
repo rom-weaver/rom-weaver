@@ -515,6 +515,97 @@ fn parse_ips_file(
     }
 }
 
+/// One record reduced to what the basis scorer needs: where it writes, how far,
+/// and the two edge bytes a trimming differ guarantees will differ from the
+/// source. Keeping the payload out means the scorer never copies record data.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct IpsProbeRecord {
+    pub(crate) offset: u64,
+    pub(crate) len: u64,
+    pub(crate) first: u8,
+    pub(crate) last: u8,
+}
+
+/// Everything [`crate::basis_probe`] reads out of an IPS patch.
+#[derive(Debug)]
+pub(crate) struct IpsProbeData {
+    pub(crate) records: Vec<IpsProbeRecord>,
+    /// Only trusted for plain IPS: the EBP flavor puts JSON where IPS puts a
+    /// truncate size, so a misidentified flavor would invent a bogus size.
+    pub(crate) truncate_size: Option<u64>,
+}
+
+/// Which IPS flavor a patch is, from its magic plus the EBP extension. EBP
+/// shares the IPS magic and record encoding, so only the file name separates
+/// them.
+fn probe_ips_flavor(path: &Path, magic: &[u8]) -> Option<IpsFlavor> {
+    if magic.starts_with(IPS32_MAGIC) {
+        return Some(IpsFlavor::Ips32);
+    }
+    if !magic.starts_with(IPS_MAGIC) {
+        return None;
+    }
+    let is_ebp = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("ebp"));
+    Some(if is_ebp {
+        IpsFlavor::Ebp
+    } else {
+        IpsFlavor::Ips
+    })
+}
+
+/// Read an IPS patch's record geometry for basis scoring. Returns `Ok(None)`
+/// when the file is not IPS at all, so callers can probe speculatively.
+/// Validation is [`PatchChecksumValidation::Ignore`]: a patch too malformed for
+/// a real apply can still carry enough structure to rule a basis out.
+pub(crate) fn probe_ips_records(path: &Path) -> Result<Option<IpsProbeData>> {
+    let mut magic = [0_u8; 5];
+    match File::open(path)?.read_exact(&mut magic) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
+        Err(error) => return Err(error.into()),
+    }
+    let Some(flavor) = probe_ips_flavor(path, &magic) else {
+        return Ok(None);
+    };
+    let patch = parse_ips_file(path, flavor, PatchChecksumValidation::Ignore)?;
+    let records = patch
+        .records
+        .iter()
+        .map(|record| {
+            let (first, last) = match &record.data {
+                IpsRecordData::Rle { byte } => (*byte, *byte),
+                IpsRecordData::Literal(data) => (
+                    data.first().copied().unwrap_or_default(),
+                    data.last().copied().unwrap_or_default(),
+                ),
+            };
+            IpsProbeRecord {
+                offset: record.offset,
+                len: record.len,
+                first,
+                last,
+            }
+        })
+        .collect();
+    trace!(
+        patch = %path.display(),
+        ?flavor,
+        records = patch.records.len(),
+        truncate_size = ?patch.truncate_size,
+        "basis probe: read IPS record geometry"
+    );
+    Ok(Some(IpsProbeData {
+        records,
+        truncate_size: match flavor {
+            IpsFlavor::Ips => patch.truncate_size,
+            IpsFlavor::Ips32 | IpsFlavor::Ebp => None,
+        },
+    }))
+}
+
 #[cfg(test)]
 fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
     parse_ips_bytes_with_validation(bytes, flavor, PatchChecksumValidation::Strict)
