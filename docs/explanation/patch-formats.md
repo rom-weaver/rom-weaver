@@ -140,7 +140,11 @@ its own never counts: two ROMs of one length are not one ROM.
 A format can also settle it by refusing the wrong form. APS GBA states an exact
 original size and a checksum per block; xdelta/VCDIFF checks each chunk of the
 result it produced. rom-weaver applies the patch both ways with those checks on,
-and a form the format rejects was not the one the author used.
+and a form the format rejects was not the one the author used. A refusal on size
+alone still counts here, unlike above: the two forms differ by exactly the
+header, so a size tells them apart even though it cannot name the ROM. Ignoring
+checksum validation turns these checks off, and the comparison below decides
+instead.
 
 IPS stores no checksum and checks nothing, so rom-weaver reads the shape of the
 patch instead:

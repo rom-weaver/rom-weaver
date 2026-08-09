@@ -9727,3 +9727,56 @@ fn patch_apply_auto_header_reads_a_rejected_apply_as_proof() {
         modified
     );
 }
+
+#[test]
+fn patch_apply_auto_header_still_tiebreaks_when_checksums_are_ignored() {
+    // APS GBA states an exact source size and a per-block source CRC16. A dump
+    // that differs from the author's original inside a patched block fails the
+    // CRC16 as the headerless candidate and the size as the raw one, so the
+    // format refuses both and the tiebreak used to stop right there: the header
+    // stayed on and, with validation ignored, every change landed 512 bytes off
+    // with nothing to say so. Those refusals are the ones the user asked to
+    // ignore, so the ROM-header comparison decides instead - it reads no
+    // checksum at all.
+    let temp = setup_temp_dir();
+    let body = snes_rom_body();
+    let modified = evidence_free_edits(&body);
+    let patch = create_basis_patch(&temp, "apsgba", &body, &modified, "update.aps");
+
+    let mut dump = body.clone();
+    dump[0x1001] ^= 0xFF;
+    fs::write(temp.child("input.smc").path(), with_header(&dump)).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch header basis inferred as headerless"),
+        "ignoring checksum validation must not silence the tiebreak: {label}"
+    );
+    // The patch XORs its payload onto the source, so the one differing byte
+    // carries through; every other byte proves the basis was right.
+    let mut expected = modified.clone();
+    expected[0x1001] ^= 0xFF;
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        expected
+    );
+}

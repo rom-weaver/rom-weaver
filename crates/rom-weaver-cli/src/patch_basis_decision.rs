@@ -516,13 +516,21 @@ impl CliApp {
         // The patch file's own integrity checksum stays off: it is the same
         // number for both candidates, so it can only fail both. So does
         // progress - this is a probe, not the user's operation.
+        //
+        // `--ignore-checksum-validation` turns the source and target checks off
+        // here too. A rejection the user told the real apply to ignore is not
+        // evidence about the bytes, and leaving the checks on would reject both
+        // candidates whenever the patch's own checksums are damaged - ending
+        // the tiebreaker before the structural comparison, which reads the ROM
+        // header and needs no checksum at all.
+        let checks_are_evidence = context.strict_patch_checksums();
         let probe_context = context
             .clone()
             .with_progress_sink(Arc::new(NoopProgressSink))
             .with_patch_check_scopes(PatchCheckScopes {
                 patch_integrity: false,
-                source: true,
-                target: true,
+                source: checks_are_evidence,
+                target: checks_are_evidence,
             });
         match handler.apply(&request, &probe_context) {
             Ok(_) => Some(BasisApply::Applied(output)),
