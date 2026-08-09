@@ -11,6 +11,10 @@
 - [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the browser's Apply workflow with loose patches, patch chains, archives, or bundles.
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
 - [Create bundles guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only bundle in the browser's Apply workflow.
+- [Test a patched ROM](https://rom-weaver.com/docs/test-a-patched-rom): Boot a ROM in EmulatorJS inside the browser to check that a patch works.
+- [Trim a ROM (browser)](https://rom-weaver.com/docs/trim-roms): Cut the padding off an NDS, GBA, 3DS, XISO, or RVZ-scrubbable ROM in the browser.
+- [Undo a PPF patch](https://rom-weaver.com/docs/browser-tools): Restore the original ROM from a PPF3 patch that carries undo data.
+- [Webapp settings](https://rom-weaver.com/docs/webapp-settings): Every toggle in the browser app's Settings panel, with its values and default.
 - [FAQ](https://rom-weaver.com/docs/faq): Common questions, each pointing at the page that owns the answer.
 - [How patching works](https://rom-weaver.com/docs/how-patching-works): Why the exact starting file matters, what a checksum proves, and why patch order matters.
 - [Why files stay on your device](https://rom-weaver.com/docs/local-first): How local-first processing works in the browser and what it costs.

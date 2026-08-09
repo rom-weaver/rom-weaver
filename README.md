@@ -272,7 +272,8 @@ AI-assisted code may still need extra scrutiny.
 ### Translations
 
 Localized translations are early and may be entirely wrong in places. Manual
-edits and corrections are welcome.
+edits and corrections are welcome; see
+[Translate rom-weaver](./CONTRIBUTING.md#translate-rom-weaver).
 
 ## Screenshots
 

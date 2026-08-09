@@ -20,6 +20,10 @@ trying to find out.
   - [Why does the checksum not match?](#why-does-the-checksum-not-match)
   - [Does patch order matter?](#does-patch-order-matter)
   - [Why is Apply and Download disabled?](#why-is-apply-and-download-disabled)
+  - [Can I test the patched ROM here?](#can-i-test-the-patched-rom-here)
+- [Making files smaller](#making-files-smaller)
+  - [How do I make my ROM smaller?](#how-do-i-make-my-rom-smaller)
+  - [Where are Trim and Tools?](#where-are-trim-and-tools)
 - [Creating a patch](#creating-a-patch)
   - [What are Original and Modified?](#what-are-original-and-modified)
   - [How do I know the patch really works?](#how-do-i-know-the-patch-really-works)
@@ -100,6 +104,25 @@ Yes - [why patch order matters](explanation/how-patching-works.md#why-patch-orde
 
 Something is still reading, or a check has not passed. See
 [choose the output and apply](how-to/apply-rom-patches.md#choose-the-output-and-apply).
+
+### Can I test the patched ROM here?
+
+Yes, on the Test page -
+[Test a patched ROM in the browser](how-to/test-a-patched-rom.md).
+
+## Making files smaller
+
+### How do I make my ROM smaller?
+
+Trim the padding or pick a compressed container -
+[Choosing a compression format](explanation/compression-formats.md) covers
+which one wins. The recipes are [Trim a ROM in the browser](how-to/trim-roms.md)
+and [Trim a ROM from the CLI](how-to/cli-trim.md).
+
+### Where are Trim and Tools?
+
+Behind a setting. Turn on **Enable beta tools (Trim and Tools)** -
+[Webapp settings](reference/webapp-settings.md#beta-tools-and-onboarding).
 
 ## Creating a patch
 

@@ -53,6 +53,9 @@ Recipes for a real job you already have in front of you.
 - [Apply a ROM patch](how-to/apply-rom-patches.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch bundle](how-to/create-bundles.md)
+- [Test a patched ROM](how-to/test-a-patched-rom.md)
+- [Trim a ROM](how-to/trim-roms.md)
+- [Undo a PPF patch](how-to/browser-tools.md)
 - [Fix a checksum error](how-to/fix-checksum-errors.md)
 
 ### From the terminal
@@ -88,6 +91,8 @@ Facts to look up. No advice, no steps.
   checksum, trim, and header support tables.
 - [CLI reference](reference/cli.md): every command, global flag, patching
   flag, JSON output, exit code, and permission check.
+- [Webapp settings](reference/webapp-settings.md): every toggle in the browser
+  app's Settings panel, with its values and default.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one
   page per visible command from Clap.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v1.schema.json): the
@@ -121,6 +126,8 @@ Background that makes the rest make sense.
 
 - [FAQ](faq.md): common questions, each pointing at the page that owns the
   answer.
+- [About rom-weaver](legal/about.md): who makes it, its licence, and what it is
+  built on.
 - [Privacy](legal/privacy.md): browser storage, logs, analytics, and network
   requests.
 - [Notices](https://rom-weaver.com/docs/notices): licensing and third-party
@@ -129,7 +136,7 @@ Background that makes the rest make sense.
 ## Develop and contribute
 
 - [Contribution guide](../CONTRIBUTING.md): reporting bugs, proposing changes,
-  validation, and contribution licensing.
+  translations, validation, and contribution licensing.
 - [Development guide](development/development.md): prerequisites, setup, native
   and WASM builds, the dev server, tests, generated files, and worktrees.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph,
