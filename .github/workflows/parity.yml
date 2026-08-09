@@ -62,10 +62,14 @@ jobs:
           tools: node
           cargo-cache: "false"
 
-      - name: Install archive reference tool (7zz)
+      # Debian and Ubuntu build 7-Zip into /usr/bin/7z and ship no `7zz`; the
+      # `7zz` name is upstream's and Homebrew's. scripts/parity-check.mjs
+      # accepts either, so this installs the package and prints what it got.
+      - name: Install archive reference tool (7-Zip)
         run: |
           sudo apt-get update
           sudo apt-get install --yes 7zip
+          7z i | head -2
 
       # The disc reference tools are cross-platform npm packages (chdman from
       # emmercm/chdman-js, dolphin-tool). Each exposes a binary of the same name

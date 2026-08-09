@@ -53,6 +53,22 @@ function requireTool(label, bin, env) {
   if (!findTool(bin, env)) fail(`${label} binary not found: '${bin}' (set ${label}_BIN or install it; e.g. npm i -g chdman dolphin-tool)`);
 }
 
+// Upstream 7-Zip installs its CLI as `7zz`, and so does Homebrew's sevenzip.
+// Debian and Ubuntu build the same source into `/usr/bin/7z` and ship no `7zz`
+// at all, so a single hardcoded name cannot cover both the CI runner and a
+// developer desktop. Order matters: prefer the modern `7zz` where it exists,
+// because on a machine that still carries legacy p7zip, `7z` may be that
+// older build.
+export const SEVENZIP_NAMES = ["7zz", "7z"];
+
+// Returns the first candidate present on PATH. Callers pass the result to
+// run(), which re-resolves it the same way execFileSync would.
+export function requireOneOf(label, candidates, env, exists = undefined) {
+  const found = candidates.find((candidate) => (exists ? findTool(candidate, env, exists) : findTool(candidate, env)));
+  if (!found) fail(`${label} binary not found: tried ${candidates.join(", ")} (set ${label}_BIN or install it; e.g. apt-get install 7zip, brew install sevenzip)`);
+  return found;
+}
+
 function extractOne(binary, source, output) {
   rmSync(output, { recursive: true, force: true });
   mkdirSync(output, { recursive: true });
@@ -78,12 +94,11 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
   if (!["debug", "release"].includes(profile)) fail(`PARITY_CARGO_PROFILE must be 'debug' or 'release' (got: ${profile})`);
   const chdman = env.CHDMAN_BIN || "chdman";
   const dolphin = env.DOLPHIN_TOOL_BIN || "dolphin-tool";
-  const sevenzip = env.SEVENZIP_BIN || "7zz";
   const zip = env.ZIP_BIN || "zip";
   const unzip = env.UNZIP_BIN || "unzip";
   requireTool("CHDMAN", chdman, env);
   requireTool("DOLPHIN_TOOL", dolphin, env);
-  requireTool("SEVENZIP", sevenzip, env);
+  const sevenzip = requireOneOf("SEVENZIP", env.SEVENZIP_BIN ? [env.SEVENZIP_BIN] : SEVENZIP_NAMES, env);
   requireTool("ZIP", zip, env);
   requireTool("UNZIP", unzip, env);
   const cli = env.ROM_WEAVER_BIN || join(root, "target", profile, "rom-weaver");
@@ -95,7 +110,7 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
   log(`rom-weaver: ${cli}`);
   log(`chdman:     ${findTool(chdman, env) || chdman}`);
   log(`dolphin:    ${findTool(dolphin, env) || dolphin}`);
-  log(`7zz:        ${findTool(sevenzip, env) || sevenzip}`);
+  log(`7-zip:      ${findTool(sevenzip, env) || sevenzip}`);
   log(`zip:        ${findTool(zip, env) || zip}`);
   log(`unzip:      ${findTool(unzip, env) || unzip}`);
 
@@ -168,14 +183,14 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
   const rw7zExtract = join(archiveDir, "rw-7z-extract");
   mkdirSync(rw7zExtract);
   run(sevenzip, ["x", "-y", "-bso0", "-bsp0", `-o${rw7zExtract}`, rw7z]);
-  failures += reportExtract(join(rw7zExtract, "payload.bin"), archiveSource, "7zz-extracted rom-weaver 7z");
+  failures += reportExtract(join(rw7zExtract, "payload.bin"), archiveSource, `${sevenzip}-extracted rom-weaver 7z`);
 
   const reference7z = join(archiveDir, "ref.7z");
   run(sevenzip, ["a", "-t7z", "-m0=lzma2", "-mx=5", "-mmt=on", "-bso0", "-bsp0", reference7z, "payload.bin"], { cwd: archiveDir });
   const ref7zExtract = join(archiveDir, "ref-7z-extract");
   mkdirSync(ref7zExtract);
   extractOne(cli, reference7z, ref7zExtract);
-  failures += reportExtract(join(ref7zExtract, "payload.bin"), archiveSource, "rom-weaver-extracted 7zz 7z");
+  failures += reportExtract(join(ref7zExtract, "payload.bin"), archiveSource, `rom-weaver-extracted ${sevenzip} 7z`);
 
   const rwZip = join(archiveDir, "rw.zip");
   run(cli, ["compress", "--input", archiveSource, "--format", "zip", "--output", rwZip, "--codec", "deflate:6", "--threads", "1", "--json"]);
@@ -192,7 +207,7 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
   failures += reportExtract(join(refZipExtract, "payload.bin"), archiveSource, "rom-weaver-extracted Info-ZIP");
 
   if (failures) fail(`${failures} parity check(s) FAILED -- a vendored codec may have regressed`);
-  log("all parity checks PASSED (CHD vs chdman, RVZ vs dolphin-tool, 7z vs 7zz, ZIP vs Info-ZIP)");
+  log("all parity checks PASSED (CHD vs chdman, RVZ vs dolphin-tool, 7z vs 7-Zip, ZIP vs Info-ZIP)");
 }
 
 function runDolphin(bin, user, input, output, format, extra = []) {

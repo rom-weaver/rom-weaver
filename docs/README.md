@@ -138,7 +138,7 @@ Background that makes the rest make sense.
 - [Reproduce a CI failure locally](development/reproduce-ci-locally.md): the
   commands behind each job, and how to match one.
 - [Performance](development/performance.md): benchmark harnesses and recorded
-  results against chdman, dolphin-tool, 7zz, and Info-ZIP.
+  results against chdman, dolphin-tool, 7-Zip, and Info-ZIP.
 - [Browser concurrency](development/browser-concurrency.md): shared memory,
   worker protocols, the thread-start barrier, and the OPFS proxy.
 - [Mobile Safari verification](development/mobile-safari-verification.md):
