@@ -7,9 +7,9 @@ import { Drawer, DrawerReadout } from "./drawer.tsx";
 
 /**
  * Nested-extraction view. The extracted file leads as the card's name line;
- * The full source chain (including a raw file's single level) lives in a
- * collapsible Files drawer rendered as the loom tree. Shared by every
- * workflow's file card.
+ * The full source chain for extracted files lives in a collapsible Files
+ * drawer rendered as the loom tree. A raw file's name and size already live in
+ * the card header, so it does not need a one-row drawer.
  */
 
 type ExtractionLevel = {
@@ -153,6 +153,9 @@ const ExtractDrawer = ({
   const levels = buildExtractionLevels(fileName, fileSize, fileEntries, parentCompressions);
   const resolvedTiming = timing ?? formatExtractionElapsedMs(decompressionTimeMs);
   const timingLabel = formatExtractionTimingLabel(resolvedTiming);
+  // A lone raw file has no provenance to inspect. Archive parents and disc
+  // sibling entries carry useful source details, so keep their drawer.
+  if (!(parentCompressions?.length || fileEntries?.length)) return null;
   const first = levels[0];
   const last = levels.at(-1);
   if (!last) return null;

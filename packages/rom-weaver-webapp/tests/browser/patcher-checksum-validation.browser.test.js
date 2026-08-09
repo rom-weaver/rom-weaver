@@ -188,6 +188,14 @@ test("strict checksum mismatch blocks apply until override is checked", async ()
     })
     .not.toBeNull();
   await expect
+    .poll(
+      () => document.querySelector("#rom-weaver-list-patch-stack .file.bad .cks-head")?.getAttribute("aria-expanded"),
+      {
+        timeout: 60000,
+      },
+    )
+    .toBe("true");
+  await expect
     .poll(() => document.getElementById("rom-weaver-button-apply") instanceof HTMLButtonElement, {
       timeout: 30000,
     })
@@ -232,6 +240,9 @@ test("source-check patch formats report runtime patch validation success", async
     }, 60000);
     expect(validation).toBeInstanceOf(HTMLElement);
     expect(validation.textContent).toContain("Checks");
+    expect(validation.querySelector(".patch-enable")).toBeNull();
+    expect(validation.textContent).toContain("matches your ROM");
+    expect(validation.querySelector(".cks-head")?.getAttribute("aria-expanded")).toBe("false");
   }
 });
 

@@ -20,7 +20,7 @@ const createRomInputRow = (
   id: partial.id,
   info: {
     archiveName: "",
-    checksumsExpanded: true,
+    checksumsExpanded: false,
     checksumTiming: "",
     crc32: "",
     fileName: "",

@@ -590,7 +590,6 @@ const chainChipText = (
   if (verdict.matched.kind === "patch_output") {
     return { text: localizer.message("ui.chain.appliesAfter", { n: displayNumber(verdict.matched.index) }) };
   }
-  if (enabledIndexes.length < 2) return null;
   if (verdict.matched.kind === "base") {
     return {
       text:
@@ -655,6 +654,7 @@ const PatchChecksDrawer = ({
   const setOption = patchStack.setPatchOption;
   const localizer = useUiLocalizer();
   const [invalidChecks, setInvalidChecks] = useState<Record<string, boolean>>({});
+  const [manualOpen, setManualOpen] = useState<{ open: boolean; phase: string } | undefined>(undefined);
   // Fields opened via "Add check" that have no committed value yet.
   const [draftFields, setDraftFields] = useState<Record<string, boolean>>({});
   const { inputRows, outputRows } = getPatchVerificationRows(item);
@@ -742,6 +742,9 @@ const PatchChecksDrawer = ({
     inputRows.length > 0 &&
     outputRows.length > 0 &&
     [...inputRows, ...outputRows].every((row) => String(row.value).length < 16);
+  const drawerPhase = disabled ? "disabled" : verifying ? "verifying" : bad ? "bad" : ok ? "ok" : "pending";
+  const automaticOpen = !ok && (hasBuiltIn || hasUserChecks || bad || verifying);
+  const resolvedOpen = manualOpen?.phase === drawerPhase ? manualOpen.open : automaticOpen;
   return (
     <ChecksumList
       action={ok ? <PreflightSuccess /> : undefined}
@@ -749,6 +752,8 @@ const PatchChecksDrawer = ({
       defaultOpen={hasBuiltIn || hasUserChecks}
       label="Checks"
       match={ok ? undefined : match}
+      onToggle={(open) => setManualOpen({ open, phase: drawerPhase })}
+      open={resolvedOpen}
       sublabel={
         !(disabled || verifying) && chainChip ? (
           <span id={`rom-weaver-patch-chain-chip-${index}`}>
@@ -1184,6 +1189,7 @@ const PatchCard = ({
   position,
   romActuals,
   rowProps,
+  showPatchEnablement,
   total,
 }: {
   /** Show the input-basis select in the card's Checks drawer. */
@@ -1210,6 +1216,7 @@ const PatchCard = ({
   /** This patch's target ROM computed checks, for verifying input checks. */
   romActuals?: RomCheckActuals;
   rowProps: ReturnType<ReturnType<typeof useListReorder>["rowProps"]>;
+  showPatchEnablement: boolean;
   total: number;
 }) => {
   // Pencil edit state: the name and description editors open/close together.
@@ -1271,7 +1278,7 @@ const PatchCard = ({
       }
       meta={
         <>
-          {onTogglePatch ? (
+          {showPatchEnablement && onTogglePatch ? (
             <PatchEnableToggle disabled={isDisabled} fileName={item.fileName} onToggle={() => onTogglePatch(index)} />
           ) : null}
           {item.fileSize ? <span className="fsize mono">{formatByteSize(item.fileSize)}</span> : null}
@@ -1397,6 +1404,7 @@ const ApplyPatchListStep = ({
   patches,
   patchStack,
   romActualsById,
+  showPatchEnablement,
   woven,
 }: {
   /** The run has optional/skipped patches: hint on the chain-output card that its
@@ -1418,11 +1426,14 @@ const ApplyPatchListStep = ({
   /** ROM id → its computed checks, for verifying user-entered input checks against
    * the real ROM (the chain-input patch's target). */
   romActualsById?: ReadonlyMap<string, RomCheckActuals>;
+  /** A switch is useful for optional or multi-patch selections only. */
+  showPatchEnablement?: boolean;
   patches: PatchStackItemState[];
   patchStack: PatcherStackController;
   woven?: boolean;
 }) => {
   const total = patches.length;
+  const enablementVisible = showPatchEnablement ?? total > 1;
   // Reordering only makes sense for a multi-patch stack. A patch may still be
   // moved while it is staging; other busy/locked rows remain non-reorderable.
   const reorderable = total > 1;
@@ -1481,32 +1492,40 @@ const ApplyPatchListStep = ({
         id="rom-weaver-list-patch-stack"
         ref={reorderList.containerRef}
       >
-        {patches.map((item, index) => (
-          <PatchCard
-            basisSelectVisible={enabledIndexes.length >= 2 || !!bundleMeta?.[index]?.basis}
-            bundleSessionMatches={bundleSessionMatches}
-            canReorder={canReorder}
-            chainChip={chainChipText(item, enabledIndexes, localizer)}
-            handleProps={reorderList.handleProps(index)}
-            index={index}
-            isChainInput={index === chainInputIndex}
-            isChainOutput={index === chainOutputIndex}
-            isDisabled={!!disabledFlags?.[index]}
-            item={item}
-            key={item.key ?? `${index}:${item.fileName}`}
-            meta={bundleMeta?.[index]}
-            onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
-            onReorder={patchStack.reorder}
-            onTogglePatch={onTogglePatch}
-            outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}
-            overrideAvailable={overrideAvailable}
-            patchStack={patchStack}
-            position={reorderList.displayIndex(index) + 1}
-            romActuals={item.targetValue ? romActualsById?.get(item.targetValue) : undefined}
-            rowProps={reorderList.rowProps(index)}
-            total={total}
-          />
-        ))}
+        {patches.map((item, index) => {
+          const chainChip = chainChipText(item, enabledIndexes, localizer);
+          const successSummary =
+            !chainChip && item.validationState === "valid" && index === chainInputIndex
+              ? { text: localizer.message("ui.chain.matchesRom") }
+              : chainChip;
+          return (
+            <PatchCard
+              basisSelectVisible={enabledIndexes.length >= 2 || !!bundleMeta?.[index]?.basis}
+              bundleSessionMatches={bundleSessionMatches}
+              canReorder={canReorder}
+              chainChip={successSummary}
+              handleProps={reorderList.handleProps(index)}
+              index={index}
+              isChainInput={index === chainInputIndex}
+              isChainOutput={index === chainOutputIndex}
+              isDisabled={!!disabledFlags?.[index]}
+              item={item}
+              key={item.key ?? `${index}:${item.fileName}`}
+              meta={bundleMeta?.[index]}
+              onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
+              onReorder={patchStack.reorder}
+              onTogglePatch={onTogglePatch}
+              outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}
+              overrideAvailable={overrideAvailable}
+              patchStack={patchStack}
+              position={reorderList.displayIndex(index) + 1}
+              romActuals={item.targetValue ? romActualsById?.get(item.targetValue) : undefined}
+              rowProps={reorderList.rowProps(index)}
+              showPatchEnablement={enablementVisible}
+              total={total}
+            />
+          );
+        })}
       </div>
       {(() => {
         // One list-level order warning: the first enabled patch whose input matches a patch it

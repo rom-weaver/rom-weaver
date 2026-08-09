@@ -76,6 +76,9 @@
   .rw-app .btn.bundle-dl:hover {
     background: color-mix(in oklab, var(--weft) 13%, transparent);
     border-color: color-mix(in oklab, var(--thread) 75%, transparent);
+    /* Export remounts this control under the pointer. A lift can move its edge
+       out from under that pointer and alternate hover forever. */
+    transform: none;
   }
 }
 .rw-app .btn:disabled {

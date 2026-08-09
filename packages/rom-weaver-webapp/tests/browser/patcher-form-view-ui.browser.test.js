@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { expect, test } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
-import { DiscTracksPanel } from "../../src/public/react/components/ds/source-info-list.tsx";
+import { DiscTracksPanel, SourceInfoList } from "../../src/public/react/components/ds/source-info-list.tsx";
 import { inertOutputController, inertStackController } from "../../src/public/react/patcher-form-session.ts";
 import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-state.ts";
 import { createStaticController, installPatcherTestHooks, mount } from "./patcher-test-shared.js";
@@ -107,4 +107,44 @@ test("disc tracks use the Checks drawer's variant-group presentation", async () 
   expect(document.querySelectorAll(".cks .ck-group")).toHaveLength(2);
   expect(document.body.textContent).toContain("AAAA1111");
   expect(document.body.textContent).toContain("67890");
+});
+
+test("successful ROM checks stay compact but expose a matching summary", async () => {
+  mount(
+    createElement(SourceInfoList, {
+      bytes: 4,
+      checksums: { crc32: "c6fb1252" },
+      expected: { checksums: { crc32: "c6fb1252" } },
+      fileName: "game.bin",
+      verificationSummary: "matches your ROM",
+    }),
+  );
+
+  await expect.poll(() => document.querySelector(".cks-head")).not.toBeNull();
+  const head = document.querySelector(".cks-head");
+  expect(head).toBeInstanceOf(HTMLButtonElement);
+  expect(head.getAttribute("aria-expanded")).toBe("false");
+  expect(head.textContent).toContain("matches your ROM");
+
+  head.click();
+  await expect.poll(() => document.querySelector(".ck-v")?.textContent || "").toContain("c6fb1252");
+});
+
+test("mismatched ROM checks open their recovery details", async () => {
+  mount(
+    createElement(SourceInfoList, {
+      bytes: 4,
+      checksums: { crc32: "c6fb1252" },
+      expected: { checksums: { crc32: "deadbeef" } },
+      fileName: "game.bin",
+      verificationMismatchSummary: "does not match the expected ROM",
+    }),
+  );
+
+  await expect.poll(() => document.querySelector(".cks-head")).not.toBeNull();
+  const head = document.querySelector(".cks-head");
+  expect(head).toBeInstanceOf(HTMLButtonElement);
+  expect(head.getAttribute("aria-expanded")).toBe("true");
+  expect(document.body.textContent).toContain("does not match the expected ROM");
+  expect(document.body.textContent).toContain("deadbeef");
 });

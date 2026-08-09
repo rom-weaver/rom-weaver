@@ -57,7 +57,7 @@ test("files drawer keeps ratio for ROM extraction outputs", async () => {
     .toBe("1.0 KB \u2192 100 B (1000%)");
 });
 
-test("files drawer keeps extract metadata for prepared single-level inputs", async () => {
+test("raw single-level inputs keep extract metadata out of the card drawers", async () => {
   mount(
     createElement(ExtractDrawer, {
       fileName: "game.iso",
@@ -66,13 +66,10 @@ test("files drawer keeps extract metadata for prepared single-level inputs", asy
     }),
   );
 
-  await expect.poll(() => document.querySelector(".extract-d .lab")?.textContent || "").toBe("Files");
-  expect(document.querySelector(".extract-d .rb:not(.time)")?.textContent || "").toBe("4.1 KB");
-  expect(document.querySelector(".extract-d .rb.time")?.textContent || "").toBe("Extract 1.2 s");
-  expect(document.querySelector(".extract-d .tree-name")?.textContent || "").toBe("game.iso");
+  await expect.poll(() => document.querySelector(".extract-d")).toBeNull();
 });
 
-test("files drawer stays available for raw single-file inputs", async () => {
+test("files drawer omits raw single-file inputs", async () => {
   mount(
     createElement(ExtractDrawer, {
       fileName: "game.bin",
@@ -80,9 +77,7 @@ test("files drawer stays available for raw single-file inputs", async () => {
     }),
   );
 
-  await expect.poll(() => document.querySelector(".extract-d .lab")?.textContent || "").toBe("Files");
-  expect(document.querySelector(".extract-d .rb:not(.time)")?.textContent || "").toBe("4.1 KB");
-  expect(document.querySelector(".extract-d .tree-name")?.textContent || "").toBe("game.bin");
+  await expect.poll(() => document.querySelector(".extract-d")).toBeNull();
 });
 
 test("files drawer lists sibling disc files below archive provenance", async () => {

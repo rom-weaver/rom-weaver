@@ -162,12 +162,8 @@ test("ApplyPatchForm runs a complete patch flow and downloads output", async () 
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
 
   await waitForApplyButtonEnabled();
-  await expect
-    .poll(() => document.querySelector("#rom-weaver-list-input-stack .extract-d .lab")?.textContent || "")
-    .toBe("Files");
-  await expect
-    .poll(() => document.querySelector("#rom-weaver-list-patch-stack .extract-d .lab")?.textContent || "")
-    .toBe("Files");
+  expect(document.querySelector("#rom-weaver-list-input-stack .extract-d")).toBeNull();
+  expect(document.querySelector("#rom-weaver-list-patch-stack .extract-d")).toBeNull();
 
   await clickApplyButton();
 

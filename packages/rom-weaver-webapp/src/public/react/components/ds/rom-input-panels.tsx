@@ -26,6 +26,10 @@ type RomInputInfoPanelProps = {
   open?: boolean;
   pending?: ChecksumPendingGroup[];
   progress?: SourceInfoProgress | null;
+  /** Localized mismatch result shown in the compact Checks header. */
+  verificationMismatchSummary?: ReactNode;
+  /** Plain-language result shown in the compact Checks header when validation settles. */
+  verificationSummary?: ReactNode;
   timing?: ReactNode;
   /** Trim-padding probe; surfaces a "Trim" group in Checks only when detected. */
   trim?: TrimFixDetails | null;

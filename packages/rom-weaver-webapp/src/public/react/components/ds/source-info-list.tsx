@@ -419,6 +419,8 @@ const SourceInfoList = ({
   progress,
   timing,
   trim,
+  verificationMismatchSummary,
+  verificationSummary,
 }: {
   bytes?: number;
   checksums?: SourceInfoChecksums | null;
@@ -439,6 +441,10 @@ const SourceInfoList = ({
    * planned groups/rows (reserving the resolved height) instead of any value. */
   pending?: ChecksumPendingGroup[];
   progress?: SourceInfoProgress | null;
+  /** Localized mismatch result shown in the compact Checks header. */
+  verificationMismatchSummary?: ReactNode;
+  /** Plain-language result shown in the compact Checks header when validation settles. */
+  verificationSummary?: ReactNode;
   timing?: ReactNode;
   /** Trim-padding probe; surfaces a "Trim" group only when padding is detected. */
   trim?: TrimFixDetails | null;
@@ -488,6 +494,7 @@ const SourceInfoList = ({
   const expectedMismatch =
     expectedNameMismatch ||
     (hasExpected && !expectedMatch && hasExpectedMismatch(expected as SourceInfoExpectedChecks, checksums, byteValue));
+  const resolvedOpen = expectedMismatch ? true : open;
   // BYTES rides directly after CRC32 - the two short rows pair onto one grid
   // row in wide drawers, so they stay adjacent in the DOM.
   const baseRows = (
@@ -501,11 +508,12 @@ const SourceInfoList = ({
   return (
     <ChecksumList
       action={expectedMismatch ? <ExpectedMismatchInfo /> : undefined}
-      defaultOpen={defaultOpen}
+      defaultOpen={defaultOpen || expectedMismatch}
       label={label}
       lead={progress ? <FileProgress {...progress} /> : lead}
       onToggle={onToggle}
-      open={open}
+      open={resolvedOpen}
+      sublabel={expectedMismatch ? verificationMismatchSummary : verificationSummary}
       timing={timing}
     >
       {expectedMatch ? (

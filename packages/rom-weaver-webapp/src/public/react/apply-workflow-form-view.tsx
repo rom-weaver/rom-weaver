@@ -685,6 +685,12 @@ const buildRomVerificationStates = (
 type RomRowDeps = {
   romInputs: RomInputRowState[];
   verificationStates: Map<string, "bad" | "ok">;
+  /** A deferred patch check is running; keep ROM details available for recovery. */
+  verificationActive: boolean;
+  /** Localized mismatch summary for the compact Checks header. */
+  verificationMismatchSummary: string;
+  /** Localized success summary for the compact Checks header. */
+  verificationSummary: string;
   ui: PatcherUiController;
   /** The bundle's expected base-ROM checks - an "Expected" group with match
    * marks inside the staged ROM's Checks drawer (single-ROM sessions only). */
@@ -825,7 +831,7 @@ const renderRomCardMeta = (input: {
 };
 
 const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomRowDeps): WorkflowRomInputStepItem => {
-  const { romInputs, verificationStates, ui } = deps;
+  const { romInputs, verificationStates, ui, verificationActive } = deps;
   const state = verificationStates.get(romInput.id);
   const { percent, staging, stagingPhase } = resolveRomStaging(romInput);
   // A container ROM extracts and checksums in one pass (Rust hashes inline), so it
@@ -883,8 +889,10 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
           fileName: romInput.info.fileName,
           lead: !staging && romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
           onToggle: () => ui.toggleRomInputChecksums?.(romInput.id),
-          open: staging ? true : romInput.info.checksumsExpanded,
+          open: staging || verificationActive || state === "bad" ? true : romInput.info.checksumsExpanded,
           pending: staging ? pendingGroups : undefined,
+          verificationMismatchSummary: state === "bad" ? deps.verificationMismatchSummary : undefined,
+          verificationSummary: state === "ok" ? deps.verificationSummary : undefined,
           timing: staging ? undefined : CHECKSUM_TIMING_LABEL(romInput.info.checksumTiming),
           trim: staging ? undefined : romInput.info.romProbe?.trim,
         },
@@ -1643,6 +1651,9 @@ const buildRomRowDeps = (input: {
   expectedRomChecks: ParsedBundleChecks | undefined;
   romInputs: RomInputRowState[];
   romVerificationStates: RomRowDeps["verificationStates"];
+  verificationActive: boolean;
+  verificationMismatchSummary: string;
+  verificationSummary: string;
   singleRom: boolean;
   uiController: PatcherUiController;
 }): RomRowDeps => {
@@ -1651,6 +1662,9 @@ const buildRomRowDeps = (input: {
     romInputs: input.romInputs,
     ui: input.uiController,
     verificationStates: input.romVerificationStates,
+    verificationActive: input.verificationActive,
+    verificationMismatchSummary: input.verificationMismatchSummary,
+    verificationSummary: input.verificationSummary,
     ...(singleRom && expectedRomChecks ? { expectedChecks: expectedRomChecks } : {}),
     ...(singleRom && input.bundleRomExpectation?.name ? { expectedName: input.bundleRomExpectation.name } : {}),
   };
@@ -1768,6 +1782,7 @@ function ApplyWorkflowFormView({
   const wovenSteps = running || applyDone;
 
   const romVerificationStates = buildRomVerificationStates(patches, romInputs, disabledPatchFlags);
+  const verificationActive = patches.some((patch) => patch.validationState === "verifying");
   // Each ROM's computed identity, keyed by id, for patch-card check verification.
   // Disc-track rows are targeted by FILE NAME (their row id is not what the
   // target select resolves), so those alias their actuals under the file name too.
@@ -1787,6 +1802,9 @@ function ApplyWorkflowFormView({
     expectedRomChecks,
     romInputs,
     romVerificationStates,
+    verificationActive,
+    verificationMismatchSummary: localizer.message("ui.chain.differentRom"),
+    verificationSummary: localizer.message("ui.chain.matchesRom"),
     singleRom,
     uiController,
   });
@@ -2028,6 +2046,9 @@ function ApplyWorkflowFormView({
             patches={patches}
             patchStack={controllers.patchStack}
             romActualsById={romActualsById}
+            showPatchEnablement={
+              patches.length > 1 || !!bundleTools?.exportVisible || !!bundleTools?.hasOptionalEntries
+            }
             notice={
               <SectionNotice
                 id="rom-weaver-patch-notice-message"

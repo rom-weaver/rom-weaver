@@ -68,6 +68,7 @@ test("same-base patches all match the ROM and feed the Expected group without co
   // the ROM directly instead of chaining off its neighbor.
   await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("matches your ROM");
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("matches your ROM");
+  expect(document.querySelectorAll("#rom-weaver-list-patch-stack .patch-enable input")).toHaveLength(2);
   expect(document.getElementById("rom-weaver-patch-order-note")).toBeNull();
 
   // Their shared base expectation unions into the ROM card's Expected group
