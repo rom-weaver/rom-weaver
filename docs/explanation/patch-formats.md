@@ -131,10 +131,19 @@ wrong one, every change lands at the wrong place. The result usually still
 boots, which is what makes the mistake expensive.
 
 A format that stores a checksum of its original settles this outright. BPS, UPS
-and RUP do. rom-weaver hashes the dump both ways and takes whichever matches, so
-the answer is proof, not preference.
+and PMSR store a CRC32; RUP and Solid store an MD5. rom-weaver hashes the dump
+both ways under whichever algorithm the patch used and takes the match, so the
+answer is proof, not preference. Checksums you supply yourself, from
+`--expect-in` or a bundle, count the same way and come first. A stated size on
+its own never counts: two ROMs of one length are not one ROM.
 
-IPS stores no such checksum, so rom-weaver reads the shape of the patch instead:
+A format can also settle it by refusing the wrong form. APS GBA states an exact
+original size and a checksum per block; xdelta/VCDIFF checks each chunk of the
+result it produced. rom-weaver applies the patch both ways with those checks on,
+and a form the format rejects was not the one the author used.
+
+IPS stores no checksum and checks nothing, so rom-weaver reads the shape of the
+patch instead:
 
 - Changes that reach past the end of the shorter form cannot have been written
   for it.
@@ -144,10 +153,13 @@ IPS stores no such checksum, so rom-weaver reads the shape of the patch instead:
   there before. Edges that already match the bytes underneath them point at the
   wrong form.
 
-When the shape settles nothing, rom-weaver applies the patch both ways and keeps
-the version the console still recognises as its own ROM, judged by the internal
-header every platform keeps. Its own checksum is a weak signal here, because a
-ROM hack routinely leaves it stale.
+When the shape settles nothing - and for every format with no shape to read -
+rom-weaver applies the patch both ways and keeps the version the console still
+recognises as its own ROM, judged by the internal header every platform keeps.
+Its own checksum is a weak signal here, because a ROM hack routinely leaves it
+stale. Some formats stay beyond this last step: bsdiff and gdiff rebuild the
+whole ROM from the patch, so their two results cannot be lined up for a fair
+comparison, and rom-weaver leaves those dumps alone.
 
 None of this is proof, and rom-weaver treats it that way: when the evidence does
 not separate the two forms it changes nothing and leaves the dump as it found

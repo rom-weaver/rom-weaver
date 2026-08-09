@@ -239,20 +239,37 @@ signatures, size-modulus rules, per-header `headered_extension` /
 two symmetric policies (`crates/rom-weaver-cli/src/patch_apply.rs`):
 
 - **`--patch-header auto|keep|strip`** - which bytes each patch applies against.
-  Auto decides **per patch in the chain** on checksum proof: the patch's
-  embedded source CRC32 (or the first patch's `[crc32:..]` filename token) is
-  compared against the current bytes vs their headerless/re-headered
-  counterpart, and the header is stripped or restored between steps
-  (`chain_header_transition`) only when the proof matches. A **first** patch
-  with no checksum to offer (IPS) falls to `patch_basis_decision.rs`: it scores
-  record geometry (`rom_weaver_patches::basis_probe` - records past the shorter
-  candidate's end, records inside the copier header, untrimmed record edges),
-  then, if that is inconclusive, applies the patch both ways and keeps the basis
-  whose output the platform still recognises, via a validate-only wrapper over
-  the `header_repair_systems` routines. Both speculative outputs are normalized
-  to headerless bytes of equal length before scoring, because those routines
-  pick their header offset from the file length. Chain steps 2..n keep the
-  checksum-only rule. The flag is
+  Auto decides **per patch in the chain** on checksum proof. For the **first**
+  patch (`CliApp::checksum_basis_proof`) the proof is every whole-file check the
+  patch normalizes into `details.patch.endpoints`, under whatever algorithm it
+  uses - BPS/UPS/PMSR crc32, RUP and Solid md5 - plus anything the user, a
+  bundle or the `[crc32:..]` filename token declared, which outranks the patch's
+  own. Each candidate is compared with `patch_plan::compare_states`, so a
+  size-only endpoint (APS GBA, DPS) never counts: size alone is not identity.
+  A checksum that matches neither candidate keeps the header and stops - the
+  fallbacks must not paper over contradicted proof.
+  A first patch with nothing to prove it falls to `patch_basis_decision.rs`:
+  1. Record geometry (`rom_weaver_patches::basis_probe` - records past the
+     shorter candidate's end, records inside the copier header, untrimmed record
+     edges). The probe reads IPS records only; every other format has no
+     geometry and drops straight to the tiebreak rather than ending the
+     decision there.
+  2. The tiebreak applies the patch both ways with the format's own source and
+     target checks ON (only the patch-integrity check is off - it is the same
+     number for both candidates). A format that verifies its bytes rejects the
+     basis it was not authored against (APS GBA's exact source size and
+     per-block source CRC16s, VCDIFF's per-window target checksum), and a
+     one-sided rejection decides outright. Only a `Validation`/`ValidationCode`
+     error counts as a rejection; anything else (cancellation, I/O) ends the
+     probe rather than being read as evidence.
+  3. When both candidates apply, it keeps the basis whose output the platform
+     still recognises, via a validate-only wrapper over the
+     `header_repair_systems` routines. Both speculative outputs are normalized
+     to headerless bytes of equal length before scoring, because those routines
+     pick their header offset from the file length; candidates that do not
+     normalize to one length are reported incomparable and keep the header.
+
+  Chain steps 2..n keep the checksum-only rule. The flag is
   positional and repeatable - each occurrence binds to the preceding `--patch`
   and carries forward (`align_patch_header_modes` re-derives the interleave from
   raw clap indices).

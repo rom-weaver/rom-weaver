@@ -9458,3 +9458,272 @@ fn patch_apply_auto_header_does_not_call_an_nsrt_header_copier_junk() {
     assert_eq!(&applied[0x100..0x104], &[0x5A; 4]);
     assert_eq!(&applied[0x1e8..0x1ec], b"NSRT");
 }
+
+/// Build a patch with rom-weaver's own creator from `original` to `modified`,
+/// so the basis it was authored against is unambiguous by construction.
+fn create_basis_patch(
+    temp: &TempDir,
+    format: &str,
+    original: &[u8],
+    modified: &[u8],
+    patch_name: &str,
+) -> PathBuf {
+    fs::write(temp.child("basis-original.bin").path(), original).expect("fixture");
+    fs::write(temp.child("basis-modified.bin").path(), modified).expect("fixture");
+    let patch = temp.child(patch_name).path().to_path_buf();
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("basis-original.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--modified",
+            temp.child("basis-modified.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--format",
+            format,
+            "--output",
+            patch.to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    patch
+}
+
+/// A body whose 12 scattered edits leave the structural rules with nothing to
+/// say: no record starts past the shorter candidate's end, none lands in the
+/// copier header, and both candidates score alike after applying. Only
+/// checksum proof can decide a basis here.
+fn evidence_free_edits(body: &[u8]) -> Vec<u8> {
+    let mut modified = body.to_vec();
+    for index in 0..12_usize {
+        let at = 0x1000 + index * 0x1000;
+        modified[at..at + 32].copy_from_slice(&[0xC0 + index as u8; 32]);
+    }
+    modified
+}
+
+#[test]
+fn patch_apply_auto_header_proves_the_basis_from_a_declared_md5() {
+    // The auto decision used to compare crc32 and nothing else, so a checksum
+    // pinned under any other algorithm was ignored and the run fell through to
+    // guessing. This patch gives the structural rules nothing, so the declared
+    // md5 is the only thing that can decide it.
+    let temp = setup_temp_dir();
+    let body = snes_rom_body();
+    let modified = evidence_free_edits(&body);
+    let patch = create_basis_patch(&temp, "ips", &body, &modified, "update.ips");
+    fs::write(temp.child("input.smc").path(), with_header(&body)).expect("fixture");
+    // `basis-original.bin` is the headerless body the patch was authored from.
+    let headerless_md5 = checksum_value(temp.child("basis-original.bin").path(), "md5");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--expect-in",
+            &format!("md5={headerless_md5}"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert_eq!(json["status"], "succeeded", "label: {label}");
+    assert!(
+        !label.contains("patch header basis inferred"),
+        "a checksum-proved basis is proof, not inference: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_proves_the_basis_from_an_embedded_md5() {
+    // RUP stores a per-variant source md5 and no crc32 at all, so its proof was
+    // invisible to the auto decision and the basis came from a fallback rule
+    // instead. Proof must decide it, and a proved decision carries no inferred
+    // note.
+    let temp = setup_temp_dir();
+    let body = snes_rom_body();
+    let modified = evidence_free_edits(&body);
+    let patch = create_basis_patch(&temp, "rup", &body, &modified, "update.rup");
+    fs::write(temp.child("input.smc").path(), with_header(&body)).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("input header stripped (512 bytes"),
+        "the embedded md5 must strip the header: {label}"
+    );
+    assert!(
+        !label.contains("patch header basis inferred"),
+        "a checksum-proved basis is proof, not inference: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_tiebreaks_a_patch_with_no_record_geometry() {
+    // The record-geometry probe reads IPS records only, and a patch it cannot
+    // read used to end the decision before the tiebreak ever ran. VCDIFF has no
+    // records to probe and states no whole-file checksum, but it does carry a
+    // per-window target checksum: decoded against the wrong source it cannot
+    // reproduce the output it promised, so the format itself rules that
+    // candidate out.
+    let temp = setup_temp_dir();
+    let body = snes_rom_body();
+    let modified = evidence_free_edits(&body);
+    let patch = create_basis_patch(&temp, "xdelta", &body, &modified, "update.xdelta");
+    fs::write(temp.child("input.smc").path(), with_header(&body)).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch header basis inferred as headerless"),
+        "a basis decided on evidence must be reported: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_tiebreak_keeps_a_raw_basis_with_no_record_geometry() {
+    // The mirror of the case above: the same recordless format authored against
+    // the headered dump must keep its header. Without this a tiebreak that
+    // always answered "headerless" would look correct.
+    let temp = setup_temp_dir();
+    let headered = with_header(&snes_rom_body());
+    let modified = evidence_free_edits(&headered);
+    let patch = create_basis_patch(&temp, "xdelta", &headered, &modified, "update.xdelta");
+    fs::write(temp.child("input.smc").path(), &headered).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            temp.child("output.smc").path().to_str().expect("path"),
+            "--output-header",
+            "keep",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("input header stripped"),
+        "a raw-basis patch must keep the header: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.smc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_reads_a_rejected_apply_as_proof() {
+    // APS GBA verifies its input: an exact source size plus a per-block source
+    // CRC16. It cannot state a whole-file checksum, so the tiebreak asks the
+    // format itself - the basis it refuses to apply to is not the one it was
+    // authored against.
+    let temp = setup_temp_dir();
+    let body = snes_rom_body();
+    let modified = evidence_free_edits(&body);
+    let patch = create_basis_patch(&temp, "apsgba", &body, &modified, "update.aps");
+    fs::write(temp.child("input.smc").path(), with_header(&body)).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch header basis inferred as headerless"),
+        "a basis decided on evidence must be reported: {label}"
+    );
+    assert!(
+        label.contains("rejects the raw"),
+        "the report must name the evidence: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        modified
+    );
+}
