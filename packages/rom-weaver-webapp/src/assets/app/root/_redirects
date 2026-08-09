@@ -33,3 +33,10 @@
 /weave/ /apply 301
 /weave.html /apply 301
 /weave/index.html /apply 301
+
+# `how-to/work-with-archives.md` was published at /docs/formats, one letter away
+# from the reference page at /docs/supported-formats. The guide now matches its
+# filename; the old slug keeps working here.
+/docs/formats /docs/work-with-archives 301
+/docs/formats/ /docs/work-with-archives 301
+/docs/formats.html /docs/work-with-archives 301

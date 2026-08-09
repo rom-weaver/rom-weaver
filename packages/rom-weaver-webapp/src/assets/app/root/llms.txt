@@ -11,6 +11,10 @@
 - [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the browser's Apply workflow with loose patches, patch chains, archives, or bundles.
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
 - [Create bundles guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only bundle in the browser's Apply workflow.
+- [Test a patched ROM](https://rom-weaver.com/docs/test-a-patched-rom): Boot a ROM in EmulatorJS inside the browser to check that a patch works.
+- [Trim a ROM (browser)](https://rom-weaver.com/docs/trim-roms): Cut the padding off an NDS, GBA, 3DS, XISO, or RVZ-scrubbable ROM in the browser.
+- [Undo a PPF patch](https://rom-weaver.com/docs/browser-tools): Restore the original ROM from a PPF3 patch that carries undo data.
+- [Webapp settings](https://rom-weaver.com/docs/webapp-settings): Every toggle in the browser app's Settings panel, with its values and default.
 - [FAQ](https://rom-weaver.com/docs/faq): Common questions, each pointing at the page that owns the answer.
 - [How patching works](https://rom-weaver.com/docs/how-patching-works): Why the exact starting file matters, what a checksum proves, and why patch order matters.
 - [Why files stay on your device](https://rom-weaver.com/docs/local-first): How local-first processing works in the browser and what it costs.
@@ -21,6 +25,10 @@
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
 - [Verify a download](https://rom-weaver.com/docs/verify-downloads): Check that a release archive, npm package, or container image carries the release workflow's build provenance.
 - [Your first apply in the terminal](https://rom-weaver.com/docs/cli-get-started): Tutorial covering Apply, Create, and Bundle in the terminal with the same test assets.
+- [Identify and hash files (CLI)](https://rom-weaver.com/docs/identify-and-hash-files): Use probe and checksum to identify a file and prove which bytes it holds.
+- [Bake cheat codes (CLI)](https://rom-weaver.com/docs/bake-cheat-codes): Write Game Genie or GameShark/Pro Action Replay codes permanently into a ROM.
+- [Trim a ROM (CLI)](https://rom-weaver.com/docs/cli-trim): Trim, preview, and revert ROM padding from the command line.
+- [Work with archives](https://rom-weaver.com/docs/work-with-archives): Extract, convert, and create ZIP and 7z archives from the command line.
 - [CLI reference](https://rom-weaver.com/docs/cli): Every command, global flag, patching flag, JSON output, exit codes, and man pages.
 - [Supported formats](https://rom-weaver.com/docs/supported-formats): The full patch, container, codec, checksum, trim, and header support tables.
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.

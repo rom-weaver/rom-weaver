@@ -33,7 +33,7 @@ using it.
 
 The heavy lifting comes from open-source projects — among them nod, libarchive,
 chd-rs, the 7-Zip LZMA SDK, and xdvdfs — each used under its own licence. The
-[notices and attribution](/docs/notices) page lists every component that ships
+[notices and attribution](https://rom-weaver.com/docs/notices) page lists every component that ships
 in a build, with its licence text.
 
 ## Where your files go
@@ -41,7 +41,7 @@ in a build, with its licence text.
 Nowhere. Files are read, patched, and written on your device: in your browser
 by WebAssembly running in background workers, or on your own disk by the CLI.
 There is no account, and no ROM, patch, or result is uploaded to a rom-weaver
-server. The [privacy](/docs/privacy) page has the details, including what the
+server. The [privacy](privacy.md) page has the details, including what the
 app stores locally and what it downloads.
 
 ## Getting in touch

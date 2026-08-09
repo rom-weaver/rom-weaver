@@ -36,6 +36,17 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/create-rom-patches",
   }),
   Object.freeze({ file: "how-to/create-bundles.md", label: "Create bundles (browser)", slug: "docs/create-bundles" }),
+  Object.freeze({ file: "how-to/trim-roms.md", label: "Trim a ROM (browser)", slug: "docs/trim-roms" }),
+  Object.freeze({
+    file: "how-to/browser-tools.md",
+    label: "Undo a PPF patch (browser)",
+    slug: "docs/browser-tools",
+  }),
+  Object.freeze({
+    file: "how-to/test-a-patched-rom.md",
+    label: "Test a patched ROM (browser)",
+    slug: "docs/test-a-patched-rom",
+  }),
   Object.freeze({
     file: "how-to/fix-checksum-errors.md",
     label: "Fix checksum errors",
@@ -50,7 +61,18 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "how-to/cli-apply.md", label: "Apply patches (CLI)", slug: "docs/cli-apply" }),
   Object.freeze({ file: "how-to/cli-create.md", label: "Create patches (CLI)", slug: "docs/cli-create" }),
   Object.freeze({ file: "how-to/cli-bundles.md", label: "Bundles (CLI)", slug: "docs/cli-bundles" }),
-  Object.freeze({ file: "how-to/work-with-archives.md", label: "Work with archives", slug: "docs/formats" }),
+  Object.freeze({ file: "how-to/cli-trim.md", label: "Trim a ROM (CLI)", slug: "docs/cli-trim" }),
+  Object.freeze({
+    file: "how-to/identify-and-hash-files.md",
+    label: "Identify and hash files (CLI)",
+    slug: "docs/identify-and-hash-files",
+  }),
+  Object.freeze({
+    file: "how-to/bake-cheat-codes.md",
+    label: "Bake cheat codes (CLI)",
+    slug: "docs/bake-cheat-codes",
+  }),
+  Object.freeze({ file: "how-to/work-with-archives.md", label: "Work with archives", slug: "docs/work-with-archives" }),
   Object.freeze({
     file: "how-to/fix-permission-errors.md",
     label: "Fix permission errors",
@@ -61,6 +83,11 @@ const DOC_SOURCES = Object.freeze([
     file: "reference/formats.md",
     label: "Supported formats",
     slug: "docs/supported-formats",
+  }),
+  Object.freeze({
+    file: "reference/webapp-settings.md",
+    label: "Webapp settings",
+    slug: "docs/webapp-settings",
   }),
   Object.freeze({
     file: "explanation/how-patching-works.md",

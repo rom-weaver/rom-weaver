@@ -9,6 +9,7 @@ Participation in this project is governed by the
 
 - [Report a problem](#report-a-problem)
 - [Propose a change](#propose-a-change)
+- [Translate rom-weaver](#translate-rom-weaver)
 - [Contributor License Agreement](#contributor-license-agreement)
 
 <!-- END doctoc -->
@@ -51,6 +52,31 @@ possible, the complete local gate:
 ```bash
 mise run ci
 ```
+
+## Translate rom-weaver
+
+The webapp ships three message catalogs: English (`en`), German (`de`), and
+Spanish (`es`). The language picker lists exactly the catalogs that ship, so a
+new language appears there as soon as its catalog lands.
+
+Catalogs live in
+`packages/rom-weaver-webapp/src/presentation/localization/locales/`. Each
+language has a `.po` file you edit and a `.ts` file compiled from it. The
+English source strings live in
+`packages/rom-weaver-webapp/src/presentation/localization/messages.ts`, and the
+catalog list and language names live in `catalog.ts` beside it.
+
+To correct or add a translation:
+
+1. Edit the language's `.po` file, or copy `en.po` to start a new language.
+2. Register a new language in `catalog.ts`: import its catalog and add its
+   endonym to `LOCALE_LABELS`.
+3. Run `npm run i18n:extract && npm run i18n:compile` in
+   `packages/rom-weaver-webapp` to regenerate the `.ts` catalogs.
+4. Commit both the `.po` and the generated `.ts` files.
+
+Existing translations are early and may be wrong in places. Corrections are
+welcome and do not need an issue first.
 
 ## Contributor License Agreement
 
