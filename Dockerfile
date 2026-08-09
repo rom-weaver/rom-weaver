@@ -16,7 +16,7 @@
 # exist for the build that asks for it.
 ARG BINARY=source
 
-FROM rust:1.95-bookworm AS builder
+FROM rust:1.97.1-bookworm AS builder
 ARG TARGETARCH
 WORKDIR /src
 
