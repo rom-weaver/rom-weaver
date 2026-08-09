@@ -9458,3 +9458,102 @@ fn patch_apply_auto_header_does_not_call_an_nsrt_header_copier_junk() {
     assert_eq!(&applied[0x100..0x104], &[0x5A; 4]);
     assert_eq!(&applied[0x1e8..0x1ec], b"NSRT");
 }
+
+/// Deterministic pseudo-random ROM bytes. Real ROM data has enough entropy that
+/// a record edge rarely matches the byte under it by chance.
+fn pseudo_random_bytes(len: usize, seed: u64) -> Vec<u8> {
+    let mut state = seed | 1;
+    (0..len)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 24) as u8
+        })
+        .collect()
+}
+
+/// A Super Magic Drive dump: a 512-byte header carrying the copier ID pair and
+/// the Genesis type byte, then 16 KiB blocks holding each block's odd bytes
+/// first and its even bytes second.
+fn super_magic_drive_dump(plain: &[u8]) -> Vec<u8> {
+    let mut dump = vec![0_u8; 512];
+    dump[0] = (plain.len() / 0x4000) as u8;
+    dump[8] = 0xAA;
+    dump[9] = 0xBB;
+    dump[10] = 0x06;
+    for block in plain.chunks(0x4000) {
+        let odd = block.iter().skip(1).step_by(2).copied();
+        let even = block.iter().step_by(2).copied();
+        dump.extend(odd);
+        dump.extend(even);
+    }
+    dump
+}
+
+#[test]
+fn patch_apply_auto_header_keeps_a_super_magic_drive_header() {
+    // Every .smd dump is 512 % 1024 bytes long, exactly the shape the size-based
+    // copier-header test looks for, so a misnamed one used to read as a headered
+    // SNES ROM and get its first 512 bytes stripped. Behind those bytes is
+    // interleaved Genesis data, not a shorter ROM: no basis this code can
+    // express is there, so the right answer is to leave the dump alone.
+    let temp = setup_temp_dir();
+    let mut plain = pseudo_random_bytes(64 * 1024, 22);
+    plain[0x100..0x104].copy_from_slice(b"SEGA");
+    let dump = super_magic_drive_dump(&plain);
+    assert_eq!(dump.len() % 1024, 512, "fixture must look copier-headered");
+    fs::write(temp.child("input.smc").path(), &dump).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![
+                TestIpsRecord::Literal {
+                    offset: 0x100,
+                    data: vec![0x5A; 4],
+                },
+                TestIpsRecord::Literal {
+                    offset: 0x2000,
+                    data: vec![0x5B; 4],
+                },
+            ],
+            None,
+        ),
+    )
+    .expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.smc").path().to_str().expect("path"),
+            "--patch-header",
+            "auto",
+            "--output-header",
+            "keep",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("input header stripped"),
+        "an interleaved Genesis dump has no removable header: {label}"
+    );
+
+    // The records landed where the patch put them, with the .smd header intact.
+    let mut expected = dump;
+    expected[0x100..0x104].copy_from_slice(&[0x5A; 4]);
+    expected[0x2000..0x2004].copy_from_slice(&[0x5B; 4]);
+    assert_eq!(
+        fs::read(temp.child("output.smc").path()).expect("output"),
+        expected
+    );
+}

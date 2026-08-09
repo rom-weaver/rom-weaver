@@ -15,6 +15,7 @@ separates them and which one to publish in.
 - [PPF](#ppf)
 - [Other supported formats](#other-supported-formats)
 - [How rom-weaver picks a patch's bytes](#how-rom-weaver-picks-a-patchs-bytes)
+  - [Interleaved Genesis dumps are not a header question](#interleaved-genesis-dumps-are-not-a-header-question)
 - [Which format should I choose?](#which-format-should-i-choose)
 
 <!-- END doctoc -->
@@ -153,6 +154,19 @@ None of this is proof, and rom-weaver treats it that way: when the evidence does
 not separate the two forms it changes nothing and leaves the dump as it found
 it. Publishing the expected checksums beside an IPS download is still the only
 way to make the question answerable.
+
+### Interleaved Genesis dumps are not a header question
+
+A Genesis `.smd` dump also opens with 512 bytes, and it is tempting to treat
+those as one more removable header. They are not. Behind them the ROM is stored
+in 16 KiB blocks with each block's odd bytes written first and its even bytes
+second, so removing the 512 bytes leaves interleaved data rather than a shorter
+ROM. There is no offset a patch could be shifted by to fit it.
+
+rom-weaver therefore does not offer a headerless form behind an `.smd` header.
+It recognises the dump for what it is and leaves it alone, which also stops a
+misnamed `.smd` from being read as a copier-headered SNES ROM - every `.smd`
+file happens to have exactly the size a copier-headered dump has.
 
 ## Which format should I choose?
 
