@@ -127,6 +127,9 @@ pub struct N64OrderEvidence {
 pub struct N64OrderProbe {
     pub candidates: [N64OrderCandidate; N64_ORDER_CANDIDATES],
     pub evidence: [N64OrderEvidence; N64_ORDER_CANDIDATES],
+    /// Whether any two compared records cover a shared byte, which voids the
+    /// edge rule's one assumption.
+    pub overlapping_records: bool,
     pub records: usize,
     /// Records writing into [`N64_STORED_CHECKSUM_RANGE`].
     pub stored_checksum_writes: usize,
@@ -196,6 +199,19 @@ pub fn probe_n64_order(
         );
         return Ok(None);
     }
+    // The result has to survive the same rewrite, and records or a truncate
+    // footer can resize it. Inferring an order for a result that cannot be
+    // rewritten turns an apply that would have worked into a failure.
+    let output_len = effective_output_len(&patch.records, patch.truncate_size, input.len());
+    if output_len < 4 || !output_len.is_multiple_of(4) {
+        trace!(
+            patch = %patch_path.display(),
+            input = %input_path.display(),
+            output_len,
+            "n64 order probe: the patched result does not hold whole N64 words"
+        );
+        return Ok(None);
+    }
 
     let mut evidence = [N64OrderEvidence::default(); N64_ORDER_CANDIDATES];
     let Some(first_word) = input.read_at::<4>(0)? else {
@@ -231,6 +247,7 @@ pub fn probe_n64_order(
     let probe = N64OrderProbe {
         candidates,
         evidence,
+        overlapping_records: records_overlap(&patch.records[..compared]),
         records: patch.records.len(),
         stored_checksum_writes,
     };
@@ -241,6 +258,46 @@ pub fn probe_n64_order(
         "n64 order probe: scored every candidate order"
     );
     Ok(Some(probe))
+}
+
+/// The size of the applied result: records can grow the input, and a truncate
+/// footer caps whatever they leave.
+fn effective_output_len(
+    records: &[IpsProbeRecord],
+    truncate_size: Option<u64>,
+    input_len: u64,
+) -> u64 {
+    let written_end = records
+        .iter()
+        .filter(|record| record.len > 0)
+        .filter_map(|record| record.offset.checked_add(record.len))
+        .max()
+        .unwrap_or(0);
+    let grown = input_len.max(written_end);
+    truncate_size.map_or(grown, |truncate_size| grown.min(truncate_size))
+}
+
+/// Whether any two records cover a shared byte.
+///
+/// The edge rule below reads each record's first and last byte against the
+/// bytes underneath it, which only means anything for records a trimming differ
+/// produced - and such a differ never emits two records over one byte. Overlap
+/// says the records came from somewhere else, so their edges prove nothing.
+fn records_overlap(records: &[IpsProbeRecord]) -> bool {
+    let mut spans = records
+        .iter()
+        .filter(|record| record.len > 0)
+        .filter_map(|record| Some((record.offset, record.offset.checked_add(record.len)?)))
+        .collect::<Vec<_>>();
+    spans.sort_unstable();
+    let mut covered_to = 0_u64;
+    for (start, end) in spans {
+        if start < covered_to {
+            return true;
+        }
+        covered_to = covered_to.max(end);
+    }
+    false
 }
 
 /// Whether a record writes any byte of `range`.
@@ -369,6 +426,11 @@ fn decide_by_magic(probe: &N64OrderProbe) -> Option<N64OrderDecision> {
 /// a wrong order the edge lands on a different byte of the same word and matches
 /// by coincidence often enough to show up.
 fn decide_by_edges(probe: &N64OrderProbe) -> N64OrderDecision {
+    if probe.overlapping_records {
+        return N64OrderDecision::inconclusive(
+            "records overlap, so their edges are not a trimming differ's",
+        );
+    }
     if probe
         .evidence
         .iter()

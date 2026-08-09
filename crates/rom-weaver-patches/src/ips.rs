@@ -532,12 +532,14 @@ pub(crate) struct IpsProbeRecord {
 pub(crate) const IPS_PROBE_PREFIX_BYTES: usize = 4;
 
 /// Everything the structural probes read out of an IPS patch.
-///
-/// The truncate footer is deliberately absent: it states the output size, not
-/// the size of the bytes the author patched, so it cannot identify a basis.
 #[derive(Debug)]
 pub(crate) struct IpsProbeData {
     pub(crate) records: Vec<IpsProbeRecord>,
+    /// The truncate footer's output size, when the patch carries one. It states
+    /// the size of the result, not the size of the bytes the author patched, so
+    /// it can never identify a basis. The N64 order probe still needs it: a
+    /// byte-order rewrite refuses a result that is not whole words.
+    pub(crate) truncate_size: Option<u64>,
     /// The byte the patch leaves at each of the first
     /// [`IPS_PROBE_PREFIX_BYTES`] output offsets, `None` where no record writes
     /// one. Later records win, matching apply order. The per-record summary
@@ -611,6 +613,7 @@ pub(crate) fn probe_ips_records(path: &Path) -> Result<Option<IpsProbeData>> {
     Ok(Some(IpsProbeData {
         records,
         prefix_writes,
+        truncate_size: patch.truncate_size,
     }))
 }
 

@@ -361,3 +361,68 @@ fn an_unwritten_first_word_leaves_the_magic_rule_silent() {
             .all(|evidence| evidence.magic == N64MagicEvidence::Unwritten)
     );
 }
+
+fn build_ips_with_truncate(records: &[(u32, Vec<u8>)], truncate: u32) -> Vec<u8> {
+    let mut patch = build_ips(records);
+    patch.extend_from_slice(&truncate.to_be_bytes()[1..]);
+    patch
+}
+
+#[test]
+fn overlapping_records_void_the_edge_rule() {
+    // The edge rule reads each record's first and last byte against the bytes
+    // underneath, which only says anything about records a trimming differ
+    // produced - and such a differ never writes one byte twice. Eight writes to
+    // one offset are enough records to reach the rule, so without the overlap
+    // guard the last write's byte decides an order on its own.
+    let temp = TestDir::new();
+    let mut rom = big_endian_rom(11);
+    rom[0x1000..0x1004].copy_from_slice(&[0x10, 0x20, 0x30, 0x40]);
+    let swapped = rewrite(&rom, 0, 2);
+    // Two writes match the byte big-endian would put under them and two match
+    // byte-swapped's, leaving little-endian the only edge-clean candidate.
+    let patch = build_ips(
+        &[0x10_u8, 0x10, 0x20, 0x20, 0xAA, 0xAB, 0xAC, 0xAD]
+            .iter()
+            .map(|value| (0x1000_u32, vec![*value]))
+            .collect::<Vec<_>>(),
+    );
+    assert_eq!(decide(&temp, &swapped, &patch, 2), None);
+}
+
+#[test]
+fn a_truncated_result_that_is_not_whole_words_is_left_alone() {
+    // A truncate footer states the size of the result, and the rewrite refuses a
+    // result that is not whole words. Inferring an order here would turn an
+    // apply that works into a failure at finalization.
+    let temp = TestDir::new();
+    let rom = big_endian_rom(12);
+    let patch = build_ips_with_truncate(&[(0, LITTLE_ENDIAN_MAGIC.to_vec())], 2);
+    let rom_path = temp.child("rom.n64");
+    let patch_path = temp.child("update.ips");
+    fs::write(&rom_path, &rom).expect("rom fixture");
+    fs::write(&patch_path, &patch).expect("patch fixture");
+    assert!(
+        probe_n64_order(&patch_path, &rom_path, candidates(0))
+            .expect("probe")
+            .is_none(),
+        "a result that cannot be rewritten must not be probed"
+    );
+}
+
+#[test]
+fn a_truncated_result_that_stays_whole_words_still_decides() {
+    // The guard above must not swallow the ordinary truncate: a result that is
+    // still a whole number of words rewrites fine, so the magic rule applies.
+    let temp = TestDir::new();
+    let rom = big_endian_rom(13);
+    let patch = build_ips_with_truncate(&[(0, LITTLE_ENDIAN_MAGIC.to_vec())], 0x400);
+    let rom_path = temp.child("rom.n64");
+    let patch_path = temp.child("update.ips");
+    fs::write(&rom_path, &rom).expect("rom fixture");
+    fs::write(&patch_path, &patch).expect("patch fixture");
+    assert_eq!(
+        decide_paths(&patch_path, &rom_path, 0),
+        Some("little-endian")
+    );
+}
