@@ -45,8 +45,12 @@ compressed format (the ROM inside is found for you), or a
 rom-weaver-bundle.json that already names the ROM, the patches, and the
 output.
 
-The result is compressed by default, into whatever container the --output
-extension names. Pass --no-compress for a plain ROM file.
+When --output names the selected ROM leaf's extension, rom-weaver writes a
+plain ROM. A registered container extension such as .zip compresses the result.
+Pass --no-compress (or --raw) to force a plain ROM, or use --compress-format,
+--compress-codec, and --compress-level (also accepted as --format, --codec,
+and --level) to force compression. Without --output, an ordinary file apply
+writes a collision-safe sibling named <stem>-patched.<ext>.
 
 Patch formats: IPS, IPS32, SOLID, BPS, UPS, VCDIFF, xdelta, GDIFF,
 HDiffPatch/HPatchZ, APS (N64), APSGBA, RUP, PPF, PAT/FFP, EBP, BDF/BSDIFF40,
@@ -60,9 +64,9 @@ cannot be combined with other patches or with the header and checksum options.";
 
 pub const PATCH_APPLY_AFTER_HELP: &str = "\
 Examples:
-  # One patch, plain ROM out
+  # One patch, plain ROM out (the .sfc extension selects raw output)
   rom-weaver patch apply --input game.sfc --patch hack.bps \\
-    --output hacked.sfc --no-compress
+    --output hacked.sfc
 
   # Two patches in order, straight out of and back into a zip
   rom-weaver patch apply --input game.zip \\
@@ -909,7 +913,11 @@ archive with one at its root, and you passed no --patch of your own."
     pub without_patches: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long, help = "Write a plain ROM instead of compressing the result")
+        arg(
+            long,
+            visible_alias = "raw",
+            help = "Write a plain ROM instead of compressing the result"
+        )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -918,6 +926,7 @@ archive with one at its root, and you passed no --patch of your own."
         not(target_arch = "wasm32"),
         arg(
             long = "compress-format",
+            visible_alias = "format",
             help = "Format to compress the patched ROM into [default: from the --output extension]",
             long_help = "\
 Format to compress the patched ROM into, such as zip, 7z, chd, rvz, or z3ds.
@@ -934,6 +943,7 @@ a plain ROM instead."
         not(target_arch = "wasm32"),
         arg(
             long = "compress-codec",
+            visible_alias = "codec",
             action = ArgAction::Append,
             value_delimiter = ',',
             help = CODEC_HELP,
@@ -955,6 +965,7 @@ Without :level, a codec follows the --compress-level profile."
         not(target_arch = "wasm32"),
         arg(
             long = "compress-level",
+            visible_alias = "level",
             value_enum,
             help = "How hard to compress: min, very-low, low, medium, high, very-high, or max [default: max]"
         )

@@ -21,7 +21,7 @@ Run a complete patch with the tiny original homebrew NES ROM the webapp uses. Th
 
 ```bash
 curl --fail --location --output first-weave.zip https://rom-weaver.com/first-weave.zip
-rom-weaver patch apply --input first-weave.zip --output modified-rom.nes --no-compress
+rom-weaver patch apply --input first-weave.zip --output modified-rom.nes
 rom-weaver checksum --input modified-rom.nes --algo sha256
 ```
 
@@ -53,8 +53,7 @@ rom-weaver patch create \
 rom-weaver patch apply \
   --input hello-world.nes \
   --patch sample.bps \
-  --output rebuilt.nes \
-  --no-compress
+  --output rebuilt.nes
 rom-weaver checksum --input rebuilt.nes --algo sha256
 ```
 
