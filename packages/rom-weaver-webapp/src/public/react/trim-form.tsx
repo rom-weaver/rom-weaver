@@ -42,7 +42,7 @@ import {
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
 import { TrimPatchFormView, type TrimPatchFormViewModel } from "./trim-form-view.tsx";
-import { routeSingleRom } from "./unified-drop-routing.ts";
+import { getRomDropNotice, routeSingleRom } from "./unified-drop-routing.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
@@ -516,6 +516,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const [message, setMessage] = useState("");
   const [messageDismissible, setMessageDismissible] = useState(false);
   const [messagePlacement, setMessagePlacement] = useState<TrimMessagePlacement | null>(null);
+  const [dropNotice, setDropNotice] = useState("");
   const [errorCode, setErrorCode] = useState("");
   const [sourceState, setSourceState] = useState<TrimWorkflowSourceState | null>(null);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
@@ -684,17 +685,19 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const updateSource = (file: BinarySource | null) => {
     resetWorkflowOutput();
     stagedTrimWorkflowGenerationRef.current += 1;
+    setDropNotice("");
     setSourceState(null);
     if (props.source === undefined) setInternalSource(file);
     props.onSourceChange?.(file);
   };
 
-  // Single-bucket unified routing: keep the first dropped ROM, ignore patches
-  // and any extra files (Trim has one source). See routeSingleRom.
+  // Single-bucket unified routing: keep the first dropped ROM and report patches
+  // or overflow instead of silently discarding them. See routeSingleRom.
   const handledPageDropIdRef = useRef<number | null>(null);
   const handleUnifiedDrop = (files: File[]) => {
-    const source = routeSingleRom(files);
-    if (source) updateSource(source);
+    const routed = routeSingleRom(files);
+    if (routed.source) updateSource(routed.source);
+    setDropNotice(getRomDropNotice(routed));
   };
 
   // Forward a page-level drop (dragging anywhere on the page) to the unified
@@ -1143,6 +1146,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     dropZone: {
       accept: getFileInputAcceptAttributes().unifiedRom,
       addLabel: "Replace the ROM",
+      afterDropZone: dropNotice ? (
+        <Notice id="trim-builder-input-notice" level="warn">
+          {dropNotice}
+        </Notice>
+      ) : null,
       big: trimSourceEmpty,
       disabled: uploadDisabled,
       heroLabel: "Drop or click to add a ROM to trim",

@@ -10,31 +10,67 @@ import { classifyDroppedFiles } from "./file-classification.ts";
 const logger = createLogger("unified-drop-routing");
 
 /**
- * ROM-only tabs (Make Patch/Trim) have no patch bucket. Drop patches silently (with
- * a log) and keep ROMs + archives, which the workflow extracts into ROMs.
+ * ROM-only tabs (Make Patch/Trim) have no patch bucket. Keep ROMs + archives in
+ * their original drop order and return patches separately so the caller can
+ * explain where those inputs belong.
  */
-const collectRomDropFiles = (files: File[]): File[] => {
-  const { archives, inputs, patches } = classifyDroppedFiles(files);
+type RomDropCollection = {
+  ignoredPatches: File[];
+  roms: File[];
+};
+
+const collectRomDropFiles = (files: File[]): RomDropCollection => {
+  const { patches } = classifyDroppedFiles(files);
   if (patches.length) {
     logger.info("ignored patch files dropped on a ROM-only tab", {
       count: patches.length,
       names: patches.map((file) => file.name),
     });
   }
-  return [...inputs, ...archives];
+  const patchSet = new Set(patches);
+  const roms = files.filter((file) => !patchSet.has(file));
+  logger.trace("collected ROM-only drop inputs", {
+    ignoredPatchCount: patches.length,
+    romCount: roms.length,
+    names: roms.map((file) => file.name),
+  });
+  // The classifier remains the source of truth for what is rejected. The
+  // returned list deliberately follows `files`, not bucket order.
+  return { ignoredPatches: patches, roms };
 };
 
+type RomDropRouting = {
+  assignment: (File | null)[];
+  ignoredPatches: File[];
+  unused: File[];
+};
+
+type SingleRomDropRouting = {
+  ignoredPatches: File[];
+  source: File | null;
+  unused: File[];
+};
+
+const DROP_NOTICE_NAME_LIMIT = 3;
+const DROP_NOTICE_NAME_LENGTH = 80;
+
+const formatDropNoticeName = (file: File) =>
+  file.name.length <= DROP_NOTICE_NAME_LENGTH ? file.name : `${file.name.slice(0, DROP_NOTICE_NAME_LENGTH - 1)}…`;
+
 /**
- * Make Patch-tab strategy: fill empty slots in drop order; if more ROMs are dropped
- * than there are empty slots, the last dropped ROM overflows into the final slot
- * (matching the legacy "default to modified" page-drop behavior).
+ * Make Patch-tab strategy: fill empty slots in drop order. If more ROMs are
+ * dropped than there are empty slots, the remainder is reported as unused.
  *
  * Returns one entry per slot: a `File` to place, or `null` to leave unchanged.
+ * Files that do not fit stay in `unused`; they are never substituted into a
+ * filled slot.
  */
-const routeByOrder = (files: File[], slotFilled: boolean[]): (File | null)[] => {
+const routeByOrder = (files: File[], slotFilled: boolean[]): RomDropRouting => {
   const assignment: (File | null)[] = slotFilled.map(() => null);
-  const roms = collectRomDropFiles(files);
-  if (roms.length === 0 || slotFilled.length === 0) return assignment;
+  const { ignoredPatches, roms } = collectRomDropFiles(files);
+  if (roms.length === 0 || slotFilled.length === 0) {
+    return { assignment, ignoredPatches, unused: roms };
+  }
   const emptySlots = slotFilled.map((filled, index) => (filled ? -1 : index)).filter((index) => index >= 0);
   let fileIndex = 0;
   for (const slot of emptySlots) {
@@ -43,24 +79,36 @@ const routeByOrder = (files: File[], slotFilled: boolean[]): (File | null)[] => 
     assignment[slot] = file;
     fileIndex += 1;
   }
-  if (fileIndex < roms.length) {
-    const lastRom = roms.at(-1);
-    if (lastRom) assignment[assignment.length - 1] = lastRom;
-  }
+  const unused = roms.slice(fileIndex);
   logger.trace("routed unified drop by order", {
     assignedSlots: assignment.map((file) => file?.name ?? null),
     slotFilled,
+    unused: unused.map((file) => file.name),
   });
-  return assignment;
+  return { assignment, ignoredPatches, unused };
 };
 
-/** Trim-tab strategy: a single ROM source - take the first dropped ROM, if any. */
-const routeSingleRom = (files: File[]): File | null => {
-  const roms = collectRomDropFiles(files);
-  const first = roms[0];
-  if (!first) return null;
-  logger.trace("routed unified drop to single source", { name: first.name });
-  return first;
+/** Trim-tab strategy: take the first dropped ROM and report every other input. */
+const routeSingleRom = (files: File[]): SingleRomDropRouting => {
+  const { ignoredPatches, roms } = collectRomDropFiles(files);
+  const [source, ...unused] = roms;
+  logger.trace("routed unified drop to single source", {
+    name: source?.name,
+    unused: unused.map((file) => file.name),
+  });
+  return { ignoredPatches, source: source || null, unused };
 };
 
-export { collectRomDropFiles, routeByOrder, routeSingleRom };
+const getRomDropNotice = ({ ignoredPatches, unused }: Pick<RomDropRouting, "ignoredPatches" | "unused">) => {
+  const notices: string[] = [];
+  if (ignoredPatches.length) notices.push("Patches belong in Apply and were ignored.");
+  if (unused.length) {
+    const shown = unused.slice(0, DROP_NOTICE_NAME_LIMIT).map(formatDropNoticeName);
+    const remaining = unused.length - shown.length;
+    const remainder = remaining > 0 ? `, and ${remaining} more` : "";
+    notices.push(`Unused inputs: ${shown.join(", ")}${remainder}.`);
+  }
+  return notices.join(" ");
+};
+
+export { collectRomDropFiles, getRomDropNotice, routeByOrder, routeSingleRom };

@@ -194,6 +194,44 @@ afterEach(() => {
   mountedRoot = null;
 });
 
+test("Trim explains that dropped patches belong in Apply", async () => {
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({
+        pageDrop: { files: [new File([], "hack.ips")], id: 1 },
+      }),
+    ),
+  );
+
+  await expect
+    .poll(() => document.getElementById("trim-builder-input-notice")?.textContent || "")
+    .toContain("Patches belong in Apply");
+  expect(document.querySelector("#trim-builder-row-source .file")).toBeNull();
+});
+
+test("Trim reports overflow inputs without replacing the first ROM", async () => {
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({
+        pageDrop: {
+          files: [new File([], "first.bin"), new File([], "unused.bin")],
+          id: 1,
+        },
+      }),
+    ),
+  );
+
+  await expect
+    .poll(() => document.getElementById("trim-builder-input-notice")?.textContent || "")
+    .toContain("Unused inputs: unused.bin.");
+  await expect
+    .poll(() => document.querySelector("#trim-builder-row-source .card")?.textContent || "")
+    .toContain("first.bin");
+  expect(document.querySelector("#trim-builder-row-source .card")?.textContent || "").not.toContain("unused.bin");
+});
+
 test("trim output edits stay enabled while queued and cancel the queued run", async () => {
   mount(
     createElement(

@@ -257,6 +257,44 @@ test("guided Create URL starts and loads the sample tutorial", async () => {
   expect(requested).toEqual(["/hello-world.nes", "/modified-world.nes"]);
 });
 
+test("Create explains that dropped patches belong in Apply", async () => {
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        pageDrop: { files: [new File([], "hack.ips")], id: 1 },
+      }),
+    ),
+  );
+
+  await expect
+    .poll(() => document.getElementById("patch-builder-input-notice")?.textContent || "")
+    .toContain("Patches belong in Apply");
+  expect(document.querySelector("#patch-builder-row-original .file")).toBeNull();
+  expect(document.querySelector("#patch-builder-row-modified .file")).toBeNull();
+});
+
+test("Create preserves simultaneous drop order regardless of filename length", async () => {
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        pageDrop: {
+          files: [new File([], "original-with-a-long-name.bin"), new File([], "m.bin")],
+          id: 1,
+        },
+      }),
+    ),
+  );
+
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-original .card")?.textContent || "")
+    .toContain("original-with-a-long-name.bin");
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-modified .card")?.textContent || "")
+    .toContain("m.bin");
+});
+
 test("create output edits stay enabled while queued and cancel the queued run", async () => {
   mount(
     createElement(
@@ -354,7 +392,7 @@ test("create active output cancel button aborts the workflow without an error no
   expect(document.getElementById("patch-builder-output-error-message")).toBeNull();
 });
 
-test("replacing the modified ROM keeps the prepared original ROM", async () => {
+test("an overflow ROM is reported without replacing the prepared sources", async () => {
   mount(
     createElement(
       CreatePatchForm,
@@ -373,20 +411,17 @@ test("replacing the modified ROM keeps the prepared original ROM", async () => {
   await expect.poll(() => document.querySelectorAll(".stage-status").length).toBe(0);
 
   workflowMockState.modifiedDeferred = createDeferred();
-  // With both slots filled, a ROM dropped on the unified surface overflows into
-  // the modified slot (routeByOrder), replacing the modified ROM and keeping the
-  // original.
+  // With both slots filled, a ROM dropped on the unified surface is unused. It
+  // must not silently replace either prepared source.
   const unifiedInput = document.getElementById("patch-builder-input-file-unified");
   expect(unifiedInput).toBeInstanceOf(HTMLInputElement);
   selectFileInput(unifiedInput, new File([new Uint8Array([0, 1, 2, 5])], "modified-v2.bin"));
 
   await expect.poll(() => document.body.textContent || "").toContain("original.bin");
-  expect(document.body.textContent || "").not.toContain("Waiting for other actions");
-  await expect.poll(() => workflowMockState.originalSetCalls).toBe(1);
-  await expect.poll(() => workflowMockState.modifiedSetCalls).toBe(2);
-
-  workflowMockState.modifiedDeferred.resolve();
-  await expect.poll(() => document.body.textContent || "").toContain("modified-v2.bin");
+  await expect.poll(() => document.body.textContent || "").toContain("modified.bin");
+  await expect.poll(() => document.body.textContent || "").toContain("Unused inputs: modified-v2.bin.");
+  expect(workflowMockState.originalSetCalls).toBe(1);
+  expect(workflowMockState.modifiedSetCalls).toBe(1);
 });
 
 test("swapping prepared sources reuses them without re-extraction", async () => {

@@ -52,7 +52,7 @@ import {
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
-import { routeByOrder } from "./unified-drop-routing.ts";
+import { getRomDropNotice, routeByOrder } from "./unified-drop-routing.ts";
 import { getDefaultCreateOutputName, getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
@@ -375,6 +375,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const [message, setMessage] = useState("");
   const [messageDismissible, setMessageDismissible] = useState(false);
   const [messagePlacement, setMessagePlacement] = useState<CreateMessagePlacement | null>(null);
+  const [dropNotice, setDropNotice] = useState("");
   const [originalState, setOriginalState] = useState<CreateDisplaySourceState | null>(null);
   const [modifiedState, setModifiedState] = useState<CreateDisplaySourceState | null>(null);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
@@ -618,6 +619,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const updateOriginal = (file: BinarySource | null) => {
     resetWorkflowOutput();
+    setDropNotice("");
     setOriginalState(null);
     if (props.original === undefined) setInternalOriginal(file);
     props.onOriginalChange?.(file);
@@ -625,23 +627,22 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const updateModified = (file: BinarySource | null) => {
     resetWorkflowOutput();
+    setDropNotice("");
     setModifiedState(null);
     if (props.modified === undefined) setInternalModified(file);
     props.onModifiedChange?.(file);
   };
 
   // Combined drop surface: both sources are ROMs, so files fill Original then
-  // Modified in drop order; patches in a dropped archive are ignored (no patch
-  // bucket on this tab). See routeByOrder.
+  // Modified in drop order; patches and overflow stay visible as a notice (no
+  // patch bucket on this tab). See routeByOrder.
   const handledPageDropIdRef = useRef<number | null>(null);
   const handleUnifiedDrop = (files: File[]) => {
-    // When both ROMs arrive together, treat the longer file name as the modified
-    // ROM - hacks/edits usually carry the more descriptive name - so it lands in
-    // the later (modified) slot. Stable sort keeps drop order for equal lengths.
-    const ordered = [...files].sort((a, b) => a.name.length - b.name.length);
-    const [originalFile, modifiedFile] = routeByOrder(ordered, [!!original, !!modified]);
+    const routed = routeByOrder(files, [!!original, !!modified]);
+    const [originalFile, modifiedFile] = routed.assignment;
     if (originalFile) updateOriginal(originalFile);
     if (modifiedFile) updateModified(modifiedFile);
+    setDropNotice(getRomDropNotice(routed));
   };
   const loadCreateSample = async () => {
     setSampleLoading(true);
@@ -1055,22 +1056,33 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     ),
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
-      addLabel: "Add or replace a ROM",
+      addLabel: "Add a ROM",
       afterDropZone: createSourcesActuallyEmpty ? (
-        <SampleTutorialStart
-          downloadHref={resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE)}
-          downloadName={CREATE_SAMPLE_ARCHIVE}
-          downloadLabel="Download the sample ROMs"
-          error={sampleError}
-          guideHref={GUIDED_SAMPLE_HREFS.create}
-          label="Start guided Create"
-          startAction="create"
-          loading={sampleLoading}
-          onStart={() => {
-            setSampleTutorialActive(true);
-            void loadCreateSample();
-          }}
-        />
+        <>
+          {dropNotice ? (
+            <Notice id="patch-builder-input-notice" level="warn">
+              {dropNotice}
+            </Notice>
+          ) : null}
+          <SampleTutorialStart
+            downloadHref={resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE)}
+            downloadName={CREATE_SAMPLE_ARCHIVE}
+            downloadLabel="Download the sample ROMs"
+            error={sampleError}
+            guideHref={GUIDED_SAMPLE_HREFS.create}
+            label="Start guided Create"
+            startAction="create"
+            loading={sampleLoading}
+            onStart={() => {
+              setSampleTutorialActive(true);
+              void loadCreateSample();
+            }}
+          />
+        </>
+      ) : dropNotice ? (
+        <Notice id="patch-builder-input-notice" level="warn">
+          {dropNotice}
+        </Notice>
       ) : null,
       big: createSourcesEmpty,
       disabled: uploadDisabled,
