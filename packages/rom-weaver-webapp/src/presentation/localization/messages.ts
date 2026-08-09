@@ -52,7 +52,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.compressionProfile": msg({ id: "settings.compressionProfile", message: "Level" }),
   "settings.applyPlayButtonEnabled": msg({
     id: "settings.applyPlayButtonEnabled",
-    message: "Show the play button after applying",
+    message: "Show the test button after applying",
   }),
   "settings.fixChecksum": msg({ id: "settings.fixChecksum", message: "Fix ROM header" }),
   "settings.language": msg({ id: "settings.language", message: "Language" }),

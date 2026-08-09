@@ -135,6 +135,11 @@ const OutputCard = ({
           labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
           readouts={compress.readouts}
         >
+          {/* None of these controls writes back - the public form reads settings
+              only. Phrased as "not saved" rather than "overrides your defaults"
+              because a few options (Apply's ROM header) have no saved default at
+              all. Said once at the top, since it holds for every option below. */}
+          <p className="optsnote">These choices are not saved. Change your defaults in Settings.</p>
           <div className="optsgrid">
             {compress.formatOptions?.length && compress.onFormatChange ? (
               <OutputField label={compress.formatLabel || "Type"} labelInfo={compress.formatInfo}>

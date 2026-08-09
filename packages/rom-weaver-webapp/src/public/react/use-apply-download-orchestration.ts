@@ -311,7 +311,7 @@ const usePostApplyRomBehaviorValue = (settingValue: unknown): PostApplyRomBehavi
   return normalizePostApplyRomBehavior(override ?? settingValue);
 };
 
-/** The "Show the play button" checkbox's controlled value, and the button's own gate. */
+/** The "Show the test button" checkbox's controlled value, and the button's own gate. */
 const useApplyPlayButtonValue = (settingValue: unknown): boolean => {
   const override = useSyncExternalStore(
     subscribeApplyPlayButtonOverride,
