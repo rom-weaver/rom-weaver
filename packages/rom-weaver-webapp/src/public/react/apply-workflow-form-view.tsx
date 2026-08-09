@@ -65,7 +65,7 @@ import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./
 
 /**
  * The finished apply's companion to the download button: the patched ROM is
- * already in memory, so playing it is one press. Styled as the run button's
+ * already in memory, so testing it is one press. Styled as the run button's
  * quieter twin (see `.emulatorjs-test` in result.css) rather than a stray ghost
  * control, and the mono chip names the core that will run it.
  */
@@ -128,7 +128,7 @@ const EmulatorJsAction = ({
         type="button"
       >
         <Gamepad2 aria-hidden="true" />
-        <span className="play-label">{loading ? "Preparing emulator…" : "Play in the Test tab"}</span>
+        <span className="play-label">{loading ? "Preparing emulator…" : "Open in the Test tab"}</span>
         <span className="play-core mono">{core}</span>
       </button>
       {error ? (
@@ -1235,9 +1235,10 @@ const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean;
 };
 
 /**
- * "Show the play button" checkbox for the Apply step's output options, the
+ * "Show the test button" checkbox for the Apply step's output options, the
  * session-only twin of the persisted `applyPlayButtonEnabled` setting (same
- * read-only-settings limit as the select above).
+ * read-only-settings limit as the select above). The setting key keeps its
+ * `play` spelling because it is persisted; only the wording changed.
  */
 const PlayButtonField = ({ disabled, settingValue }: { disabled: boolean; settingValue: unknown }) => {
   const checked = useApplyPlayButtonValue(settingValue);
@@ -1250,7 +1251,7 @@ const PlayButtonField = ({ disabled, settingValue }: { disabled: boolean; settin
         onChange={(event) => setApplyPlayButtonOverride(event.currentTarget.checked)}
         type="checkbox"
       />
-      <span>Show the play button</span>
+      <span>Show the test button</span>
     </label>
   );
 };

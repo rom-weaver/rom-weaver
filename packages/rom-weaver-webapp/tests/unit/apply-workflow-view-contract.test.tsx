@@ -478,7 +478,17 @@ describe("apply workflow view - post-apply behavior select", () => {
   });
 });
 
-describe("apply workflow view - play button checkbox", () => {
+describe("apply workflow view - output options notice", () => {
+  it("tells the user the options are not saved and Settings holds the defaults", () => {
+    const { container } = renderView({ ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] } });
+    const note = container.querySelector(".outopts .optsnote");
+    expect(note?.textContent).toBe("These choices are not saved. Change your defaults in Settings.");
+    // It leads the body, so it covers every option below it rather than one field.
+    expect(note?.nextElementSibling?.className).toContain("optsgrid");
+  });
+});
+
+describe("apply workflow view - test button checkbox", () => {
   // Session state, same as the select's override above.
   afterEach(() => setApplyPlayButtonOverride(null));
 
@@ -499,7 +509,13 @@ describe("apply workflow view - play button checkbox", () => {
     expect((container.querySelector("#rom-weaver-checkbox-play-button") as HTMLInputElement).checked).toBe(false);
   });
 
-  it("hides the play button for the session when unticked", () => {
+  it("labels the button by where it goes, not by playing", () => {
+    const { container } = playButtonView({});
+    const label = container.querySelector("#rom-weaver-button-test-emulator .play-label");
+    expect(label?.textContent).toBe("Open in the Test tab");
+  });
+
+  it("hides the test button for the session when unticked", () => {
     const { container } = playButtonView({});
     expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeTruthy();
     const checkbox = container.querySelector("#rom-weaver-checkbox-play-button") as HTMLInputElement;

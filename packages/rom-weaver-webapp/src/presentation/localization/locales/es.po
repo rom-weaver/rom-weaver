@@ -651,7 +651,7 @@ msgstr "Mostrar los consejos de inicio rápido («New here?»)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.applyPlayButtonEnabled"
-msgstr "Mostrar el botón Play después de aplicar"
+msgstr "Mostrar el botón Probar después de aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
