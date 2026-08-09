@@ -2924,15 +2924,11 @@ impl CliApp {
             let stripped_path = context
                 .temp_paths()
                 .next_path("patch-apply-input-noheader", Some("bin"));
-            match Self::strip_header_to_temp(resolved_input, &stripped_path) {
-                Ok(result) => {
-                    stripped_header = Some(result.header_bytes);
-                    stripped_header_match = result.matched_header;
-                    temp_paths.push(stripped_path.clone());
-                    stripped_path
-                }
-                Err(error) => return Err(error),
-            }
+            let result = Self::strip_header_to_temp(resolved_input, &stripped_path)?;
+            stripped_header = Some(result.header_bytes);
+            stripped_header_match = result.matched_header;
+            temp_paths.push(stripped_path.clone());
+            stripped_path
         } else {
             resolved_input.to_path_buf()
         };

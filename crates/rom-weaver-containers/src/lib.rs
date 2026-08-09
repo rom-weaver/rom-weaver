@@ -98,10 +98,10 @@ use libarchive_support::{
 pub use z3ds::{Z3dsSubtypeMetadata, z3ds_subtype_metadata};
 
 const GZIP_SIGNATURE: [u8; 2] = [0x1F, 0x8B];
-const BZIP2_SIGNATURE: [u8; 3] = [b'B', b'Z', b'h'];
+const BZIP2_SIGNATURE: [u8; 3] = *b"BZh";
 const XZ_SIGNATURE: [u8; 6] = [0xFD, b'7', b'z', b'X', b'Z', 0x00];
 const ZSTD_SIGNATURE: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
-const CSO_SIGNATURE: [u8; 4] = [b'C', b'I', b'S', b'O'];
+const CSO_SIGNATURE: [u8; 4] = *b"CISO";
 const PBP_SIGNATURE: [u8; 4] = [0x00, b'P', b'B', b'P'];
 
 fn supported_codec_clause(supported_codecs: &[&str]) -> String {

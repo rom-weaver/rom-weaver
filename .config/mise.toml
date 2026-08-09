@@ -27,7 +27,7 @@ node = "24.18.0"
 # `mise install` alone. Masked on a workstation that already has a rustup
 # `default` profile toolchain, and in CI, which adds them explicitly (see
 # .github/actions/setup-build-env/action.yml).
-rust = { version = "1.95.0", components = "rustfmt,clippy" }
+rust = { version = "1.97.1", components = "rustfmt,clippy" }
 # provides wasm-opt. ubi rather than aqua because aqua's registry entry covers
 # only darwin and linux/amd64, so `mise install` hard-fails on linux/arm64 with
 # `unsupported env: linux/arm64` - and mise retries that install on every later
