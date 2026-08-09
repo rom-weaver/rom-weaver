@@ -29,6 +29,9 @@ const SMC_GAME_DOCTOR_2_MAGIC: [u8; 16] = *b"GAME DOCTOR SF 3";
 /// Super Wild Card copier ID bytes at header offset 8 (the check NSRT/uCON64 use).
 const SWC_ID_OFFSET: usize = 8;
 const SWC_ID_MAGIC: [u8; 3] = [0xAA, 0xBB, 0x04];
+/// Super Magic Drive ID bytes: the same copier ID pair at the same offset, with
+/// the Genesis file type in place of the Super Wild Card's SNES `0x04`.
+const SMD_ID_MAGIC: [u8; 3] = [0xAA, 0xBB, 0x06];
 pub const GAME_BOY_NINTENDO_LOGO: [u8; 48] = [
     0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
     0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
@@ -273,6 +276,24 @@ pub fn header_has_nsrt_metadata(header: &[u8]) -> bool {
         == Some(NSRT_METADATA_MAGIC.as_slice())
 }
 
+/// Whether a header prefix declares itself a Super Magic Drive (`.smd`) header.
+///
+/// This matters because an `.smd` file is *not* a copier-headered ROM whose
+/// header can simply be removed: behind the header the ROM is stored in 16 KiB
+/// blocks with each block's odd bytes first and its even bytes second. Dropping
+/// the header leaves interleaved blocks, not ROM data. The RUP handler's
+/// `deinterleave_smd_block` (`rom-weaver-patches/src/rup.rs`) is the code that
+/// actually undoes that layout; it recognises the pair alone because SNES is
+/// not a possibility on the path it guards, while this check must keep telling
+/// the two apart.
+///
+/// Every `.smd` file is also `512 % 1024` bytes long, exactly the shape the
+/// size-based SNES copier-header test looks for, so without this check a
+/// misnamed Genesis dump reads as a headered SNES ROM.
+pub fn header_declares_smd_interleave(prefix: &[u8]) -> bool {
+    prefix.get(SWC_ID_OFFSET..SWC_ID_OFFSET + SMD_ID_MAGIC.len()) == Some(SMD_ID_MAGIC.as_slice())
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct KnownRomHeaderMatch {
     pub header: KnownRomHeader,
@@ -317,5 +338,20 @@ mod tests {
         // A 16-byte iNES header can never cover the NSRT offset; the check must
         // not read past the header slice into ROM payload bytes.
         assert!(!header_has_nsrt_metadata(&[0_u8; 16]));
+    }
+
+    #[test]
+    fn a_super_magic_drive_header_is_recognised() {
+        let mut header = vec![0_u8; ROM_HEADER_BYTES];
+        header[SWC_ID_OFFSET..SWC_ID_OFFSET + SMD_ID_MAGIC.len()].copy_from_slice(&SMD_ID_MAGIC);
+        assert!(header_declares_smd_interleave(&header));
+    }
+
+    #[test]
+    fn a_super_wild_card_header_is_not_a_super_magic_drive_header() {
+        // The two differ only in the type byte: SNES 0x04 against Genesis 0x06.
+        let mut header = vec![0_u8; ROM_HEADER_BYTES];
+        header[SWC_ID_OFFSET..SWC_ID_OFFSET + SWC_ID_MAGIC.len()].copy_from_slice(&SWC_ID_MAGIC);
+        assert!(!header_declares_smd_interleave(&header));
     }
 }
