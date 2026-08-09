@@ -536,7 +536,11 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   });
   // "Don't show this again" on the New here? beacon persists through the
   // settings so the Settings panel checkbox can bring it back.
-  window.addEventListener(ONBOARDING_DISMISS_EVENT, () => webappController.setOnboardingEnabled(false));
+  // Per-guide dismissal is persisted by the beacon itself. The shell only logs
+  // it - flipping onboardingEnabled here would hide every other guide too.
+  window.addEventListener(ONBOARDING_DISMISS_EVENT, (event) => {
+    logger.debug("onboarding guide dismissed", { guide: (event as CustomEvent<string>).detail });
+  });
   if (!isNotFoundPage) {
     // A real page unload - reload, address bar, closing the tab - is the one
     // exit the app cannot soft-navigate. Everything else that could lose staged

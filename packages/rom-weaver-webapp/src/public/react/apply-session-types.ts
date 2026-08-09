@@ -102,6 +102,8 @@ type LocalPatcherSessionState = {
   completedApplyTimeMs: number | null;
   completedCompressionTimeMs: number | null;
   completedSizeSummary: ReturnType<typeof createOutputSizeSummary>;
+  /** Machine code behind {@link failureMessage}, shown as the notice's copyable tag. */
+  failureCode: string;
   failureMessage: string;
   inputStaging: boolean;
   outputErrorMessage: string;

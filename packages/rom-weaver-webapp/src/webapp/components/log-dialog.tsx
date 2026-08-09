@@ -359,6 +359,10 @@ const useSettingsFieldFocus = (active: boolean, focusHint: SettingsFocusHint | n
         return;
       }
       logger.trace("settings focus hint resolved", { fieldId: focusHint.fieldId });
+      // Advanced settings live in a collapsed <details>; a deep link into one
+      // must open it, or the field is focused inside hidden content.
+      const group = field.closest("details");
+      if (group instanceof HTMLDetailsElement) group.open = true;
       field.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
       field.focus({ preventScroll: true });
       if (reduced) return;

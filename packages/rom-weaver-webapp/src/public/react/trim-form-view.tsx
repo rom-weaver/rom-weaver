@@ -21,6 +21,8 @@ type TrimPatchFormViewModel = {
   dialog?: ReactNode;
   /** Unified ROM/archive drop zone (step 0x01). */
   dropZone: ComponentProps<typeof UnifiedDropZone>;
+  /** Notice about files the drop discarded (e.g. patches on this ROM-only tab). */
+  dropNotice?: ReactNode;
   /** Output step (0x03): filename, output format, compression, run action. */
   output: ComponentProps<typeof WorkflowOutputStep>;
   /** No source staged yet - show only the hero. */
@@ -29,11 +31,20 @@ type TrimPatchFormViewModel = {
   sourceStep: ComponentProps<typeof WorkflowRomInputStep>;
 };
 
-const TrimPatchFormView = ({ confirm, dialog, dropZone, output, sourceEmpty, sourceStep }: TrimPatchFormViewModel) => {
+const TrimPatchFormView = ({
+  confirm,
+  dialog,
+  dropNotice,
+  dropZone,
+  output,
+  sourceEmpty,
+  sourceStep,
+}: TrimPatchFormViewModel) => {
   const localizer = useUiLocalizer();
   return (
     <section className="panel" id="trim-builder-container">
       <UnifiedDropZone {...dropZone} lead={{ line1: "ui.hero.trimThesis", line2: "ui.hero.trimThesis2" }} />
+      {dropNotice}
       {sourceEmpty ? (
         <GhostSteps
           steps={[

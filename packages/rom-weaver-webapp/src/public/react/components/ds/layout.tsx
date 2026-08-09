@@ -1,6 +1,6 @@
 import { Upload } from "lucide-react";
 import { type ReactNode, type Ref, useId, useLayoutEffect, useRef, useState } from "react";
-import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
+import { readDataTransfer } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { join } from "./cx.ts";
@@ -137,6 +137,9 @@ const DropZone = ({
   const resolvedInputId = inputId || generatedInputId;
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState(false);
+  // Entries a dropped folder refused to hand over. Reporting nothing left the
+  // user counting cards to work out what went missing.
+  const [skippedCount, setSkippedCount] = useState(0);
   const formatsRef = useRef<HTMLSpanElement>(null);
   const showFormats = Boolean(big && formats?.length);
   // Phase-lock the extension ticker (`formats-ticker`) to wall-clock time via a
@@ -223,7 +226,14 @@ const DropZone = ({
       className={join("drop", big && "hero", big && bare && "bare", dragging && "dragging", reading && "staging")}
       htmlFor={resolvedInputId}
       id={id}
-      onDragLeave={() => setDragging(false)}
+      onDragLeave={(event) => {
+        // dragleave also fires every time the pointer crosses from the zone into
+        // one of its own children, which flickered the highlight. Only a leave
+        // whose destination is outside this zone ends the drag.
+        const next = event.relatedTarget;
+        if (next instanceof Node && event.currentTarget.contains(next)) return;
+        setDragging(false);
+      }}
       onDragOver={(event) => {
         if (disabled) return;
         event.preventDefault();
@@ -242,9 +252,11 @@ const DropZone = ({
         // Surface a "reading" hint only if the traversal runs long enough to
         // matter, so plain file drops don't flicker it.
         const readingTimer = setTimeout(() => setReading(true), 120);
-        void readDataTransferFiles(event.dataTransfer).then((files) => {
+        setSkippedCount(0);
+        void readDataTransfer(event.dataTransfer).then(({ files, skippedCount: skipped }) => {
           clearTimeout(readingTimer);
           setReading(false);
+          setSkippedCount(skipped);
           if (files.length) {
             stampDroppedFiles(files, droppedAtMs);
             onFiles(files);
@@ -275,6 +287,13 @@ const DropZone = ({
           {hintCoarse ? <span className="hint coarse">{hintCoarse}</span> : null}
         </>
       )}
+      {skippedCount ? (
+        <span className="drop-skipped" role="status">
+          {skippedCount === 1
+            ? "1 file in that folder couldn't be read"
+            : `${skippedCount} files in that folder couldn't be read`}
+        </span>
+      ) : null}
       <input
         accept={accept}
         aria-label={typeof label === "string" ? label : "Add files"}

@@ -14,12 +14,17 @@ type OutputController = {
   runPrimaryAction: () => void;
 };
 
+const BLOCKED_REASON_ID = "rom-weaver-apply-blocked-reason";
+
 /** The apply form's primary action: download button when an output is ready, run/progress otherwise. */
 function PatcherPrimaryAction({
+  blockedReason,
   controller,
   disableRun,
   totalTime,
 }: {
+  /** Plain-language reason the run cannot start, shown under a disabled button. */
+  blockedReason?: string;
   controller: OutputController;
   /** Extra gate (e.g. every staged patch toggled off). */
   disableRun?: boolean;
@@ -62,19 +67,33 @@ function PatcherPrimaryAction({
     );
   }
 
+  const disabled = state.applyButton.disabled || !!disableRun;
+  // The hint stays mounted while the button is disabled rather than appearing on
+  // hover: a disabled control never fires hover on touch, and a title alone is
+  // invisible to a keyboard user.
+  const reason = disabled ? blockedReason || "" : "";
   return (
-    <ProgressActionButton
-      cancelLabel="Cancel applying"
-      disabled={state.applyButton.disabled || !!disableRun}
-      icon={<ApplyBandaidIcon className="apply-button-icon" />}
-      id="rom-weaver-button-apply"
-      label={state.applyButton.label}
-      loading={state.applyButton.loading}
-      onCancel={controller.cancelPrimaryAction}
-      onClick={() => controller.runPrimaryAction()}
-      progress={state.applyButton.progress}
-      progressId="rom-weaver-progress-apply"
-    />
+    <>
+      <ProgressActionButton
+        ariaDescribedBy={reason ? BLOCKED_REASON_ID : undefined}
+        cancelLabel="Cancel applying"
+        disabled={disabled}
+        icon={<ApplyBandaidIcon className="apply-button-icon" />}
+        id="rom-weaver-button-apply"
+        label={state.applyButton.label}
+        loading={state.applyButton.loading}
+        onCancel={controller.cancelPrimaryAction}
+        onClick={() => controller.runPrimaryAction()}
+        progress={state.applyButton.progress}
+        progressId="rom-weaver-progress-apply"
+        title={reason || undefined}
+      />
+      {reason ? (
+        <p className="run-blocked-reason" id={BLOCKED_REASON_ID} role="status">
+          {reason}
+        </p>
+      ) : null}
+    </>
   );
 }
 

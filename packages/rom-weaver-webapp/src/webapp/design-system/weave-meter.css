@@ -112,9 +112,13 @@
 .rw-app .cancel {
   display: grid;
   flex: none;
+  grid-auto-flow: column;
+  gap: var(--sp-xs);
   place-items: center;
-  width: 34px;
+  width: auto;
+  min-width: 34px;
   height: 34px;
+  padding-inline: 8px;
   color: var(--ink-3);
   appearance: none;
   cursor: pointer;
@@ -143,8 +147,17 @@
   width: 14px;
   height: 14px;
 }
+/* The word makes the icon unambiguous; --cancel-w is what the label row
+   reserves for it, so the two can never overlap. */
+.rw-app .cancel-text {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .rw-app .prog-panel {
   --lab-lh: 1.2rem;
+  /* Width the label row leaves clear for the absolutely placed cancel button. */
+  --cancel-w: 5.6rem;
   position: relative;
   display: flex;
   align-items: stretch;
@@ -175,12 +188,22 @@
 }
 /* Derive label space from action size to prevent overlap. */
 .rw-app .prog-panel .lab {
-  padding-inline-end: calc(var(--ctrl-h) + 16px);
+  padding-inline-end: calc(var(--cancel-w) + 16px);
 }
 .rw-app .prog-panel .cancel {
-  width: var(--ctrl-h);
+  width: auto;
+  min-width: var(--ctrl-h);
   height: var(--ctrl-h);
   background: var(--well);
+}
+/* Narrow columns cannot spare the word - the icon and the accessible label carry it. */
+@media (width <= 480px) {
+  .rw-app .cancel-text {
+    display: none;
+  }
+  .rw-app .prog-panel {
+    --cancel-w: var(--ctrl-h);
+  }
 }
 .rw-app .runprog .prog {
   flex: 1 1 auto;

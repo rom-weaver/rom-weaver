@@ -314,7 +314,9 @@ test("create queued output cancel button clears the queued run", async () => {
 
   const cancelButton = document.querySelector("button[aria-label='Cancel queued create']");
   expect(cancelButton).toBeInstanceOf(HTMLButtonElement);
-  expect(cancelButton.textContent).toBe("");
+  // The button now carries a visible "Cancel" word beside the icon (an icon-only
+  // X was unreadable); the operation it cancels stays on the accessible label.
+  expect(cancelButton.textContent).toBe("Cancel");
   cancelButton.click();
   await expect.poll(getOutputWaitingText).toBe("");
 

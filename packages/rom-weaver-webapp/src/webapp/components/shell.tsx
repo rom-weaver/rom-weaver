@@ -54,7 +54,11 @@ const readPwaState = () => {
 };
 
 type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
-const isBetaWorkflowTab = (tab: WorkflowTab) => tab.id === "trim" || tab.id === "tools";
+const isBetaWorkflowId = (id: string) => id === "trim" || id === "tools";
+const isBetaWorkflowTab = (tab: WorkflowTab) => isBetaWorkflowId(tab.id);
+/* Hiding beta tabs outright made the app look like it had fewer features than
+   its own docs describe. Shown-but-locked says what exists and where to unlock it. */
+const BETA_LOCKED_TITLE = "Beta - enable in Settings";
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
 
@@ -75,13 +79,25 @@ const scrollTabIntoView = (tab: HTMLElement | null | undefined) => {
  * Enter, so only Space needs intercepting.
  */
 const createTabListKeyDown =
-  (order: string[], current: string, onSelect: (id: string) => void, focusTab: (id: string) => void) =>
+  (
+    order: string[],
+    current: string,
+    onSelect: (id: string) => void,
+    focusTab: (id: string) => void,
+    // Locked beta tabs stay in the roving order (arrows land on them, Space
+    // opens Settings via activate) but arrowing across one must not select it.
+    activate: (id: string) => void = onSelect,
+    roveOnly: (id: string) => boolean = () => false,
+  ) =>
   (event: React.KeyboardEvent) => {
     if (order.length === 0) return;
     const index = Math.max(0, order.indexOf(current));
     if (event.key === " " || event.key === "Spacebar") {
       event.preventDefault();
-      onSelect(order[index] as string);
+      // Prefer the tab that actually holds focus: roved-to locked tabs are
+      // focused without being selected, so `current` may lag behind.
+      const focusedTab = (event.target as HTMLElement | null)?.closest?.("[data-mode]");
+      activate(focusedTab?.getAttribute("data-mode") ?? (order[index] as string));
       return;
     }
     let next = -1;
@@ -92,7 +108,7 @@ const createTabListKeyDown =
     const nextId = next >= 0 ? order[next] : undefined;
     if (nextId === undefined) return;
     event.preventDefault();
-    onSelect(nextId);
+    if (!roveOnly(nextId)) onSelect(nextId);
     focusTab(nextId);
   };
 
@@ -100,6 +116,25 @@ const activateTabOnClick = (event: React.MouseEvent, id: string, onSelect: (id: 
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   onSelect(id);
+};
+/**
+ * Whether beta tabs are still locked, read from the root attribute rather than
+ * from React state. The prerendered shell is hydrated against markup that knows
+ * nothing about the visitor's settings, so the tab's MARKUP must be identical in
+ * both states - only the click behaviour and the CSS may differ.
+ */
+const betaToolsLocked = (): boolean =>
+  typeof document !== "undefined" && document.documentElement.dataset.betaToolsEnabled !== "true";
+
+const handleBetaTabClick = (
+  event: React.MouseEvent,
+  tabId: string,
+  onSelect: (id: string) => void,
+  onEnableBeta?: () => void,
+) => {
+  if (!betaToolsLocked()) return activateTabOnClick(event, tabId, onSelect);
+  event.preventDefault();
+  onEnableBeta?.();
 };
 
 /** Reveal light/dark changes from the theme control that caused them. */
@@ -129,6 +164,7 @@ const runThemeWipe = (update: () => void, source: HTMLElement | null) => {
  */
 const ModeRail = ({
   betaToolsEnabled = true,
+  onEnableBeta,
   tabs,
   current,
   navLabel,
@@ -137,6 +173,8 @@ const ModeRail = ({
   trailing,
 }: {
   betaToolsEnabled?: boolean;
+  /** Open Settings at the beta-tools toggle; offered by every locked beta tab. */
+  onEnableBeta?: () => void;
   tabs: WorkflowTab[];
   current: string;
   navLabel: string;
@@ -174,10 +212,19 @@ const ModeRail = ({
   // current view is not always one of these tabs - the 404 shell renders the
   // rail with nothing selected. Roving focus falls back to the first tab.
   const railTabs = tabs.filter((tab) => tab.id !== "tools");
-  const interactiveTabs = betaToolsEnabled ? railTabs : railTabs.filter((tab) => !isBetaWorkflowTab(tab));
-  const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
+  // Locked beta tabs stay in the roving order so keyboard users can reach
+  // them; arrowing across one focuses without selecting (see roveOnly).
+  const selectedIndex = railTabs.findIndex((tab) => tab.id === current);
   const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
-  const focusedId = interactiveTabs[focusIndex]?.id ?? "";
+  const focusedId = railTabs[focusIndex]?.id ?? "";
+  const lockedBeta = (id: string) => !betaToolsEnabled && isBetaWorkflowId(id);
+  const activateTab = (id: string) => {
+    if (lockedBeta(id)) {
+      onEnableBeta?.();
+      return;
+    }
+    onSelect(id);
+  };
 
   // The rail can be scrolled past its column in the snug 1000-1159px band, so
   // the tab that just became current must never be left off-screen.
@@ -186,10 +233,12 @@ const ModeRail = ({
   }, [current]);
 
   const handleKeyDown = createTabListKeyDown(
-    interactiveTabs.map((tab) => tab.id),
+    railTabs.map((tab) => tab.id),
     focusedId,
     onSelect,
     (id) => railRef.current?.querySelector<HTMLAnchorElement>(`.mode[data-mode="${id}"]`)?.focus(),
+    activateTab,
+    lockedBeta,
   );
 
   return (
@@ -204,24 +253,33 @@ const ModeRail = ({
           role="tablist"
         >
           <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
-          {railTabs.map((tab) => (
-            <a
-              aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
-              aria-selected={tab.id === current}
-              className="mode"
-              data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
-              data-mode={tab.id}
-              href={tab.href}
-              id={`tab-${tab.id}`}
-              key={tab.id}
-              onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
-              role="tab"
-              tabIndex={tab.id === focusedId ? 0 : -1}
-            >
-              {tab.icon}
-              <span className="mode-label">{tab.label}</span>
-            </a>
-          ))}
+          {railTabs.map((tab) => {
+            const beta = isBetaWorkflowTab(tab);
+            return (
+              <a
+                aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
+                aria-selected={tab.id === current}
+                className="mode"
+                data-beta-tool={beta ? "" : undefined}
+                data-mode={tab.id}
+                href={tab.href}
+                id={`tab-${tab.id}`}
+                key={tab.id}
+                onClick={(event) =>
+                  beta
+                    ? handleBetaTabClick(event, tab.id, onSelect, onEnableBeta)
+                    : activateTabOnClick(event, tab.id, onSelect)
+                }
+                role="tab"
+                tabIndex={tab.id === focusedId ? 0 : -1}
+                title={beta ? BETA_LOCKED_TITLE : undefined}
+              >
+                {tab.icon}
+                <span className="mode-label">{tab.label}</span>
+                {beta ? <span className="mode-beta-tag">Beta</span> : null}
+              </a>
+            );
+          })}
         </div>
       </div>
       {trailing}
@@ -238,6 +296,7 @@ const ModeRail = ({
  */
 const PhoneDock = ({
   betaToolsEnabled = true,
+  onEnableBeta,
   controlsPanels = true,
   current,
   mobileActions,
@@ -246,6 +305,8 @@ const PhoneDock = ({
   tabs,
 }: {
   betaToolsEnabled?: boolean;
+  /** Open Settings at the beta-tools toggle; offered by every locked beta tab. */
+  onEnableBeta?: () => void;
   controlsPanels?: boolean;
   current: string;
   mobileActions?: ReactNode;
@@ -255,14 +316,25 @@ const PhoneDock = ({
 }) => {
   const dockRef = useRef<HTMLDivElement | null>(null);
   const dockTabs = tabs.filter((tab) => tab.id !== "tools");
-  const interactiveTabs = betaToolsEnabled ? dockTabs : dockTabs.filter((tab) => !isBetaWorkflowTab(tab));
-  const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
-  const focusedId = interactiveTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
+  // Locked beta tabs stay in the roving order so keyboard users can reach
+  // them; arrowing across one focuses without selecting (see roveOnly).
+  const selectedIndex = dockTabs.findIndex((tab) => tab.id === current);
+  const focusedId = dockTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
+  const lockedBeta = (id: string) => !betaToolsEnabled && isBetaWorkflowId(id);
+  const activateTab = (id: string) => {
+    if (lockedBeta(id)) {
+      onEnableBeta?.();
+      return;
+    }
+    onSelect(id);
+  };
   const handleKeyDown = createTabListKeyDown(
-    interactiveTabs.map((tab) => tab.id),
+    dockTabs.map((tab) => tab.id),
     focusedId,
     onSelect,
     (id) => dockRef.current?.querySelector<HTMLAnchorElement>(`.dock-tab[data-mode="${id}"]`)?.focus(),
+    activateTab,
+    lockedBeta,
   );
   return (
     <nav aria-label={navLabel} className="dock-nav">
@@ -276,24 +348,32 @@ const PhoneDock = ({
           role="tablist"
         >
           <span aria-hidden="true" className="dock-thumb" />
-          {dockTabs.map((tab) => (
-            <a
-              aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
-              aria-selected={tab.id === current}
-              className="dock-tab"
-              data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
-              data-mode={tab.id}
-              href={tab.href}
-              id={`docktab-${tab.id}`}
-              key={tab.id}
-              onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
-              role="tab"
-              tabIndex={tab.id === focusedId ? 0 : -1}
-            >
-              {tab.icon}
-              <span>{tab.label}</span>
-            </a>
-          ))}
+          {dockTabs.map((tab) => {
+            const beta = isBetaWorkflowTab(tab);
+            return (
+              <a
+                aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
+                aria-selected={tab.id === current}
+                className="dock-tab"
+                data-beta-tool={beta ? "" : undefined}
+                data-mode={tab.id}
+                href={tab.href}
+                id={`docktab-${tab.id}`}
+                key={tab.id}
+                onClick={(event) =>
+                  beta
+                    ? handleBetaTabClick(event, tab.id, onSelect, onEnableBeta)
+                    : activateTabOnClick(event, tab.id, onSelect)
+                }
+                role="tab"
+                tabIndex={tab.id === focusedId ? 0 : -1}
+                title={beta ? BETA_LOCKED_TITLE : undefined}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </a>
+            );
+          })}
         </div>
         {mobileActions}
       </div>
@@ -869,6 +949,7 @@ const Masthead = ({
   onPreloadLog,
   onOpenSettings,
   onOpenThreads,
+  onEnableBetaTools,
   onPreloadSettings,
   tabsControlPanels = true,
   serviceWorkerStatus,
@@ -898,6 +979,8 @@ const Masthead = ({
   onOpenSettings: () => void;
   /** Deep link from the thread count into the Threads setting; falls back to plain Settings. */
   onOpenThreads?: () => void;
+  /** Deep link from a locked beta tab into the beta-tools setting. */
+  onEnableBetaTools?: () => void;
   onPreloadSettings?: () => void;
   tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
@@ -1041,6 +1124,7 @@ const Masthead = ({
         </span>
         <ModeRail
           betaToolsEnabled={betaToolsEnabled}
+          onEnableBeta={onEnableBetaTools}
           controlsPanels={tabsControlPanels}
           current={currentTab}
           navLabel={navLabel}
@@ -1143,6 +1227,7 @@ const Masthead = ({
       </header>
       <PhoneDock
         betaToolsEnabled={betaToolsEnabled}
+        onEnableBeta={onEnableBetaTools}
         controlsPanels={tabsControlPanels}
         current={currentTab}
         mobileActions={

@@ -35,6 +35,11 @@ msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.ignoredPatches"
+msgstr "{count, plural, one {# archivo de parche se ignoró aquí ({names})} other {# archivos de parche se ignoraron aquí ({names})}} - los parches se aplican en la pestaña «Apply»."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
 msgstr "{count, plural, one {# parche está desactivado - márcalo para incluirlo} other {# parches están desactivados - márcalos para incluirlos}}"
 
@@ -207,6 +212,11 @@ msgstr "Commit"
 #: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "La compresión falló."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.UNSUPPORTED_FORMAT"
+msgstr "Convierte el archivo a un formato compatible o suelta el archivo comprimido del que procede."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -455,6 +465,16 @@ msgstr "Soporte sin conexión desactivado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.hint.UNKNOWN"
+msgstr "Abre los registros para ver la traza completa y vuelve a ejecutarlo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.openApply"
+msgstr "Abrir la pestaña «Apply»"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
 
@@ -492,6 +512,11 @@ msgstr "La salida no se verificará: los parches están desordenados."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewLabel"
 msgstr "Registro mostrado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.movedTo"
+msgstr "Parche {from} movido a la posición {to}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -552,6 +577,11 @@ msgstr "Recargar"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.reloadNow"
 msgstr "Recargar ahora"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.WORKER_FAILED"
+msgstr "Recarga la página y vuelve a ejecutarlo. Si sigue fallando, abre los registros para ver la traza completa."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -655,6 +685,11 @@ msgstr "Mostrar el botón Probar después de aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.hint.STORAGE_UNAVAILABLE"
+msgstr "El almacenamiento del sitio está bloqueado. Las ventanas privadas y los datos de sitio bloqueados impiden que rom-weaver funcione."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Saltar al contenido principal"
 
@@ -705,6 +740,11 @@ msgstr "Prueba"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.hint.OUTPUT_WRITE_FAILED"
+msgstr "El navegador no pudo escribir la salida. Libera espacio en disco y vuelve a ejecutarlo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.corsHint"
 msgstr "El servidor de archivos debe permitir descargas de origen cruzado (CORS)."
 
@@ -712,6 +752,16 @@ msgstr "El servidor de archivos debe permitir descargas de origen cruzado (CORS)
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "El destino del parche no coincide con la entrada seleccionada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.PATCH_TARGET_MISMATCH"
+msgstr "El parche apunta a otra ROM. Consulta las notas del parche para saber qué volcado espera."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.UNKNOWN"
+msgstr "La ejecución falló de forma inesperada."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -772,6 +822,11 @@ msgstr "Estos parches esperan ROMs distintas: cada tarjeta de parche muestra la 
 #: src/presentation/localization/messages.ts
 msgid "ui.status.build"
 msgstr "Esta compilación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.CHECKSUM_MISMATCH"
+msgstr "Esta ROM no es el volcado para el que se creó el parche. Prueba otra región o revisión, o el mismo volcado con o sin cabecera de copiadora."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

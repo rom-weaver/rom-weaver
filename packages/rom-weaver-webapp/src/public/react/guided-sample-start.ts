@@ -9,6 +9,7 @@ const GUIDED_SAMPLE_HREFS = {
 const GUIDED_SAMPLE_START_EVENT = "rom-weaver:guided-sample-start";
 const GUIDED_SAMPLE_VIEW_EVENT = "rom-weaver:guided-sample-view";
 const ONBOARDING_DISMISS_EVENT = "rom-weaver:onboarding-dismiss";
+const STATUS_VIEW_EVENT = "rom-weaver:open-status";
 
 const requestGuidedSampleStart = (guide: GuidedSample) => {
   window.dispatchEvent(new CustomEvent<GuidedSample>(GUIDED_SAMPLE_START_EVENT, { detail: guide }));
@@ -26,11 +27,18 @@ const clearGuidedSampleQuery = () => {
   window.history.replaceState(window.history.state, "", url);
 };
 
-/** "Don't show this again" on the New here? beacon. The webapp shell persists it
-    into the onboardingEnabled setting; embeds without a listener lose nothing -
-    the beacon still hides itself for the session. */
-const requestOnboardingDismiss = () => {
-  window.dispatchEvent(new CustomEvent(ONBOARDING_DISMISS_EVENT));
+/** "Don't show this guide again" on the New here? beacon. The beacon persists
+    its own per-guide flag; the event only tells a host which guide it was, so a
+    host can mirror the choice. It must NOT turn onboarding off globally - that
+    hid guides the user had never seen. */
+const requestOnboardingDismiss = (guide: string) => {
+  window.dispatchEvent(new CustomEvent<string>(ONBOARDING_DISMISS_EVENT, { detail: guide }));
+};
+
+/** Ask the host shell to open its Status panel - the one place a failed startup
+    can be diagnosed. Embeds without a listener simply do nothing. */
+const requestStatusView = () => {
+  window.dispatchEvent(new CustomEvent(STATUS_VIEW_EVENT));
 };
 
 export {
@@ -43,4 +51,6 @@ export {
   ONBOARDING_DISMISS_EVENT,
   requestGuidedSampleStart,
   requestOnboardingDismiss,
+  requestStatusView,
+  STATUS_VIEW_EVENT,
 };

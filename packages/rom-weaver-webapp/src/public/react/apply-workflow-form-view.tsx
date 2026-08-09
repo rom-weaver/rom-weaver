@@ -29,12 +29,13 @@ import {
   type SampleTutorialStep,
   useGuidedSampleStart,
 } from "./components/ds/sample-tutorial.tsx";
-import { GUIDED_SAMPLE_HREFS } from "./guided-sample-start.ts";
+import { GUIDED_SAMPLE_HREFS, requestStatusView } from "./guided-sample-start.ts";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
+import { getApplyBlockedReason } from "./patcher-view-models.ts";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
@@ -493,6 +494,7 @@ const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () =
   if (!state.visible) return null;
   return (
     <Notice
+      code={state.code}
       id={id}
       level={state.level === "warning" ? "warn" : "error"}
       onDismiss={state.dismissible ? onDismiss : undefined}
@@ -1303,6 +1305,7 @@ const ApplyErrorNotice = ({
   if (!notice?.visible) return null;
   return (
     <Notice
+      code={notice.code}
       id="rom-weaver-row-error-message"
       level={notice.level === "warning" ? "warn" : "error"}
       onDismiss={notice.dismissible ? () => noticeController?.dismiss?.() : undefined}
@@ -1383,6 +1386,15 @@ const ApplyOutputAction = ({
       </p>
     </div>
     <PatcherPrimaryAction
+      blockedReason={getApplyBlockedReason({
+        bundleVerificationError: bundleVerificationError || "",
+        busy: outputState.applyButton.loading,
+        checksumPreflightBlocked: uiState.checksumOverride.visible && !uiState.checksumOverride.checked,
+        enabledPatchCount,
+        hasPendingDownload: !!outputState.pendingDownloadFileName,
+        patchCount: patches.length,
+        romCount: romInputs.length,
+      })}
       controller={controllers.output}
       disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
       totalTime={applyTotalTime || undefined}
@@ -1898,7 +1910,21 @@ function ApplyWorkflowFormView({
     return (
       <section className="panel" id="rom-weaver-container">
         <div className="step-body">
-          <Notice level="error">{startup.message || "rom-weaver failed to load."}</Notice>
+          <Notice
+            actions={
+              <>
+                <button className="btn ghost slim" onClick={() => window.location.reload()} type="button">
+                  {localizer.message("ui.common.retry")}
+                </button>
+                <button className="btn ghost slim" onClick={requestStatusView} type="button">
+                  {localizer.message("ui.log.tabStatus")}
+                </button>
+              </>
+            }
+            level="error"
+          >
+            {startup.message || "rom-weaver failed to load."}
+          </Notice>
         </div>
       </section>
     );

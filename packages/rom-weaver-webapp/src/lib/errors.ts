@@ -55,6 +55,7 @@ const WORKFLOW_ERROR_CODES = new Set<RomWeaverErrorCode>([
   "SOURCE_NOT_FOUND",
   "SOURCE_UNSUPPORTED",
   "STORAGE_UNAVAILABLE",
+  "UNKNOWN",
   "UNSUPPORTED_FORMAT",
   "WORKFLOW_BUSY",
   "WORKFLOW_DISPOSED",
@@ -82,7 +83,9 @@ const getPatternErrorCode = (lower: string, message: string): RomWeaverErrorCode
   if (OUTPUT_WRITE_FAILURE_MESSAGE_REGEX.test(message)) return "OUTPUT_WRITE_FAILED";
   if (COMPRESSION_FAILURE_MESSAGE_REGEX.test(message)) return "COMPRESSION_FAILED";
   if (lower.includes("no input") || lower.includes("no patch")) return "INVALID_INPUT";
-  return "INVALID_INPUT";
+  // Nothing matched. Blaming the user's file for a failure we cannot explain
+  // sends them re-dumping a ROM that was fine; UNKNOWN points at the log instead.
+  return "UNKNOWN";
 };
 
 const getWorkflowErrorCode = (error: unknown): RomWeaverErrorCode | null => {

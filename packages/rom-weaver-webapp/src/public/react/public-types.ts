@@ -56,6 +56,8 @@ type CreatePatchFormProps = {
   onProgress?: (event: ProgressEvent) => void;
   onCreateComplete?: (result: BrowserCreateResult) => void;
   onError?: (error: Error) => void;
+  /** Hand off to the Apply tab (offered when a drop here contained patch files). */
+  onOpenApplyTab?: () => void;
 };
 
 type TrimPatchFormSettings = CreateSettings;
@@ -77,6 +79,8 @@ type TrimPatchFormProps = {
   onProgress?: (event: ProgressEvent) => void;
   onTrimComplete?: (result: BrowserTrimResult) => void;
   onError?: (error: Error) => void;
+  /** Hand off to the Apply tab (offered when a drop here contained patch files). */
+  onOpenApplyTab?: () => void;
 };
 
 export type {

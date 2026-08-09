@@ -15,6 +15,36 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "error.CANCELLED": msg({ id: "error.CANCELLED", message: "Workflow was cancelled." }),
   "error.CHECKSUM_MISMATCH": msg({ id: "error.CHECKSUM_MISMATCH", message: "Checksum validation failed." }),
   "error.COMPRESSION_FAILED": msg({ id: "error.COMPRESSION_FAILED", message: "Compression failed." }),
+  "error.hint.CHECKSUM_MISMATCH": msg({
+    id: "error.hint.CHECKSUM_MISMATCH",
+    message:
+      "This ROM is not the dump the patch was built against. Try another region or revision, or the same dump with the copier header added or removed.",
+  }),
+  "error.hint.OUTPUT_WRITE_FAILED": msg({
+    id: "error.hint.OUTPUT_WRITE_FAILED",
+    message: "The browser could not write the output. Free some disk space, then run it again.",
+  }),
+  "error.hint.PATCH_TARGET_MISMATCH": msg({
+    id: "error.hint.PATCH_TARGET_MISMATCH",
+    message: "The patch targets a different ROM. Check the patch's notes for the exact dump it expects.",
+  }),
+  "error.hint.STORAGE_UNAVAILABLE": msg({
+    id: "error.hint.STORAGE_UNAVAILABLE",
+    message: "Site storage is blocked. Private windows and blocked site data stop rom-weaver from running.",
+  }),
+  "error.hint.UNKNOWN": msg({
+    id: "error.hint.UNKNOWN",
+    message: "Open Logs for the full trace, then run it again.",
+  }),
+  "error.hint.UNSUPPORTED_FORMAT": msg({
+    id: "error.hint.UNSUPPORTED_FORMAT",
+    message: "Convert the file to a supported format, or drop the archive it came in.",
+  }),
+  "error.hint.WORKER_FAILED": msg({
+    id: "error.hint.WORKER_FAILED",
+    message: "Reload the page and run it again. If it keeps failing, open Logs for the full trace.",
+  }),
+  "error.UNKNOWN": msg({ id: "error.UNKNOWN", message: "The run failed unexpectedly." }),
   "error.INVALID_INPUT": msg({ id: "error.INVALID_INPUT", message: "The selected input is not valid." }),
   "error.INVALID_SETTINGS": msg({ id: "error.INVALID_SETTINGS", message: "The selected settings are not valid." }),
   "error.NO_COMPATIBLE_PATCH": msg({ id: "error.NO_COMPATIBLE_PATCH", message: "No compatible patch was found." }),
@@ -99,9 +129,19 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.common.dismiss": msg({ id: "ui.common.dismiss", message: "Dismiss" }),
   "ui.common.retry": msg({ id: "ui.common.retry", message: "Retry" }),
   "ui.common.skipToMain": msg({ id: "ui.common.skipToMain", message: "Skip to main content" }),
+  "ui.drop.ignoredPatches": msg({
+    id: "ui.drop.ignoredPatches",
+    message:
+      "{count, plural, one {# patch file was ignored here ({names})} other {# patch files were ignored here ({names})}} - patches are applied on the Apply tab.",
+  }),
+  "ui.drop.openApply": msg({ id: "ui.drop.openApply", message: "Open the Apply tab" }),
   "ui.drop.release": msg({ id: "ui.drop.release", message: "Release to add files" }),
   "ui.drop.staging": msg({ id: "ui.drop.staging", message: "Reading dropped files…" }),
   "ui.drop.tap": msg({ id: "ui.drop.tap", message: "Tap to choose files" }),
+  "ui.env.singleThreaded": msg({
+    id: "ui.env.singleThreaded",
+    message: "Running single-threaded - this browser or host didn't enable cross-origin isolation.",
+  }),
   "ui.env.threads": msg({ id: "ui.env.threads", message: "threads" }),
   "ui.footer.donate": msg({ id: "ui.footer.donate", message: "Support" }),
   "ui.nav.docs": msg({ id: "ui.nav.docs", message: "Docs" }),
@@ -170,6 +210,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.output.outOfOrder",
     message: "Output won't be verified - the patches are out of order.",
   }),
+  "ui.patch.movedTo": msg({ id: "ui.patch.movedTo", message: "Patch {from} moved to position {to}" }),
   "ui.patch.offCount": msg({
     id: "ui.patch.offCount",
     message:

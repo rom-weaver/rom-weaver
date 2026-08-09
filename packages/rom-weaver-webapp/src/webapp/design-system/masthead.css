@@ -503,9 +503,20 @@ html.vt-theme .mode-rail .mode {
 .rw-app .mode[aria-selected="true"] {
   color: var(--thread-ink);
 }
-html:not([data-beta-tools-enabled="true"]) .rw-app .mode[data-beta-tool],
-html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
+/* A locked beta tab stays visible and readable - clicking it opens Settings at
+   the toggle instead of doing nothing. Only the Beta tag marks it: dimming the
+   label failed WCAG contrast. Driven by the root attribute, not React state, so
+   the prerendered shell hydrates without a markup mismatch. */
+html[data-beta-tools-enabled="true"] .rw-app .mode-beta-tag {
   display: none;
+}
+.rw-app .mode-beta-tag {
+  padding-inline: 4px;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid currentColor;
+  border-radius: var(--r-s);
 }
 @media (hover: hover) {
   .rw-app .mode:not([aria-selected="true"]):hover {

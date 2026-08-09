@@ -10,6 +10,8 @@ type NoticeLevel = "error" | "warning";
 
 type NoticeState = {
   message: string;
+  /** Machine error code behind the message, rendered as a small copyable tag. */
+  code?: string;
   level: NoticeLevel;
   visible: boolean;
   dismissible?: boolean;

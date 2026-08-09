@@ -35,6 +35,11 @@ msgstr "“{patch}” expects “{predecessor}” applied first."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.ignoredPatches"
+msgstr "{count, plural, one {# patch file was ignored here ({names})} other {# patch files were ignored here ({names})}} - patches are applied on the Apply tab."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
 msgstr "{count, plural, one {# patch is off - tick it to include it} other {# patches are off - tick them to include them}}"
 
@@ -207,6 +212,11 @@ msgstr "Commit"
 #: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "Compression failed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.UNSUPPORTED_FORMAT"
+msgstr "Convert the file to a supported format, or drop the archive it came in."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -455,6 +465,16 @@ msgstr "Offline support off"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.hint.UNKNOWN"
+msgstr "Open Logs for the full trace, then run it again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.openApply"
+msgstr "Open the Apply tab"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
 
@@ -492,6 +512,11 @@ msgstr "Output won't be verified - the patches are out of order."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewLabel"
 msgstr "Page Logs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.movedTo"
+msgstr "Patch {from} moved to position {to}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -552,6 +577,11 @@ msgstr "Reload"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.reloadNow"
 msgstr "Reload now"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.WORKER_FAILED"
+msgstr "Reload the page and run it again. If it keeps failing, open Logs for the full trace."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -655,6 +685,11 @@ msgstr "Show the test button after applying"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.hint.STORAGE_UNAVAILABLE"
+msgstr "Site storage is blocked. Private windows and blocked site data stop rom-weaver from running."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Skip to main content"
 
@@ -705,6 +740,11 @@ msgstr "Test"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "error.hint.OUTPUT_WRITE_FAILED"
+msgstr "The browser could not write the output. Free some disk space, then run it again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.corsHint"
 msgstr "The file host must allow cross-origin downloads (CORS)."
 
@@ -712,6 +752,16 @@ msgstr "The file host must allow cross-origin downloads (CORS)."
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "The patch target did not match the selected input."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.PATCH_TARGET_MISMATCH"
+msgstr "The patch targets a different ROM. Check the patch's notes for the exact dump it expects."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.UNKNOWN"
+msgstr "The run failed unexpectedly."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -772,6 +822,11 @@ msgstr "These patches expect different ROMs - each patch card shows the one it n
 #: src/presentation/localization/messages.ts
 msgid "ui.status.build"
 msgstr "This build"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.hint.CHECKSUM_MISMATCH"
+msgstr "This ROM is not the dump the patch was built against. Try another region or revision, or the same dump with the copier header added or removed."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

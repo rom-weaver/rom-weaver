@@ -1,5 +1,10 @@
 import { expect, test } from "vitest";
-import { collectRomDropFiles, routeByOrder, routeSingleRom } from "../../src/public/react/unified-drop-routing.ts";
+import {
+  collectIgnoredPatchDrops,
+  collectRomDropFiles,
+  routeByOrder,
+  routeSingleRom,
+} from "../../src/public/react/unified-drop-routing.ts";
 
 const file = (name) => new File([], name);
 const names = (files) => files.map((entry) => (entry ? entry.name : null));
@@ -33,4 +38,13 @@ test("routeSingleRom returns the first non-patch rom, or null", () => {
   expect(routeSingleRom([file("hack.ips"), file("game.sfc")])?.name).toBe("game.sfc");
   expect(routeSingleRom([file("hack.ips")])).toBeNull();
   expect(routeSingleRom([])).toBeNull();
+});
+
+// The discarded set is what the ROM-only tabs turn into a visible notice; losing
+// it is what made a patch dropped on Create look like a failed drop.
+test("collectIgnoredPatchDrops reports exactly the patches a ROM-only tab discards", () => {
+  const ignored = collectIgnoredPatchDrops([file("game.sfc"), file("hack.ips"), file("more.bps"), file("bundle.zip")]);
+  expect(names(ignored)).toEqual(["hack.ips", "more.bps"]);
+  expect(collectIgnoredPatchDrops([file("game.sfc")])).toEqual([]);
+  expect(collectIgnoredPatchDrops([])).toEqual([]);
 });

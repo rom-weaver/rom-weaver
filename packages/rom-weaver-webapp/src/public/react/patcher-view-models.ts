@@ -23,9 +23,12 @@ interface UiViewStateInput {
   disabled: boolean;
   effectiveOutputNoticeMessage: string;
   hasStrictInputChecksumMismatch: boolean;
+  inputNoticeCode: string;
   inputNoticeMessage: string;
   inputStaging: boolean;
+  outputNoticeCode: string;
   outputRuntimeNoticeMessage: string;
+  patchNoticeCode: string;
   patchNoticeMessage: string;
   patchProgress: InputProgress | null;
   patchProgressByKey: Record<string, InputProgress>;
@@ -40,9 +43,12 @@ const buildUiViewState = ({
   disabled,
   effectiveOutputNoticeMessage,
   hasStrictInputChecksumMismatch,
+  inputNoticeCode,
   inputNoticeMessage,
   inputStaging,
+  outputNoticeCode,
   outputRuntimeNoticeMessage,
+  patchNoticeCode,
   patchNoticeMessage,
   patchProgress,
   patchProgressByKey,
@@ -59,12 +65,14 @@ const buildUiViewState = ({
       visible: hasStrictInputChecksumMismatch,
     },
     inputNotice: {
+      code: inputNoticeCode,
       dismissible: true,
       level: "error" as const,
       message: inputNoticeMessage,
       visible: !!inputNoticeMessage,
     },
     outputNotice: {
+      code: outputNoticeCode,
       dismissible: !!outputRuntimeNoticeMessage,
       level: "error" as const,
       message: effectiveOutputNoticeMessage,
@@ -74,6 +82,7 @@ const buildUiViewState = ({
       loading: patchStaging || !!patchProgress || Object.keys(patchProgressByKey).length > 0,
     },
     patchNotice: {
+      code: patchNoticeCode,
       dismissible: true,
       level: "error" as const,
       message: patchNoticeMessage,
@@ -253,17 +262,60 @@ const buildOutputViewState = ({
   totalTiming: totalTimingText,
 });
 
+interface ApplyBlockedReasonInput {
+  bundleVerificationError: string;
+  /** Patches left ticked on. Zero with a non-empty stack means every one is off. */
+  enabledPatchCount: number;
+  /** The run is already in flight or an output is waiting - nothing is blocked. */
+  busy: boolean;
+  hasPendingDownload: boolean;
+  patchCount: number;
+  /** A strict input-checksum mismatch the user has not overridden. */
+  checksumPreflightBlocked: boolean;
+  romCount: number;
+}
+
+/**
+ * Why "Apply & download" is unavailable, in plain words, or "" when it is not
+ * blocked. A disabled button with no reason forces the user to guess which of
+ * four preconditions they missed, so the first unmet one is named.
+ */
+const getApplyBlockedReason = ({
+  bundleVerificationError,
+  busy,
+  checksumPreflightBlocked,
+  enabledPatchCount,
+  hasPendingDownload,
+  patchCount,
+  romCount,
+}: ApplyBlockedReasonInput): string => {
+  if (busy || hasPendingDownload) return "";
+  if (romCount === 0) return "Add a ROM first - the patch needs something to apply to.";
+  if (patchCount === 0) return "Add at least one patch file.";
+  if (enabledPatchCount === 0) return "Every patch is switched off - tick at least one to include it.";
+  if (checksumPreflightBlocked)
+    return "This ROM does not match what a patch expects. Tick “Apply anyway” above, or swap in the ROM the patch was built for.";
+  if (bundleVerificationError) return bundleVerificationError;
+  return "";
+};
+
 interface NoticeViewStateInput {
+  failureCode: string;
   failureMessage: string;
   failurePlacement: "input" | "output" | "patch" | null;
 }
 
 // Pure projection of the top-level (unplaced) failure notice.
-const buildNoticeViewState = ({ failureMessage, failurePlacement }: NoticeViewStateInput): NoticeState => ({
+const buildNoticeViewState = ({
+  failureCode,
+  failureMessage,
+  failurePlacement,
+}: NoticeViewStateInput): NoticeState => ({
+  code: failureCode,
   dismissible: true,
   level: "error",
   message: failureMessage,
   visible: !!failureMessage && !failurePlacement,
 });
 
-export { buildNoticeViewState, buildOutputViewState, buildStackViewState, buildUiViewState };
+export { buildNoticeViewState, buildOutputViewState, buildStackViewState, buildUiViewState, getApplyBlockedReason };

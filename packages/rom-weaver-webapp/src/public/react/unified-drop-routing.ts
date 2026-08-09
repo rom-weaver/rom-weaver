@@ -63,4 +63,11 @@ const routeSingleRom = (files: File[]): File | null => {
   return first;
 };
 
-export { collectRomDropFiles, routeByOrder, routeSingleRom };
+/**
+ * The patch files a ROM-only tab is about to discard. The tabs surface this as
+ * a notice with a hand-off to Apply; dropping patches on Create or Trim used to
+ * look like the drop had simply failed.
+ */
+const collectIgnoredPatchDrops = (files: File[]): File[] => classifyDroppedFiles(files).patches;
+
+export { collectIgnoredPatchDrops, collectRomDropFiles, routeByOrder, routeSingleRom };
