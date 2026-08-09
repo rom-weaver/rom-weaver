@@ -34,7 +34,7 @@ tutorial is [Your first apply in the terminal](../tutorials/cli-first-weave.md).
 | `probe` | Identify a file: its format, its platform, and any header it carries. |
 | `extract` | Unpack an archive or single-payload compressed format. |
 | `checksum` | Hash a file, a byte range, or a ROM inside an archive. |
-| `ingest` | Sort a file into ROMs and patches, unpacking and hashing as needed. |
+| `formats` | List the formats this build supports, and what it can do with each. |
 | `compress` | Pack files into an archive, disc image, or ROM-specific compressed format. |
 | `trim` | Cut the padding off a ROM, or put it back. |
 | `patch apply` | Apply one or more patches to a ROM, in order. |
@@ -114,13 +114,25 @@ List-valued flags (`--algo`, `--checksum`, `--filter`, `--codec`, `--expect-in`,
 or comma-separated: `--algo crc32,sha1` and `--algo crc32 --algo sha1` do the
 same thing.
 
+These three appear on the commands that write files:
+
+- `--force` overwrites an output that already exists. Without it, a command
+  that would overwrite stops before writing anything.
+- `-n`/`--dry-run` reports what the command would write, and writes nothing.
+- `-y`/`--yes` answers every confirmation with yes, so a run never waits for
+  input.
+
 rom-weaver only asks interactive questions when stdin and stderr are both
 terminals and `--json` is off. Otherwise, it decides on its own or fails.
+
+`rom-weaver formats` prints the same support matrix as
+[Supported formats](formats.md), for the build you are running. Add `--json`
+for a machine-readable copy.
 
 ## Reaching inside archives
 
 
-`probe`, `extract`, `checksum`, `ingest`, `trim`, `bundle parse`, and the
+`probe`, `extract`, `checksum`, `trim`, `bundle parse`, and the
 patching commands all open archives for you, so you can point them at a `.zip`
 and they will work on the ROM inside it. Four flags steer that, and they mean
 the same thing everywhere they appear:
@@ -133,8 +145,7 @@ the same thing everywhere they appear:
   checksum sidecars, and OS clutter such as `.DS_Store`.
 - `--no-extract` skips all of this and works on the file itself.
 
-Not every command takes all four. `ingest` has `--select` and `--no-ignore`
-only, since it always looks inside and always sorts by kind. `extract` has no
+Not every command takes all four. `extract` has no
 `--no-extract`, since unpacking is the whole job. `trim` spells its filter
 `--no-filter`, because it filters to ROMs by default. `rom-weaver <command>
 --help` is authoritative.
@@ -199,8 +210,12 @@ stream-compressed positional bundle needs a canonical name such as
 
 ### Extras
 
-- `--code` bakes Game Genie or GameShark/Pro Action Replay codes into the ROM,
-  as if they were a patch.
+- `--code` bakes a Game Genie or GameShark/Pro Action Replay code into the ROM,
+  as if it were a patch. Repeat it for each code. `--code-system nes|snes|genesis|gameboy`
+  names the console when the ROM header does not, and
+  `--code-kind auto|game-genie|gameshark` pins the scheme instead of inferring
+  it from the code's shape. The recipe is
+  [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 - `--emit-bundle PATH` also writes a `rom-weaver-bundle.json` recording the run:
   the ROM's checksums, the patches in order, and the result. It runs the same
   code as `bundle create`, so the file is byte-identical to the equivalent

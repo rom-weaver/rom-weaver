@@ -118,139 +118,34 @@ set `HTTPS_PORT` instead.
 ## CLI
 
 Native release assets cover macOS arm64 and x86-64; Linux x86-64 GNU plus
-x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86. The package
-manager and installer options below select the matching asset unless their
-description says otherwise.
+x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86.
 
-<details>
-<summary>Homebrew (macOS arm64/Intel, Linux arm64/x86-64)</summary>
+Three recommended ways to install:
 
 ```bash
 brew install rom-weaver/tap/rom-weaver
 ```
-
-</details>
-
-<details>
-<summary>Scoop (Windows)</summary>
-
-```powershell
-scoop bucket add rom-weaver https://github.com/rom-weaver/scoop-bucket
-scoop install rom-weaver
-```
-
-</details>
-
-<details>
-<summary>Install script (macOS, Linux)</summary>
-
-Downloads the latest release to `~/.local/bin` and checks its GitHub build
-attestation.
-Override with `ROM_WEAVER_INSTALL_DIR` or pin with `ROM_WEAVER_VERSION`.
-The script also installs manpages and shell completions for the current user.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
   https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh | sh
 ```
 
-</details>
-
-<details>
-<summary>Install script (Windows)</summary>
-
-The same thing for PowerShell, installing to `%LOCALAPPDATA%\rom-weaver\bin`.
-It also installs the PowerShell completion beside the executable.
-
-```powershell
-irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex
-```
-
-</details>
-
-<details>
-<summary>npm</summary>
-
-Cross-platform, and the only channel that covers every supported target at
-once. Needs Node.js 22+. The package is a launcher that pulls the right
-prebuilt binary through platform-specific optional dependencies, so only your
-platform's binary is downloaded.
-
 ```bash
 npm install --global rom-weaver
 ```
 
-For a one-off run, or to add the scoped launcher for a repository's scripts,
-use the scoped package directly:
-
-```bash
-npx @rom-weaver/cli probe --input game.iso
-npm install --save-dev @rom-weaver/cli
-```
-
-</details>
-
-<details>
-<summary>cargo-binstall</summary>
-
-Downloads the same release binary rather than compiling the workspace:
-
-```bash
-cargo binstall rom-weaver-cli
-```
-
-</details>
-
-<details>
-<summary>mise</summary>
-
-Useful when you want the CLI managed per project in `mise.toml`.
-[Install mise](https://mise.jdx.dev/installing-mise.html) first; it verifies
-the release's GitHub artifact attestations on install. The
-`minimum_release_age=0s` option lets new releases resolve immediately on release
-day; omit it if you prefer mise's default release-age delay.
-
-```bash
-mise use 'github:rom-weaver/rom-weaver[minimum_release_age=0s]'
-```
-
-</details>
-
-<details>
-<summary>Docker</summary>
-
-Runs from the published Linux image without installing anything:
-
-```bash
-docker run --rm \
-  --user "$(id -u):$(id -g)" \
-  --volume "$PWD:/work" \
-  ghcr.io/rom-weaver/rom-weaver-cli:latest \
-  probe --input /work/game.iso
-```
-
-Mount your ROM directory at `/work` and pass paths under it. On Linux and
-macOS, `--user` keeps files created in the bind mount owned by your host user.
-See [Run in Docker](./docs/how-to/install-cli.md#run-in-docker).
-
-</details>
+Homebrew covers macOS arm64/Intel and Linux arm64/x86-64. The install script
+covers macOS and Linux: it downloads the latest release to `~/.local/bin` and
+checks its build provenance, refusing to install a binary this repository did
+not publish. npm is the only channel covering every supported target at once,
+and needs Node.js 22+.
 
 <a name="build-from-source"></a>
 
-<details>
-<summary>Build from source</summary>
-
-```bash
-git clone https://github.com/rom-weaver/rom-weaver.git
-cd rom-weaver
-cargo install --path crates/rom-weaver-cli --locked
-rom-weaver --help
-```
-
-The source build requires Rust 1.95+, CMake, Clang, and a native compiler
-toolchain.
-
-</details>
+Windows, Scoop, PowerShell, cargo-binstall, mise, Docker, shell completions,
+and building from source are all in
+[Install the CLI](./docs/how-to/install-cli.md).
 
 Hitting `Permission denied`? See
 [File permissions](./docs/reference/cli.md#file-permissions).

@@ -50,7 +50,18 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "how-to/cli-apply.md", label: "Apply patches (CLI)", slug: "docs/cli-apply" }),
   Object.freeze({ file: "how-to/cli-create.md", label: "Create patches (CLI)", slug: "docs/cli-create" }),
   Object.freeze({ file: "how-to/cli-bundles.md", label: "Bundles (CLI)", slug: "docs/cli-bundles" }),
-  Object.freeze({ file: "how-to/work-with-archives.md", label: "Work with archives", slug: "docs/formats" }),
+  Object.freeze({ file: "how-to/cli-trim.md", label: "Trim a ROM (CLI)", slug: "docs/cli-trim" }),
+  Object.freeze({
+    file: "how-to/identify-and-hash-files.md",
+    label: "Identify and hash files (CLI)",
+    slug: "docs/identify-and-hash-files",
+  }),
+  Object.freeze({
+    file: "how-to/bake-cheat-codes.md",
+    label: "Bake cheat codes (CLI)",
+    slug: "docs/bake-cheat-codes",
+  }),
+  Object.freeze({ file: "how-to/work-with-archives.md", label: "Work with archives", slug: "docs/work-with-archives" }),
   Object.freeze({
     file: "how-to/fix-permission-errors.md",
     label: "Fix permission errors",
