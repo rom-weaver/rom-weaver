@@ -4,6 +4,7 @@ import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import {
   installPatcherTestHooks,
+  clickApplyButton,
   loadFixtureFile,
   mount,
   RAW_PATCH,
@@ -11,6 +12,7 @@ import {
   setFormControlValue,
   selectFileInput,
   waitForApplyButtonEnabled,
+  waitForApplyOutcome,
   waitForState,
 } from "./patcher-test-shared.js";
 
@@ -50,11 +52,16 @@ test("export bundle bundles the session from main-page options with a checks-onl
   );
   await waitForApplyButtonEnabled();
 
-  // The bundle package dropdown lives permanently in Output options and mirrors
-  // the persisted "Bundle" setting: it defaults to hidden ("") with no export
-  // action until the user picks a package format.
+  // Bundle authoring is a separate secondary job. It mirrors the persisted
+  // "Bundle" setting, defaults to hidden ("") and has no export action until
+  // the user picks a package format.
   const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
   expect(formatSelect).not.toBeNull();
+  expect(document.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
+  expect(document.getElementById("rom-weaver-bundle-job")?.textContent).toContain("Share this setup");
+  expect(document.getElementById("rom-weaver-bundle-job")?.textContent).toContain(
+    "Exporting a recipe does not apply patches",
+  );
   expect(formatSelect.value).toBe("");
   expect(document.getElementById("rom-weaver-button-export-bundle")).toBeNull();
   expect(Array.from(formatSelect.options, (option) => option.textContent)).toEqual([
@@ -199,6 +206,26 @@ test("export bundle bundles the session from main-page options with a checks-onl
   await expect.poll(() => saveAs.mock.calls.length).toBe(2);
   await expect.poll(() => downloadButton.disabled).toBe(false);
   saveAs.mockRestore();
+});
+
+test("keeps the sharing job after an ordinary Apply completes", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  const applyButton = document.getElementById("rom-weaver-button-apply");
+  const job = document.getElementById("rom-weaver-bundle-job");
+  expect(job?.textContent).toContain("Share this setup");
+  expect(applyButton?.compareDocumentPosition(job || document.body)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(document.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
+
+  const formatSelect = document.getElementById("rom-weaver-bundle-export-format");
+  expect(formatSelect).not.toBeNull();
+  expect(formatSelect.value).toBe("");
+  setFormControlValue(formatSelect, "zip:patches");
+  await expect.poll(() => document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
 });
 
 test("export bundles the extracted patch leaf, not the archive it arrived in", async () => {

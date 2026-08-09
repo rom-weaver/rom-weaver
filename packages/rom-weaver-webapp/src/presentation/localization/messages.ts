@@ -81,6 +81,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.bundleExport.createRom": msg({ id: "ui.bundleExport.createRom", message: "Create {format} ROM Bundle" }),
   "ui.bundleExport.download": msg({ id: "ui.bundleExport.download", message: "Download {format} Bundle" }),
   "ui.bundleExport.downloadRom": msg({ id: "ui.bundleExport.downloadRom", message: "Download {format} ROM Bundle" }),
+  "ui.bundleExport.shareDescription": msg({
+    id: "ui.bundleExport.shareDescription",
+    message: "Exporting a recipe does not apply patches. It saves this patch setup for someone else to run.",
+  }),
+  "ui.bundleExport.shareTitle": msg({ id: "ui.bundleExport.shareTitle", message: "Share this setup" }),
   "ui.chain.appliesAfter": msg({ id: "ui.chain.appliesAfter", message: "applies after patch {n}" }),
   "ui.chain.differentRom": msg({ id: "ui.chain.differentRom", message: "expected a different ROM" }),
   "ui.chain.expectsFirst": msg({ id: "ui.chain.expectsFirst", message: "expects patch {n} first" }),

@@ -112,12 +112,11 @@ const capture = async () => {
             await exitGuide.evaluate((button) => button.click());
             await exitGuide.waitFor({ state: "detached" });
           }
-          if (captureCase.openOutputOptions) {
-            const output = page.locator("#rom-weaver-row-output-file-name");
-            const options = output.locator(".cks > .cks-head");
-            if ((await options.getAttribute("aria-expanded")) === "false") await options.click();
-            await output.locator("#rom-weaver-bundle-export-format").waitFor({ state: "visible" });
+          if (captureCase.openBundleJob) {
+            await page.locator("#rom-weaver-bundle-job").waitFor({ state: "visible" });
+            await page.locator("#rom-weaver-bundle-export-format").waitFor({ state: "visible" });
           }
+          if (captureCase.hideDock) await page.locator(".dock-nav").evaluate((dock) => dock.setAttribute("hidden", ""));
           await waitForStableContent(page);
           await assertNoDevBadge(page);
           await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));

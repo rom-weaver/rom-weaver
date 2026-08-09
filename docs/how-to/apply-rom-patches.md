@@ -110,10 +110,14 @@ In **0x04 Apply**:
 1. Enter an output filename without an extension.
 2. Pick a plain file or a compressed output format. The format selector adds
    the extension.
-3. Open **Options** only if you need compression, output header, or bundle
-   controls. The defaults are right for most patches.
+3. Open **Options** only if you need compression or output-header controls.
+   The defaults are right for most patches.
 4. Choose **APPLY & DOWNLOAD**.
 5. Wait for the button to finish, then save the browser download.
+
+To share the staged recipe, use the separate **Share this setup** job below the
+Apply result. [Create and share a patch bundle](create-bundles.md) covers that
+job in detail.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">

@@ -156,8 +156,8 @@ type OutputCompressionPanelConfig = {
   note?: string;
   onFieldChange?: (key: string, value: string, updates?: Record<string, string>) => void;
   onFormatChange?: (value: string) => void;
-  /** Extra drawer-header readout chips for non-compression options (e.g. the apply
-   * output's bundle package). */
+  /** Extra drawer-header readout chips for non-compression options (e.g. output
+   * verification status). */
   readouts?: ReactNode;
   timing?: ReactNode;
 };

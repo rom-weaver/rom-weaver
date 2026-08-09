@@ -79,7 +79,7 @@ and [patch output](../screenshots/create-output-mobile-light.webp).
 </picture>
 
 The [mobile capture](../screenshots/bundle-output-mobile-light.webp)
-keeps the entire expanded Output Options card readable.
+keeps the entire Share this setup job readable.
 
 ## Sample ROMs
 

@@ -9,7 +9,7 @@ same result you tested.
 
 - [Choose what to include](#choose-what-to-include)
 - [Build the patch recipe](#build-the-patch-recipe)
-- [Turn on bundle output and download it](#turn-on-bundle-output-and-download-it)
+- [Share this setup](#share-this-setup)
 - [Test the finished download](#test-the-finished-download)
 - [Publish a useful release](#publish-a-useful-release)
 - [Open a hosted bundle in Apply](#open-a-hosted-bundle-in-apply)
@@ -64,14 +64,19 @@ Order is part of the recipe. Move a card only when you know the patch was
 authored for that state. Test every optional combination you tell users is
 supported, especially when a later patch depends on an earlier one.
 
-## Turn on bundle output and download it
+## Share this setup
 
-In **0x04 Apply**:
+In **0x04 Apply**, the **Share this setup** job follows the main Apply action.
+It is separate because exporting a recipe does not apply patches. The job is
+available once the ROM and patches are staged, so you can author a recipe
+without running Apply.
+
+After a successful Apply:
 
 1. Set the output filename and format users should receive after patching.
-2. Open **Options**.
-3. Find **Bundle**. It starts at **Hide bundle creation**. Turn bundle output
-   on by choosing **Bundle + patches (.zip)** for a normal public release.
+2. Find **Share this setup** below the patched-ROM result.
+3. Choose **Bundle + patches (.zip)** for a normal public release. It includes
+   the recipe and patches, but not the ROM bytes.
 4. Confirm or edit **Expected ROM name**. A different supplied filename warns
    without blocking the weave; checksum and size requirements stay strict.
    Clear the field to omit the name check.
@@ -82,23 +87,27 @@ In **0x04 Apply**:
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-light.avif" width="1170" height="1368">
-    <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-light.avif" width="2242" height="796">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-light.webp" width="1170" height="1368">
-    <img src="/docs/screenshots/bundle-output-desktop-light.webp" width="2242" height="796" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the light theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-light.avif" width="1170" height="638">
+    <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-light.avif" width="2242" height="473">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-light.webp" width="1170" height="638">
+    <img src="/docs/screenshots/bundle-output-desktop-light.webp" width="2242" height="473" alt="Separate Share this setup job with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-dark.avif" width="1170" height="1368">
-    <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-dark.avif" width="2242" height="796">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-dark.webp" width="1170" height="1368">
-    <img src="/docs/screenshots/bundle-output-desktop-dark.webp" width="2242" height="796" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the dark theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-dark.avif" width="1170" height="638">
+    <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-dark.avif" width="2242" height="473">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-dark.webp" width="1170" height="638">
+    <img src="/docs/screenshots/bundle-output-desktop-dark.webp" width="2242" height="473" alt="Separate Share this setup job with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the dark theme">
   </picture>
-  <figcaption>The bundle setting lives inside Output Options. The focused capture keeps the selector and action readable.</figcaption>
+  <figcaption>The separate Share this setup job keeps recipe export beside, but apart from, the patched-ROM result.</figcaption>
 </figure>
 
 Bundle creation does not apply the patches. It packages the recipe you have
-staged. **APPLY & DOWNLOAD** remains available separately when you also want
-to build the patched output.
+staged. **APPLY & DOWNLOAD** remains the primary action for building the
+patched output.
+
+The job remains available after a successful Apply. A saved bundle-package
+setting can reveal it while inputs are staging, and the [guided Bundle tour](https://rom-weaver.com/apply?guide=bundle)
+opens the same separate job before Apply so you can author a recipe first.
 
 Your ROM and patches are read locally. A patch-only bundle carries the ROM's
 checksums, not its bytes.

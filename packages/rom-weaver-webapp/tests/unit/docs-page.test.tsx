@@ -15,7 +15,7 @@ beforeAll(async () => {
 const BUNDLE_GUIDE_ANCHORS = [
   "choose-what-to-include",
   "build-the-patch-recipe",
-  "turn-on-bundle-output-and-download-it",
+  "share-this-setup",
   "test-the-finished-download",
   "publish-a-useful-release",
   "open-a-hosted-bundle-in-apply",

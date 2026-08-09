@@ -1480,7 +1480,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const resolvedOutputController = localOutputController;
   bundleControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
 
-  // "Export bundle…" (output card secondary action): snapshots the current
+  // "Share this setup" (secondary job after the output card): snapshots the current
   // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
   const stagedBundleSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources();
   const bundleExportReady =
@@ -1525,9 +1525,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
   });
 
-  // The bundle package dropdown lives permanently in Output options and mirrors
+  // The bundle package dropdown lives in the separate sharing job and mirrors
   // the persisted "Bundle" user setting: a format arms the create/download
-  // action, "" hides it. The selection drives visibility - no separate reveal.
+  // action, "" hides it. The selection drives the action - no separate reveal.
   const {
     format: bundleExportFormat,
     setBundleRom: setBundleExportRom,

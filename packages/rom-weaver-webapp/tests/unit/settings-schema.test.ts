@@ -59,7 +59,7 @@ describe("getDefaultSettings", () => {
     expect(settings.threads).toBe("auto");
   });
 
-  it("places post-apply behavior after the bundle output setting", () => {
+  it("places post-apply behavior after the bundle package setting", () => {
     const field = SETTINGS_FIELD_METADATA.postApplyRomBehavior;
     expect(field.kind).toBe("select");
     expect(field.options?.map((option) => option.value)).toEqual([

@@ -314,10 +314,9 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
     actions: [
       ["options", "Options"],
-      ["package", "Bundle"],
       ["apply", "Apply & download"],
     ],
-    body: "Choose the output name, format, compression, header, and bundle settings. Then press APPLY & DOWNLOAD to apply both patches.",
+    body: "Choose the output name, format, compression, and header. Then press APPLY & DOWNLOAD to apply both patches.",
     cta: ".btn.run",
     openDrawers: true,
     placement: "top",
@@ -349,23 +348,18 @@ const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     title: "Describe the patch recipe",
   },
   {
-    actions: [
-      ["options", "Options"],
-      ["package", "Bundle + patches (.zip)"],
-    ],
-    body: "Output Options now has Bundle + patches (.zip) selected. This shares the patches and recipe without putting a copyrighted ROM in the download.",
-    openDrawers: true,
+    actions: [["package", "Bundle + patches (.zip)"]],
+    body: "Share this setup is separate from Apply. Bundle + patches (.zip) shares the recipe and patch files without putting a copyrighted ROM in the download.",
     placement: "top",
-    target: "#rom-weaver-row-output-file-name",
+    target: "#rom-weaver-bundle-job",
     title: "Choose a safe bundle",
   },
   {
     actions: [["package", "Create ZIP Bundle"]],
-    body: "Press Create ZIP Bundle to finish the tutorial. After rom-weaver checks the recipe, the same control becomes Download ZIP Bundle.",
+    body: "Exporting a recipe does not apply patches. Press Create ZIP Bundle to check and download the setup; the same control then becomes Download ZIP Bundle.",
     cta: "#rom-weaver-button-export-bundle",
-    openDrawers: true,
     placement: "top",
-    target: "#rom-weaver-row-output-file-name",
+    target: "#rom-weaver-bundle-job",
     title: "Build and download",
   },
 ];
@@ -1336,8 +1330,6 @@ const ChecksumOverrideRow = ({
 
 const ApplyOutputAction = ({
   applyTotalTime,
-  bundleActionLabel,
-  bundleExport,
   bundleTools,
   bundleVerificationError,
   controllers,
@@ -1355,8 +1347,6 @@ const ApplyOutputAction = ({
   uiState,
 }: {
   applyTotalTime: PatcherOutputState["totalTiming"];
-  bundleActionLabel: string;
-  bundleExport?: BundleExportState;
   bundleTools?: BundleToolsState;
   bundleVerificationError: string | null;
   controllers: { output: PatcherOutputController };
@@ -1407,14 +1397,6 @@ const ApplyOutputAction = ({
         <span>{bundleTools.outputVerification.message}</span>
       </p>
     ) : null}
-    {bundleExport && bundleTools?.exportVisible ? (
-      <BundleExportAction
-        bundleActionLabel={bundleActionLabel}
-        bundleExport={bundleExport}
-        disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
-      />
-    ) : null}
-    {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
   </>
 );
 
@@ -1466,11 +1448,9 @@ const getBundleFormatValue = (
 const BundleOutputFields = ({
   bundleExport,
   bundleTools,
-  outputHeaderField,
 }: {
   bundleExport?: BundleExportState;
   bundleTools?: BundleToolsState;
-  outputHeaderField: ReactNode;
 }) => {
   const exportTypeInfo = {
     items: [
@@ -1484,10 +1464,9 @@ const BundleOutputFields = ({
     title: "Bundle",
   };
   const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
-  if (!bundleExport) return outputHeaderField;
+  if (!bundleExport) return null;
   return (
-    <>
-      {outputHeaderField}
+    <div className="bundle-job-fields">
       <OutputField
         className="export-type-field"
         label="Bundle"
@@ -1523,7 +1502,42 @@ const BundleOutputFields = ({
           />
         </OutputField>
       ) : null}
-    </>
+    </div>
+  );
+};
+
+/**
+ * Bundle export is a separate job from Apply. It follows the primary action so
+ * a normal Apply run stays focused on producing the patched ROM, while a saved
+ * bundle preference or the guided Bundle tour can reveal it before that run.
+ */
+const BundleSecondaryJob = ({
+  bundleActionLabel,
+  bundleExport,
+  bundleTools,
+  disabled,
+}: {
+  bundleActionLabel: string;
+  bundleExport: BundleExportState;
+  bundleTools: BundleToolsState;
+  disabled: boolean;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <section aria-labelledby="rom-weaver-bundle-job-title" className="bundle-job" id="rom-weaver-bundle-job">
+      <div className="bundle-job-heading">
+        <Package aria-hidden="true" className="bundle-job-icon" />
+        <div>
+          <h3 id="rom-weaver-bundle-job-title">{localizer.message("ui.bundleExport.shareTitle")}</h3>
+          <p>{localizer.message("ui.bundleExport.shareDescription")}</p>
+        </div>
+      </div>
+      <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
+      {bundleTools.exportVisible ? (
+        <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+      ) : null}
+      {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+    </section>
   );
 };
 
@@ -1679,7 +1693,7 @@ function ApplyWorkflowFormView({
     notice?: NoticeController;
   };
   emulatorOutput?: BrowserApplyResult["output"] | null;
-  /** Bundle export controls live directly in the Output options drawer. */
+  /** Bundle export controls live in the separate sharing job after Apply. */
   bundleExport?: BundleExportState;
   /** Bundle notices + the export reveal state. */
   bundleTools?: BundleToolsState;
@@ -1809,15 +1823,9 @@ function ApplyWorkflowFormView({
   const bundleActionLabel = bundleExport?.downloadable
     ? getBundleActionLabel(bundleExport, localizer, true)
     : bundleCreateLabel;
-  // The bundle package select mirrors the persisted "Bundle" user setting - ""
-  // is the hide sentinel (matches the stored value), a format arms the action.
-  const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
-  const bundleOutputFields = (
-    <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} outputHeaderField={outputHeaderField} />
-  );
   const outputExtraFields = (
     <>
-      {bundleOutputFields}
+      {outputHeaderField}
       <PostApplyBehaviorField disabled={outputState.disabled} settingValue={settings.postApplyRomBehavior} />
       <PlayButtonField disabled={outputState.disabled} settingValue={settings.applyPlayButtonEnabled} />
     </>
@@ -1874,8 +1882,6 @@ function ApplyWorkflowFormView({
   const renderOutputAction = (
     <ApplyOutputAction
       applyTotalTime={applyTotalTime}
-      bundleActionLabel={bundleActionLabel}
-      bundleExport={bundleExport}
       bundleTools={bundleTools}
       bundleVerificationError={bundleVerificationError}
       controllers={{ output: controllers.output }}
@@ -1893,6 +1899,21 @@ function ApplyWorkflowFormView({
       uiState={uiState}
     />
   );
+  // Keep the sharing job after Apply's primary action and result recovery. It
+  // remains available once the bench has content so direct bundle authoring
+  // still works, while saved settings and the guided Bundle URL can reveal it
+  // before staging completes.
+  const bundleSecondaryJob =
+    bundleExport &&
+    bundleTools &&
+    (romInputs.length > 0 || patches.length > 0 || bundleTools.exportVisible || applyDone) ? (
+      <BundleSecondaryJob
+        bundleActionLabel={bundleActionLabel}
+        bundleExport={bundleExport}
+        bundleTools={bundleTools}
+        disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+      />
+    ) : null;
 
   if (startup.status === "error") {
     return (
@@ -2052,11 +2073,7 @@ function ApplyWorkflowFormView({
               note: outputState.compress?.note,
               onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
               onFormatChange: (value) => controllers.output.setOutputCompression(value),
-              readouts: bundleExport ? (
-                <DrawerReadout label="Bundle" muted={!bundleFormatValue}>
-                  {bundleFormatValue || "hidden"}
-                </DrawerReadout>
-              ) : null,
+              readouts: null,
               timing: outputState.compressTiming || undefined,
             })}
             disabled={outputState.disabled}
@@ -2089,6 +2106,7 @@ function ApplyWorkflowFormView({
             num="0x04"
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
+            secondary={bundleSecondaryJob}
             title="Apply"
             woven={applyDone || running}
           />

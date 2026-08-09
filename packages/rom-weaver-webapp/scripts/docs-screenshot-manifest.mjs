@@ -32,10 +32,11 @@ const DOCS_SCREENSHOT_CASES = [
   {
     dismissGuide: true,
     docsRoute: "docs/create-bundles",
+    hideDock: true,
     name: "bundle-output",
-    openOutputOptions: true,
+    openBundleJob: true,
     route: "/apply?guide=bundle",
-    target: "#rom-weaver-row-output-file-name",
+    target: "#rom-weaver-bundle-job",
     waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
   },
 ];

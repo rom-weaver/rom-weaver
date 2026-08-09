@@ -10,6 +10,8 @@ type WorkflowOutputStepProps = OutputCardProps & {
   meta?: ReactNode;
   notice?: ReactNode;
   num: string;
+  /** A secondary job that follows the primary output action in this step. */
+  secondary?: ReactNode;
   title: ReactNode;
   woven?: boolean;
 };
@@ -31,6 +33,7 @@ const WorkflowOutputStep = ({
   meta,
   notice,
   num,
+  secondary,
   title,
   woven,
   ...output
@@ -38,6 +41,7 @@ const WorkflowOutputStep = ({
   <StepSection fault={fault} id={id} info={info} meta={meta} num={num} title={title} woven={woven}>
     <OutputCard {...output} />
     {notice}
+    {secondary}
   </StepSection>
 );
 

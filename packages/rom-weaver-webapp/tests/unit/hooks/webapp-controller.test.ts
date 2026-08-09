@@ -211,7 +211,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().settings.accent).toBe("woad");
   });
 
-  it("commits and persists the bundle package selection from the output card", () => {
+  it("commits and persists the bundle package selection from the sharing job", () => {
     const storage = createStorage();
     const controller = createWebappRootController({
       onApplySettings: vi.fn(),

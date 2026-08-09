@@ -27,6 +27,8 @@ const LOAD_BEARING_UI_IDS = [
   "ui.log.filter",
   "ui.log.filterLabel",
   "ui.step.apply",
+  "ui.bundleExport.shareDescription",
+  "ui.bundleExport.shareTitle",
 ] as const;
 
 describe("ui catalog", () => {
@@ -50,6 +52,8 @@ describe("ui catalog", () => {
     expect(es.message("ui.step.apply")).toBe("Aplicar");
     expect(de.message("ui.step.apply")).toBe("Anwenden");
     expect(en.message("ui.step.apply")).toBe("Apply");
+    expect(es.message("ui.bundleExport.shareTitle")).toBe("Comparte esta configuración");
+    expect(de.message("ui.bundleExport.shareTitle")).toBe("Diese Konfiguration teilen");
   });
 
   it("falls back to English per-id for unknown ids in a partial locale", () => {
