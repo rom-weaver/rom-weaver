@@ -11,6 +11,7 @@ tutorial is [Your first apply in the terminal](../tutorials/cli-first-weave.md).
 - [Commands](#commands)
   - [Alternate names](#alternate-names)
 - [Reaching inside archives](#reaching-inside-archives)
+- [Checksum](#checksum)
 - [Patching](#patching)
   - [Inputs](#inputs)
   - [Bundle detection](#bundle-detection)
@@ -145,6 +146,12 @@ already exists, extraction stops before writing anything, unless `--force` is
 given. While extracting it can hash what it writes (`--checksum ALGO`, or
 `--checksum-rom ALGO` for the ROMs only) and report each file's format and
 platform (`--probe`).
+
+## Checksum
+
+`checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing
+`--algo` replaces that default set; repeat the flag or separate values with
+commas to compute multiple algorithms.
 
 ## Patching
 
