@@ -468,6 +468,37 @@ mod tests {
     }
 
     #[test]
+    fn patch_apply_compression_aliases_are_accepted() {
+        for flag in ["--raw", "--format", "--codec", "--level"] {
+            let mut argv = vec![
+                "rom-weaver",
+                "patch",
+                "apply",
+                "--input",
+                "game.sfc",
+                "--patch",
+                "update.bps",
+                "--output",
+                "patched.sfc",
+            ];
+            argv.push(flag);
+            if flag != "--raw" {
+                argv.push(if flag == "--format" {
+                    "zip"
+                } else if flag == "--codec" {
+                    "deflate"
+                } else {
+                    "high"
+                });
+            }
+            assert!(
+                cli_command().try_get_matches_from(argv).is_ok(),
+                "{flag} parses for patch apply"
+            );
+        }
+    }
+
+    #[test]
     fn completions_is_a_native_subcommand() {
         let matches = cli_command().try_get_matches_from(["rom-weaver", "completions", "fish"]);
         assert!(matches.is_ok(), "completions <shell> parses");

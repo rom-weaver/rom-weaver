@@ -1443,6 +1443,325 @@ fn patch_apply_infers_zip_from_output_extension() {
     );
 }
 
+#[test]
+fn patch_apply_infers_raw_output_from_rom_extension() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.sfc");
+    let modified = temp.child("new.sfc");
+    let patch = temp.child("update.bps");
+    let output = temp.child("patched.sfc");
+
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let apply_json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    ));
+    assert_patch_envelope(&apply_json, "patch-apply", "BPS", "succeeded");
+    assert!(
+        !apply_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("compressed as")
+    );
+    assert_eq!(
+        fs::read(output.path()).expect("raw output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
+fn patch_apply_default_output_is_collision_safe() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.sfc");
+    let modified = temp.child("changed.sfc");
+    let patch = temp.child("update.bps");
+    let existing = temp.child("game-patched.sfc");
+    let inferred = temp.child("game-patched-1.sfc");
+
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+    fs::write(existing.path(), b"keep this file").expect("collision fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let apply_json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    ));
+    assert_patch_envelope(&apply_json, "patch-apply", "BPS", "succeeded");
+    assert_eq!(
+        fs::read(existing.path()).expect("existing output"),
+        b"keep this file"
+    );
+    assert_eq!(
+        fs::read(inferred.path()).expect("inferred output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
+fn patch_apply_emit_bundle_records_inferred_container_output() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let bundle = temp.child("rom-weaver-bundle.json");
+    let output = temp.child("old-patched.zip");
+
+    let events = parse_json_lines(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--emit-bundle",
+            bundle.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    ));
+    let apply_json = events
+        .iter()
+        .find(|event| event["command"] == "patch-apply" && event["status"] == "succeeded")
+        .expect("successful patch-apply event");
+    assert_patch_envelope(apply_json, "patch-apply", "BPS", "succeeded");
+    assert!(output.path().is_file());
+
+    let emitted: Value = serde_json::from_slice(&fs::read(bundle.path()).expect("bundle bytes"))
+        .expect("valid emitted bundle");
+    assert_eq!(emitted["output"]["name"], "old-patched.zip");
+}
+
+#[test]
+fn patch_apply_emit_bundle_records_appended_output_extension() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let bundle = temp.child("rom-weaver-bundle.json");
+    let requested_output = temp.child("custom-output");
+
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            requested_output.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--emit-bundle",
+            bundle.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let emitted: Value = serde_json::from_slice(&fs::read(bundle.path()).expect("bundle bytes"))
+        .expect("valid emitted bundle");
+    assert_eq!(emitted["output"]["name"], "custom-output.zip");
+    assert!(temp.child("custom-output.zip").path().is_file());
+}
+
+#[test]
+fn patch_apply_rejects_invalid_codec_before_patching() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let output = temp.child("invalid-codec.zip");
+
+    let apply_json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--codec",
+            "not-a-codec",
+            "--json",
+        ],
+        1,
+    ));
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["status"], "failed");
+    assert_eq!(apply_json["stage"], "validate");
+    assert!(
+        apply_json["label"]
+            .as_str()
+            .expect("failure label")
+            .contains("unsupported zip codec")
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
+fn patch_apply_rejects_unknown_or_ambiguous_output_extensions() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+
+    for (name, expected) in [
+        ("patched.unknown", "neither a registered container"),
+        (
+            "patched.bin",
+            "ambiguous between a raw ROM and a disc image",
+        ),
+    ] {
+        let output = temp.child(name);
+        let apply_json = parse_single_json_line(&command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                original.path().to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--json",
+            ],
+            1,
+        ));
+        assert_eq!(apply_json["command"], "patch-apply");
+        assert_eq!(apply_json["status"], "failed");
+        assert!(
+            apply_json["label"]
+                .as_str()
+                .expect("label")
+                .contains(expected),
+            "{}",
+            apply_json["label"]
+        );
+        assert!(!output.path().exists());
+    }
+}
+
+#[test]
+fn patch_apply_accepts_raw_and_compression_flag_aliases() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let raw_output = temp.child("aliased.raw");
+    let compressed_base = temp.child("aliased-container");
+
+    let raw_json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            raw_output.path().to_str().expect("path"),
+            "--raw",
+            "--json",
+        ],
+        0,
+    ));
+    assert_patch_envelope(&raw_json, "patch-apply", "BPS", "succeeded");
+    assert_eq!(
+        fs::read(raw_output.path()).expect("raw output"),
+        fs::read(temp.child("new.bin").path()).expect("modified")
+    );
+
+    let compressed_json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            compressed_base.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--codec",
+            "deflate",
+            "--level",
+            "high",
+            "--json",
+        ],
+        0,
+    ));
+    assert_patch_envelope(&compressed_json, "patch-apply", "BPS", "succeeded");
+    assert!(temp.child("aliased-container.zip").path().exists());
+
+    let inferred_compressed_json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--json",
+        ],
+        0,
+    ));
+    assert_patch_envelope(&inferred_compressed_json, "patch-apply", "BPS", "succeeded");
+    assert!(temp.child("old-patched.zip").path().exists());
+}
+
 fn make_bps_patch_fixture(
     temp: &assert_fs::TempDir,
 ) -> (assert_fs::fixture::ChildPath, assert_fs::fixture::ChildPath) {

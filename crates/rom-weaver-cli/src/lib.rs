@@ -36,6 +36,7 @@ use rom_weaver_checksum::{
 };
 use rom_weaver_containers::{
     CompressFormatRecommendation, ContainerRegistry, extract_only_create_validation_message,
+    is_ambiguous_disc_image_extension,
 };
 use rom_weaver_core::{
     ArchiveEntryKindFilter, CancellationToken, ChecksumRequest, ContainerCreateRequest,
@@ -1113,6 +1114,7 @@ struct PatchApplyCompressionOptions {
     requested_format: Option<String>,
     codec: Option<String>,
     level: Option<i32>,
+    level_explicit: bool,
     profile: CompressionLevelProfile,
 }
 

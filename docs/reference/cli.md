@@ -13,6 +13,7 @@ tutorial is [Your first apply in the terminal](../tutorials/cli-first-weave.md).
 - [Reaching inside archives](#reaching-inside-archives)
 - [Patching](#patching)
   - [Inputs](#inputs)
+  - [Output and compression](#output-and-compression)
   - [Bundle detection](#bundle-detection)
   - [Checksum flags](#checksum-flags)
   - [Header and byte-order flags](#header-and-byte-order-flags)
@@ -158,6 +159,23 @@ last. Leave `--patch` out entirely and rom-weaver looks for RetroArch-style
 patches sitting next to the ROM inside the input archive. A
 `rom-weaver-bundle.json` can supply the ROM, the patch order, the checks, and
 the output name instead.
+
+### Output and compression
+
+For an ordinary file apply, `--output` is optional. Without it, the command
+writes a sibling named `<input-stem>-patched.<rom-extension>` and adds a
+numeric suffix when that path already exists. Bundle applies keep their
+bundle-provided output behavior.
+
+Without an explicit compression flag, an output extension matching the
+selected ROM leaf writes raw ROM bytes. A registered creatable container
+extension selects that container. Unknown or ambiguous extensions fail rather
+than selecting a format silently.
+
+`--no-compress` and its compatibility alias `--raw` force raw output.
+`--compress-format`, `--compress-codec`, and `--compress-level` remain the
+canonical compression flags; `--format`, `--codec`, and `--level` are accepted
+aliases on `patch apply`.
 
 DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM
 data track and reassemble the whole disc, so they cannot be chained with

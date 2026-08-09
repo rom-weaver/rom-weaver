@@ -26,8 +26,7 @@ Apply one patch, or several in order, each on the result of the last:
 rom-weaver patch apply \
   --input original.sfc \
   --patch translation.bps \
-  --output translated.sfc \
-  --no-compress
+  --output translated.sfc
 
 rom-weaver patch apply \
   --input original.sfc \
@@ -38,9 +37,17 @@ rom-weaver patch apply \
 
 `patch apply` is the canonical spelling; `weave` remains accepted for compatibility.
 
-The result is compressed by default, into whatever the `--output` extension
-names. Pass `--no-compress` for a plain ROM, or set `--compress-format`,
-`--compress-codec`, and `--compress-level` yourself.
+An output extension matching the selected ROM leaf writes a plain ROM, so
+`translated.sfc` does not need `--no-compress`. A registered container
+extension such as `.zip` still compresses the result. Pass `--no-compress` (or
+`--raw`) to force raw bytes, or set `--compress-format` (also `--format`),
+`--compress-codec` (also `--codec`), and `--compress-level` (also `--level`)
+to force compression.
+
+For an ordinary file apply, omit `--output` to write a sibling such as
+`original-patched.sfc`. Existing names are preserved by adding a numeric
+suffix. Bundle applies keep their bundle-provided output name; a bundle without
+one still requires `--output`.
 
 Formats that carry their own checksums are verified strictly, so a wrong
 starting ROM stops before anything is written - see
