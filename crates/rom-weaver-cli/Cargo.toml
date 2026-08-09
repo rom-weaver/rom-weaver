@@ -41,6 +41,8 @@ clap.workspace = true
 # the Windows by-handle info std still gates behind an unstable feature.
 same-file.workspace = true
 clap_complete = "4.5"
+# Ctrl-C -> cancellation token. Tiny, one platform shim dependency each side.
+ctrlc = "3.5"
 # Light interactive prompts for `apply --tui`; built on `console`, already in
 # the tree via indicatif. default-features off drops editor/password/fuzzy.
 dialoguer = { version = "0.12", default-features = false }

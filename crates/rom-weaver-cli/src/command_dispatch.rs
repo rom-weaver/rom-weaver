@@ -6,12 +6,14 @@ impl CliApp {
         prompter: Arc<dyn SelectionPrompter>,
         emit_progress_events: bool,
         interactive_selection_enabled: bool,
+        assume_yes: bool,
     ) -> Self {
         Self {
             reporter,
             prompter,
             emit_progress_events,
             interactive_selection_enabled,
+            assume_yes,
             containers: ContainerRegistry::new(),
             patches: PatchRegistry::new(),
             checksum: NativeChecksumEngine,

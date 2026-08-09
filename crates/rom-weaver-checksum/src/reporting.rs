@@ -27,3 +27,18 @@ pub(super) fn hex_encode(bytes: &[u8]) -> String {
 pub fn supported_algorithms() -> &'static [&'static str] {
     SUPPORTED_ALGORITHMS
 }
+
+/// The one rejection message for an unknown checksum algorithm. Every caller
+/// routes through this so the list of valid names cannot drift between sites.
+pub fn unsupported_checksum_algorithm_message(value: &str) -> String {
+    let mut names = SUPPORTED_ALGORITHMS.to_vec();
+    let last = names.pop().unwrap_or_default();
+    format!(
+        "unsupported checksum algorithm `{value}`; expected {}, or {last}",
+        names.join(", ")
+    )
+}
+
+pub fn unsupported_checksum_algorithm(value: &str) -> RomWeaverError {
+    RomWeaverError::Validation(unsupported_checksum_algorithm_message(value))
+}

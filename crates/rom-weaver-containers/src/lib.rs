@@ -85,7 +85,8 @@ pub use formats::{
     ContainerThreadCapabilityMetadata, DiscImagePolicyMetadata, container_format_metadata,
     disc_image_policy_metadata, extract_only_create_error, extract_only_create_validation_message,
     is_ambiguous_disc_image_extension, is_likely_disc_image_size, is_likely_disc_image_source,
-    recommend_container_for_identity,
+    recommend_container_for_identity, supported_create_format_names, supported_create_formats_text,
+    unregistered_output_format_message,
 };
 use formats::{GCZ, NFS, PBP, RVZ, TGC, WBFS, WIA, XISO, Z3DS};
 use libarchive_support::{

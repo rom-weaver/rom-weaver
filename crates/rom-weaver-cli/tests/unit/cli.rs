@@ -17,6 +17,7 @@ fn output_options(json: bool, progress: Option<bool>) -> RomWeaverRunOutputOptio
         log_level: None,
         dep_trace: false,
         interactive_selection_enabled: false,
+        assume_yes: false,
     }
 }
 

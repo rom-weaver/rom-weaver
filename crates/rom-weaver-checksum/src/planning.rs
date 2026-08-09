@@ -3,9 +3,8 @@ pub(super) fn resolve_algorithms(values: &[String]) -> Result<Vec<Algorithm>> {
     let mut algorithms = Vec::new();
     let mut seen = BTreeSet::new();
     for value in values {
-        let algorithm = Algorithm::parse(value).ok_or_else(|| {
-            RomWeaverError::Validation(format!("unsupported checksum algorithm `{value}`"))
-        })?;
+        let algorithm =
+            Algorithm::parse(value).ok_or_else(|| unsupported_checksum_algorithm(value))?;
         if seen.insert(algorithm) {
             algorithms.push(algorithm);
         }

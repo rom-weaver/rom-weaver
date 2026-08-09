@@ -46,6 +46,7 @@ pub fn run_extract_batch(
         prompter,
         options.emit_progress_events,
         options.interactive_selection_enabled,
+        false,
     );
     app.run_extract_batch(jobs, options.threads, options.sequential)
 }
@@ -189,9 +190,12 @@ mod tests {
                 output: archive.clone(),
                 codec: Vec::new(),
                 level: CompressionLevelProfile::default(),
+                force: false,
+                dry_run: false,
                 threads: ThreadBudget::Fixed(1),
             }),
             AppRunOptions {
+                assume_yes: false,
                 emit_progress_events: false,
                 interactive_selection_enabled: false,
             },

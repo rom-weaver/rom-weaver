@@ -19,6 +19,19 @@ pub enum CompressionLevelProfile {
 }
 
 impl CompressionLevelProfile {
+    /// The profile's CLI spelling, for plan output and messages.
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Min => "min",
+            Self::VeryLow => "very-low",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::VeryHigh => "very-high",
+            Self::Max => "max",
+        }
+    }
+
     pub(crate) const fn standard_level(self) -> i32 {
         match self {
             Self::Min => 0,

@@ -1297,6 +1297,9 @@ fn bundle_apply_warns_but_succeeds_when_rom_name_differs() {
             "GAME.BIN",
             "--patch",
             main.to_str().expect("path"),
+            // Rewriting the bundle from the first half of this test now needs
+            // --force: `bundle create` refuses to clobber an existing output.
+            "--force",
             "--output",
             bundle.path().to_str().expect("path"),
             "--json",
@@ -1621,6 +1624,9 @@ fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
                 .expect("path"),
             "--output",
             out.path().to_str().expect("path"),
+            // The successful run above wrote this output; patch apply now
+            // refuses to overwrite without --force.
+            "--force",
             "--no-compress",
             "--json",
         ],

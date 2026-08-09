@@ -286,7 +286,7 @@ impl CliApp {
                     OperationFamily::Command,
                     Some("ingest".to_string()),
                     "validate",
-                    format!("unsupported checksum algorithm `{invalid}`"),
+                    unsupported_checksum_algorithm_message(invalid),
                     thread_execution,
                 ),
             );
