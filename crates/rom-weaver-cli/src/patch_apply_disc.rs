@@ -331,6 +331,9 @@ impl CliApp {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| input.display().to_string());
+        if self.assume_yes {
+            return Ok(Vec::new());
+        }
         if self.interactive_selection_enabled {
             let heading = format!(
                 "Directory `{}` contains data file(s) not referenced by `{sheet_name}`. Proceed patching the disc, ignoring them?",

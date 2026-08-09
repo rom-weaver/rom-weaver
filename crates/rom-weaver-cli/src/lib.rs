@@ -13,6 +13,8 @@ extern crate self as rom_weaver_app;
 
 mod cli;
 #[cfg(not(target_arch = "wasm32"))]
+mod formats_command;
+#[cfg(not(target_arch = "wasm32"))]
 mod interactive;
 #[cfg(not(target_arch = "wasm32"))]
 mod render;
@@ -32,23 +34,25 @@ use rom_weaver_checksum::rom_headers::{
 use rom_weaver_checksum::{
     ChecksumProgress, IdentityPrefix, NativeChecksumEngine, StreamingVariantChecksums,
     VariantOutput, VariantRow, checksum_file_values, finish_deferred_fix_header,
-    supported_algorithms,
+    supported_algorithms, unsupported_checksum_algorithm, unsupported_checksum_algorithm_message,
 };
 use rom_weaver_containers::{
     CompressFormatRecommendation, ContainerRegistry, extract_only_create_validation_message,
+    unregistered_output_format_message,
 };
 use rom_weaver_core::{
-    ArchiveEntryKindFilter, CancellationToken, ChecksumRequest, ContainerCreateRequest,
-    ContainerExtractRequest, ContainerHandler, ContainerListEntry, ContainerProbeRequest,
-    CreateInputOverride, CreateInputSource, DiscSheetKind, OperationContext, OperationFamily,
-    OperationReport, OperationStatus, PatchApplyRequest, PatchCheckScopes, PatchChecksumValidation,
+    ArchiveEntryKindFilter, ChecksumRequest, ContainerCreateRequest, ContainerExtractRequest,
+    ContainerHandler, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
+    CreateInputSource, DiscSheetKind, OperationContext, OperationFamily, OperationReport,
+    OperationStatus, PatchApplyRequest, PatchCheckScopes, PatchChecksumValidation,
     PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection, PatchInputN64ByteOrder,
     PatchValidateRequest, ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError,
     Selection, SelectionList, SelectionMatcher, SelectionPrompter, SolidPatchMetadata,
     ThreadBudget, ThreadCapability, ThreadExecution, UnsupportedOp, ValidationCodeError,
-    XdeltaSecondaryMode, detect_disc_sheet, emit_variant_plan, enumerate_disc_sheet_refs, env_u64,
-    is_patch_filter_candidate_name, is_rom_filter_candidate_name, normalize_archive_name,
-    operation_report_details, should_ignore_common_container_file, sibling_gdi_path,
+    XdeltaSecondaryMode, detect_disc_sheet, emit_variant_plan, ensure_output_available,
+    enumerate_disc_sheet_refs, env_u64, is_patch_filter_candidate_name,
+    is_rom_filter_candidate_name, normalize_archive_name, operation_report_details,
+    process_cancellation_token, should_ignore_common_container_file, sibling_gdi_path,
 };
 // The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
 // test in `tests.rs` can exercise it through `CliApp`.
@@ -135,6 +139,9 @@ match a file that is stored slightly differently."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
+            // Webapp plumbing: the browser drop handler runs this. It stays
+            // functional on the CLI but is not part of the advertised surface.
+            hide = true,
             about = "Sort a file into ROMs and patches, unpacking and hashing along the way",
             long_about = "\
 Sort a file into ROMs and patches, unpacking archives and hashing the ROMs as
@@ -395,6 +402,11 @@ pub struct RomWeaverRunOutputOptions {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub interactive_selection_enabled: bool,
+    /// `--yes`: answer every yes/no confirmation with yes instead of asking or
+    /// refusing. Never picks between candidates - only confirms.
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub assume_yes: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -434,6 +446,7 @@ impl RomWeaverRunOutputOptions {
 pub struct AppRunOptions {
     pub emit_progress_events: bool,
     pub interactive_selection_enabled: bool,
+    pub assume_yes: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -457,6 +470,7 @@ impl RomWeaverApp {
             prompter,
             options.emit_progress_events,
             options.interactive_selection_enabled,
+            options.assume_yes,
         );
         app.run(command)
     }
@@ -469,6 +483,7 @@ pub struct RunCommandOptions {
     pub dep_trace: bool,
     pub emit_progress_events: bool,
     pub interactive_selection_enabled: bool,
+    pub assume_yes: bool,
 }
 
 impl RunCommandOptions {
@@ -479,6 +494,7 @@ impl RunCommandOptions {
             dep_trace: output.dep_trace,
             emit_progress_events: output.emit_progress_events(stdout_is_tty),
             interactive_selection_enabled: output.interactive_selection_enabled,
+            assume_yes: output.assume_yes,
         }
     }
 }
@@ -755,6 +771,7 @@ pub fn run_command_outcome(
         AppRunOptions {
             emit_progress_events: options.emit_progress_events,
             interactive_selection_enabled: options.interactive_selection_enabled,
+            assume_yes: options.assume_yes,
         },
         reporter,
         prompter,
@@ -795,18 +812,34 @@ fn log_filter_spec(
     (!directives.is_empty()).then(|| directives.join(","))
 }
 
-fn configured_trace_filter() -> Option<String> {
+/// The env filter in effect plus the variable it came from, so the override
+/// warning can name it.
+fn configured_trace_filter_source() -> Option<(&'static str, String)> {
     std::env::var("ROM_WEAVER_LOG")
         .ok()
         .and_then(trim_non_empty)
-        .or_else(|| std::env::var("RUST_LOG").ok().and_then(trim_non_empty))
+        .map(|filter| ("ROM_WEAVER_LOG", filter))
+        .or_else(|| {
+            std::env::var("RUST_LOG")
+                .ok()
+                .and_then(trim_non_empty)
+                .map(|filter| ("RUST_LOG", filter))
+        })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn init_logging(log_level: Option<LogLevel>, dep_trace: bool, json_mode: bool) {
     static TRACE_LOGGING_INIT: OnceLock<()> = OnceLock::new();
     TRACE_LOGGING_INIT.get_or_init(|| {
-        let filter_spec = log_filter_spec(log_level, dep_trace, configured_trace_filter());
+        let configured = configured_trace_filter_source();
+        // The flag replaces the env filter outright rather than merging with
+        // it; say so instead of silently dropping what the environment asked
+        // for.
+        if let (Some(_), Some((name, filter))) = (log_level, configured.as_ref()) {
+            eprintln!("warning: --log-level/-v/-q overrides {name}=`{filter}`");
+        }
+        let filter_spec =
+            log_filter_spec(log_level, dep_trace, configured.map(|(_, filter)| filter));
 
         let Some(filter_spec) = filter_spec else {
             return;
@@ -843,8 +876,11 @@ fn init_logging(log_level: Option<LogLevel>, dep_trace: bool, json_mode: bool) {
 fn init_logging(log_level: Option<LogLevel>, dep_trace: bool, _json_mode: bool) {
     static TRACE_LOGGING_INIT: OnceLock<()> = OnceLock::new();
     TRACE_LOGGING_INIT.get_or_init(|| {
-        let Some(filter_spec) = log_filter_spec(log_level, dep_trace, configured_trace_filter())
-        else {
+        let Some(filter_spec) = log_filter_spec(
+            log_level,
+            dep_trace,
+            configured_trace_filter_source().map(|(_, filter)| filter),
+        ) else {
             return;
         };
         let filter = match filter_spec.parse::<Targets>() {
@@ -922,6 +958,7 @@ struct CliApp {
     prompter: Arc<dyn SelectionPrompter>,
     emit_progress_events: bool,
     interactive_selection_enabled: bool,
+    assume_yes: bool,
     containers: ContainerRegistry,
     patches: PatchRegistry,
     checksum: NativeChecksumEngine,

@@ -362,6 +362,8 @@ impl CliApp {
             code_kind,
             emit_bundle: _,
             tui: _,
+            force,
+            dry_run,
             threads,
         } = args;
         let mut output = output.expect("output presence is validated above");
@@ -430,6 +432,21 @@ impl CliApp {
             probe_threads.clone(),
         ) {
             return self.finish("patch-apply", report);
+        }
+        if dry_run {
+            let report = self.patch_apply_dry_run(
+                &input,
+                &patches,
+                &output,
+                &compression_options,
+                probe_threads.clone(),
+            );
+            return self.finish("patch-apply", report);
+        }
+        // Guards the output the user named. Compressing can append an
+        // extension; the compress step re-checks the resolved path.
+        if let Err(error) = ensure_output_available(&output, force) {
+            return self.finish("patch-apply", fail("validate", error.to_string()));
         }
         let disc_context = match self.resolve_patch_apply_disc(PatchApplyDiscInputs {
             input: &input,
@@ -988,21 +1005,16 @@ impl CliApp {
                 }
 
                 if report.status == OperationStatus::Succeeded && compression_options.enabled {
-                    let compression_plan = match self.resolve_patch_apply_compression_plan(
+                    let compression_plan = match self.resolve_guarded_patch_apply_compression_plan(
                         &output,
                         &resolved_input,
                         &compression_options,
+                        force,
+                        report.format.clone(),
+                        &context,
                     ) {
                         Ok(plan) => plan,
-                        Err(error) => {
-                            return OperationReport::failed(
-                                OperationFamily::Patch,
-                                report.format.clone(),
-                                "compress",
-                                error.to_string(),
-                                context.single_thread_execution(),
-                            );
-                        }
+                        Err(error_report) => return *error_report,
                     };
                     // Disc: feed the original sheet to the compressor; the patched
                     // track is redirected via `disc_track_overrides`. Plain inputs
@@ -2822,6 +2834,129 @@ impl CliApp {
     /// Caller-specific labels and report metadata stay outside. A missing
     /// handler preserves the validation error expected by callers, though the
     /// compression plan should already have validated it.
+    /// Resolve the plan `--dry-run` reports. Only the dry run resolves the
+    /// compression plan up front; doing it on the normal path would surface its
+    /// errors ahead of the patch checks that run first today.
+    /// Resolve the compression plan and re-check the resolved output path: the
+    /// early guard checked the path the user named, and an appended container
+    /// extension makes the real output a different file.
+    fn resolve_guarded_patch_apply_compression_plan(
+        &self,
+        output: &Path,
+        resolved_input: &Path,
+        compression_options: &PatchApplyCompressionOptions,
+        force: bool,
+        report_format: Option<String>,
+        context: &OperationContext,
+    ) -> std::result::Result<PatchApplyCompressionPlan, Box<OperationReport>> {
+        let fail = |error: RomWeaverError| {
+            Box::new(OperationReport::failed(
+                OperationFamily::Patch,
+                report_format.clone(),
+                "compress",
+                error.to_string(),
+                context.single_thread_execution(),
+            ))
+        };
+        let plan = self
+            .resolve_patch_apply_compression_plan(output, resolved_input, compression_options)
+            .map_err(&fail)?;
+        if plan.extension_appended {
+            ensure_output_available(&plan.output_path, force).map_err(&fail)?;
+        }
+        Ok(plan)
+    }
+
+    fn patch_apply_dry_run(
+        &self,
+        input: &Path,
+        patches: &[PathBuf],
+        output: &Path,
+        compression_options: &PatchApplyCompressionOptions,
+        thread_execution: Option<ThreadExecution>,
+    ) -> OperationReport {
+        let planned_output = if compression_options.enabled {
+            match self.resolve_patch_apply_compression_plan(output, input, compression_options) {
+                Ok(plan) => Some(plan),
+                Err(error) => {
+                    return OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        error.to_string(),
+                        thread_execution,
+                    );
+                }
+            }
+        } else {
+            None
+        };
+        let planned_output_path = planned_output
+            .as_ref()
+            .map(|plan| plan.output_path.clone())
+            .unwrap_or_else(|| output.to_path_buf());
+        Self::patch_apply_dry_run_report(
+            input,
+            patches,
+            &planned_output_path,
+            planned_output.as_ref(),
+            thread_execution,
+        )
+    }
+
+    /// The `--dry-run` answer for `patch apply`: the resolved inputs, patch
+    /// chain, output path, and compression choices. Nothing is written.
+    fn patch_apply_dry_run_report(
+        input: &Path,
+        patches: &[PathBuf],
+        output: &Path,
+        compression: Option<&PatchApplyCompressionPlan>,
+        thread_execution: Option<ThreadExecution>,
+    ) -> OperationReport {
+        let mut details = Map::new();
+        details.insert("dry_run".to_string(), json!(true));
+        details.insert("input".to_string(), json!(input.display().to_string()));
+        details.insert(
+            "patches".to_string(),
+            json!(
+                patches
+                    .iter()
+                    .map(|patch| patch.display().to_string())
+                    .collect::<Vec<_>>()
+            ),
+        );
+        details.insert("output".to_string(), json!(output.display().to_string()));
+        match compression {
+            Some(plan) => {
+                details.insert("format".to_string(), json!(plan.format));
+                details.insert("codec".to_string(), json!(plan.codec));
+                details.insert("level".to_string(), json!(plan.level));
+            }
+            None => {
+                details.insert("format".to_string(), json!("raw"));
+            }
+        }
+        let format_label = compression
+            .map(|plan| plan.format.clone())
+            .unwrap_or_else(|| "raw (no compression)".to_string());
+        let label = format!(
+            "dry run: would apply {} patch(es) to `{}` and write `{}` as {format_label}; nothing written",
+            patches.len(),
+            input.display(),
+            output.display()
+        );
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Patch,
+            compression.map(|plan| plan.format.clone()),
+            "plan",
+            label,
+            None,
+            thread_execution,
+        );
+        report.details = Some(Value::Object(details));
+        report
+    }
+
     pub(super) fn run_patch_apply_compression(
         &self,
         plan: &PatchApplyCompressionPlan,
@@ -2832,7 +2967,7 @@ impl CliApp {
     ) -> Result<(OperationReport, String)> {
         let Some(handler) = self.containers.find_by_name(&plan.format) else {
             return Err(RomWeaverError::Validation(
-                "requested output format is not registered".to_string(),
+                unregistered_output_format_message(),
             ));
         };
         let codec_label = plan.codec.as_deref().unwrap_or("default").to_string();

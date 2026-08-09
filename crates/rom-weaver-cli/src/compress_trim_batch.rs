@@ -5,6 +5,7 @@ struct TrimBatchConfig<'a> {
     extension: &'a str,
     in_place: bool,
     dry_run: bool,
+    force: bool,
     operation: TrimOperation,
     revert_marker: bool,
     context: &'a OperationContext,
@@ -41,6 +42,8 @@ impl CliApp {
             output,
             codec,
             level: level_profile,
+            force,
+            dry_run,
             threads,
         } = args;
         let requested_format = match format {
@@ -94,6 +97,12 @@ impl CliApp {
         ) {
             return self.finish("compress", report);
         }
+        if !dry_run && let Err(error) = ensure_output_available(&output, force) {
+            return self.finish(
+                "compress",
+                fail(requested_format.clone(), "validate", error.to_string()),
+            );
+        }
         // The output format is derived from the output filename's extension; an explicit --format
         // overrides it (with a warning when they disagree) and is required when the output has no
         // extension. There is no auto selection.
@@ -143,7 +152,7 @@ impl CliApp {
                 fail(
                     Some(resolved_format),
                     "probe",
-                    "requested output format is not registered".to_string(),
+                    unregistered_output_format_message(),
                 ),
             );
         };
@@ -154,7 +163,7 @@ impl CliApp {
                 fail(
                     Some(resolved_format),
                     "probe",
-                    "requested output format is not registered".to_string(),
+                    unregistered_output_format_message(),
                 ),
             );
         }
@@ -169,6 +178,27 @@ impl CliApp {
             );
         }
         let create_threads = Some(context.plan_threads(capabilities.create_threads.clone()));
+        if dry_run {
+            let request = ContainerCreateRequest {
+                inputs: input.clone(),
+                output: output.clone(),
+                format: resolved_format.clone(),
+                codec: codec.clone(),
+                level,
+                parent: None,
+            };
+            let estimated = handler.create_dry_run_size(&request, &context).ok();
+            let report = Self::compress_dry_run_report(
+                &input,
+                &output,
+                &resolved_format,
+                codec.as_deref(),
+                level_profile,
+                estimated,
+                create_threads.clone(),
+            );
+            return self.finish("compress", report);
+        }
         self.emit_running(
             OperationLabel {
                 command: "compress",
@@ -242,6 +272,54 @@ impl CliApp {
         self.finish("compress", report)
     }
 
+    /// The `--dry-run` answer for `compress`: everything that was resolved, and
+    /// the handler's size estimate when it can produce one. Nothing is written.
+    fn compress_dry_run_report(
+        inputs: &[PathBuf],
+        output: &Path,
+        format: &str,
+        codec: Option<&str>,
+        level: CompressionLevelProfile,
+        estimated_output_bytes: Option<u64>,
+        thread_execution: Option<ThreadExecution>,
+    ) -> OperationReport {
+        let mut details = Map::new();
+        details.insert("dry_run".to_string(), json!(true));
+        details.insert(
+            "inputs".to_string(),
+            json!(
+                inputs
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+            ),
+        );
+        details.insert("output".to_string(), json!(output.display().to_string()));
+        details.insert("format".to_string(), json!(format));
+        details.insert("codec".to_string(), json!(codec));
+        details.insert("level".to_string(), json!(level.name()));
+        if let Some(bytes) = estimated_output_bytes {
+            details.insert("estimated_output_bytes".to_string(), json!(bytes));
+        }
+        let label = format!(
+            "dry run: would write `{}` as {format} (codec {}, level {}) from {} input(s); nothing written",
+            output.display(),
+            codec.unwrap_or("default"),
+            level.name(),
+            inputs.len()
+        );
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(format.to_string()),
+            "plan",
+            label,
+            None,
+            thread_execution,
+        );
+        report.details = Some(Value::Object(details));
+        report
+    }
+
     pub(super) fn run_trim(&self, args: TrimCommand) -> AppRunOutcome {
         trace!(
             source_count = args.input.len(),
@@ -251,12 +329,13 @@ impl CliApp {
             dry_run = args.dry_run,
             revert = args.revert,
             recursive = args.recursive,
-            rom_filter = args.rom_filter,
+            rom_filter = args.rom_filter_enabled(),
             no_extract = args.no_extract,
             revert_marker = args.revert_marker,
             threads = %args.threads,
             "starting trim command"
         );
+        let rom_filter = args.rom_filter_enabled();
         let TrimCommand {
             input: source,
             output,
@@ -265,9 +344,11 @@ impl CliApp {
             dry_run,
             revert,
             recursive,
-            rom_filter,
+            filter: _,
+            rom_filter: _,
             no_extract,
             revert_marker,
+            force,
             threads,
         } = args;
         let operation = if revert {
@@ -371,6 +452,7 @@ impl CliApp {
             extension: &extension,
             in_place,
             dry_run,
+            force,
             operation,
             revert_marker,
             context: &context,
@@ -487,6 +569,16 @@ impl CliApp {
         } else {
             Self::default_trim_output_path(trim_source, config.extension)
         };
+        // --in-place and archive repack rewrite the source on purpose, so the
+        // overwrite guard only covers the new files --output/--extension name.
+        let writes_new_file = repack_root.is_none() && !config.in_place;
+        if writes_new_file
+            && !config.dry_run
+            && let Err(error) = ensure_output_available(&output_path, config.force)
+        {
+            Self::record_trim_failure(state, error.to_string());
+            return;
+        }
         let output_label = if let Some(archive) = trim_source
             .archive_origin
             .as_ref()
@@ -538,7 +630,15 @@ impl CliApp {
             (result, _) => result,
         };
         match trim_result {
-            Ok(outcome) => Self::record_trim_outcome(outcome, config, state),
+            Ok(outcome) => {
+                // A finished output must leave the cancel registry, or a later
+                // Ctrl-C in this batch would delete it along with the file in
+                // flight.
+                if writes_new_file && !config.dry_run {
+                    rom_weaver_core::complete_in_progress_output(&output_path);
+                }
+                Self::record_trim_outcome(outcome, config, state);
+            }
             Err(error) => {
                 Self::record_trim_failure(state, format!("{}: {error}", trim_source.path.display()))
             }
@@ -711,9 +811,13 @@ impl CliApp {
             );
             return Ok(true);
         }
+        // `--yes` is the scripted answer to the same question the prompt asks.
+        if self.assume_yes {
+            return Ok(true);
+        }
         if !self.interactive_selection_enabled {
             return Err(RomWeaverError::Validation(format!(
-                "refusing to repack `{}` in place: it contains {} other file(s) that would be rewritten; rerun in an interactive terminal to confirm, or omit --in-place to write the trimmed ROM beside the archive",
+                "refusing to repack `{}` in place: it contains {} other file(s) that would be rewritten; pass --yes to confirm, rerun in an interactive terminal, or omit --in-place to write the trimmed ROM beside the archive",
                 archive.display(),
                 others.len()
             )));

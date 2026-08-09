@@ -94,6 +94,25 @@ pub fn bounded_items_for_threads(effective_threads: usize) -> usize {
     threads.saturating_mul(2).max(2)
 }
 
+/// The shared output-overwrite guard. Every command that writes a named output
+/// checks this before doing any work, so `--force` means the same thing and the
+/// refusal reads the same everywhere.
+pub fn ensure_output_available(output_path: &Path, overwrite: bool) -> Result<()> {
+    if !output_path.exists() {
+        // Nothing was there, so a cancelled run may safely delete whatever it
+        // wrote here.
+        crate::register_in_progress_output(output_path);
+        return Ok(());
+    }
+    if overwrite {
+        return Ok(());
+    }
+    Err(RomWeaverError::Validation(format!(
+        "refusing to overwrite existing output `{}` (pass --force to overwrite it)",
+        output_path.display()
+    )))
+}
+
 pub fn create_extract_output_file(output_path: &Path, overwrite: bool) -> Result<File> {
     if overwrite {
         return File::create(output_path).io_op(IoOp::Create, output_path);

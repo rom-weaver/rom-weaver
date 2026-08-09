@@ -38,8 +38,10 @@ use self::execution::*;
 
 #[path = "reporting.rs"]
 mod reporting;
-pub use self::reporting::supported_algorithms;
 use self::reporting::*;
+pub use self::reporting::{
+    supported_algorithms, unsupported_checksum_algorithm, unsupported_checksum_algorithm_message,
+};
 
 #[cfg(test)]
 #[path = "../tests/unit/engine.rs"]

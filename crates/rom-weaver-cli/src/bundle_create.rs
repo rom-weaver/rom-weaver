@@ -277,9 +277,7 @@ impl CliApp {
                 .iter()
                 .any(|supported| supported.eq_ignore_ascii_case(algorithm))
         }) {
-            return Err(RomWeaverError::Validation(format!(
-                "unsupported checksum algorithm `{invalid}`"
-            )));
+            return Err(unsupported_checksum_algorithm(invalid));
         }
         let mut warnings = Vec::new();
 
@@ -384,6 +382,8 @@ impl CliApp {
                 checks: None,
             }),
         };
+
+        ensure_output_available(&args.output, args.force)?;
 
         let output_checks = bundle_entry_checks(&args.output_check, "--expect-out")?;
 
@@ -745,8 +745,21 @@ pub(crate) fn aligned_metadata<T: Clone>(
     if values.len() == count {
         return Ok(values.iter().cloned().map(Some).collect());
     }
+    let positions = if values.len() < count {
+        let missing = (values.len() + 1..=count)
+            .map(|position| format!("#{position}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("no value for --patch {missing}")
+    } else {
+        let extra = (count + 1..=values.len())
+            .map(|position| format!("#{position}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("value(s) {extra} have no matching --patch")
+    };
     Err(RomWeaverError::Validation(format!(
-        "{flag} must be given once per --patch (or not at all); got {} value(s) for {count} patch(es)",
+        "{flag} must follow its --patch, once per --patch (or be left out entirely); got {} value(s) for {count} patch(es): {positions}",
         values.len()
     )))
 }

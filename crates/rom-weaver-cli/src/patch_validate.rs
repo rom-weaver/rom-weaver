@@ -1869,7 +1869,7 @@ mod tests {
     use super::*;
 
     fn cancelled_context(temp_root: PathBuf) -> OperationContext {
-        let cancel = CancellationToken::new();
+        let cancel = rom_weaver_core::CancellationToken::new();
         cancel.cancel();
         OperationContext::new(
             ThreadBudget::Fixed(1),
@@ -1958,6 +1958,7 @@ mod tests {
         let app = CliApp::new(
             Arc::new(rom_weaver_core::NoopProgressSink),
             Arc::new(rom_weaver_core::NoninteractivePrompter),
+            false,
             false,
             false,
         );

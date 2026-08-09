@@ -639,8 +639,8 @@ impl CliApp {
                 .any(|supported| supported.eq_ignore_ascii_case(&algorithm))
             {
                 return Err(RomWeaverError::Validation(format!(
-                    "{flag_name} uses unsupported checksum algorithm `{}`",
-                    algorithm_raw.trim()
+                    "{flag_name} uses {}",
+                    unsupported_checksum_algorithm_message(algorithm_raw.trim())
                 )));
             }
 
@@ -662,8 +662,8 @@ impl CliApp {
             }
             let Some(expected_hex_len) = super::expect_tokens::checksum_hex_len(&algorithm) else {
                 return Err(RomWeaverError::Validation(format!(
-                    "{flag_name} uses unsupported checksum algorithm `{}`",
-                    algorithm_raw.trim()
+                    "{flag_name} uses {}",
+                    unsupported_checksum_algorithm_message(algorithm_raw.trim())
                 )));
             };
             if checksum.len() != expected_hex_len {

@@ -76,7 +76,14 @@ impl CliApp {
                 self.reporter.clone(),
             ))
         };
-        OperationContext::new(thread_budget, temp_root, reporter, CancellationToken::new())
+        // The process token, so a Ctrl-C reaches work already running. On wasm
+        // and in tests nothing ever trips it, so it behaves like a fresh one.
+        OperationContext::new(
+            thread_budget,
+            temp_root,
+            reporter,
+            process_cancellation_token(),
+        )
     }
 
     pub(super) fn default_temp_root() -> PathBuf {
@@ -363,7 +370,8 @@ impl CliApp {
                 })
             }
             None => Err(RomWeaverError::Validation(format!(
-                "output extension `{extension_display}` is not a supported format; pass {flag_label} <name> or use a supported extension{raw_output_hint}"
+                "output extension `{extension_display}` is not a supported format; pass {flag_label} <name> or use a supported extension{raw_output_hint}. Supported output formats: {}",
+                rom_weaver_containers::supported_create_formats_text()
             ))),
         }
     }

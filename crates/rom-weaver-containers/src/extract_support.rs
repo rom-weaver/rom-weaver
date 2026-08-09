@@ -15,8 +15,8 @@ use rom_weaver_core::{
     OrderedChunkWriter, OrderedStreamingMessages, ProgressEvent, Result, RomWeaverError,
     ThreadExecution, bounded_items_for_threads, build_known_emitted_file_detail,
     create_extract_output_file, detect_disc_sheet, emit_container_running_progress,
-    is_rom_filter_candidate_name, maybe_emit_container_byte_progress, operation_report_details,
-    ordered_streaming_compress,
+    ensure_output_available, is_rom_filter_candidate_name, maybe_emit_container_byte_progress,
+    operation_report_details, ordered_streaming_compress,
 };
 use serde_json::{Map, Value, json};
 use tracing::trace;
@@ -24,13 +24,7 @@ use tracing::trace;
 use crate::constants::copy_progress_buffer_size;
 
 pub(crate) fn ensure_extract_output_available(output_path: &Path, overwrite: bool) -> Result<()> {
-    if overwrite || !output_path.exists() {
-        return Ok(());
-    }
-    Err(RomWeaverError::Validation(format!(
-        "refusing to overwrite existing output `{}` (pass --force to overwrite it)",
-        output_path.display()
-    )))
+    ensure_output_available(output_path, overwrite)
 }
 
 pub(crate) fn emit_container_indeterminate_progress(

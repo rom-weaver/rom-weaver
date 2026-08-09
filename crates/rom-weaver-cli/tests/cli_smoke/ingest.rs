@@ -886,8 +886,12 @@ fn ingest_rejects_unsupported_checksum_algorithm() {
     fs::write(rom.path(), with_nes_header(b"rom")).expect("rom fixture");
     let out_dir = temp.child("ingest-bad-algo-out");
 
-    let terminal = run_single_json_event(
-        &[
+    // --checksum is backed by the checksum registry's possible values, so clap
+    // rejects an unknown algorithm before the command runs (exit 2, usage
+    // error) and lists the valid ones.
+    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    let assert = command
+        .args([
             "ingest",
             "--input",
             rom.path().to_str().expect("path"),
@@ -896,11 +900,15 @@ fn ingest_rejects_unsupported_checksum_algorithm() {
             "--checksum",
             "not-a-real-algo",
             "--json",
-        ],
-        1,
+        ])
+        .assert()
+        .code(2);
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    assert!(
+        stderr.contains("invalid value 'not-a-real-algo'"),
+        "{stderr}"
     );
-    assert_eq!(terminal["command"], "ingest");
-    assert_eq!(terminal["status"], "failed");
+    assert!(stderr.contains("crc32"), "{stderr}");
 }
 
 #[test]
