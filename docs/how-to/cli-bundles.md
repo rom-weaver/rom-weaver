@@ -8,8 +8,8 @@ running bundles from the terminal.
 <!-- START doctoc -->
 ## Table of contents
 
+- [Create a bundle from a spec file](#create-a-bundle-from-a-spec-file)
 - [Create a bundle from local files](#create-a-bundle-from-local-files)
-- [Author a spec instead of flags](#author-a-spec-instead-of-flags)
 - [Parse and run a bundle](#parse-and-run-a-bundle)
 
 <!-- END doctoc -->
@@ -29,9 +29,41 @@ file or point an editor at it:
 rom-weaver bundle schema > rom-weaver-bundle-v1.schema.json
 ```
 
+## Create a bundle from a spec file
+
+Write a small spec with local `path`s. Leave checksums out; `bundle create --from`
+reads the referenced files and fills them from the real bytes.
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json",
+  "version": 1,
+  "rom": { "path": "original.sfc" },
+  "patches": [
+    { "path": "translation.bps", "name": "English translation" },
+    { "path": "fixes.ips", "optional": true }
+  ],
+  "output": { "name": "translated.sfc" }
+}
+```
+
+```bash
+rom-weaver bundle create --from spec.json --output rom-weaver-bundle.json
+```
+
+Add the `$schema` line from the example when your editor supports JSON Schema.
+Print the current schema with `rom-weaver bundle schema`.
+
+`--from -` reads the spec from stdin, in which case paths resolve against the
+current directory. For a file, paths resolve against the spec file. Any flag
+you also pass overrides what the spec says, and a `$schema` already in the
+spec is kept. `--from` only accepts entries with a local `path`; url-only and
+checks-only entries are rejected with an explanation.
+
 ## Create a bundle from local files
 
-The checks are computed from the real bytes:
+For a one-off command, pass the files directly. The checks are still computed
+from the real bytes:
 
 ```bash
 rom-weaver bundle create \
@@ -51,7 +83,8 @@ Every `--patch-*` flag describes the `--patch` before it: `--patch-id`,
 `--patch-optional`, `--patch-label`, `--patch-source-url`, `--patch-header`,
 and `--patch-basis`. Give each patch an ID that stays the same across releases
 and the webapp keeps its settings when you publish a replacement; bump
-`--patch-version` at the same time.
+`--patch-version` at the same time. These repeated flags are grouped under
+**Advanced authoring options** in `--help`.
 
 Checksums use the same tokens as `patch apply`. `--expect-out ALGO=HEX` pins
 the final result, `--patch-expect-in` and `--patch-expect-out` pin what a
@@ -63,36 +96,6 @@ archive. `--no-bundle-rom` leaves the ROM out and records only its checksums,
 which is the usual shape for distributing a patch. `--schema-ref <URL>` records
 a `$schema` URL for editors; it is left out unless you ask for it, so the
 output stays byte-stable.
-
-## Author a spec instead of flags
-
-Rather than pass every flag, hand-author a `rom-weaver-bundle.json` spec with
-local `path`s and optional or omitted checksums, add a `$schema` line so your
-editor validates it, then let `bundle create --from` hash the referenced files
-and bake the canonical checksummed bundle:
-
-```json
-{
-  "$schema": "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json",
-  "version": 1,
-  "rom": { "path": "original.sfc" },
-  "patches": [
-    { "path": "translation.bps", "name": "English translation" },
-    { "path": "fixes.ips", "optional": true }
-  ],
-  "output": { "name": "translated.sfc" }
-}
-```
-
-```bash
-rom-weaver bundle create --from spec.json --output rom-weaver-bundle.json
-```
-
-`--from -` reads the spec from stdin, in which case paths resolve against the
-current directory; otherwise they resolve against the spec file. Any flag you
-also pass overrides what the spec says, and a `$schema` already in the spec is
-kept. `--from` only accepts entries with a local `path`; url-only and
-checks-only entries are rejected with an explanation.
 
 ## Parse and run a bundle
 

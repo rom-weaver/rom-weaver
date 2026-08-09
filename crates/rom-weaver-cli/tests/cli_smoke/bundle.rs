@@ -848,6 +848,108 @@ fn bundle_apply_url_bundle_resolves_relative_entries() {
 }
 
 #[test]
+fn bundle_create_help_leads_with_spec_workflow() {
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["bundle", "create", "--help"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let help = String::from_utf8(output).expect("utf8 help");
+    let workflow = help
+        .find("Recommended workflow: write a spec")
+        .expect("spec workflow in help");
+    let example = help.find("\"patches\": [{ \"path\": \"hack.bps\" }]");
+    assert!(
+        example.is_some_and(|example| example > workflow),
+        "minimal spec example should follow the workflow: {help}"
+    );
+    let advanced = help
+        .find("Advanced authoring options:")
+        .expect("advanced authoring heading in help");
+    let from = help.find("--from <SPEC>").expect("--from in help");
+    let patch = help[advanced..]
+        .find("--patch <PATCH>")
+        .map(|offset| advanced + offset)
+        .expect("--patch under advanced heading");
+    for option in ["--assume-in", "--expect-out", "--checksum <CHECKSUM>"] {
+        let option_index = help[advanced..]
+            .find(option)
+            .map(|offset| advanced + offset)
+            .unwrap_or_else(|| panic!("{option} under advanced heading"));
+        assert!(
+            option_index > advanced,
+            "{option} should be in the advanced section: {help}"
+        );
+    }
+    assert!(
+        from < advanced && advanced < patch,
+        "spec workflow should precede advanced flag authoring: {help}"
+    );
+}
+
+#[test]
+fn bundle_create_from_spec_resolves_paths_and_preserves_schema() {
+    let temp = setup_temp_dir();
+    let rom = write_bundle_rom(&temp, "game.bin");
+    let patch = write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let spec_dir = temp.child("specs");
+    fs::create_dir_all(spec_dir.path()).expect("spec directory");
+    let spec_rom = spec_dir.child("game.bin");
+    let spec_patch = spec_dir.child("main.ips");
+    fs::copy(rom, spec_rom.path()).expect("copy spec rom");
+    fs::copy(patch, spec_patch.path()).expect("copy spec patch");
+    let spec = spec_dir.child("release.json");
+    fs::write(
+        spec.path(),
+        format!(
+            r#"{{
+                "$schema": "https://example.test/rom-weaver-bundle.json",
+                "version": 1,
+                "rom": {{ "path": "{}" }},
+                "patches": [
+                    {{ "path": "{}", "name": "Main hack" }}
+                ],
+                "output": {{ "name": "patched.bin" }}
+            }}"#,
+            "game.bin", "main.ips",
+        ),
+    )
+    .expect("spec fixture");
+    let bundle = temp.child("rom-weaver-bundle.json");
+
+    let events = run_json_events(
+        &[
+            "bundle",
+            "create",
+            "--from",
+            spec.path().to_str().expect("spec path"),
+            "--output",
+            bundle.path().to_str().expect("bundle path"),
+            "--json",
+        ],
+        0,
+    );
+    let terminal = events.last().expect("terminal");
+    assert_eq!(terminal["status"], "succeeded");
+    let created = &terminal["details"]["bundle_create"]["bundle"];
+    assert_eq!(
+        created["$schema"],
+        "https://example.test/rom-weaver-bundle.json"
+    );
+    assert_eq!(created["rom"]["path"], "game.bin");
+    assert_eq!(created["patches"][0]["path"], "main.ips");
+    assert_eq!(created["patches"][0]["name"], "Main hack");
+    assert_eq!(created["output"]["name"], "patched.bin");
+    assert_eq!(
+        created["rom"]["checks"]["checksums"]["crc32"],
+        crc32_hex(BUNDLE_ROM_BYTES).as_str()
+    );
+}
+
+#[test]
 fn bundle_create_computes_checks_and_aligns_metadata() {
     let temp = setup_temp_dir();
     let rom = write_bundle_rom(&temp, "game.bin");

@@ -92,6 +92,9 @@ pub const NO_IGNORE_HELP: &str = "Also consider files normally skipped inside ar
 pub const THREADS_HELP: &str =
     "How many threads to use at most. auto uses every core; a format may still use fewer";
 
+#[cfg(not(target_arch = "wasm32"))]
+const BUNDLE_CREATE_ADVANCED_HEADING: &str = "Advanced authoring options";
+
 /// `compress` and `patch apply` both choose an output container, so the format
 /// and codec flags say the same thing in both places.
 #[cfg(not(target_arch = "wasm32"))]
@@ -1997,6 +2000,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "assume-in",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             value_name = "ALGO=HEX",
             value_delimiter = ',',
             value_parser = crate::expect_tokens::validate_expect_token,
@@ -2030,6 +2034,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             help = "Patch to list in the bundle. Repeat once per patch, in the order they should be applied",
             long_help = "\
 Patch to list in the bundle. Repeat once per patch, in the order they should be
@@ -2049,6 +2054,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-id",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             help = "Identifier for the preceding --patch that stays the same across releases, so a replacement keeps its settings"
         )
     )]
@@ -2059,6 +2065,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-version",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             help = "Version of the preceding --patch, in whatever form its author uses"
         )
     )]
@@ -2067,21 +2074,33 @@ patches reads left to right:
     pub patch_version: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long = "patch-name", help = "Name to show for the preceding --patch")
+        arg(
+            long = "patch-name",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
+            help = "Name to show for the preceding --patch"
+        )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_name: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long = "patch-description", help = "What the preceding --patch does")
+        arg(
+            long = "patch-description",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
+            help = "What the preceding --patch does"
+        )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_description: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long = "patch-author", help = "Who made the preceding --patch")
+        arg(
+            long = "patch-author",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
+            help = "Who made the preceding --patch"
+        )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -2090,6 +2109,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-label",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             help = "Short status note for the preceding --patch, such as beta or recommended"
         )
     )]
@@ -2100,6 +2120,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-optional",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             help = "Mark the preceding --patch optional, so it starts switched off and needs --with to run"
         )
     )]
@@ -2110,6 +2131,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-source-url",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             help = "Where the preceding --patch can be downloaded from. The local file is still read to build the bundle"
         )
     )]
@@ -2120,6 +2142,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-header",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             value_enum,
             help = "Whether the preceding --patch applies to the ROM with or without its copier header: auto, keep, or strip"
         )
@@ -2131,6 +2154,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-basis",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             value_enum,
             help = "Which ROM the preceding --patch was built against: base (the bundle's ROM) or previous (the patch before it). Use auto to leave it out and let apply infer it"
         )
@@ -2142,6 +2166,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-expect-in",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             value_name = "ALGO=HEX",
             help = "Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the bundle's ROM checksums (repeatable, comma-separable)"
         )
@@ -2153,6 +2178,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-expect-out",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             value_name = "ALGO=HEX",
             help = "Checksum the ROM should have after the preceding --patch runs. Recorded only when it differs from the final output checksums (repeatable, comma-separable)"
         )
@@ -2164,6 +2190,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "expect-out",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             value_name = "ALGO=HEX",
             help = "Checksum the ROM should have once every patch has run, so users can confirm they got the right result (repeatable, comma-separable)"
         )
@@ -2236,6 +2263,7 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "checksum",
+            help_heading = BUNDLE_CREATE_ADVANCED_HEADING,
             help = "Which checksums to record for the ROM (repeatable) [default: crc32,md5,sha1]"
         )
     )]
@@ -2251,7 +2279,8 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "from",
-            value_name = "FILE",
+            display_order = 0,
+            value_name = "SPEC",
             help = "Build the bundle from a hand-written rom-weaver-bundle.json instead of flags. Use - to read it from stdin",
             long_help = "\
 Build the bundle from a hand-written rom-weaver-bundle.json instead of flags.

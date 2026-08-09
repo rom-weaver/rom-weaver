@@ -286,16 +286,33 @@ pub enum BundleCommands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Write a rom-weaver-bundle.json recipe from local ROM and patch files",
+            about = "Create a bundle from a spec or local ROM and patch files",
             long_about = "\
-Write a rom-weaver-bundle.json recipe from local ROM and patch files.
+Create a rom-weaver-bundle.json recipe from a small spec or local ROM and patch
+files.
+
+Recommended workflow: write a spec and let rom-weaver fill in the checksums:
+
+  rom-weaver bundle create --from spec.json --output rom-weaver-bundle.json
+
+Minimal `spec.json`:
+
+  {
+    \"version\": 1,
+    \"rom\": { \"path\": \"original.sfc\" },
+    \"patches\": [{ \"path\": \"hack.bps\" }]
+  }
+
+Paths in the spec are relative to that file. Use `--from -` to read a spec
+from stdin. Checksums come from the real local files, so nothing here is taken
+on faith.
 
 A bundle records which ROM the patches are for, what order they run in, and
 what the result should hash to. Hand it to someone else and
 `rom-weaver patch apply --bundle` reproduces your exact result.
 
-Checksums come from the real files, so nothing here is taken on faith. Every
---patch-* flag describes the --patch before it.
+For direct flag-based authoring, pass --input and repeat --patch. The
+per-patch metadata flags are under Advanced authoring options below.
 
 --output names the recipe itself; add .gz or .zst to compress it. --bundle
 additionally packs the recipe and its files into one shareable archive."

@@ -40,7 +40,7 @@ tutorial is [Your first apply in the terminal](../tutorials/cli-first-weave.md).
 | `patch apply` | Apply one or more patches to a ROM, in order. |
 | `patch create` | Build a patch from an original ROM and a changed one. |
 | `patch validate` | Check that patches would apply cleanly, without writing anything. |
-| `bundle create` | Write a `rom-weaver-bundle.json` recipe from local files. |
+| `bundle create` | Create a `rom-weaver-bundle.json` recipe from a spec or local files. |
 | `bundle parse` | Read a bundle recipe and report what it points at. |
 | `bundle schema` | Print the `rom-weaver-bundle.json` JSON Schema to stdout. |
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
