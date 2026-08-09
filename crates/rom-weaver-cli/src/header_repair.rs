@@ -9,6 +9,31 @@
 use super::*;
 
 impl CliApp {
+    /// Report which platforms' internal checksums a ROM already satisfies,
+    /// leaving the ROM untouched.
+    ///
+    /// The `repair_*` routines compute and write in one pass. Splitting each of
+    /// the twenty into compute-then-write would leave two copies of every
+    /// checksum rule to drift apart, so this runs the real repair over a
+    /// throwaway copy instead: `matched_without_changes` names the platforms
+    /// whose checksum was already correct, `repaired_profiles` the ones whose
+    /// checksum was wrong. The caller owns `scratch` and its cleanup.
+    pub(super) fn validate_checksum_file(
+        path: &Path,
+        hint_path: Option<&Path>,
+        scratch: &Path,
+    ) -> Result<HeaderRepairOutcome> {
+        fs::copy(path, scratch)?;
+        let outcome = Self::repair_checksum_file_in_place(scratch, hint_path)?;
+        trace!(
+            rom = %path.display(),
+            valid = ?outcome.matched_without_changes,
+            invalid = ?outcome.repaired_profiles,
+            "checksum validate: internal ROM checksums inspected"
+        );
+        Ok(outcome)
+    }
+
     pub(super) fn repair_checksum_file_in_place(
         path: &Path,
         hint_path: Option<&Path>,

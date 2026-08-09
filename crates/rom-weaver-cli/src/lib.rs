@@ -1323,6 +1323,7 @@ pub mod gdrom;
 mod patch_apply;
 mod patch_apply_dcp;
 mod patch_apply_disc;
+mod patch_basis_decision;
 #[path = "patch_commands.rs"]
 mod patch_commands;
 mod patch_create;

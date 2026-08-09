@@ -1203,6 +1203,7 @@ impl CliApp {
                 expected_input_checksums,
                 cached_input_checksums,
                 context,
+                temp_paths,
             ),
         };
         let PreparedApplyInput {
@@ -1537,8 +1538,11 @@ impl CliApp {
 
     /// Decide `--patch-header auto` for the FIRST patch: strip the detected
     /// copier header only when the patch's required input checksum proves it was
-    /// authored against the headerless bytes; any doubt keeps the input as-is.
-    /// Later chain steps decide per patch in [`Self::chain_header_transition`].
+    /// authored against the headerless bytes. A patch with no checksum to prove
+    /// it falls back to structural evidence
+    /// ([`Self::structural_strip_decision`]); any remaining doubt keeps the
+    /// input as-is. Later chain steps decide per patch in
+    /// [`Self::chain_header_transition`].
     fn auto_header_strip_decision(
         &self,
         resolved_input: &Path,
@@ -1546,6 +1550,7 @@ impl CliApp {
         expected_input_checksums: &BTreeMap<String, String>,
         cached_input_checksums: &BTreeMap<String, String>,
         context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
     ) -> bool {
         let Ok(header_match) = Self::detect_strippable_rom_header(resolved_input) else {
             trace!(
@@ -1562,9 +1567,14 @@ impl CliApp {
             trace!(
                 input = %resolved_input.display(),
                 header = ?header_match.header,
-                "auto header: strippable header present but no required input checksum; keeping header (ambiguous)"
+                "auto header: strippable header present but no required input checksum; falling back to structural evidence"
             );
-            return false;
+            let Some(patch) = first_resolved_patch else {
+                return false;
+            };
+            return self
+                .structural_strip_decision(resolved_input, patch, header_match, context, temp_paths)
+                .unwrap_or(false);
         };
         if cached_input_checksums
             .get("crc32")

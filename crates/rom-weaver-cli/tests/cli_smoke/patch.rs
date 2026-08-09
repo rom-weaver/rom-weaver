@@ -8936,3 +8936,197 @@ fn build_nds_with_dldi_slot(
     file[slot_offset..slot_offset + slot_size].copy_from_slice(&slot);
     file
 }
+
+#[test]
+fn patch_apply_auto_header_strips_for_a_checksumless_ips_patch() {
+    let temp = setup_temp_dir();
+    // 512-byte copier header + 32 KiB payload: SNES copier size rule
+    // (len % 1024 == 512). IPS carries no source checksum, so `auto` has no
+    // proof to work from and falls back to structural evidence.
+    let base = vec![0xA5_u8; 32768];
+    let mut modified = base.clone();
+    // Offset 0 lands inside the copier header on the raw basis. Copier padding
+    // is junk no author patches, so the record proves the offsets are
+    // header-relative.
+    modified[0] = b'Z';
+    fs::write(temp.child("base.sfc").path(), &base).expect("fixture");
+    fs::write(temp.child("modified.sfc").path(), &modified).expect("fixture");
+    fs::write(temp.child("input.smc").path(), with_header(&base)).expect("fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("base.sfc").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.sfc").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("input header stripped (512 bytes"),
+        "label mismatch: {}",
+        json["label"]
+    );
+    // Applied against the headerless bytes, so the payload byte changed and the
+    // copier header was not written through.
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_keeps_the_header_for_a_headered_ips_patch() {
+    let temp = setup_temp_dir();
+    // The same ambiguity the other way: this patch was authored against the
+    // headered dump, so a record sits past the end of the headerless bytes and
+    // only the raw basis can hold it.
+    let headered = with_header(&vec![0xA5_u8; 32768]);
+    let mut modified = headered.clone();
+    modified[33000] = b'Z';
+    fs::write(temp.child("base.smc").path(), &headered).expect("fixture");
+    fs::write(temp.child("modified.smc").path(), &modified).expect("fixture");
+    fs::write(temp.child("input.smc").path(), &headered).expect("fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("base.smc").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.smc").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.smc").path().to_str().expect("path"),
+            "--output-header",
+            "keep",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        !json["label"]
+            .as_str()
+            .expect("label")
+            .contains("input header stripped"),
+        "header must not be stripped: {}",
+        json["label"]
+    );
+    assert_eq!(
+        fs::read(temp.child("output.smc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_tiebreaks_on_the_internal_rom_header() {
+    let temp = setup_temp_dir();
+    // Record geometry cannot separate the two bases here: the single record sits
+    // past the copier header, inside both candidates, with no truncate footer
+    // and too few records to compare edges. What separates them is where the
+    // record lands - on the raw basis it overwrites the SNES internal header at
+    // 0x81C0 and the platform stops recognising its own ROM, so the tiebreaker
+    // strips. Stripping is not the fallback default, so only the tiebreaker can
+    // produce this result.
+    const TITLE_AT: usize = 0x7FC0;
+    const RECORD_AT: usize = 0x81C0;
+    let title = b"ROM WEAVER TEST TITLE";
+    let mut body = vec![0xA5_u8; 65536];
+    body[TITLE_AT..TITLE_AT + title.len()].copy_from_slice(title);
+    fs::write(temp.child("input.smc").path(), with_header(&body)).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: RECORD_AT as u32,
+                data: vec![0x00; title.len()],
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("input header stripped (512 bytes"),
+        "label mismatch: {}",
+        json["label"]
+    );
+
+    // Headerless basis: the record writes ROM payload and the internal header
+    // survives.
+    let mut expected = body.clone();
+    expected[RECORD_AT..RECORD_AT + title.len()].copy_from_slice(&[0x00; 21]);
+    let applied = fs::read(temp.child("output.sfc").path()).expect("output");
+    assert_eq!(applied, expected);
+    assert_eq!(&applied[TITLE_AT..TITLE_AT + title.len()], title);
+}
