@@ -3,10 +3,13 @@ import { resolveApplyHeaderMode, resolveApplyN64ByteOrder } from "../../src/lib/
 import type { ChecksumVariant } from "../../src/types/checksum.ts";
 
 /**
- * The header decision mirrors the CLI's `--patch-header auto` rule: strip only when
- * the patch's required input crc32 provably matches the ROM's headerless
- * (remove-header) variant; keep on raw matches or any doubt; no resolution at all
- * when the ROM has no strippable header (nothing to show in the drawer).
+ * The header decision mirrors the checksum half of the CLI's `--patch-header auto`
+ * rule: strip only when the patch's required input crc32 provably matches the ROM's
+ * headerless (remove-header) variant; keep on raw matches or any doubt; no resolution
+ * at all when the ROM has no strippable header (nothing to show in the drawer).
+ *
+ * `decided: false` is "the page cannot predict this", not "the engine will keep it" -
+ * the engine's own record-layout fallback may still strip.
  */
 
 const RAW_CRC = "11111111";

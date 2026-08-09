@@ -1,3 +1,4 @@
+pub mod basis_probe;
 pub mod xdelta;
 
 mod aps_n64;

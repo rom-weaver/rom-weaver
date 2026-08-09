@@ -111,10 +111,14 @@ const getVariantExtension = (
 };
 
 /** Decide the default header handling for a patch against its target ROM, mirroring the
- * CLI's `--patch-header auto` rule: the ROM's checksum variants (already computed at staging)
- * are matched against the patch's required input crc32 (embedded UPS/BPS source crc32,
- * else the filename `[crc32:..]` token). Returns undefined when the ROM has no
- * strippable header - there is nothing header-related to decide or show. */
+ * checksum half of the CLI's `--patch-header auto` rule: the ROM's checksum variants
+ * (already computed at staging) are matched against the patch's required input crc32
+ * (embedded UPS/BPS source crc32, else the filename `[crc32:..]` token). Returns undefined
+ * when the ROM has no strippable header - there is nothing header-related to decide or show.
+ *
+ * `decided: false` means only that the page cannot predict the outcome. The engine still
+ * receives `auto` and decides from the patch's record layout, so callers must not present
+ * the returned `mode` as what will happen. */
 const resolveApplyHeaderMode = (
   requirements: HeaderRequirements | undefined,
   target: Pick<InputAsset, "checksums" | "checksumVariants">,

@@ -1142,6 +1142,7 @@ struct PatchApplyFinalizeResult {
     repair_warning: Option<String>,
 }
 
+#[derive(Debug)]
 struct HeaderRepairOutcome {
     repaired_profiles: Vec<&'static str>,
     matched_without_changes: Vec<&'static str>,
@@ -1225,8 +1226,9 @@ struct N64ByteOrderTransform {
     to: N64ByteOrder,
 }
 
-/// Which bytes a patch consumes. `Auto` uses input checksums to choose headered or headerless bytes
-/// for each chain step.
+/// Which bytes a patch consumes. `Auto` chooses headered or headerless bytes for each chain step
+/// from the patch's own source checksum, falling back to the patch's record layout when it has no
+/// checksum to offer.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
@@ -1323,6 +1325,7 @@ pub mod gdrom;
 mod patch_apply;
 mod patch_apply_dcp;
 mod patch_apply_disc;
+mod patch_basis_decision;
 #[path = "patch_commands.rs"]
 mod patch_commands;
 mod patch_create;
