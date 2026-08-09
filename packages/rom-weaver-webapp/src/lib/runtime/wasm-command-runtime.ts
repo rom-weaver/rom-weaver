@@ -600,8 +600,11 @@ const getPatchApplyN64ByteOrders = (options: Record<string, unknown> | null) => 
   return options?.n64ByteOrder ? [options.n64ByteOrder] : [];
 };
 
-const normalizePatchApplyHeaderMode = (mode: unknown, index: number): "keep" | "strip" | "auto" =>
-  mode === "keep" || mode === "strip" || mode === "auto" ? mode : index === 0 ? "keep" : "auto";
+// Unrecognized modes fall back to `auto` at every position, matching the CLI
+// default. A first-patch `keep` fallback would discard the engine's basis
+// inference for exactly the patches that need it - the checksumless ones.
+const normalizePatchApplyHeaderMode = (mode: unknown): "keep" | "strip" | "auto" =>
+  mode === "keep" || mode === "strip" || mode === "auto" ? mode : "auto";
 
 const getPatchApplyHeaderModes = (options: Record<string, unknown> | null, removeHeader: boolean) => {
   if (removeHeader) return ["strip"] as ("keep" | "strip" | "auto")[];

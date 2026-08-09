@@ -9408,3 +9408,53 @@ fn patch_apply_auto_header_infers_a_basis_from_a_read_only_input() {
         "a read-only input must not disable the tiebreaker: {label}"
     );
 }
+
+#[test]
+fn patch_apply_auto_header_does_not_call_an_nsrt_header_copier_junk() {
+    // The header-write rule rests on copier headers being padding nobody edits.
+    // An NSRT-signed SNES copier header is not padding - it carries real dump
+    // metadata, which is why the output policy keeps it - so a record inside it
+    // is an ordinary edit and proves nothing about the basis.
+    let temp = setup_temp_dir();
+    let body = vec![0xA5_u8; 32768];
+    fs::write(temp.child("input.smc").path(), with_nsrt_header(&body)).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0x100,
+                data: vec![0x5A; 4],
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.smc").path().to_str().expect("path"),
+            "--output-header",
+            "keep",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("patch header basis inferred as headerless"),
+        "an NSRT header edit must not be read as a headerless basis: {label}"
+    );
+    // Kept the header, so the record landed inside the NSRT block as authored.
+    let applied = fs::read(temp.child("output.smc").path()).expect("output");
+    assert_eq!(&applied[0x100..0x104], &[0x5A; 4]);
+    assert_eq!(&applied[0x1e8..0x1ec], b"NSRT");
+}

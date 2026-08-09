@@ -267,11 +267,17 @@ two symmetric policies (`crates/rom-weaver-cli/src/patch_apply.rs`):
 
 The browser mirrors the decision instead of re-hashing: staging's checksum
 variants carry a `remove-header` row (`transforms.removeHeader` with
-`strippedBytes`, `retainOnOutput`, and the extension pair), the first patch's
-mode is resolved in TS (`lib/workflow/apply-header-resolution.ts`) and sent
-concretely, later chain entries are sent as `auto` for the engine to decide from
-its own intermediates, and the download filename follows the engine's emitted
-(possibly extension-adjusted) path.
+`strippedBytes`, `retainOnOutput`, and the extension pair), and when TS proves a
+headerless basis (`lib/workflow/apply-header-resolution.ts`) staging pre-strips
+and sends `removeHeader`. Everything TS cannot prove is sent as `auto` -
+including the first patch, which used to default to `keep` and so discarded the
+engine's basis inference for the checksumless patches that need it. The download
+filename follows the engine's emitted (possibly extension-adjusted) path.
+
+Because the engine now decides an unproven first patch, the page cannot predict
+the outcome: `resolveApplyHeaderMode`'s `decided: false` means "unknown here",
+not "keep", and the header control labels it plain `auto`
+(`formatHeaderAutoLabel`).
 
 ## Dreamcast `.dcp` patches (the filesystem-level apply path)
 

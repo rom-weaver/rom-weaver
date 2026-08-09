@@ -67,8 +67,12 @@ impl CliApp {
     ) -> Option<(PatchBasis, String)> {
         let header_len = header.stripped_bytes()?;
         // Only copier padding supports the header-write rule. Format headers
-        // (iNES and friends) are ROM data an author may legitimately edit.
-        let header_is_copier_junk = !header.header.retained_on_output();
+        // (iNES and friends) are ROM data an author may legitimately edit, and
+        // so is an NSRT-signed SNES copier header - it holds real dump metadata,
+        // which is why the output policy keeps it. Treating either as padding
+        // would read a legitimate edit as proof of a headerless basis.
+        let header_is_copier_junk = !header.header.retained_on_output()
+            && !Self::header_bytes_have_nsrt_metadata(input, header_len);
         let probe = match probe_patch_basis(patch, input, header_len as u64, header_is_copier_junk)
         {
             Ok(Some(probe)) => probe,
@@ -101,6 +105,22 @@ impl CliApp {
             "auto header: record geometry inconclusive; trying the ROM-header tiebreaker"
         );
         self.basis_tiebreak_by_rom_header(input, patch, header_len as u64, context, temp_paths)
+    }
+
+    /// Whether the input's own header bytes carry NSRT dump metadata. Read from
+    /// the file rather than inferred from the header kind, because the NSRT
+    /// signature is what separates a real metadata header from copier padding
+    /// of the same kind and size. Unreadable bytes count as no metadata, which
+    /// leaves the caller on the kind-level answer.
+    fn header_bytes_have_nsrt_metadata(input: &Path, header_len: usize) -> bool {
+        let Ok(mut file) = File::open(input) else {
+            return false;
+        };
+        let mut header = vec![0_u8; header_len];
+        if file.read_exact(&mut header).is_err() {
+            return false;
+        }
+        header_has_nsrt_metadata(&header)
     }
 
     /// Apply the patch both ways and keep the basis whose output still looks

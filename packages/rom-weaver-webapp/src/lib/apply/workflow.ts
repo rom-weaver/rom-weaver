@@ -430,11 +430,16 @@ const getSelectedPatchInputs = (
     };
   });
 
+// An explicit user choice wins. Otherwise every position sends `auto`, matching
+// the CLI default: when staging proved a headerless basis it has already sent
+// `removeHeader`, and when it proved nothing the engine's own inference is
+// strictly better informed than this side is. Defaulting the first patch to
+// `keep` here used to discard that inference before it ran.
 const getPatchHeaderModes = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) =>
-  patchIndices.map((patchIndex, position) => {
+  patchIndices.map((patchIndex) => {
     const header = patchOptions?.[patchIndex]?.header;
     if (header === "strip" || header === "keep") return header;
-    return position === 0 ? ("keep" as const) : ("auto" as const);
+    return "auto" as const;
   });
 
 const getPatchN64ByteOrders = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) =>
@@ -754,4 +759,4 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   };
 };
 
-export { retainUncompressedWorkerOutputs, runApplyWorkflow };
+export { getPatchHeaderModes, retainUncompressedWorkerOutputs, runApplyWorkflow };
