@@ -640,6 +640,20 @@ impl CliApp {
             }
         }
 
+        // Guarded after --checksum-name has settled the final file name, so the
+        // path checked is the path written.
+        if let Err(error) = ensure_output_available(&create_output, args.force) {
+            return self.finish(
+                "patch-create",
+                OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "validate",
+                    error.to_string(),
+                    probe_threads.clone(),
+                ),
+            );
+        }
         let request = PatchCreateRequest {
             original: args.original,
             modified: modified_path,

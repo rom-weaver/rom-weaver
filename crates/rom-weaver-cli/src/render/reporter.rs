@@ -22,14 +22,17 @@ pub struct HumanReporter {
     active: Mutex<Option<ActiveBar>>,
     /// Last printed decile (0..=10) per operation key, used to throttle Simple-mode progress lines.
     simple_deciles: Mutex<HashMap<String, u8>>,
+    /// `--quiet`: drop the success summary. Failures still print to stderr.
+    quiet: bool,
 }
 
 impl HumanReporter {
-    pub fn new(style: HumanStyle, color_override: Option<bool>) -> Self {
+    pub fn new(style: HumanStyle, color_override: Option<bool>, quiet: bool) -> Self {
         Self {
             surface: Surface::new(style, color_override),
             active: Mutex::new(None),
             simple_deciles: Mutex::new(HashMap::new()),
+            quiet,
         }
     }
 
@@ -93,6 +96,8 @@ impl HumanReporter {
 
     fn render_terminal(&self, event: &ProgressEvent) {
         match event.status {
+            OperationStatus::Succeeded
+                if self.quiet && commands::success_is_write_summary(&event.command) => {}
             OperationStatus::Succeeded => commands::render_success(&self.surface, event),
             OperationStatus::Failed => self.surface.error(&format!("error: {}", event.label)),
             OperationStatus::Unsupported => {
@@ -122,7 +127,7 @@ fn progress_bar_style() -> ProgressStyle {
     // sits before the bar so the terminal cursor - which rests at the end of the line - never lands
     // on it. The filled portion is the brand orange (256-color 166 ≈ #d75f00, the closest palette
     // match so it renders without truecolor support too).
-    ProgressStyle::with_template("{msg}  {percent:>3}%  {bar:30.166}")
+    ProgressStyle::with_template("{msg}  {percent:>3}%  {bar:30.166}  {elapsed_precise}<{eta}")
         .unwrap_or_else(|_| ProgressStyle::default_bar())
         .progress_chars("██░")
 }

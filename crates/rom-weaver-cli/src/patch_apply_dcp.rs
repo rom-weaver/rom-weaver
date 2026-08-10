@@ -21,6 +21,7 @@ struct CompressDcpDiscInputs<'a> {
     context: &'a OperationContext,
     label: &'a mut String,
     single: Option<ThreadExecution>,
+    force: bool,
 }
 
 impl CliApp {
@@ -169,6 +170,11 @@ impl CliApp {
             .output
             .as_deref()
             .expect("output presence is validated by run_patch_apply");
+        // The `.dcp` flow branches off before `run_patch_apply`'s overwrite
+        // guard, so it checks its own output here.
+        if let Err(error) = ensure_output_available(output, args.force) {
+            return fail("validate", error.to_string());
+        }
 
         self.emit_running(
             OperationLabel {
@@ -266,6 +272,7 @@ impl CliApp {
                 context,
                 label: &mut label,
                 single: single.clone(),
+                force: args.force,
             })
         } else {
             let staged_sheet =
@@ -307,6 +314,7 @@ impl CliApp {
             context,
             label,
             single,
+            force,
         } = inputs;
         let fail = |stage: &str, message: String| {
             OperationReport::failed(OperationFamily::Patch, None, stage, message, single.clone())
@@ -319,6 +327,13 @@ impl CliApp {
             Ok(plan) => plan,
             Err(error) => return fail("compress", error.to_string()),
         };
+        // The early guard checked the path the user named; an appended
+        // container extension makes the real output a different file.
+        if plan.extension_appended
+            && let Err(error) = ensure_output_available(&plan.output_path, force)
+        {
+            return fail("compress", error.to_string());
+        }
         let running_label = format!(
             "compressing rebuilt disc as {} (codec={})",
             plan.format,

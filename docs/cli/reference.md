@@ -8,6 +8,8 @@ This stub stays because binaries released before v0.12 print the old path in the
 
 Newer builds print `https://rom-weaver.com/docs/cli` instead, which a line in the webapp's `_redirects` can move.
 
+Remove this stub once no supported release still prints the old path: that is when the oldest release we support is v0.12 or newer. Deleting it earlier breaks `--help` output that cannot be changed.
+
 | Looking for | Now at |
 | --- | --- |
 | Commands, flags, JSON output, exit codes, permissions, completions, man pages | [CLI reference](../reference/cli.md) |

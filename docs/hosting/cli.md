@@ -13,3 +13,5 @@ The CLI documentation now lives in focused pages. Update any bookmark or link th
 | Bundles | [Bundles from the CLI](../how-to/cli-bundles.md) |
 | Commands, flags, alternate names, JSON, permissions, completions, man pages | [CLI reference](../reference/cli.md) |
 | Supported formats, codecs, checksums, trim, headers | [Supported formats](../reference/formats.md) |
+
+This stub exists only for links made before that split. Unlike [`docs/cli/reference.md`](../cli/reference.md), no released binary prints this path, so nothing outside the repository depends on it. Remove it once inbound traffic to `docs/hosting/cli.md` has stopped.

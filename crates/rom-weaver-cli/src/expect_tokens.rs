@@ -76,10 +76,7 @@ pub fn parse_expect_token(raw: &str) -> std::result::Result<ExpectToken, String>
                 ));
             }
             let Some(expected_len) = checksum_hex_len(algo) else {
-                return Err(format!(
-                    "unsupported checksum algorithm `{}`",
-                    key_raw.trim()
-                ));
+                return Err(unsupported_checksum_algorithm_message(key_raw.trim()));
             };
             if hex.len() != expected_len {
                 return Err(format!(

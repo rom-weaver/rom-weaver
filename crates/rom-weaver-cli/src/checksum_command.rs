@@ -84,7 +84,7 @@ impl CliApp {
                 OperationFamily::Checksum,
                 Some(self.checksum.name().to_string()),
                 "validate",
-                format!("unsupported checksum algorithm `{invalid}`"),
+                unsupported_checksum_algorithm_message(invalid),
                 thread_execution,
             );
         }

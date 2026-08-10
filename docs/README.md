@@ -51,6 +51,9 @@ Recipes for a real job you already have in front of you.
 - [Apply patches from the CLI](how-to/cli-apply.md)
 - [Create patches from the CLI](how-to/cli-create.md)
 - [Bundles from the CLI](how-to/cli-bundles.md)
+- [Identify and hash files](how-to/identify-and-hash-files.md)
+- [Bake cheat codes into a ROM](how-to/bake-cheat-codes.md)
+- [Trim a ROM from the CLI](how-to/cli-trim.md)
 - [Extract, convert, and compress archives](how-to/work-with-archives.md)
 - [Fix a permission error](how-to/fix-permission-errors.md)
 
@@ -95,16 +98,6 @@ Background that makes the rest make sense.
 - [Contribution guide](../CONTRIBUTING.md): reporting bugs, proposing changes, validation, and contribution licensing.
 - [Development guide](development/development.md): prerequisites, setup, native and WASM builds, the dev server, tests, generated files, and worktrees.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
-- [Commit conventions](development/commits.md): pull request title format, types and scopes, breaking changes, and release footers.
-- [Continuous integration](development/ci.md): every workflow, the required gate, deploy channels, caching, and secrets.
-- [Reproduce a CI failure locally](development/reproduce-ci-locally.md): the commands behind each job, and how to match one.
-- [Performance](development/performance.md): benchmark harnesses and recorded results against chdman, dolphin-tool, 7-Zip, and Info-ZIP.
-- [Browser concurrency](development/browser-concurrency.md): shared memory, worker protocols, the thread-start barrier, and the OPFS proxy.
-- [Mobile Safari verification](development/mobile-safari-verification.md): automated and real-device checks for WebKit, OPFS, and PWA behavior.
-- [Vendored third-party code](development/vendor-code.md): what is vendored and why, and how to return each one to upstream.
-- [Screenshots](development/screenshots.md): reproducible desktop and mobile captures plus the runnable sample ROMs.
-- [Reversible trim footer](development/trim-revert-footer.md): the footer that allows an exact byte-for-byte trim reversal.
 - [References](development/references.md): format specifications and upstream reference implementations.
-- [Release guide](../.github/RELEASING.md): first-release setup, trusted publishing, deployment channels, and retry steps.
-- [Browser WASM runtime](../packages/rom-weaver-webapp/src/wasm/README.md): the OPFS runner and worker-client API surface.
-- [Contributor License Agreement](../CLA.md), [code of conduct](../.github/CODE_OF_CONDUCT.md), and [security policy](../.github/SECURITY.md).
+
+…and more in the repository: commit conventions, CI, performance, browser concurrency, mobile Safari verification, vendored code, screenshots, the release guide, the CLA, the code of conduct, and the security policy all live under [`docs/development/`](https://github.com/rom-weaver/rom-weaver/tree/main/docs/development).

@@ -368,6 +368,8 @@ impl CliApp {
             code_kind,
             emit_bundle: _,
             tui: _,
+            force,
+            dry_run,
             threads,
         } = args;
         let discover_implicit_patches = patches.is_empty() && codes.is_empty() && !no_extract;
@@ -409,7 +411,7 @@ impl CliApp {
             );
         }
         let ParsedPatchApplyInputs {
-            compression_options: _initial_compression_options,
+            compression_options,
             cached_input_checksums,
             mut expected_input_checksums,
             mut expected_output_checksums,
@@ -434,6 +436,25 @@ impl CliApp {
             &input,
             probe_threads.clone(),
         ) {
+            return self.finish("patch-apply", report);
+        }
+        if dry_run {
+            let Some(output) = output.as_deref() else {
+                return self.finish(
+                    "patch-apply",
+                    fail(
+                        "validate",
+                        "--dry-run requires --output when the output path cannot be inferred before selecting an archive member".to_string(),
+                    ),
+                );
+            };
+            let report = self.patch_apply_dry_run(
+                &input,
+                &patches,
+                output,
+                &compression_options,
+                probe_threads.clone(),
+            );
             return self.finish("patch-apply", report);
         }
         let disc_context = match self.resolve_patch_apply_disc(PatchApplyDiscInputs {
@@ -483,58 +504,18 @@ impl CliApp {
         let mut expected_input_size: Option<u64> = None;
         // Input-check precedence is CLI > bundle > file name; any conflict
         // names the bundle source that introduced it.
-        if !ignore_checksum_validation && let Some(resolution) = &bundle_resolution {
-            for (source_label, requirements) in &resolution.checks {
-                if let Some(report) = self.merge_expected_input_requirements(
-                    "patch-apply",
-                    source_label,
-                    requirements,
-                    &mut expected_input_checksums,
-                    &mut expected_input_size,
-                    probe_threads.clone(),
-                ) {
-                    return self.finish("patch-apply", report);
-                }
-            }
-            // Bundle output checks merge with the same conflict rule. Disc
-            // inputs have no single output to checksum - skip rather than fail
-            // an otherwise valid bundle.
-            match (&resolution.output_checks, disc_context.is_some()) {
-                (Some((source_label, _)), true) => {
-                    trace!(
-                        source = %source_label,
-                        "bundle output checks skipped: disc apply emits no single checksummable output"
-                    );
-                }
-                (Some((source_label, requirements)), false) => {
-                    for (algorithm, hex) in &requirements.checksums {
-                        match expected_output_checksums.get(algorithm) {
-                            Some(existing) if existing != hex => {
-                                return self.finish(
-                                    "patch-apply",
-                                    fail(
-                                        "validate",
-                                        format!(
-                                            "{source_label} requires output {algorithm} {hex} but {existing} was already requested"
-                                        ),
-                                    ),
-                                );
-                            }
-                            Some(_) => {}
-                            None => {
-                                trace!(
-                                    source = %source_label,
-                                    algorithm = %algorithm,
-                                    checksum = %hex,
-                                    "merged expected output checksum requirement"
-                                );
-                                expected_output_checksums.insert(algorithm.clone(), hex.clone());
-                            }
-                        }
-                    }
-                }
-                (None, _) => {}
-            }
+        if !ignore_checksum_validation
+            && let Some(resolution) = &bundle_resolution
+            && let Some(report) = self.merge_patch_apply_bundle_requirements(
+                resolution,
+                disc_context.is_some(),
+                &mut expected_input_checksums,
+                &mut expected_input_size,
+                &mut expected_output_checksums,
+                probe_threads.clone(),
+            )
+        {
+            return self.finish("patch-apply", report);
         }
         if !ignore_checksum_validation
             && let Some(first_patch) = patches.first()
@@ -624,6 +605,11 @@ impl CliApp {
             Ok(options) => options,
             Err(error) => return self.finish("patch-apply", fail("validate", error.to_string())),
         };
+        // Compressing can append an extension; the compression step re-checks
+        // that resolved path after patch validation.
+        if let Err(error) = ensure_output_available(&output, force) {
+            return self.finish("patch-apply", fail("validate", error.to_string()));
+        }
         if let Some(report) =
             self.validate_patch_apply_access(&patches, &output, probe_threads.clone())
         {
@@ -1052,6 +1038,19 @@ impl CliApp {
                     return *error_report;
                 }
 
+                if report.status == OperationStatus::Succeeded
+                    && compression_options.enabled
+                    && let Err(error_report) = self.resolve_guarded_patch_apply_compression_plan(
+                        &output,
+                        &resolved_input,
+                        &compression_options,
+                        force,
+                        report.format.clone(),
+                        &context,
+                    )
+                {
+                    return *error_report;
+                }
                 if let Some(error_report) =
                     self.compress_patch_apply_output(PatchApplyCompressionInputs {
                         report: &mut report,
@@ -1112,6 +1111,64 @@ impl CliApp {
         *final_output = terminal_output_for_apply;
         Self::cleanup_temp_paths(&temp_paths);
         self.finish("patch-apply", report)
+    }
+
+    fn merge_patch_apply_bundle_requirements(
+        &self,
+        resolution: &BundleApplyResolution,
+        is_disc: bool,
+        expected_input_checksums: &mut BTreeMap<String, String>,
+        expected_input_size: &mut Option<u64>,
+        expected_output_checksums: &mut BTreeMap<String, String>,
+        probe_threads: Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        for (source_label, requirements) in &resolution.checks {
+            if let Some(report) = self.merge_expected_input_requirements(
+                "patch-apply",
+                source_label,
+                requirements,
+                expected_input_checksums,
+                expected_input_size,
+                probe_threads.clone(),
+            ) {
+                return Some(report);
+            }
+        }
+
+        let (source_label, requirements) = resolution.output_checks.as_ref()?;
+        if is_disc {
+            trace!(
+                source = %source_label,
+                "bundle output checks skipped: disc apply emits no single checksummable output"
+            );
+            return None;
+        }
+        for (algorithm, hex) in &requirements.checksums {
+            match expected_output_checksums.get(algorithm) {
+                Some(existing) if existing != hex => {
+                    return Some(OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        format!(
+                            "{source_label} requires output {algorithm} {hex} but {existing} was already requested"
+                        ),
+                        probe_threads.clone(),
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    trace!(
+                        source = %source_label,
+                        algorithm = %algorithm,
+                        checksum = %hex,
+                        "merged expected output checksum requirement"
+                    );
+                    expected_output_checksums.insert(algorithm.clone(), hex.clone());
+                }
+            }
+        }
+        None
     }
 
     fn validate_patch_apply_output_preflight(
@@ -3430,6 +3487,129 @@ impl CliApp {
     /// Caller-specific labels and report metadata stay outside. A missing
     /// handler preserves the validation error expected by callers, though the
     /// compression plan should already have validated it.
+    /// Resolve the plan `--dry-run` reports. Only the dry run resolves the
+    /// compression plan up front; doing it on the normal path would surface its
+    /// errors ahead of the patch checks that run first today.
+    /// Resolve the compression plan and re-check the resolved output path: the
+    /// early guard checked the path the user named, and an appended container
+    /// extension makes the real output a different file.
+    fn resolve_guarded_patch_apply_compression_plan(
+        &self,
+        output: &Path,
+        resolved_input: &Path,
+        compression_options: &PatchApplyCompressionOptions,
+        force: bool,
+        report_format: Option<String>,
+        context: &OperationContext,
+    ) -> std::result::Result<PatchApplyCompressionPlan, Box<OperationReport>> {
+        let fail = |error: RomWeaverError| {
+            Box::new(OperationReport::failed(
+                OperationFamily::Patch,
+                report_format.clone(),
+                "compress",
+                error.to_string(),
+                context.single_thread_execution(),
+            ))
+        };
+        let plan = self
+            .resolve_patch_apply_compression_plan(output, resolved_input, compression_options)
+            .map_err(&fail)?;
+        if plan.extension_appended {
+            ensure_output_available(&plan.output_path, force).map_err(&fail)?;
+        }
+        Ok(plan)
+    }
+
+    fn patch_apply_dry_run(
+        &self,
+        input: &Path,
+        patches: &[PathBuf],
+        output: &Path,
+        compression_options: &PatchApplyCompressionOptions,
+        thread_execution: Option<ThreadExecution>,
+    ) -> OperationReport {
+        let planned_output = if compression_options.enabled {
+            match self.resolve_patch_apply_compression_plan(output, input, compression_options) {
+                Ok(plan) => Some(plan),
+                Err(error) => {
+                    return OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        error.to_string(),
+                        thread_execution,
+                    );
+                }
+            }
+        } else {
+            None
+        };
+        let planned_output_path = planned_output
+            .as_ref()
+            .map(|plan| plan.output_path.clone())
+            .unwrap_or_else(|| output.to_path_buf());
+        Self::patch_apply_dry_run_report(
+            input,
+            patches,
+            &planned_output_path,
+            planned_output.as_ref(),
+            thread_execution,
+        )
+    }
+
+    /// The `--dry-run` answer for `patch apply`: the resolved inputs, patch
+    /// chain, output path, and compression choices. Nothing is written.
+    fn patch_apply_dry_run_report(
+        input: &Path,
+        patches: &[PathBuf],
+        output: &Path,
+        compression: Option<&PatchApplyCompressionPlan>,
+        thread_execution: Option<ThreadExecution>,
+    ) -> OperationReport {
+        let mut details = Map::new();
+        details.insert("dry_run".to_string(), json!(true));
+        details.insert("input".to_string(), json!(input.display().to_string()));
+        details.insert(
+            "patches".to_string(),
+            json!(
+                patches
+                    .iter()
+                    .map(|patch| patch.display().to_string())
+                    .collect::<Vec<_>>()
+            ),
+        );
+        details.insert("output".to_string(), json!(output.display().to_string()));
+        match compression {
+            Some(plan) => {
+                details.insert("format".to_string(), json!(plan.format));
+                details.insert("codec".to_string(), json!(plan.codec));
+                details.insert("level".to_string(), json!(plan.level));
+            }
+            None => {
+                details.insert("format".to_string(), json!("raw"));
+            }
+        }
+        let format_label = compression
+            .map(|plan| plan.format.clone())
+            .unwrap_or_else(|| "raw (no compression)".to_string());
+        let label = format!(
+            "dry run: would apply {} patch(es) to `{}` and write `{}` as {format_label}; nothing written",
+            patches.len(),
+            input.display(),
+            output.display()
+        );
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Patch,
+            compression.map(|plan| plan.format.clone()),
+            "plan",
+            label,
+            None,
+            thread_execution,
+        );
+        report.details = Some(Value::Object(details));
+        report
+    }
+
     pub(super) fn run_patch_apply_compression(
         &self,
         plan: &PatchApplyCompressionPlan,
@@ -3440,7 +3620,7 @@ impl CliApp {
     ) -> Result<(OperationReport, String)> {
         let Some(handler) = self.containers.find_by_name(&plan.format) else {
             return Err(RomWeaverError::Validation(
-                "requested output format is not registered".to_string(),
+                unregistered_output_format_message(),
             ));
         };
         let codec_label = plan.codec.as_deref().unwrap_or("default").to_string();

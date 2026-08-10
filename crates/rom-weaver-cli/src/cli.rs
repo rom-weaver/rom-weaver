@@ -14,8 +14,13 @@ use rom_weaver_app::{
     RunCommandOptions, run_command, run_command_outcome,
 };
 #[cfg(not(target_arch = "wasm32"))]
-use rom_weaver_core::{NoninteractivePrompter, ProgressSink, SelectionPrompter};
+use rom_weaver_core::{
+    NoninteractivePrompter, ProgressSink, SelectionPrompter, clear_in_progress_outputs,
+    process_cancellation_token, remove_in_progress_outputs,
+};
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::formats_command::print_formats;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::render::{HumanReporter, HumanStyle, StdinPrompter};
 
@@ -68,6 +73,9 @@ Full guide: https://rom-weaver.com/docs/cli";
         about = "Inspect, extract, checksum, compress, trim, and patch ROMs and disc images",
         long_about = CLI_LONG_ABOUT,
         after_help = CLI_AFTER_HELP,
+        // A bare `rom-weaver` has nothing to do, so show the full help instead
+        // of the one-line usage error.
+        arg_required_else_help = true,
     )
 )]
 struct Cli {
@@ -172,6 +180,17 @@ struct Cli {
         )
     )]
     no_color: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'y',
+            long = "yes",
+            global = true,
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Answer yes to every confirmation instead of asking. Does not choose between candidates"
+        )
+    )]
+    yes: bool,
     #[cfg_attr(not(target_arch = "wasm32"), command(subcommand))]
     command: CliCommand,
 }
@@ -209,6 +228,16 @@ Save it where your shell looks for completions, then start a new shell:
         #[arg(value_name = "SHELL", help = "Shell to print completions for")]
         shell: clap_complete::Shell,
     },
+    #[command(
+        about = "List the formats, codecs, and checksum algorithms this build supports",
+        long_about = "\
+List what this build supports, read straight from its registries: container
+formats (and whether each can be created, extracted, or both), patch formats,
+the codecs each container format accepts, and the checksum algorithms.
+
+Pass --json for the machine-readable form."
+    )]
+    Formats,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -225,6 +254,7 @@ impl Cli {
             log_level: log_level_override(self.log_level, self.verbose, self.quiet),
             dep_trace: self.dep_trace,
             interactive_selection_enabled: interactive,
+            assume_yes: self.yes,
         }
     }
 }
@@ -289,6 +319,10 @@ pub fn main_entry() -> ExitCode {
         clap_complete::generate(shell, &mut command, "rom-weaver", &mut io::stdout());
         return ExitCode::SUCCESS;
     }
+    if let CliCommand::Formats = &cli.command {
+        print_formats(cli.json);
+        return ExitCode::SUCCESS;
+    }
     // `bundle schema` prints the raw JSON Schema to stdout (redirect it to a
     // file / point an editor at it), before any command runs.
     if let CliCommand::App(Commands::Bundle(BundleCommands::Schema)) = &cli.command {
@@ -338,9 +372,9 @@ pub fn main_entry() -> ExitCode {
     let reporter: Arc<dyn ProgressSink> = if cli.json {
         Arc::new(JsonProgressSink)
     } else if stdout_is_tty {
-        Arc::new(HumanReporter::new(HumanStyle::Rich, color))
+        Arc::new(HumanReporter::new(HumanStyle::Rich, color, cli.quiet))
     } else {
-        Arc::new(HumanReporter::new(HumanStyle::Simple, color))
+        Arc::new(HumanReporter::new(HumanStyle::Simple, color, cli.quiet))
     };
     let prompter: Arc<dyn SelectionPrompter> = if interactive {
         Arc::new(StdinPrompter::new())
@@ -363,9 +397,46 @@ pub fn main_entry() -> ExitCode {
             );
             return ExitCode::from(2);
         }
-        return run_apply_tui(command, options, reporter, prompter);
+        install_cancel_handler();
+        return finish_run(run_apply_tui(command, options, reporter, prompter));
     }
-    run_command(command, options, reporter, prompter)
+    install_cancel_handler();
+    finish_run(run_command(command, options, reporter, prompter))
+}
+
+/// Trip the process cancellation token on Ctrl-C so running work unwinds and
+/// the partial output is cleaned up. A second Ctrl-C means the operation is not
+/// unwinding, so leave immediately after removing what was written.
+#[cfg(not(target_arch = "wasm32"))]
+fn install_cancel_handler() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static SIGNALLED: AtomicBool = AtomicBool::new(false);
+    let token = process_cancellation_token();
+    let result = ctrlc::set_handler(move || {
+        if SIGNALLED.swap(true, Ordering::SeqCst) {
+            remove_in_progress_outputs();
+            eprintln!("cancelled");
+            std::process::exit(130);
+        }
+        token.cancel();
+        eprintln!("cancelling; press Ctrl-C again to stop immediately");
+    });
+    if let Err(error) = result {
+        // Not fatal: without a handler Ctrl-C keeps its default behaviour.
+        eprintln!("warning: could not install the Ctrl-C handler ({error})");
+    }
+}
+
+/// Map the run's exit code, cleaning up partial output when it was cancelled.
+#[cfg(not(target_arch = "wasm32"))]
+fn finish_run(exit_code: ExitCode) -> ExitCode {
+    if process_cancellation_token().is_cancelled() {
+        remove_in_progress_outputs();
+        return ExitCode::from(130);
+    }
+    clear_in_progress_outputs();
+    exit_code
 }
 
 /// Drive `apply --tui`: collect bundle metadata interactively, run the apply,
@@ -609,6 +680,7 @@ mod tests {
             log_level: None,
             dep_trace: false,
             interactive_selection_enabled: false,
+            assume_yes: false,
         }
     }
 

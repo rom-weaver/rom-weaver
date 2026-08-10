@@ -6,6 +6,25 @@ use serde_json::{Map, Value};
 
 use super::{Surface, humanize_bytes};
 
+/// Commands whose success rendering is a recap of work done rather than the
+/// answer the user asked for. `--quiet` drops these; `probe`, `checksum`,
+/// `patch validate` and friends keep printing because their summary *is* the
+/// output.
+const WRITE_SUMMARY_COMMANDS: &[&str] = &[
+    "extract",
+    "compress",
+    "patch-apply",
+    "patch-create",
+    "trim",
+    "ingest",
+    "bundle-create",
+    "bundle-apply",
+];
+
+pub fn success_is_write_summary(command: &str) -> bool {
+    WRITE_SUMMARY_COMMANDS.contains(&command)
+}
+
 /// Render the summary for a succeeded command, dispatching on the command name.
 pub fn render_success(surface: &Surface, event: &ProgressEvent) {
     match event.command.as_str() {

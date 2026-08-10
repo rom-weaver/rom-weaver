@@ -640,6 +640,15 @@ pub fn supported_create_formats_text() -> String {
     supported_create_format_names().join(", ")
 }
 
+/// The one rejection message for an output format the registry does not know,
+/// listing what it does know so the fix is on screen.
+pub fn unregistered_output_format_message() -> String {
+    format!(
+        "requested output format is not registered; supported output formats are {}",
+        supported_create_formats_text()
+    )
+}
+
 pub fn extract_only_create_validation_message(format_name: &str) -> String {
     format!(
         "{format_name} is extract-only; supported create formats are {}",
@@ -725,13 +734,13 @@ impl ContainerRegistry {
     pub fn find_creatable_by_name(&self, name: &str) -> Result<Arc<dyn ContainerHandler>> {
         let Some(handler) = self.find_by_name(name) else {
             return Err(RomWeaverError::Validation(
-                "requested output format is not registered".to_string(),
+                unregistered_output_format_message(),
             ));
         };
         let capabilities = handler.capabilities();
         if !capabilities.probe_details && !capabilities.extract && !capabilities.create {
             return Err(RomWeaverError::Validation(
-                "requested output format is not registered".to_string(),
+                unregistered_output_format_message(),
             ));
         }
         if !capabilities.create {

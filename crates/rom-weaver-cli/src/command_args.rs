@@ -28,6 +28,19 @@ filter_accessors!(PatchApplyCommand);
 filter_accessors!(PatchValidateCommand);
 filter_accessors!(BundleParseCommand);
 
+impl TrimCommand {
+    /// `--filter rom` (the default) and the older no-value `--no-filter` both
+    /// feed one answer: whether archive entries are narrowed to ROM-looking
+    /// names.
+    pub fn rom_filter_enabled(&self) -> bool {
+        self.rom_filter
+            && self
+                .filter
+                .iter()
+                .any(|kind| matches!(kind, FilterKind::Rom))
+    }
+}
+
 /// `patch apply` and its top-level `weave` spelling are the same command, so
 /// they share one set of help strings. Without this the alias would show a
 /// shorter help than the command it aliases.
@@ -131,8 +144,136 @@ This is a speed option for scripts that already know the checksum: it skips a
 full read of a large ROM. It does not verify anything. To check a ROM against a
 checksum, use --expect-in.";
 
+/// Advertises the create-capable container formats to help and shell
+/// completions without taking over validation: an extract-only or unknown name
+/// still reaches the handler, which explains *why* it cannot be written
+/// (extract-only vs not registered). A hard possible-value check here would
+/// replace those with a bare "invalid value".
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone)]
+pub struct CreateFormatValueParser;
+
+#[cfg(not(target_arch = "wasm32"))]
+impl clap::builder::TypedValueParser for CreateFormatValueParser {
+    type Value = String;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        _arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> std::result::Result<Self::Value, clap::Error> {
+        value.to_str().map(str::to_string).ok_or_else(|| {
+            clap::Error::raw(
+                clap::error::ErrorKind::InvalidUtf8,
+                "format names must be valid UTF-8\n",
+            )
+            .with_cmd(cmd)
+        })
+    }
+
+    fn possible_values(
+        &self,
+    ) -> Option<Box<dyn Iterator<Item = clap::builder::PossibleValue> + '_>> {
+        Some(Box::new(
+            rom_weaver_containers::container_format_metadata()
+                .into_iter()
+                .filter(|format| format.capabilities.create)
+                .map(|format| {
+                    format.aliases.iter().fold(
+                        clap::builder::PossibleValue::new(format.name),
+                        |value, alias| value.alias(*alias),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        ))
+    }
+}
+
+/// A `--codec` value is `codec` or `codec:level`. The registry values are
+/// exposed for help and shell completion, while the format handler retains
+/// validation so JSON operation errors use the normal command envelope.
+/// Wrapping [`clap::builder::PossibleValuesParser`] keeps completion names
+/// discoverable without turning invalid values into clap parse failures.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone)]
+pub struct CodecValueParser;
+
+#[cfg(not(target_arch = "wasm32"))]
+impl clap::builder::TypedValueParser for CodecValueParser {
+    type Value = String;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        _arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> std::result::Result<Self::Value, clap::Error> {
+        let raw = value.to_str().ok_or_else(|| {
+            clap::Error::raw(
+                clap::error::ErrorKind::InvalidUtf8,
+                "codec values must be valid UTF-8\n",
+            )
+            .with_cmd(cmd)
+        })?;
+        Ok(raw.to_string())
+    }
+
+    fn possible_values(
+        &self,
+    ) -> Option<Box<dyn Iterator<Item = clap::builder::PossibleValue> + '_>> {
+        Some(Box::new(
+            compression_metadata()
+                .codecs
+                .iter()
+                .map(|codec| {
+                    codec.aliases.iter().fold(
+                        clap::builder::PossibleValue::new(codec.name),
+                        |value, alias| value.alias(*alias),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        ))
+    }
+}
+
+/// clap's possible-value set for a plain checksum-algorithm argument, taken
+/// straight from the checksum registry so help, completions, and did-you-mean
+/// track the real list.
+#[cfg(not(target_arch = "wasm32"))]
+fn checksum_algorithm_parser() -> clap::builder::PossibleValuesParser {
+    clap::builder::PossibleValuesParser::new(supported_algorithms())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub const CHECKSUM_ALGO_HELP: &str = "Which checksum to compute (repeatable, comma-separable)";
+
+/// The `--patch-*` metadata flags on `bundle create` all bind positionally to
+/// the `--patch` before them, so every one of them repeats the same rule. This
+/// appends it to the flag's own long help.
+#[cfg(not(target_arch = "wasm32"))]
+macro_rules! patch_adjacency_long_help {
+    ($help:literal) => {
+        concat!(
+            $help,
+            "\n\nThis flag must follow the --patch it describes. Give it once per --patch, ",
+            "in the same order, or leave it out entirely - a partial list is an error. ",
+            "An occurrence before any --patch has nothing to bind to.\n\n  ",
+            "--patch a.bps --patch-name \"First\" --patch b.ups --patch-name \"Second\""
+        )
+    };
+}
+
 const fn default_true() -> bool {
     true
+}
+
+/// `trim` filters to ROM-looking files by default; its siblings default to no
+/// filter at all.
+fn default_rom_filter_kinds() -> Vec<FilterKind> {
+    vec![FilterKind::Rom]
 }
 
 fn default_checksum_algorithms() -> Vec<String> {
@@ -295,8 +436,11 @@ pub struct ExtractCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "checksum",
+            visible_alias = "algo",
             value_name = "ALGO",
             value_delimiter = ',',
+            ignore_case = true,
+            value_parser = checksum_algorithm_parser(),
             help = "Also hash every extracted file (repeatable, comma-separable)"
         )
     )]
@@ -309,7 +453,10 @@ pub struct ExtractCommand {
             long = "checksum-rom",
             value_name = "ALGO",
             value_delimiter = ',',
-            help = "Like --checksum, but hash only the ROMs and skip sidecar files. Ignored when --checksum is also given"
+            ignore_case = true,
+            conflicts_with = "checksum",
+            value_parser = checksum_algorithm_parser(),
+            help = "Like --checksum, but hash only the ROMs and skip sidecar files. Cannot be combined with --checksum"
         )
     )]
     #[serde(default)]
@@ -359,10 +506,13 @@ pub struct ChecksumCommand {
         arg(
             short = 'a',
             long = "algo",
+            visible_alias = "checksum",
             default_values_t = default_checksum_algorithms(),
             value_name = "ALGO",
             value_delimiter = ',',
-            help = "Which checksum to compute: crc32, md5, sha1, sha256, blake3, crc32c, crc16, or adler32 (repeatable, comma-separable)"
+            ignore_case = true,
+            value_parser = checksum_algorithm_parser(),
+            help = CHECKSUM_ALGO_HELP
         )
     )]
     #[serde(default = "default_checksum_algorithms")]
@@ -541,8 +691,11 @@ pub struct IngestCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "checksum",
+            visible_alias = "algo",
             value_name = "ALGO",
             value_delimiter = ',',
+            ignore_case = true,
+            value_parser = checksum_algorithm_parser(),
             help = "Which checksums to compute for each ROM found (repeatable, comma-separable) [default: crc32,md5,sha1]"
         )
     )]
@@ -584,6 +737,8 @@ pub struct CompressCommand {
         arg(
             short = 'f',
             long,
+            ignore_case = true,
+            value_parser = CreateFormatValueParser,
             help = FORMAT_HELP,
             long_help = FORMAT_LONG_HELP
         )
@@ -606,6 +761,8 @@ pub struct CompressCommand {
             long,
             action = ArgAction::Append,
             value_delimiter = ',',
+            ignore_case = true,
+            value_parser = CodecValueParser,
             help = CODEC_HELP,
             long_help = CODEC_LONG_HELP
         )
@@ -622,6 +779,27 @@ pub struct CompressCommand {
     #[serde(default = "default_max_compression_level")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub level: CompressionLevelProfile,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "force",
+            help = "Overwrite the output if it already exists (without this, the command stops instead)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub force: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'n',
+            long = "dry-run",
+            help = "Print the plan (inputs, output, format, codec, level, threads) and stop without writing"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub dry_run: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -725,6 +903,21 @@ XISO and RVZ scrub cannot be reverted."
     #[serde(default = "default_true")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub recursive: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "filter",
+            value_enum,
+            value_delimiter = ',',
+            default_value = "rom",
+            help = FILTER_HELP
+        )
+    )]
+    #[serde(default = "default_rom_filter_kinds")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub filter: Vec<FilterKind>,
+    /// `--filter` has no "off" value, so this stays the visible way to disable
+    /// the ROM filter entirely (and keeps older scripts working).
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long = "no-filter",
         action = ArgAction::SetFalse,
@@ -768,6 +961,16 @@ XISO and RVZ scrub cannot be reverted."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "force",
+            help = "Overwrite the output if it already exists (without this, the command stops instead)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub force: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -926,6 +1129,8 @@ archive with one at its root, and you passed no --patch of your own."
         not(target_arch = "wasm32"),
         arg(
             long = "compress-format",
+            ignore_case = true,
+            value_parser = CreateFormatValueParser,
             visible_alias = "format",
             help_heading = "Basic",
             help = "Format to compress the patched ROM into [default: from the --output extension]",
@@ -947,6 +1152,8 @@ a plain ROM instead."
             visible_alias = "codec",
             action = ArgAction::Append,
             value_delimiter = ',',
+            ignore_case = true,
+            value_parser = CodecValueParser,
             help_heading = "Basic",
             help = CODEC_HELP,
             long_help = "\
@@ -1069,8 +1276,11 @@ checksums describe.
   previous  The output of the patch before it.
 
 Reach for this when several patches in a chain were each written against the
-unmodified ROM rather than against each other. Binds to the most recent
---patch."
+unmodified ROM rather than against each other.
+
+This flag must follow the --patch it describes; it binds to the most recent
+--patch and carries forward until the next occurrence. An occurrence before any
+--patch applies to every patch."
         )
     )]
     #[serde(default)]
@@ -1243,6 +1453,27 @@ output is written back in the order the input arrived in."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "force",
+            help = "Overwrite the output if it already exists (without this, the command stops instead)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub force: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'n',
+            long = "dry-run",
+            help = "Print the plan (inputs, patches, output, format, codec, level, threads) and stop without writing"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub dry_run: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1844,6 +2075,16 @@ game assets, and the patch tends to get compressed again downstream anyway."
     #[serde(default = "default_xdelta_secondary")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub xdelta_secondary: String,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "force",
+            help = "Overwrite the output if it already exists (without this, the command stops instead)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub force: bool,
 }
 
 /// Compute a memory-/thread-aware concurrent extraction schedule from per-job source sizes, without
@@ -2089,7 +2330,8 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-id",
-            help = "Identifier for the preceding --patch that stays the same across releases, so a replacement keeps its settings"
+            help = "Identifier for the preceding --patch that stays the same across releases, so a replacement keeps its settings",
+            long_help = patch_adjacency_long_help!("Identifier for the preceding --patch that stays the same across releases, so a replacement keeps its settings")
         )
     )]
     #[serde(default)]
@@ -2099,7 +2341,8 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-version",
-            help = "Version of the preceding --patch, in whatever form its author uses"
+            help = "Version of the preceding --patch, in whatever form its author uses",
+            long_help = patch_adjacency_long_help!("Version of the preceding --patch, in whatever form its author uses")
         )
     )]
     #[serde(default)]
@@ -2107,21 +2350,33 @@ patches reads left to right:
     pub patch_version: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long = "patch-name", help = "Name to show for the preceding --patch")
+        arg(
+            long = "patch-name",
+            help = "Name to show for the preceding --patch",
+            long_help = patch_adjacency_long_help!("Name to show for the preceding --patch")
+        )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_name: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long = "patch-description", help = "What the preceding --patch does")
+        arg(
+            long = "patch-description",
+            help = "What the preceding --patch does",
+            long_help = patch_adjacency_long_help!("What the preceding --patch does")
+        )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_description: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long = "patch-author", help = "Who made the preceding --patch")
+        arg(
+            long = "patch-author",
+            help = "Who made the preceding --patch",
+            long_help = patch_adjacency_long_help!("Who made the preceding --patch")
+        )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -2130,7 +2385,8 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-label",
-            help = "Short status note for the preceding --patch, such as beta or recommended"
+            help = "Short status note for the preceding --patch, such as beta or recommended",
+            long_help = patch_adjacency_long_help!("Short status note for the preceding --patch, such as beta or recommended")
         )
     )]
     #[serde(default)]
@@ -2140,7 +2396,8 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-optional",
-            help = "Mark the preceding --patch optional, so it starts switched off and needs --with to run"
+            help = "Mark the preceding --patch optional, so it starts switched off and needs --with to run",
+            long_help = patch_adjacency_long_help!("Mark the preceding --patch optional, so it starts switched off and needs --with to run")
         )
     )]
     #[serde(default)]
@@ -2150,7 +2407,8 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-source-url",
-            help = "Where the preceding --patch can be downloaded from. The local file is still read to build the bundle"
+            help = "Where the preceding --patch can be downloaded from. The local file is still read to build the bundle",
+            long_help = patch_adjacency_long_help!("Where the preceding --patch can be downloaded from. The local file is still read to build the bundle")
         )
     )]
     #[serde(default)]
@@ -2161,7 +2419,8 @@ patches reads left to right:
         arg(
             long = "patch-header",
             value_enum,
-            help = "Whether the preceding --patch applies to the ROM with or without its copier header: auto, keep, or strip"
+            help = "Whether the preceding --patch applies to the ROM with or without its copier header: auto, keep, or strip",
+            long_help = patch_adjacency_long_help!("Whether the preceding --patch applies to the ROM with or without its copier header: auto, keep, or strip")
         )
     )]
     #[serde(default)]
@@ -2172,7 +2431,8 @@ patches reads left to right:
         arg(
             long = "patch-basis",
             value_enum,
-            help = "Which ROM the preceding --patch was built against: base (the bundle's ROM) or previous (the patch before it). Use auto to leave it out and let apply infer it"
+            help = "Which ROM the preceding --patch was built against: base (the bundle's ROM) or previous (the patch before it). Use auto to leave it out and let apply infer it",
+            long_help = patch_adjacency_long_help!("Which ROM the preceding --patch was built against: base (the bundle's ROM) or previous (the patch before it). Use auto to leave it out and let apply infer it")
         )
     )]
     #[serde(default)]
@@ -2183,7 +2443,8 @@ patches reads left to right:
         arg(
             long = "patch-expect-in",
             value_name = "ALGO=HEX",
-            help = "Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the bundle's ROM checksums (repeatable, comma-separable)"
+            help = "Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the bundle's ROM checksums (repeatable, comma-separable)",
+            long_help = patch_adjacency_long_help!("Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the bundle's ROM checksums (repeatable, comma-separable)")
         )
     )]
     #[serde(default)]
@@ -2276,7 +2537,12 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "checksum",
-            help = "Which checksums to record for the ROM (repeatable) [default: crc32,md5,sha1]"
+            visible_alias = "algo",
+            value_name = "ALGO",
+            value_delimiter = ',',
+            ignore_case = true,
+            value_parser = checksum_algorithm_parser(),
+            help = "Which checksums to record for the ROM (repeatable, comma-separable) [default: crc32,md5,sha1]"
         )
     )]
     #[serde(default)]
@@ -2339,6 +2605,16 @@ Any flag you also pass overrides what the file says."
     #[serde(skip)]
     #[cfg_attr(feature = "typescript-types", ts(skip))]
     pub patch_specs: Vec<BundleCreatePatchSpec>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "force",
+            help = "Overwrite the output if it already exists (without this, the command stops instead)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub force: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]

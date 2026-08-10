@@ -5086,6 +5086,9 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            // The run above already wrote this output; patch apply now refuses
+            // to overwrite without --force.
+            "--force",
             "--no-ignore",
             "--no-compress",
             "--json",

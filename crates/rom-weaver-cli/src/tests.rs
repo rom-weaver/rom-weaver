@@ -166,6 +166,7 @@ fn test_app_with_prompt(selected: Vec<usize>) -> CliApp {
         Arc::new(TestPrompter { selected }),
         false,
         true,
+        false,
     )
 }
 
@@ -414,6 +415,8 @@ fn compress_zip_fixture(app: &CliApp, inputs: &[PathBuf], output: &Path) {
         output: output.to_path_buf(),
         codec: Vec::new(),
         level: CompressionLevelProfile::Max,
+        force: false,
+        dry_run: false,
         threads: ThreadBudget::Fixed(1),
     }));
     assert_eq!(
@@ -1164,6 +1167,7 @@ fn noninteractive_app() -> CliApp {
     CliApp::new(
         Arc::new(NoopProgressSink),
         Arc::new(TestPrompter { selected: vec![] }),
+        false,
         false,
         false,
     )
