@@ -693,7 +693,9 @@ struct BasisScore {
     checksum_valid: usize,
 }
 
-fn basis_temp_path(
+/// Name a scratch path for a speculative probe and register it for cleanup.
+/// Shared with the N64 byte-order probe, which runs the same way.
+pub(super) fn basis_temp_path(
     context: &OperationContext,
     stem: &str,
     temp_paths: &mut Vec<PathBuf>,
@@ -709,7 +711,7 @@ fn basis_temp_path(
         trace!(
             %error,
             parent = %parent.display(),
-            "auto header: could not create the probe temp directory"
+            "patch apply: could not create the probe temp directory"
         );
     }
     temp_paths.push(path.clone());
@@ -718,10 +720,13 @@ fn basis_temp_path(
 
 /// Log why a probe step gave up.
 ///
-/// Every bail in this module means "keep the caller's default", which looks
-/// identical to a confident decision from the outside. A silent one is
-/// undebuggable, so each gets a reason.
-fn probe_step<T, E: std::fmt::Display>(step: &str, result: std::result::Result<T, E>) -> Option<T> {
+/// Every bail in the structural decisions means "keep the caller's default",
+/// which looks identical to a confident decision from the outside. A silent one
+/// is undebuggable, so each gets a reason.
+pub(super) fn probe_step<T, E: std::fmt::Display>(
+    step: &str,
+    result: std::result::Result<T, E>,
+) -> Option<T> {
     match result {
         Ok(value) => Some(value),
         Err(error) => {

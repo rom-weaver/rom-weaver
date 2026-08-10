@@ -238,3 +238,57 @@ fn a_header_covering_the_whole_input_leaves_no_candidate() {
     let probe = probe_patch_basis(&patch_path, &rom_path, HEADER_LEN as u64, true).expect("probe");
     assert!(probe.is_none());
 }
+
+#[test]
+fn overlapping_records_void_the_edge_rule() {
+    // The edge rule only describes records a trimming differ produced, and such
+    // a differ never writes one byte twice. The same fixture as above, with the
+    // records packed close enough to overlap, must decide nothing.
+    let temp = TestDir::new();
+    let rom = headered_rom(6);
+    let record_len = 8_usize;
+    let mut records = Vec::new();
+    let mut matched_on_raw = 0;
+    for index in 0..12_u32 {
+        // Half a record apart, so every record shares bytes with its neighbour.
+        let offset = 0x1000 + index * 4;
+        let at = offset as usize;
+        let raw_first = rom[at];
+        let headerless_first = rom[HEADER_LEN + at];
+        let headerless_last = rom[HEADER_LEN + at + record_len - 1];
+        let mut data = vec![0_u8; record_len];
+        data[0] = if matched_on_raw < 2 && raw_first != headerless_first {
+            matched_on_raw += 1;
+            raw_first
+        } else {
+            headerless_first ^ 0xFF
+        };
+        data[record_len - 1] = headerless_last ^ 0xFF;
+        records.push((offset, data));
+    }
+    assert_eq!(matched_on_raw, 2, "fixture must plant two raw-edge matches");
+    let patch = build_ips(&records, None);
+    assert_eq!(decide(&temp, &rom, &patch, HEADER_LEN, true), None);
+}
+
+#[test]
+fn overlap_after_the_edge_sample_cap_still_voids_the_edge_rule() {
+    let temp = TestDir::new();
+    let rom = headered_rom(9);
+    let mut records = Vec::with_capacity(4097);
+    for index in 0..4096_u32 {
+        records.push((0x1000 + index * 4, vec![0xAA]));
+    }
+    records.push((0x1000, vec![0xBB]));
+
+    let patch = build_ips(&records, None);
+    let rom_path = temp.child("rom.sfc");
+    let patch_path = temp.child("update.ips");
+    fs::write(&rom_path, &rom).expect("rom fixture");
+    fs::write(&patch_path, patch).expect("patch fixture");
+    let probe = probe_patch_basis(&patch_path, &rom_path, HEADER_LEN as u64, true)
+        .expect("probe")
+        .expect("patch is IPS and the header leaves a headerless candidate");
+    assert!(probe.overlapping_records);
+    assert!(decide_basis(&probe).basis().is_none());
+}

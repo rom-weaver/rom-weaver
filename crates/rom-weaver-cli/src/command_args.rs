@@ -1099,7 +1099,9 @@ N64 dumps circulate in three interleavings (.z64 big-endian, .v64 byte-swapped,
 .n64 little-endian) and a patch only matches one of them.
 
   auto           Match whichever order the patch's source CRC32 names. The
-                 default, and almost always right.
+                 default, and almost always right. For the first patch, one
+                 that carries no checksum (IPS) falls back to the shape of its
+                 changes; an order settled that way is named in the report.
   keep           Leave the ROM as it is.
   big-endian     Rewrite to .z64 order.
   little-endian  Rewrite to .n64 order.
