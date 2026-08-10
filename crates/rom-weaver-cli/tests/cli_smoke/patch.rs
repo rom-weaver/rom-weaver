@@ -1550,6 +1550,51 @@ fn patch_apply_default_output_is_collision_safe() {
 }
 
 #[test]
+fn patch_apply_infers_z3ds_subtype_from_source_extension() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.cia");
+    let modified = temp.child("changed.cia");
+    let patch = temp.child("update.bps");
+
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let apply_json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--format",
+            "z3ds",
+            "--json",
+        ],
+        0,
+    ));
+    assert_patch_envelope(&apply_json, "patch-apply", "BPS", "succeeded");
+    assert!(temp.child("game-patched.zcia").path().is_file());
+    assert!(!temp.child("game-patched.z3ds").path().exists());
+}
+
+#[test]
 fn patch_apply_emit_bundle_records_inferred_container_output() {
     let temp = setup_temp_dir();
     let (original, patch) = make_bps_patch_fixture(&temp);
@@ -1648,6 +1693,42 @@ fn patch_apply_rejects_invalid_codec_before_patching() {
             .as_str()
             .expect("failure label")
             .contains("unsupported zip codec")
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
+fn patch_apply_rejects_invalid_chd_codec_combination_before_patching() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let output = temp.child("invalid-codec.chd");
+
+    let apply_json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--codec",
+            "zstd,avhuff",
+            "--json",
+        ],
+        1,
+    ));
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["status"], "failed");
+    assert_eq!(apply_json["stage"], "validate");
+    assert!(
+        apply_json["label"]
+            .as_str()
+            .expect("failure label")
+            .contains("avhuff` must be the first codec")
     );
     assert!(!output.path().exists());
 }

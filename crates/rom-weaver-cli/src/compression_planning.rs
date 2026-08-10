@@ -539,6 +539,7 @@ impl CliApp {
             )));
         }
         let mut primary_metadata = None;
+        let mut canonical_codecs = Vec::with_capacity(requested_codecs.len());
         for requested in requested_codecs {
             let Some(codec_metadata) = metadata.codecs.iter().find(|entry| {
                 entry.name.eq_ignore_ascii_case(requested)
@@ -560,6 +561,34 @@ impl CliApp {
                 )));
             }
             primary_metadata.get_or_insert(codec_metadata);
+            canonical_codecs.push(codec_metadata.name);
+        }
+        if format.eq_ignore_ascii_case("chd") {
+            if canonical_codecs.len() > 4 {
+                return Err(RomWeaverError::Validation(format!(
+                    "chd supports at most 4 codecs; received {}",
+                    canonical_codecs.len()
+                )));
+            }
+            if canonical_codecs
+                .first()
+                .is_some_and(|codec| *codec == "store")
+                && canonical_codecs.len() > 1
+            {
+                return Err(RomWeaverError::Validation(
+                    "chd codec `store` cannot be combined with additional codecs".to_string(),
+                ));
+            }
+            if canonical_codecs
+                .iter()
+                .skip(1)
+                .any(|codec| *codec == "avhuff")
+            {
+                return Err(RomWeaverError::Validation(
+                    "chd codec `avhuff` must be the first codec when multiple codecs are provided"
+                        .to_string(),
+                ));
+            }
         }
         if let (Some(level), Some(codec_metadata)) = (level, primary_metadata) {
             let Some(range) = codec_metadata.level else {

@@ -703,6 +703,26 @@ fn patch_apply_rejects_invalid_codec_before_compression() {
 }
 
 #[test]
+fn patch_apply_rejects_invalid_chd_codec_order_before_compression() {
+    let app = noninteractive_app();
+    let error = app
+        .resolve_patch_apply_compression_options(
+            false,
+            Some("chd".to_string()),
+            vec!["zstd,avhuff".to_string()],
+            None,
+            Path::new("patched.chd"),
+            Path::new("game.bin"),
+        )
+        .expect_err("invalid CHD codec order must fail during planning");
+    assert!(
+        error
+            .to_string()
+            .contains("avhuff` must be the first codec")
+    );
+}
+
+#[test]
 fn patch_apply_inferred_publish_uses_create_new_collision_safety() {
     let nonce = REPAIR_TEST_FILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let directory =
@@ -727,6 +747,33 @@ fn patch_apply_inferred_publish_uses_create_new_collision_safety() {
         b"patched bytes"
     );
 
+    std::fs::remove_dir_all(directory).expect("remove output fixture directory");
+}
+
+#[test]
+fn patch_apply_inferred_publish_falls_back_when_hard_links_are_unsupported() {
+    let nonce = REPAIR_TEST_FILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let directory = std::env::temp_dir().join(format!(
+        "rw-output-publish-fallback-{}-{nonce}",
+        std::process::id()
+    ));
+    let staged = directory.join("staged.bin");
+    let destination = directory.join("output.bin");
+    std::fs::create_dir_all(&directory).expect("create output fixture directory");
+    std::fs::write(&staged, b"complete").expect("write staged output");
+
+    CliApp::install_staged_no_overwrite_with(&staged, &destination, |_, _| {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "hard links unsupported",
+        ))
+    })
+    .expect("copy fallback");
+
+    assert_eq!(
+        std::fs::read(&destination).expect("read fallback output"),
+        b"complete"
+    );
     std::fs::remove_dir_all(directory).expect("remove output fixture directory");
 }
 

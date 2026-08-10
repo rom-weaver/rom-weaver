@@ -1238,12 +1238,16 @@ impl CliApp {
             .ok_or_else(|| {
                 RomWeaverError::Validation("requested output format is not registered".to_string())
             })?;
-        let extension = handler.descriptor().extensions.first().ok_or_else(|| {
-            RomWeaverError::Validation(format!(
+        if handler.descriptor().extensions.is_empty() {
+            return Err(RomWeaverError::Validation(format!(
                 "output format `{compress_format}` has no usable file extension"
-            ))
-        })?;
-        output = Self::default_patch_apply_output_path_for_extension(input, extension)?;
+            )));
+        }
+        output = Self::default_patch_apply_output_path_for_format(
+            input,
+            resolved_input,
+            handler.descriptor().extensions,
+        )?;
         Ok((output, output_was_inferred))
     }
 
@@ -1304,6 +1308,33 @@ impl CliApp {
                 )
             })?;
         }
+    }
+
+    fn default_patch_apply_output_path_for_format(
+        input: &Path,
+        extension_source: &Path,
+        extensions: &[&str],
+    ) -> Result<PathBuf> {
+        let parent = input.parent().unwrap_or_else(|| Path::new("."));
+        let stem = input
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("rom");
+        let base = parent.join(format!("{stem}-patched"));
+        let (candidate, _) =
+            Self::append_output_extension_if_missing(&base, extensions, Some(extension_source));
+        let extension = candidate
+            .extension()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "cannot infer a patch output name because the selected format has no file extension"
+                        .to_string(),
+                )
+            })?;
+        Self::default_patch_apply_output_path_for_extension(input, extension)
     }
 
     fn ensure_inferred_output_available(
@@ -1390,6 +1421,61 @@ impl CliApp {
         Self::publish_inferred_patch_apply_output(source, destination, input)
     }
 
+    fn copy_file_create_new(source: &Path, destination: &Path) -> io::Result<()> {
+        let mut source_file = File::open(source)?;
+        let mut destination_file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(destination)?;
+        let copy_result = (|| {
+            io::copy(&mut source_file, &mut destination_file)?;
+            destination_file.sync_all()
+        })();
+        drop(destination_file);
+        if let Err(error) = copy_result {
+            let _ = fs::remove_file(destination);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub(super) fn install_staged_no_overwrite_with<F>(
+        staged_path: &Path,
+        destination_path: &Path,
+        hard_link: F,
+    ) -> io::Result<()>
+    where
+        F: FnOnce(&Path, &Path) -> io::Result<()>,
+    {
+        match hard_link(staged_path, destination_path) {
+            Ok(()) => Ok(()),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::AlreadyExists | io::ErrorKind::NotFound
+                ) =>
+            {
+                Err(error)
+            }
+            Err(_) => Self::copy_file_create_new(staged_path, destination_path),
+        }
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn install_staged_no_overwrite(staged_path: &Path, destination_path: &Path) -> io::Result<()> {
+        Self::install_staged_no_overwrite_with(
+            staged_path,
+            destination_path,
+            |source, destination| fs::hard_link(source, destination),
+        )
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn install_staged_no_overwrite(staged_path: &Path, destination_path: &Path) -> io::Result<()> {
+        Self::copy_file_create_new(staged_path, destination_path)
+    }
+
     fn copy_to_new_output_file(source: &Path, destination: &Path) -> Result<()> {
         let mut source_file = File::open(source)?;
         let (staged_path, mut staged_file) = loop {
@@ -1420,7 +1506,7 @@ impl CliApp {
             io::copy(&mut source_file, &mut staged_file)?;
             staged_file.sync_all()?;
             drop(staged_file);
-            fs::hard_link(&staged_path, destination)
+            Self::install_staged_no_overwrite(&staged_path, destination)
         })();
         let cleanup_result = fs::remove_file(&staged_path);
         if let Err(error) = cleanup_result
