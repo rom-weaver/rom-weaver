@@ -9,6 +9,7 @@ trim, and header capabilities that surround them.
 <!-- START doctoc -->
 ## Table of contents
 
+- [Legend](#legend)
 - [Patch formats](#patch-formats)
 - [Container and compression formats](#container-and-compression-formats)
 - [Create-time codecs](#create-time-codecs)
@@ -18,39 +19,53 @@ trim, and header capabilities that surround them.
 
 <!-- END doctoc -->
 
+## Legend
+
+Every support table uses these three marks. Each mark has its own shape and
+colour, so the tables still read without colour vision.
+
+| Mark | Meaning |
+| :---: | --- |
+| ✅ | Supported. |
+| ⚠️ | Partly supported. The limit appears beside the mark or in a numbered note. |
+| ❌ | Not supported. |
 
 ## Patch formats
 
-All formats marked Apply also support probe/parse. DCP is a specialized
-Dreamcast apply workflow rather than a general single-file patch parser.
+Every supported Apply entry also supports probe/parse, except DCP. DCP uses a
+specialized Dreamcast apply workflow rather than the general single-file parser.
 
 | Format | Aliases | Extensions | Apply | Create |
 | --- | --- | --- | :---: | :---: |
-| IPS | none | `.ips` | yes | yes |
-| IPS32 | none | `.ips32` | yes | yes |
-| SOLID | `solidpatch`, `solid-patch` | `.solid` | yes | yes |
-| BPS | none | `.bps` | yes | yes |
-| UPS | none | `.ups` | yes | yes |
-| VCDIFF | `vcdiff` | `.vcdiff` | yes | yes |
-| xdelta | `xdelta3` | `.xdelta`, `.delta`, `.dat` | yes | yes |
-| GDIFF | `gdiff` | `.gdiff`, `.gdf` | yes | yes |
-| HDiffPatch/HPatchZ | `hdiffpatch`, `hdiff`, `hpatch`, `hpatchz` | `.hdiff`, `.hpatchz` | yes | no |
-| APS (N64) | none | `.aps` | yes | yes |
-| APSGBA | `aps-gba` | `.apsgba` | yes | yes |
-| RUP | none | `.rup` | yes | yes |
-| PPF | none | `.ppf` | yes | yes |
-| PAT | `ffp`, `fireflower` | `.pat`, `.ffp` | yes | yes |
-| EBP | none | `.ebp` | yes | yes |
-| BDF/BSDIFF40 | `bdf`, `bsdiff`, `bsdiff40` | `.bdf`, `.bsdiff`, `.bsdiff40` | yes | yes |
-| BSP | `bspatch` | `.bsp`, `.bspatch` | yes | no |
-| MOD | `pmsr` | `.mod`, `.pmsr` | yes | yes |
-| DLDI | none | `.dldi` | yes | yes |
-| DPS | none | `.dps` | yes | yes |
-| DCP | none | `.dcp` | yes | no |
+| IPS | none | `.ips` | ✅ | ✅ |
+| IPS32 | none | `.ips32` | ✅ | ✅ |
+| SOLID | `solidpatch`, `solid-patch` | `.solid` | ✅ | ✅ |
+| BPS | none | `.bps` | ✅ | ✅ |
+| UPS | none | `.ups` | ✅ | ✅ |
+| VCDIFF | `vcdiff` | `.vcdiff` | ✅ | ✅ |
+| xdelta | `xdelta3` | `.xdelta`, `.delta`, `.dat` | ✅ | ✅ |
+| GDIFF | `gdiff` | `.gdiff`, `.gdf` | ✅ | ✅ |
+| HDiffPatch/HPatchZ | `hdiffpatch`, `hdiff`, `hpatch`, `hpatchz` | `.hdiff`, `.hpatchz` | ⚠️ ¹ | ❌ |
+| APS (N64) | none | `.aps` | ✅ | ✅ |
+| APSGBA | `aps-gba` | `.apsgba` | ✅ | ✅ |
+| RUP | none | `.rup` | ✅ | ✅ |
+| PPF | none | `.ppf` | ✅ | ✅ |
+| PAT | `ffp`, `fireflower` | `.pat`, `.ffp` | ✅ | ✅ |
+| EBP | none | `.ebp` | ✅ | ✅ |
+| BDF/BSDIFF40 | `bdf`, `bsdiff`, `bsdiff40` | `.bdf`, `.bsdiff`, `.bsdiff40` | ✅ | ✅ |
+| BSP | `bspatch` | `.bsp`, `.bspatch` | ✅ | ❌ |
+| MOD | `pmsr` | `.mod`, `.pmsr` | ✅ | ✅ |
+| DLDI | none | `.dldi` | ✅ | ✅ |
+| DPS | none | `.dps` | ✅ | ✅ |
+| DCP | none | `.dcp` | ⚠️ ² | ❌ |
 
-HDiffPatch directory patches (`HDIFF19`) are not supported; single-file
-`.hdiff` and `.hpatchz` patches are supported. NINJA1 headers can be detected
-but not applied, and PDS is unsupported.
+> ¹ Single-file `.hdiff` and `.hpatchz` patches are supported. Directory
+> patches (`HDIFF19`) are not supported.
+>
+> ² DCP requires a Dreamcast `.cue` or `.gdi` input and must be applied alone.
+> Byte-level patch flags do not apply to this filesystem rebuild.
+
+NINJA1 headers can be detected but not applied. PDS is unsupported.
 
 ## Container and compression formats
 
@@ -59,34 +74,35 @@ For everyday extract, convert, and compress steps, see
 
 | Format | Aliases | Extensions | Probe | Extract | Create |
 | --- | --- | --- | :---: | :---: | :---: |
-| ZIP | none | `.zip` | yes | yes | yes |
-| ZIPX | none | `.zipx` | yes | yes | no |
-| 7z | `7zip` | `.7z` | yes | yes | yes |
-| RAR | none | `.rar` | yes | yes | no |
-| TAR | none | `.tar` | yes | yes | no |
-| TAR.GZ | `tgz` | `.tar.gz`, `.tgz` | yes | yes | no |
-| TAR.BZ2 | `tbz2` | `.tar.bz2`, `.tbz2` | yes | yes | no |
-| TAR.XZ | `txz` | `.tar.xz`, `.txz` | yes | yes | no |
-| Gzip | `gzip` | `.gz` | yes | yes | no |
-| Bzip2 | `bzip2` | `.bz2` | yes | yes | no |
-| XZ | `lzma`, `lzma2` | `.xz` | yes | yes | no |
-| Zstandard | `zstd`, `zstandard` | `.zst` | yes | yes | no |
-| CSO | `ciso` | `.cso`, `.ciso` | yes | yes | no |
-| PBP | none | `.pbp` | yes | yes | no |
-| CHD | `chd-cd`, `chd-gd`, `chd-dvd`, `chd-raw`, `chd-hd`, `chd-av`, `chd-ld` | `.chd` | yes | yes | yes |
-| GCZ | none | `.gcz` | yes | yes | no |
-| WIA | none | `.wia` | yes | yes | no |
-| TGC | none | `.tgc` | yes | yes | no |
-| NFS | none | `.nfs` | yes | yes | no |
-| WBFS | none | `.wbfs` | yes | yes | no |
-| RVZ | none | `.rvz` | yes | yes | yes |
-| Z3DS | `3ds` | `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, `.z3dsx` | yes | yes | yes |
-| XISO | none | `.xiso`, `.xiso.iso` | no | yes | no |
+| ZIP | none | `.zip` | ✅ | ✅ | ✅ |
+| ZIPX | none | `.zipx` | ✅ | ✅ | ❌ |
+| 7z | `7zip` | `.7z` | ✅ | ✅ | ✅ |
+| RAR | none | `.rar` | ✅ | ✅ | ❌ |
+| TAR | none | `.tar` | ✅ | ✅ | ❌ |
+| TAR.GZ | `tgz` | `.tar.gz`, `.tgz` | ✅ | ✅ | ❌ |
+| TAR.BZ2 | `tbz2` | `.tar.bz2`, `.tbz2` | ✅ | ✅ | ❌ |
+| TAR.XZ | `txz` | `.tar.xz`, `.txz` | ✅ | ✅ | ❌ |
+| Gzip | `gzip` | `.gz` | ✅ | ✅ | ❌ |
+| Bzip2 | `bzip2` | `.bz2` | ✅ | ✅ | ❌ |
+| XZ | `lzma`, `lzma2` | `.xz` | ✅ | ✅ | ❌ |
+| Zstandard | `zstd`, `zstandard` | `.zst` | ✅ | ✅ | ❌ |
+| CSO | `ciso` | `.cso`, `.ciso` | ✅ | ✅ | ❌ |
+| PBP | none | `.pbp` | ✅ | ✅ | ❌ |
+| CHD | `chd-cd`, `chd-gd`, `chd-dvd`, `chd-raw`, `chd-hd`, `chd-av`, `chd-ld` | `.chd` | ✅ | ✅ ² | ✅ ² |
+| GCZ | none | `.gcz` | ✅ | ✅ | ❌ |
+| WIA | none | `.wia` | ✅ | ✅ | ❌ |
+| TGC | none | `.tgc` | ✅ | ✅ | ❌ |
+| NFS | none | `.nfs` | ✅ | ✅ | ❌ |
+| WBFS | none | `.wbfs` | ✅ | ✅ | ❌ |
+| RVZ | none | `.rvz` | ✅ | ✅ | ✅ |
+| Z3DS | `3ds` | `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, `.z3dsx` | ✅ | ✅ | ✅ |
+| XISO | none | `.xiso`, `.xiso.iso` | ❌ | ⚠️ ¹ | ❌ |
 
-XISO extraction rebuilds the detected XDVDFS filesystem as a normalized ISO;
-detailed `probe` reports and XISO creation are not supported. CHD
-parent/differential support exists in the Rust container API but is not exposed
-as a native CLI flag. `extract --split-bin` affects CHD CD extraction only.
+> ¹ XISO extraction rebuilds the detected XDVDFS filesystem as a normalized
+> ISO. Detailed `probe` reports and XISO creation are not supported.
+>
+> ² CHD parent and differential support exists in the Rust container API. The
+> native CLI does not expose it. `extract --split-bin` affects CD images only.
 
 ## Create-time codecs
 
