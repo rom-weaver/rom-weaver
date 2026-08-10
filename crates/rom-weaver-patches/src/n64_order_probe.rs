@@ -127,7 +127,7 @@ pub struct N64OrderEvidence {
 pub struct N64OrderProbe {
     pub candidates: [N64OrderCandidate; N64_ORDER_CANDIDATES],
     pub evidence: [N64OrderEvidence; N64_ORDER_CANDIDATES],
-    /// Whether any two compared records cover a shared byte, which voids the
+    /// Whether any two records cover a shared byte, which voids the
     /// edge rule's one assumption.
     pub overlapping_records: bool,
     pub records: usize,
@@ -247,7 +247,7 @@ pub fn probe_n64_order(
     let probe = N64OrderProbe {
         candidates,
         evidence,
-        overlapping_records: records_overlap(&patch.records[..compared]),
+        overlapping_records: records_overlap(&patch.records),
         records: patch.records.len(),
         stored_checksum_writes,
     };

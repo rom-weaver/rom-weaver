@@ -270,3 +270,25 @@ fn overlapping_records_void_the_edge_rule() {
     let patch = build_ips(&records, None);
     assert_eq!(decide(&temp, &rom, &patch, HEADER_LEN, true), None);
 }
+
+#[test]
+fn overlap_after_the_edge_sample_cap_still_voids_the_edge_rule() {
+    let temp = TestDir::new();
+    let rom = headered_rom(9);
+    let mut records = Vec::with_capacity(4097);
+    for index in 0..4096_u32 {
+        records.push((0x1000 + index * 4, vec![0xAA]));
+    }
+    records.push((0x1000, vec![0xBB]));
+
+    let patch = build_ips(&records, None);
+    let rom_path = temp.child("rom.sfc");
+    let patch_path = temp.child("update.ips");
+    fs::write(&rom_path, &rom).expect("rom fixture");
+    fs::write(&patch_path, patch).expect("patch fixture");
+    let probe = probe_patch_basis(&patch_path, &rom_path, HEADER_LEN as u64, true)
+        .expect("probe")
+        .expect("patch is IPS and the header leaves a headerless candidate");
+    assert!(probe.overlapping_records);
+    assert!(decide_basis(&probe).basis().is_none());
+}

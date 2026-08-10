@@ -391,6 +391,31 @@ fn overlapping_records_void_the_edge_rule() {
 }
 
 #[test]
+fn overlap_after_the_edge_sample_cap_still_voids_the_edge_rule() {
+    let temp = TestDir::new();
+    let rom = big_endian_rom(14);
+    let mut records = Vec::with_capacity(4097);
+    for index in 0..4096_u32 {
+        records.push((0x1000 + index * 4, vec![0xAA]));
+    }
+    records.push((0x1000, vec![0xBB]));
+
+    let patch = build_ips(&records);
+    let rom_path = temp.child("rom.n64");
+    let patch_path = temp.child("update.ips");
+    fs::write(&rom_path, &rom).expect("rom fixture");
+    fs::write(&patch_path, patch).expect("patch fixture");
+    let probe = probe_n64_order(&patch_path, &rom_path, candidates(0))
+        .expect("probe")
+        .expect("patch is IPS and the input holds whole words");
+    assert!(probe.overlapping_records);
+    assert!(matches!(
+        decide_n64_order(&probe),
+        super::N64OrderDecision::Inconclusive { .. }
+    ));
+}
+
+#[test]
 fn a_truncated_result_that_is_not_whole_words_is_left_alone() {
     // A truncate footer states the size of the result, and the rewrite refuses a
     // result that is not whole words. Inferring an order here would turn an

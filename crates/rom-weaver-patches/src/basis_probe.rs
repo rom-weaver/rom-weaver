@@ -86,7 +86,7 @@ pub struct BasisProbe {
     pub raw: BasisEvidence,
     pub headerless: BasisEvidence,
     pub records: usize,
-    /// Whether any two compared records cover a shared byte, which voids the
+    /// Whether any two records cover a shared byte, which voids the
     /// edge rule's one assumption.
     pub overlapping_records: bool,
     /// Whether the stripped header is copier junk rather than an emulator-read
@@ -185,7 +185,7 @@ pub fn probe_patch_basis(
         raw,
         headerless,
         records: patch.records.len(),
-        overlapping_records: records_overlap(&patch.records[..compared]),
+        overlapping_records: records_overlap(&patch.records),
         header_is_copier_junk,
     };
     debug!(
