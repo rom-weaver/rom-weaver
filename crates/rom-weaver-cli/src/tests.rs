@@ -599,6 +599,235 @@ fn patch_apply_archive_entry_name_preserves_source_extension() {
     );
 }
 
+#[test]
+fn patch_apply_output_mode_uses_leaf_extension_only_for_raw_output() {
+    let app = noninteractive_app();
+    let raw = app
+        .resolve_patch_apply_compression_options(
+            false,
+            None,
+            Vec::new(),
+            None,
+            Path::new("patched.sfc"),
+            Path::new("game.sfc"),
+        )
+        .expect("matching ROM extension selects raw output");
+    assert!(!raw.enabled);
+
+    let container = app
+        .resolve_patch_apply_compression_options(
+            false,
+            None,
+            Vec::new(),
+            None,
+            Path::new("patched.zip"),
+            Path::new("game.sfc"),
+        )
+        .expect("registered container extension selects compression");
+    assert!(container.enabled);
+
+    let unknown = app
+        .resolve_patch_apply_compression_options(
+            false,
+            None,
+            Vec::new(),
+            None,
+            Path::new("patched.unknown"),
+            Path::new("game.sfc"),
+        )
+        .expect_err("unknown extension must fail closed");
+    assert!(
+        unknown
+            .to_string()
+            .contains("neither a registered container")
+    );
+
+    let ambiguous = app
+        .resolve_patch_apply_compression_options(
+            false,
+            None,
+            Vec::new(),
+            None,
+            Path::new("patched.bin"),
+            Path::new("game.bin"),
+        )
+        .expect_err("ambiguous extension must fail closed");
+    assert!(
+        ambiguous
+            .to_string()
+            .contains("ambiguous between a raw ROM and a disc image")
+    );
+}
+
+#[test]
+fn patch_apply_explicit_level_forces_container_resolution() {
+    let app = noninteractive_app();
+    let options = app
+        .resolve_patch_apply_compression_options(
+            false,
+            None,
+            Vec::new(),
+            Some(CompressionLevelProfile::High),
+            Path::new("patched.zip"),
+            Path::new("game.sfc"),
+        )
+        .expect("explicit level parses");
+    assert!(options.enabled);
+    let error = app
+        .resolve_patch_apply_compression_options(
+            false,
+            None,
+            Vec::new(),
+            Some(CompressionLevelProfile::High),
+            Path::new("patched.sfc"),
+            Path::new("game.sfc"),
+        )
+        .expect_err("explicit level must not silently select raw output");
+    assert!(error.to_string().contains("not a supported format"));
+}
+
+#[test]
+fn patch_apply_rejects_invalid_codec_before_compression() {
+    let app = noninteractive_app();
+    let error = app
+        .resolve_patch_apply_compression_options(
+            false,
+            Some("zip".to_string()),
+            vec!["not-a-codec".to_string()],
+            None,
+            Path::new("patched.zip"),
+            Path::new("game.sfc"),
+        )
+        .expect_err("invalid codec must fail during planning");
+    assert!(error.to_string().contains("unsupported zip codec"));
+}
+
+#[test]
+fn patch_apply_rejects_invalid_chd_codec_order_before_compression() {
+    let app = noninteractive_app();
+    let error = app
+        .resolve_patch_apply_compression_options(
+            false,
+            Some("chd".to_string()),
+            vec!["zstd,avhuff".to_string()],
+            None,
+            Path::new("patched.chd"),
+            Path::new("game.bin"),
+        )
+        .expect_err("invalid CHD codec order must fail during planning");
+    assert!(
+        error
+            .to_string()
+            .contains("avhuff` must be the first codec")
+    );
+}
+
+#[test]
+fn patch_apply_inferred_publish_uses_create_new_collision_safety() {
+    let nonce = REPAIR_TEST_FILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let directory =
+        std::env::temp_dir().join(format!("rw-output-publish-{}-{nonce}", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("create output fixture directory");
+    let source = directory.join("staged.bin");
+    let input = directory.join("game.sfc");
+    let existing = directory.join("game-patched.sfc");
+    std::fs::write(&source, b"patched bytes").expect("write staged output");
+    std::fs::write(&existing, b"keep this file").expect("write collision fixture");
+    let mut destination = existing.clone();
+
+    CliApp::publish_inferred_patch_apply_output(&source, &mut destination, &input)
+        .expect("publish collision-safe output");
+    assert_eq!(destination, directory.join("game-patched-1.sfc"));
+    assert_eq!(
+        std::fs::read(&existing).expect("existing output"),
+        b"keep this file"
+    );
+    assert_eq!(
+        std::fs::read(destination).expect("published output"),
+        b"patched bytes"
+    );
+
+    std::fs::remove_dir_all(directory).expect("remove output fixture directory");
+}
+
+#[test]
+fn patch_apply_inferred_publish_falls_back_when_hard_links_are_unsupported() {
+    let nonce = REPAIR_TEST_FILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let directory = std::env::temp_dir().join(format!(
+        "rw-output-publish-fallback-{}-{nonce}",
+        std::process::id()
+    ));
+    let staged = directory.join("staged.bin");
+    let destination = directory.join("output.bin");
+    std::fs::create_dir_all(&directory).expect("create output fixture directory");
+    std::fs::write(&staged, b"complete").expect("write staged output");
+
+    CliApp::install_staged_no_overwrite_with(&staged, &destination, |_, _| {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "hard links unsupported",
+        ))
+    })
+    .expect("copy fallback");
+
+    assert_eq!(
+        std::fs::read(&destination).expect("read fallback output"),
+        b"complete"
+    );
+    std::fs::remove_dir_all(directory).expect("remove output fixture directory");
+}
+
+#[test]
+fn patch_apply_inferred_publish_cleans_failed_private_stage() {
+    let nonce = REPAIR_TEST_FILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let directory = std::env::temp_dir().join(format!(
+        "rw-output-publish-failure-{}-{nonce}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&directory).expect("create output fixture directory");
+    let source = directory.join("source-directory");
+    let destination = directory.join("game-patched.sfc");
+    std::fs::create_dir(&source).expect("create invalid source fixture");
+    let mut destination = destination;
+
+    let error = CliApp::publish_inferred_patch_apply_output(
+        &source,
+        &mut destination,
+        &directory.join("game.sfc"),
+    )
+    .expect_err("directory source must fail to publish");
+    assert!(matches!(error, RomWeaverError::Io(_)));
+    assert!(!destination.exists());
+    assert_eq!(
+        std::fs::read_dir(&directory)
+            .expect("read output fixture directory")
+            .count(),
+        1,
+        "failed publish must remove its private staging file"
+    );
+
+    std::fs::remove_dir_all(directory).expect("remove output fixture directory");
+}
+
+#[test]
+fn patch_apply_default_output_path_avoids_existing_sibling() {
+    let nonce = REPAIR_TEST_FILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let directory = std::env::temp_dir().join(format!(
+        "rw-output-inference-{}-{nonce}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&directory).expect("create output fixture directory");
+    let input = directory.join("game.sfc");
+    let existing = directory.join("game-patched.sfc");
+    std::fs::write(&existing, b"sentinel").expect("write collision fixture");
+
+    let inferred = CliApp::default_patch_apply_output_path(&input, &input)
+        .expect("infer collision-safe sibling");
+    assert_eq!(inferred, directory.join("game-patched-1.sfc"));
+
+    std::fs::remove_dir_all(directory).expect("remove output fixture directory");
+}
+
 static REPAIR_TEST_FILE_COUNTER: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
 
