@@ -27,7 +27,8 @@ use rom_weaver_checksum::rom_headers::{
     INES_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, LNX_HEADER_MAGIC, N64_BIG_ENDIAN_MAGIC,
     N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC, NGP_COPYRIGHT_MAGIC,
     PCE_COPIER_HEADER_MODULUS, ROM_HEADER_BYTES, ROM_HEADER_SCAN_BYTES, SMS_TMR_SEGA_MAGIC,
-    SNES_COPIER_HEADER_MODULUS, StripHeaderResult, header_has_nsrt_metadata,
+    SNES_COPIER_HEADER_MODULUS, StripHeaderResult, header_declares_smd_interleave,
+    header_has_nsrt_metadata,
 };
 use rom_weaver_checksum::{
     ChecksumProgress, IdentityPrefix, NativeChecksumEngine, StreamingVariantChecksums,
@@ -1329,6 +1330,7 @@ mod patch_basis_decision;
 #[path = "patch_commands.rs"]
 mod patch_commands;
 mod patch_create;
+mod patch_n64_order_decision;
 mod patch_validate;
 mod tools;
 pub use patch_commands::{PatchCreateFormatPolicyMetadata, patch_create_format_policy_metadata};

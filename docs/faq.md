@@ -1,8 +1,6 @@
 # Frequently asked questions
 
-Every answer lives on the page that owns the topic, so it stays correct when
-that page changes. This list is a map to those pages, grouped by what you are
-trying to find out.
+Every answer lives on the page that owns the topic, so it stays correct when that page changes. This list is a map to those pages, grouped by what you are trying to find out.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -46,47 +44,37 @@ trying to find out.
 
 ### Are my ROMs or patches uploaded?
 
-No. [Why your files stay on your device](explanation/local-first.md) explains
-how that is enforced, and [Privacy](legal/privacy.md) has the detailed
-statement.
+No. [Why your files stay on your device](explanation/local-first.md) explains how that is enforced, and [Privacy](legal/privacy.md) has the detailed statement.
 
 ### Does rom-weaver include games?
 
-No. It is a patching tool, and the guided samples are homebrew ROMs written
-for this project. See [How patching works](explanation/how-patching-works.md#a-patch-is-not-a-game).
+No. It is a patching tool, and the guided samples are homebrew ROMs written for this project. See [How patching works](explanation/how-patching-works.md#a-patch-is-not-a-game).
 
 ### Will it overwrite my original?
 
-No. rom-weaver always writes a new file -
-[your original is never modified](explanation/local-first.md#your-original-is-never-modified).
+No. rom-weaver always writes a new file - [your original is never modified](explanation/local-first.md#your-original-is-never-modified).
 
 ### Can I share the result?
 
-Usually you should share the patch or a patch-only bundle, not the patched ROM.
-See [what a bundle is not](explanation/bundles.md#what-it-is-not).
+Usually you should share the patch or a patch-only bundle, not the patched ROM. See [what a bundle is not](explanation/bundles.md#what-it-is-not).
 
 ## Applying a patch
 
 ### Which page should I use?
 
-[Apply](https://rom-weaver.com/apply), following [Apply a ROM patch](how-to/apply-rom-patches.md).
-If you have never done it, start with [your first patch](tutorials/first-patch.md).
+[Apply](https://rom-weaver.com/apply), following [Apply a ROM patch](how-to/apply-rom-patches.md). If you have never done it, start with [your first patch](tutorials/first-patch.md).
 
 ### Which patch format should I choose?
 
-When applying, use the one you were given. When publishing, see
-[Choosing a patch format](explanation/patch-formats.md).
+When applying, use the one you were given. When publishing, see [Choosing a patch format](explanation/patch-formats.md).
 
 ### Can I drop a ZIP or 7z without extracting it?
 
-Yes, including nested archives - [Apply a ROM patch](how-to/apply-rom-patches.md)
-covers it in the browser, and [Work with archives](how-to/work-with-archives.md)
-has the terminal recipes.
+Yes, including nested archives - [Apply a ROM patch](how-to/apply-rom-patches.md) covers it in the browser, and [Work with archives](how-to/work-with-archives.md) has the terminal recipes.
 
 ### Why does the expected filename not match?
 
-A name is advisory; bytes are not. See
-[what a checksum proves](explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not).
+A name is advisory; bytes are not. See [what a checksum proves](explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not).
 
 ### Why does the checksum not match?
 
@@ -98,20 +86,17 @@ Yes - [why patch order matters](explanation/how-patching-works.md#why-patch-orde
 
 ### Why is Apply and Download disabled?
 
-Something is still reading, or a check has not passed. See
-[choose the output and apply](how-to/apply-rom-patches.md#choose-the-output-and-apply).
+Something is still reading, or a check has not passed. See [choose the output and apply](how-to/apply-rom-patches.md#choose-the-output-and-apply).
 
 ## Creating a patch
 
 ### What are Original and Modified?
 
-[Create a ROM patch](how-to/create-rom-patches.md) opens with the distinction,
-and the direction matters.
+[Create a ROM patch](how-to/create-rom-patches.md) opens with the distinction, and the direction matters.
 
 ### How do I know the patch really works?
 
-Test the downloaded patch, not your Modified file -
-[test the downloaded patch](how-to/create-rom-patches.md#test-the-downloaded-patch).
+Test the downloaded patch, not your Modified file - [test the downloaded patch](how-to/create-rom-patches.md#test-the-downloaded-patch).
 
 ### What belongs in release notes?
 
@@ -133,15 +118,13 @@ Not by default - [what it is not](explanation/bundles.md#what-it-is-not).
 
 ### Can a link open my hosted bundle?
 
-Yes, with CORS - [links can carry them](explanation/bundles.md#links-can-carry-them)
-and [Webapp integration](hosting/webapp-integration.md).
+Yes, with CORS - [links can carry them](explanation/bundles.md#links-can-carry-them) and [Webapp integration](hosting/webapp-integration.md).
 
 ## Devices, browsers, and offline
 
 ### Does it work on a phone or tablet?
 
-Yes, within the device's limits -
-[what this costs you](explanation/local-first.md#what-this-costs-you).
+Yes, within the device's limits - [what this costs you](explanation/local-first.md#what-this-costs-you).
 
 ### Does it work offline?
 
@@ -149,8 +132,7 @@ After the browser has cached the app - [offline](explanation/local-first.md#offl
 
 ### Which browser should I use?
 
-A current Chromium, Firefox, or Safari; the masthead reports what it found -
-[Webapp runtime status](hosting/webapp-runtime-status.md).
+A current Chromium, Firefox, or Safari; the masthead reports what it found - [Webapp runtime status](hosting/webapp-runtime-status.md).
 
 ### Can I change the theme?
 
@@ -164,8 +146,7 @@ Yes, from the masthead control. Documentation screenshots follow it.
 
 ### How does rom-weaver compare with the patcher I already use?
 
-[Comparison with similar tools](explanation/comparisons.md) puts it beside
-RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool.
+[Comparison with similar tools](explanation/comparisons.md) puts it beside RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool.
 
 ### How do I install the CLI?
 
@@ -173,10 +154,6 @@ RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool.
 
 ### Where can I report a bug?
 
-[GitHub issues](https://github.com/rom-weaver/rom-weaver/issues), with the
-visible error, versions, and steps that led to it. Never attach copyrighted
-ROMs; the homebrew samples make ideal repro files. Report vulnerabilities
-privately through the
-[security policy](https://github.com/rom-weaver/rom-weaver/security/policy).
+[GitHub issues](https://github.com/rom-weaver/rom-weaver/issues), with the visible error, versions, and steps that led to it. Never attach copyrighted ROMs; the homebrew samples make ideal repro files. Report vulnerabilities privately through the [security policy](https://github.com/rom-weaver/rom-weaver/security/policy).
 
 Still looking? The [documentation index](README.md) lists every page.

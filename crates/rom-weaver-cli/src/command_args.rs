@@ -145,6 +145,13 @@ const fn default_true() -> bool {
     true
 }
 
+fn default_checksum_algorithms() -> Vec<String> {
+    ["crc32", "md5", "sha1"]
+        .into_iter()
+        .map(String::from)
+        .collect()
+}
+
 const fn default_max_compression_level() -> CompressionLevelProfile {
     CompressionLevelProfile::Max
 }
@@ -362,12 +369,14 @@ pub struct ChecksumCommand {
         arg(
             short = 'a',
             long = "algo",
-            required = true,
+            default_values_t = default_checksum_algorithms(),
             value_name = "ALGO",
             value_delimiter = ',',
             help = "Which checksum to compute: crc32, md5, sha1, sha256, blake3, crc32c, crc16, or adler32 (repeatable, comma-separable)"
         )
     )]
+    #[serde(default = "default_checksum_algorithms")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub algo: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -1099,7 +1108,9 @@ N64 dumps circulate in three interleavings (.z64 big-endian, .v64 byte-swapped,
 .n64 little-endian) and a patch only matches one of them.
 
   auto           Match whichever order the patch's source CRC32 names. The
-                 default, and almost always right.
+                 default, and almost always right. For the first patch, one
+                 that carries no checksum (IPS) falls back to the shape of its
+                 changes; an order settled that way is named in the report.
   keep           Leave the ROM as it is.
   big-endian     Rewrite to .z64 order.
   little-endian  Rewrite to .n64 order.

@@ -9458,3 +9458,790 @@ fn patch_apply_auto_header_does_not_call_an_nsrt_header_copier_junk() {
     assert_eq!(&applied[0x100..0x104], &[0x5A; 4]);
     assert_eq!(&applied[0x1e8..0x1ec], b"NSRT");
 }
+
+/// Deterministic pseudo-random ROM bytes. Real ROM data has enough entropy that
+/// a record edge rarely matches the byte under it by chance.
+fn pseudo_random_bytes(len: usize, seed: u64) -> Vec<u8> {
+    let mut state = seed | 1;
+    (0..len)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 24) as u8
+        })
+        .collect()
+}
+
+/// A Super Magic Drive dump: a 512-byte header carrying the copier ID pair and
+/// the Genesis type byte, then 16 KiB blocks holding each block's odd bytes
+/// first and its even bytes second.
+fn super_magic_drive_dump(plain: &[u8]) -> Vec<u8> {
+    let mut dump = vec![0_u8; 512];
+    dump[0] = (plain.len() / 0x4000) as u8;
+    dump[8] = 0xAA;
+    dump[9] = 0xBB;
+    dump[10] = 0x06;
+    for block in plain.chunks(0x4000) {
+        let odd = block.iter().skip(1).step_by(2).copied();
+        let even = block.iter().step_by(2).copied();
+        dump.extend(odd);
+        dump.extend(even);
+    }
+    dump
+}
+
+#[test]
+fn patch_apply_auto_header_keeps_a_super_magic_drive_header() {
+    // Every .smd dump is 512 % 1024 bytes long, exactly the shape the size-based
+    // copier-header test looks for, so a misnamed one used to read as a headered
+    // SNES ROM and get its first 512 bytes stripped. Behind those bytes is
+    // interleaved Genesis data, not a shorter ROM: no basis this code can
+    // express is there, so the right answer is to leave the dump alone.
+    let temp = setup_temp_dir();
+    let mut plain = pseudo_random_bytes(64 * 1024, 22);
+    plain[0x100..0x104].copy_from_slice(b"SEGA");
+    let dump = super_magic_drive_dump(&plain);
+    assert_eq!(dump.len() % 1024, 512, "fixture must look copier-headered");
+    fs::write(temp.child("input.smc").path(), &dump).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![
+                TestIpsRecord::Literal {
+                    offset: 0x100,
+                    data: vec![0x5A; 4],
+                },
+                TestIpsRecord::Literal {
+                    offset: 0x2000,
+                    data: vec![0x5B; 4],
+                },
+            ],
+            None,
+        ),
+    )
+    .expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.smc").path().to_str().expect("path"),
+            "--patch-header",
+            "auto",
+            "--output-header",
+            "keep",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("input header stripped"),
+        "an interleaved Genesis dump has no removable header: {label}"
+    );
+
+    // The records landed where the patch put them, with the .smd header intact.
+    let mut expected = dump;
+    expected[0x100..0x104].copy_from_slice(&[0x5A; 4]);
+    expected[0x2000..0x2004].copy_from_slice(&[0x5B; 4]);
+    assert_eq!(
+        fs::read(temp.child("output.smc").path()).expect("output"),
+        expected
+    );
+}
+
+/// Build a patch with rom-weaver's own creator from `original` to `modified`,
+/// so the basis it was authored against is unambiguous by construction.
+fn create_basis_patch(
+    temp: &TempDir,
+    format: &str,
+    original: &[u8],
+    modified: &[u8],
+    patch_name: &str,
+) -> PathBuf {
+    fs::write(temp.child("basis-original.bin").path(), original).expect("fixture");
+    fs::write(temp.child("basis-modified.bin").path(), modified).expect("fixture");
+    let patch = temp.child(patch_name).path().to_path_buf();
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("basis-original.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--modified",
+            temp.child("basis-modified.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--format",
+            format,
+            "--output",
+            patch.to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    patch
+}
+
+/// A body whose 12 scattered edits leave the structural rules with nothing to
+/// say: no record starts past the shorter candidate's end, none lands in the
+/// copier header, and both candidates score alike after applying. Only
+/// checksum proof can decide a basis here.
+fn evidence_free_edits(body: &[u8]) -> Vec<u8> {
+    let mut modified = body.to_vec();
+    for index in 0..12_usize {
+        let at = 0x1000 + index * 0x1000;
+        modified[at..at + 32].copy_from_slice(&[0xC0 + index as u8; 32]);
+    }
+    modified
+}
+
+#[test]
+fn patch_apply_auto_header_proves_the_basis_from_a_declared_md5() {
+    // The auto decision used to compare crc32 and nothing else, so a checksum
+    // pinned under any other algorithm was ignored and the run fell through to
+    // guessing. This patch gives the structural rules nothing, so the declared
+    // md5 is the only thing that can decide it.
+    let temp = setup_temp_dir();
+    let body = snes_rom_body();
+    let modified = evidence_free_edits(&body);
+    let patch = create_basis_patch(&temp, "ips", &body, &modified, "update.ips");
+    fs::write(temp.child("input.smc").path(), with_header(&body)).expect("fixture");
+    // `basis-original.bin` is the headerless body the patch was authored from.
+    let headerless_md5 = checksum_value(temp.child("basis-original.bin").path(), "md5");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--expect-in",
+            &format!("md5={headerless_md5}"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert_eq!(json["status"], "succeeded", "label: {label}");
+    assert!(
+        !label.contains("patch header basis inferred"),
+        "a checksum-proved basis is proof, not inference: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_proves_the_basis_from_an_embedded_md5() {
+    // RUP stores a per-variant source md5 and no crc32 at all, so its proof was
+    // invisible to the auto decision and the basis came from a fallback rule
+    // instead. Proof must decide it, and a proved decision carries no inferred
+    // note.
+    let temp = setup_temp_dir();
+    let body = snes_rom_body();
+    let modified = evidence_free_edits(&body);
+    let patch = create_basis_patch(&temp, "rup", &body, &modified, "update.rup");
+    fs::write(temp.child("input.smc").path(), with_header(&body)).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("input header stripped (512 bytes"),
+        "the embedded md5 must strip the header: {label}"
+    );
+    assert!(
+        !label.contains("patch header basis inferred"),
+        "a checksum-proved basis is proof, not inference: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_tiebreaks_a_patch_with_no_record_geometry() {
+    // The record-geometry probe reads IPS records only, and a patch it cannot
+    // read used to end the decision before the tiebreak ever ran. VCDIFF has no
+    // records to probe and states no whole-file checksum, but it does carry a
+    // per-window target checksum: decoded against the wrong source it cannot
+    // reproduce the output it promised, so the format itself rules that
+    // candidate out.
+    let temp = setup_temp_dir();
+    let body = snes_rom_body();
+    let modified = evidence_free_edits(&body);
+    let patch = create_basis_patch(&temp, "xdelta", &body, &modified, "update.xdelta");
+    fs::write(temp.child("input.smc").path(), with_header(&body)).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch header basis inferred as headerless"),
+        "a basis decided on evidence must be reported: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_tiebreak_keeps_a_raw_basis_with_no_record_geometry() {
+    // The mirror of the case above: the same recordless format authored against
+    // the headered dump must keep its header. Without this a tiebreak that
+    // always answered "headerless" would look correct.
+    let temp = setup_temp_dir();
+    let headered = with_header(&snes_rom_body());
+    let modified = evidence_free_edits(&headered);
+    let patch = create_basis_patch(&temp, "xdelta", &headered, &modified, "update.xdelta");
+    fs::write(temp.child("input.smc").path(), &headered).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            temp.child("output.smc").path().to_str().expect("path"),
+            "--output-header",
+            "keep",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("input header stripped"),
+        "a raw-basis patch must keep the header: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.smc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_reads_a_rejected_apply_as_proof() {
+    // APS GBA verifies its input: an exact source size plus a per-block source
+    // CRC16. It cannot state a whole-file checksum, so the tiebreak asks the
+    // format itself - the basis it refuses to apply to is not the one it was
+    // authored against.
+    let temp = setup_temp_dir();
+    let body = snes_rom_body();
+    let modified = evidence_free_edits(&body);
+    let patch = create_basis_patch(&temp, "apsgba", &body, &modified, "update.aps");
+    fs::write(temp.child("input.smc").path(), with_header(&body)).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch header basis inferred as headerless"),
+        "a basis decided on evidence must be reported: {label}"
+    );
+    assert!(
+        label.contains("rejects the raw"),
+        "the report must name the evidence: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        modified
+    );
+}
+
+#[test]
+fn patch_apply_auto_header_still_tiebreaks_when_checksums_are_ignored() {
+    // APS GBA states an exact source size and a per-block source CRC16. A dump
+    // that differs from the author's original inside a patched block fails the
+    // CRC16 as the headerless candidate and the size as the raw one, so the
+    // format refuses both and the tiebreak used to stop right there: the header
+    // stayed on and, with validation ignored, every change landed 512 bytes off
+    // with nothing to say so. Those refusals are the ones the user asked to
+    // ignore, so the ROM-header comparison decides instead - it reads no
+    // checksum at all.
+    let temp = setup_temp_dir();
+    let body = snes_rom_body();
+    let modified = evidence_free_edits(&body);
+    let patch = create_basis_patch(&temp, "apsgba", &body, &modified, "update.aps");
+
+    let mut dump = body.clone();
+    dump[0x1001] ^= 0xFF;
+    fs::write(temp.child("input.smc").path(), with_header(&dump)).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--output",
+            temp.child("output.sfc").path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--output-header",
+            "strip",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch header basis inferred as headerless"),
+        "ignoring checksum validation must not silence the tiebreak: {label}"
+    );
+    // The patch XORs its payload onto the source, so the one differing byte
+    // carries through; every other byte proves the basis was right.
+    let mut expected = modified.clone();
+    expected[0x1001] ^= 0xFF;
+    assert_eq!(
+        fs::read(temp.child("output.sfc").path()).expect("output"),
+        expected
+    );
+}
+
+/// Shortest N64 ROM that carries a boot checksum: it covers 0x1000..0x101000.
+const N64_BOOT_CHECKSUM_END: usize = 0x101000;
+
+/// A big-endian N64 ROM with a deterministic pseudo-random body, long enough to
+/// carry a boot checksum. The stored checksum at 0x10..0x18 is left wrong;
+/// `repair_n64_rom` fixes it with rom-weaver's own repair pass.
+fn n64_big_endian_rom(seed: u64) -> Vec<u8> {
+    // Mix the seed before use: a bare `seed | 1` collides on consecutive seeds,
+    // which would quietly hand two fixtures the same body.
+    let mut state = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+    let mut rom = vec![0x80, 0x37, 0x12, 0x40];
+    rom.extend((0..N64_BOOT_CHECKSUM_END - 4).map(|_| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 24) as u8
+    }));
+    rom
+}
+
+/// Put a correct boot checksum in a fixture with rom-weaver's own repair pass,
+/// so no copy of the checksum algorithm lives in the tests. The patch is a
+/// record that rewrites one byte with the value already there, because
+/// `--repair-checksum` only runs as part of an apply.
+fn repair_n64_rom(temp: &TempDir, rom: &[u8], name: &str) -> Vec<u8> {
+    let source = temp.child(format!("{name}-stale.z64"));
+    let patch = temp.child(format!("{name}-noop.ips"));
+    let output = temp.child(format!("{name}.z64"));
+    fs::write(source.path(), rom).expect("fixture");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0x40,
+                data: vec![rom[0x40]],
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+    let report = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--repair-checksum",
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&report);
+    assert_eq!(json["status"], "succeeded");
+    let repaired = fs::read(output.path()).expect("repaired fixture");
+    // Only the stored checksum may move; anything else means another platform's
+    // repair pass also claimed the fixture and the test would be measuring that.
+    for (offset, (before, after)) in rom.iter().zip(&repaired).enumerate() {
+        assert!(
+            before == after || (0x10..0x18).contains(&offset),
+            "repair changed offset {offset:#x} outside the stored checksum"
+        );
+    }
+    repaired
+}
+
+#[test]
+fn patch_apply_auto_n64_order_infers_from_the_internal_boot_checksum() {
+    // The realistic checksumless case: an IPS hack authored against the .z64
+    // dump, handed to a user who has the .v64. The patch fixes the boot checksum
+    // the way an N64 hack has to, and only the author's order leaves that
+    // checksum correct - so applying all three ways and asking which result the
+    // console would still boot names the order.
+    let temp = setup_temp_dir();
+    let original = repair_n64_rom(&temp, &n64_big_endian_rom(1), "original");
+    let mut modified = original.clone();
+    // Inside 0x1000..0x101000, so the boot checksum changes with it and the
+    // patch has to carry a new one.
+    modified[0x2000..0x2020].copy_from_slice(&[0xC3; 32]);
+    let modified = repair_n64_rom(&temp, &modified, "modified");
+    assert_ne!(
+        original[0x10..0x18],
+        modified[0x10..0x18],
+        "the fixture must change the stored checksum"
+    );
+
+    let patch = temp.child("update.ips");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("original.z64").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.z64").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let input = temp.child("input.v64");
+    fs::write(input.path(), byte_swap_pairs(&original)).expect("fixture");
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("output.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch N64 byte order inferred as big-endian"),
+        "label must report the inferred order: {label}"
+    );
+    assert!(
+        label.contains("boot checksum"),
+        "label must give the reason: {label}"
+    );
+    // Applied against the big-endian bytes and written back in the order the
+    // input arrived in.
+    assert_eq!(
+        fs::read(temp.child("output.v64").path()).expect("output"),
+        byte_swap_pairs(&modified)
+    );
+}
+
+#[test]
+fn patch_apply_auto_n64_order_keeps_the_order_when_the_input_is_not_the_base() {
+    // The same patch against a ROM it was never made for. No order leaves a
+    // correct boot checksum, so nothing is inferred and the bytes stay where the
+    // user put them - the outcome that keeps a wrong guess from corrupting a
+    // dump silently.
+    let temp = setup_temp_dir();
+    let original = repair_n64_rom(&temp, &n64_big_endian_rom(2), "original");
+    let mut modified = original.clone();
+    modified[0x2000..0x2020].copy_from_slice(&[0xC3; 32]);
+    let modified = repair_n64_rom(&temp, &modified, "modified");
+
+    let patch = temp.child("update.ips");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("original.z64").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.z64").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let stranger = byte_swap_pairs(&repair_n64_rom(&temp, &n64_big_endian_rom(3), "stranger"));
+    let input = temp.child("input.v64");
+    fs::write(input.path(), &stranger).expect("fixture");
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("output.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("patch N64 byte order inferred"),
+        "no order may be inferred from a ROM the patch was not made for: {label}"
+    );
+    // Kept the input's order, so the records landed exactly where they were
+    // addressed.
+    let mut expected = stranger;
+    expected[0x10..0x18].copy_from_slice(&modified[0x10..0x18]);
+    expected[0x2000..0x2020].copy_from_slice(&[0xC3; 32]);
+    assert_eq!(
+        fs::read(temp.child("output.v64").path()).expect("output"),
+        expected
+    );
+}
+
+/// A short big-endian N64 ROM plus an IPS patch that rewrites the first 16
+/// header bytes, magic included. The magic it writes is what names the order the
+/// patch was authored in.
+fn n64_header_rewrite_fixture(temp: &TempDir) -> (Vec<u8>, Vec<u8>) {
+    let mut z64 = vec![0x80, 0x37, 0x12, 0x40];
+    z64.extend((0..0x100 - 4).map(|index| (index as u8).wrapping_mul(7).wrapping_add(3)));
+    let mut header = vec![0x80, 0x37, 0x12, 0x40];
+    header.extend_from_slice(&[0x00, 0x00, 0x00, 0x0F]);
+    header.extend_from_slice(&[0x00, 0x00, 0x04, 0x00]);
+    header.extend_from_slice(&[0x00, 0x00, 0x14, 0x44]);
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: header.clone(),
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+    fs::write(temp.child("input.v64").path(), byte_swap_pairs(&z64)).expect("fixture");
+    let mut applied = z64;
+    applied[..header.len()].copy_from_slice(&header);
+    (applied, header)
+}
+
+#[test]
+fn patch_apply_auto_n64_order_infers_from_a_written_magic() {
+    // A patch whose first record rewrites the ROM header carries the magic it
+    // was authored against. Only one order spells that magic, so this settles
+    // the question outright - no speculative applies needed.
+    let temp = setup_temp_dir();
+    let (applied_z64, _) = n64_header_rewrite_fixture(&temp);
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.v64").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch N64 byte order inferred as big-endian"),
+        "label must report the inferred order: {label}"
+    );
+    assert!(
+        label.contains("magic"),
+        "label must give the reason: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.v64").path()).expect("output"),
+        byte_swap_pairs(&applied_z64)
+    );
+}
+
+#[test]
+fn patch_apply_n64_order_keep_overrides_the_inference() {
+    // `keep` is an instruction, not a hint. Even with a magic that names another
+    // order, the bytes stay exactly where the user asked for them.
+    let temp = setup_temp_dir();
+    let (_, header) = n64_header_rewrite_fixture(&temp);
+    let input = fs::read(temp.child("input.v64").path()).expect("input");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.v64").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--n64-byte-order",
+            "keep",
+            "--output",
+            temp.child("output.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("patch N64 byte order inferred"),
+        "keep must not infer anything: {label}"
+    );
+    let mut expected = input;
+    expected[..header.len()].copy_from_slice(&header);
+    assert_eq!(
+        fs::read(temp.child("output.v64").path()).expect("output"),
+        expected
+    );
+}
+
+#[test]
+fn patch_apply_auto_n64_order_leaves_a_checksummed_patch_alone() {
+    // Checksum proof still owns the decision when a format carries it: this BPS
+    // patch names its source exactly, and the structural fallback must not run
+    // at all. Regression guard for the fallback reaching past its case.
+    let temp = setup_temp_dir();
+    let z64 = [
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let mut modified_z64 = z64;
+    modified_z64[12..].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
+    fs::write(temp.child("original.z64").path(), z64).expect("fixture");
+    fs::write(temp.child("modified.z64").path(), modified_z64).expect("fixture");
+    fs::write(temp.child("input.v64").path(), byte_swap_pairs(&z64)).expect("fixture");
+    create_bps_patch(
+        temp.child("original.z64").path(),
+        temp.child("modified.z64").path(),
+        temp.child("update.bps").path(),
+    );
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.v64").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.bps").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        !label.contains("patch N64 byte order inferred"),
+        "a checksum-proved order is not an inference: {label}"
+    );
+    assert_eq!(
+        fs::read(temp.child("output.v64").path()).expect("output"),
+        byte_swap_pairs(&modified_z64)
+    );
+}

@@ -305,7 +305,7 @@ export type ProbeCommand = { input: string, select?: Array<string>, filter?: Arr
 
 export type ExtractCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, output: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, force?: boolean, checksum?: Array<string>, checksum_rom?: Array<string>, probe?: boolean, threads?: ThreadBudget, };
 
-export type ChecksumCommand = { input: string, algo: Array<string>, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, start?: bigint, length?: bigint, probe?: boolean, threads?: ThreadBudget, };
+export type ChecksumCommand = { input: string, algo?: Array<string>, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, start?: bigint, length?: bigint, probe?: boolean, threads?: ThreadBudget, };
 
 export type IngestCommand = { input: string, output: string, select?: Array<string>,
 /**

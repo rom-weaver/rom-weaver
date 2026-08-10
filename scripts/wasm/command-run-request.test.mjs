@@ -81,7 +81,7 @@ test('maps every CLI command shape to a typed run request', async (t) => {
 
 test('only includes JSON output when requested by the caller', () => {
   const args = ['--json', 'checksum', 'game.bin'];
-  const command = request('checksum', { input: 'game.bin', algo: [] });
+  const command = request('checksum', { input: 'game.bin' });
 
   assert.deepEqual(commandArgsToRunRequest(args), command);
   assert.deepEqual(commandArgsToRunRequest(args, { includeJson: true }), {

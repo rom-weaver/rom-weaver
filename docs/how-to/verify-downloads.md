@@ -1,11 +1,6 @@
 # Verify a download
 
-Check that a rom-weaver artifact you downloaded - a release archive, an npm
-package, or a container image - was built by this repository's release
-workflow. The install scripts run the first check automatically; use this page
-to verify a file by hand, to check the full signature, or to change how strict
-the install scripts are. Why the checks are shaped this way is covered in
-[Release provenance](../explanation/release-provenance.md).
+Check that a rom-weaver artifact you downloaded - a release archive, an npm package, or a container image - was built by this repository's release workflow. The install scripts run the first check automatically; use this page to verify a file by hand, to check the full signature, or to change how strict the install scripts are. Why the checks are shaped this way is covered in [Release provenance](../explanation/release-provenance.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -18,9 +13,7 @@ the install scripts are. Why the checks are shaped this way is covered in
 
 ## Verify a file you downloaded by hand
 
-Hash the file and ask GitHub whether this repository's release workflow built
-exactly those bytes. Nothing needs installing - this is the same check both
-install scripts run:
+Hash the file and ask GitHub whether this repository's release workflow built exactly those bytes. Nothing needs installing - this is the same check both install scripts run:
 
 ```bash
 file=rom-weaver-linux-x64-gnu.tar.gz
@@ -70,20 +63,13 @@ if ($count -gt 0) {
 }
 ```
 
-Keep the `predicate_type` filter: without it the check passes on files the
-release workflow never built.
-[Why the predicate type filter is mandatory](../explanation/release-provenance.md#why-the-predicate-type-filter-is-mandatory)
-explains what the unfiltered query actually matches.
+Keep the `predicate_type` filter: without it the check passes on files the release workflow never built. [Why the predicate type filter is mandatory](../explanation/release-provenance.md#why-the-predicate-type-filter-is-mandatory) explains what the unfiltered query actually matches.
 
-An asset from a release cut before provenance was added correctly reports NOT
-VERIFIED - there is no attestation to find. See
-[what build provenance proves](../explanation/release-provenance.md#what-build-provenance-proves).
+An asset from a release cut before provenance was added correctly reports NOT VERIFIED - there is no attestation to find. See [what build provenance proves](../explanation/release-provenance.md#what-build-provenance-proves).
 
 ## Check the signature
 
-The queries above trust GitHub's API response over TLS. To check the Sigstore
-signature itself - signature, certificate chain, and transparency-log
-inclusion - use `gh`, which must be signed in even for a public repository:
+The queries above trust GitHub's API response over TLS. To check the Sigstore signature itself - signature, certificate chain, and transparency-log inclusion - use `gh`, which must be signed in even for a public repository:
 
 ```bash
 gh attestation verify rom-weaver-linux-x64-gnu.tar.gz --repo rom-weaver/rom-weaver
@@ -99,9 +85,7 @@ npm audit signatures
 
 ## Control the install scripts' check
 
-The install scripts run the digest query against the file they just
-downloaded. A definite negative stops the install; an unanswered question does
-not:
+The install scripts run the digest query against the file they just downloaded. A definite negative stops the install; an unanswered question does not:
 
 | Outcome | Behavior |
 | --- | --- |
@@ -109,9 +93,7 @@ not:
 | Nothing attested them - empty response or HTTP 404 | **refuses** |
 | The check could not run - offline, rate-limited, 5xx | warns, installs |
 
-[Why an unanswered check installs anyway](../explanation/release-provenance.md#why-an-unanswered-check-installs-anyway)
-covers the reasoning behind that last row. Every refusal prints the way past
-it:
+[Why an unanswered check installs anyway](../explanation/release-provenance.md#why-an-unanswered-check-installs-anyway) covers the reasoning behind that last row. Every refusal prints the way past it:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
@@ -119,10 +101,6 @@ curl --proto '=https' --tlsv1.2 -LsSf \
   ROM_WEAVER_SKIP_ATTESTATION=1 sh
 ```
 
-The assignment belongs on `sh`, not on `curl`: putting it at the front of the
-pipeline sets it for the download and not for the script that reads the
-variable, so the install refuses again.
+The assignment belongs on `sh`, not on `curl`: putting it at the front of the pipeline sets it for the download and not for the script that reads the variable, so the install refuses again.
 
-Going the other way, `ROM_WEAVER_REQUIRE_ATTESTATION=1` promotes the
-could-not-run warning to a refusal too, so an install that could not be
-verified fails rather than proceeding.
+Going the other way, `ROM_WEAVER_REQUIRE_ATTESTATION=1` promotes the could-not-run warning to a refusal too, so an install that could not be verified fails rather than proceeding.

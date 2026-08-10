@@ -3,10 +3,13 @@ use super::*;
 use super::bundle_apply::BundleApplyResolution;
 use super::bundle_parse::bundle_validation;
 use super::patch_apply_disc::DiscContext;
+use super::patch_basis_decision::ChecksumBasisProof;
 use super::patch_commands::{
     DiscoveredPatchApplySidecars, PatchApplyProgressSink, PatchApplyProgressTracker,
     patch_progress_segment_start,
 };
+
+use rom_weaver_patches::basis_probe::PatchBasis;
 
 fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
     left == right
@@ -1212,11 +1215,17 @@ impl CliApp {
             stripped_header,
             stripped_header_match,
             n64_order,
+            n64_order_note,
         } = self
             .prepare_patch_apply_input(PreparePatchApplyInputInputs {
                 resolved_input,
                 strip_header,
                 n64_byte_order: chain_n64_modes.first().copied().unwrap_or_default(),
+                inference: if auto_evidence_available {
+                    N64AutoInference::Structural
+                } else {
+                    N64AutoInference::ChecksumOnly
+                },
                 first_patch,
                 expected_crc32: expected_input_checksums.get("crc32").map(String::as_str),
                 repair_checksum,
@@ -1233,9 +1242,10 @@ impl CliApp {
                 ))
             })?;
 
-        // An inferred basis changes output bytes on evidence rather than proof,
-        // so it is always reported.
+        // An inferred header basis or byte order changes output bytes on
+        // evidence rather than proof, so both are always reported.
         let mut checksum_verification_labels = Vec::from_iter(inferred_basis_note);
+        checksum_verification_labels.extend(n64_order_note);
         if let Some(expected_size) = expected_input_size {
             let label = Self::validate_patch_input_size(&apply_input, Some(expected_size), None)
                 .map_err(|error| {
@@ -1540,12 +1550,13 @@ impl CliApp {
     }
 
     /// Decide `--patch-header auto` for the FIRST patch: strip the detected
-    /// copier header only when the patch's required input checksum proves it was
-    /// authored against the headerless bytes. A patch with no checksum to prove
-    /// it falls back to structural evidence
-    /// ([`Self::structural_strip_decision`]); any remaining doubt keeps the
-    /// input as-is. Later chain steps decide per patch in
-    /// [`Self::chain_header_transition`].
+    /// copier header only when a required input checksum - declared or embedded
+    /// in the patch, under whatever algorithm the patch offers - proves the
+    /// patch was authored against the headerless bytes
+    /// ([`Self::checksum_basis_proof`]). A patch with no checksum to prove it
+    /// falls back to structural evidence ([`Self::structural_strip_decision`]);
+    /// any remaining doubt keeps the input as-is. Later chain steps decide per
+    /// patch in [`Self::chain_header_transition`].
     fn auto_header_strip_decision(
         &self,
         resolved_input: &Path,
@@ -1563,82 +1574,76 @@ impl CliApp {
             return (false, None);
         };
         let header_len = header_match.stripped_bytes().unwrap_or(ROM_HEADER_BYTES);
-        let required_crc32 = expected_input_checksums.get("crc32").cloned().or_else(|| {
-            first_resolved_patch.and_then(|patch| self.embedded_patch_source_crc32(patch, context))
-        });
-        let Some(required_crc32) = required_crc32 else {
-            trace!(
-                input = %resolved_input.display(),
-                header = ?header_match.header,
-                "auto header: strippable header present but no required input checksum; falling back to structural evidence"
-            );
-            let Some(patch) = first_resolved_patch else {
-                return (false, None);
-            };
-            return match self.structural_strip_decision(
-                resolved_input,
-                patch,
-                header_match,
-                context,
-                temp_paths,
-            ) {
-                Some((strip, note)) => (strip, Some(note)),
-                None => (false, None),
-            };
-        };
-        if cached_input_checksums
-            .get("crc32")
-            .is_some_and(|cached| cached.eq_ignore_ascii_case(&required_crc32))
-        {
-            trace!(
-                required_crc32 = %required_crc32,
-                "auto header: required checksum matches the raw (headered) input; keeping header"
-            );
-            return (false, None);
-        }
-        let headerless_crc32 = (|| -> Result<Option<String>> {
-            let mut reader = BufReader::new(File::open(resolved_input)?);
-            reader.seek(SeekFrom::Start(header_len as u64))?;
-            Self::crc32_of_reader(&mut reader, context)
-        })();
-        match headerless_crc32 {
-            Ok(Some(headerless)) if headerless.eq_ignore_ascii_case(&required_crc32) => {
+        match self.checksum_basis_proof(
+            resolved_input,
+            first_resolved_patch,
+            header_len as u64,
+            expected_input_checksums,
+            cached_input_checksums,
+            context,
+        ) {
+            ChecksumBasisProof::Proved(PatchBasis::Headerless) => {
                 debug!(
                     header = ?header_match.header,
                     header_bytes = header_len,
-                    required_crc32 = %required_crc32,
-                    "auto header: required input checksum matches the headerless bytes; stripping header before apply and re-adding it after"
+                    "auto header: a required input checksum matches the headerless bytes; stripping header before apply and re-adding it after"
                 );
-                (true, None)
+                // Proof, not evidence: no report note.
+                return (true, None);
             }
-            Ok(_) => {
+            ChecksumBasisProof::Proved(PatchBasis::Raw) => {
                 trace!(
-                    required_crc32 = %required_crc32,
-                    "auto header: required checksum matches neither the raw nor the headerless bytes; keeping header"
+                    input = %resolved_input.display(),
+                    "auto header: a required input checksum matches the raw (headered) input; keeping header"
                 );
-                (false, None)
+                return (false, None);
             }
-            Err(error) => {
+            ChecksumBasisProof::Unproven => {
                 trace!(
-                    %error,
-                    "auto header: could not hash the headerless bytes; keeping header"
+                    input = %resolved_input.display(),
+                    "auto header: required checksums prove no basis; keeping header without guessing"
                 );
-                (false, None)
+                return (false, None);
             }
+            ChecksumBasisProof::NoEvidence => {}
+        }
+        trace!(
+            input = %resolved_input.display(),
+            header = ?header_match.header,
+            "auto header: strippable header present but no required input checksum; falling back to structural evidence"
+        );
+        let Some(patch) = first_resolved_patch else {
+            return (false, None);
+        };
+        match self.structural_strip_decision(
+            resolved_input,
+            patch,
+            header_match,
+            context,
+            temp_paths,
+        ) {
+            Some((strip, note)) => (strip, Some(note)),
+            None => (false, None),
         }
     }
 
-    /// Resolve the N64 order a patch should see. Auto acts only on checksum
-    /// proof; without a source CRC32 (or when no variant matches), it keeps the
-    /// current bytes so checksumless patches are never silently guessed.
+    /// Resolve the N64 order a patch should see. Auto acts on checksum proof
+    /// first; a patch with no source CRC32 falls back to structural evidence
+    /// ([`Self::structural_n64_order_decision`]) when the caller allows it, and
+    /// any remaining doubt keeps the current bytes.
     pub(super) fn resolve_patch_n64_target(
         &self,
-        input: &Path,
-        patch: Option<&Path>,
-        expected_crc32: Option<&str>,
-        mode: PatchN64ByteOrderMode,
+        request: N64TargetRequest<'_>,
         context: &OperationContext,
-    ) -> Result<Option<(N64ByteOrder, N64ByteOrder)>> {
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> Result<Option<N64TargetResolution>> {
+        let N64TargetRequest {
+            input,
+            patch,
+            expected_crc32,
+            mode,
+            inference,
+        } = request;
         let source = Self::detect_n64_byte_order_path(input)?;
         let Some(source) = source else {
             if mode.target().is_some() {
@@ -1649,23 +1654,69 @@ impl CliApp {
             }
             return Ok(None);
         };
-        let target = match mode {
-            PatchN64ByteOrderMode::Keep => source,
+        let (target, inferred_note) = match mode {
+            PatchN64ByteOrderMode::Keep => (source, None),
             PatchN64ByteOrderMode::Auto => {
                 let required_crc32 = expected_crc32.map(str::to_owned).or_else(|| {
                     patch.and_then(|path| self.embedded_patch_source_crc32(path, context))
                 });
                 match required_crc32 {
-                    Some(required) => {
+                    // A checksum that matches no variant means the input is not
+                    // the patch's base at all. Structural evidence assumes it is,
+                    // so proof that says otherwise ends the decision.
+                    Some(required) => (
                         Self::resolve_n64_byte_order_for_crc32(input, &required, context)?
-                            .unwrap_or(source)
-                    }
-                    None => source,
+                            .unwrap_or(source),
+                        None,
+                    ),
+                    None => self.infer_patch_n64_target(
+                        input, patch, source, inference, context, temp_paths,
+                    ),
                 }
             }
-            concrete => concrete.target().unwrap_or(source),
+            concrete => (concrete.target().unwrap_or(source), None),
         };
-        Ok(Some((source, target)))
+        Ok(Some(N64TargetResolution {
+            source,
+            target,
+            inferred_note,
+        }))
+    }
+
+    /// The checksumless half of `auto`: structural evidence plus the note that
+    /// reports it, or the current order and no note when nothing separates the
+    /// three.
+    fn infer_patch_n64_target(
+        &self,
+        input: &Path,
+        patch: Option<&Path>,
+        source: N64ByteOrder,
+        inference: N64AutoInference,
+        context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> (N64ByteOrder, Option<String>) {
+        let (N64AutoInference::Structural, Some(patch)) = (inference, patch) else {
+            trace!(
+                input = %input.display(),
+                "auto n64: patch embeds no source checksum and structural evidence is off for this step; keeping the current order"
+            );
+            return (source, None);
+        };
+        let Some((target, reason)) =
+            self.structural_n64_order_decision(input, patch, source, context, temp_paths)
+        else {
+            trace!(
+                input = %input.display(),
+                patch = %patch.display(),
+                "auto n64: nothing separates the three orders; keeping the current one"
+            );
+            return (source, None);
+        };
+        let note = format!(
+            "patch N64 byte order inferred as {} ({reason})",
+            target.label()
+        );
+        (target, Some(note))
     }
 
     pub(super) fn transition_n64_byte_order(
@@ -1718,17 +1769,24 @@ impl CliApp {
             );
             (source, requested)
         } else {
+            // Later chain steps stay on checksum proof. The inferred-order note
+            // has no channel out of the apply loop, and a decision that changes
+            // output bytes on evidence must never go unreported.
             let Some(resolved) = self.resolve_patch_n64_target(
-                current_input,
-                Some(resolved_patch),
-                None,
-                mode,
+                N64TargetRequest {
+                    input: current_input,
+                    patch: Some(resolved_patch),
+                    expected_crc32: None,
+                    mode,
+                    inference: N64AutoInference::ChecksumOnly,
+                },
                 context,
+                temp_paths,
             )?
             else {
                 return Ok(());
             };
-            resolved
+            (resolved.source, resolved.target)
         };
         let original = state.map(|order| order.to).unwrap_or(source);
         if source != target {
@@ -2173,6 +2231,9 @@ struct PreparedApplyInput {
     stripped_header: Option<Vec<u8>>,
     stripped_header_match: Option<KnownRomHeaderMatch>,
     n64_order: Option<N64ByteOrderTransform>,
+    /// Set when the byte order came from structural evidence rather than
+    /// checksum proof. Always reported.
+    n64_order_note: Option<String>,
 }
 
 /// The state carried out of [`CliApp::run_patch_apply_loop`] when every patch
@@ -2231,11 +2292,45 @@ struct PreparePatchApplyInputInputs<'a> {
     resolved_input: &'a Path,
     strip_header: bool,
     n64_byte_order: PatchN64ByteOrderMode,
+    inference: N64AutoInference,
     first_patch: Option<&'a Path>,
     expected_crc32: Option<&'a str>,
     repair_checksum: bool,
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
+}
+
+/// What `--n64-byte-order auto` may act on for one step.
+///
+/// Only the first patch has a channel to report an inferred order in the
+/// operation label, and cheat codes or an explicit byte-order transform pin
+/// offsets to the bytes the user passed in. Everything else stays on checksum
+/// proof.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum N64AutoInference {
+    /// Checksum proof, then structural evidence.
+    Structural,
+    /// Checksum proof only.
+    ChecksumOnly,
+}
+
+/// What to resolve an N64 byte-order target from.
+pub(super) struct N64TargetRequest<'a> {
+    pub(super) input: &'a Path,
+    pub(super) patch: Option<&'a Path>,
+    pub(super) expected_crc32: Option<&'a str>,
+    pub(super) mode: PatchN64ByteOrderMode,
+    pub(super) inference: N64AutoInference,
+}
+
+/// The order the input is in, the order the patch needs, and how that was
+/// settled.
+pub(super) struct N64TargetResolution {
+    pub(super) source: N64ByteOrder,
+    pub(super) target: N64ByteOrder,
+    /// Set only when the target came from structural evidence rather than
+    /// checksum proof, for the operation label.
+    pub(super) inferred_note: Option<String>,
 }
 
 impl CliApp {
@@ -2920,6 +3015,7 @@ impl CliApp {
             resolved_input,
             strip_header,
             n64_byte_order,
+            inference,
             first_patch,
             expected_crc32,
             repair_checksum,
@@ -2952,14 +3048,25 @@ impl CliApp {
         } else {
             resolved_input.to_path_buf()
         };
-        let apply_input = match self.resolve_patch_n64_target(
-            &apply_input,
-            first_patch,
-            expected_crc32,
-            n64_byte_order,
+        let resolved_n64 = self.resolve_patch_n64_target(
+            N64TargetRequest {
+                input: &apply_input,
+                patch: first_patch,
+                expected_crc32,
+                mode: n64_byte_order,
+                inference,
+            },
             context,
-        )? {
-            Some((source_order, target_order)) => {
+            temp_paths,
+        )?;
+        let mut n64_order_note = None;
+        let apply_input = match resolved_n64 {
+            Some(N64TargetResolution {
+                source: source_order,
+                target: target_order,
+                inferred_note,
+            }) => {
+                n64_order_note = inferred_note;
                 n64_order = Some(N64ByteOrderTransform {
                     from: target_order,
                     to: source_order,
@@ -3035,6 +3142,7 @@ impl CliApp {
             stripped_header,
             stripped_header_match,
             n64_order,
+            n64_order_note,
         })
     }
 }

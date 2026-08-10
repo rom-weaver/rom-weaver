@@ -2,7 +2,9 @@ use super::*;
 
 use rayon::prelude::*;
 
-use super::patch_apply::ChainN64TransitionPlan;
+use super::patch_apply::{
+    ChainN64TransitionPlan, N64AutoInference, N64TargetRequest, N64TargetResolution,
+};
 use super::patch_commands::{
     PatchApplyProgressSink, PatchApplyProgressTracker, patch_progress_segment_start,
 };
@@ -224,14 +226,25 @@ impl CliApp {
                 resolved_input.clone()
             };
             let mut n64_order = None;
+            // Validate stays on checksum proof. It writes nothing, so it has no
+            // output bytes to protect, and its verdict has no place to report a
+            // decision made on evidence rather than proof.
             let validate_input = match self.resolve_patch_n64_target(
-                &validate_input,
-                resolved_patches.first().map(|(_, patch)| patch.as_path()),
-                expected_input_checksums.get("crc32").map(String::as_str),
-                n64_byte_order,
+                N64TargetRequest {
+                    input: &validate_input,
+                    patch: resolved_patches.first().map(|(_, patch)| patch.as_path()),
+                    expected_crc32: expected_input_checksums.get("crc32").map(String::as_str),
+                    mode: n64_byte_order,
+                    inference: N64AutoInference::ChecksumOnly,
+                },
                 &context,
+                &mut temp_paths,
             ) {
-                Ok(Some((source_order, target_order))) => {
+                Ok(Some(N64TargetResolution {
+                    source: source_order,
+                    target: target_order,
+                    ..
+                })) => {
                     n64_order = Some(N64ByteOrderTransform {
                         from: target_order,
                         to: source_order,
