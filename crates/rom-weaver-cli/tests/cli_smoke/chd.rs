@@ -84,9 +84,11 @@ fn checksum_chd_uses_raw_sha1_fast_path_for_single_payload() {
 #[test]
 fn checksum_chd_reuses_raw_sha1_with_default_algorithms() {
     let temp = setup_temp_dir();
-    let source = (0..32_768)
-        .map(|index| (index % 211) as u8)
-        .collect::<Vec<_>>();
+    let source = with_nes_header(
+        &(0..32_768)
+            .map(|index| (index % 211) as u8)
+            .collect::<Vec<_>>(),
+    );
     fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
 
     let chd_path = temp.child("disc.chd");
@@ -130,6 +132,13 @@ fn checksum_chd_reuses_raw_sha1_with_default_algorithms() {
     }
     let label = json["label"].as_str().expect("label");
     assert!(label.contains("sha1 reused from chd raw_sha1 metadata"));
+    assert!(
+        json["details"]["checksum_variants"]
+            .as_array()
+            .expect("checksum variants")
+            .iter()
+            .any(|variant| variant["id"] == "remove-header")
+    );
 }
 
 #[test]
