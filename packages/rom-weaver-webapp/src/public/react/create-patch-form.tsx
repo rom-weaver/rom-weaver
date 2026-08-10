@@ -54,7 +54,12 @@ import {
   useRomWeaverAssetBaseUrl,
   useUiLocalizer,
 } from "./settings-context.tsx";
-import { getRomDropNotice, getRomDropNoticeLevel, routeByOrder } from "./unified-drop-routing.ts";
+import {
+  getRomDropNotice,
+  getRomDropNoticeLevel,
+  routeByOrder,
+  selectRomDropCandidate,
+} from "./unified-drop-routing.ts";
 import { getDefaultCreateOutputName, getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
@@ -337,6 +342,30 @@ type InternalCreatePatchFormProps = CreatePatchFormProps & {
 };
 
 type PendingCreateDrop = ReturnType<typeof routeByOrder>;
+
+const selectCreateDropAssignments = async (
+  routed: PendingCreateDrop,
+  slotFilled: boolean[],
+  selectFile: Parameters<typeof selectRomDropCandidate>[2],
+  sourceNames: readonly [string, string],
+): Promise<(File | null)[] | null> => {
+  const assignment: (File | null)[] = slotFilled.map(() => null);
+  const emptySlots = slotFilled.map((filled, index) => (filled ? -1 : index)).filter((index) => index >= 0);
+  let candidates = routed.roms.slice();
+
+  for (const [slotOffset, slot] of emptySlots.entries()) {
+    if (!candidates.length) break;
+    const slotsRemaining = emptySlots.length - slotOffset;
+    const candidate =
+      candidates.length > slotsRemaining
+        ? await selectRomDropCandidate(candidates, sourceNames[slot] || "ROM", selectFile)
+        : candidates[0] || null;
+    if (!candidate) return null;
+    assignment[slot] = candidate;
+    candidates.splice(candidates.indexOf(candidate), 1);
+  }
+  return assignment;
+};
 
 function CreatePatchForm(props: CreatePatchFormProps) {
   const { onError } = props;
@@ -653,8 +682,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     if (modifiedFile) updateModified(modifiedFile);
     setDropNoticeRouting(routed);
   };
-  const handleUnifiedDrop = (files: File[]) => {
-    const routed = routeByOrder(files, [!!original, !!modified]);
+  const commitRoutedDrop = (routed: PendingCreateDrop) => {
     const assigned = routed.assignment.filter((file): file is File => file !== null);
     const selectedSources = [original, modified, ...assigned].filter(
       (source): source is BinarySource => source !== null && source !== undefined,
@@ -665,6 +693,26 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       return;
     }
     applyRoutedDrop(routed);
+  };
+  const handleUnifiedDrop = (files: File[]) => {
+    const slotFilled = [!!original, !!modified];
+    const routed = routeByOrder(files, slotFilled);
+    const emptySlotCount = slotFilled.filter((filled) => !filled).length;
+    if (emptySlotCount > 0 && routed.roms.length > emptySlotCount) {
+      setDropNoticeRouting(null);
+      void selectCreateDropAssignments(routed, slotFilled, selectFile, [
+        localizer.message("ui.step.original"),
+        localizer.message("ui.step.modified"),
+      ]).then((assignment) => {
+        if (!assignment) {
+          setDropNoticeRouting(routed.ignoredPatches.length ? { ...routed, unused: [] } : null);
+          return;
+        }
+        commitRoutedDrop({ ...routed, assignment, unused: [] });
+      });
+      return;
+    }
+    commitRoutedDrop(routed);
   };
   const loadCreateSample = async () => {
     setSampleLoading(true);

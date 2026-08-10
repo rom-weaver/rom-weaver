@@ -43,7 +43,12 @@ import {
   useUiLocalizer,
 } from "./settings-context.tsx";
 import { TrimPatchFormView, type TrimPatchFormViewModel } from "./trim-form-view.tsx";
-import { getRomDropNotice, getRomDropNoticeLevel, routeSingleRom } from "./unified-drop-routing.ts";
+import {
+  getRomDropNotice,
+  getRomDropNoticeLevel,
+  routeSingleRom,
+  selectRomDropCandidate,
+} from "./unified-drop-routing.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
@@ -697,11 +702,23 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     props.onSourceChange?.(file);
   };
 
-  // Single-bucket unified routing: keep the first dropped ROM and report patches
-  // or overflow instead of silently discarding them. See routeSingleRom.
+  // Single-bucket unified routing: ask which ROM to use when several are dropped;
+  // report patches when they have no bucket on Trim. See routeSingleRom.
   const handledPageDropIdRef = useRef<number | null>(null);
   const handleUnifiedDrop = (files: File[]) => {
     const routed = routeSingleRom(files);
+    if (routed.roms.length > 1) {
+      setDropNoticeRouting(null);
+      void selectRomDropCandidate(routed.roms, localizer.message("ui.step.rom"), selectFile).then((selected) => {
+        if (!selected) {
+          setDropNoticeRouting(routed.ignoredPatches.length ? { ...routed, unused: [] } : null);
+          return;
+        }
+        updateSource(selected);
+        setDropNoticeRouting({ ...routed, source: selected, unused: [] });
+      });
+      return;
+    }
     if (routed.source) updateSource(routed.source);
     setDropNoticeRouting(routed);
   };
@@ -721,7 +738,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     updateSource(null);
   };
 
-  cancelSelectionRef.current = () => updateSource(null);
+  cancelSelectionRef.current = (request) => {
+    if (request.sourceIndex === -1) return;
+    updateSource(null);
+  };
 
   const updateSettings = (nextSettings: TrimPatchFormSettings) => {
     resetWorkflowOutput({ clearProgress: false });

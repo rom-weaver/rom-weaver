@@ -2,10 +2,12 @@ import { expect, test } from "vitest";
 import { createLocalizer } from "../../src/presentation/localization/index.ts";
 import {
   collectRomDropFiles,
+  createRomDropSelectionRequest,
   getRomDropNotice,
   getRomDropNoticeLevel,
   routeByOrder,
   routeSingleRom,
+  selectRomDropCandidate,
 } from "../../src/public/react/unified-drop-routing.ts";
 
 const file = (name) => new File([], name);
@@ -66,4 +68,16 @@ test("routeSingleRom returns the first non-patch rom and reports unused inputs",
   ]);
   expect(routeSingleRom([file("hack.ips")]).source).toBeNull();
   expect(routeSingleRom([]).source).toBeNull();
+});
+
+test("selectRomDropCandidate maps a picker choice back to the dropped file", async () => {
+  const files = [file("first.sfc"), file("second.sfc")];
+  let request;
+  const selected = await selectRomDropCandidate(files, "Original", async (nextRequest) => {
+    request = nextRequest;
+    return { id: "1" };
+  });
+
+  expect(request).toEqual(createRomDropSelectionRequest(files, "Original"));
+  expect(selected?.name).toBe("second.sfc");
 });

@@ -215,27 +215,55 @@ test("Trim explains that dropped patches belong in Apply", async () => {
   expect(document.querySelector("#trim-builder-row-source .file")).toBeNull();
 });
 
-test("Trim reports overflow inputs without replacing the first ROM", async () => {
+test("Trim asks which dropped ROM to use", async () => {
   mount(
     createElement(
       TrimPatchForm,
       withTrimWorkflowMock({
         pageDrop: {
-          files: [new File([], "first.bin"), new File([], "unused.bin")],
+          files: [new File([], "first.bin"), new File([], "chosen.bin")],
           id: 1,
         },
       }),
     ),
   );
 
-  await expect
-    .poll(() => document.getElementById("trim-builder-input-notice")?.textContent || "")
-    .toContain("Unused inputs: unused.bin.");
+  await expect.poll(() => document.querySelector(".rw-modal.select-modal")?.textContent || "").toContain("ROM");
+  const option = Array.from(document.querySelectorAll(".rw-modal.select-modal .seltree button")).find((button) =>
+    button.textContent?.includes("chosen.bin"),
+  );
+  expect(option).toBeInstanceOf(HTMLButtonElement);
+  option.click();
+
   await expect
     .poll(() => document.querySelector("#trim-builder-row-source .card")?.textContent || "")
-    .toContain("first.bin");
+    .toContain("chosen.bin");
   expect(document.querySelector("#trim-builder-row-source .card")?.textContent || "").not.toContain("unused.bin");
-  expect(document.getElementById("trim-builder-input-notice")?.classList.contains("warn")).toBe(true);
+  expect(document.getElementById("trim-builder-input-notice")).toBeNull();
+});
+
+test("Trim keeps its existing source when a dropped ROM choice is cancelled", async () => {
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({
+        defaultSource: new File([], "existing.bin"),
+        pageDrop: {
+          files: [new File([], "first.bin"), new File([], "second.bin")],
+          id: 1,
+        },
+      }),
+    ),
+  );
+
+  await expect.poll(() => document.querySelector(".rw-modal.select-modal")?.textContent || "").toContain("ROM");
+  const closeButton = document.querySelector(".rw-modal.select-modal .modal-head button[aria-label='Close']");
+  expect(closeButton).toBeInstanceOf(HTMLButtonElement);
+  closeButton.click();
+
+  await expect
+    .poll(() => document.querySelector("#trim-builder-row-source .card")?.textContent || "")
+    .toContain("existing.bin");
 });
 
 test("trim output edits stay enabled while queued and cancel the queued run", async () => {

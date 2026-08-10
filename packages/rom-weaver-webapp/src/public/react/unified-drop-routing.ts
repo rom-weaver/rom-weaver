@@ -1,5 +1,6 @@
 import { createLogger } from "../../lib/logging.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
+import type { CandidateSelectionRequest, SelectFile } from "../../types/selection.ts";
 import { classifyDroppedFiles } from "./file-classification.ts";
 
 /**
@@ -43,11 +44,13 @@ const collectRomDropFiles = (files: File[]): RomDropCollection => {
 type RomDropRouting = {
   assignment: (File | null)[];
   ignoredPatches: File[];
+  roms: File[];
   unused: File[];
 };
 
 type SingleRomDropRouting = {
   ignoredPatches: File[];
+  roms: File[];
   source: File | null;
   unused: File[];
 };
@@ -72,7 +75,7 @@ const routeByOrder = (files: File[], slotFilled: boolean[]): RomDropRouting => {
   const assignment: (File | null)[] = slotFilled.map(() => null);
   const { ignoredPatches, roms } = collectRomDropFiles(files);
   if (roms.length === 0 || slotFilled.length === 0) {
-    return { assignment, ignoredPatches, unused: roms };
+    return { assignment, ignoredPatches, roms, unused: roms };
   }
   const emptySlots = slotFilled.map((filled, index) => (filled ? -1 : index)).filter((index) => index >= 0);
   let fileIndex = 0;
@@ -88,10 +91,10 @@ const routeByOrder = (files: File[], slotFilled: boolean[]): RomDropRouting => {
     slotFilled,
     unused: unused.map((file) => file.name),
   });
-  return { assignment, ignoredPatches, unused };
+  return { assignment, ignoredPatches, roms, unused };
 };
 
-/** Trim-tab strategy: take the first dropped ROM and report every other input. */
+/** Trim-tab routing: return the first ROM plus every other candidate. */
 const routeSingleRom = (files: File[]): SingleRomDropRouting => {
   const { ignoredPatches, roms } = collectRomDropFiles(files);
   const [source, ...unused] = roms;
@@ -99,7 +102,50 @@ const routeSingleRom = (files: File[]): SingleRomDropRouting => {
     name: source?.name,
     unused: unused.map((file) => file.name),
   });
-  return { ignoredPatches, source: source || null, unused };
+  return { ignoredPatches, roms, source: source || null, unused };
+};
+
+const createRomDropSelectionRequest = (files: File[], sourceName: string): CandidateSelectionRequest => ({
+  candidates: files.map((file, index) => ({
+    fileName: file.name,
+    id: String(index),
+    kind: "rom",
+    patchable: true,
+    selectable: true,
+    size: file.size,
+    type: "file",
+  })),
+  role: "input",
+  // A negative index identifies a pre-staging drop choice to cancellation handlers.
+  sourceIndex: -1,
+  sourceName,
+  warnings: [],
+});
+
+const selectRomDropCandidate = async (
+  files: File[],
+  sourceName: string,
+  selectFile: SelectFile,
+): Promise<File | null> => {
+  if (!files.length) return null;
+  try {
+    const choice = await selectFile(createRomDropSelectionRequest(files, sourceName));
+    const index = Number(choice?.id);
+    if (!Number.isSafeInteger(index) || index < 0 || index >= files.length) {
+      logger.warn("dropped ROM selection returned an invalid candidate", {
+        candidateId: choice?.id,
+        sourceName,
+      });
+      return null;
+    }
+    return files[index] || null;
+  } catch (error) {
+    logger.trace("dropped ROM selection cancelled", {
+      error: error instanceof Error ? error.message : String(error),
+      sourceName,
+    });
+    return null;
+  }
 };
 
 const getRomDropNotice = (
@@ -121,4 +167,12 @@ const getRomDropNoticeLevel = (routing: RomDropRouting | SingleRomDropRouting): 
   return routing.unused.length > 0 && !used ? "error" : "warn";
 };
 
-export { collectRomDropFiles, getRomDropNotice, getRomDropNoticeLevel, routeByOrder, routeSingleRom };
+export {
+  collectRomDropFiles,
+  createRomDropSelectionRequest,
+  getRomDropNotice,
+  getRomDropNoticeLevel,
+  routeByOrder,
+  routeSingleRom,
+  selectRomDropCandidate,
+};

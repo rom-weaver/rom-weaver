@@ -70,6 +70,15 @@ const selectFileInput = (input, file) => {
 
 const getOutputWaitingText = () => document.querySelector(".outcard > .fileprog")?.textContent || "";
 
+const clickCandidateSelectionOption = async (label) => {
+  await expect.poll(() => document.querySelector(".rw-modal.select-modal")?.textContent || "").toContain(label);
+  const option = Array.from(document.querySelectorAll(".rw-modal.select-modal .seltree button")).find((button) =>
+    button.textContent?.includes(label),
+  );
+  expect(option).toBeInstanceOf(HTMLButtonElement);
+  option.click();
+};
+
 class MockCreateWorkflow {
   constructor(options = {}) {
     this.id = options.id || "mock-create";
@@ -294,6 +303,33 @@ test("Create preserves simultaneous drop order regardless of filename length", a
   await expect
     .poll(() => document.querySelector("#patch-builder-row-modified .card")?.textContent || "")
     .toContain("m.bin");
+});
+
+test("Create asks which dropped ROMs fill the available slots", async () => {
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        pageDrop: {
+          files: [new File([], "first.bin"), new File([], "chosen-original.bin"), new File([], "chosen-modified.bin")],
+          id: 1,
+        },
+      }),
+    ),
+  );
+
+  await expect.poll(() => document.querySelector(".rw-modal.select-modal")?.textContent || "").toContain("Original");
+  await clickCandidateSelectionOption("chosen-original.bin");
+  await expect.poll(() => document.querySelector(".rw-modal.select-modal")?.textContent || "").toContain("Modified");
+  await clickCandidateSelectionOption("chosen-modified.bin");
+
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-original .card")?.textContent || "")
+    .toContain("chosen-original.bin");
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-modified .card")?.textContent || "")
+    .toContain("chosen-modified.bin");
+  expect(document.getElementById("patch-builder-input-notice")?.textContent || "").not.toContain("Unused inputs");
 });
 
 test("Create asks before using duplicate ROMs", async () => {
