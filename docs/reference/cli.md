@@ -110,6 +110,10 @@ Not every command takes all four. `ingest` has `--select` and `--no-ignore` only
 
 The flags shared by `patch apply` (also spelled `weave`) and `patch validate`. The task-shaped recipes live in [Apply patches from the CLI](../how-to/cli-apply.md).
 
+Under `Basic`, `patch apply --help` puts the common `--input`, `--patch`, and
+`--output` task first. The complete list uses the `Basic`, `Archive/bundle`,
+`Compatibility`, `Diagnostics/authoring`, and `Performance` headings.
+
 ### Inputs
 
 Repeat `--patch` to run several patches in order, each on the result of the last. Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches sitting next to the ROM inside the input archive. A `rom-weaver-bundle.json` can supply the ROM, the patch order, the checks, and the output name instead.
