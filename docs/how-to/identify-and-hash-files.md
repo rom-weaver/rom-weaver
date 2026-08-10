@@ -1,7 +1,6 @@
 # Identify and hash files from the CLI
 
-Find out what a file is with `rom-weaver probe`, and prove which bytes it holds
-with `rom-weaver checksum`.
+Find out what a file is with `rom-weaver probe`, and prove which bytes it holds with `rom-weaver checksum`.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -22,8 +21,7 @@ with `rom-weaver checksum`.
 rom-weaver probe --input game.iso
 ```
 
-`probe` reports the detected format, the platform, and any copier header the
-file carries. It also answers to `rom-weaver inspect`.
+`probe` reports the detected format, the platform, and any copier header the file carries. It also answers to `rom-weaver inspect`.
 
 Point it at an archive and it looks inside:
 
@@ -31,8 +29,7 @@ Point it at an archive and it looks inside:
 rom-weaver probe --input games.zip
 ```
 
-`--select` picks one member by name, prefix, or glob. `--no-extract` treats the
-archive itself as the file to identify.
+`--select` picks one member by name, prefix, or glob. `--no-extract` treats the archive itself as the file to identify.
 
 ## Hash a file
 
@@ -40,8 +37,7 @@ archive itself as the file to identify.
 rom-weaver checksum --input game.sfc --algo sha256
 ```
 
-`--algo` is repeatable and comma-separable, so one read produces several
-hashes:
+`--algo` is repeatable and comma-separable, so one read produces several hashes:
 
 ```bash
 rom-weaver checksum --input game.sfc --algo crc32,md5,sha1
@@ -53,13 +49,11 @@ rom-weaver checksum --input game.sfc --algo crc32,md5,sha1
 rom-weaver checksum --input game.zip --select 'game*.sfc' --algo crc32
 ```
 
-This is the checksum a patch author usually means: the ROM's bytes, not the
-archive's.
+This is the checksum a patch author usually means: the ROM's bytes, not the archive's.
 
 ## Hash part of a file
 
-Skip a copier header, or hash only the region a patch touches, with a byte
-range. `rom-weaver checksum --help` lists the range flags for your version.
+Skip a copier header, or hash only the region a patch touches, with a byte range. `rom-weaver checksum --help` lists the range flags for your version.
 
 ## Read from a pipeline
 
@@ -82,9 +76,6 @@ JSON mode turns off interactive selection, so scripts never block on a prompt.
 
 ## Related
 
-- [CLI reference](../reference/cli.md): every flag, exit code, and the JSON
-  contract.
-- [Checksum support](../reference/formats.md#checksum-support): the algorithms
-  `--algo` accepts.
-- [Fix a checksum error](fix-checksum-errors.md): what to do when a hash does
-  not match.
+- [CLI reference](../reference/cli.md): every flag, exit code, and the JSON contract.
+- [Checksum support](../reference/formats.md#checksum-support): the algorithms `--algo` accepts.
+- [Fix a checksum error](fix-checksum-errors.md): what to do when a hash does not match.

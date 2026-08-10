@@ -1,8 +1,6 @@
 # Bake cheat codes into a ROM
 
-Write Game Genie or GameShark/Pro Action Replay codes permanently into a ROM
-with `rom-weaver patch apply --code`, so the effect is there without a cheat
-device or an emulator cheat list.
+Write Game Genie or GameShark/Pro Action Replay codes permanently into a ROM with `rom-weaver patch apply --code`, so the effect is there without a cheat device or an emulator cheat list.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -22,8 +20,7 @@ device or an emulator cheat list.
 rom-weaver patch apply --input game.nes --code SXIOPO --output game-coded.nes
 ```
 
-`--code` is treated as a patch: the codes are applied to the ROM and the result
-is written to `--output`. Your input file is not changed.
+`--code` is treated as a patch: the codes are applied to the ROM and the result is written to `--output`. Your input file is not changed.
 
 ## Bake several codes
 
@@ -39,8 +36,7 @@ rom-weaver patch apply \
 
 ## Say which console or scheme a code is for
 
-rom-weaver works both out from the ROM header and the code's shape. Pin them
-when it cannot:
+rom-weaver works both out from the ROM header and the code's shape. Pin them when it cannot:
 
 ```bash
 rom-weaver patch apply \
@@ -51,8 +47,7 @@ rom-weaver patch apply \
   --output game-coded.bin
 ```
 
-`--code-system` accepts `nes`, `snes`, `genesis`, and `gameboy`.
-`--code-kind` accepts `auto` (the default), `game-genie`, and `gameshark`/`par`.
+`--code-system` accepts `nes`, `snes`, `genesis`, and `gameboy`. `--code-kind` accepts `auto` (the default), `game-genie`, and `gameshark`/`par`.
 
 ## Combine codes with a patch
 
@@ -74,13 +69,10 @@ Hash the result so you can tell the baked ROM apart from the clean one later:
 rom-weaver checksum --input game-coded.nes --algo sha256
 ```
 
-Keep the clean ROM. A patch author's checksum refers to the unbaked file, so a
-later patch will refuse the baked one.
+Keep the clean ROM. A patch author's checksum refers to the unbaked file, so a later patch will refuse the baked one.
 
 ## Related
 
-- [CLI reference](../reference/cli.md#extras): `--code` beside the other
-  patching extras.
+- [CLI reference](../reference/cli.md#extras): `--code` beside the other patching extras.
 - [Apply patches from the CLI](cli-apply.md): the rest of the apply workflow.
-- [How patching works](../explanation/how-patching-works.md): why the exact
-  starting bytes matter.
+- [How patching works](../explanation/how-patching-works.md): why the exact starting bytes matter.

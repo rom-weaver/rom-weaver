@@ -1,7 +1,6 @@
 # Trim a ROM from the CLI
 
-Cut the padding off a ROM with `rom-weaver trim`, check the saving before you
-commit to it, and pad a trimmed file back out again.
+Cut the padding off a ROM with `rom-weaver trim`, check the saving before you commit to it, and pad a trimmed file back out again.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -35,8 +34,7 @@ rom-weaver trim --input game.nds --output game-trimmed.nds
 rom-weaver trim --input game.nds --extension trimmed.nds
 ```
 
-`--in-place` rewrites the source file. Keep a known-good copy first; a trimmed
-ROM is not always the file a patch expects.
+`--in-place` rewrites the source file. Keep a known-good copy first; a trimmed ROM is not always the file a patch expects.
 
 ## Make the trim reversible
 
@@ -52,9 +50,7 @@ rom-weaver trim --input game.gba --output game-trimmed.gba --revert-marker
 rom-weaver trim --input game-trimmed.gba --output game.gba --revert
 ```
 
-`--revert` works for NDS, GBA, and 3DS. XISO and RVZ scrub cannot be reverted.
-Without a footer from `--revert-marker`, the restored padding is reconstructed
-and may not be byte-identical.
+`--revert` works for NDS, GBA, and 3DS. XISO and RVZ scrub cannot be reverted. Without a footer from `--revert-marker`, the restored padding is reconstructed and may not be byte-identical.
 
 ## Trim files inside an archive
 
@@ -68,6 +64,4 @@ rom-weaver trim --input games.zip --select 'game*.nds' --output game-trimmed.nds
 
 ## Look up what is supported
 
-[Trim support](../reference/formats.md#trim-support) lists every trim target
-and every flag alias. For whether to trim at all, see
-[Choosing a compression format](../explanation/compression-formats.md).
+[Trim support](../reference/formats.md#trim-support) lists every trim target and every flag alias. For whether to trim at all, see [Choosing a compression format](../explanation/compression-formats.md).

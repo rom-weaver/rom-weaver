@@ -159,20 +159,24 @@ struct VariantHasher {
     apply_compatibility: Value,
     transforms: Value,
     transform: Transform,
-    checksum: StreamingChecksum,
+    checksum: Option<StreamingChecksum>,
+    precomputed_checksums: BTreeMap<String, String>,
 }
 
 impl VariantHasher {
     fn update(&mut self, offset: u64, chunk: &[u8]) -> Result<()> {
+        let Some(checksum) = self.checksum.as_mut() else {
+            return Ok(());
+        };
         match &mut self.transform {
-            Transform::Raw => self.checksum.update(chunk),
+            Transform::Raw => checksum.update(chunk),
             Transform::RemoveHeader { stripped } => {
                 let chunk_end = offset.saturating_add(chunk.len() as u64);
                 if chunk_end <= *stripped {
                     return Ok(());
                 }
                 let start = stripped.saturating_sub(offset).min(chunk.len() as u64) as usize;
-                self.checksum.update(&chunk[start..])
+                checksum.update(&chunk[start..])
             }
             Transform::N64ByteOrder {
                 source,
@@ -180,7 +184,7 @@ impl VariantHasher {
                 carry,
             } => {
                 if source == target {
-                    return self.checksum.update(chunk);
+                    return checksum.update(chunk);
                 }
                 let mut buffer = std::mem::take(carry);
                 buffer.extend_from_slice(chunk);
@@ -193,7 +197,7 @@ impl VariantHasher {
                     transformed.extend_from_slice(&bytes);
                 }
                 *carry = buffer[full..].to_vec();
-                self.checksum.update_owned(transformed)
+                checksum.update_owned(transformed)
             }
         }
     }
@@ -203,7 +207,11 @@ impl VariantHasher {
     }
 
     fn finalize_timed(self) -> Result<(VariantRow, StreamingChecksumTiming)> {
-        let (checksums, timing) = self.checksum.finalize_timed()?;
+        let (mut checksums, timing) = match self.checksum {
+            Some(checksum) => checksum.finalize_timed()?,
+            None => (BTreeMap::new(), StreamingChecksumTiming::default()),
+        };
+        checksums.extend(self.precomputed_checksums);
         Ok((
             VariantRow {
                 id: self.id,
@@ -541,6 +549,7 @@ enum State {
 /// Push-based engine that computes all applicable checksum variants in one pass.
 pub struct StreamingVariantChecksums {
     algorithms: Vec<String>,
+    precomputed_raw_checksums: BTreeMap<String, String>,
     total_len: u64,
     extension: Option<String>,
     consumed: u64,
@@ -568,11 +577,40 @@ impl StreamingVariantChecksums {
         name_hint: Option<&str>,
         hash_thread_budget: usize,
     ) -> Result<Self> {
+        Self::new_with_precomputed_raw(
+            algorithms,
+            BTreeMap::new(),
+            total_len,
+            name_hint,
+            hash_thread_budget,
+        )
+    }
+
+    /// Create an engine with already-known checksums for the raw variant. Other variants still
+    /// hash every requested algorithm, so a metadata shortcut cannot hide a transformed checksum.
+    pub fn new_with_precomputed_raw(
+        algorithms: &[String],
+        precomputed_raw_checksums: BTreeMap<String, String>,
+        total_len: u64,
+        name_hint: Option<&str>,
+        hash_thread_budget: usize,
+    ) -> Result<Self> {
+        let precomputed_raw_checksums = precomputed_raw_checksums
+            .into_iter()
+            .filter_map(|(algorithm, checksum)| {
+                let algorithm = algorithm.to_ascii_lowercase();
+                algorithms
+                    .iter()
+                    .any(|requested| requested.eq_ignore_ascii_case(&algorithm))
+                    .then_some((algorithm, checksum))
+            })
+            .collect();
         let extension = name_hint
             .and_then(extension_with_dot)
             .map(|value| value.to_ascii_lowercase());
         Ok(Self {
             algorithms: algorithms.to_vec(),
+            precomputed_raw_checksums,
             total_len,
             extension,
             consumed: 0,
@@ -708,7 +746,18 @@ impl StreamingVariantChecksums {
         // Build each variant with a synchronous hasher first so the active count is known, then
         // split the worker budget and upgrade each to a parallel hasher - independent per-variant
         // hashing overlaps the producer instead of serializing on the decode thread.
-        let Some(raw_checksum) = StreamingChecksum::new(&self.algorithms)? else {
+        let raw_algorithms = self
+            .algorithms
+            .iter()
+            .filter(|algorithm| {
+                !self
+                    .precomputed_raw_checksums
+                    .contains_key(&algorithm.to_ascii_lowercase())
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let raw_checksum = StreamingChecksum::new(&raw_algorithms)?;
+        if raw_checksum.is_none() && self.precomputed_raw_checksums.is_empty() {
             self.state = State::Empty;
             return Ok(());
         };
@@ -719,6 +768,7 @@ impl StreamingVariantChecksums {
             transforms: json!({}),
             transform: Transform::Raw,
             checksum: raw_checksum,
+            precomputed_checksums: std::mem::take(&mut self.precomputed_raw_checksums),
         };
 
         let mut remove_header = self.plan_remove_header(&header)?;
@@ -734,16 +784,18 @@ impl StreamingVariantChecksums {
             + usize::from(fix.as_ref().is_some_and(|fix| fix.checksum.is_some()))
             + n64_orders.len();
         let per_variant = (self.hash_thread_budget / active).max(1);
-        Self::upgrade_variant_checksum(&mut raw.checksum, &self.algorithms, per_variant)?;
-        if let Some(remove_header) = remove_header.as_mut() {
-            Self::upgrade_variant_checksum(
-                &mut remove_header.checksum,
-                &self.algorithms,
-                per_variant,
-            )?;
+        if let Some(checksum) = raw.checksum.as_mut() {
+            Self::upgrade_variant_checksum(checksum, &raw_algorithms, per_variant)?;
+        }
+        if let Some(remove_header) = remove_header.as_mut()
+            && let Some(checksum) = remove_header.checksum.as_mut()
+        {
+            Self::upgrade_variant_checksum(checksum, &self.algorithms, per_variant)?;
         }
         for variant in &mut n64_orders {
-            Self::upgrade_variant_checksum(&mut variant.checksum, &self.algorithms, per_variant)?;
+            if let Some(checksum) = variant.checksum.as_mut() {
+                Self::upgrade_variant_checksum(checksum, &self.algorithms, per_variant)?;
+            }
         }
         if let Some(fix) = fix.as_mut()
             && let Some(checksum) = fix.checksum.as_mut()
@@ -817,7 +869,8 @@ impl StreamingVariantChecksums {
             transform: Transform::RemoveHeader {
                 stripped: stripped as u64,
             },
-            checksum,
+            checksum: Some(checksum),
+            precomputed_checksums: BTreeMap::new(),
         }))
     }
 
@@ -852,7 +905,8 @@ impl StreamingVariantChecksums {
                     target,
                     carry: Vec::new(),
                 },
-                checksum,
+                checksum: Some(checksum),
+                precomputed_checksums: BTreeMap::new(),
             });
         }
         Ok(variants)
@@ -1401,5 +1455,44 @@ mod tests {
         let parallel = overlay_checksums(&mut Cursor::new(&rom), &algorithms, &deferred.patches, 4)
             .expect("parallel overlay");
         assert_eq!(parallel, direct);
+    }
+
+    #[test]
+    fn precomputed_raw_sha1_is_normalized_and_does_not_replace_variants() {
+        let mut rom = vec![0_u8; 16 + 16_384];
+        rom[..4].copy_from_slice(b"NES\x1A");
+        for (index, value) in rom[16..].iter_mut().enumerate() {
+            *value = (index as u8).wrapping_mul(7).wrapping_add(3);
+        }
+        let algorithms = vec!["crc32".to_string(), "sha1".to_string()];
+        let precomputed = BTreeMap::from([(String::from("SHA1"), String::from("raw-sha1"))]);
+        let mut engine = StreamingVariantChecksums::new_with_precomputed_raw(
+            &algorithms,
+            precomputed,
+            rom.len() as u64,
+            Some("game.nes"),
+            1,
+        )
+        .expect("engine");
+        engine.update(&rom).expect("update");
+        let output = engine.finalize().expect("finalize");
+
+        let raw = output
+            .rows
+            .iter()
+            .find(|row| row.id == "raw")
+            .expect("raw row");
+        assert_eq!(raw.checksums.get("sha1"), Some(&String::from("raw-sha1")));
+        assert!(!raw.checksums.contains_key("SHA1"));
+
+        let remove_header = output
+            .rows
+            .iter()
+            .find(|row| row.id == "remove-header")
+            .expect("remove-header row");
+        assert_ne!(
+            remove_header.checksums.get("sha1"),
+            Some(&String::from("raw-sha1"))
+        );
     }
 }

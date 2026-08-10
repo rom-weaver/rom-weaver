@@ -539,6 +539,135 @@ mod tests {
     }
 
     #[test]
+    fn patch_apply_compression_aliases_are_accepted() {
+        for flag in ["--raw", "--format", "--codec", "--level"] {
+            let mut argv = vec![
+                "rom-weaver",
+                "patch",
+                "apply",
+                "--input",
+                "game.sfc",
+                "--patch",
+                "update.bps",
+                "--output",
+                "patched.sfc",
+            ];
+            argv.push(flag);
+            if flag != "--raw" {
+                argv.push(if flag == "--format" {
+                    "zip"
+                } else if flag == "--codec" {
+                    "deflate"
+                } else {
+                    "high"
+                });
+            }
+            assert!(
+                cli_command().try_get_matches_from(argv).is_ok(),
+                "{flag} parses for patch apply"
+            );
+        }
+    }
+
+    #[test]
+    fn patch_apply_help_is_task_grouped() {
+        let mut command = cli_command();
+        let patch = command.find_subcommand_mut("patch").expect("patch command");
+        let apply = patch
+            .find_subcommand_mut("apply")
+            .expect("patch apply command");
+        let help = apply.render_long_help().to_string();
+        const EXPECTED_SECTIONS: &[(&str, &[&str])] = &[
+            ("Options:", &["-h, --help"]),
+            (
+                "Basic:",
+                &[
+                    "-i, --input",
+                    "--patch",
+                    "-o, --output",
+                    "--no-compress",
+                    "--raw",
+                    "--compress-format",
+                    "--format",
+                    "--compress-codec",
+                    "--codec",
+                    "--compress-level",
+                    "--level",
+                ],
+            ),
+            (
+                "Archive/bundle:",
+                &[
+                    "-s, --select",
+                    "--target",
+                    "--filter",
+                    "--no-extract",
+                    "--no-ignore",
+                    "--bundle",
+                    "--with",
+                    "--without",
+                ],
+            ),
+            (
+                "Compatibility:",
+                &[
+                    "--assume-in",
+                    "--expect-in",
+                    "--patch-header",
+                    "--patch-basis",
+                    "--output-header",
+                    "--repair-checksum",
+                    "--n64-byte-order",
+                    "--ignore-checksum-validation",
+                ],
+            ),
+            (
+                "Diagnostics/authoring:",
+                &[
+                    "--expect-out",
+                    "--code",
+                    "--code-system",
+                    "--code-kind",
+                    "--emit-bundle",
+                    "--tui",
+                ],
+            ),
+            ("Performance:", &["-j, --threads"]),
+        ];
+        let mut previous = 0;
+        for (index, (heading, flags)) in EXPECTED_SECTIONS.iter().enumerate() {
+            let position = help
+                .find(heading)
+                .unwrap_or_else(|| panic!("help heading {heading:?} missing from:\n{help}"));
+            assert!(position > previous, "help headings are out of order");
+            previous = position;
+
+            let end = EXPECTED_SECTIONS
+                .get(index + 1)
+                .and_then(|(next_heading, _)| help.find(next_heading))
+                .or_else(|| help.find("Example:"))
+                .expect("end of help section");
+            let section = &help[position..end];
+            for flag in *flags {
+                assert!(
+                    section.contains(flag),
+                    "{flag} is missing from the {heading} help section"
+                );
+            }
+        }
+
+        let basic_start = help.find("Basic:").expect("basic heading");
+        let basic_end = help.find("Archive/bundle:").expect("archive heading");
+        let basic = &help[basic_start..basic_end];
+        let input = basic.find("-i, --input").expect("input in basic help");
+        let patch = basic.find("--patch").expect("patch in basic help");
+        let output = basic.find("-o, --output").expect("output in basic help");
+        assert!(input < patch && patch < output, "basic task order");
+        assert_eq!(help.matches("Example:").count(), 1);
+        assert!(help.contains("rom-weaver patch apply -i game.sfc --patch hack.bps"));
+    }
+
+    #[test]
     fn completions_is_a_native_subcommand() {
         let matches = cli_command().try_get_matches_from(["rom-weaver", "completions", "fish"]);
         assert!(matches.is_ok(), "completions <shell> parses");

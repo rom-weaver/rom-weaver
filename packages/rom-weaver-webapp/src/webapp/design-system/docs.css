@@ -12,12 +12,8 @@ html:has(.docs-workbench) {
 }
 
 .rw-app .docs-workbench {
-  /* Two measures, because one number cannot serve both. Reading wants a short
-     line; a seven-column table wants every pixel. So the panel grows with the
-     viewport and each block picks its own limit: prose stops at
-     --measure-prose, code and screenshots at the looser --measure-wide, and
-     tables take the panel. */
-  --measure-prose: 42rem;
+  /* The panel grows with the viewport. Code and screenshots keep a looser
+     measure, while tables and prose use the available article width. */
   --measure-wide: 60rem;
   --article-pad: clamp(18px, 3vw, 32px);
   --docs-rail: 13.5rem;
@@ -460,16 +456,6 @@ html:has(.docs-workbench) {
   line-height: 1.6;
   color: var(--ink-2);
   border-bottom: 1px solid var(--seam-soft);
-}
-/* The reading measure. Applied per block rather than to the article, so a
-   table or a screenshot in the same flow can still use the whole panel. */
-.rw-app .docs-article > p,
-.rw-app .docs-article > ul,
-.rw-app .docs-article > ol,
-.rw-app .docs-article > blockquote,
-.rw-app .docs-article > h2,
-.rw-app .docs-article > h3 {
-  max-width: var(--measure-prose);
 }
 .rw-app .docs-article p,
 .rw-app .docs-article li {

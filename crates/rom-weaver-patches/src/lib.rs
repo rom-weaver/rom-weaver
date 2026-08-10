@@ -1,4 +1,5 @@
 pub mod basis_probe;
+pub mod n64_order_probe;
 pub mod xdelta;
 
 mod aps_n64;
@@ -16,6 +17,7 @@ mod ninja1;
 mod pat;
 mod pmsr;
 mod ppf;
+mod probe_reader;
 mod qbsdiff_support;
 mod rup;
 mod shared;

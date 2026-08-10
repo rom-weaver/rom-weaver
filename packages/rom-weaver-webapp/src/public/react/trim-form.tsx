@@ -40,9 +40,15 @@ import {
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
+  useUiLocalizer,
 } from "./settings-context.tsx";
 import { TrimPatchFormView, type TrimPatchFormViewModel } from "./trim-form-view.tsx";
-import { routeSingleRom } from "./unified-drop-routing.ts";
+import {
+  getRomDropNotice,
+  getRomDropNoticeLevel,
+  routeSingleRom,
+  selectRomDropCandidate,
+} from "./unified-drop-routing.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
@@ -489,11 +495,14 @@ type InternalTrimPatchFormProps = TrimPatchFormProps & {
   trimWorkflow?: typeof TrimWorkflow;
 };
 
+type PendingTrimDrop = ReturnType<typeof routeSingleRom>;
+
 function TrimPatchForm(props: TrimPatchFormProps) {
   const internalProps = props as InternalTrimPatchFormProps;
   const trimWorkflowOverride = internalProps.trimWorkflow;
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
+  const localizer = useUiLocalizer();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
   const cancelSelectionRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
@@ -516,6 +525,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const [message, setMessage] = useState("");
   const [messageDismissible, setMessageDismissible] = useState(false);
   const [messagePlacement, setMessagePlacement] = useState<TrimMessagePlacement | null>(null);
+  const [dropNoticeRouting, setDropNoticeRouting] = useState<PendingTrimDrop | null>(null);
   const [errorCode, setErrorCode] = useState("");
   const [sourceState, setSourceState] = useState<TrimWorkflowSourceState | null>(null);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
@@ -539,6 +549,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const source = props.source === undefined ? internalSource : props.source;
   const settings = props.settings || internalSettings || providerSettings;
+  const dropNotice = dropNoticeRouting ? getRomDropNotice(dropNoticeRouting, localizer) : "";
+  const dropNoticeLevel = dropNoticeRouting ? getRomDropNoticeLevel(dropNoticeRouting) : "warn";
   const settingsLanguage = (settings as { language?: string }).language;
   const traceSettingsRef = useRef(settings);
   const onErrorRef = useRef(props.onError);
@@ -684,17 +696,31 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const updateSource = (file: BinarySource | null) => {
     resetWorkflowOutput();
     stagedTrimWorkflowGenerationRef.current += 1;
+    setDropNoticeRouting(null);
     setSourceState(null);
     if (props.source === undefined) setInternalSource(file);
     props.onSourceChange?.(file);
   };
 
-  // Single-bucket unified routing: keep the first dropped ROM, ignore patches
-  // and any extra files (Trim has one source). See routeSingleRom.
+  // Single-bucket unified routing: ask which ROM to use when several are dropped;
+  // report patches when they have no bucket on Trim. See routeSingleRom.
   const handledPageDropIdRef = useRef<number | null>(null);
   const handleUnifiedDrop = (files: File[]) => {
-    const source = routeSingleRom(files);
-    if (source) updateSource(source);
+    const routed = routeSingleRom(files);
+    if (routed.roms.length > 1) {
+      setDropNoticeRouting(null);
+      void selectRomDropCandidate(routed.roms, localizer.message("ui.step.rom"), selectFile).then((selected) => {
+        if (!selected) {
+          setDropNoticeRouting(routed.ignoredPatches.length ? { ...routed, unused: [] } : null);
+          return;
+        }
+        updateSource(selected);
+        setDropNoticeRouting({ ...routed, source: selected, unused: [] });
+      });
+      return;
+    }
+    if (routed.source) updateSource(routed.source);
+    setDropNoticeRouting(routed);
   };
 
   // Forward a page-level drop (dragging anywhere on the page) to the unified
@@ -712,7 +738,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     updateSource(null);
   };
 
-  cancelSelectionRef.current = () => updateSource(null);
+  cancelSelectionRef.current = (request) => {
+    if (request.sourceIndex === -1) return;
+    updateSource(null);
+  };
 
   const updateSettings = (nextSettings: TrimPatchFormSettings) => {
     resetWorkflowOutput({ clearProgress: false });
@@ -1143,6 +1172,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     dropZone: {
       accept: getFileInputAcceptAttributes().unifiedRom,
       addLabel: "Replace the ROM",
+      afterDropZone: dropNotice ? (
+        <Notice id="trim-builder-input-notice" level={dropNoticeLevel}>
+          {dropNotice}
+        </Notice>
+      ) : null,
       big: trimSourceEmpty,
       disabled: uploadDisabled,
       heroLabel: "Drop or click to add a ROM to trim",

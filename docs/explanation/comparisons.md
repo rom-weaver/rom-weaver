@@ -1,8 +1,6 @@
 # Comparison with similar tools
 
-rom-weaver overlaps with six established tools, each narrower than it is. This
-page compares all of them, format by format and feature by feature, so you can
-tell which one fits your job.
+rom-weaver overlaps with six established tools, each narrower than it is. This page compares all of them, format by format and feature by feature, so you can tell which one fits your job.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -25,8 +23,7 @@ tell which one fits your job.
 
 ## Legend
 
-Every table on this page uses these three marks. Each one has its own shape as
-well as its own colour, so the tables still read without colour vision.
+Every table on this page uses these three marks. Each one has its own shape as well as its own colour, so the tables still read without colour vision.
 
 | Mark | Meaning |
 | :---: | --- |
@@ -46,19 +43,11 @@ well as its own colour, so the tables still read without colour vision.
 | [chdman](https://docs.mamedev.org/tools/chdman.html) | Converts disc images to and from CHD | Linux, macOS, Windows | GPL-2.0 |
 | [Dolphin tool](https://github.com/dolphin-emu/dolphin) | Converts GameCube and Wii images | Linux, macOS, Windows | GPL-2.0 |
 
-The last three are the reference implementations rom-weaver is tested against.
-Its CHD and RVZ output is checked byte-for-byte against chdman and Dolphin
-tool, and its patch output against Flips and MultiPatch, so choosing rom-weaver
-for those jobs is a question of convenience, not of different bytes. The full
-list of specifications consulted is in
-[references](../development/references.md).
+The last three are the reference implementations rom-weaver is tested against. Its CHD and RVZ output is checked byte-for-byte against chdman and Dolphin tool, and its patch output against Flips and MultiPatch, so choosing rom-weaver for those jobs is a question of convenience, not of different bytes. The full list of specifications consulted is in [references](../development/references.md).
 
 ## At a glance
 
-The patch counts are format counts from the [Applying a patch](#applying-a-patch)
-and [Creating a patch](#creating-a-patch) tables, so every tool is counted the
-same way. Partial support counts. A row naming several formats counts as each
-of them.
+The patch counts are format counts from the [Applying a patch](#applying-a-patch) and [Creating a patch](#creating-a-patch) tables, so every tool is counted the same way. Partial support counts. A row naming several formats counts as each of them.
 
 | Capability | rom-weaver | RomPatcher.js | Flips | MultiPatch | xdelta3 | chdman | Dolphin tool |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -73,9 +62,7 @@ of them.
 | Runs in a browser | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Command line | ✅ | ⚠️ Node script | ✅ | ⚠️ macOS only | ✅ | ✅ | ✅ |
 
-> ¹ xdelta3's two rows, VCDIFF and xdelta, are one underlying family: plain
-> VCDIFF. It is a general delta tool with no ROM knowledge at all — no headers,
-> no byte order, no consoles.
+> ¹ xdelta3's two rows, VCDIFF and xdelta, are one underlying family: plain VCDIFF. It is a general delta tool with no ROM knowledge at all — no headers, no byte order, no consoles.
 >
 > ² chdman and Dolphin tool do not patch. They convert disc images.
 
@@ -107,16 +94,11 @@ rom-weaver reads 21 patch formats. No other tool here reads more than 12.
 | HDiffPatch/HPatchZ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | DCP (Dreamcast) | ✅ | ❌ | ❌ | ❌ | ❌ |
 
-> ¹ RomPatcher.js decodes plain VCDIFF but throws on two optional parts of the
-> spec: a secondary compressor and a custom code table. Most `.xdelta` patches
-> from xdelta3 use the `djw` secondary compressor, so they fail.
+> ¹ RomPatcher.js decodes plain VCDIFF but throws on two optional parts of the spec: a secondary compressor and a custom code table. Most `.xdelta` patches from xdelta3 use the `djw` secondary compressor, so they fail.
 >
-> ² MultiPatch links the real xdelta3 library, so it decodes both. So does
-> rom-weaver.
+> ² MultiPatch links the real xdelta3 library, so it decodes both. So does rom-weaver.
 
-rom-weaver has gaps too. It detects NINJA1 headers but cannot apply them, it
-does not support PDS, and it does not support HDiffPatch directory patches
-(`HDIFF19`). None of the other tools support those either.
+rom-weaver has gaps too. It detects NINJA1 headers but cannot apply them, it does not support PDS, and it does not support HDiffPatch directory patches (`HDIFF19`). None of the other tools support those either.
 
 ## Creating a patch
 
@@ -138,11 +120,9 @@ does not support PDS, and it does not support HDiffPatch directory patches
 | SOLID, GDIFF, PAT, DLDI, DPS | ✅ | ❌ | ❌ | ❌ | ❌ |
 | BSP, HDiffPatch, DCP | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-> ¹ Flips is the only tool here offering two BPS strategies on the command
-> line: `--bps-delta` and `--bps-linear`.
+> ¹ Flips is the only tool here offering two BPS strategies on the command line: `--bps-delta` and `--bps-linear`.
 >
-> ² Flips ships a UPS encoder in its library but exposes no way to reach it, so
-> UPS is apply-only in practice.
+> ² Flips ships a UPS encoder in its library but exposes no way to reach it, so UPS is apply-only in practice.
 
 ## Containers and disc images
 
@@ -166,15 +146,11 @@ does not support PDS, and it does not support HDiffPatch directory patches
 | PBP | ✅ | ❌ | ❌ | ❌ | ❌ |
 | XISO | ✅ | ❌ | ❌ | ❌ | ❌ |
 
-> ¹ chdman also reads `.cue`, `.gdi`, `.toc`, and raw images as CHD build
-> inputs, which is a different job from extracting an existing archive.
+> ¹ chdman also reads `.cue`, `.gdi`, `.toc`, and raw images as CHD build inputs, which is a different job from extracting an existing archive.
 >
-> ² An honest gap: Dolphin tool writes GCZ and WIA, and rom-weaver only reads
-> them.
+> ² An honest gap: Dolphin tool writes GCZ and WIA, and rom-weaver only reads them.
 
-The practical difference: rom-weaver can take a `.chd` or `.rvz` disc image,
-patch the ROM inside, and pack the result back up in one command. Every other
-tool here needs you to convert, patch, and convert back by hand.
+The practical difference: rom-weaver can take a `.chd` or `.rvz` disc image, patch the ROM inside, and pack the result back up in one command. Every other tool here needs you to convert, patch, and convert back by hand.
 
 ## Checksums
 
@@ -189,14 +165,9 @@ tool here needs you to convert, patch, and convert back by hand.
 | Hash a file inside an archive | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Header and byte-order variants | ✅ all detected headers, plus trim boundaries ² | ⚠️ N64 only | ❌ | ❌ | ❌ | ❌ |
 
-> ¹ chdman `verify` and Dolphin tool `verify` check an image against its own
-> stored hashes. Neither hashes an arbitrary file.
+> ¹ chdman `verify` and Dolphin tool `verify` check an image against its own stored hashes. Neither hashes an arbitrary file.
 >
-> ² This matters when a patch's readme lists a CRC32 you cannot reproduce.
-> rom-weaver reports the hash of the raw file, the headerless file, the
-> repaired-header file, and each N64 byte order at once, so you can see which
-> one the author meant. See
-> [Fix a checksum error](../how-to/fix-checksum-errors.md).
+> ² This matters when a patch's readme lists a CRC32 you cannot reproduce. rom-weaver reports the hash of the raw file, the headerless file, the repaired-header file, and each N64 byte order at once, so you can see which one the author meant. See [Fix a checksum error](../how-to/fix-checksum-errors.md).
 
 ## Headers and byte order
 
@@ -208,19 +179,13 @@ tool here needs you to convert, patch, and convert back by hand.
 | Output header mode | ✅ separate `auto`, `keep`, or `strip` | ⚠️ follows the input choice | ⚠️ restores what it stripped | ❌ |
 | N64 byte order | ✅ converts to match the patch, writes back in the original order | ⚠️ detects `.z64` for its CRC display | ❌ | ❌ |
 
-> ¹ A78, LNX, NES and FDS, SNES copier and SMC variants, PCE copier formats,
-> Game Boy and GBA, Mega Drive, SMS and Game Gear, all N64 byte orders, NDS,
-> Neo Geo Pocket, and MSX.
+> ¹ A78, LNX, NES and FDS, SNES copier and SMC variants, PCE copier formats, Game Boy and GBA, Mega Drive, SMS and Game Gear, all N64 byte orders, NDS, Neo Geo Pocket, and MSX.
 >
-> ² iNES (`.nes`), fwNES (`.fds`), LNX (`.lnx`), and SNES copier (`.sfc`,
-> `.smc`, `.swc`, `.fig`), picked by file extension and file size.
+> ² iNES (`.nes`), fwNES (`.fds`), LNX (`.lnx`), and SNES copier (`.sfc`, `.smc`, `.swc`, `.fig`), picked by file extension and file size.
 >
 > ³ The 512-byte SNES copier header and nothing else.
 >
-> ⁴ SNES, NES, Game Boy/GBA, Mega Drive, SMS/Game Gear, N64, Atari 7800/Lynx,
-> PCE/TurboGrafx-16, Virtual Boy, Neo Geo Pocket, MSX, and NDS. FDS, Atari
-> Jaguar, ColecoVision, Watara Supervision, and Intellivision headers are
-> validated but not rewritten.
+> ⁴ SNES, NES, Game Boy/GBA, Mega Drive, SMS/Game Gear, N64, Atari 7800/Lynx, PCE/TurboGrafx-16, Virtual Boy, Neo Geo Pocket, MSX, and NDS. FDS, Atari Jaguar, ColecoVision, Watara Supervision, and Intellivision headers are validated but not rewritten.
 
 ## Patching features
 
@@ -237,13 +202,9 @@ tool here needs you to convert, patch, and convert back by hand.
 | Patch metadata on create | ⚠️ SOLID fields only ² | ✅ RUP description, EBP JSON | ✅ BPS manifest | ❌ | ✅ `-A` app header |
 | Machine-readable output | ✅ `--json` | ❌ | ❌ | ❌ | ❌ |
 
-> ¹ These apply exactly one patch per run. Hacks that ship a base patch plus an
-> update need two passes, and you have to keep the intermediate file yourself.
+> ¹ These apply exactly one patch per run. Hacks that ship a base patch plus an update need two passes, and you have to keep the intermediate file yourself.
 >
-> ² `--solid-system`, `--solid-game`, `--solid-hack`, `--solid-version`,
-> `--solid-author`, `--solid-contact`, and `--solid-comment`. RUP and EBP
-> patches are written with an empty description and a placeholder JSON block
-> respectively; neither can be set.
+> ² `--solid-system`, `--solid-game`, `--solid-hack`, `--solid-version`, `--solid-author`, `--solid-contact`, and `--solid-comment`. RUP and EBP patches are written with an empty description and a placeholder JSON block respectively; neither can be set.
 
 ## Beyond patching
 
@@ -255,13 +216,9 @@ tool here needs you to convert, patch, and convert back by hand.
 | Ingest | ✅ sorts a mixed folder into ROMs and patches | ❌ |
 | Bundles | ✅ `rom-weaver-bundle.json` recipes ² | ❌ |
 
-> ¹ `trim --revert` pads a trimmed file back out for NDS, GBA, and 3DS, and
-> `--revert-marker` stores a footer so that revert is exact rather than a guess
-> at the padding. XISO and RVZ scrub are one-way.
+> ¹ `trim --revert` pads a trimmed file back out for NDS, GBA, and 3DS, and `--revert-marker` stores a footer so that revert is exact rather than a guess at the padding. XISO and RVZ scrub are one-way.
 >
-> ² A bundle records the ROM's checksums, the patch order, and the expected
-> result, so someone else can reproduce your build. See
-> [What a bundle is](bundles.md).
+> ² A bundle records the ROM's checksums, the patch order, and the expected result, so someone else can reproduce your build. See [What a bundle is](bundles.md).
 
 ## Delivery and platforms
 
@@ -276,40 +233,27 @@ tool here needs you to convert, patch, and convert back by hand.
 | Install | ✅ npm, Homebrew, Docker, or a binary | ⚠️ copy files, or `npm install` | ⚠️ binary or build | ⚠️ app download | ⚠️ package or build | ⚠️ part of MAME tools | ⚠️ part of Dolphin |
 | Language | Rust | JavaScript | C++ | Objective-C, C++ | C | C++ | C++ |
 
-> ¹ The warning is advisory, not a block. It reflects that RomPatcher.js loads
-> whole files into JavaScript arrays.
+> ¹ The warning is advisory, not a block. It reflects that RomPatcher.js loads whole files into JavaScript arrays.
 
 ## Which one should you use?
 
-**RomPatcher.js** when you are publishing a hack and want a patch button on
-your own site. It embeds in a page, has no build step, and handles IPS, BPS, or
-UPS on a cartridge ROM in a few kilobytes of script.
+**RomPatcher.js** when you are publishing a hack and want a patch button on your own site. It embeds in a page, has no build step, and handles IPS, BPS, or UPS on a cartridge ROM in a few kilobytes of script.
 
-**Flips** when you only touch IPS and BPS and want the reference BPS encoder
-with both delta and linear strategies, plus a desktop GUI.
+**Flips** when you only touch IPS and BPS and want the reference BPS encoder with both delta and linear strategies, plus a desktop GUI.
 
-**MultiPatch** when you are on macOS and want a native app covering seven
-families, including real xdelta3.
+**MultiPatch** when you are on macOS and want a native app covering seven families, including real xdelta3.
 
-**xdelta3** when the files are not ROMs. It is a general delta compressor and
-knows nothing about headers, byte order, or consoles.
+**xdelta3** when the files are not ROMs. It is a general delta compressor and knows nothing about headers, byte order, or consoles.
 
-**chdman** or **Dolphin tool** when you want the reference converter itself, or
-need an output rom-weaver does not write — Dolphin tool writes GCZ and WIA.
+**chdman** or **Dolphin tool** when you want the reference converter itself, or need an output rom-weaver does not write — Dolphin tool writes GCZ and WIA.
 
-**rom-weaver** when the job is bigger than one patch and one ROM: a disc image
-inside a CHD, an `.xdelta` patch with secondary compression, a chain of
-patches, an N64 ROM in the wrong byte order, a checksum you need to explain, or
-a scripted batch you want to run the same way twice.
+**rom-weaver** when the job is bigger than one patch and one ROM: a disc image inside a CHD, an `.xdelta` patch with secondary compression, a chain of patches, an N64 ROM in the wrong byte order, a checksum you need to explain, or a scripted batch you want to run the same way twice.
 
-These are not exclusive. Publishing a BPS patch with a RomPatcher.js button on
-your page, and a rom-weaver bundle for people who want the checksums recorded,
-covers both audiences.
+These are not exclusive. Publishing a BPS patch with a RomPatcher.js button on your page, and a rom-weaver bundle for people who want the checksums recorded, covers both audiences.
 
 ## How this page was checked
 
-Every claim was read out of each tool's source or official documentation, not
-out of a feature list.
+Every claim was read out of each tool's source or official documentation, not out of a feature list.
 
 | Tool | Checked at | What was read |
 | --- | --- | --- |
@@ -321,6 +265,4 @@ out of a feature list.
 | chdman | current MAME docs | The [chdman command list](https://docs.mamedev.org/tools/chdman.html) |
 | Dolphin tool | `master` | `ToolMain.cpp` subcommands, `ConvertCommand.cpp` output formats, `Blob.cpp` readable formats |
 
-All projects move. If a row here is stale, check the rom-weaver side against
-[Supported formats](../reference/formats.md), and each other tool's side
-against the repository linked from [the tools](#the-tools).
+All projects move. If a row here is stale, check the rom-weaver side against [Supported formats](../reference/formats.md), and each other tool's side against the repository linked from [the tools](#the-tools).

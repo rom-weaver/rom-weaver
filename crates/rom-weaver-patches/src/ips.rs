@@ -526,13 +526,48 @@ pub(crate) struct IpsProbeRecord {
     pub(crate) last: u8,
 }
 
-/// Everything [`crate::basis_probe`] reads out of an IPS patch.
+/// Whether any two records cover a shared byte.
 ///
-/// The truncate footer is deliberately absent: it states the output size, not
-/// the size of the bytes the author patched, so it cannot identify a basis.
+/// The edge rule below reads each record's first and last byte against the
+/// bytes underneath it, which only means anything for records a trimming differ
+/// produced - and such a differ never emits two records over one byte. Overlap
+/// says the records came from somewhere else, so their edges prove nothing.
+pub(crate) fn records_overlap(records: &[IpsProbeRecord]) -> bool {
+    let mut spans = records
+        .iter()
+        .filter(|record| record.len > 0)
+        .filter_map(|record| Some((record.offset, record.offset.checked_add(record.len)?)))
+        .collect::<Vec<_>>();
+    spans.sort_unstable();
+    let mut covered_to = 0_u64;
+    for (start, end) in spans {
+        if start < covered_to {
+            return true;
+        }
+        covered_to = covered_to.max(end);
+    }
+    false
+}
+
+/// How many leading output bytes [`IpsProbeData::prefix_writes`] captures. Four
+/// covers a magic number, the one header field whose correct contents a probe
+/// can know without knowing the game.
+pub(crate) const IPS_PROBE_PREFIX_BYTES: usize = 4;
+
+/// Everything the structural probes read out of an IPS patch.
 #[derive(Debug)]
 pub(crate) struct IpsProbeData {
     pub(crate) records: Vec<IpsProbeRecord>,
+    /// The truncate footer's output size, when the patch carries one. It states
+    /// the size of the result, not the size of the bytes the author patched, so
+    /// it can never identify a basis. The N64 order probe still needs it: a
+    /// byte-order rewrite refuses a result that is not whole words.
+    pub(crate) truncate_size: Option<u64>,
+    /// The byte the patch leaves at each of the first
+    /// [`IPS_PROBE_PREFIX_BYTES`] output offsets, `None` where no record writes
+    /// one. Later records win, matching apply order. The per-record summary
+    /// carries only edge bytes, so a magic-number rule needs this overlay.
+    pub(crate) prefix_writes: [Option<u8>; IPS_PROBE_PREFIX_BYTES],
 }
 
 /// Which IPS flavor a patch is, from its magic plus the EBP extension. EBP
@@ -571,6 +606,7 @@ pub(crate) fn probe_ips_records(path: &Path) -> Result<Option<IpsProbeData>> {
         return Ok(None);
     };
     let patch = parse_ips_file(path, flavor, PatchChecksumValidation::Ignore)?;
+    let prefix_writes = collect_ips_prefix_writes(&patch.records);
     let records = patch
         .records
         .iter()
@@ -594,9 +630,38 @@ pub(crate) fn probe_ips_records(path: &Path) -> Result<Option<IpsProbeData>> {
         patch = %path.display(),
         ?flavor,
         records = patch.records.len(),
+        ?prefix_writes,
         "basis probe: read IPS record geometry"
     );
-    Ok(Some(IpsProbeData { records }))
+    Ok(Some(IpsProbeData {
+        records,
+        prefix_writes,
+        truncate_size: patch.truncate_size,
+    }))
+}
+
+/// Replay every record's writes over the first [`IPS_PROBE_PREFIX_BYTES`]
+/// output bytes, in patch order, so a later record overwrites an earlier one
+/// exactly as an apply would.
+fn collect_ips_prefix_writes(records: &[IpsRecord]) -> [Option<u8>; IPS_PROBE_PREFIX_BYTES] {
+    let mut prefix = [None; IPS_PROBE_PREFIX_BYTES];
+    let prefix_end = IPS_PROBE_PREFIX_BYTES as u64;
+    for record in records {
+        if record.offset >= prefix_end || record.len == 0 {
+            continue;
+        }
+        let end = record.offset.saturating_add(record.len).min(prefix_end);
+        for offset in record.offset..end {
+            let index = offset as usize;
+            prefix[index] = Some(match &record.data {
+                IpsRecordData::Rle { byte } => *byte,
+                // `offset - record.offset` indexes the literal payload, which is
+                // `record.len` long, and `offset` stops at the record's end.
+                IpsRecordData::Literal(data) => data[(offset - record.offset) as usize],
+            });
+        }
+    }
+    prefix
 }
 
 #[cfg(test)]

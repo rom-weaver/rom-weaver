@@ -112,11 +112,20 @@ impl CliApp {
             args.no_compress,
             args.compress_format.clone(),
             args.compress_codec.clone(),
-            args.compress_level.unwrap_or_default(),
+            args.compress_level,
         ) {
             Ok(options) => options,
             Err(error) => return self.finish("patch-apply", fail("validate", error.to_string())),
         };
+        if let Err(error) = self.validate_patch_apply_compression_plan(
+            args.output
+                .as_deref()
+                .expect("output validated by run_patch_apply"),
+            &args.input,
+            &compression_options,
+        ) {
+            return self.finish("patch-apply", fail("validate", error.to_string()));
+        }
 
         let disc = match self.build_dcp_disc_context(&args.input) {
             Ok(Some(disc)) => disc,

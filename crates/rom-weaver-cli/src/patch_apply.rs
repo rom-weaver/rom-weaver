@@ -3,10 +3,13 @@ use super::*;
 use super::bundle_apply::BundleApplyResolution;
 use super::bundle_parse::bundle_validation;
 use super::patch_apply_disc::DiscContext;
+use super::patch_basis_decision::ChecksumBasisProof;
 use super::patch_commands::{
     DiscoveredPatchApplySidecars, PatchApplyProgressSink, PatchApplyProgressTracker,
     patch_progress_segment_start,
 };
+
+use rom_weaver_patches::basis_probe::PatchBasis;
 
 fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
     left == right
@@ -16,6 +19,17 @@ fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
         )
         || native_file_identity_matches(left, right)
 }
+
+fn path_is_occupied(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(RomWeaverError::Io(error)),
+    }
+}
+
+static INFERRED_PUBLISH_COUNTER: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 pub(super) fn warn_on_rom_name_mismatch(expected: Option<&str>, actual_path: &Path) {
     let Some(expected) = expected else {
@@ -112,6 +126,21 @@ struct PatchApplyReportDecoration<'a> {
     context: &'a OperationContext,
 }
 
+struct PatchApplyCompressionInputs<'a> {
+    report: &'a mut OperationReport,
+    compression_options: &'a PatchApplyCompressionOptions,
+    output: &'a Path,
+    output_was_inferred: bool,
+    resolved_input: &'a Path,
+    is_disc: bool,
+    raw_ready_output: &'a Path,
+    disc_track_overrides: &'a [CreateInputOverride],
+    context: &'a OperationContext,
+    temp_paths: &'a mut Vec<PathBuf>,
+    terminal_output_path: &'a mut PathBuf,
+    terminal_output_source: &'a mut PathBuf,
+}
+
 impl CliApp {
     pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
         let rom_filter = args.rom_filter();
@@ -169,6 +198,14 @@ impl CliApp {
                 );
             }
         };
+        if let Some(outcome) = self.validate_patch_apply_output_preflight(
+            &args,
+            bundle_resolution.as_ref(),
+            &original_input,
+            local_bundle.as_deref(),
+        ) {
+            return outcome;
+        }
         let emit_bundle = args.emit_bundle.clone();
         let emit_inputs = emit_bundle.as_ref().map(|_| EmitBundleInputs {
             input: args.input.clone(),
@@ -178,19 +215,34 @@ impl CliApp {
             output: args.output.clone(),
             threads: args.threads,
         });
-        let outcome =
-            self.run_patch_apply_resolved(args, bundle_resolution, original_input, local_bundle);
+        let mut final_output = None;
+        let outcome = if args.patches.iter().any(|patch| Self::is_dcp_patch(patch)) {
+            let expected_rom_name = bundle_resolution
+                .as_ref()
+                .and_then(|resolution| resolution.expected_rom_name.as_deref());
+            self.run_dcp_apply(args, expected_rom_name)
+        } else {
+            self.run_patch_apply_resolved(
+                args,
+                bundle_resolution,
+                original_input,
+                local_bundle,
+                &mut final_output,
+            )
+        };
         // --emit-bundle failures don't undo the already-written apply; warn
         // rather than fail.
-        if let (Some(emit_path), Some(inputs)) = (emit_bundle, emit_inputs)
+        if let (Some(emit_path), Some(mut inputs)) = (emit_bundle, emit_inputs)
             && outcome.status == OperationStatus::Succeeded
-            && let Err(error) = self.emit_apply_bundle(&emit_path, inputs)
         {
-            tracing::warn!(
-                %error,
-                bundle = %emit_path.display(),
-                "apply succeeded but --emit-bundle failed",
-            );
+            inputs.output = final_output.or(inputs.output);
+            if let Err(error) = self.emit_apply_bundle(&emit_path, inputs) {
+                tracing::warn!(
+                    %error,
+                    bundle = %emit_path.display(),
+                    "apply succeeded but --emit-bundle failed",
+                );
+            }
         }
         outcome
     }
@@ -282,54 +334,8 @@ impl CliApp {
         bundle_resolution: Option<BundleApplyResolution>,
         original_input: PathBuf,
         local_bundle: Option<PathBuf>,
+        final_output: &mut Option<PathBuf>,
     ) -> AppRunOutcome {
-        // Bundle-driven runs fill output from output.name before this point, so
-        // only the flag-less, bundle-less case can still be empty.
-        let Some(output) = args.output.as_deref() else {
-            let thread_execution = self.context(args.threads).single_thread_execution();
-            return self.finish(
-                "patch-apply",
-                OperationReport::failed(
-                    OperationFamily::Patch,
-                    None,
-                    "validate",
-                    bundle_validation(
-                        "bundle.output.missing",
-                        "patch apply requires --output or a bundle output.name",
-                    )
-                    .to_string(),
-                    thread_execution,
-                ),
-            );
-        };
-        let alias_message = Self::patch_apply_output_alias_message(
-            &args,
-            &original_input,
-            local_bundle.as_deref(),
-            output,
-        );
-        if let Some(message) = alias_message {
-            let thread_execution = self.context(args.threads).single_thread_execution();
-            return self.finish(
-                "patch-apply",
-                OperationReport::failed(
-                    OperationFamily::Patch,
-                    None,
-                    "validate",
-                    message,
-                    thread_execution,
-                ),
-            );
-        }
-        // A `.dcp` (Universal Dreamcast Patcher) patch rebuilds a GD-ROM data
-        // track's filesystem rather than patching bytes, so it follows a
-        // dedicated path.
-        if args.patches.iter().any(|patch| Self::is_dcp_patch(patch)) {
-            let expected_rom_name = bundle_resolution
-                .as_ref()
-                .and_then(|resolution| resolution.expected_rom_name.as_deref());
-            return self.run_dcp_apply(args, expected_rom_name);
-        }
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
         let PatchApplyCommand {
@@ -366,7 +372,6 @@ impl CliApp {
             dry_run,
             threads,
         } = args;
-        let mut output = output.expect("output presence is validated above");
         let discover_implicit_patches = patches.is_empty() && codes.is_empty() && !no_extract;
         let input_kind_filter =
             Self::archive_entry_kind_filter(rom_filter || discover_implicit_patches, false);
@@ -415,9 +420,9 @@ impl CliApp {
             &expect_in,
             &expect_out,
             no_compress,
-            compress_format,
-            compress_codec,
-            compress_level.unwrap_or_default(),
+            compress_format.clone(),
+            compress_codec.clone(),
+            compress_level,
         ) {
             Ok(parsed) => parsed,
             Err(error) => {
@@ -434,19 +439,23 @@ impl CliApp {
             return self.finish("patch-apply", report);
         }
         if dry_run {
+            let Some(output) = output.as_deref() else {
+                return self.finish(
+                    "patch-apply",
+                    fail(
+                        "validate",
+                        "--dry-run requires --output when the output path cannot be inferred before selecting an archive member".to_string(),
+                    ),
+                );
+            };
             let report = self.patch_apply_dry_run(
                 &input,
                 &patches,
-                &output,
+                output,
                 &compression_options,
                 probe_threads.clone(),
             );
             return self.finish("patch-apply", report);
-        }
-        // Guards the output the user named. Compressing can append an
-        // extension; the compress step re-checks the resolved path.
-        if let Err(error) = ensure_output_available(&output, force) {
-            return self.finish("patch-apply", fail("validate", error.to_string()));
         }
         let disc_context = match self.resolve_patch_apply_disc(PatchApplyDiscInputs {
             input: &input,
@@ -492,67 +501,21 @@ impl CliApp {
                 ),
             );
         }
-        if let Some(report) =
-            self.validate_patch_apply_access(&patches, &output, probe_threads.clone())
-        {
-            return self.finish("patch-apply", report);
-        }
-
         let mut expected_input_size: Option<u64> = None;
         // Input-check precedence is CLI > bundle > file name; any conflict
         // names the bundle source that introduced it.
-        if !ignore_checksum_validation && let Some(resolution) = &bundle_resolution {
-            for (source_label, requirements) in &resolution.checks {
-                if let Some(report) = self.merge_expected_input_requirements(
-                    "patch-apply",
-                    source_label,
-                    requirements,
-                    &mut expected_input_checksums,
-                    &mut expected_input_size,
-                    probe_threads.clone(),
-                ) {
-                    return self.finish("patch-apply", report);
-                }
-            }
-            // Bundle output checks merge with the same conflict rule. Disc
-            // inputs have no single output to checksum - skip rather than fail
-            // an otherwise valid bundle.
-            match (&resolution.output_checks, disc_context.is_some()) {
-                (Some((source_label, _)), true) => {
-                    trace!(
-                        source = %source_label,
-                        "bundle output checks skipped: disc apply emits no single checksummable output"
-                    );
-                }
-                (Some((source_label, requirements)), false) => {
-                    for (algorithm, hex) in &requirements.checksums {
-                        match expected_output_checksums.get(algorithm) {
-                            Some(existing) if existing != hex => {
-                                return self.finish(
-                                    "patch-apply",
-                                    fail(
-                                        "validate",
-                                        format!(
-                                            "{source_label} requires output {algorithm} {hex} but {existing} was already requested"
-                                        ),
-                                    ),
-                                );
-                            }
-                            Some(_) => {}
-                            None => {
-                                trace!(
-                                    source = %source_label,
-                                    algorithm = %algorithm,
-                                    checksum = %hex,
-                                    "merged expected output checksum requirement"
-                                );
-                                expected_output_checksums.insert(algorithm.clone(), hex.clone());
-                            }
-                        }
-                    }
-                }
-                (None, _) => {}
-            }
+        if !ignore_checksum_validation
+            && let Some(resolution) = &bundle_resolution
+            && let Some(report) = self.merge_patch_apply_bundle_requirements(
+                resolution,
+                disc_context.is_some(),
+                &mut expected_input_checksums,
+                &mut expected_input_size,
+                &mut expected_output_checksums,
+                probe_threads.clone(),
+            )
+        {
+            return self.finish("patch-apply", report);
         }
         if !ignore_checksum_validation
             && let Some(first_patch) = patches.first()
@@ -612,6 +575,46 @@ impl CliApp {
                 .and_then(|resolution| resolution.expected_rom_name.as_deref()),
             &resolved_input,
         );
+        let (mut output, output_was_inferred) = match self.resolve_patch_apply_output_path(
+            output,
+            &input,
+            &resolved_input,
+            no_compress,
+            compress_format.as_deref(),
+        ) {
+            Ok(resolved) => resolved,
+            Err(error) => return self.finish("patch-apply", fail("validate", error.to_string())),
+        };
+        if let Some(message) = Self::patch_apply_output_alias_message(
+            &input,
+            &patches,
+            &original_input,
+            local_bundle.as_deref(),
+            &output,
+        ) {
+            return self.finish("patch-apply", fail("validate", message));
+        }
+        let compression_options = match self.resolve_patch_apply_compression_options(
+            no_compress,
+            compress_format.clone(),
+            compress_codec.clone(),
+            compress_level,
+            &output,
+            &resolved_input,
+        ) {
+            Ok(options) => options,
+            Err(error) => return self.finish("patch-apply", fail("validate", error.to_string())),
+        };
+        // Compressing can append an extension; the compression step re-checks
+        // that resolved path after patch validation.
+        if let Err(error) = ensure_output_available(&output, force) {
+            return self.finish("patch-apply", fail("validate", error.to_string()));
+        }
+        if let Some(report) =
+            self.validate_patch_apply_access(&patches, &output, probe_threads.clone())
+        {
+            return self.finish("patch-apply", report);
+        }
         // Seed host-provided input checksums so handler source verification skips
         // a re-read. Keyed by the resolved path; header/N64 transforms write a
         // distinct temp path whose lookup misses and recomputes. Skipped for disc
@@ -668,6 +671,7 @@ impl CliApp {
             }
         }
 
+        let mut terminal_output_for_apply = None;
         let report = if resolved_patches.is_empty() {
             OperationReport::failed(
                 OperationFamily::Patch,
@@ -730,6 +734,14 @@ impl CliApp {
                     output = swapped_output;
                     extension_swap_note = Some(note);
                 }
+                if let Some(report) = Self::inferred_output_collision_report(
+                    output_was_inferred,
+                    &mut output,
+                    &input,
+                    context.single_thread_execution(),
+                ) {
+                    return report;
+                }
                 // Disc inputs reject the header/N64 transforms and do their own
                 // reassembly, so they skip the standard compat finalize; they always
                 // stage the patched track before reassembling the full disc.
@@ -744,6 +756,7 @@ impl CliApp {
                 let staged_output = match Self::patch_apply_staged_output(
                     &output,
                     &resolved_input,
+                    output_was_inferred,
                     needs_staged_output,
                     compression_options.enabled,
                     &context,
@@ -837,10 +850,19 @@ impl CliApp {
                         output = swapped_output;
                         extension_swap_note = Some(note);
                     }
+                    if let Some(report) = Self::inferred_output_collision_report(
+                        output_was_inferred,
+                        &mut output,
+                        &input,
+                        context.single_thread_execution(),
+                    ) {
+                        return report;
+                    }
                 }
                 let mut terminal_output_path = output.clone();
 
                 let mut raw_ready_output = staged_output.clone();
+                let mut terminal_output_source = raw_ready_output.clone();
                 let mut disc_track_overrides: Vec<CreateInputOverride> = Vec::new();
                 if report.status == OperationStatus::Succeeded && requires_compat_finalize {
                     self.emit_running(
@@ -858,28 +880,29 @@ impl CliApp {
                         None,
                         context.single_thread_execution(),
                     );
-                    let finalized_output_path = if compression_options.enabled {
-                        match Self::patch_apply_raw_output_path(
-                            &output,
-                            &resolved_input,
-                            &context,
-                            "patch-apply-output-raw-final",
-                            &mut temp_paths,
-                        ) {
-                            Ok(path) => path,
-                            Err(error) => {
-                                return OperationReport::failed(
-                                    OperationFamily::Patch,
-                                    report.format.clone(),
-                                    "prepare",
-                                    error.to_string(),
-                                    context.single_thread_execution(),
-                                );
+                    let finalized_output_path =
+                        if compression_options.enabled || output_was_inferred {
+                            match Self::patch_apply_raw_output_path(
+                                &output,
+                                &resolved_input,
+                                &context,
+                                "patch-apply-output-raw-final",
+                                &mut temp_paths,
+                            ) {
+                                Ok(path) => path,
+                                Err(error) => {
+                                    return OperationReport::failed(
+                                        OperationFamily::Patch,
+                                        report.format.clone(),
+                                        "prepare",
+                                        error.to_string(),
+                                        context.single_thread_execution(),
+                                    );
+                                }
                             }
-                        }
-                    } else {
-                        output.clone()
-                    };
+                        } else {
+                            output.clone()
+                        };
                     match Self::finalize_patch_apply_output(
                         &staged_output,
                         &finalized_output_path,
@@ -894,6 +917,9 @@ impl CliApp {
                     ) {
                         Ok(finalized) => {
                             raw_ready_output = finalized_output_path;
+                            if output_was_inferred {
+                                terminal_output_source = raw_ready_output.clone();
+                            }
                             if finalized.repaired_profiles.len() == 1 {
                                 report.label = format!(
                                     "{}; repaired checksum ({})",
@@ -968,7 +994,12 @@ impl CliApp {
                                 );
                             }
                         };
-                        match self.write_disc_output(disc, &staged_sheet, &output) {
+                        let disc_output = if output_was_inferred {
+                            &staged_output
+                        } else {
+                            &output
+                        };
+                        match self.write_disc_output(disc, &staged_sheet, disc_output) {
                             Ok(note) => report.label = format!("{}; {}", report.label, note),
                             Err(error) => {
                                 return OperationReport::failed(
@@ -981,6 +1012,9 @@ impl CliApp {
                             }
                         }
                         raw_ready_output = staged_sheet;
+                        if output_was_inferred {
+                            terminal_output_source = staged_output.clone();
+                        }
                     }
                 }
 
@@ -1004,103 +1038,58 @@ impl CliApp {
                     return *error_report;
                 }
 
-                if report.status == OperationStatus::Succeeded && compression_options.enabled {
-                    let compression_plan = match self.resolve_guarded_patch_apply_compression_plan(
+                if report.status == OperationStatus::Succeeded
+                    && compression_options.enabled
+                    && let Err(error_report) = self.resolve_guarded_patch_apply_compression_plan(
                         &output,
                         &resolved_input,
                         &compression_options,
                         force,
                         report.format.clone(),
                         &context,
-                    ) {
-                        Ok(plan) => plan,
-                        Err(error_report) => return *error_report,
-                    };
-                    // Disc: feed the original sheet to the compressor; the patched
-                    // track is redirected via `disc_track_overrides`. Plain inputs
-                    // stage the payload under an archive-appropriate entry name.
-                    let archive_input = if is_disc {
-                        raw_ready_output.clone()
-                    } else {
-                        match Self::stage_patch_apply_archive_input(
-                            &raw_ready_output,
-                            &output,
-                            &resolved_input,
-                        ) {
-                            Ok(path) => path,
-                            Err(error) => {
-                                return OperationReport::failed(
-                                    OperationFamily::Patch,
-                                    report.format.clone(),
-                                    "compress",
-                                    error.to_string(),
-                                    context.single_thread_execution(),
-                                );
-                            }
-                        }
-                    };
-                    let running_label = format!(
-                        "compressing patched output as {} (codec={})",
-                        compression_plan.format,
-                        compression_plan.codec.as_deref().unwrap_or("default")
-                    );
-                    let (compress_report, codec_label) = match self.run_patch_apply_compression(
-                        &compression_plan,
-                        vec![archive_input],
-                        &disc_track_overrides,
-                        running_label,
-                        &context,
-                    ) {
-                        Ok(result) => result,
-                        Err(error) => {
-                            return OperationReport::failed(
-                                OperationFamily::Patch,
-                                report.format.clone(),
-                                "compress",
-                                error.to_string(),
-                                context.single_thread_execution(),
-                            );
-                        }
-                    };
-                    if compress_report.status != OperationStatus::Succeeded {
-                        return OperationReport::failed(
-                            OperationFamily::Patch,
-                            report.format.clone(),
-                            "compress",
-                            format!("patch output compression failed: {}", compress_report.label),
-                            compress_report.thread_execution,
-                        );
-                    }
-                    let extension_note = if compression_plan.extension_appended {
-                        "; output extension appended to match container format"
-                    } else {
-                        ""
-                    };
-                    let warning_note = compression_plan
-                        .warning
-                        .as_deref()
-                        .map(|warning| format!("; warning: {warning}"))
-                        .unwrap_or_default();
-                    report.stage = "compress".to_string();
-                    report.label = format!(
-                        "{}; patch output compressed as {} (codec={}, path=`{}`; {}){}{}",
-                        report.label,
-                        compression_plan.format,
-                        codec_label,
-                        compression_plan.output_path.display(),
-                        compression_plan.note,
-                        extension_note,
-                        warning_note
-                    );
-                    terminal_output_path = compression_plan.output_path;
+                    )
+                {
+                    return *error_report;
+                }
+                if let Some(error_report) =
+                    self.compress_patch_apply_output(PatchApplyCompressionInputs {
+                        report: &mut report,
+                        compression_options: &compression_options,
+                        output: &output,
+                        output_was_inferred,
+                        resolved_input: &resolved_input,
+                        is_disc,
+                        raw_ready_output: &raw_ready_output,
+                        disc_track_overrides: &disc_track_overrides,
+                        context: &context,
+                        temp_paths: &mut temp_paths,
+                        terminal_output_path: &mut terminal_output_path,
+                        terminal_output_source: &mut terminal_output_source,
+                    })
+                {
+                    return error_report;
                 }
 
+                if let Err(error) = Self::publish_inferred_patch_apply_output_if_needed(
+                    output_was_inferred,
+                    report.status,
+                    &terminal_output_source,
+                    &mut terminal_output_path,
+                    &input,
+                ) {
+                    return OperationReport::failed(
+                        OperationFamily::Patch,
+                        report.format.clone(),
+                        "publish",
+                        error.to_string(),
+                        context.single_thread_execution(),
+                    );
+                }
+                terminal_output_for_apply = (report.status == OperationStatus::Succeeded)
+                    .then(|| terminal_output_path.clone());
+
                 if report.status == OperationStatus::Succeeded {
-                    let kind_hint = if compression_options.enabled {
-                        Some("archive")
-                    } else {
-                        None
-                    };
+                    let kind_hint = compression_options.enabled.then_some("archive");
                     report = Self::attach_emitted_files_details(
                         report,
                         vec![terminal_output_path],
@@ -1119,26 +1108,150 @@ impl CliApp {
             report.label = format!("{}; {}", report.label, summary.label());
         }
 
+        *final_output = terminal_output_for_apply;
         Self::cleanup_temp_paths(&temp_paths);
         self.finish("patch-apply", report)
     }
 
-    fn patch_apply_output_alias_message(
+    fn merge_patch_apply_bundle_requirements(
+        &self,
+        resolution: &BundleApplyResolution,
+        is_disc: bool,
+        expected_input_checksums: &mut BTreeMap<String, String>,
+        expected_input_size: &mut Option<u64>,
+        expected_output_checksums: &mut BTreeMap<String, String>,
+        probe_threads: Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        for (source_label, requirements) in &resolution.checks {
+            if let Some(report) = self.merge_expected_input_requirements(
+                "patch-apply",
+                source_label,
+                requirements,
+                expected_input_checksums,
+                expected_input_size,
+                probe_threads.clone(),
+            ) {
+                return Some(report);
+            }
+        }
+
+        let (source_label, requirements) = resolution.output_checks.as_ref()?;
+        if is_disc {
+            trace!(
+                source = %source_label,
+                "bundle output checks skipped: disc apply emits no single checksummable output"
+            );
+            return None;
+        }
+        for (algorithm, hex) in &requirements.checksums {
+            match expected_output_checksums.get(algorithm) {
+                Some(existing) if existing != hex => {
+                    return Some(OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        format!(
+                            "{source_label} requires output {algorithm} {hex} but {existing} was already requested"
+                        ),
+                        probe_threads.clone(),
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    trace!(
+                        source = %source_label,
+                        algorithm = %algorithm,
+                        checksum = %hex,
+                        "merged expected output checksum requirement"
+                    );
+                    expected_output_checksums.insert(algorithm.clone(), hex.clone());
+                }
+            }
+        }
+        None
+    }
+
+    fn validate_patch_apply_output_preflight(
+        &self,
         args: &PatchApplyCommand,
+        bundle_resolution: Option<&BundleApplyResolution>,
+        original_input: &Path,
+        local_bundle: Option<&Path>,
+    ) -> Option<AppRunOutcome> {
+        // Bundle-driven runs retain their existing output requirement. DCP
+        // rebuilds a disc sheet and also needs an explicit destination; plain
+        // file applies can infer one after the ROM leaf is selected.
+        let requires_explicit_output = bundle_resolution.is_some()
+            || args.patches.iter().any(|patch| Self::is_dcp_patch(patch));
+        if args.output.is_none() && requires_explicit_output {
+            let thread_execution = self.context(args.threads).single_thread_execution();
+            return Some(
+                self.finish(
+                    "patch-apply",
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        bundle_validation(
+                            "bundle.output.missing",
+                            "patch apply requires --output or a bundle output.name",
+                        )
+                        .to_string(),
+                        thread_execution,
+                    ),
+                ),
+            );
+        }
+        let output = args.output.as_deref()?;
+        let message = Self::patch_apply_output_alias_message(
+            &args.input,
+            &args.patches,
+            original_input,
+            local_bundle,
+            output,
+        )?;
+        let thread_execution = self.context(args.threads).single_thread_execution();
+        Some(self.finish(
+            "patch-apply",
+            OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                "validate",
+                message,
+                thread_execution,
+            ),
+        ))
+    }
+
+    pub(super) fn validate_patch_apply_compression_plan(
+        &self,
+        output: &Path,
+        extension_source: &Path,
+        options: &PatchApplyCompressionOptions,
+    ) -> Result<()> {
+        if !options.enabled {
+            return Ok(());
+        }
+        self.resolve_patch_apply_compression_plan(output, extension_source, options)
+            .map(|_| ())
+    }
+
+    fn patch_apply_output_alias_message(
+        input: &Path,
+        patches: &[PathBuf],
         original_input: &Path,
         local_bundle: Option<&Path>,
         output: &Path,
     ) -> Option<String> {
         if paths_refer_to_same_file(original_input, output)
-            || paths_refer_to_same_file(&args.input, output)
+            || paths_refer_to_same_file(input, output)
         {
             return Some(
                 "patch apply input and output resolve to the same file; choose a different --output path"
                     .to_string(),
             );
         }
-        if let Some(patch) = args
-            .patches
+        if let Some(patch) = patches
             .iter()
             .find(|patch| paths_refer_to_same_file(patch, output))
         {
@@ -1155,6 +1268,444 @@ impl CliApp {
                     bundle.display()
                 )
             })
+    }
+
+    fn resolve_patch_apply_output_path(
+        &self,
+        output: Option<PathBuf>,
+        input: &Path,
+        resolved_input: &Path,
+        no_compress: bool,
+        compress_format: Option<&str>,
+    ) -> Result<(PathBuf, bool)> {
+        let output_was_inferred = output.is_none();
+        let mut output = match output {
+            Some(output) => output,
+            None => Self::default_patch_apply_output_path(input, resolved_input)?,
+        };
+        if !output_was_inferred || no_compress {
+            return Ok((output, output_was_inferred));
+        }
+        let Some(compress_format) = compress_format else {
+            return Ok((output, output_was_inferred));
+        };
+        let handler = self
+            .containers
+            .find_by_name(compress_format)
+            .ok_or_else(|| {
+                RomWeaverError::Validation("requested output format is not registered".to_string())
+            })?;
+        if handler.descriptor().extensions.is_empty() {
+            return Err(RomWeaverError::Validation(format!(
+                "output format `{compress_format}` has no usable file extension"
+            )));
+        }
+        output = Self::default_patch_apply_output_path_for_format(
+            input,
+            resolved_input,
+            handler.descriptor().extensions,
+        )?;
+        Ok((output, output_was_inferred))
+    }
+
+    /// Pick a user-visible raw-ROM destination when a plain file apply omitted
+    /// `--output`. The candidate lives beside the original input and advances
+    /// with a numeric suffix instead of replacing an existing path.
+    pub(super) fn default_patch_apply_output_path(
+        input: &Path,
+        extension_source: &Path,
+    ) -> Result<PathBuf> {
+        let extension = extension_source
+            .extension()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "cannot infer a patch output name because the selected ROM leaf has no file extension; pass --output"
+                        .to_string(),
+                )
+            })?;
+        Self::default_patch_apply_output_path_for_extension(input, extension)
+    }
+
+    fn default_patch_apply_output_path_for_extension(
+        input: &Path,
+        extension: &str,
+    ) -> Result<PathBuf> {
+        let extension = extension.trim_start_matches('.');
+        if extension.is_empty() {
+            return Err(RomWeaverError::Validation(
+                "cannot infer a patch output name because the selected format has no file extension"
+                    .to_string(),
+            ));
+        }
+        let parent = input.parent().unwrap_or_else(|| Path::new("."));
+        let stem = input
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("rom");
+        let base_name = format!("{stem}-patched.{extension}");
+        let candidate = parent.join(&base_name);
+        if !path_is_occupied(&candidate)? {
+            trace!(output = %candidate.display(), "inferred patch apply output path");
+            return Ok(candidate);
+        }
+
+        let mut suffix = 1u64;
+        loop {
+            let candidate = parent.join(format!("{stem}-patched-{suffix}.{extension}"));
+            if !path_is_occupied(&candidate)? {
+                trace!(output = %candidate.display(), suffix, "inferred collision-safe patch apply output path");
+                return Ok(candidate);
+            }
+            suffix = suffix.checked_add(1).ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "could not find an unused inferred patch output path".to_string(),
+                )
+            })?;
+        }
+    }
+
+    fn default_patch_apply_output_path_for_format(
+        input: &Path,
+        extension_source: &Path,
+        extensions: &[&str],
+    ) -> Result<PathBuf> {
+        let parent = input.parent().unwrap_or_else(|| Path::new("."));
+        let stem = input
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("rom");
+        let base = parent.join(format!("{stem}-patched"));
+        let (candidate, _) =
+            Self::append_output_extension_if_missing(&base, extensions, Some(extension_source));
+        let extension = candidate
+            .extension()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "cannot infer a patch output name because the selected format has no file extension"
+                        .to_string(),
+                )
+            })?;
+        Self::default_patch_apply_output_path_for_extension(input, extension)
+    }
+
+    fn ensure_inferred_output_available(
+        output_was_inferred: bool,
+        output: &mut PathBuf,
+        input: &Path,
+    ) -> Result<()> {
+        if !output_was_inferred {
+            return Ok(());
+        }
+        if !path_is_occupied(output)? {
+            return Ok(());
+        }
+        let extension = output
+            .extension()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "inferred patch output path became occupied and has no file extension"
+                        .to_string(),
+                )
+            })?;
+        *output = Self::default_patch_apply_output_path_for_extension(input, extension)?;
+        Ok(())
+    }
+
+    fn inferred_output_collision_report(
+        output_was_inferred: bool,
+        output: &mut PathBuf,
+        input: &Path,
+        thread_execution: Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        Self::ensure_inferred_output_available(output_was_inferred, output, input)
+            .err()
+            .map(|error| {
+                OperationReport::failed(
+                    OperationFamily::Patch,
+                    None,
+                    "validate",
+                    error.to_string(),
+                    thread_execution,
+                )
+            })
+    }
+
+    pub(super) fn publish_inferred_patch_apply_output(
+        source: &Path,
+        destination: &mut PathBuf,
+        input: &Path,
+    ) -> Result<()> {
+        let extension = destination
+            .extension()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "inferred patch output path has no file extension".to_string(),
+                )
+            })?;
+        loop {
+            match Self::copy_to_new_output_file(source, destination) {
+                Ok(()) => return Ok(()),
+                Err(RomWeaverError::Io(error)) if error.kind() == io::ErrorKind::AlreadyExists => {
+                    *destination =
+                        Self::default_patch_apply_output_path_for_extension(input, &extension)?;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    fn publish_inferred_patch_apply_output_if_needed(
+        output_was_inferred: bool,
+        status: OperationStatus,
+        source: &Path,
+        destination: &mut PathBuf,
+        input: &Path,
+    ) -> Result<()> {
+        if !output_was_inferred || status != OperationStatus::Succeeded {
+            return Ok(());
+        }
+        Self::publish_inferred_patch_apply_output(source, destination, input)
+    }
+
+    fn copy_file_create_new(source: &Path, destination: &Path) -> io::Result<()> {
+        let mut source_file = File::open(source)?;
+        let mut destination_file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(destination)?;
+        let copy_result = (|| {
+            io::copy(&mut source_file, &mut destination_file)?;
+            destination_file.sync_all()
+        })();
+        drop(destination_file);
+        if let Err(error) = copy_result {
+            let _ = fs::remove_file(destination);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub(super) fn install_staged_no_overwrite_with<F>(
+        staged_path: &Path,
+        destination_path: &Path,
+        hard_link: F,
+    ) -> io::Result<()>
+    where
+        F: FnOnce(&Path, &Path) -> io::Result<()>,
+    {
+        match hard_link(staged_path, destination_path) {
+            Ok(()) => Ok(()),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::AlreadyExists | io::ErrorKind::NotFound
+                ) =>
+            {
+                Err(error)
+            }
+            Err(_) => Self::copy_file_create_new(staged_path, destination_path),
+        }
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn install_staged_no_overwrite(staged_path: &Path, destination_path: &Path) -> io::Result<()> {
+        Self::install_staged_no_overwrite_with(
+            staged_path,
+            destination_path,
+            |source, destination| fs::hard_link(source, destination),
+        )
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn install_staged_no_overwrite(staged_path: &Path, destination_path: &Path) -> io::Result<()> {
+        Self::copy_file_create_new(staged_path, destination_path)
+    }
+
+    fn copy_to_new_output_file(source: &Path, destination: &Path) -> Result<()> {
+        let mut source_file = File::open(source)?;
+        let (staged_path, mut staged_file) = loop {
+            let counter =
+                INFERRED_PUBLISH_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let file_name = destination
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("output");
+            let staged_path = destination
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(format!(
+                    ".{file_name}.rom-weaver-stage-{}-{counter}",
+                    Self::runtime_process_id()
+                ));
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&staged_path)
+            {
+                Ok(file) => break (staged_path, file),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(RomWeaverError::Io(error)),
+            }
+        };
+        let publish_result = (|| -> io::Result<()> {
+            io::copy(&mut source_file, &mut staged_file)?;
+            staged_file.sync_all()?;
+            drop(staged_file);
+            Self::install_staged_no_overwrite(&staged_path, destination)
+        })();
+        let cleanup_result = fs::remove_file(&staged_path);
+        if let Err(error) = cleanup_result
+            && error.kind() != io::ErrorKind::NotFound
+        {
+            if publish_result.is_ok() {
+                warn!(
+                    stage = %staged_path.display(),
+                    "published inferred patch output but could not remove private stage"
+                );
+                return Ok(());
+            }
+            return Err(RomWeaverError::Io(error));
+        }
+        publish_result.map_err(RomWeaverError::Io)
+    }
+
+    fn compress_patch_apply_output(
+        &self,
+        inputs: PatchApplyCompressionInputs<'_>,
+    ) -> Option<OperationReport> {
+        let PatchApplyCompressionInputs {
+            report,
+            compression_options,
+            output,
+            output_was_inferred,
+            resolved_input,
+            is_disc,
+            raw_ready_output,
+            disc_track_overrides,
+            context,
+            temp_paths,
+            terminal_output_path,
+            terminal_output_source,
+        } = inputs;
+        if report.status != OperationStatus::Succeeded || !compression_options.enabled {
+            return None;
+        }
+        let compression_plan = match self.resolve_patch_apply_compression_plan(
+            output,
+            resolved_input,
+            compression_options,
+        ) {
+            Ok(plan) => plan,
+            Err(error) => {
+                return Some(OperationReport::failed(
+                    OperationFamily::Patch,
+                    report.format.clone(),
+                    "compress",
+                    error.to_string(),
+                    context.single_thread_execution(),
+                ));
+            }
+        };
+        let final_output_path = compression_plan.output_path.clone();
+        let mut compression_plan = compression_plan;
+        if output_was_inferred {
+            let extension = final_output_path
+                .extension()
+                .and_then(|value| value.to_str());
+            let staged_output = context
+                .temp_paths()
+                .next_path("patch-apply-output-compressed", extension);
+            temp_paths.push(staged_output.clone());
+            compression_plan.output_path = staged_output;
+        }
+        // Disc inputs feed the original sheet to the compressor. Plain inputs
+        // stage the payload under an archive-appropriate entry name.
+        let archive_input = if is_disc {
+            raw_ready_output.to_path_buf()
+        } else {
+            match Self::stage_patch_apply_archive_input(raw_ready_output, output, resolved_input) {
+                Ok(path) => path,
+                Err(error) => {
+                    return Some(OperationReport::failed(
+                        OperationFamily::Patch,
+                        report.format.clone(),
+                        "compress",
+                        error.to_string(),
+                        context.single_thread_execution(),
+                    ));
+                }
+            }
+        };
+        let running_label = format!(
+            "compressing patched output as {} (codec={})",
+            compression_plan.format,
+            compression_plan.codec.as_deref().unwrap_or("default")
+        );
+        let (compress_report, codec_label) = match self.run_patch_apply_compression(
+            &compression_plan,
+            vec![archive_input],
+            disc_track_overrides,
+            running_label,
+            context,
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                return Some(OperationReport::failed(
+                    OperationFamily::Patch,
+                    report.format.clone(),
+                    "compress",
+                    error.to_string(),
+                    context.single_thread_execution(),
+                ));
+            }
+        };
+        if compress_report.status != OperationStatus::Succeeded {
+            return Some(OperationReport::failed(
+                OperationFamily::Patch,
+                report.format.clone(),
+                "compress",
+                format!("patch output compression failed: {}", compress_report.label),
+                compress_report.thread_execution,
+            ));
+        }
+        let extension_note = if compression_plan.extension_appended {
+            "; output extension appended to match container format"
+        } else {
+            ""
+        };
+        let warning_note = compression_plan
+            .warning
+            .as_deref()
+            .map(|warning| format!("; warning: {warning}"))
+            .unwrap_or_default();
+        report.stage = "compress".to_string();
+        report.label = format!(
+            "{}; patch output compressed as {} (codec={}, path=`{}`; {}){}{}",
+            report.label,
+            compression_plan.format,
+            codec_label,
+            final_output_path.display(),
+            compression_plan.note,
+            extension_note,
+            warning_note
+        );
+        if output_was_inferred {
+            *terminal_output_source = compression_plan.output_path;
+        }
+        *terminal_output_path = final_output_path;
+        None
     }
 
     fn prepare_patch_apply_chain(
@@ -1224,11 +1775,17 @@ impl CliApp {
             stripped_header,
             stripped_header_match,
             n64_order,
+            n64_order_note,
         } = self
             .prepare_patch_apply_input(PreparePatchApplyInputInputs {
                 resolved_input,
                 strip_header,
                 n64_byte_order: chain_n64_modes.first().copied().unwrap_or_default(),
+                inference: if auto_evidence_available {
+                    N64AutoInference::Structural
+                } else {
+                    N64AutoInference::ChecksumOnly
+                },
                 first_patch,
                 expected_crc32: expected_input_checksums.get("crc32").map(String::as_str),
                 repair_checksum,
@@ -1245,9 +1802,10 @@ impl CliApp {
                 ))
             })?;
 
-        // An inferred basis changes output bytes on evidence rather than proof,
-        // so it is always reported.
+        // An inferred header basis or byte order changes output bytes on
+        // evidence rather than proof, so both are always reported.
         let mut checksum_verification_labels = Vec::from_iter(inferred_basis_note);
+        checksum_verification_labels.extend(n64_order_note);
         if let Some(expected_size) = expected_input_size {
             let label = Self::validate_patch_input_size(&apply_input, Some(expected_size), None)
                 .map_err(|error| {
@@ -1521,11 +2079,21 @@ impl CliApp {
     fn patch_apply_staged_output(
         output: &Path,
         resolved_input: &Path,
+        output_was_inferred: bool,
         needs_staged_output: bool,
         compression_enabled: bool,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
     ) -> Result<PathBuf> {
+        if output_was_inferred {
+            return Self::patch_apply_raw_output_path(
+                output,
+                resolved_input,
+                context,
+                "patch-apply-output-inferred",
+                temp_paths,
+            );
+        }
         if !needs_staged_output {
             return Ok(output.to_path_buf());
         }
@@ -1552,12 +2120,13 @@ impl CliApp {
     }
 
     /// Decide `--patch-header auto` for the FIRST patch: strip the detected
-    /// copier header only when the patch's required input checksum proves it was
-    /// authored against the headerless bytes. A patch with no checksum to prove
-    /// it falls back to structural evidence
-    /// ([`Self::structural_strip_decision`]); any remaining doubt keeps the
-    /// input as-is. Later chain steps decide per patch in
-    /// [`Self::chain_header_transition`].
+    /// copier header only when a required input checksum - declared or embedded
+    /// in the patch, under whatever algorithm the patch offers - proves the
+    /// patch was authored against the headerless bytes
+    /// ([`Self::checksum_basis_proof`]). A patch with no checksum to prove it
+    /// falls back to structural evidence ([`Self::structural_strip_decision`]);
+    /// any remaining doubt keeps the input as-is. Later chain steps decide per
+    /// patch in [`Self::chain_header_transition`].
     fn auto_header_strip_decision(
         &self,
         resolved_input: &Path,
@@ -1575,82 +2144,76 @@ impl CliApp {
             return (false, None);
         };
         let header_len = header_match.stripped_bytes().unwrap_or(ROM_HEADER_BYTES);
-        let required_crc32 = expected_input_checksums.get("crc32").cloned().or_else(|| {
-            first_resolved_patch.and_then(|patch| self.embedded_patch_source_crc32(patch, context))
-        });
-        let Some(required_crc32) = required_crc32 else {
-            trace!(
-                input = %resolved_input.display(),
-                header = ?header_match.header,
-                "auto header: strippable header present but no required input checksum; falling back to structural evidence"
-            );
-            let Some(patch) = first_resolved_patch else {
-                return (false, None);
-            };
-            return match self.structural_strip_decision(
-                resolved_input,
-                patch,
-                header_match,
-                context,
-                temp_paths,
-            ) {
-                Some((strip, note)) => (strip, Some(note)),
-                None => (false, None),
-            };
-        };
-        if cached_input_checksums
-            .get("crc32")
-            .is_some_and(|cached| cached.eq_ignore_ascii_case(&required_crc32))
-        {
-            trace!(
-                required_crc32 = %required_crc32,
-                "auto header: required checksum matches the raw (headered) input; keeping header"
-            );
-            return (false, None);
-        }
-        let headerless_crc32 = (|| -> Result<Option<String>> {
-            let mut reader = BufReader::new(File::open(resolved_input)?);
-            reader.seek(SeekFrom::Start(header_len as u64))?;
-            Self::crc32_of_reader(&mut reader, context)
-        })();
-        match headerless_crc32 {
-            Ok(Some(headerless)) if headerless.eq_ignore_ascii_case(&required_crc32) => {
+        match self.checksum_basis_proof(
+            resolved_input,
+            first_resolved_patch,
+            header_len as u64,
+            expected_input_checksums,
+            cached_input_checksums,
+            context,
+        ) {
+            ChecksumBasisProof::Proved(PatchBasis::Headerless) => {
                 debug!(
                     header = ?header_match.header,
                     header_bytes = header_len,
-                    required_crc32 = %required_crc32,
-                    "auto header: required input checksum matches the headerless bytes; stripping header before apply and re-adding it after"
+                    "auto header: a required input checksum matches the headerless bytes; stripping header before apply and re-adding it after"
                 );
-                (true, None)
+                // Proof, not evidence: no report note.
+                return (true, None);
             }
-            Ok(_) => {
+            ChecksumBasisProof::Proved(PatchBasis::Raw) => {
                 trace!(
-                    required_crc32 = %required_crc32,
-                    "auto header: required checksum matches neither the raw nor the headerless bytes; keeping header"
+                    input = %resolved_input.display(),
+                    "auto header: a required input checksum matches the raw (headered) input; keeping header"
                 );
-                (false, None)
+                return (false, None);
             }
-            Err(error) => {
+            ChecksumBasisProof::Unproven => {
                 trace!(
-                    %error,
-                    "auto header: could not hash the headerless bytes; keeping header"
+                    input = %resolved_input.display(),
+                    "auto header: required checksums prove no basis; keeping header without guessing"
                 );
-                (false, None)
+                return (false, None);
             }
+            ChecksumBasisProof::NoEvidence => {}
+        }
+        trace!(
+            input = %resolved_input.display(),
+            header = ?header_match.header,
+            "auto header: strippable header present but no required input checksum; falling back to structural evidence"
+        );
+        let Some(patch) = first_resolved_patch else {
+            return (false, None);
+        };
+        match self.structural_strip_decision(
+            resolved_input,
+            patch,
+            header_match,
+            context,
+            temp_paths,
+        ) {
+            Some((strip, note)) => (strip, Some(note)),
+            None => (false, None),
         }
     }
 
-    /// Resolve the N64 order a patch should see. Auto acts only on checksum
-    /// proof; without a source CRC32 (or when no variant matches), it keeps the
-    /// current bytes so checksumless patches are never silently guessed.
+    /// Resolve the N64 order a patch should see. Auto acts on checksum proof
+    /// first; a patch with no source CRC32 falls back to structural evidence
+    /// ([`Self::structural_n64_order_decision`]) when the caller allows it, and
+    /// any remaining doubt keeps the current bytes.
     pub(super) fn resolve_patch_n64_target(
         &self,
-        input: &Path,
-        patch: Option<&Path>,
-        expected_crc32: Option<&str>,
-        mode: PatchN64ByteOrderMode,
+        request: N64TargetRequest<'_>,
         context: &OperationContext,
-    ) -> Result<Option<(N64ByteOrder, N64ByteOrder)>> {
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> Result<Option<N64TargetResolution>> {
+        let N64TargetRequest {
+            input,
+            patch,
+            expected_crc32,
+            mode,
+            inference,
+        } = request;
         let source = Self::detect_n64_byte_order_path(input)?;
         let Some(source) = source else {
             if mode.target().is_some() {
@@ -1661,23 +2224,69 @@ impl CliApp {
             }
             return Ok(None);
         };
-        let target = match mode {
-            PatchN64ByteOrderMode::Keep => source,
+        let (target, inferred_note) = match mode {
+            PatchN64ByteOrderMode::Keep => (source, None),
             PatchN64ByteOrderMode::Auto => {
                 let required_crc32 = expected_crc32.map(str::to_owned).or_else(|| {
                     patch.and_then(|path| self.embedded_patch_source_crc32(path, context))
                 });
                 match required_crc32 {
-                    Some(required) => {
+                    // A checksum that matches no variant means the input is not
+                    // the patch's base at all. Structural evidence assumes it is,
+                    // so proof that says otherwise ends the decision.
+                    Some(required) => (
                         Self::resolve_n64_byte_order_for_crc32(input, &required, context)?
-                            .unwrap_or(source)
-                    }
-                    None => source,
+                            .unwrap_or(source),
+                        None,
+                    ),
+                    None => self.infer_patch_n64_target(
+                        input, patch, source, inference, context, temp_paths,
+                    ),
                 }
             }
-            concrete => concrete.target().unwrap_or(source),
+            concrete => (concrete.target().unwrap_or(source), None),
         };
-        Ok(Some((source, target)))
+        Ok(Some(N64TargetResolution {
+            source,
+            target,
+            inferred_note,
+        }))
+    }
+
+    /// The checksumless half of `auto`: structural evidence plus the note that
+    /// reports it, or the current order and no note when nothing separates the
+    /// three.
+    fn infer_patch_n64_target(
+        &self,
+        input: &Path,
+        patch: Option<&Path>,
+        source: N64ByteOrder,
+        inference: N64AutoInference,
+        context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> (N64ByteOrder, Option<String>) {
+        let (N64AutoInference::Structural, Some(patch)) = (inference, patch) else {
+            trace!(
+                input = %input.display(),
+                "auto n64: patch embeds no source checksum and structural evidence is off for this step; keeping the current order"
+            );
+            return (source, None);
+        };
+        let Some((target, reason)) =
+            self.structural_n64_order_decision(input, patch, source, context, temp_paths)
+        else {
+            trace!(
+                input = %input.display(),
+                patch = %patch.display(),
+                "auto n64: nothing separates the three orders; keeping the current one"
+            );
+            return (source, None);
+        };
+        let note = format!(
+            "patch N64 byte order inferred as {} ({reason})",
+            target.label()
+        );
+        (target, Some(note))
     }
 
     pub(super) fn transition_n64_byte_order(
@@ -1730,17 +2339,24 @@ impl CliApp {
             );
             (source, requested)
         } else {
+            // Later chain steps stay on checksum proof. The inferred-order note
+            // has no channel out of the apply loop, and a decision that changes
+            // output bytes on evidence must never go unreported.
             let Some(resolved) = self.resolve_patch_n64_target(
-                current_input,
-                Some(resolved_patch),
-                None,
-                mode,
+                N64TargetRequest {
+                    input: current_input,
+                    patch: Some(resolved_patch),
+                    expected_crc32: None,
+                    mode,
+                    inference: N64AutoInference::ChecksumOnly,
+                },
                 context,
+                temp_paths,
             )?
             else {
                 return Ok(());
             };
-            resolved
+            (resolved.source, resolved.target)
         };
         let original = state.map(|order| order.to).unwrap_or(source);
         if source != target {
@@ -2185,6 +2801,9 @@ struct PreparedApplyInput {
     stripped_header: Option<Vec<u8>>,
     stripped_header_match: Option<KnownRomHeaderMatch>,
     n64_order: Option<N64ByteOrderTransform>,
+    /// Set when the byte order came from structural evidence rather than
+    /// checksum proof. Always reported.
+    n64_order_note: Option<String>,
 }
 
 /// The state carried out of [`CliApp::run_patch_apply_loop`] when every patch
@@ -2243,11 +2862,45 @@ struct PreparePatchApplyInputInputs<'a> {
     resolved_input: &'a Path,
     strip_header: bool,
     n64_byte_order: PatchN64ByteOrderMode,
+    inference: N64AutoInference,
     first_patch: Option<&'a Path>,
     expected_crc32: Option<&'a str>,
     repair_checksum: bool,
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
+}
+
+/// What `--n64-byte-order auto` may act on for one step.
+///
+/// Only the first patch has a channel to report an inferred order in the
+/// operation label, and cheat codes or an explicit byte-order transform pin
+/// offsets to the bytes the user passed in. Everything else stays on checksum
+/// proof.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum N64AutoInference {
+    /// Checksum proof, then structural evidence.
+    Structural,
+    /// Checksum proof only.
+    ChecksumOnly,
+}
+
+/// What to resolve an N64 byte-order target from.
+pub(super) struct N64TargetRequest<'a> {
+    pub(super) input: &'a Path,
+    pub(super) patch: Option<&'a Path>,
+    pub(super) expected_crc32: Option<&'a str>,
+    pub(super) mode: PatchN64ByteOrderMode,
+    pub(super) inference: N64AutoInference,
+}
+
+/// The order the input is in, the order the patch needs, and how that was
+/// settled.
+pub(super) struct N64TargetResolution {
+    pub(super) source: N64ByteOrder,
+    pub(super) target: N64ByteOrder,
+    /// Set only when the target came from structural evidence rather than
+    /// checksum proof, for the operation label.
+    pub(super) inferred_note: Option<String>,
 }
 
 impl CliApp {
@@ -3016,7 +3669,7 @@ impl CliApp {
         no_compress: bool,
         compress_format: Option<String>,
         compress_codec: Vec<String>,
-        compress_level: CompressionLevelProfile,
+        compress_level: Option<CompressionLevelProfile>,
     ) -> Result<ParsedPatchApplyInputs> {
         let compression_options = Self::parse_patch_apply_compression_options(
             no_compress,
@@ -3055,6 +3708,7 @@ impl CliApp {
             resolved_input,
             strip_header,
             n64_byte_order,
+            inference,
             first_patch,
             expected_crc32,
             repair_checksum,
@@ -3087,14 +3741,25 @@ impl CliApp {
         } else {
             resolved_input.to_path_buf()
         };
-        let apply_input = match self.resolve_patch_n64_target(
-            &apply_input,
-            first_patch,
-            expected_crc32,
-            n64_byte_order,
+        let resolved_n64 = self.resolve_patch_n64_target(
+            N64TargetRequest {
+                input: &apply_input,
+                patch: first_patch,
+                expected_crc32,
+                mode: n64_byte_order,
+                inference,
+            },
             context,
-        )? {
-            Some((source_order, target_order)) => {
+            temp_paths,
+        )?;
+        let mut n64_order_note = None;
+        let apply_input = match resolved_n64 {
+            Some(N64TargetResolution {
+                source: source_order,
+                target: target_order,
+                inferred_note,
+            }) => {
+                n64_order_note = inferred_note;
                 n64_order = Some(N64ByteOrderTransform {
                     from: target_order,
                     to: source_order,
@@ -3170,6 +3835,7 @@ impl CliApp {
             stripped_header,
             stripped_header_match,
             n64_order,
+            n64_order_note,
         })
     }
 }

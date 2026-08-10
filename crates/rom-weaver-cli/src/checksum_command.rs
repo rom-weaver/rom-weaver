@@ -119,6 +119,19 @@ impl CliApp {
             }
         }
 
+        let chd_raw_sha1 = match self.try_get_chd_raw_sha1(&source, &checksum_options, &context) {
+            Ok(raw_sha1) => raw_sha1,
+            Err(error) => {
+                return OperationReport::failed(
+                    OperationFamily::Checksum,
+                    Some(self.checksum.name().to_string()),
+                    "checksum",
+                    error.to_string(),
+                    thread_execution.clone(),
+                );
+            }
+        };
+
         match self.try_run_checksum_tar_stream_auto_extract(
             &source,
             &checksum_options,
@@ -230,12 +243,23 @@ impl CliApp {
         };
         let checksum_algorithm_count = request.algorithms.len();
         let variants_enabled = !user_requested_range;
+        if chd_raw_sha1.is_some() && extracted_archives != 1 {
+            trace!(
+                resolved_source = %resolved_source.display(),
+                extracted_archives,
+                "skipping chd raw_sha1 metadata because checksum source did not resolve directly"
+            );
+        }
+        let precomputed_raw_checksums = chd_raw_sha1
+            .filter(|_| extracted_archives == 1)
+            .map(|raw_sha1| BTreeMap::from([(String::from("sha1"), raw_sha1)]));
         let mut report = if variants_enabled {
             self.run_checksum_variants_with_progress(
                 &request,
                 &context,
                 "checksum",
                 checksum_stage,
+                precomputed_raw_checksums.as_ref(),
                 &mut |progress| {
                     self.emit_running(
                         OperationLabel {
@@ -293,6 +317,11 @@ impl CliApp {
                 "{}; checksum source resolved via {extracted_archives} container extract step(s)",
                 report.label
             );
+        }
+        if report.status == OperationStatus::Succeeded && precomputed_raw_checksums.is_some() {
+            report
+                .label
+                .push_str("; sha1 reused from chd raw_sha1 metadata");
         }
         if !variants_enabled {
             // The variant engine already detected identity from the streamed prefix

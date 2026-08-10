@@ -1,7 +1,6 @@
 # Webapp masthead metadata
 
-The webapp masthead shows build identity, the configured thread count, and two
-independent runtime facts in one text row.
+The webapp masthead shows build identity, the configured thread count, and two independent runtime facts in one text row.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -22,9 +21,7 @@ independent runtime facts in one text row.
 | `10 threads` | The full thread-count label shown on desktop. |
 | `10T` | The compact mobile thread-count label; `T` means threads. |
 
-The version text normally looks like `vX.Y.Z · abcdef0`. The full build
-identifier, including a branch or dirty-build suffix when applicable, is
-available from the version tooltip.
+The version text normally looks like `vX.Y.Z · abcdef0`. The full build identifier, including a branch or dirty-build suffix when applicable, is available from the version tooltip.
 
 ## Runtime values
 
@@ -35,14 +32,6 @@ available from the version tooltip.
 | `sw` | A service worker controls the page or is installed and ready to take control. Its tooltip distinguishes those states. |
 | `sw off` | Service-worker offline support is disabled, unavailable, or registration failed. |
 
-The first value describes how the page was launched; the second describes
-service-worker state. The combinations are therefore independent, such as
-`web · sw`, `pwa · sw`, or `pwa · sw off`. The prerendered shell resolves
-known runtime state before first paint, then React hydrates that shell in place
-instead of replacing the masthead nodes. While service-worker state is still
-unknown, the shell preserves the `sw` placeholder and adds a tooltip after the
-state resolves.
+The first value describes how the page was launched; the second describes service-worker state. The combinations are therefore independent, such as `web · sw`, `pwa · sw`, or `pwa · sw off`. The prerendered shell resolves known runtime state before first paint, then React hydrates that shell in place instead of replacing the masthead nodes. While service-worker state is still unknown, the shell preserves the `sw` placeholder and adds a tooltip after the state resolves.
 
-The thread count is shown as `· 10 threads` on desktop and `· 10T` on mobile
-to preserve masthead space. The full wording remains available to assistive
-technology and in the tooltip.
+The thread count is shown as `· 10 threads` on desktop and `· 10T` on mobile to preserve masthead space. The full wording remains available to assistive technology and in the tooltip.

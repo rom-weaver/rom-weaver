@@ -39,6 +39,16 @@ const getBinarySourceStableSignature = (source: NamedSourceLike): string => {
   return `source:${getBinarySourceFileName(source, "")}:${getBinarySourceSize(source) || 0}`;
 };
 
+const hasDuplicateBinarySources = (sources: NamedSourceLike[]): boolean => {
+  const signatures = new Set<string>();
+  for (const source of sources) {
+    const signature = getBinarySourceStableSignature(source);
+    if (signatures.has(signature)) return true;
+    signatures.add(signature);
+  }
+  return false;
+};
+
 const getBinarySourceListStableIds = (sources: NamedSourceLike[]): string[] => {
   const occurrenceBySignature = new Map<string, number>();
   return sources.map((source) => {
@@ -65,6 +75,7 @@ export {
   getBinarySourceFileName,
   getBinarySourceListStableIds,
   getBinarySourceSize,
+  hasDuplicateBinarySources,
   sameBinarySourceLists,
   toApplyButtonProgress,
   toInputProgress,

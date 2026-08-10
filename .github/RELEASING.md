@@ -1,30 +1,17 @@
 # Releases
 
-This is the release *decision* and its one-time setup. For the pipeline that
-executes it - workflows, jobs, caching, and the publish fan-out - see
-[`docs/development/ci.md`](../docs/development/ci.md).
+This is the release *decision* and its one-time setup. For the pipeline that executes it - workflows, jobs, caching, and the publish fan-out - see [`docs/development/ci.md`](../docs/development/ci.md).
 
-Start `release.yml` manually to open or refresh the Release Please pull request
-after CI succeeds for the exact `main` commit. Conventional `feat`, `fix`, and
-breaking-change commits update that pull request and `CHANGELOG.md`. Merging it
-creates a **draft** GitHub Release and starts the publish fan-out. The final job
-publishes the draft, which creates the `vX.Y.Z` tag and then triggers the
-crates.io publication. The fan-out publishes:
+Start `release.yml` manually to open or refresh the Release Please pull request after CI succeeds for the exact `main` commit. Conventional `feat`, `fix`, and breaking-change commits update that pull request and `CHANGELOG.md`. Merging it creates a **draft** GitHub Release and starts the publish fan-out. The final job publishes the draft, which creates the `vX.Y.Z` tag and then triggers the crates.io publication. The fan-out publishes:
 
 - the Cargo workspace to crates.io;
-- 11 npm packages: `@rom-weaver/cli`, its nine
-  `@rom-weaver/<platform>` binaries, and the unscoped `rom-weaver` alias
-  that depends on the launcher;
+- 11 npm packages: `@rom-weaver/cli`, its nine `@rom-weaver/<platform>` binaries, and the unscoped `rom-weaver` alias that depends on the launcher;
 - the `rom-weaver` formula in `rom-weaver/homebrew-tap` for stable releases;
 - the `rom-weaver` manifest in `rom-weaver/scoop-bucket` for stable releases;
 - `ghcr.io/rom-weaver/rom-weaver-cli`;
 - `ghcr.io/rom-weaver/rom-weaver-webapp`.
 
-The npm packages include npm provenance, Cargo authenticates with crates.io's
-GitHub OIDC trusted publisher, and both container images include an SBOM plus
-signed SLSA build provenance. Publishers check the registry before writing, so
-reruns skip versions that already exist instead of failing halfway through a
-release.
+The npm packages include npm provenance, Cargo authenticates with crates.io's GitHub OIDC trusted publisher, and both container images include an SBOM plus signed SLSA build provenance. Publishers check the registry before writing, so reruns skip versions that already exist instead of failing halfway through a release.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -42,95 +29,54 @@ release.
 
 ## One-time repository setup
 
-1. In GitHub Actions settings, allow workflows to read and write the repository
-   and to create pull requests.
-2. Add a fine-grained `RELEASE_PLEASE_TOKEN` Actions secret owned by the
-   `rom-weaver` organization, limited to `rom-weaver/rom-weaver`, with Contents,
-   Issues, and Pull requests read/write access. Release Please needs a
-   non-`GITHUB_TOKEN` credential so its release pull requests trigger the
-   required CI checks.
-3. Require the `PR Title Lint` and normal CI checks in the `main` branch
-   protection rules. Use squash merges so the validated pull request title is
-   the commit subject that lands on `main`.
-4. Enable **Immutable releases** in Settings → General. The fan-out is built
-   for it: releases are created as drafts and published only after every asset
-   is attached. Read the warning under [normal release flow](#normal-release-flow)
-   before touching a draft by hand.
-5. Create a fine-grained token owned by the `rom-weaver` organization, limited
-   to `rom-weaver/homebrew-tap` and `rom-weaver/scoop-bucket`, with Contents
-   read/write access. Store it as the `PACKAGE_MANAGER_TOKEN` Actions secret.
-   Stable releases update `Formula/rom-weaver.rb` and
-   `bucket/rom-weaver.json`; prereleases leave both repositories unchanged.
+1. In GitHub Actions settings, allow workflows to read and write the repository and to create pull requests.
+2. Add a fine-grained `RELEASE_PLEASE_TOKEN` Actions secret owned by the `rom-weaver` organization, limited to `rom-weaver/rom-weaver`, with Contents, Issues, and Pull requests read/write access. Release Please needs a non-`GITHUB_TOKEN` credential so its release pull requests trigger the required CI checks.
+3. Require the `PR Title Lint` and normal CI checks in the `main` branch protection rules. Use squash merges so the validated pull request title is the commit subject that lands on `main`.
+4. Enable **Immutable releases** in Settings → General. The fan-out is built for it: releases are created as drafts and published only after every asset is attached. Read the warning under [normal release flow](#normal-release-flow) before touching a draft by hand.
+5. Create a fine-grained token owned by the `rom-weaver` organization, limited to `rom-weaver/homebrew-tap` and `rom-weaver/scoop-bucket`, with Contents read/write access. Store it as the `PACKAGE_MANAGER_TOKEN` Actions secret. Stable releases update `Formula/rom-weaver.rb` and `bucket/rom-weaver.json`; prereleases leave both repositories unchanged.
 
-The tap and bucket repositories are public. The token must target the
-organization-owned repositories; a fine-grained token limited to the former
-personal repositories cannot push after the transfer.
+The tap and bucket repositories are public. The token must target the organization-owned repositories; a fine-grained token limited to the former personal repositories cannot push after the transfer.
 
 ## Cargo trusted publishing
 
-The workspace's five crates are published and configured for trusted
-publishing: `rom-weaver-core`, `rom-weaver-checksum`,
-`rom-weaver-containers`, `rom-weaver-patches`, and `rom-weaver-cli`. Each
-crates.io publisher uses:
+The workspace's five crates are published and configured for trusted publishing: `rom-weaver-core`, `rom-weaver-checksum`, `rom-weaver-containers`, `rom-weaver-patches`, and `rom-weaver-cli`. Each crates.io publisher uses:
 
 - repository: `rom-weaver/rom-weaver`;
 - workflow: `cargo-publish.yml`;
 - environment: empty.
 
-crates.io requires a crate to be published once before its trusted publisher
-can be configured. If a new crate is added, publish its first version from the
-release pull request's final commit:
+crates.io requires a crate to be published once before its trusted publisher can be configured. If a new crate is added, publish its first version from the release pull request's final commit:
 
 ```bash
 cargo login
 cargo publish --locked --package <crate>
 ```
 
-Do not change the release pull request after this bootstrap publish. Configure
-the trusted publisher above, then merge. The automated Cargo job sees that the
-version already exists and skips it; later releases use short-lived OIDC
-credentials and do not need a stored Cargo token.
+Do not change the release pull request after this bootstrap publish. Configure the trusted publisher above, then merge. The automated Cargo job sees that the version already exists and skips it; later releases use short-lived OIDC credentials and do not need a stored Cargo token.
 
 ## npm trusted publishing
 
-Trusted publishing (OIDC) is enabled for all 11 npm packages, so publishing
-uses short-lived GitHub Actions credentials and no stored npm token.
+Trusted publishing (OIDC) is enabled for all 11 npm packages, so publishing uses short-lived GitHub Actions credentials and no stored npm token.
 
-The optional `NPM_BOOTSTRAP_TOKEN` secret remains available for a new package's
-first publication. Set `bootstrap: true` on only that package's publish matrix
-entry, publish it once, configure its trusted publisher, then remove the flag.
-Existing packages must continue through OIDC.
+The optional `NPM_BOOTSTRAP_TOKEN` secret remains available for a new package's first publication. Set `bootstrap: true` on only that package's publish matrix entry, publish it once, configure its trusted publisher, then remove the flag. Existing packages must continue through OIDC.
 
-The publish jobs already meet the mechanical requirements - `id-token: write`
-is set, and the Node 24 toolchain ships npm 11.16.0, above the 11.5.1 minimum.
+The publish jobs already meet the mechanical requirements - `id-token: write` is set, and the Node 24 toolchain ships npm 11.16.0, above the 11.5.1 minimum.
 
-One caveat decides the configuration. npm validates the OIDC claim against the
-**calling** workflow's filename, and `release.yml` reaches the publisher through
-`workflow_call`, so npm sees `release.yml` rather than `npm-publish.yml`. Only
-one trusted publisher may be configured per package, so register:
+One caveat decides the configuration. npm validates the OIDC claim against the **calling** workflow's filename, and `release.yml` reaches the publisher through `workflow_call`, so npm sees `release.yml` rather than `npm-publish.yml`. Only one trusted publisher may be configured per package, so register:
 
 - repository: `rom-weaver/rom-weaver`;
 - workflow: `release.yml` (filename only, no path);
 - environment: empty.
 
-That covers the release path and the "re-run failed jobs" retry, both of which
-execute under `release.yml`. Direct dispatch of `npm-publish.yml` is not
-available because npm would see the wrong workflow name. See "Retry a failed
-publication".
+That covers the release path and the "re-run failed jobs" retry, both of which execute under `release.yml`. Direct dispatch of `npm-publish.yml` is not available because npm would see the wrong workflow name. See "Retry a failed publication".
 
-The publish helper keeps its explicit `--provenance` flag; npm also generates
-provenance automatically for trusted publishing.
+The publish helper keeps its explicit `--provenance` flag; npm also generates provenance automatically for trusted publishing.
 
 ## Webapp hosting and the channel domains
 
-The deploy job in `ci.yml` publishes the tested webapp to **Cloudflare Pages**
-with `wrangler pages deploy` (Direct Upload). Cloudflare does not build the
-project, so it needs no WASI SDK and consumes no Cloudflare build minutes.
+The deploy job in `ci.yml` publishes the tested webapp to **Cloudflare Pages** with `wrangler pages deploy` (Direct Upload). Cloudflare does not build the project, so it needs no WASI SDK and consumes no Cloudflare build minutes.
 
-Three permanent channels and one pull-request preview project use separate
-Cloudflare Pages origins. They are not subpaths of one site because OPFS,
-service-worker scope, and Cache Storage are all per-origin; a shared origin
-would let a nightly build read and corrupt production's OPFS state.
+Three permanent channels and one pull-request preview project use separate Cloudflare Pages origins. They are not subpaths of one site because OPFS, service-worker scope, and Cache Storage are all per-origin; a shared origin would let a nightly build read and corrupt production's OPFS state.
 
 | Channel | Domain | Publishes on | Pages project |
 | --- | --- | --- | --- |
@@ -139,107 +85,43 @@ would let a nightly build read and corrupt production's OPFS state.
 | Nightly | `nightly.rom-weaver.com` | every push to `main`, and any release tag | `rom-weaver-nightly` |
 | Preview | `pr-<n>.rom-weaver-preview.pages.dev` | every first-party pull-request commit | `rom-weaver-preview` |
 
-The three permanent channels are a stability ladder, and a deploy refreshes its
-own channel **plus every less-stable one below it**. A stable release therefore
-publishes to production, beta *and* nightly; a prerelease publishes to beta and
-nightly. Without that cascade a quiet stretch on `main` would leave beta and
-nightly serving code older than production - the opposite of what their names
-promise, and useless for reproducing a release-day bug.
+The three permanent channels are a stability ladder, and a deploy refreshes its own channel **plus every less-stable one below it**. A stable release therefore publishes to production, beta *and* nightly; a prerelease publishes to beta and nightly. Without that cascade a quiet stretch on `main` would leave beta and nightly serving code older than production - the opposite of what their names promise, and useless for reproducing a release-day bug.
 
-Production is CI-gated by construction: only a release pull request whose
-required checks are green can reach the draft-first fan-out, and its tag does
-not exist until the final job publishes the draft. After that pull request
-merges, the release workflow starts from the merged PR event rather than
-waiting for a duplicate full CI run on the merge commit. `workflow_dispatch`
-accepts a `deploy_channel` input to force one channel manually; that override
-deploys only the channel named and does not cascade.
+Production is CI-gated by construction: only a release pull request whose required checks are green can reach the draft-first fan-out, and its tag does not exist until the final job publishes the draft. After that pull request merges, the release workflow starts from the merged PR event rather than waiting for a duplicate full CI run on the merge commit. `workflow_dispatch` accepts a `deploy_channel` input to force one channel manually; that override deploys only the channel named and does not cascade.
 
-Required repository secrets: `CLOUDFLARE_API_TOKEN` (needs **Account -
-Cloudflare Pages - Edit**, plus **Zone - DNS - Edit** to attach custom domains)
-and `CLOUDFLARE_ACCOUNT_ID`.
+Required repository secrets: `CLOUDFLARE_API_TOKEN` (needs **Account - Cloudflare Pages - Edit**, plus **Zone - DNS - Edit** to attach custom domains) and `CLOUDFLARE_ACCOUNT_ID`.
 
-The optional `CLOUDFLARE_ZONE_ID` secret enables the `/assets/*` zone Cache
-Rule. When it is set, the API token also needs **Zone - Cache Rules - Edit**.
+The optional `CLOUDFLARE_ZONE_ID` secret enables the `/assets/*` zone Cache Rule. When it is set, the API token also needs **Zone - Cache Rules - Edit**.
 
-The workflow creates its own Pages project on first run for a channel, so there
-is no manual bootstrap and no local `wrangler login` - which matters because
-`wrangler login` needs a localhost OAuth callback and cannot complete on a
-headless machine. An API token is the only credential this setup requires.
+The workflow creates its own Pages project on first run for a channel, so there is no manual bootstrap and no local `wrangler login` - which matters because `wrangler login` needs a localhost OAuth callback and cannot complete on a headless machine. An API token is the only credential this setup requires.
 
-DNS lives in the same Cloudflare account, so adding a custom domain to a Pages
-project creates the record automatically. Unlike the previous GitHub Pages
-setup, records should stay **proxied** (orange) - Pages is Cloudflare-native, so
-there is no origin-certificate chicken-and-egg and TLS is issued automatically.
+DNS lives in the same Cloudflare account, so adding a custom domain to a Pages project creates the record automatically. Unlike the previous GitHub Pages setup, records should stay **proxied** (orange) - Pages is Cloudflare-native, so there is no origin-certificate chicken-and-egg and TLS is issued automatically.
 
-The webapp builds with a relative base (`base: "./"` in `vite.config.mjs`), so
-it works unchanged at an apex domain, a project subpath, or the Forgejo mirror.
+The webapp builds with a relative base (`base: "./"` in `vite.config.mjs`), so it works unchanged at an apex domain, a project subpath, or the Forgejo mirror.
 
-One value is **not** relative: the bundle schema's `$id` in
-`docs/rom-weaver-bundle-v1.schema.json`, mirrored by `BUNDLE_JSON_SCHEMA_URL` in
-`crates/rom-weaver-cli/src/bundle_schema.rs` (a unit test asserts they match).
-It points at the public GitHub raw-content URL. The organization transfer
-intentionally moved that URL from `brandonocasey/rom-weaver` to
-`rom-weaver/rom-weaver`; the old URL still resolves, and existing bundles remain
-valid because `$schema` values are carried through verbatim and never matched
-against this constant. The published schema revision and bundle version are both
-v1; other bundle versions are rejected. Treat any later edit as a change of the
-schema's identity rather than a routine URL update.
+One value is **not** relative: the bundle schema's `$id` in `docs/rom-weaver-bundle-v1.schema.json`, mirrored by `BUNDLE_JSON_SCHEMA_URL` in `crates/rom-weaver-cli/src/bundle_schema.rs` (a unit test asserts they match). It points at the public GitHub raw-content URL. The organization transfer intentionally moved that URL from `brandonocasey/rom-weaver` to `rom-weaver/rom-weaver`; the old URL still resolves, and existing bundles remain valid because `$schema` values are carried through verbatim and never matched against this constant. The published schema revision and bundle version are both v1; other bundle versions are rejected. Treat any later edit as a change of the schema's identity rather than a routine URL update.
 
-Cloudflare Pages reads the generated `dist/_headers` file. It applies the
-COOP/COEP headers on the first response, blocks indexing outside production,
-caches content-hashed assets, and keeps the service worker revalidating. The
-service worker in `packages/rom-weaver-webapp/src/webapp/cache-service-worker.ts`
-remains the fallback for hosts that cannot set response headers and chooses the
-compatible COEP mode at runtime. Preserve and test both paths on Safari and iOS.
+Cloudflare Pages reads the generated `dist/_headers` file. It applies the COOP/COEP headers on the first response, blocks indexing outside production, caches content-hashed assets, and keeps the service worker revalidating. The service worker in `packages/rom-weaver-webapp/src/webapp/cache-service-worker.ts` remains the fallback for hosts that cannot set response headers and chooses the compatible COEP mode at runtime. Preserve and test both paths on Safari and iOS.
 
 ## Normal release flow
 
-Land changes on `main` through squash-merged pull requests. Use a Conventional
-Commit title for the pull request, because that title becomes the commit
-Release Please reads.
+Land changes on `main` through squash-merged pull requests. Use a Conventional Commit title for the pull request, because that title becomes the commit Release Please reads.
 
-Use `feat(scope): ...` for a minor release, `fix(scope): ...` for a patch, and
-`feat(scope)!: ...` (or a `BREAKING CHANGE:` footer) for a major release. Other
-allowed types do not trigger a release by themselves.
+Use `feat(scope): ...` for a minor release, `fix(scope): ...` for a patch, and `feat(scope)!: ...` (or a `BREAKING CHANGE:` footer) for a major release. Other allowed types do not trigger a release by themselves.
 
-Merging to `main` does not open a release pull request - nothing runs on push.
-When you want to release, go to **Actions → Release → Run workflow** (branch
-`main`). The workflow waits for a completed successful `CI` push run for that
-exact main commit before it creates or refreshes the release pull request. If
-that run fails or is cancelled, no release pull request is opened. The workflow
-then syncs the generated version metadata and captures the release screenshots.
-Re-dispatch whenever you want an open release pull request brought up to date.
+Merging to `main` does not open a release pull request - nothing runs on push. When you want to release, go to **Actions → Release → Run workflow** (branch `main`). The workflow waits for a completed successful `CI` push run for that exact main commit before it creates or refreshes the release pull request. If that run fails or is cancelled, no release pull request is opened. The workflow then syncs the generated version metadata and captures the release screenshots. Re-dispatch whenever you want an open release pull request brought up to date.
 
-The screenshot step reuses the `wasm-prod` artifact from that commit's CI run;
-if changed-path classification did not produce one, it rebuilds WASM from
-source and the run takes ~6.5 min longer.
+The screenshot step reuses the `wasm-prod` artifact from that commit's CI run; if changed-path classification did not produce one, it rebuilds WASM from source and the run takes ~6.5 min longer.
 
-The optional **Version to release as** input forces a specific version - the
-dispatch equivalent of a `Release-As:` footer. Leave it blank to let Release
-Please compute the bump from the commits.
+The optional **Version to release as** input forces a specific version - the dispatch equivalent of a `Release-As:` footer. Leave it blank to let Release Please compute the bump from the commits.
 
-Merging the release pull request creates a **draft** GitHub Release and runs
-every asset-producing publisher against that draft. The `publish-release` job publishes it, which is what creates the
-`vX.Y.Z` tag and in turn triggers the crates.io publish. The Homebrew and Scoop
-pushes run after that, because the manifests they write point at release
-download URLs that do not resolve while the release is a draft. Follow progress
-under GitHub's **Actions → Release** page.
+Merging the release pull request creates a **draft** GitHub Release and runs every asset-producing publisher against that draft. The `publish-release` job publishes it, which is what creates the `vX.Y.Z` tag and in turn triggers the crates.io publish. The Homebrew and Scoop pushes run after that, because the manifests they write point at release download URLs that do not resolve while the release is a draft. Follow progress under GitHub's **Actions → Release** page.
 
-> **Never publish a draft release by hand, and never re-cut a version whose
-> release was published.** Immutable releases are enabled, so publishing is a
-> one-way door: the release accepts no further assets *and permanently reserves
-> its tag name*, even if the release is later deleted. v0.6.0 was lost exactly
-> that way - it published before its assets were uploaded, every upload came
-> back `HTTP 422`, and the version could never be re-cut. A failed fan-out
-> leaves a draft, which is safe: delete the draft and merge the release pull
-> request again to retry the same version.
+> **Never publish a draft release by hand, and never re-cut a version whose release was published.** Immutable releases are enabled, so publishing is a one-way door: the release accepts no further assets *and permanently reserves its tag name*, even if the release is later deleted. v0.6.0 was lost exactly that way - it published before its assets were uploaded, every upload came back `HTTP 422`, and the version could never be re-cut. A failed fan-out leaves a draft, which is safe: delete the draft and merge the release pull request again to retry the same version.
 
 ### How a prerelease differs
 
-Every publisher keys off one thing: whether the version contains a hyphen
-(`0.6.0-alpha.1` is a prerelease, `0.6.0` is not). Nothing else needs setting -
-a `Release-As: X.Y.Z-alpha.N` footer, or the same value in the dispatch's
-**Version to release as** input, is enough to route the whole pipeline.
+Every publisher keys off one thing: whether the version contains a hyphen (`0.6.0-alpha.1` is a prerelease, `0.6.0` is not). Nothing else needs setting - a `Release-As: X.Y.Z-alpha.N` footer, or the same value in the dispatch's **Version to release as** input, is enough to route the whole pipeline.
 
 | Target | Release `0.6.0` | Prerelease `0.6.0-alpha.1` |
 | --- | --- | --- |
@@ -248,66 +130,34 @@ a `Release-As: X.Y.Z-alpha.N` footer, or the same value in the dispatch's
 | Docker tags | `0.6.0`, `0.6`, `latest` | `0.6.0-alpha.1`, `beta` |
 | crates.io | published | published |
 
-Docker also publishes a major series tag (`1`, `2`, ...), but **only from
-`1.0.0` on**. Pre-1.0 it is suppressed: a `0` tag would float across `0.5` ->
-`0.6`, and semver treats a pre-1.0 minor bump as breaking, so the tag would
-promise compatibility it cannot keep. It starts publishing itself once the
-first `1.0.0` ships. Before v1.0, Release Please treats breaking changes as
-minor bumps because `bump-minor-pre-major` is enabled.
+Docker also publishes a major series tag (`1`, `2`, ...), but **only from `1.0.0` on**. Pre-1.0 it is suppressed: a `0` tag would float across `0.5` -> `0.6`, and semver treats a pre-1.0 minor bump as breaking, so the tag would promise compatibility it cannot keep. It starts publishing itself once the first `1.0.0` ships. Before v1.0, Release Please treats breaking changes as minor bumps because `bump-minor-pre-major` is enabled.
 
-When a stable release follows one or more prereleases, the release workflow
-folds all same-version prerelease entries into the stable `CHANGELOG.md`
-section and into the GitHub Release notes. The prerelease sections are removed
-from the canonical changelog to avoid listing the same changes twice; the
-individual prerelease GitHub Releases retain their own notes.
+When a stable release follows one or more prereleases, the release workflow folds all same-version prerelease entries into the stable `CHANGELOG.md` section and into the GitHub Release notes. The prerelease sections are removed from the canonical changelog to avoid listing the same changes twice; the individual prerelease GitHub Releases retain their own notes.
 
-The rule exists because a prerelease that takes `latest` is effectively a
-shipped regression: `npm i @rom-weaver/cli` and
-`docker pull ghcr.io/rom-weaver/rom-weaver-cli` both resolve `latest` by
-default.
-Cargo needs no equivalent guard - crates.io has no
-dist-tags and Cargo will not resolve a prerelease unless a version request
-explicitly asks for one.
+The rule exists because a prerelease that takes `latest` is effectively a shipped regression: `npm i @rom-weaver/cli` and `docker pull ghcr.io/rom-weaver/rom-weaver-cli` both resolve `latest` by default. Cargo needs no equivalent guard - crates.io has no dist-tags and Cargo will not resolve a prerelease unless a version request explicitly asks for one.
 
-Note the npm dist-tag is derived from the **version field**, never from the
-`name@version` spec: several package names contain hyphens (`darwin-arm64`,
-`linux-x64-gnu`), and matching the spec would tag every platform package as a
-prerelease.
+Note the npm dist-tag is derived from the **version field**, never from the `name@version` spec: several package names contain hyphens (`darwin-arm64`, `linux-x64-gnu`), and matching the spec would tag every platform package as a prerelease.
 
 ## Retry a failed publication
 
-Run **Actions → Retry release**, enter the numeric run ID from the failed
-**Release** workflow URL, and start it. This reruns the failed jobs and their
-dependents while preserving successful jobs and the artifacts they produced.
-Do not choose **Re-run all jobs**: that needlessly repeats the native builds.
+Run **Actions → Retry release**, enter the numeric run ID from the failed **Release** workflow URL, and start it. This reruns the failed jobs and their dependents while preserving successful jobs and the artifacts they produced. Do not choose **Re-run all jobs**: that needlessly repeats the native builds.
 
-Because the release is still a draft, `publish-release` will not have run, so
-nothing is stamped immutable and the retry can still attach assets. A
-`publish-homebrew` or `publish-scoop` failure is the exception: those run after
-the release is published, so the release itself is fine and rerunning the one
-job is the whole fix. From the CLI, the same recovery is:
+Because the release is still a draft, `publish-release` will not have run, so nothing is stamped immutable and the retry can still attach assets. A `publish-homebrew` or `publish-scoop` failure is the exception: those run after the release is published, so the release itself is fine and rerunning the one job is the whole fix. From the CLI, the same recovery is:
 
 ```bash
 gh workflow run release-retry.yml -f run_id=29885072562
 ```
 
-Manual `workflow_dispatch` remains available for Cargo and Docker, taking the
-version without a `v` prefix, such as `0.6.1`:
+Manual `workflow_dispatch` remains available for Cargo and Docker, taking the version without a `v` prefix, such as `0.6.1`:
 
 - Publish Cargo crates;
 - Publish Docker images.
 
-These dispatches check out `v<version>`, so they only work **after** the release
-has been published and the tag exists. While the release is still a draft, rerun
-the jobs from the original Release run instead. Registry checks make Cargo
-retries safe when a previous attempt published only some packages.
+These dispatches check out `v<version>`, so they only work **after** the release has been published and the tag exists. While the release is still a draft, rerun the jobs from the original Release run instead. Registry checks make Cargo retries safe when a previous attempt published only some packages.
 
-If the fan-out cannot be salvaged, delete the draft release and re-merge the
-release pull request: an unpublished draft holds no reservation on its tag name.
+If the fan-out cannot be salvaged, delete the draft release and re-merge the release pull request: an unpublished draft holds no reservation on its tag name.
 
-Re-run failed npm jobs from the original Release run. npm validates the calling
-workflow's filename, so the reusable publisher must run under the registered
-`release.yml` trusted publisher rather than through a direct dispatch.
+Re-run failed npm jobs from the original Release run. npm validates the calling workflow's filename, so the reusable publisher must run under the registered `release.yml` trusted publisher rather than through a direct dispatch.
 
 ## Run the containers locally
 

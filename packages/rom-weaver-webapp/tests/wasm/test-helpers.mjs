@@ -227,8 +227,9 @@ function extractArgs(parsed) {
 }
 
 function checksumArgs(parsed) {
+  const algo = readOptionValues(parsed, "algo");
   return {
-    algo: readOptionValues(parsed, "algo"),
+    ...(algo.length ? { algo } : {}),
     input: requireOptionValue(parsed, "input"),
     ...(readOptionValues(parsed, "select").length ? { select: readOptionValues(parsed, "select") } : {}),
     ...filterFlags(parsed),

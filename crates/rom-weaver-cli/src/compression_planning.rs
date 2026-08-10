@@ -260,7 +260,7 @@ impl CliApp {
         no_compress: bool,
         compress_format: Option<String>,
         compress_codec: Vec<String>,
-        compress_level: CompressionLevelProfile,
+        compress_level: Option<CompressionLevelProfile>,
     ) -> Result<PatchApplyCompressionOptions> {
         if no_compress {
             if compress_format.is_some() {
@@ -278,6 +278,7 @@ impl CliApp {
                 requested_format: None,
                 codec: None,
                 level: None,
+                level_explicit: false,
                 profile: CompressionLevelProfile::Max,
             });
         }
@@ -300,8 +301,75 @@ impl CliApp {
             requested_format,
             codec,
             level,
-            profile: compress_level,
+            level_explicit: compress_level.is_some(),
+            profile: compress_level.unwrap_or_default(),
         })
+    }
+
+    /// Resolve the default patch-apply output mode after the selected ROM leaf
+    /// is known. An explicit compression flag keeps its historical precedence;
+    /// otherwise a registered container extension means compression and the
+    /// leaf's own extension means raw output.
+    pub(super) fn resolve_patch_apply_compression_options(
+        &self,
+        no_compress: bool,
+        compress_format: Option<String>,
+        compress_codec: Vec<String>,
+        compress_level: Option<CompressionLevelProfile>,
+        output: &Path,
+        extension_source: &Path,
+    ) -> Result<PatchApplyCompressionOptions> {
+        let mut options = Self::parse_patch_apply_compression_options(
+            no_compress,
+            compress_format,
+            compress_codec,
+            compress_level,
+        )?;
+        if no_compress {
+            return Ok(options);
+        }
+        if options.requested_format.is_some()
+            || options.codec.is_some()
+            || options.level.is_some()
+            || options.level_explicit
+        {
+            self.resolve_patch_apply_compression_plan(output, extension_source, &options)?;
+            return Ok(options);
+        }
+
+        let Some(output_extension) = output.extension().and_then(|value| value.to_str()) else {
+            return Err(RomWeaverError::Validation(
+                "output has no file extension; pass --no-compress for a raw ROM or use --compress-format <name>"
+                    .to_string(),
+            ));
+        };
+        if self.containers.find_by_output_extension(output).is_some() {
+            self.resolve_patch_apply_compression_plan(output, extension_source, &options)?;
+            return Ok(options);
+        }
+
+        let source_extension = extension_source
+            .extension()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty());
+        if source_extension
+            .is_some_and(|source_extension| source_extension.eq_ignore_ascii_case(output_extension))
+        {
+            if is_ambiguous_disc_image_extension(output_extension) {
+                return Err(RomWeaverError::Validation(format!(
+                    "output extension `.{output_extension}` is ambiguous between a raw ROM and a disc image; pass --no-compress or --compress-format <name>"
+                )));
+            }
+            options.enabled = false;
+            return Ok(options);
+        }
+
+        let source_hint = source_extension
+            .map(|extension| format!(" (selected ROM leaf extension is `.{extension}`)"))
+            .unwrap_or_else(|| " (the selected ROM leaf has no file extension)".to_string());
+        Err(RomWeaverError::Validation(format!(
+            "output extension `.{output_extension}` is neither a registered container nor the selected ROM leaf extension{source_hint}; pass --no-compress, --compress-format <name>, or use the ROM extension"
+        )))
     }
 
     /// Resolve a container output format from an explicit format flag and/or the output path's
@@ -408,6 +476,12 @@ impl CliApp {
             options.level,
             options.profile,
         );
+        if options.level_explicit && level.is_none() {
+            return Err(RomWeaverError::Validation(format!(
+                "{resolved_format} does not accept --compress-level"
+            )));
+        }
+        Self::validate_patch_apply_compression_codec(&resolved_format, codec.as_deref(), level)?;
 
         // Only append the container extension when the user gave an extensionless output name. A
         // name that already carries an extension (matching, or an explicit --compress-format that
@@ -440,6 +514,105 @@ impl CliApp {
             note: resolution.note,
             warning: resolution.warning,
         })
+    }
+
+    fn validate_patch_apply_compression_codec(
+        format: &str,
+        codec: Option<&str>,
+        level: Option<i32>,
+    ) -> Result<()> {
+        let Some(codec) = codec else {
+            return Ok(());
+        };
+        let metadata = compression_metadata();
+        let supported = match format.to_ascii_lowercase().as_str() {
+            "zip" | "zipx" => ["deflate", "store", "zstd"].as_slice(),
+            "7z" => ["lzma2"].as_slice(),
+            "rvz" | "z3ds" => ["zstd"].as_slice(),
+            "chd" => [
+                "store", "zstd", "lzma", "zlib", "huff", "flac", "cdzs", "cdlz", "cdzl", "cdfl",
+                "avhuff",
+            ]
+            .as_slice(),
+            _ => {
+                return Err(RomWeaverError::Validation(format!(
+                    "{format} does not accept --compress-codec"
+                )));
+            }
+        };
+        let requested_codecs = codec.split('+').map(str::trim).collect::<Vec<_>>();
+        if !format.eq_ignore_ascii_case("chd") && requested_codecs.len() > 1 {
+            return Err(RomWeaverError::Validation(format!(
+                "{format} accepts one --compress-codec value"
+            )));
+        }
+        let mut primary_metadata = None;
+        let mut canonical_codecs = Vec::with_capacity(requested_codecs.len());
+        for requested in requested_codecs {
+            let Some(codec_metadata) = metadata.codecs.iter().find(|entry| {
+                entry.name.eq_ignore_ascii_case(requested)
+                    || entry
+                        .aliases
+                        .iter()
+                        .any(|alias| alias.eq_ignore_ascii_case(requested))
+            }) else {
+                return Err(RomWeaverError::Validation(format!(
+                    "unsupported {format} codec `{requested}`"
+                )));
+            };
+            if !supported
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case(codec_metadata.name))
+            {
+                return Err(RomWeaverError::Validation(format!(
+                    "unsupported {format} codec `{requested}`"
+                )));
+            }
+            primary_metadata.get_or_insert(codec_metadata);
+            canonical_codecs.push(codec_metadata.name);
+        }
+        if format.eq_ignore_ascii_case("chd") {
+            if canonical_codecs.len() > 4 {
+                return Err(RomWeaverError::Validation(format!(
+                    "chd supports at most 4 codecs; received {}",
+                    canonical_codecs.len()
+                )));
+            }
+            if canonical_codecs
+                .first()
+                .is_some_and(|codec| *codec == "store")
+                && canonical_codecs.len() > 1
+            {
+                return Err(RomWeaverError::Validation(
+                    "chd codec `store` cannot be combined with additional codecs".to_string(),
+                ));
+            }
+            if canonical_codecs
+                .iter()
+                .skip(1)
+                .any(|codec| *codec == "avhuff")
+            {
+                return Err(RomWeaverError::Validation(
+                    "chd codec `avhuff` must be the first codec when multiple codecs are provided"
+                        .to_string(),
+                ));
+            }
+        }
+        if let (Some(level), Some(codec_metadata)) = (level, primary_metadata) {
+            let Some(range) = codec_metadata.level else {
+                return Err(RomWeaverError::Validation(format!(
+                    "{format} codec `{}` does not accept --level",
+                    codec_metadata.name
+                )));
+            };
+            if !(range.min..=range.max).contains(&level) {
+                return Err(RomWeaverError::Validation(format!(
+                    "compression level {level} is invalid for {format} codec `{}` (expected {}..={})",
+                    codec_metadata.name, range.min, range.max
+                )));
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn append_output_extension_if_missing(
