@@ -9877,6 +9877,9 @@ fn patch_apply_auto_header_still_tiebreaks_when_checksums_are_ignored() {
     assert_eq!(
         fs::read(temp.child("output.sfc").path()).expect("output"),
         expected
+    );
+}
+
 /// Shortest N64 ROM that carries a boot checksum: it covers 0x1000..0x101000.
 const N64_BOOT_CHECKSUM_END: usize = 0x101000;
 
