@@ -1,8 +1,6 @@
 # Screenshots and sample assets
 
-The documentation uses focused captures of real sample workflows. The committed
-images live in `docs/screenshots/`, with desktop and mobile versions in both
-light and dark themes.
+The documentation uses focused captures of real sample workflows. The committed images live in `docs/screenshots/`, with desktop and mobile versions in both light and dark themes.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -39,11 +37,7 @@ light and dark themes.
   <img src="../screenshots/apply-output-desktop-light.webp" width="2242" alt="Focused Apply output card on desktop">
 </picture>
 
-Mobile versions:
-[patch stack](../screenshots/apply-patches-mobile-light.webp)
-and [Apply output](../screenshots/apply-output-mobile-light.webp).
-The web guide selects these automatically on narrow screens and switches to
-their dark variants with the site theme.
+Mobile versions: [patch stack](../screenshots/apply-patches-mobile-light.webp) and [Apply output](../screenshots/apply-output-mobile-light.webp). The web guide selects these automatically on narrow screens and switches to their dark variants with the site theme.
 
 ## Create a patch
 
@@ -65,9 +59,7 @@ their dark variants with the site theme.
   <img src="../screenshots/create-output-desktop-light.webp" width="2242" alt="Focused Create patch output card on desktop">
 </picture>
 
-Mobile versions:
-[Original and Modified](../screenshots/create-inputs-mobile-light.webp)
-and [patch output](../screenshots/create-output-mobile-light.webp).
+Mobile versions: [Original and Modified](../screenshots/create-inputs-mobile-light.webp) and [patch output](../screenshots/create-output-mobile-light.webp).
 
 ## Create a bundle
 
@@ -78,8 +70,7 @@ and [patch output](../screenshots/create-output-mobile-light.webp).
   <img src="../screenshots/bundle-output-desktop-light.webp" width="2242" alt="Focused patch-only bundle options and Create ZIP Bundle action on desktop">
 </picture>
 
-The [mobile capture](../screenshots/bundle-output-mobile-light.webp)
-keeps the entire expanded Output Options card readable.
+The [mobile capture](../screenshots/bundle-output-mobile-light.webp) keeps the entire expanded Output Options card readable.
 
 ## Sample ROMs
 
@@ -87,10 +78,7 @@ keeps the entire expanded Output Options card readable.
 | :---: | :---: | :---: |
 | ![The original sample ROM displaying HELLO WORLD in an NES emulator](../screenshots/first-sample-hello-world.webp) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../screenshots/first-sample-modified-world.webp) | ![The sample ROM displaying MODIFIED ROM after both patches](../screenshots/first-sample-modified-rom.webp) |
 
-The webapp generates `first-weave.zip`, `first-create.zip`, and the loose
-homebrew ROMs from
-[`first-sample-assets.mjs`](../../packages/rom-weaver-webapp/scripts/first-sample-assets.mjs).
-The guided tours and automated tests use the same assets.
+The webapp generates `first-weave.zip`, `first-create.zip`, and the loose homebrew ROMs from [`first-sample-assets.mjs`](../../packages/rom-weaver-webapp/scripts/first-sample-assets.mjs). The guided tours and automated tests use the same assets.
 
 ## Regenerate the captures
 
@@ -101,10 +89,7 @@ ROM_WEAVER_SCREENSHOT_BASE_URL=http://127.0.0.1:4173/ \
   npm --prefix packages/rom-weaver-webapp run capture:screenshots
 ```
 
-The capture script opens the generated samples, waits for reading and checksum
-work to settle, and crops to the controls each guide explains. It renders
-desktop at 2x and mobile at 3x, then saves AVIF images with lossless WebP
-fallbacks.
+The capture script opens the generated samples, waits for reading and checksum work to settle, and crops to the controls each guide explains. It renders desktop at 2x and mobile at 3x, then saves AVIF images with lossless WebP fallbacks.
 
 To regenerate one subject while adjusting its crop:
 
@@ -114,5 +99,4 @@ ROM_WEAVER_SCREENSHOT_CASE=bundle-output \
   npm --prefix packages/rom-weaver-webapp run capture:screenshots
 ```
 
-The build verifies that every documented device and theme variant exists and
-is referenced by its guide.
+The build verifies that every documented device and theme variant exists and is referenced by its guide.

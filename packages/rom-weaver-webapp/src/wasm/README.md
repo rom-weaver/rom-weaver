@@ -1,7 +1,6 @@
 # Browser WASM runtime
 
-JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution,
-consumed within `@rom-weaver/webapp` through relative imports.
+JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution, consumed within `@rom-weaver/webapp` through relative imports.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -22,15 +21,13 @@ consumed within `@rom-weaver/webapp` through relative imports.
 - Dedicated browser worker client (`createBrowserWorkerClient`)
 - First-party TypeScript declarations
 
-Node.js, Electron, and Capacitor filesystem backends are intentionally omitted from this directory.
-Use the native `rom-weaver` CLI directly for Node workflows.
+Node.js, Electron, and Capacitor filesystem backends are intentionally omitted from this directory. Use the native `rom-weaver` CLI directly for Node workflows.
 
 ## Import paths
 
 Import the TypeScript sources directly with relative paths, for example:
 
-- `src/wasm/index.ts` (main entry: format metadata, command helpers, and
-  type-only OPFS exports)
+- `src/wasm/index.ts` (main entry: format metadata, command helpers, and type-only OPFS exports)
 - `src/wasm/generated/rom-weaver-format-metadata.ts`
 - `src/wasm/rom-weaver-browser-opfs-api.ts`
 - `src/wasm/workers/browser-worker-client.ts`
@@ -38,8 +35,7 @@ Import the TypeScript sources directly with relative paths, for example:
 
 ## Browser OPFS runner example
 
-`createRomWeaverBrowserOpfs` must run in a secure-context Dedicated Worker so it can use `FileSystemSyncAccessHandle`.
-It is not a main-thread API and will throw when called from `window`.
+`createRomWeaverBrowserOpfs` must run in a secure-context Dedicated Worker so it can use `FileSystemSyncAccessHandle`. It is not a main-thread API and will throw when called from `window`.
 
 ```js
 import { createRomWeaverBrowserOpfs } from './rom-weaver-browser-opfs-api.ts';
@@ -77,16 +73,13 @@ Runtime behavior:
 - WASI sees a single mounted directory: `/work`.
 - The browser worker runtime requires `SharedArrayBuffer` plus `crossOriginIsolated` and loads `rom-weaver-app.wasm`.
 - `runner.threaded` and `runner.wasmUrl` report the loaded runtime.
-- Pass browser picker `File` or `Blob` inputs through `virtualFiles`; paths
-  already produced in OPFS can be reused without copying.
+- Pass browser picker `File` or `Blob` inputs through `virtualFiles`; paths already produced in OPFS can be reused without copying.
 - Known typed-command output paths are created in OPFS before `_start()` because WASI Preview 1 filesystem calls are synchronous.
 - Dynamic files created during a run are flushed back to OPFS after `_start()` returns.
 - WASI argv0 is fixed to `rom-weaver`; constructor-level `program`, `argv0`, and `env` configuration is not supported.
 - Use the second argument to `run()` or `runJson()` for per-run `env` values when a command needs a supported runtime knob.
 
-Format-specific creation metadata belongs on the typed command. For example,
-SOLID's extended seven-string header can be requested without ambient
-environment variables:
+Format-specific creation metadata belongs on the typed command. For example, SOLID's extended seven-string header can be requested without ambient environment variables:
 
 ```js
 await runner.runJson({
@@ -140,13 +133,9 @@ worker.terminate();
 
 ## Build and package
 
-The [development guide](../../../../docs/development/development.md#build-and-run-the-webapp)
-owns the WASM build and dev-server procedure. Build artifacts are written to
-this directory by default.
+The [development guide](../../../../docs/development/development.md#build-and-run-the-webapp) owns the WASM build and dev-server procedure. Build artifacts are written to this directory by default.
 
-If you built artifacts to a custom directory (`ROM_WEAVER_WASM_OUT_DIR`), `build-wasm`
-syncs them in automatically. To sync a pre-built directory manually (run from
-`packages/rom-weaver-webapp`):
+If you built artifacts to a custom directory (`ROM_WEAVER_WASM_OUT_DIR`), `build-wasm` syncs them in automatically. To sync a pre-built directory manually (run from `packages/rom-weaver-webapp`):
 
 ```bash
 ARTIFACT_DIR="/path/to/wasm-artifacts"

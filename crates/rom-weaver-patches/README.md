@@ -13,33 +13,17 @@
   <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
 </p>
 
-> **Beta software, published so the CLI can be.** This crate exists to build
-> [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the
-> `rom-weaver` command is the only supported interface. The Rust API is not
-> documented beyond this page, changes without notice between minor releases,
-> and using it in another project is unsupported.
+> **Beta software, published so the CLI can be.** This crate exists to build [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the `rom-weaver` command is the only supported interface. The Rust API is not documented beyond this page, changes without notice between minor releases, and using it in another project is unsupported.
 
 ## What does this crate do?
 
-One file per patch format, each implementing `rom-weaver-core`'s `PatchHandler`
-trait, plus the registry that probes an unknown patch file down to a format.
+One file per patch format, each implementing `rom-weaver-core`'s `PatchHandler` trait, plus the registry that probes an unknown patch file down to a format.
 
-- **Formats.** IPS, IPS32, BPS, UPS, xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40,
-  APS (N64 and GBA), SOLID, MOD/PMSR, DPS, DLDI, GDIFF, HDiffPatch, BSP, PAT,
-  EBP, and more than twenty in total. NINJA1 is recognized on probe but cannot
-  be applied.
-- **Apply and create.** Most formats round-trip: generate a distributable patch
-  from an original and a modified file, then apply it back. BSP and HDiffPatch
-  can only be applied, not created.
-- **Validation before writing.** `validate` dry-run applies to a temp path, so
-  a patch chain can be checked end to end before anything is written.
-- **Checksum discipline.** Formats that carry expected input/output checksums
-  are enforced against `rom-weaver-checksum`. Formats that carry none, such as
-  IPS, cannot prove that the chosen base is correct on their own; the CLI can
-  add that check with `--expect-in`.
-- **Parallel VCDIFF.** The xdelta encoder splits window encoding across
-  threads, and `apply_patch_bytes` exposes in-memory VCDIFF apply for callers
-  that patch individual files inside a container.
+- **Formats.** IPS, IPS32, BPS, UPS, xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS (N64 and GBA), SOLID, MOD/PMSR, DPS, DLDI, GDIFF, HDiffPatch, BSP, PAT, EBP, and more than twenty in total. NINJA1 is recognized on probe but cannot be applied.
+- **Apply and create.** Most formats round-trip: generate a distributable patch from an original and a modified file, then apply it back. BSP and HDiffPatch can only be applied, not created.
+- **Validation before writing.** `validate` dry-run applies to a temp path, so a patch chain can be checked end to end before anything is written.
+- **Checksum discipline.** Formats that carry expected input/output checksums are enforced against `rom-weaver-checksum`. Formats that carry none, such as IPS, cannot prove that the chosen base is correct on their own; the CLI can add that check with `--expect-in`.
+- **Parallel VCDIFF.** The xdelta encoder splits window encoding across threads, and `apply_patch_bytes` exposes in-memory VCDIFF apply for callers that patch individual files inside a container.
 
 ## Usage
 
@@ -47,8 +31,7 @@ trait, plus the registry that probes an unknown patch file down to a format.
 cargo add rom-weaver-patches
 ```
 
-`cargo add` selects the current release. To follow the exact-pinning guidance
-below, change its generated requirement to `=X.Y.Z`.
+`cargo add` selects the current release. To follow the exact-pinning guidance below, change its generated requirement to `=X.Y.Z`.
 
 ## Related crates
 
@@ -61,11 +44,7 @@ below, change its generated requirement to `=X.Y.Z`.
 
 ## Stability
 
-rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in
-minor releases; this crate is the least settled surface in the project. The
-supported way to use rom-weaver is the `rom-weaver` CLI; if you depend on this
-crate anyway, pin an exact version and expect to do the migration work
-yourself.
+rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in minor releases; this crate is the least settled surface in the project. The supported way to use rom-weaver is the `rom-weaver` CLI; if you depend on this crate anyway, pin an exact version and expect to do the migration work yourself.
 
 ## Documentation
 
@@ -74,6 +53,4 @@ yourself.
 
 ## License
 
-Copyright © Brandon Casey. Licensed under
-[AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
-Bundled third-party components retain their own licenses.
+Copyright © Brandon Casey. Licensed under [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE). Bundled third-party components retain their own licenses.

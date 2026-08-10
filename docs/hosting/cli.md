@@ -1,10 +1,8 @@
-<!-- START doctoc -->
-<!-- END doctoc -->
+<!-- START doctoc --> <!-- END doctoc -->
 
 # CLI usage has moved
 
-The CLI documentation now lives in focused pages. Update any bookmark or link
-that points here:
+The CLI documentation now lives in focused pages. Update any bookmark or link that points here:
 
 | Was on this page | Now at |
 | --- | --- |
