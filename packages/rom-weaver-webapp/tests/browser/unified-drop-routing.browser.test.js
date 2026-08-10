@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { createLocalizer } from "../../src/presentation/localization/index.ts";
 import {
   collectRomDropFiles,
   getRomDropNotice,
@@ -9,6 +10,7 @@ import {
 
 const file = (name) => new File([], name);
 const names = (files) => files.map((entry) => (entry ? entry.name : null));
+const localizer = createLocalizer("en");
 
 test("collectRomDropFiles keeps roms and archives but drops patches", () => {
   const result = collectRomDropFiles([file("game.sfc"), file("hack.ips"), file("bundle.zip")]);
@@ -43,7 +45,7 @@ test("routeByOrder returns ignored patches for a user-facing notice", () => {
   const result = routeByOrder([file("hack.ips"), file("game.sfc")], [false, false]);
   expect(names(result.assignment)).toEqual(["game.sfc", null]);
   expect(names(result.ignoredPatches)).toEqual(["hack.ips"]);
-  expect(getRomDropNotice(result)).toContain("Patches belong in Apply");
+  expect(getRomDropNotice(result, localizer)).toContain("Patches belong in Apply");
 });
 
 test("getRomDropNotice bounds unused names", () => {
@@ -51,7 +53,7 @@ test("getRomDropNotice bounds unused names", () => {
     Array.from({ length: 5 }, (_, index) => file(`${String(index).repeat(100)}.sfc`)),
     [],
   );
-  const notice = getRomDropNotice(result);
+  const notice = getRomDropNotice(result, localizer);
   expect(notice).toContain("and 2 more");
   expect(notice.length).toBeLessThan(300);
 });

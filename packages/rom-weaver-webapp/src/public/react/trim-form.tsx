@@ -40,6 +40,7 @@ import {
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
+  useUiLocalizer,
 } from "./settings-context.tsx";
 import { TrimPatchFormView, type TrimPatchFormViewModel } from "./trim-form-view.tsx";
 import { getRomDropNotice, getRomDropNoticeLevel, routeSingleRom } from "./unified-drop-routing.ts";
@@ -489,11 +490,14 @@ type InternalTrimPatchFormProps = TrimPatchFormProps & {
   trimWorkflow?: typeof TrimWorkflow;
 };
 
+type PendingTrimDrop = ReturnType<typeof routeSingleRom>;
+
 function TrimPatchForm(props: TrimPatchFormProps) {
   const internalProps = props as InternalTrimPatchFormProps;
   const trimWorkflowOverride = internalProps.trimWorkflow;
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
+  const localizer = useUiLocalizer();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
   const cancelSelectionRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
@@ -516,8 +520,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const [message, setMessage] = useState("");
   const [messageDismissible, setMessageDismissible] = useState(false);
   const [messagePlacement, setMessagePlacement] = useState<TrimMessagePlacement | null>(null);
-  const [dropNotice, setDropNotice] = useState("");
-  const [dropNoticeLevel, setDropNoticeLevel] = useState<"warn" | "error">("warn");
+  const [dropNoticeRouting, setDropNoticeRouting] = useState<PendingTrimDrop | null>(null);
   const [errorCode, setErrorCode] = useState("");
   const [sourceState, setSourceState] = useState<TrimWorkflowSourceState | null>(null);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
@@ -541,6 +544,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const source = props.source === undefined ? internalSource : props.source;
   const settings = props.settings || internalSettings || providerSettings;
+  const dropNotice = dropNoticeRouting ? getRomDropNotice(dropNoticeRouting, localizer) : "";
+  const dropNoticeLevel = dropNoticeRouting ? getRomDropNoticeLevel(dropNoticeRouting) : "warn";
   const settingsLanguage = (settings as { language?: string }).language;
   const traceSettingsRef = useRef(settings);
   const onErrorRef = useRef(props.onError);
@@ -686,8 +691,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const updateSource = (file: BinarySource | null) => {
     resetWorkflowOutput();
     stagedTrimWorkflowGenerationRef.current += 1;
-    setDropNotice("");
-    setDropNoticeLevel("warn");
+    setDropNoticeRouting(null);
     setSourceState(null);
     if (props.source === undefined) setInternalSource(file);
     props.onSourceChange?.(file);
@@ -699,8 +703,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const handleUnifiedDrop = (files: File[]) => {
     const routed = routeSingleRom(files);
     if (routed.source) updateSource(routed.source);
-    setDropNotice(getRomDropNotice(routed));
-    setDropNoticeLevel(getRomDropNoticeLevel(routed));
+    setDropNoticeRouting(routed);
   };
 
   // Forward a page-level drop (dragging anywhere on the page) to the unified

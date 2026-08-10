@@ -1,4 +1,5 @@
 import { createLogger } from "../../lib/logging.ts";
+import type { Localizer } from "../../presentation/localization/index.ts";
 import { classifyDroppedFiles } from "./file-classification.ts";
 
 /**
@@ -101,14 +102,16 @@ const routeSingleRom = (files: File[]): SingleRomDropRouting => {
   return { ignoredPatches, source: source || null, unused };
 };
 
-const getRomDropNotice = ({ ignoredPatches, unused }: Pick<RomDropRouting, "ignoredPatches" | "unused">) => {
+const getRomDropNotice = (
+  { ignoredPatches, unused }: Pick<RomDropRouting, "ignoredPatches" | "unused">,
+  localizer: Pick<Localizer, "message" | "messageCount">,
+) => {
   const notices: string[] = [];
-  if (ignoredPatches.length) notices.push("Patches belong in Apply and were ignored.");
+  if (ignoredPatches.length) notices.push(localizer.message("ui.drop.patchesIgnored"));
   if (unused.length) {
     const shown = unused.slice(0, DROP_NOTICE_NAME_LIMIT).map(formatDropNoticeName);
     const remaining = unused.length - shown.length;
-    const remainder = remaining > 0 ? `, and ${remaining} more` : "";
-    notices.push(`Unused inputs: ${shown.join(", ")}${remainder}.`);
+    notices.push(localizer.messageCount("ui.drop.unusedInputs", remaining, { names: shown.join(", ") }));
   }
   return notices.join(" ");
 };

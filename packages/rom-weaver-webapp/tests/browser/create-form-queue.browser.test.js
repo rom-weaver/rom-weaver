@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { CreatePatchForm } from "../../src/public/react/create-patch-form.tsx";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 
 const workflowMockState = {
   instances: [],
@@ -326,18 +327,22 @@ test("Create asks before pairing a dropped duplicate with an existing ROM", asyn
   const duplicateOptions = { lastModified: 1700000000000 };
   mount(
     createElement(
-      CreatePatchForm,
-      withCreateWorkflowMock({
-        defaultOriginal: new File([], "same.sfc", duplicateOptions),
-        pageDrop: {
-          files: [new File([], "same.sfc", duplicateOptions)],
-          id: 1,
-        },
-      }),
+      RomWeaverSettingsProvider,
+      { settings: { language: "es" } },
+      createElement(
+        CreatePatchForm,
+        withCreateWorkflowMock({
+          defaultOriginal: new File([], "same.sfc", duplicateOptions),
+          pageDrop: {
+            files: [new File([], "same.sfc", duplicateOptions)],
+            id: 1,
+          },
+        }),
+      ),
     ),
   );
 
-  await expect.poll(() => document.querySelector(".confirm-card")?.textContent || "").toContain("Use duplicate ROMs");
+  await expect.poll(() => document.querySelector(".confirm-card")?.textContent || "").toContain("Usar ROM duplicadas");
   expect(document.querySelector("#patch-builder-row-modified .file")).toBeNull();
 
   document.querySelector(".confirm-card button.btn.primary")?.click();

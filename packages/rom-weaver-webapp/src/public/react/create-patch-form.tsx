@@ -52,6 +52,7 @@ import {
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
+  useUiLocalizer,
 } from "./settings-context.tsx";
 import { getRomDropNotice, getRomDropNoticeLevel, routeByOrder } from "./unified-drop-routing.ts";
 import { getDefaultCreateOutputName, getReactBinarySourceFileName } from "./workflow-adapters.ts";
@@ -351,6 +352,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   );
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
+  const localizer = useUiLocalizer();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
   const cancelSelectionRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
@@ -378,8 +380,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const [message, setMessage] = useState("");
   const [messageDismissible, setMessageDismissible] = useState(false);
   const [messagePlacement, setMessagePlacement] = useState<CreateMessagePlacement | null>(null);
-  const [dropNotice, setDropNotice] = useState("");
-  const [dropNoticeLevel, setDropNoticeLevel] = useState<"warn" | "error">("warn");
+  const [dropNoticeRouting, setDropNoticeRouting] = useState<PendingCreateDrop | null>(null);
   const [pendingDuplicateDrop, setPendingDuplicateDrop] = useState<PendingCreateDrop | null>(null);
   const [originalState, setOriginalState] = useState<CreateDisplaySourceState | null>(null);
   const [modifiedState, setModifiedState] = useState<CreateDisplaySourceState | null>(null);
@@ -409,6 +410,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const original = props.original === undefined ? internalOriginal : props.original;
   const modified = props.modified === undefined ? internalModified : props.modified;
   const settings = props.settings || internalSettings || providerSettings;
+  const dropNotice = dropNoticeRouting ? getRomDropNotice(dropNoticeRouting, localizer) : "";
+  const dropNoticeLevel = dropNoticeRouting ? getRomDropNoticeLevel(dropNoticeRouting) : "warn";
   const originalSourceKey = useMemo(
     () => (original ? getBinarySourceListStableIds([original])[0] || "" : ""),
     [original],
@@ -624,8 +627,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const updateOriginal = (file: BinarySource | null) => {
     resetWorkflowOutput();
-    setDropNotice("");
-    setDropNoticeLevel("warn");
+    setDropNoticeRouting(null);
     setPendingDuplicateDrop(null);
     setOriginalState(null);
     if (props.original === undefined) setInternalOriginal(file);
@@ -634,8 +636,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const updateModified = (file: BinarySource | null) => {
     resetWorkflowOutput();
-    setDropNotice("");
-    setDropNoticeLevel("warn");
+    setDropNoticeRouting(null);
     setPendingDuplicateDrop(null);
     setModifiedState(null);
     if (props.modified === undefined) setInternalModified(file);
@@ -650,8 +651,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     const [originalFile, modifiedFile] = routed.assignment;
     if (originalFile) updateOriginal(originalFile);
     if (modifiedFile) updateModified(modifiedFile);
-    setDropNotice(getRomDropNotice(routed));
-    setDropNoticeLevel(getRomDropNoticeLevel(routed));
+    setDropNoticeRouting(routed);
   };
   const handleUnifiedDrop = (files: File[]) => {
     const routed = routeByOrder(files, [!!original, !!modified]);
@@ -660,8 +660,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       (source): source is BinarySource => source !== null && source !== undefined,
     );
     if (assigned.length > 0 && hasDuplicateBinarySources(selectedSources)) {
-      setDropNotice("");
-      setDropNoticeLevel("warn");
+      setDropNoticeRouting(null);
       setPendingDuplicateDrop(routed);
       return;
     }
@@ -1069,9 +1068,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         {candidateSelectionDialog}
         {pendingDuplicateDrop ? (
           <ConfirmDialog
-            body="The selected inputs appear to be the same ROM. Use them as Original and Modified?"
-            cancelLabel="Cancel"
-            confirmLabel="Use duplicate ROMs"
+            body={localizer.message("ui.drop.duplicateBody")}
+            cancelLabel={localizer.message("ui.common.cancel")}
+            confirmLabel={localizer.message("ui.drop.duplicateConfirm")}
             onCancel={() => setPendingDuplicateDrop(null)}
             onConfirm={() => {
               if (!pendingDuplicateDrop) return;
@@ -1080,7 +1079,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
               applyRoutedDrop(routed);
             }}
             open
-            title="Use duplicate ROMs?"
+            title={localizer.message("ui.drop.duplicateTitle")}
           />
         ) : null}
         {sampleTutorialActive ? (
@@ -1095,7 +1094,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     ),
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
-      addLabel: "Add a ROM",
+      addLabel: localizer.message("ui.drop.addRom"),
       afterDropZone: createSourcesActuallyEmpty ? (
         <>
           {dropNotice ? (

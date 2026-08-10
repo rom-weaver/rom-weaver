@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test } from "vitest";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { TrimPatchForm } from "../../src/public/react/trim-form.tsx";
 
 const workflowMockState = {
@@ -197,16 +198,20 @@ afterEach(() => {
 test("Trim explains that dropped patches belong in Apply", async () => {
   mount(
     createElement(
-      TrimPatchForm,
-      withTrimWorkflowMock({
-        pageDrop: { files: [new File([], "hack.ips")], id: 1 },
-      }),
+      RomWeaverSettingsProvider,
+      { settings: { language: "es" } },
+      createElement(
+        TrimPatchForm,
+        withTrimWorkflowMock({
+          pageDrop: { files: [new File([], "hack.ips")], id: 1 },
+        }),
+      ),
     ),
   );
 
   await expect
     .poll(() => document.getElementById("trim-builder-input-notice")?.textContent || "")
-    .toContain("Patches belong in Apply");
+    .toContain("Los parches corresponden a Aplicar");
   expect(document.querySelector("#trim-builder-row-source .file")).toBeNull();
 });
 

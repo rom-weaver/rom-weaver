@@ -75,6 +75,11 @@ msgstr "Akzentfarbe"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.addRom"
+msgstr "ROM hinzufügen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "Alles lokal in deinem Browser — deine Dateien verlassen nie deinen Rechner."
 
@@ -162,6 +167,11 @@ msgstr "Browser-Tab"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingDesc"
 msgstr "Die App wird für die Offline-Nutzung zwischengespeichert…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.common.cancel"
+msgstr "Abbrechen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -510,6 +520,11 @@ msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.patchesIgnored"
+msgstr "Patches gehören zu Anwenden und wurden ignoriert."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
 msgstr "Eine gepatchte ROM im Emulator spielen, direkt im Browser,"
 
@@ -730,6 +745,11 @@ msgstr "Die gewählte Eingabe ist ungültig."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.duplicateBody"
+msgstr "Die ausgewählten Eingaben scheinen dieselbe ROM zu sein. Als Original-ROM und modifizierte ROM verwenden?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.INVALID_SETTINGS"
 msgstr "Die gewählten Einstellungen sind ungültig."
 
@@ -790,6 +810,11 @@ msgstr "Verwandle eine Original-ROM und ihre modifizierte Version, ob komprimier
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.unusedInputs"
+msgstr "Nicht verwendete Eingaben: {names}{count, plural, =0 {} one { und eine weitere} other { und # weitere}}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.update"
 msgstr "Update verfügbar"
 
@@ -797,6 +822,16 @@ msgstr "Update verfügbar"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Update bereit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.duplicateConfirm"
+msgstr "Doppelte ROMs verwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.duplicateTitle"
+msgstr "Doppelte ROMs verwenden?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
