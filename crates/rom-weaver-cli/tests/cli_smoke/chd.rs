@@ -82,6 +82,57 @@ fn checksum_chd_uses_raw_sha1_fast_path_for_single_payload() {
 }
 
 #[test]
+fn checksum_chd_reuses_raw_sha1_with_default_algorithms() {
+    let temp = setup_temp_dir();
+    let source = (0..32_768)
+        .map(|index| (index % 211) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
+
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.bin").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd",
+            "--json",
+        ],
+        0,
+    );
+
+    let output = command_stdout(
+        &[
+            "checksum",
+            "--input",
+            chd_path.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let checksums = json["details"]["checksums"]
+        .as_object()
+        .expect("checksum details");
+    for algorithm in ["crc32", "md5", "sha1"] {
+        assert_eq!(
+            checksums[algorithm],
+            checksum_value(temp.child("disc.bin").path(), algorithm),
+            "unexpected {algorithm} checksum",
+        );
+    }
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("sha1 reused from chd raw_sha1 metadata"));
+}
+
+#[test]
 fn checksum_chd_cd_does_not_use_raw_sha1_fast_path() {
     let temp = setup_temp_dir();
     let source = (0..(8 * 2352))

@@ -23,33 +23,30 @@ pub(super) struct ChecksumStreamOptions<'a> {
 }
 
 impl CliApp {
-    pub(super) fn try_run_checksum_chd_raw_sha1_fast_path(
+    pub(super) fn try_get_chd_raw_sha1(
         &self,
         source: &Path,
         options: &ChecksumStreamOptions,
         context: &OperationContext,
-        thread_execution: Option<ThreadExecution>,
-    ) -> Result<Option<OperationReport>> {
+    ) -> Result<Option<String>> {
         let ChecksumStreamOptions {
             algo,
             select,
             kind_filter,
             no_extract,
-            no_trim_fix,
             start,
             length,
             ..
         } = *options;
         if self.interactive_selection_enabled
             || no_extract
-            || !no_trim_fix
             || !select.is_empty()
             || start.is_some()
             || length.is_some()
+            || !algo
+                .iter()
+                .any(|algorithm| algorithm.eq_ignore_ascii_case("sha1"))
         {
-            return Ok(None);
-        }
-        if algo.len() != 1 || !algo[0].eq_ignore_ascii_case("sha1") {
             return Ok(None);
         }
 
@@ -83,6 +80,26 @@ impl CliApp {
         if !Self::is_valid_sha1_hex(&raw_sha1) {
             return Ok(None);
         }
+
+        Ok(Some(raw_sha1))
+    }
+
+    pub(super) fn try_run_checksum_chd_raw_sha1_fast_path(
+        &self,
+        source: &Path,
+        options: &ChecksumStreamOptions,
+        context: &OperationContext,
+        thread_execution: Option<ThreadExecution>,
+    ) -> Result<Option<OperationReport>> {
+        let ChecksumStreamOptions {
+            algo, no_trim_fix, ..
+        } = *options;
+        if !no_trim_fix || algo.len() != 1 || !algo[0].eq_ignore_ascii_case("sha1") {
+            return Ok(None);
+        }
+        let Some(raw_sha1) = self.try_get_chd_raw_sha1(source, options, context)? else {
+            return Ok(None);
+        };
 
         let mut checksums = BTreeMap::new();
         checksums.insert("sha1".to_string(), raw_sha1.clone());

@@ -934,6 +934,7 @@ impl CliApp {
             context,
             "ingest",
             "checksum",
+            None,
             &mut |progress| {
                 self.emit_running(
                     OperationLabel {
