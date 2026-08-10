@@ -17,11 +17,18 @@ const LOAD_BEARING_UI_IDS = [
   "ui.tools.more",
   "ui.settings.title",
   "ui.common.copy",
+  "ui.common.cancel",
   "ui.common.close",
   "ui.common.dismiss",
   "ui.update.ready",
   "ui.update.reload",
   "ui.drop.release",
+  "ui.drop.addRom",
+  "ui.drop.duplicateBody",
+  "ui.drop.duplicateConfirm",
+  "ui.drop.duplicateTitle",
+  "ui.drop.patchesIgnored",
+  "ui.drop.unusedInputs",
   "ui.footer.donate",
   "ui.env.threads",
   "ui.log.filter",
@@ -47,6 +54,8 @@ describe("ui catalog", () => {
     expect(es.message("ui.common.copy")).toBe("Copiar");
     expect(de.message("ui.common.copy")).toBe("Kopieren");
     expect(en.message("ui.common.copy")).toBe("Copy");
+    expect(es.message("ui.drop.duplicateConfirm")).toBe("Usar ROM duplicadas");
+    expect(de.message("ui.drop.duplicateConfirm")).toBe("Doppelte ROMs verwenden");
     expect(es.message("ui.step.apply")).toBe("Aplicar");
     expect(de.message("ui.step.apply")).toBe("Anwenden");
     expect(en.message("ui.step.apply")).toBe("Apply");
@@ -69,6 +78,19 @@ describe("messageCount", () => {
     // Spanish selects a distinct plural form and translates instead of echoing English.
     expect(es.messageCount("ui.patch.offCount", 1)).toMatch(/^1 parche está/);
     expect(es.messageCount("ui.patch.offCount", 2)).toMatch(/^2 parches están/);
+  });
+
+  it("localizes bounded unused-input lists", () => {
+    const en = createLocalizer("en");
+    const es = createLocalizer("es");
+    const de = createLocalizer("de");
+    expect(en.messageCount("ui.drop.unusedInputs", 0, { names: "a.sfc" })).toBe("Unused inputs: a.sfc.");
+    expect(es.messageCount("ui.drop.unusedInputs", 2, { names: "a.sfc, b.sfc, c.sfc" })).toBe(
+      "Entradas sin usar: a.sfc, b.sfc, c.sfc y 2 más.",
+    );
+    expect(de.messageCount("ui.drop.unusedInputs", 1, { names: "a.sfc, b.sfc, c.sfc" })).toBe(
+      "Nicht verwendete Eingaben: a.sfc, b.sfc, c.sfc und eine weitere.",
+    );
   });
 });
 

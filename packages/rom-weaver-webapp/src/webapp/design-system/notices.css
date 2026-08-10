@@ -21,6 +21,7 @@
 .rw-app .notice .body {
   flex: 1 1 auto;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .rw-app .notice.warn {
   color: var(--ink);

@@ -103,9 +103,7 @@ Not every command takes all four. `ingest` has `--select` and `--no-ignore` only
 
 ## Checksum
 
-`checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing
-`--algo` replaces that default set; repeat the flag or separate values with
-commas to compute multiple algorithms.
+`checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
 
 ## Patching
 

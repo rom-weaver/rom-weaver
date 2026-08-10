@@ -32,7 +32,7 @@ Write down the region, revision, and header state now. The Create cards will sho
 ## Add Original and Modified
 
 1. Open [Create](https://rom-weaver.com/create).
-2. Drop both files onto **0x01 Inputs**, or choose **Add files** and select them. The shorter filename usually becomes Original and the longer one Modified.
+2. Drop both files onto **0x01 Inputs**, or choose **Add files** and select them. If more ROM candidates are available than Create can use, choose the Original and Modified files from the list. Extra files are not staged after you choose. If both files appear to be the same ROM, confirm before using them as a pair. Add patches on **Apply** instead.
 3. Check the labels on **0x02 Original** and **0x03 Modified**.
 4. If they landed backwards, choose **Swap** between the two cards.
 5. Wait until reading and checksum work finishes.
