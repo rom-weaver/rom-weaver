@@ -142,6 +142,80 @@ fn checksum_chd_reuses_raw_sha1_with_default_algorithms() {
 }
 
 #[test]
+fn checksum_chd_does_not_reuse_raw_sha1_after_nested_extract() {
+    let temp = setup_temp_dir();
+    let inner_path = temp.child("game.bin");
+    fs::write(
+        inner_path.path(),
+        (0..32_768)
+            .map(|index| (index % 211) as u8)
+            .collect::<Vec<_>>(),
+    )
+    .expect("fixture");
+
+    let nested_path = temp.child("disc.bin");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            inner_path.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            nested_path.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            nested_path.path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd",
+            "--json",
+        ],
+        0,
+    );
+
+    let output = command_stdout(
+        &[
+            "checksum",
+            "--input",
+            chd_path.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let checksums = json["details"]["checksums"]
+        .as_object()
+        .expect("checksum details");
+    for algorithm in ["crc32", "md5", "sha1"] {
+        assert_eq!(
+            checksums[algorithm],
+            checksum_value(inner_path.path(), algorithm),
+            "unexpected {algorithm} checksum",
+        );
+    }
+    assert!(
+        !json["label"]
+            .as_str()
+            .expect("label")
+            .contains("sha1 reused from chd raw_sha1 metadata")
+    );
+}
+
+#[test]
 fn checksum_chd_cd_does_not_use_raw_sha1_fast_path() {
     let temp = setup_temp_dir();
     let source = (0..(8 * 2352))

@@ -243,8 +243,16 @@ impl CliApp {
         };
         let checksum_algorithm_count = request.algorithms.len();
         let variants_enabled = !user_requested_range;
-        let precomputed_raw_checksums =
-            chd_raw_sha1.map(|raw_sha1| BTreeMap::from([(String::from("sha1"), raw_sha1)]));
+        if chd_raw_sha1.is_some() && extracted_archives != 1 {
+            trace!(
+                resolved_source = %resolved_source.display(),
+                extracted_archives,
+                "skipping chd raw_sha1 metadata because checksum source did not resolve directly"
+            );
+        }
+        let precomputed_raw_checksums = chd_raw_sha1
+            .filter(|_| extracted_archives == 1)
+            .map(|raw_sha1| BTreeMap::from([(String::from("sha1"), raw_sha1)]));
         let mut report = if variants_enabled {
             self.run_checksum_variants_with_progress(
                 &request,
