@@ -230,6 +230,7 @@ test("Trim reports overflow inputs without replacing the first ROM", async () =>
     .poll(() => document.querySelector("#trim-builder-row-source .card")?.textContent || "")
     .toContain("first.bin");
   expect(document.querySelector("#trim-builder-row-source .card")?.textContent || "").not.toContain("unused.bin");
+  expect(document.getElementById("trim-builder-input-notice")?.classList.contains("warn")).toBe(true);
 });
 
 test("trim output edits stay enabled while queued and cancel the queued run", async () => {

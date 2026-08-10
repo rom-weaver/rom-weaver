@@ -47,7 +47,8 @@ show checksums you can copy into the release notes later.
 2. Drop both files onto **0x01 Inputs**, or choose **Add files** and select
    them. The first non-patch file becomes Original and the second becomes
    Modified. Extra files remain unused and are reported below the drop area.
-   Add patches on **Apply** instead.
+   If both files appear to be the same ROM, confirm before using them as a
+   pair. Add patches on **Apply** instead.
 3. Check the labels on **0x02 Original** and **0x03 Modified**.
 4. If they landed backwards, choose **Swap** between the two cards.
 5. Wait until reading and checksum work finishes.

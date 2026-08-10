@@ -51,6 +51,8 @@ type SingleRomDropRouting = {
   unused: File[];
 };
 
+type RomDropNoticeLevel = "warn" | "error";
+
 const DROP_NOTICE_NAME_LIMIT = 3;
 const DROP_NOTICE_NAME_LENGTH = 80;
 
@@ -111,4 +113,9 @@ const getRomDropNotice = ({ ignoredPatches, unused }: Pick<RomDropRouting, "igno
   return notices.join(" ");
 };
 
-export { collectRomDropFiles, getRomDropNotice, routeByOrder, routeSingleRom };
+const getRomDropNoticeLevel = (routing: RomDropRouting | SingleRomDropRouting): RomDropNoticeLevel => {
+  const used = "assignment" in routing ? routing.assignment.some(Boolean) : !!routing.source;
+  return routing.unused.length > 0 && !used ? "error" : "warn";
+};
+
+export { collectRomDropFiles, getRomDropNotice, getRomDropNoticeLevel, routeByOrder, routeSingleRom };

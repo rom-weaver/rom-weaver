@@ -42,7 +42,7 @@ import {
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
 import { TrimPatchFormView, type TrimPatchFormViewModel } from "./trim-form-view.tsx";
-import { getRomDropNotice, routeSingleRom } from "./unified-drop-routing.ts";
+import { getRomDropNotice, getRomDropNoticeLevel, routeSingleRom } from "./unified-drop-routing.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
@@ -517,6 +517,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const [messageDismissible, setMessageDismissible] = useState(false);
   const [messagePlacement, setMessagePlacement] = useState<TrimMessagePlacement | null>(null);
   const [dropNotice, setDropNotice] = useState("");
+  const [dropNoticeLevel, setDropNoticeLevel] = useState<"warn" | "error">("warn");
   const [errorCode, setErrorCode] = useState("");
   const [sourceState, setSourceState] = useState<TrimWorkflowSourceState | null>(null);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
@@ -686,6 +687,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     resetWorkflowOutput();
     stagedTrimWorkflowGenerationRef.current += 1;
     setDropNotice("");
+    setDropNoticeLevel("warn");
     setSourceState(null);
     if (props.source === undefined) setInternalSource(file);
     props.onSourceChange?.(file);
@@ -698,6 +700,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     const routed = routeSingleRom(files);
     if (routed.source) updateSource(routed.source);
     setDropNotice(getRomDropNotice(routed));
+    setDropNoticeLevel(getRomDropNoticeLevel(routed));
   };
 
   // Forward a page-level drop (dragging anywhere on the page) to the unified
@@ -1147,7 +1150,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       accept: getFileInputAcceptAttributes().unifiedRom,
       addLabel: "Replace the ROM",
       afterDropZone: dropNotice ? (
-        <Notice id="trim-builder-input-notice" level="warn">
+        <Notice id="trim-builder-input-notice" level={dropNoticeLevel}>
           {dropNotice}
         </Notice>
       ) : null,

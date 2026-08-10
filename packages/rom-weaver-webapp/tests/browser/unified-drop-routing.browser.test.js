@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import {
   collectRomDropFiles,
   getRomDropNotice,
+  getRomDropNoticeLevel,
   routeByOrder,
   routeSingleRom,
 } from "../../src/public/react/unified-drop-routing.ts";
@@ -30,10 +31,12 @@ test("routeByOrder reports overflow without replacing accepted slots", () => {
   const full = routeByOrder([file("new.sfc")], [true, true]);
   expect(names(full.assignment)).toEqual([null, null]);
   expect(names(full.unused)).toEqual(["new.sfc"]);
+  expect(getRomDropNoticeLevel(full)).toBe("error");
 
   const overflow = routeByOrder([file("a.sfc"), file("b.sfc"), file("c.sfc")], [false, false]);
   expect(names(overflow.assignment)).toEqual(["a.sfc", "b.sfc"]);
   expect(names(overflow.unused)).toEqual(["c.sfc"]);
+  expect(getRomDropNoticeLevel(overflow)).toBe("warn");
 });
 
 test("routeByOrder returns ignored patches for a user-facing notice", () => {

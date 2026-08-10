@@ -295,6 +295,57 @@ test("Create preserves simultaneous drop order regardless of filename length", a
     .toContain("m.bin");
 });
 
+test("Create asks before using duplicate ROMs", async () => {
+  const duplicateOptions = { lastModified: 1700000000000 };
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        pageDrop: {
+          files: [new File([], "same.sfc", duplicateOptions), new File([], "same.sfc", duplicateOptions)],
+          id: 1,
+        },
+      }),
+    ),
+  );
+
+  await expect.poll(() => document.querySelector(".confirm-card")?.textContent || "").toContain("Use duplicate ROMs");
+  expect(document.querySelector("#patch-builder-row-original .file")).toBeNull();
+  expect(document.querySelector("#patch-builder-row-modified .file")).toBeNull();
+
+  document.querySelector(".confirm-card button.btn.primary")?.click();
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-original .card")?.textContent || "")
+    .toContain("same.sfc");
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-modified .card")?.textContent || "")
+    .toContain("same.sfc");
+});
+
+test("Create asks before pairing a dropped duplicate with an existing ROM", async () => {
+  const duplicateOptions = { lastModified: 1700000000000 };
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        defaultOriginal: new File([], "same.sfc", duplicateOptions),
+        pageDrop: {
+          files: [new File([], "same.sfc", duplicateOptions)],
+          id: 1,
+        },
+      }),
+    ),
+  );
+
+  await expect.poll(() => document.querySelector(".confirm-card")?.textContent || "").toContain("Use duplicate ROMs");
+  expect(document.querySelector("#patch-builder-row-modified .file")).toBeNull();
+
+  document.querySelector(".confirm-card button.btn.primary")?.click();
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-modified .card")?.textContent || "")
+    .toContain("same.sfc");
+});
+
 test("create output edits stay enabled while queued and cancel the queued run", async () => {
   mount(
     createElement(
@@ -420,6 +471,7 @@ test("an overflow ROM is reported without replacing the prepared sources", async
   await expect.poll(() => document.body.textContent || "").toContain("original.bin");
   await expect.poll(() => document.body.textContent || "").toContain("modified.bin");
   await expect.poll(() => document.body.textContent || "").toContain("Unused inputs: modified-v2.bin.");
+  expect(document.getElementById("patch-builder-input-notice")?.classList.contains("error")).toBe(true);
   expect(workflowMockState.originalSetCalls).toBe(1);
   expect(workflowMockState.modifiedSetCalls).toBe(1);
 });

@@ -16,6 +16,7 @@ import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./
 import { Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
+import { ConfirmDialog } from "./components/ds/modal.tsx";
 import {
   SampleTutorial,
   SampleTutorialStart,
@@ -40,7 +41,7 @@ import {
 import { buildCreateSourceStep, type CreateSourceStepRuntimeNotice } from "./create-source-step-view-model.tsx";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
-import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
+import { getBinarySourceListStableIds, hasDuplicateBinarySources } from "./input-session-helpers.ts";
 import { createCreateOutputCompressionOptions, createCreatePatchFormatOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
@@ -52,7 +53,7 @@ import {
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
-import { getRomDropNotice, routeByOrder } from "./unified-drop-routing.ts";
+import { getRomDropNotice, getRomDropNoticeLevel, routeByOrder } from "./unified-drop-routing.ts";
 import { getDefaultCreateOutputName, getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
@@ -334,6 +335,8 @@ type InternalCreatePatchFormProps = CreatePatchFormProps & {
   getCreatePatchFormatCandidates?: typeof getCreatePatchFormatCandidates;
 };
 
+type PendingCreateDrop = ReturnType<typeof routeByOrder>;
+
 function CreatePatchForm(props: CreatePatchFormProps) {
   const { onError } = props;
   const internalProps = props as InternalCreatePatchFormProps;
@@ -376,6 +379,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const [messageDismissible, setMessageDismissible] = useState(false);
   const [messagePlacement, setMessagePlacement] = useState<CreateMessagePlacement | null>(null);
   const [dropNotice, setDropNotice] = useState("");
+  const [dropNoticeLevel, setDropNoticeLevel] = useState<"warn" | "error">("warn");
+  const [pendingDuplicateDrop, setPendingDuplicateDrop] = useState<PendingCreateDrop | null>(null);
   const [originalState, setOriginalState] = useState<CreateDisplaySourceState | null>(null);
   const [modifiedState, setModifiedState] = useState<CreateDisplaySourceState | null>(null);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
@@ -620,6 +625,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const updateOriginal = (file: BinarySource | null) => {
     resetWorkflowOutput();
     setDropNotice("");
+    setDropNoticeLevel("warn");
+    setPendingDuplicateDrop(null);
     setOriginalState(null);
     if (props.original === undefined) setInternalOriginal(file);
     props.onOriginalChange?.(file);
@@ -628,6 +635,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const updateModified = (file: BinarySource | null) => {
     resetWorkflowOutput();
     setDropNotice("");
+    setDropNoticeLevel("warn");
+    setPendingDuplicateDrop(null);
     setModifiedState(null);
     if (props.modified === undefined) setInternalModified(file);
     props.onModifiedChange?.(file);
@@ -637,12 +646,26 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   // Modified in drop order; patches and overflow stay visible as a notice (no
   // patch bucket on this tab). See routeByOrder.
   const handledPageDropIdRef = useRef<number | null>(null);
-  const handleUnifiedDrop = (files: File[]) => {
-    const routed = routeByOrder(files, [!!original, !!modified]);
+  const applyRoutedDrop = (routed: PendingCreateDrop) => {
     const [originalFile, modifiedFile] = routed.assignment;
     if (originalFile) updateOriginal(originalFile);
     if (modifiedFile) updateModified(modifiedFile);
     setDropNotice(getRomDropNotice(routed));
+    setDropNoticeLevel(getRomDropNoticeLevel(routed));
+  };
+  const handleUnifiedDrop = (files: File[]) => {
+    const routed = routeByOrder(files, [!!original, !!modified]);
+    const assigned = routed.assignment.filter((file): file is File => file !== null);
+    const selectedSources = [original, modified, ...assigned].filter(
+      (source): source is BinarySource => source !== null && source !== undefined,
+    );
+    if (assigned.length > 0 && hasDuplicateBinarySources(selectedSources)) {
+      setDropNotice("");
+      setDropNoticeLevel("warn");
+      setPendingDuplicateDrop(routed);
+      return;
+    }
+    applyRoutedDrop(routed);
   };
   const loadCreateSample = async () => {
     setSampleLoading(true);
@@ -1044,6 +1067,22 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     dialog: (
       <>
         {candidateSelectionDialog}
+        {pendingDuplicateDrop ? (
+          <ConfirmDialog
+            body="The selected inputs appear to be the same ROM. Use them as Original and Modified?"
+            cancelLabel="Cancel"
+            confirmLabel="Use duplicate ROMs"
+            onCancel={() => setPendingDuplicateDrop(null)}
+            onConfirm={() => {
+              if (!pendingDuplicateDrop) return;
+              const routed = pendingDuplicateDrop;
+              setPendingDuplicateDrop(null);
+              applyRoutedDrop(routed);
+            }}
+            open
+            title="Use duplicate ROMs?"
+          />
+        ) : null}
         {sampleTutorialActive ? (
           <SampleTutorial
             loadingBody="RomWeaver is loading two tiny ROMs, then fingerprinting the untouched and edited versions."
@@ -1060,7 +1099,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       afterDropZone: createSourcesActuallyEmpty ? (
         <>
           {dropNotice ? (
-            <Notice id="patch-builder-input-notice" level="warn">
+            <Notice id="patch-builder-input-notice" level={dropNoticeLevel}>
               {dropNotice}
             </Notice>
           ) : null}
@@ -1080,7 +1119,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           />
         </>
       ) : dropNotice ? (
-        <Notice id="patch-builder-input-notice" level="warn">
+        <Notice id="patch-builder-input-notice" level={dropNoticeLevel}>
           {dropNotice}
         </Notice>
       ) : null,
