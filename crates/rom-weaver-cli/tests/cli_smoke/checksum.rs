@@ -859,6 +859,116 @@ fn checksum_xiso_does_not_auto_extract_payload() {
 }
 
 #[test]
+fn checksum_defaults_to_crc32_md5_and_sha1() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("sample.bin").path(), b"plain checksum payload").expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "checksum",
+            "--input",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let checksums = json["details"]["checksums"]
+        .as_object()
+        .expect("checksum details");
+    assert_eq!(
+        checksums.keys().collect::<Vec<_>>(),
+        vec!["crc32", "md5", "sha1"]
+    );
+    let label = json["label"].as_str().expect("label");
+    assert_eq!(
+        label,
+        "crc32=bbc7effb md5=e801614938ede85ec53cc34bdca57810 sha1=636fab58d4bd943722007423e0426c70a9f02398"
+    );
+    assert_eq!(checksums["crc32"], "bbc7effb");
+    assert_eq!(checksums["md5"], "e801614938ede85ec53cc34bdca57810");
+    assert_eq!(
+        checksums["sha1"],
+        "636fab58d4bd943722007423e0426c70a9f02398"
+    );
+}
+
+#[test]
+fn checksum_comma_separated_algorithms_replace_defaults() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("sample.bin").path(), b"plain checksum payload").expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "checksum",
+            "--input",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--algo",
+            "sha256,blake3",
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let checksums = json["details"]["checksums"]
+        .as_object()
+        .expect("checksum details");
+    assert_eq!(
+        checksums.keys().collect::<Vec<_>>(),
+        vec!["blake3", "sha256"]
+    );
+    let label = json["label"].as_str().expect("label");
+    assert_eq!(
+        label,
+        "sha256=513a0f2917518ad35ec9daeec3f329b7b302ab30c863060285b76012b3bf41ab blake3=3a0b6ba8ddce8714862dc139ba5372586ad412f97a155a493ba359334c1a8678"
+    );
+    assert!(!label.contains("crc32="));
+    assert!(!label.contains("md5="));
+    assert!(!label.contains("sha1="));
+}
+
+#[test]
+fn checksum_repeated_algorithms_replace_defaults() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("sample.bin").path(), b"plain checksum payload").expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "checksum",
+            "--input",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--algo",
+            "sha256",
+            "--algo",
+            "blake3",
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let checksums = json["details"]["checksums"]
+        .as_object()
+        .expect("checksum details");
+    assert_eq!(
+        checksums.keys().collect::<Vec<_>>(),
+        vec!["blake3", "sha256"]
+    );
+    assert_eq!(
+        json["label"],
+        "sha256=513a0f2917518ad35ec9daeec3f329b7b302ab30c863060285b76012b3bf41ab blake3=3a0b6ba8ddce8714862dc139ba5372586ad412f97a155a493ba359334c1a8678"
+    );
+    assert!(!json["label"].as_str().expect("label").contains("crc32="));
+    assert!(!json["label"].as_str().expect("label").contains("md5="));
+    assert!(!json["label"].as_str().expect("label").contains("sha1="));
+}
+
+#[test]
 fn checksum_json_includes_primary_checksums_and_raw_variant_by_default() {
     let temp = setup_temp_dir();
     fs::write(temp.child("sample.bin").path(), b"plain checksum payload").expect("fixture");

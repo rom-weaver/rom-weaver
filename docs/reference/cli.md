@@ -8,6 +8,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 - [Commands](#commands)
   - [Alternate names](#alternate-names)
 - [Reaching inside archives](#reaching-inside-archives)
+- [Checksum](#checksum)
 - [Patching](#patching)
   - [Inputs](#inputs)
   - [Bundle detection](#bundle-detection)
@@ -99,6 +100,12 @@ Not every command takes all four. `ingest` has `--select` and `--no-ignore` only
 --help` is authoritative.
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
+
+## Checksum
+
+`checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing
+`--algo` replaces that default set; repeat the flag or separate values with
+commas to compute multiple algorithms.
 
 ## Patching
 

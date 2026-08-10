@@ -42,10 +42,11 @@ export function commandArgsToRunRequest(args, { includeJson = false } = {}) {
         force: !parsed.flags.has('no-overwrite'),
       });
       break;
-    case 'checksum':
+    case 'checksum': {
+      const algo = readOptionValues(parsed, 'algo');
       Object.assign(commandArgs, {
         input: requirePositional(parsed, 0, 'checksum source'),
-        algo: readOptionValues(parsed, 'algo'),
+        ...(algo.length ? { algo } : {}),
         ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
         ...filterFlags(parsed),
         ...(parsed.flags.has('no-extract') ? { no_extract: true } : {}),
@@ -56,6 +57,7 @@ export function commandArgsToRunRequest(args, { includeJson = false } = {}) {
         ...(readOptionalNumber(parsed, 'length') !== null ? { length: readOptionalNumber(parsed, 'length') } : {}),
       });
       break;
+    }
     case 'patch-create':
       Object.assign(commandArgs, {
         original: requireOptionValue(parsed, 'original'),
