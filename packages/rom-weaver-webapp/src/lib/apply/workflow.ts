@@ -442,11 +442,14 @@ const getPatchHeaderModes = (patchIndices: number[], patchOptions: PatchInput["p
     return "auto" as const;
   });
 
+// Same rule as the header above, for the same reason. `resolvedN64ByteOrder` is
+// only set when a checksum proved the order; an unproven one used to arrive here
+// as `keep` for the first patch, which discarded the engine's inference for
+// exactly the checksumless patches that need it.
 const getPatchN64ByteOrders = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) =>
-  patchIndices.map((patchIndex, position) => {
+  patchIndices.map((patchIndex) => {
     const patchOption = patchOptions?.[patchIndex];
-    if (patchOption?.n64ByteOrder) return patchOption.n64ByteOrder;
-    return position === 0 ? patchOption?.resolvedN64ByteOrder || ("keep" as const) : ("auto" as const);
+    return patchOption?.n64ByteOrder || patchOption?.resolvedN64ByteOrder || ("auto" as const);
   });
 
 const getPatchBases = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) =>
@@ -759,4 +762,4 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   };
 };
 
-export { getPatchHeaderModes, retainUncompressedWorkerOutputs, runApplyWorkflow };
+export { getPatchHeaderModes, getPatchN64ByteOrders, retainUncompressedWorkerOutputs, runApplyWorkflow };

@@ -28,6 +28,17 @@ fn parses_a_run_request_with_output_options() {
 }
 
 #[test]
+fn parses_checksum_run_request_without_algorithms() {
+    let request =
+        parse_wasm_run_request(r#"{"command":{"type":"checksum","args":{"input":"game.bin"}}}"#)
+            .expect("checksum request without algorithms should parse");
+    let rom_weaver_app::Commands::Checksum(args) = request.command else {
+        panic!("expected checksum command");
+    };
+    assert_eq!(args.algo, ["crc32", "md5", "sha1"]);
+}
+
+#[test]
 fn empty_stdin_reports_a_missing_request_error() {
     let error = parse_wasm_run_request("").expect_err("empty input should fail to parse");
     assert_eq!(error, "missing typed run request on stdin");

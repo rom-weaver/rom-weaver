@@ -75,6 +75,11 @@ msgstr "Accent"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.addRom"
+msgstr "Add a ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "All local, in your browser — files never leave your machine."
 
@@ -162,6 +167,11 @@ msgstr "Browser tab"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingDesc"
 msgstr "Caching the app so it can run offline…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.common.cancel"
+msgstr "Cancel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -510,6 +520,11 @@ msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.patchesIgnored"
+msgstr "Patches belong in Apply and were ignored."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
 msgstr "Play a patched ROM in an emulator, right in the browser,"
 
@@ -730,6 +745,11 @@ msgstr "The selected input is not valid."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.duplicateBody"
+msgstr "The selected inputs appear to be the same ROM. Use them as Original and Modified?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.INVALID_SETTINGS"
 msgstr "The selected settings are not valid."
 
@@ -790,6 +810,11 @@ msgstr "Turn an original ROM and its modified version, whether compressed or raw
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.unusedInputs"
+msgstr "Unused inputs: {names}{count, plural, =0 {} one {, and one more} other {, and # more}}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.update"
 msgstr "Update available"
 
@@ -797,6 +822,16 @@ msgstr "Update available"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Update ready"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.duplicateConfirm"
+msgstr "Use duplicate ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.duplicateTitle"
+msgstr "Use duplicate ROMs?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

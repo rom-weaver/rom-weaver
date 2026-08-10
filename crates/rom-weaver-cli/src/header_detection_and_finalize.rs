@@ -71,6 +71,35 @@ impl CliApp {
             .any(|candidate| extension.eq_ignore_ascii_case(candidate))
     }
 
+    /// Whether the 512 bytes a size match points at are really copier padding.
+    ///
+    /// A Super Magic Drive (`.smd`) dump is `512 % 1024` bytes long just like a
+    /// copier-headered SNES ROM, and `512 % 8192` like a PCE one, so size alone
+    /// claims every misnamed Genesis dump. Its 512 bytes head up 16 KiB blocks
+    /// holding each block's odd bytes first and its even bytes second: removing
+    /// them leaves interleaved data rather than a shorter ROM, so there is no
+    /// removable header here at all.
+    ///
+    /// Bytes this cannot read stay copier padding, which is the answer the size
+    /// test gave before this check existed.
+    fn size_based_header_is_copier_padding(path: &Path) -> bool {
+        let Ok(mut file) = File::open(path) else {
+            return true;
+        };
+        let mut prefix = [0_u8; ROM_HEADER_BYTES];
+        if file.read_exact(&mut prefix).is_err() {
+            return true;
+        }
+        if header_declares_smd_interleave(&prefix) {
+            debug!(
+                input = %path.display(),
+                "size matches a copier header but the bytes declare a Super Magic Drive interleave; nothing here is removable"
+            );
+            return false;
+        }
+        true
+    }
+
     pub(super) fn detect_size_based_copier_header(
         path: &Path,
         input_len: u64,
@@ -78,23 +107,26 @@ impl CliApp {
         if input_len <= ROM_HEADER_BYTES as u64 {
             return None;
         }
-        if Self::has_extension(path, &["smc", "sfc"])
+        let header = if Self::has_extension(path, &["smc", "sfc"])
             && input_len % SNES_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
         {
-            return Some(KnownRomHeaderMatch {
-                header: KnownRomHeader::SnesCopier,
-                stripped_bytes: Some(ROM_HEADER_BYTES),
-            });
-        }
-        if Self::has_extension(path, &["pce", "tg16"])
+            KnownRomHeader::SnesCopier
+        } else if Self::has_extension(path, &["pce", "tg16"])
             && input_len % PCE_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
         {
-            return Some(KnownRomHeaderMatch {
-                header: KnownRomHeader::PceCopier,
-                stripped_bytes: Some(ROM_HEADER_BYTES),
-            });
+            KnownRomHeader::PceCopier
+        } else {
+            return None;
+        };
+        // Only now is it worth reading the file: the size and the name already
+        // agree, and this is the check that can still take the verdict away.
+        if !Self::size_based_header_is_copier_padding(path) {
+            return None;
         }
-        None
+        Some(KnownRomHeaderMatch {
+            header,
+            stripped_bytes: Some(ROM_HEADER_BYTES),
+        })
     }
 
     pub(super) fn detect_strippable_rom_header(path: &Path) -> Result<KnownRomHeaderMatch> {

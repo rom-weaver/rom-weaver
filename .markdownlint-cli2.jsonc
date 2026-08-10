@@ -1,8 +1,12 @@
 {
+  "customRules": [
+    "./scripts/markdownlint-no-soft-line-breaks.mjs"
+  ],
   "globs": [
     "*.md",
     ".github/**/*.md",
     "crates/**/README.md",
+    "design/**/README.md",
     "docs/**/*.md",
     "packages/**/README.md",
     "scripts/wasm/README.md"
@@ -49,5 +53,18 @@
     "MD038": false,
     "MD051": false,
     "MD060": false
-  }
+  },
+  "overrides": [
+    // These files contain model instructions, not project documentation.
+    {
+      "filter": [
+        "AGENTS.md",
+        "CLAUDE.md"
+      ],
+      "config": {
+        "RW001": false
+      },
+      "combine": "merge"
+    }
+  ]
 }

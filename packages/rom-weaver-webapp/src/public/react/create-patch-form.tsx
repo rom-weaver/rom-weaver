@@ -16,6 +16,7 @@ import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./
 import { Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
+import { ConfirmDialog } from "./components/ds/modal.tsx";
 import {
   SampleTutorial,
   SampleTutorialStart,
@@ -40,7 +41,7 @@ import {
 import { buildCreateSourceStep, type CreateSourceStepRuntimeNotice } from "./create-source-step-view-model.tsx";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
-import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
+import { getBinarySourceListStableIds, hasDuplicateBinarySources } from "./input-session-helpers.ts";
 import { createCreateOutputCompressionOptions, createCreatePatchFormatOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
@@ -51,8 +52,14 @@ import {
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
+  useUiLocalizer,
 } from "./settings-context.tsx";
-import { routeByOrder } from "./unified-drop-routing.ts";
+import {
+  getRomDropNotice,
+  getRomDropNoticeLevel,
+  routeByOrder,
+  selectRomDropCandidate,
+} from "./unified-drop-routing.ts";
 import { getDefaultCreateOutputName, getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import {
   markCompressionStart,
@@ -334,6 +341,32 @@ type InternalCreatePatchFormProps = CreatePatchFormProps & {
   getCreatePatchFormatCandidates?: typeof getCreatePatchFormatCandidates;
 };
 
+type PendingCreateDrop = ReturnType<typeof routeByOrder>;
+
+const selectCreateDropAssignments = async (
+  routed: PendingCreateDrop,
+  slotFilled: boolean[],
+  selectFile: Parameters<typeof selectRomDropCandidate>[2],
+  sourceNames: readonly [string, string],
+): Promise<(File | null)[] | null> => {
+  const assignment: (File | null)[] = slotFilled.map(() => null);
+  const emptySlots = slotFilled.map((filled, index) => (filled ? -1 : index)).filter((index) => index >= 0);
+  let candidates = routed.roms.slice();
+
+  for (const [slotOffset, slot] of emptySlots.entries()) {
+    if (!candidates.length) break;
+    const slotsRemaining = emptySlots.length - slotOffset;
+    const candidate =
+      candidates.length > slotsRemaining
+        ? await selectRomDropCandidate(candidates, sourceNames[slot] || "ROM", selectFile)
+        : candidates[0] || null;
+    if (!candidate) return null;
+    assignment[slot] = candidate;
+    candidates.splice(candidates.indexOf(candidate), 1);
+  }
+  return assignment;
+};
+
 function CreatePatchForm(props: CreatePatchFormProps) {
   const { onError } = props;
   const internalProps = props as InternalCreatePatchFormProps;
@@ -348,6 +381,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   );
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
+  const localizer = useUiLocalizer();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
   const cancelSelectionRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
@@ -375,6 +409,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const [message, setMessage] = useState("");
   const [messageDismissible, setMessageDismissible] = useState(false);
   const [messagePlacement, setMessagePlacement] = useState<CreateMessagePlacement | null>(null);
+  const [dropNoticeRouting, setDropNoticeRouting] = useState<PendingCreateDrop | null>(null);
+  const [pendingDuplicateDrop, setPendingDuplicateDrop] = useState<PendingCreateDrop | null>(null);
   const [originalState, setOriginalState] = useState<CreateDisplaySourceState | null>(null);
   const [modifiedState, setModifiedState] = useState<CreateDisplaySourceState | null>(null);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
@@ -403,6 +439,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const original = props.original === undefined ? internalOriginal : props.original;
   const modified = props.modified === undefined ? internalModified : props.modified;
   const settings = props.settings || internalSettings || providerSettings;
+  const dropNotice = dropNoticeRouting ? getRomDropNotice(dropNoticeRouting, localizer) : "";
+  const dropNoticeLevel = dropNoticeRouting ? getRomDropNoticeLevel(dropNoticeRouting) : "warn";
   const originalSourceKey = useMemo(
     () => (original ? getBinarySourceListStableIds([original])[0] || "" : ""),
     [original],
@@ -618,6 +656,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const updateOriginal = (file: BinarySource | null) => {
     resetWorkflowOutput();
+    setDropNoticeRouting(null);
+    setPendingDuplicateDrop(null);
     setOriginalState(null);
     if (props.original === undefined) setInternalOriginal(file);
     props.onOriginalChange?.(file);
@@ -625,23 +665,54 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const updateModified = (file: BinarySource | null) => {
     resetWorkflowOutput();
+    setDropNoticeRouting(null);
+    setPendingDuplicateDrop(null);
     setModifiedState(null);
     if (props.modified === undefined) setInternalModified(file);
     props.onModifiedChange?.(file);
   };
 
   // Combined drop surface: both sources are ROMs, so files fill Original then
-  // Modified in drop order; patches in a dropped archive are ignored (no patch
-  // bucket on this tab). See routeByOrder.
+  // Modified in drop order; patches and overflow stay visible as a notice (no
+  // patch bucket on this tab). See routeByOrder.
   const handledPageDropIdRef = useRef<number | null>(null);
-  const handleUnifiedDrop = (files: File[]) => {
-    // When both ROMs arrive together, treat the longer file name as the modified
-    // ROM - hacks/edits usually carry the more descriptive name - so it lands in
-    // the later (modified) slot. Stable sort keeps drop order for equal lengths.
-    const ordered = [...files].sort((a, b) => a.name.length - b.name.length);
-    const [originalFile, modifiedFile] = routeByOrder(ordered, [!!original, !!modified]);
+  const applyRoutedDrop = (routed: PendingCreateDrop) => {
+    const [originalFile, modifiedFile] = routed.assignment;
     if (originalFile) updateOriginal(originalFile);
     if (modifiedFile) updateModified(modifiedFile);
+    setDropNoticeRouting(routed);
+  };
+  const commitRoutedDrop = (routed: PendingCreateDrop) => {
+    const assigned = routed.assignment.filter((file): file is File => file !== null);
+    const selectedSources = [original, modified, ...assigned].filter(
+      (source): source is BinarySource => source !== null && source !== undefined,
+    );
+    if (assigned.length > 0 && hasDuplicateBinarySources(selectedSources)) {
+      setDropNoticeRouting(null);
+      setPendingDuplicateDrop(routed);
+      return;
+    }
+    applyRoutedDrop(routed);
+  };
+  const handleUnifiedDrop = (files: File[]) => {
+    const slotFilled = [!!original, !!modified];
+    const routed = routeByOrder(files, slotFilled);
+    const emptySlotCount = slotFilled.filter((filled) => !filled).length;
+    if (emptySlotCount > 0 && routed.roms.length > emptySlotCount) {
+      setDropNoticeRouting(null);
+      void selectCreateDropAssignments(routed, slotFilled, selectFile, [
+        localizer.message("ui.step.original"),
+        localizer.message("ui.step.modified"),
+      ]).then((assignment) => {
+        if (!assignment) {
+          setDropNoticeRouting(routed.ignoredPatches.length ? { ...routed, unused: [] } : null);
+          return;
+        }
+        commitRoutedDrop({ ...routed, assignment, unused: [] });
+      });
+      return;
+    }
+    commitRoutedDrop(routed);
   };
   const loadCreateSample = async () => {
     setSampleLoading(true);
@@ -1043,6 +1114,22 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     dialog: (
       <>
         {candidateSelectionDialog}
+        {pendingDuplicateDrop ? (
+          <ConfirmDialog
+            body={localizer.message("ui.drop.duplicateBody")}
+            cancelLabel={localizer.message("ui.common.cancel")}
+            confirmLabel={localizer.message("ui.drop.duplicateConfirm")}
+            onCancel={() => setPendingDuplicateDrop(null)}
+            onConfirm={() => {
+              if (!pendingDuplicateDrop) return;
+              const routed = pendingDuplicateDrop;
+              setPendingDuplicateDrop(null);
+              applyRoutedDrop(routed);
+            }}
+            open
+            title={localizer.message("ui.drop.duplicateTitle")}
+          />
+        ) : null}
         {sampleTutorialActive ? (
           <SampleTutorial
             loadingBody="RomWeaver is loading two tiny ROMs, then fingerprinting the untouched and edited versions."
@@ -1055,22 +1142,33 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     ),
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
-      addLabel: "Add or replace a ROM",
+      addLabel: localizer.message("ui.drop.addRom"),
       afterDropZone: createSourcesActuallyEmpty ? (
-        <SampleTutorialStart
-          downloadHref={resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE)}
-          downloadName={CREATE_SAMPLE_ARCHIVE}
-          downloadLabel="Download the sample ROMs"
-          error={sampleError}
-          guideHref={GUIDED_SAMPLE_HREFS.create}
-          label="Start guided Create"
-          startAction="create"
-          loading={sampleLoading}
-          onStart={() => {
-            setSampleTutorialActive(true);
-            void loadCreateSample();
-          }}
-        />
+        <>
+          {dropNotice ? (
+            <Notice id="patch-builder-input-notice" level={dropNoticeLevel}>
+              {dropNotice}
+            </Notice>
+          ) : null}
+          <SampleTutorialStart
+            downloadHref={resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE)}
+            downloadName={CREATE_SAMPLE_ARCHIVE}
+            downloadLabel="Download the sample ROMs"
+            error={sampleError}
+            guideHref={GUIDED_SAMPLE_HREFS.create}
+            label="Start guided Create"
+            startAction="create"
+            loading={sampleLoading}
+            onStart={() => {
+              setSampleTutorialActive(true);
+              void loadCreateSample();
+            }}
+          />
+        </>
+      ) : dropNotice ? (
+        <Notice id="patch-builder-input-notice" level={dropNoticeLevel}>
+          {dropNotice}
+        </Notice>
       ) : null,
       big: createSourcesEmpty,
       disabled: uploadDisabled,

@@ -14,6 +14,7 @@ impl CliApp {
         context: &OperationContext,
         command: &'static str,
         stage: &'static str,
+        precomputed_raw_checksums: Option<&BTreeMap<String, String>>,
         on_progress: &mut F,
     ) -> Result<OperationReport>
     where
@@ -41,8 +42,13 @@ impl CliApp {
             used_parallelism = execution.used_parallelism,
             "planned checksum variant hashing budget"
         );
-        let mut engine =
-            StreamingVariantChecksums::new(&algorithms, file_len, name_hint, engine_budget)?;
+        let mut engine = StreamingVariantChecksums::new_with_precomputed_raw(
+            &algorithms,
+            precomputed_raw_checksums.cloned().unwrap_or_default(),
+            file_len,
+            name_hint,
+            engine_budget,
+        )?;
 
         // Identity detection is a separate stream consumer fed the same bytes as the
         // variant engine - neither embeds the other. No extra read.

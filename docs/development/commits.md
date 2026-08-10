@@ -1,10 +1,6 @@
 # Commit and pull request title conventions
 
-rom-weaver uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
-Pull requests are squash-merged, so the **pull request title** becomes the commit
-on `main` and is the input Release Please reads to decide the next version and
-write the changelog entry. Branch commit messages are not linted; the title is
-the one that has to parse.
+rom-weaver uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Pull requests are squash-merged, so the **pull request title** becomes the commit on `main` and is the input Release Please reads to decide the next version and write the changelog entry. Branch commit messages are not linted; the title is the one that has to parse.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -26,11 +22,9 @@ type: description
 ```
 
 - `type` is required and must come from the list below.
-- `scope` is optional. Include the shortest useful scope when the affected area
-  is clear; an unscoped title is also valid.
+- `scope` is optional. Include the shortest useful scope when the affected area is clear; an unscoped title is also valid.
 - `description` is lower case, imperative, and no trailing full stop.
-- The whole header is capped at 150 characters - raised from the usual 100 so
-  grouped Dependabot titles fit.
+- The whole header is capped at 150 characters - raised from the usual 100 so grouped Dependabot titles fit.
 
 ```text
 fix(webapp): handle empty patch archives
@@ -39,9 +33,7 @@ perf(ci): build multi-arch images on native runners instead of QEMU
 
 ## Types
 
-Allowed types come from `.config/commitlint.config.mjs`, which is the single
-source of truth - the `PR Title Lint` check reads that same file, so this
-list cannot drift into being enforced.
+Allowed types come from `.config/commitlint.config.mjs`, which is the single source of truth - the `PR Title Lint` check reads that same file, so this list cannot drift into being enforced.
 
 | Type | Use it for | Release effect |
 | --- | --- | --- |
@@ -58,16 +50,11 @@ list cannot drift into being enforced.
 | `style` | Formatting only | Changelog only |
 | `test` | Tests only | Changelog only |
 
-`perf` changes must not alter output bytes - compression and patch output is
-validated against reference tools, so run the relevant `cli_smoke` tests.
+`perf` changes must not alter output bytes - compression and patch output is validated against reference tools, so run the relevant `cli_smoke` tests.
 
 ## Scopes
 
-Scopes are not enumerated in config, so use the shortest name that says where
-the change lands: the crate (`core`, `containers`, `patches`, `cli`), the
-surface (`webapp`, `wasm`, `docker`, `ci`, `dx`), or the format (`chd`, `iso`,
-`bps`). Match what recent history uses for the same area rather than inventing a
-synonym.
+Scopes are not enumerated in config, so use the shortest name that says where the change lands: the crate (`core`, `containers`, `patches`, `cli`), the surface (`webapp`, `wasm`, `docker`, `ci`, `dx`), or the format (`chd`, `iso`, `bps`). Match what recent history uses for the same area rather than inventing a synonym.
 
 ## Breaking changes
 
@@ -77,25 +64,18 @@ Append `!` after the type and scope, and explain the break in the body:
 feat(cli)!: rename --output to --out
 ```
 
-Before 1.0 a breaking change bumps the **minor** version, because
-`bump-minor-pre-major` is enabled in `release-please-config.json`.
+Before 1.0 a breaking change bumps the **minor** version, because `bump-minor-pre-major` is enabled in `release-please-config.json`.
 
 ## Footers
 
-- `Release-As: X.Y.Z` forces a specific version, including a prerelease such as
-  `Release-As: 0.7.0-alpha.1`. A hyphen in the version routes every publish to
-  the prerelease channels automatically; see
-  [prerelease routing](ci.md#prerelease-routing).
+- `Release-As: X.Y.Z` forces a specific version, including a prerelease such as `Release-As: 0.7.0-alpha.1`. A hyphen in the version routes every publish to the prerelease channels automatically; see [prerelease routing](ci.md#prerelease-routing).
 - `Fixes #123` closes the issue when the pull request merges.
 
-The [release guide](../../.github/RELEASING.md) covers the rest of the release
-flow. Opening or refreshing the release pull request is manually dispatched;
-merging that pull request starts the publish fan-out.
+The [release guide](../../.github/RELEASING.md) covers the rest of the release flow. Opening or refreshing the release pull request is manually dispatched; merging that pull request starts the publish fan-out.
 
 ## Checking a title before you push
 
-`PR Title Lint` reports the failing commitlint rule in the Title Check log. To
-check a message locally:
+`PR Title Lint` reports the failing commitlint rule in the Title Check log. To check a message locally:
 
 ```bash
 echo "fix(webapp): handle empty patch archives" | npx commitlint --config .config/commitlint.config.mjs

@@ -1,9 +1,6 @@
 # CLI reference
 
-Every rom-weaver command and global flag, the archive-selection options, the
-patching flags, JSON output, exit codes, file permissions, and man pages.
-Installation is covered in [Install the CLI](../how-to/install-cli.md), and the
-tutorial is [Your first apply in the terminal](../tutorials/cli-first-weave.md).
+Every rom-weaver command and global flag, the archive-selection options, the patching flags, JSON output, exit codes, file permissions, and man pages. Installation is covered in [Install the CLI](../how-to/install-cli.md), and the tutorial is [Your first apply in the terminal](../tutorials/cli-first-weave.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -11,6 +8,7 @@ tutorial is [Your first apply in the terminal](../tutorials/cli-first-weave.md).
 - [Commands](#commands)
   - [Alternate names](#alternate-names)
 - [Reaching inside archives](#reaching-inside-archives)
+- [Checksum](#checksum)
 - [Patching](#patching)
   - [Inputs](#inputs)
   - [Bundle detection](#bundle-detection)
@@ -46,17 +44,11 @@ tutorial is [Your first apply in the terminal](../tutorials/cli-first-weave.md).
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
 | `completions` | Print a tab-completion script for your shell. |
 
-`-h` prints a one-line summary of each option; `--help` prints the full
-explanation, including the extra detail on flags like `--patch-header`.
+`-h` prints a one-line summary of each option; `--help` prints the full explanation, including the extra detail on flags like `--patch-header`.
 
-Nearly every command takes `-i`/`--input` and `-o`/`--output`; `patch create`
-is the exception, taking `--original` and `--modified` instead. The other short
-flags are `-j` threads, `-f` format, `-s` select, `-a` algorithm, `-e`
-extension, `-n` dry run, `-v` verbose, and `-q` quiet. Run
-`rom-weaver <command> --help` for the full list.
+Nearly every command takes `-i`/`--input` and `-o`/`--output`; `patch create` is the exception, taking `--original` and `--modified` instead. The other short flags are `-j` threads, `-f` format, `-s` select, `-a` algorithm, `-e` extension, `-n` dry run, `-v` verbose, and `-q` quiet. Run `rom-weaver <command> --help` for the full list.
 
-`probe` and `checksum` accept `-` as the `--input` value to read from stdin, so
-they fit into a pipeline:
+`probe` and `checksum` accept `-` as the `--input` value to read from stdin, so they fit into a pipeline:
 
 ```bash
 curl -sL https://example.com/game.gba | rom-weaver checksum --input - --algo sha256
@@ -65,8 +57,7 @@ xz -dc game.iso.xz | rom-weaver probe --input - --json
 
 ### Alternate names
 
-Some commands and flags answer to more than one name. They are the same code
-either way, so pick whichever reads better:
+Some commands and flags answer to more than one name. They are the same code either way, so pick whichever reads better:
 
 | Canonical | Also accepted |
 | --- | --- |
@@ -75,175 +66,96 @@ either way, so pick whichever reads better:
 | `trim --revert` | `trim --untrim`, `trim --restore` |
 | `trim --revert-marker` | `trim --reversible` |
 
-Format names have alternates too, accepted anywhere `--format` is: `7zip` for
-`7z`, `3ds` for `z3ds`, `xdelta3` for `xdelta`, `bsdiff` for `bdf`, and more.
-The [format tables](formats.md) list every one.
+Format names have alternates too, accepted anywhere `--format` is: `7zip` for `7z`, `3ds` for `z3ds`, `xdelta3` for `xdelta`, `bsdiff` for `bdf`, and more. The [format tables](formats.md) list every one.
 
-Codecs are stricter. Each format accepts only the codec names in its own row of
-the [codec table](formats.md#create-time-codecs), and the only
-two alternates are CHD's
-`huffman` for `huff` and `avhu` for `avhuff`. Passing `--codec zlib` to a ZIP,
-for instance, is an error rather than a synonym for `deflate`.
+Codecs are stricter. Each format accepts only the codec names in its own row of the [codec table](formats.md#create-time-codecs), and the only two alternates are CHD's `huffman` for `huff` and `avhu` for `avhuff`. Passing `--codec zlib` to a ZIP, for instance, is an error rather than a synonym for `deflate`.
 
-Every command accepts these global flags, listed under `Global options` in its
-help:
+Every command accepts these global flags, listed under `Global options` in its help:
 
-- `--json` prints operation reports as one JSON object per line instead of
-  human-readable output. Asset generators such as `bundle schema` and
-  `completions` keep their native schema or script output.
-- `--progress` and `--no-progress` override the automatic choice, which is to
-  show progress on a terminal and hide it when output is piped.
-- `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs
-  to stderr. Logging is off unless you ask for it, and it is separate from the
-  normal output.
+- `--json` prints operation reports as one JSON object per line instead of human-readable output. Asset generators such as `bundle schema` and `completions` keep their native schema or script output.
+- `--progress` and `--no-progress` override the automatic choice, which is to show progress on a terminal and hide it when output is piped.
+- `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs to stderr. Logging is off unless you ask for it, and it is separate from the normal output.
 - `-v`, `-vv`, and `-vvv` are shorthand for info, debug, and trace.
 - `-q`/`--quiet` logs errors only.
-- `--dep-trace` adds trace output from the bundled libraries, useful in a bug
-  report. On its own it also raises rom-weaver's own logs to warning level.
-- `--color` and `--no-color` override colored output. The flag wins over the
-  `NO_COLOR` environment variable, which wins over the terminal-vs-piped
-  default. `--color` keeps color even when piped, though the live progress bar
-  stays terminal-only.
+- `--dep-trace` adds trace output from the bundled libraries, useful in a bug report. On its own it also raises rom-weaver's own logs to warning level.
+- `--color` and `--no-color` override colored output. The flag wins over the `NO_COLOR` environment variable, which wins over the terminal-vs-piped default. `--color` keeps color even when piped, though the live progress bar stays terminal-only.
 
-Most commands also accept `-j`/`--threads auto|N`. `auto` uses the available
-core count as its ceiling; a number sets a lower ceiling, and format or memory
-limits may still use fewer.
+Most commands also accept `-j`/`--threads auto|N`. `auto` uses the available core count as its ceiling; a number sets a lower ceiling, and format or memory limits may still use fewer.
 
-List-valued flags (`--algo`, `--checksum`, `--filter`, `--codec`, `--expect-in`,
-`--expect-out`, `--assume-in`, and the compression codec flags) can be repeated
-or comma-separated: `--algo crc32,sha1` and `--algo crc32 --algo sha1` do the
-same thing.
+List-valued flags (`--algo`, `--checksum`, `--filter`, `--codec`, `--expect-in`, `--expect-out`, `--assume-in`, and the compression codec flags) can be repeated or comma-separated: `--algo crc32,sha1` and `--algo crc32 --algo sha1` do the same thing.
 
-rom-weaver only asks interactive questions when stdin and stderr are both
-terminals and `--json` is off. Otherwise, it decides on its own or fails.
+rom-weaver only asks interactive questions when stdin and stderr are both terminals and `--json` is off. Otherwise, it decides on its own or fails.
 
 ## Reaching inside archives
 
 
-`probe`, `extract`, `checksum`, `ingest`, `trim`, `bundle parse`, and the
-patching commands all open archives for you, so you can point them at a `.zip`
-and they will work on the ROM inside it. Four flags steer that, and they mean
-the same thing everywhere they appear:
+`probe`, `extract`, `checksum`, `ingest`, `trim`, `bundle parse`, and the patching commands all open archives for you, so you can point them at a `.zip` and they will work on the ROM inside it. Four flags steer that, and they mean the same thing everywhere they appear:
 
 - `-s`/`--select` picks which file to use, by exact name, prefix, or glob.
-- `--filter rom` considers only files that look like ROMs; `--filter patch`
-  only patches. Both judge by extension, and the flag is repeatable and
-  comma-separable (`--filter rom,patch`).
-- `--no-ignore` also considers the files normally skipped: readmes, images,
-  checksum sidecars, and OS clutter such as `.DS_Store`.
+- `--filter rom` considers only files that look like ROMs; `--filter patch` only patches. Both judge by extension, and the flag is repeatable and comma-separable (`--filter rom,patch`).
+- `--no-ignore` also considers the files normally skipped: readmes, images, checksum sidecars, and OS clutter such as `.DS_Store`.
 - `--no-extract` skips all of this and works on the file itself.
 
-Not every command takes all four. `ingest` has `--select` and `--no-ignore`
-only, since it always looks inside and always sorts by kind. `extract` has no
-`--no-extract`, since unpacking is the whole job. `trim` spells its filter
-`--no-filter`, because it filters to ROMs by default. `rom-weaver <command>
+Not every command takes all four. `ingest` has `--select` and `--no-ignore` only, since it always looks inside and always sorts by kind. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` spells its filter `--no-filter`, because it filters to ROMs by default. `rom-weaver <command>
 --help` is authoritative.
 
-`extract` also unpacks archives found inside the input, up to eight levels
-deep; `--no-nested-extract` stops after the first layer. If any output file
-already exists, extraction stops before writing anything, unless `--force` is
-given. While extracting it can hash what it writes (`--checksum ALGO`, or
-`--checksum-rom ALGO` for the ROMs only) and report each file's format and
-platform (`--probe`).
+`extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
+
+## Checksum
+
+`checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
 
 ## Patching
 
-The flags shared by `patch apply` (also spelled `weave`) and `patch validate`.
-The task-shaped recipes live in [Apply patches from the CLI](../how-to/cli-apply.md).
+The flags shared by `patch apply` (also spelled `weave`) and `patch validate`. The task-shaped recipes live in [Apply patches from the CLI](../how-to/cli-apply.md).
 
 ### Inputs
 
-Repeat `--patch` to run several patches in order, each on the result of the
-last. Leave `--patch` out entirely and rom-weaver looks for RetroArch-style
-patches sitting next to the ROM inside the input archive. A
-`rom-weaver-bundle.json` can supply the ROM, the patch order, the checks, and
-the output name instead.
+Repeat `--patch` to run several patches in order, each on the result of the last. Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches sitting next to the ROM inside the input archive. A `rom-weaver-bundle.json` can supply the ROM, the patch order, the checks, and the output name instead.
 
-DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM
-data track and reassemble the whole disc, so they cannot be chained with
-another patch or combined with the header and checksum options.
+DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM data track and reassemble the whole disc, so they cannot be chained with another patch or combined with the header and checksum options.
 
 ### Bundle detection
 
-When `patch apply` detects a bundle from its positional input, the canonical
-`rom-weaver-bundle.json` name is the fast path. It also content-probes valid
-plain `.json` files and root-level `.json` members inside archives. A
-stream-compressed positional bundle needs a canonical name such as
-`rom-weaver-bundle.json.gz`; pass a differently named one explicitly with
-`--bundle`.
+When `patch apply` detects a bundle from its positional input, the canonical `rom-weaver-bundle.json` name is the fast path. It also content-probes valid plain `.json` files and root-level `.json` members inside archives. A stream-compressed positional bundle needs a canonical name such as `rom-weaver-bundle.json.gz`; pass a differently named one explicitly with `--bundle`.
 
 ### Checksum flags
 
-- Formats that carry their own checksums are verified strictly.
-  `--ignore-checksum-validation` applies the patch anyway, which can produce a
-  broken ROM.
+- Formats that carry their own checksums are verified strictly. `--ignore-checksum-validation` applies the patch anyway, which can produce a broken ROM.
 - `--expect-in ALGO=HEX` stops unless the ROM about to be patched matches.
 - `--expect-out ALGO=HEX` fails unless the finished ROM matches.
-- `--assume-in ALGO=HEX` takes a checksum on trust rather than reading the ROM
-  to compute it. It is a speed option for scripts and verifies nothing.
+- `--assume-in ALGO=HEX` takes a checksum on trust rather than reading the ROM to compute it. It is a speed option for scripts and verifies nothing.
 
 ### Header and byte-order flags
 
-- `--patch-header auto|keep|strip` decides whether each patch applies to the
-  ROM with or without its copier header. Auto works it out per patch from the
-  patch's own source checksum, and for a patch that carries none from where its
-  records land. See
-  [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
-- `--output-header auto|keep|strip` decides whether the finished ROM keeps its
-  header. Auto keeps the ones emulators need and drops the ones they do not.
-- `--repair-checksum` repairs supported internal checksums and compatibility
-  header fields after patching.
-- `--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped` puts an
-  N64 ROM in the interleaving a patch expects. Auto matches the patch's source
-  CRC32, and the output is written back in the order the input arrived in.
+- `--patch-header auto|keep|strip` decides whether each patch applies to the ROM with or without its copier header. Auto works it out per patch from the patch's own source checksum under any algorithm, and for a patch that carries none from where its records land, from which form the format itself accepts, and from which result the console still recognises. See [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
+- `--output-header auto|keep|strip` decides whether the finished ROM keeps its header. Auto keeps the ones emulators need and drops the ones they do not.
+- `--repair-checksum` repairs supported internal checksums and compatibility header fields after patching.
+- `--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped` puts an N64 ROM in the interleaving a patch expects. Auto matches the patch's source CRC32; for the first patch, a patch that carries no checksum falls back to the shape of its changes. An order settled that way is named in the report label. The output is written back in the order the input arrived in. See [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
 
 ### Extras
 
-- `--code` bakes Game Genie or GameShark/Pro Action Replay codes into the ROM,
-  as if they were a patch.
-- `--emit-bundle PATH` also writes a `rom-weaver-bundle.json` recording the run:
-  the ROM's checksums, the patches in order, and the result. It runs the same
-  code as `bundle create`, so the file is byte-identical to the equivalent
-  `bundle create` call. It carries no per-patch names or authors; for those use
-  `bundle create`, `bundle create --from`, or `--tui`.
-- `--tui` asks for each patch's name, version, author, and optional state plus
-  an output name, then applies and writes the bundle. It needs a terminal, and
-  for now it needs explicit `--patch` files; re-opening a bundle is not
-  supported yet.
+- `--code` bakes Game Genie or GameShark/Pro Action Replay codes into the ROM, as if they were a patch.
+- `--emit-bundle PATH` also writes a `rom-weaver-bundle.json` recording the run: the ROM's checksums, the patches in order, and the result. It runs the same code as `bundle create`, so the file is byte-identical to the equivalent `bundle create` call. It carries no per-patch names or authors; for those use `bundle create`, `bundle create --from`, or `--tui`.
+- `--tui` asks for each patch's name, version, author, and optional state plus an output name, then applies and writes the bundle. It needs a terminal, and for now it needs explicit `--patch` files; re-opening a bundle is not supported yet.
 
 ### Validation
 
-`patch validate` runs the same checks as `patch apply` but writes nothing: it
-parses each patch and verifies every checksum the format carries.
+`patch validate` runs the same checks as `patch apply` but writes nothing: it parses each patch and verifies every checksum the format carries.
 
-- `--expect-in` adds a check on the ROM itself, and accepts a checksum
-  (`ALGO=HEX`), an exact size (`size=N`), or a minimum size (`min-size=N`).
-- `--strip-header` and `--n64-byte-order` put the ROM in the form the patches
-  expect before checking; N64 byte order defaults to matching the patch's
-  source CRC32.
-- Patches are checked as a chain by default, each against the output of the
-  one before it. `--independent` checks each one against the original ROM
-  instead and reports a verdict per patch, rather than stopping at the first
-  failure.
+- `--expect-in` adds a check on the ROM itself, and accepts a checksum (`ALGO=HEX`), an exact size (`size=N`), or a minimum size (`min-size=N`).
+- `--strip-header` and `--n64-byte-order` put the ROM in the form the patches expect before checking; N64 byte order defaults to matching the patch's source CRC32.
+- Patches are checked as a chain by default, each against the output of the one before it. `--independent` checks each one against the original ROM instead and reports a verdict per patch, rather than stopping at the first failure.
 
 ## Supported formats
 
 
-The full support matrix - every patch format, container and compressed ROM or
-disc image, create-time codec, checksum algorithm, trim target, and detected
-header - lives in [Supported formats](formats.md). For picking a
-format rather than looking one up, see the
-[archive formats](../how-to/work-with-archives.md) and
-[compression formats](../explanation/compression-formats.md) guides.
+The full support matrix - every patch format, container and compressed ROM or disc image, create-time codec, checksum algorithm, trim target, and detected header - lives in [Supported formats](formats.md). For picking a format rather than looking one up, see the [archive formats](../how-to/work-with-archives.md) and [compression formats](../explanation/compression-formats.md) guides.
 
 ## JSON output
 
 
-Pass `--json` to make operation commands emit one JSON object per line,
-including progress, status, warnings, selected inputs, and emitted-file
-metadata where relevant. JSON mode disables interactive selection, making it
-the stable interface for scripts. Commands that generate an asset, such as
-`bundle schema` and `completions`, still write that asset in its native format.
+Pass `--json` to make operation commands emit one JSON object per line, including progress, status, warnings, selected inputs, and emitted-file metadata where relevant. JSON mode disables interactive selection, making it the stable interface for scripts. Commands that generate an asset, such as `bundle schema` and `completions`, still write that asset in its native format.
 
 ```bash
 rom-weaver --json probe --input game.sfc | jq
@@ -251,20 +163,12 @@ rom-weaver --json probe --input game.sfc | jq
 
 ### Exit codes
 
-`rom-weaver` returns `0` on success, `1` when an operation fails, `2` for an
-unsupported operation or a command-line usage error, and `130` when a run is
-cancelled.
+`rom-weaver` returns `0` on success, `1` when an operation fails, `2` for an unsupported operation or a command-line usage error, and `130` when a run is cancelled.
 
 ## File permissions
 
 
-Inputs are checked for readability before a command does any work. The commands
-that write large outputs (`extract`, `compress`, `trim`, `patch apply`, and
-`patch create`) have their destination checked for writability at the same
-point, so a read-only output directory costs you a quick error rather than an
-abandoned multi-gigabyte compress. Both checks do the real thing, an open, a
-listing, or a create, so ACLs, group membership, and read-only mounts are
-honored instead of guessed at from mode bits.
+Inputs are checked for readability before a command does any work. The commands that write large outputs (`extract`, `compress`, `trim`, `patch apply`, and `patch create`) have their destination checked for writability at the same point, so a read-only output directory costs you a quick error rather than an abandoned multi-gigabyte compress. Both checks do the real thing, an open, a listing, or a create, so ACLs, group membership, and read-only mounts are honored instead of guessed at from mode bits.
 
 Denials name the path, the operation, and the identities involved:
 
@@ -273,27 +177,17 @@ error: i/o error: cannot open `/roms/game.iso`: Permission denied (os error 13)
 (`/roms/game.iso` is mode 0600 owned by 0:0; this process runs as 1000:1000)
 ```
 
-Read that as three facts: what was refused, who owns it, and who asked. Only a
-genuinely missing path is reported as `input path does not exist`. A file that
-exists but cannot be reached, including one behind a directory you cannot
-traverse, is always reported as a denial rather than as a typo. The fixes for
-each case are in
-[Fix a permission error](../how-to/fix-permission-errors.md).
+Read that as three facts: what was refused, who owns it, and who asked. Only a genuinely missing path is reported as `input path does not exist`. A file that exists but cannot be reached, including one behind a directory you cannot traverse, is always reported as a denial rather than as a typo. The fixes for each case are in [Fix a permission error](../how-to/fix-permission-errors.md).
 
-Permission failures exit `1`. Under `--json` they arrive as a terminal event
-with `"status": "failed"`, carrying `"stage": "validate"` when the preflight
-caught them.
+Permission failures exit `1`. Under `--json` they arrive as a terminal event with `"status": "failed"`, carrying `"stage": "validate"` when the preflight caught them.
 
 ## Man pages
 
 
-The pages under `docs/man` come from the same Clap definitions as `--help`, so
-they always match it. They are generated during release packaging and are
-installed by Homebrew and the install scripts. In a source checkout, run:
+The pages under `docs/man` come from the same Clap definitions as `--help`, so they always match it. They are generated during release packaging and are installed by Homebrew and the install scripts. In a source checkout, run:
 
 ```bash
 mise run manpages
 ```
 
-Use `man ./docs/man/rom-weaver.1` from a source checkout when they are not
-installed system-wide. Do not edit the generated `.1` files manually.
+Use `man ./docs/man/rom-weaver.1` from a source checkout when they are not installed system-wide. Do not edit the generated `.1` files manually.

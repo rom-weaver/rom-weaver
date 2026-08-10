@@ -26,13 +26,9 @@ It is intentionally a living document. Some patch families do not have stable fo
 - VCDIFF: RFC 3284 <https://www.rfc-editor.org/rfc/rfc3284.html>
 - DLDI (Dynamically Linked Device Interface): <https://www.chishm.com/DLDI/>
 - BSDIFF family background paper: <https://www.daemonology.net/papers/bsdiff.pdf>
-- DCP (Universal Dreamcast Patcher): no formal spec - a ZIP of per-file
-  xdelta3/VCDIFF deltas applied inside a GD-ROM ISO9660 filesystem; convention
-  documented from the UDP source (see implementations below).
-- ISO9660 / ECMA-119 (volume descriptors, directory records, path tables):
-  <https://wiki.osdev.org/ISO_9660>
-- CD-ROM sector layout + EDC/ECC (ECMA-130, `MODE1/2352`):
-  <https://www.ecma-international.org/wp-content/uploads/ECMA-130_2nd_edition_june_1996.pdf>
+- DCP (Universal Dreamcast Patcher): no formal spec - a ZIP of per-file xdelta3/VCDIFF deltas applied inside a GD-ROM ISO9660 filesystem; convention documented from the UDP source (see implementations below).
+- ISO9660 / ECMA-119 (volume descriptors, directory records, path tables): <https://wiki.osdev.org/ISO_9660>
+- CD-ROM sector layout + EDC/ECC (ECMA-130, `MODE1/2352`): <https://www.ecma-international.org/wp-content/uploads/ECMA-130_2nd_edition_june_1996.pdf>
 
 ## Patch reference implementations
 
@@ -63,14 +59,9 @@ It is intentionally a living document. Some patch families do not have stable fo
   - Vendored Flips snapshot: <https://github.com/Alcaro/Flips/tree/5a3d2012b8ea53ae777c24b8ac4edb9a6bdb9761>
 - xdelta3 (VCDIFF-compatible toolchain): <https://github.com/jmacd/xdelta>
 - open-vcdiff (RFC 3284 implementation): <https://github.com/google/open-vcdiff>
-- Universal Dreamcast Patcher (the `.dcp` reference; GPL-3.0, study only - do
-  not copy): <https://github.com/DerekPascarella/UniversalDreamcastPatcher>
-  - GD-ROM ISO9660 build/extract (DiscUtilsGD, MIT) used by it and by
-    `buildgdi`: <https://github.com/Sappharad/GDIbuilder>
-- CD-ROM EDC/ECC reference (Neill Corlett's ECM algorithm; basis for the
-  `mode1` re-encoder): widely mirrored as `ecm.c`/`unecm.c` (ECMA-130 P/Q
-  Reed-Solomon product code over GF(2⁸), primitive poly `0x11D`, EDC poly
-  `0x8001801B`).
+- Universal Dreamcast Patcher (the `.dcp` reference; GPL-3.0, study only - do not copy): <https://github.com/DerekPascarella/UniversalDreamcastPatcher>
+  - GD-ROM ISO9660 build/extract (DiscUtilsGD, MIT) used by it and by `buildgdi`: <https://github.com/Sappharad/GDIbuilder>
+- CD-ROM EDC/ECC reference (Neill Corlett's ECM algorithm; basis for the `mode1` re-encoder): widely mirrored as `ecm.c`/`unecm.c` (ECMA-130 P/Q Reed-Solomon product code over GF(2⁸), primitive poly `0x11D`, EDC poly `0x8001801B`).
 
 ### In-repository (`rom-weaver`) implementations
 
@@ -113,10 +104,7 @@ It is intentionally a living document. Some patch families do not have stable fo
 
 ## BPS comparison: MultiPatch and Flips
 
-Comparison target: MultiPatch `b047dd325f5d37fd3cc920433080e27af779cf47`, whose `flips`
-submodule is `Alcaro/Flips` `5a3d2012b8ea53ae777c24b8ac4edb9a6bdb9761`.
-MultiPatch's BPS adapter calls Flips `ApplyPatch`, `CreatePatch(... ty_bps_linear)`,
-and `CreatePatch(... ty_bps)`.
+Comparison target: MultiPatch `b047dd325f5d37fd3cc920433080e27af779cf47`, whose `flips` submodule is `Alcaro/Flips` `5a3d2012b8ea53ae777c24b8ac4edb9a6bdb9761`. MultiPatch's BPS adapter calls Flips `ApplyPatch`, `CreatePatch(... ty_bps_linear)`, and `CreatePatch(... ty_bps)`.
 
 | Area | MultiPatch / Flips | `rom-weaver` |
 | ---- | ------------------ | ------------ |
@@ -128,14 +116,11 @@ and `CreatePatch(... ty_bps)`.
 | Header handling | Flips has legacy SMC/SFC 512-byte header removal unless exact handling is requested. MultiPatch inherits that behavior through Flips. | Treats input and output files as exact byte streams; no implicit SMC/SFC header removal. |
 | Limits | Flips is bounded by host `size_t`/`off_t` and allocation success; delta creation can use more memory for reverse indexes in some modes. | BPS create is intentionally in-memory and copy-aware only under the repo memory limits, including the current suffix-index budget and 32-bit suffix-array range. |
 
-Use MultiPatch/Flips as a behavioral oracle for applying BPS patches and for creation
-heuristics, not as a byte-for-byte creation oracle. Different valid creators can emit
-different action streams for the same source/target pair.
+Use MultiPatch/Flips as a behavioral oracle for applying BPS patches and for creation heuristics, not as a byte-for-byte creation oracle. Different valid creators can emit different action streams for the same source/target pair.
 
 ## PPF comparison: MultiPatch and ApplyPPF
 
-Comparison target: MultiPatch `master`, whose PPF path wraps Icarus/Paradox
-`ApplyPPF3.c` and `MakePPF3.c`.
+Comparison target: MultiPatch `master`, whose PPF path wraps Icarus/Paradox `ApplyPPF3.c` and `MakePPF3.c`.
 
 | Area | MultiPatch / ApplyPPF | `rom-weaver` |
 | ---- | --------------------- | ------------ |

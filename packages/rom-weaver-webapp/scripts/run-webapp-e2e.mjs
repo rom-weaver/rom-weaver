@@ -625,6 +625,16 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       }
     }
     await tutorial.waitFor({ state: "hidden" });
+    await page.waitForFunction(
+      () => {
+        const button = document.getElementById("rom-weaver-button-apply");
+        if (!(button instanceof HTMLButtonElement)) return false;
+        const label = button.textContent || "";
+        return !button.disabled && /download/i.test(label) && !/apply/i.test(label);
+      },
+      undefined,
+      { timeout: 60_000 },
+    );
 
     await page.goto(new URL("weave?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
