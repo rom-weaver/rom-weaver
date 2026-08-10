@@ -9555,6 +9555,9 @@ fn patch_apply_auto_header_keeps_a_super_magic_drive_header() {
     assert_eq!(
         fs::read(temp.child("output.smc").path()).expect("output"),
         expected
+    );
+}
+
 /// Build a patch with rom-weaver's own creator from `original` to `modified`,
 /// so the basis it was authored against is unambiguous by construction.
 fn create_basis_patch(
