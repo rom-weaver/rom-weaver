@@ -635,7 +635,17 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Bundle ${step}/4`);
       if (step === 4) {
-        await page.getByRole("button", { name: "Create ZIP Bundle", exact: true }).click();
+        const createBundleButton = page.getByRole("button", { name: "Create ZIP Bundle", exact: true });
+        await createBundleButton.waitFor({ state: "visible", timeout: 60_000 });
+        await page.waitForFunction(
+          () => {
+            const button = document.getElementById("rom-weaver-button-export-bundle");
+            return button instanceof HTMLButtonElement && !button.disabled;
+          },
+          undefined,
+          { timeout: 60_000 },
+        );
+        await createBundleButton.click();
         const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
         await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
         // Stability first: the guide re-anchors (and may scroll) while the
