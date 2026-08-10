@@ -1,10 +1,6 @@
 # Supported formats
 
-This is the authoritative support matrix for everything rom-weaver reads and
-writes. It covers every patch format the tool can apply and create, every
-container and format-specific compressed ROM or disc image it can probe, extract,
-and build, and the codecs available at create time. It also lists the checksum,
-trim, and header capabilities that surround them.
+This is the authoritative support matrix for everything rom-weaver reads and writes. It covers every patch format the tool can apply and create, every container and format-specific compressed ROM or disc image it can probe, extract, and build, and the codecs available at create time. It also lists the checksum, trim, and header capabilities that surround them.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -21,8 +17,7 @@ trim, and header capabilities that surround them.
 
 ## Legend
 
-Every support table uses these three marks. Each mark has its own shape and
-colour, so the tables still read without colour vision.
+Every support table uses these three marks. Each mark has its own shape and colour, so the tables still read without colour vision.
 
 | Mark | Meaning |
 | :---: | --- |
@@ -32,8 +27,7 @@ colour, so the tables still read without colour vision.
 
 ## Patch formats
 
-Every supported Apply entry also supports probe/parse, except DCP. DCP uses a
-specialized Dreamcast apply workflow rather than the general single-file parser.
+Every supported Apply entry also supports probe/parse, except DCP. DCP uses a specialized Dreamcast apply workflow rather than the general single-file parser.
 
 | Format | Aliases | Extensions | Apply | Create |
 | --- | --- | --- | :---: | :---: |
@@ -59,18 +53,15 @@ specialized Dreamcast apply workflow rather than the general single-file parser.
 | DPS | none | `.dps` | ✅ | ✅ |
 | DCP | none | `.dcp` | ⚠️ ² | ❌ |
 
-> ¹ Single-file `.hdiff` and `.hpatchz` patches are supported. Directory
-> patches (`HDIFF19`) are not supported.
+> ¹ Single-file `.hdiff` and `.hpatchz` patches are supported. Directory patches (`HDIFF19`) are not supported.
 >
-> ² DCP requires a Dreamcast `.cue` or `.gdi` input and must be applied alone.
-> Byte-level patch flags do not apply to this filesystem rebuild.
+> ² DCP requires a Dreamcast `.cue` or `.gdi` input and must be applied alone. Byte-level patch flags do not apply to this filesystem rebuild.
 
 NINJA1 headers can be detected but not applied. PDS is unsupported.
 
 ## Container and compression formats
 
-For everyday extract, convert, and compress steps, see
-[Extract, convert, and compress archives](../how-to/work-with-archives.md).
+For everyday extract, convert, and compress steps, see [Extract, convert, and compress archives](../how-to/work-with-archives.md).
 
 | Format | Aliases | Extensions | Probe | Extract | Create |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -98,11 +89,9 @@ For everyday extract, convert, and compress steps, see
 | Z3DS | `3ds` | `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, `.z3dsx` | ✅ | ✅ | ✅ |
 | XISO | none | `.xiso`, `.xiso.iso` | ❌ | ⚠️ ¹ | ❌ |
 
-> ¹ XISO extraction rebuilds the detected XDVDFS filesystem as a normalized
-> ISO. Detailed `probe` reports and XISO creation are not supported.
+> ¹ XISO extraction rebuilds the detected XDVDFS filesystem as a normalized ISO. Detailed `probe` reports and XISO creation are not supported.
 >
-> ² CHD parent and differential support exists in the Rust container API. The
-> native CLI does not expose it. `extract --split-bin` affects CD images only.
+> ² CHD parent and differential support exists in the Rust container API. The native CLI does not expose it. `extract --split-bin` affects CD images only.
 
 ## Create-time codecs
 
@@ -114,8 +103,7 @@ For everyday extract, convert, and compress steps, see
 | Z3DS | `zstd` |
 | CHD | `store`, `zlib`, `zstd`, `lzma`, `huff`, `flac`, `cdlz`, `cdzl`, `cdzs`, `cdfl`, `avhuff` |
 
-`huffman` aliases `huff`; `avhu` aliases `avhuff`. CHD accepts repeated codec
-options for MAME-style codec lists.
+`huffman` aliases `huff`; `avhu` aliases `avhuff`. CHD accepts repeated codec options for MAME-style codec lists.
 
 Compression levels use these codec-aware profiles:
 
@@ -131,14 +119,9 @@ An explicit `codec:level` value overrides the global profile.
 
 ## Checksum support
 
-Supported algorithms are `crc32`, `md5`, `sha1`, `sha256`, `blake3`,
-`crc32c`, `crc16`, and `adler32`.
+Supported algorithms are `crc32`, `md5`, `sha1`, `sha256`, `blake3`, `crc32c`, `crc16`, and `adler32`.
 
-Checksums can target source bytes, selected container payloads, or byte
-ranges (`--start`/`--length`).
-Known header and byte-order compatibility transforms appear as
-`checksum_variants`, including raw, headerless, repaired-header, and N64 byte
-orders. `--no-trim-fix` disables automatic trim-boundary variants.
+Checksums can target source bytes, selected container payloads, or byte ranges (`--start`/`--length`). Known header and byte-order compatibility transforms appear as `checksum_variants`, including raw, headerless, repaired-header, and N64 byte orders. `--no-trim-fix` disables automatic trim-boundary variants.
 
 ## Trim support
 
@@ -150,30 +133,17 @@ orders. `--no-trim-fix` disables automatic trim-boundary variants.
 - XISO images (`.xiso`, `.xiso.iso`, and probed XDVDFS `.iso` files)
 - RVZ scrub candidates detected by the format recommendation
 
-`--in-place` rewrites the source file; `--output` or `--extension` write the
-trimmed copy elsewhere instead, and `-n`/`--dry-run` reports what would change
-without writing anything.
+`--in-place` rewrites the source file; `--output` or `--extension` write the trimmed copy elsewhere instead, and `-n`/`--dry-run` reports what would change without writing anything.
 
-`--revert` pads a trimmed file back out, and works for NDS, GBA, and 3DS. XISO
-and RVZ scrub cannot be reverted. It also answers to `--untrim` and
-`--restore`.
+`--revert` pads a trimmed file back out, and works for NDS, GBA, and 3DS. XISO and RVZ scrub cannot be reverted. It also answers to `--untrim` and `--restore`.
 
-`--revert-marker` (also `--reversible`) embeds a small footer so a later revert
-reproduces the original padding exactly rather than guessing at it; see the
-[footer format](../development/trim-revert-footer.md).
+`--revert-marker` (also `--reversible`) embeds a small footer so a later revert reproduces the original padding exactly rather than guessing at it; see the [footer format](../development/trim-revert-footer.md).
 
 ## Header detection and repair
 
-Probe, checksum, and patch apply recognize headers for A78, LNX, NES/FDS,
-SNES copier and SMC variants, PCE copier formats, Game Boy/GBA, Mega Drive,
-SMS/Game Gear, all N64 byte orders, NDS, Neo Geo Pocket, and MSX.
+Probe, checksum, and patch apply recognize headers for A78, LNX, NES/FDS, SNES copier and SMC variants, PCE copier formats, Game Boy/GBA, Mega Drive, SMS/Game Gear, all N64 byte orders, NDS, Neo Geo Pocket, and MSX.
 
-`patch apply --repair-checksum` can repair SNES, NES, Game Boy/GBA, Mega
-Drive, SMS/Game Gear, N64, Atari 7800/Lynx, PCE/TurboGrafx-16, Virtual Boy,
-Neo Geo Pocket, MSX, and NDS compatibility fields. It validates but does not
-rewrite FDS, Atari Jaguar, ColecoVision, Watara Supervision, or Intellivision
-headers.
+`patch apply --repair-checksum` can repair SNES, NES, Game Boy/GBA, Mega Drive, SMS/Game Gear, N64, Atari 7800/Lynx, PCE/TurboGrafx-16, Virtual Boy, Neo Geo Pocket, MSX, and NDS compatibility fields. It validates but does not rewrite FDS, Atari Jaguar, ColecoVision, Watara Supervision, or Intellivision headers.
 
 
-For format specifications and upstream implementations, see
-[`references.md`](../development/references.md).
+For format specifications and upstream implementations, see [`references.md`](../development/references.md).

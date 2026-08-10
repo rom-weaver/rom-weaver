@@ -13,29 +13,18 @@
   <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
 </p>
 
-> **Beta software, published so the CLI can be.** This crate exists to build
-> [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the
-> `rom-weaver` command is the only supported interface. The Rust API is not
-> documented beyond this page, changes without notice between minor releases,
-> and using it in another project is unsupported.
+> **Beta software, published so the CLI can be.** This crate exists to build [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the `rom-weaver` command is the only supported interface. The Rust API is not documented beyond this page, changes without notice between minor releases, and using it in another project is unsupported.
 
 ## What does this crate do?
 
-The container registry and one handler per format, each implementing
-`rom-weaver-core`'s `ContainerHandler` trait.
+The container registry and one handler per format, each implementing `rom-weaver-core`'s `ContainerHandler` trait.
 
 - **General archives.** ZIP, 7z, RAR, and the tar family.
-- **Disc-image containers.** CHD, RVZ, CSO, PBP, GCZ, WIA, WBFS, NFS, TGC,
-  and XISO.
+- **Disc-image containers.** CHD, RVZ, CSO, PBP, GCZ, WIA, WBFS, NFS, TGC, and XISO.
 - **ROM-specific compression.** Z3DS for Nintendo 3DS ROMs.
-- **Creation, not just reading.** ZIP, 7z, CHD, RVZ, and Z3DS can be written
-  with codec-aware compression settings. CHD and RVZ output is validated
-  against `chdman` and `dolphin-tool`, respectively.
-- **Bounded memory.** Extract and create run as producer/consumer pipelines
-  over bounded channels, so a 60 GiB image does not become a 60 GiB
-  allocation.
-- **Threading that reports itself.** Every operation returns the
-  `ThreadExecution` it actually used, not just what it could have used.
+- **Creation, not just reading.** ZIP, 7z, CHD, RVZ, and Z3DS can be written with codec-aware compression settings. CHD and RVZ output is validated against `chdman` and `dolphin-tool`, respectively.
+- **Bounded memory.** Extract and create run as producer/consumer pipelines over bounded channels, so a 60 GiB image does not become a 60 GiB allocation.
+- **Threading that reports itself.** Every operation returns the `ThreadExecution` it actually used, not just what it could have used.
 
 ## Usage
 
@@ -43,16 +32,11 @@ The container registry and one handler per format, each implementing
 cargo add rom-weaver-containers
 ```
 
-`cargo add` selects the current release. To follow the exact-pinning guidance
-below, change its generated requirement to `=X.Y.Z`.
+`cargo add` selects the current release. To follow the exact-pinning guidance below, change its generated requirement to `=X.Y.Z`.
 
-This crate links native C libraries: a vendored libarchive plus zlib, bzip2,
-LZMA, zstd, and LZ4. Building it needs **CMake**, **Clang**, and a working
-native compiler toolchain. It declares `links = "archive"`, so only one
-libarchive-linking crate may appear in a dependency graph.
+This crate links native C libraries: a vendored libarchive plus zlib, bzip2, LZMA, zstd, and LZ4. Building it needs **CMake**, **Clang**, and a working native compiler toolchain. It declares `links = "archive"`, so only one libarchive-linking crate may appear in a dependency graph.
 
-Default features build every compression backend from vendored sources.
-Notable toggles:
+Default features build every compression backend from vendored sources. Notable toggles:
 
 | Feature | Effect |
 | --- | --- |
@@ -71,11 +55,7 @@ Notable toggles:
 
 ## Stability
 
-rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in
-minor releases; this crate is the least settled surface in the project. The
-supported way to use rom-weaver is the `rom-weaver` CLI; if you depend on this
-crate anyway, pin an exact version and expect to do the migration work
-yourself.
+rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in minor releases; this crate is the least settled surface in the project. The supported way to use rom-weaver is the `rom-weaver` CLI; if you depend on this crate anyway, pin an exact version and expect to do the migration work yourself.
 
 ## Documentation
 
@@ -85,7 +65,4 @@ yourself.
 
 ## License
 
-Copyright © Brandon Casey. Licensed under
-[AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
-Bundled third-party components retain their own licenses: libarchive, the
-inlined `nod` and `xdvdfs` sources, and the C compression libraries.
+Copyright © Brandon Casey. Licensed under [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE). Bundled third-party components retain their own licenses: libarchive, the inlined `nod` and `xdvdfs` sources, and the C compression libraries.

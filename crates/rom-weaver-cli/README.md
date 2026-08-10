@@ -13,37 +13,19 @@
   <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
 </p>
 
-> **Beta software.** The `rom-weaver` command is the supported interface, and
-> the one to install. The four library crates it is built from
-> (`rom-weaver-core`, `-checksum`, `-containers`, `-patches`) are published only
-> so this one can be; using them directly is unsupported.
+> **Beta software.** The `rom-weaver` command is the supported interface, and the one to install. The four library crates it is built from (`rom-weaver-core`, `-checksum`, `-containers`, `-patches`) are published only so this one can be; using them directly is unsupported.
 
 ## What does this crate do?
 
-The installable end of rom-weaver. It ships the `rom-weaver` binary and the
-`rom_weaver_app` command library that both frontends share. The native CLI and
-the `wasm32-wasip1-threads` build that powers the
-[rom-weaver.com](https://rom-weaver.com/) webapp run the exact same
-orchestration code.
+The installable end of rom-weaver. It ships the `rom-weaver` binary and the `rom_weaver_app` command library that both frontends share. The native CLI and the `wasm32-wasip1-threads` build that powers the [rom-weaver.com](https://rom-weaver.com/) webapp run the exact same orchestration code.
 
-- **Apply and create patches.** Twenty-one formats, including IPS, BPS, UPS,
-  xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered
-  multi-patch chains, strict checksum validation, and cheat-code baking. Three
-  of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
-- **Inspect and extract archives, disc images, and compressed ROMs.** ZIP, 7z,
-  RAR, tar, CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including
-  nested archives.
-- **Create compressed output.** ZIP, 7z, CHD, RVZ, and Z3DS. CHD and RVZ
-  output is validated against `chdman` and `dolphin-tool`, respectively.
-- **Checksum and verify.** CRC-32, MD5, SHA-1, SHA-256, BLAKE3, and friends,
-  with copier-header detection and header-aware checksum variants.
-- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS,
-  GBA, and 3DS can be reverted, with an opt-in footer that restores the
-  original byte-for-byte.
-- **Share workflows.** `rom-weaver-bundle.json` bundles pin patch order,
-  checksums, and output naming so others can replay the exact workflow.
-- **Scriptable.** Operation commands can emit line-delimited JSON; schema and
-  completion generators keep their native output formats.
+- **Apply and create patches.** Twenty-one formats, including IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered multi-patch chains, strict checksum validation, and cheat-code baking. Three of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
+- **Inspect and extract archives, disc images, and compressed ROMs.** ZIP, 7z, RAR, tar, CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
+- **Create compressed output.** ZIP, 7z, CHD, RVZ, and Z3DS. CHD and RVZ output is validated against `chdman` and `dolphin-tool`, respectively.
+- **Checksum and verify.** CRC-32, MD5, SHA-1, SHA-256, BLAKE3, and friends, with copier-header detection and header-aware checksum variants.
+- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS, GBA, and 3DS can be reverted, with an opt-in footer that restores the original byte-for-byte.
+- **Share workflows.** `rom-weaver-bundle.json` bundles pin patch order, checksums, and output naming so others can replay the exact workflow.
+- **Scriptable.** Operation commands can emit line-delimited JSON; schema and completion generators keep their native output formats.
 
 Everything runs locally. Nothing is uploaded.
 
@@ -54,10 +36,7 @@ cargo install rom-weaver-cli --locked
 rom-weaver --help
 ```
 
-A source build links native C libraries and needs **Rust 1.95+**, **CMake**,
-**Clang**, and a native compiler toolchain. The crate's Cargo features
-(`typescript-types`, `wasm-app`) drive this project's own type generation and
-WASM entrypoint builds; they are not meant for external use.
+A source build links native C libraries and needs **Rust 1.95+**, **CMake**, **Clang**, and a native compiler toolchain. The crate's Cargo features (`typescript-types`, `wasm-app`) drive this project's own type generation and WASM entrypoint builds; they are not meant for external use.
 
 To skip the toolchain entirely, run the published Linux image:
 
@@ -66,13 +45,9 @@ docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" \
   ghcr.io/rom-weaver/rom-weaver-cli:latest probe --input /work/game.iso
 ```
 
-Mount your ROM directory at `/work` and pass paths under it. `--user` matters:
-bind-mounted files keep their host ownership, so without it the container
-may be unable to read private files and writes use the image's uid.
+Mount your ROM directory at `/work` and pass paths under it. `--user` matters: bind-mounted files keep their host ownership, so without it the container may be unable to read private files and writes use the image's uid.
 
-Prebuilt binaries and a Homebrew tap are available. See the
-[project README](https://github.com/rom-weaver/rom-weaver#install) for the
-current install methods and platform coverage.
+Prebuilt binaries and a Homebrew tap are available. See the [project README](https://github.com/rom-weaver/rom-weaver#install) for the current install methods and platform coverage.
 
 ## Usage
 
@@ -100,16 +75,9 @@ rom-weaver compress --input game.cue --output game.chd
 rom-weaver probe --input game.chd --json
 ```
 
-A few commands and flags answer to more than one name: `weave` is the short
-name for `patch apply`, `inspect` for `probe`, and `trim --untrim`/`--restore`
-for `trim --revert`. Format names have alternates too, so `--format 7zip` and
-`--format 7z` are the same. The
-[CLI guide](https://rom-weaver.com/docs/cli#alternate-names)
-lists them all.
+A few commands and flags answer to more than one name: `weave` is the short name for `patch apply`, `inspect` for `probe`, and `trim --untrim`/`--restore` for `trim --revert`. Format names have alternates too, so `--format 7zip` and `--format 7z` are the same. The [CLI guide](https://rom-weaver.com/docs/cli#alternate-names) lists them all.
 
-The [CLI reference](https://rom-weaver.com/docs/cli)
-covers every command, the supported-format tables, compression settings, JSON
-output, man pages, Docker usage, and file permissions.
+The [CLI reference](https://rom-weaver.com/docs/cli) covers every command, the supported-format tables, compression settings, JSON output, man pages, Docker usage, and file permissions.
 
 ## Related crates
 
@@ -122,11 +90,7 @@ output, man pages, Docker usage, and file permissions.
 
 ## Stability
 
-rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in
-minor releases. Patching, compressing, extracting, and bundling are tested
-extensively; the flags and JSON shapes around them may still change on the way
-to v1.0. The `rom_weaver_app` library this crate also exposes is an internal
-seam between the native and wasm frontends, not a supported API.
+rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in minor releases. Patching, compressing, extracting, and bundling are tested extensively; the flags and JSON shapes around them may still change on the way to v1.0. The `rom_weaver_app` library this crate also exposes is an internal seam between the native and wasm frontends, not a supported API.
 
 ## Documentation
 
@@ -136,7 +100,4 @@ seam between the native and wasm frontends, not a supported API.
 
 ## License
 
-Copyright © Brandon Casey. Licensed under
-[AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE).
-Bundled third-party components retain their own licenses; release builds ship a
-generated `CLI_NOTICE` attribution and license inventory.
+Copyright © Brandon Casey. Licensed under [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE). Bundled third-party components retain their own licenses; release builds ship a generated `CLI_NOTICE` attribution and license inventory.
