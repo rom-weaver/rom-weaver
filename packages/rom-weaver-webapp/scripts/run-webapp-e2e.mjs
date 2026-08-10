@@ -737,7 +737,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     let retargetedSamples = 0;
     for (const slug of DOCS_ROUTES) {
       if (browserName === "chromium") await page.coverage.startCSSCoverage();
-      await page.goto(`${baseUrl.replace(/\/$/, "")}/${slug}`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${baseUrl.replace(/\/$/, "")}/${slug}`, { waitUntil: "commit" });
       await page.locator(".docs-article h1").waitFor({ state: "visible" });
       await installAuditTools();
       const headings = await page.locator("h1").count();
