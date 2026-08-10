@@ -36,6 +36,7 @@ const operationMultiplier = (command: RomWeaverCommand): number => {
     case "trim":
       return MULTIPLIER_STREAMED;
     case "compress":
+    case "export":
       return MULTIPLIER_COMPRESS;
     case "extract":
     // Ingest now drives disc decompression + archive extraction (formerly `extract`), so it

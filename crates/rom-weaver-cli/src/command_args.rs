@@ -283,7 +283,7 @@ fn default_checksum_algorithms() -> Vec<String> {
         .collect()
 }
 
-const fn default_max_compression_level() -> CompressionLevelProfile {
+pub(crate) const fn default_max_compression_level() -> CompressionLevelProfile {
     CompressionLevelProfile::Max
 }
 
@@ -948,6 +948,10 @@ XISO and RVZ scrub cannot be reverted."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub revert_marker: bool,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub export: Option<ExportOptions>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1965,6 +1969,10 @@ apply and verifies the input, as long as the file name survives."
     #[serde(default = "default_code_kind")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub code_kind: String,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub export: Option<ExportOptions>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

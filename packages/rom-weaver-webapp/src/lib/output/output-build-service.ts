@@ -6,7 +6,7 @@ import {
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { JsonValue, ProgressEvent as SharedProgressEvent } from "../../types/runtime.ts";
 import type { CompressionOptionValue } from "../../types/workflow-compression.ts";
-import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import type { RuntimeOutputExportOptions, WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import { emitTraceLog } from "../logging.ts";
 import { COMPRESSION_DEFAULTS } from "../compression/compression-metadata.ts";
@@ -92,6 +92,110 @@ const getChdCompressionCodecs = (mode: string | null | undefined, options: Outpu
     chdCreateDvdCodecs: getStringOption(archiveSettings.chdCreateDvdCodecs, COMPRESSION_DEFAULTS.chdCreateDvdCodecs),
     compressionProfile: String(getCompressionProfile(options)),
   });
+};
+
+const getRustExportCodec = (codec: string, level: number | string | undefined) => {
+  const normalizedCodec = String(codec || "").trim();
+  if (!normalizedCodec || normalizedCodec === "store" || level === undefined) return normalizedCodec;
+  return `${normalizedCodec}:${level}`;
+};
+
+const getRustOutputExportOptions = (
+  compression: string,
+  options: OutputWorkflowOptions | undefined,
+  chdMode?: string | null,
+  entryName?: string | null,
+): RuntimeOutputExportOptions => {
+  const levels = resolveCompressionLevels({
+    compressionProfile: String(getCompressionProfile(options)),
+    rvzCodec: getContainerSettings(options).rvzCodec as string | null | undefined,
+    rvzCompressionLevel: getContainerSettings(options).rvzCompressionLevel as string | number | null | undefined,
+    sevenZipCodec: getContainerSettings(options).sevenZipCodec as string | null | undefined,
+    sevenZipLevel: getContainerSettings(options).sevenZipLevel as string | number | null | undefined,
+    zipCodec: getContainerSettings(options).zipCodec as string | null | undefined,
+    zipLevel: getContainerSettings(options).zipLevel as string | number | null | undefined,
+    z3dsCompressionLevel: getContainerSettings(options).z3dsCompressionLevel as
+      | string
+      | number
+      | "default"
+      | null
+      | undefined,
+  });
+  const normalized = String(compression || "")
+    .trim()
+    .toLowerCase();
+  const withEntryName = (exportOptions: RuntimeOutputExportOptions): RuntimeOutputExportOptions => {
+    const normalizedEntryName = typeof entryName === "string" ? entryName.trim() : "";
+    return normalizedEntryName ? { ...exportOptions, entryName: normalizedEntryName } : exportOptions;
+  };
+  if (normalized === "zip") {
+    return withEntryName({
+      codecs: [getRustExportCodec(levels.zipCodec, levels.zipCodec === "store" ? undefined : levels.zipLevel)],
+      format: normalized,
+      level: levels.compressionProfile as RuntimeOutputExportOptions["level"],
+    });
+  }
+  if (normalized === "7z") {
+    return withEntryName({
+      codecs: [getRustExportCodec(levels.sevenZipCodec, levels.sevenZipLevel)],
+      format: normalized,
+      level: levels.compressionProfile as RuntimeOutputExportOptions["level"],
+    });
+  }
+  if (normalized === "rvz") {
+    return withEntryName({
+      codecs: [getRustExportCodec(levels.rvzCodec, levels.rvzCompressionLevel)],
+      format: normalized,
+      level: levels.compressionProfile as RuntimeOutputExportOptions["level"],
+    });
+  }
+  if (normalized === "z3ds") {
+    return withEntryName({
+      codecs: [
+        getRustExportCodec(
+          COMPRESSION_DEFAULTS.z3dsCodec,
+          levels.z3dsCompressionLevel === "default" ? undefined : levels.z3dsCompressionLevel,
+        ),
+      ],
+      format: normalized,
+      level: levels.compressionProfile as RuntimeOutputExportOptions["level"],
+    });
+  }
+  if (normalized === "chd") {
+    const chdCodecs = getChdCompressionCodecs(chdMode || "cd", options);
+    return withEntryName({
+      codecs: String(chdCodecs)
+        .split(/[,+]/)
+        .map((codec) => codec.trim())
+        .filter(Boolean),
+      format: normalized,
+      level: levels.compressionProfile as RuntimeOutputExportOptions["level"],
+    });
+  }
+  return withEntryName({ format: normalized, level: levels.compressionProfile as RuntimeOutputExportOptions["level"] });
+};
+
+const isEnabledOption = (value: unknown): boolean =>
+  value === true || value === 1 || (typeof value === "string" && value.trim().toLowerCase() === "true");
+
+const hasRustCompatibleRvzSettings = (options: OutputWorkflowOptions | undefined): boolean => {
+  const container = getContainerSettings(options);
+  const blockSize = container.rvzBlockSize;
+  if (blockSize !== undefined && Number(blockSize) !== Number(COMPRESSION_DEFAULTS.rvzBlockSize)) return false;
+  return !isEnabledOption(container.rvzScrub);
+};
+
+const shouldUseRustOutputExport = (
+  compression: string,
+  options: OutputWorkflowOptions | undefined,
+  source?: PatchFileInstance | null,
+): boolean => {
+  const normalized = String(compression || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "rvz" && !hasRustCompatibleRvzSettings(options)) return false;
+  if (normalized === "chd" && source?.metadata?.cuePath) return false;
+  return true;
 };
 
 const setCompressionOption = (
@@ -605,4 +709,9 @@ const buildSessionOutputFiles = async (
   };
 };
 
-export { buildSessionOutputFiles, createSingleFileRomSpecificOutput };
+export {
+  buildSessionOutputFiles,
+  createSingleFileRomSpecificOutput,
+  getRustOutputExportOptions,
+  shouldUseRustOutputExport,
+};

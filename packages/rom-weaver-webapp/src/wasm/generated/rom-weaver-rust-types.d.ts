@@ -316,18 +316,26 @@ sidecar_names?: Array<string>, sidecar_only?: boolean, no_ignore?: boolean, no_n
 
 export type CompressCommand = { input: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, force?: boolean, dry_run?: boolean, threads?: ThreadBudget, };
 
+export type ExportOptions = { output: string, format?: string, codec?: Array<string>, level?: CompressionLevelProfile,
+/**
+ * Name the staged input should have inside a single-file archive.
+ */
+entry_name?: string, };
+
+export type ExportCommand = { input: Array<string>, output: string, format?: string, codec?: Array<string>, level?: CompressionLevelProfile, threads?: ThreadBudget, };
+
 export type TrimCommand = { input: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, revert?: boolean, recursive?: boolean, filter?: Array<FilterKind>,
 /**
  * `--filter` has no "off" value, so this stays the visible way to disable
  * the ROM filter entirely (and keeps older scripts working).
  */
-rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, threads?: ThreadBudget, force?: boolean, };
+rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, export?: ExportOptions, threads?: ThreadBudget, force?: boolean, };
 
 export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, expect_out?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
 
 export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
 
-export type PatchCreateCommand = { original: string, modified?: string, format?: string, output?: string, plan?: boolean, ignore_checksum_validation?: boolean, checksum_name?: boolean, assume_in?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, solid_system?: string, solid_game?: string, solid_hack?: string, solid_version?: string, solid_author?: string, solid_contact?: string, solid_comment?: string, solid_extended?: boolean, xdelta_secondary?: string, force?: boolean, };
+export type PatchCreateCommand = { original: string, modified?: string, format?: string, output?: string, plan?: boolean, ignore_checksum_validation?: boolean, checksum_name?: boolean, assume_in?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, export?: ExportOptions, threads?: ThreadBudget, solid_system?: string, solid_game?: string, solid_hack?: string, solid_version?: string, solid_author?: string, solid_contact?: string, solid_comment?: string, solid_extended?: boolean, xdelta_secondary?: string, force?: boolean, };
 
 export type PatchCommands = { "type": "apply", "args": PatchApplyCommand } | { "type": "validate", "args": PatchValidateCommand } | { "type": "create", "args": PatchCreateCommand };
 
@@ -503,7 +511,7 @@ export type BundleCommands = { "type": "create", "args": BundleCreateCommand } |
 
 export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, memory_ceiling_bytes?: bigint | null, };
 
-export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "bundle", "args": BundleCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
+export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "export", "args": ExportCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "bundle", "args": BundleCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, log_level?: LogLevel, dep_trace?: boolean, interactive_selection_enabled?: boolean,
 /**

@@ -156,6 +156,11 @@ unpacking, use `probe`."
     Ingest(IngestCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
+        command(name = "export", hide = true, about = "Finalize a staged output")
+    )]
+    Export(ExportCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
         command(
             about = "Pack files into an archive, disc image, or ROM-specific compressed format",
             long_about = "\
@@ -1344,6 +1349,10 @@ pub use extract_progress::{ExtractStepDetails, ExtractedFileEntry};
 
 #[path = "compress_trim_batch.rs"]
 mod compress_trim_batch;
+
+mod export;
+use export::ExportRequest;
+pub use export::{ExportCommand, ExportOptions};
 
 // Pure planning (no threads/fs), so it compiles on wasm too - the browser calls `plan-extract-batch`
 // to schedule its multi-worker pool with the same Rust policy the native executor uses.

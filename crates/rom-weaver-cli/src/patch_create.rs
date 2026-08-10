@@ -134,6 +134,56 @@ pub(super) fn create_patch_format_size_error_message(
 }
 
 impl CliApp {
+    fn patch_create_output_path(
+        context: &OperationContext,
+        output: &Path,
+        export: Option<&ExportOptions>,
+        patch_format: &str,
+    ) -> Result<PathBuf> {
+        if let Some(export) = export {
+            Self::staged_export_path(
+                context,
+                "patch-create-staged",
+                export.entry_name.as_deref(),
+                patch_format,
+            )
+        } else {
+            Ok(output.to_path_buf())
+        }
+    }
+
+    fn export_patch_create_output(
+        &self,
+        report: OperationReport,
+        export: Option<&ExportOptions>,
+        create_output: &Path,
+        context: &OperationContext,
+    ) -> OperationReport {
+        if report.status != OperationStatus::Succeeded {
+            return report;
+        }
+        let Some(export) = export else {
+            return report;
+        };
+        self.export(
+            ExportRequest {
+                command: "patch-create",
+                family: OperationFamily::Patch,
+                stage: "compress",
+                output_kind: "output",
+                inputs: vec![create_output.to_path_buf()],
+                output: export.output.clone(),
+                format: export.format.clone(),
+                codec: export.codec.clone(),
+                explicit_level: None,
+                level: export.level,
+                overrides: Vec::new(),
+                parent: None,
+            },
+            context,
+        )
+    }
+
     pub(super) fn inspect_patch_create_input_sizes(
         &self,
         command: &str,
@@ -304,6 +354,7 @@ impl CliApp {
             code_kind = %args.code_kind,
             threads = %args.threads,
             xdelta_secondary = %args.xdelta_secondary,
+            export = args.export.is_some(),
             "starting patch-create command"
         );
         let base_context = self.context(args.threads);
@@ -591,7 +642,24 @@ impl CliApp {
             );
         }
 
-        let mut create_output = output;
+        let mut create_output = match Self::patch_create_output_path(
+            &context,
+            &output,
+            args.export.as_ref(),
+            handler.descriptor().name,
+        ) {
+            Ok(path) => path,
+            Err(error) => {
+                return self.finish(
+                    "patch-create",
+                    fail(
+                        Some(handler.descriptor().name.to_string()),
+                        "validate",
+                        format!("failed to prepare patch output: {error}"),
+                    ),
+                );
+            }
+        };
         if args.checksum_name {
             // Prefer a caller-supplied source crc32 (the browser already hashes the
             // original during input prep) to avoid re-reading the original here; fall
@@ -688,7 +756,8 @@ impl CliApp {
                 context.single_thread_execution(),
             ),
         };
-        let mut report = report;
+        let mut report =
+            self.export_patch_create_output(report, args.export.as_ref(), &create_output, &context);
         if report.status == OperationStatus::Succeeded
             && let Some(warning) = format_warning.as_deref()
         {
@@ -699,8 +768,15 @@ impl CliApp {
         {
             report.label = format!("{}; {}", report.label, summary.label());
         }
-        if report.status == OperationStatus::Succeeded && args.checksum_name {
-            report = Self::attach_emitted_files_details(report, vec![create_output.clone()], None);
+        if report.status == OperationStatus::Succeeded
+            && (args.checksum_name || args.export.is_some())
+        {
+            let output_detail = args
+                .export
+                .as_ref()
+                .map(|export| export.output.clone())
+                .unwrap_or(create_output);
+            report = Self::attach_emitted_files_details(report, vec![output_detail], None);
         }
         self.finish("patch-create", report)
     }

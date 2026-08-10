@@ -8,6 +8,7 @@ struct TrimBatchConfig<'a> {
     force: bool,
     operation: TrimOperation,
     revert_marker: bool,
+    export: Option<&'a ExportOptions>,
     context: &'a OperationContext,
     thread_execution: &'a Option<ThreadExecution>,
     source_count: usize,
@@ -349,6 +350,7 @@ impl CliApp {
             no_extract,
             revert_marker,
             force,
+            export,
             threads,
         } = args;
         let operation = if revert {
@@ -447,6 +449,18 @@ impl CliApp {
             );
         }
 
+        if export.is_some() && trim_sources.len() != 1 {
+            Self::cleanup_temp_paths(&cleanup_paths);
+            return self.finish(
+                "trim",
+                fail(
+                    "validate",
+                    "exported trim output requires exactly one trim-eligible source file"
+                        .to_string(),
+                ),
+            );
+        }
+
         let config = TrimBatchConfig {
             explicit_output: output.as_deref(),
             extension: &extension,
@@ -455,6 +469,7 @@ impl CliApp {
             force,
             operation,
             revert_marker,
+            export: export.as_ref(),
             context: &context,
             thread_execution: &thread_execution,
             source_count: trim_sources.len(),
@@ -558,7 +573,29 @@ impl CliApp {
             return;
         }
         let repack_root = trim_source.repack_root.as_ref();
-        let output_path = if repack_root.is_some() {
+        let output_path = if let Some(export) = config
+            .export
+            .filter(|_| !config.dry_run && repack_root.is_none())
+        {
+            match Self::staged_export_path(
+                config.context,
+                "trim-staged",
+                export.entry_name.as_deref(),
+                "bin",
+            ) {
+                Ok(path) => path,
+                Err(error) => {
+                    Self::record_trim_failure(
+                        state,
+                        format!(
+                            "{}: failed to prepare trim output: {error}",
+                            trim_source.path.display()
+                        ),
+                    );
+                    return;
+                }
+            }
+        } else if repack_root.is_some() {
             trim_source.path.clone()
         } else if let Some(explicit_output) = config.explicit_output {
             explicit_output.to_path_buf()
@@ -630,12 +667,42 @@ impl CliApp {
             (result, _) => result,
         };
         match trim_result {
-            Ok(outcome) => {
+            Ok(mut outcome) => {
                 // A finished output must leave the cancel registry, or a later
                 // Ctrl-C in this batch would delete it along with the file in
                 // flight.
                 if writes_new_file && !config.dry_run {
                     rom_weaver_core::complete_in_progress_output(&output_path);
+                }
+                if let Some(export) = config.export
+                    && !config.dry_run
+                    && repack_root.is_none()
+                {
+                    let export_report = self.export(
+                        ExportRequest {
+                            command: "trim",
+                            family: OperationFamily::Command,
+                            stage: "compress",
+                            output_kind: "output",
+                            inputs: vec![outcome.output_path.clone()],
+                            output: export.output.clone(),
+                            format: export.format.clone(),
+                            codec: export.codec.clone(),
+                            explicit_level: None,
+                            level: export.level,
+                            overrides: Vec::new(),
+                            parent: None,
+                        },
+                        config.context,
+                    );
+                    if export_report.status != OperationStatus::Succeeded {
+                        Self::record_trim_failure(
+                            state,
+                            format!("{}: {}", trim_source.path.display(), export_report.label),
+                        );
+                        return;
+                    }
+                    outcome.output_path = export.output.clone();
                 }
                 Self::record_trim_outcome(outcome, config, state);
             }

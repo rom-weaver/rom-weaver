@@ -1,25 +1,18 @@
-import { getDefaultCreatePatchOutputFileName, getPatchFileBytes } from "../../lib/input/binary-service.ts";
+import { getDefaultCreatePatchOutputFileName } from "../../lib/input/binary-service.ts";
 import { getPrimaryInputAsset } from "../../lib/input/input-assets.ts";
 import { prepareInputAssets } from "../../lib/input/input-preparation-service.ts";
 import { getProgressEventPercent } from "../../presentation/workflow-presentation.ts";
 import type { SourceRef } from "../../types/source.ts";
+import type { ArchiveOutputSettings } from "../../types/workflow-compression.ts";
 import type { PatchFileInstance } from "../../types/workflow-internal.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { CreatePatchInput, CreatePatchResult, JsonValue } from "../../types/workflow-runtime-types.ts";
-import { toPublicOutput } from "../apply/patch-apply-service.ts";
-import {
-  createSingleFileArchiveOutput,
-  getArchiveOutputCompression,
-  hasArchiveFileName,
-} from "../output/archive-output-service.ts";
+import { getArchiveOutputCompression, hasArchiveFileName } from "../output/archive-output-service.ts";
 import { requireOutputName } from "../output/output-name-validation.ts";
+import { getRustOutputExportOptions } from "../output/output-build-service.ts";
+import { getCompressedOutputFileName } from "../output/output-files.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
-import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
-import {
-  getWorkflowSourceFileName,
-  roundElapsedMs,
-  shouldPrepareWorkflowSource,
-} from "../workflow/source-preparation.ts";
+import { getWorkflowSourceFileName, shouldPrepareWorkflowSource } from "../workflow/source-preparation.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
 
 type JsonObject = { [key: string]: JsonValue };
@@ -35,6 +28,19 @@ const getCreateMetadata = (options: CreatePatchInput["options"]): JsonObject =>
 const getCreateCompression = (options: CreatePatchInput["options"]) => options?.output?.compression;
 const getCreateOutputName = (options: CreatePatchInput["options"]) => options?.output?.outputName;
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("create");
+
+const resolveCreateOutputName = (
+  requestedFileName: string,
+  compression: string,
+  options: CreatePatchInput["options"],
+): string => {
+  if (compression === "none" || hasArchiveFileName(requestedFileName, compression)) return requestedFileName;
+  return getCompressedOutputFileName(
+    requestedFileName,
+    compression,
+    (options?.output?.container || {}) as ArchiveOutputSettings,
+  );
+};
 
 const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRuntime): Promise<CreatePatchResult> => {
   const options = input.options || {};
@@ -76,25 +82,6 @@ const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRunti
     );
   };
 
-  const createCompressedPatchOutput = async (patchFile: PatchFileInstance) => {
-    const compression = getArchiveOutputCompression(getCreateCompression(options), "create patch");
-    if (compression === "none") {
-      traceWorkflowStage(options, "stage.skip", "compress", "output", { reason: "output compression disabled" });
-      return toPublicOutput(patchFile, runtime);
-    }
-    return createSingleFileArchiveOutput({
-      compression,
-      deps: { getPatchFileBytes, hasArchiveFileName },
-      entryFile: patchFile,
-      entryNameDetailKey: "patchEntryName",
-      fallbackEntryName: patchFile.fileName || `patch.${format}`,
-      options,
-      runtime,
-      trace: (operation, details) => traceWorkflowStageBlock(options, "compress", "output", operation, details),
-      unsupportedRuntimeMessage: "Patch output compression requires the rom-weaver wasm runtime",
-    });
-  };
-
   const createPatchCapability = runtime.patch.createPatch;
   const shouldUseWorkerCreate = !!createPatchCapability;
   const original = await prepareCreateSource(input.original, "original", input.selectedOriginalEntryName);
@@ -112,10 +99,17 @@ const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRunti
     );
     const requestedFileName = getCreateOutputName(options) || defaultPatchFileName;
     const compression = getArchiveOutputCompression(getCreateCompression(options), "create patch");
-    const basePatchFileName =
-      compression !== "none" && hasArchiveFileName(requestedFileName, compression)
-        ? defaultPatchFileName
-        : requestedFileName;
+    const outputName = resolveCreateOutputName(requestedFileName, compression, options);
+    const archiveEntryName =
+      compression === "none"
+        ? undefined
+        : hasArchiveFileName(requestedFileName, compression)
+          ? defaultPatchFileName
+          : requestedFileName;
+    const outputExport =
+      compression === "none"
+        ? undefined
+        : getRustOutputExportOptions(compression, options, undefined, archiveEntryName);
     // Embed the source crc32 into the patch file name via Rust `--checksum-name`
     // (the engine owns the parse/embed; see patch_filename_checksum.rs) so
     // checksumless formats round trip a "right ROM?" guard back into apply/validate.
@@ -144,25 +138,24 @@ const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRunti
               stage: "create",
             }),
           original: original as SourceRef,
-          outputName: basePatchFileName,
+          outputName,
+          ...(outputExport ? { export: outputExport } : {}),
           signal: options.signal,
           sourceCrc32,
           threads: getCreateThreads(options),
         }),
       () => ({ patchType: format, worker: true }),
     );
-    if (compression === "none") return result;
-    const patchFile = await createPatchFileFromPublicOutput(result.output, basePatchFileName);
-    const output = await createCompressedPatchOutput(patchFile);
-    const compressionTimeMs = roundElapsedMs(output?.timing);
     return {
-      format,
-      output,
+      ...result,
       sizeSummary: {
         ...result.sizeSummary,
-        ...(compressionTimeMs === undefined ? {} : { compressionTimeMs }),
-        outputSize: output.size,
-        rawSize: patchFile.fileSize,
+        outputSize: result.sizeSummary?.outputSize ?? result.output.size,
+        ...(result.sizeSummary?.rawSize === undefined
+          ? compression === "none"
+            ? { rawSize: result.sizeSummary?.outputSize ?? result.output.size }
+            : {}
+          : { rawSize: result.sizeSummary.rawSize }),
       },
     };
   }

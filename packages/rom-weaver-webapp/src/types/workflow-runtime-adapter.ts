@@ -6,6 +6,7 @@ import type {
   PatchValidateCommand,
   PatchValidationPlan,
   ThreadBudget,
+  CompressionLevelProfile,
 } from "../wasm/index.ts";
 import type { BundleHeaderMode, ParsedBundleCreateResult, ParsedBundleParseResult } from "./bundle.ts";
 import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
@@ -217,6 +218,13 @@ type RuntimePatchWorkerProgress = {
 
 type RuntimeThreadBudgetInput = ThreadBudget | string | number | null;
 
+type RuntimeOutputExportOptions = {
+  codecs?: string[];
+  entryName?: string;
+  format: string;
+  level?: CompressionLevelProfile | null;
+};
+
 type RuntimePatchValidationRequirement = {
   minimumSourceSize?: string | number | null;
   minimum_source_size?: string | number | null;
@@ -324,6 +332,7 @@ type RuntimePatchCreateWorkerInput = {
   originalFileName: string;
   originalFilePath: PatchCreateCommand["original"];
   outputName: NonNullable<PatchCreateCommand["output"]>;
+  export?: RuntimeOutputExportOptions;
   signal?: AbortSignal;
   sourceCrc32?: string;
   threads?: RuntimeThreadBudgetInput;
@@ -347,6 +356,7 @@ type RuntimePatchCreateFormatCandidates = {
 };
 
 type RuntimeTrimWorkerInput = {
+  export?: RuntimeOutputExportOptions;
   extension?: string;
   logLevel?: LogLevel;
   outputName: string;
@@ -409,6 +419,7 @@ type WorkflowRuntimePatch = {
     format: NonNullable<PatchCreateCommand["format"]>;
     metadata: JsonObject;
     outputName: NonNullable<PatchCreateCommand["output"]>;
+    export?: RuntimeOutputExportOptions;
     checksumName?: PatchCreateCommand["checksum_name"];
     sourceCrc32?: string;
     threads?: RuntimeThreadBudgetInput;
@@ -522,6 +533,7 @@ type WorkflowRuntimeBundle = {
 
 type WorkflowRuntimeTrim = {
   trim?: (input: {
+    export?: RuntimeOutputExportOptions;
     source: SourceRef;
     extension?: string;
     outputName: string;
@@ -610,6 +622,7 @@ export type {
   RuntimePatchCreateWorkerInput,
   RuntimePatchValidateWorkerInput,
   RuntimePatchWorkerProgress,
+  RuntimeOutputExportOptions,
   RuntimePublicOutputAdapter,
   RuntimeRomSpecificCreateChdInput,
   RuntimeRomSpecificCreateRvzInput,

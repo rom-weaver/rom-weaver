@@ -302,7 +302,7 @@ type ApplyWorkflowResult = {
     inputSize: number;
     patchCompressedSize?: number;
     patchSize?: number;
-    rawSize: number;
+    rawSize?: number;
     outputSize: number;
   };
   rom: {

@@ -4,6 +4,8 @@ import { createPatchFile } from "../../src/lib/input/binary-service.ts";
 import {
   buildSessionOutputFiles,
   createSingleFileRomSpecificOutput,
+  getRustOutputExportOptions,
+  shouldUseRustOutputExport,
 } from "../../src/lib/output/output-build-service.ts";
 import type { InputAsset } from "../../src/lib/input/input-assets.ts";
 import type { PatchFileInstance } from "../../src/lib/input/binary-service.ts";
@@ -226,6 +228,48 @@ describe("buildSessionOutputFiles", () => {
     expect(request.romSpecific.chd.mode).toBe("cd");
     expect(request.romSpecific.chd.imageFiles).toEqual([{ fileName: "t1.bin", source: expect.anything() }]);
     expect(result.files).toEqual([chdOutputFile]);
+  });
+});
+
+describe("getRustOutputExportOptions", () => {
+  it("selects DVD CHD codecs for DVD sources", () => {
+    const options: ApplyWorkflowOptions = { output: { compression: "chd" } } as never;
+
+    const result = getRustOutputExportOptions("chd", options, "dvd");
+
+    expect(result.codecs?.some((codec) => codec.startsWith("lzma"))).toBe(true);
+    expect(result.codecs?.some((codec) => codec.startsWith("cdlz"))).toBe(false);
+  });
+
+  it("passes through a configured Z3DS compression level", () => {
+    const options: ApplyWorkflowOptions = {
+      output: { compression: "z3ds", container: { z3dsCompressionLevel: 12 } },
+    } as never;
+
+    const result = getRustOutputExportOptions("z3ds", options);
+
+    expect(result.codecs).toEqual(["zstd:12"]);
+  });
+
+  it("carries a single-file archive entry name into the Rust export", () => {
+    const options: ApplyWorkflowOptions = { output: { compression: "zip" } } as never;
+
+    const result = getRustOutputExportOptions("zip", options, undefined, "patched.nes");
+
+    expect(result.entryName).toBe("patched.nes");
+  });
+
+  it("falls back when CHD sidecars or custom RVZ settings need metadata-aware compression", async () => {
+    const cueFile = await makeFile("rom-bytes", "game.bin");
+    cueFile.metadata = { cuePath: "/work/game.cue" };
+    const chdOptions: ApplyWorkflowOptions = { output: { compression: "chd" } } as never;
+    const rvzOptions: ApplyWorkflowOptions = {
+      output: { compression: "rvz", container: { rvzBlockSize: 65536 } },
+    } as never;
+
+    expect(shouldUseRustOutputExport("chd", chdOptions, cueFile)).toBe(false);
+    expect(shouldUseRustOutputExport("rvz", rvzOptions)).toBe(false);
+    expect(shouldUseRustOutputExport("rvz", { output: { compression: "rvz" } } as never)).toBe(true);
   });
 });
 

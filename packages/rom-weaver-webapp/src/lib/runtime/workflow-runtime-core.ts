@@ -256,6 +256,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
     outputName,
     checksumName,
     sourceCrc32,
+    export: outputExport,
     threads,
     logLevel,
     onLog,
@@ -295,6 +296,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           originalFileName: originalSource.fileName,
           originalFilePath: originalSource.filePath,
           outputName,
+          export: outputExport,
           signal,
           sourceCrc32,
           threads: threads ?? undefined,
@@ -419,7 +421,17 @@ type TrimRuntimeAdapter = {
 };
 
 const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["trim"] => ({
-  trim: async ({ source, extension, outputName, threads, logLevel, onLog, onProgress, signal }) => {
+  trim: async ({
+    source,
+    extension,
+    outputName,
+    export: outputExport,
+    threads,
+    logLevel,
+    onLog,
+    onProgress,
+    signal,
+  }) => {
     const traceContext = { logLevel, onLog };
     const workerSource = await adapter.workerIo.stageSource({
       fallbackFileName: "input.bin",
@@ -433,6 +445,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
       const result = await adapter.invokeTrimWorker(
         {
           extension,
+          export: outputExport,
           logLevel,
           outputName,
           signal,

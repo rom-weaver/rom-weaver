@@ -626,11 +626,26 @@ const getPatchApplyCommandOptions = (input: RuntimePatchApplyWorkerInput) => {
   const options = asRecord(input.options);
   const removeHeader = Boolean((input.options as { removeHeader?: unknown } | undefined)?.removeHeader);
   const addHeader = Boolean((input.options as { addHeader?: unknown } | undefined)?.addHeader);
+  const compressFormat =
+    typeof options?.compressFormat === "string"
+      ? options.compressFormat.trim()
+      : typeof options?.compress_format === "string"
+        ? options.compress_format.trim()
+        : "";
+  const compressCodec = normalizeCodecEntries(options?.compressCodec ?? options?.compress_codec);
+  const compressLevel = normalizeCompressionLevelProfile(
+    options?.compressLevel ?? options?.compress_level,
+  ) as CompressionLevelProfile | null;
+  const hasCompression = !!compressFormat || compressCodec.length > 0 || !!compressLevel;
   return {
+    compressCodec,
+    compressFormat: compressFormat || undefined,
+    compressLevel,
     headerModes: getPatchApplyHeaderModes(options, removeHeader),
     ignoreChecksumValidation:
       (input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true,
     n64ByteOrders: getPatchApplyN64ByteOrders(options).map((mode) => normalizeN64ByteOrder(mode) || "auto"),
+    noCompress: !hasCompression && options?.noCompress !== false && options?.no_compress !== false,
     outputHeader: getPatchApplyOutputHeader(options, removeHeader, addHeader),
     patchBasis: Array.isArray(options?.patchBasis)
       ? (options.patchBasis as PatchBasisMode[])
@@ -709,7 +724,10 @@ const getPatchApplyExecution = (input: RuntimePatchApplyWorkerInput, outputPath:
     output_header: commandOptions.outputHeader,
     ...(commandOptions.patchBasis.length ? { patch_basis: commandOptions.patchBasis } : {}),
     ...(commandOptions.n64ByteOrders.length ? { n64_byte_order: commandOptions.n64ByteOrders } : {}),
-    no_compress: true,
+    ...(commandOptions.noCompress ? { no_compress: true } : {}),
+    ...(commandOptions.compressFormat ? { compress_format: commandOptions.compressFormat } : {}),
+    ...(commandOptions.compressCodec.length ? { compress_codec: commandOptions.compressCodec } : {}),
+    ...(commandOptions.compressLevel ? { compress_level: commandOptions.compressLevel } : {}),
     output: outputPath,
     filter: ["rom", "patch"],
     patches: input.patchFiles.map((patch) => patch.patchFilePath),
@@ -900,6 +918,19 @@ const invokeRomWeaverCreatePatchWorker = async (
         modified: input.modifiedFilePath,
         original: input.originalFilePath,
         output: outputPath,
+        ...(input.export
+          ? {
+              export: {
+                codec: normalizeCodecEntries(input.export.codecs),
+                format: input.export.format,
+                ...(input.export.entryName ? { entry_name: input.export.entryName } : {}),
+                level: (normalizeCompressionLevelProfile(input.export.level) || undefined) as
+                  | CompressionLevelProfile
+                  | undefined,
+                output: outputPath,
+              },
+            }
+          : {}),
         ...(input.checksumName ? { checksum_name: true } : {}),
         ...(input.sourceCrc32 ? { assume_in: [`crc32=${input.sourceCrc32}`] } : {}),
         ...(threadArg ? { threads: threadArg } : {}),
@@ -954,6 +985,19 @@ const invokeRomWeaverTrimWorker = async (
       dry_run: false,
       in_place: false,
       output: outputPath,
+      ...(input.export
+        ? {
+            export: {
+              codec: normalizeCodecEntries(input.export.codecs),
+              format: input.export.format,
+              ...(input.export.entryName ? { entry_name: input.export.entryName } : {}),
+              level: (normalizeCompressionLevelProfile(input.export.level) || undefined) as
+                | CompressionLevelProfile
+                | undefined,
+              output: outputPath,
+            },
+          }
+        : {}),
       revert: false,
       input: [sourceFilePath],
       ...(normalizedExtension ? { extension: normalizedExtension } : {}),

@@ -12,7 +12,11 @@ import {
   getSidecarPatchOutputLabel,
   resolveSidecarPatchEntries,
 } from "../../lib/input/sidecar-patch-resolution.ts";
-import { buildSessionOutputFiles } from "../../lib/output/output-build-service.ts";
+import {
+  buildSessionOutputFiles,
+  getRustOutputExportOptions,
+  shouldUseRustOutputExport,
+} from "../../lib/output/output-build-service.ts";
 import { requireOutputName } from "../../lib/output/output-name-validation.ts";
 import { reportProgress } from "../../lib/progress/progress-reporting.ts";
 import { getNamedSourcePath } from "../../storage/shared/binary/source-file-utils.ts";
@@ -20,11 +24,14 @@ import { copyRuntimeOutputToPath } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PatchApplySummary, PatchFileInstance } from "../../types/workflow-internal.ts";
-import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import type { RuntimeOutputExportOptions, WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowResult, PatchInput } from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike } from "../../workers/protocol/patch-engine.ts";
 import { type createPatchFile, getPatchFileExternalSource } from "../input/binary-service.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
+import { getChdAutoCreateMode } from "../input/rom-specific-file-utils.ts";
+import OutputCompressionManager from "../compression/output-compression-manager.ts";
+import { createPatchedOutputPlan } from "../output/patched-output-plan.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
 import { parsePatchForApply, resolvePatchTargets, toPublicOutput } from "./patch-apply-service.ts";
@@ -143,12 +150,23 @@ const resolveWorkerApplyOutputName = (options: PatchInput["options"], asset: Inp
   return sourceExtension ? replaceFileNameExtension(outputName, sourceExtension) : outputName;
 };
 
-const createWorkerApplyOptions = (options: PatchInput["options"], outputName?: string) => ({
+const createWorkerApplyOptions = (
+  options: PatchInput["options"],
+  outputName?: string,
+  outputExport?: RuntimeOutputExportOptions,
+) => ({
   addHeader: !!options?.compatibility?.addHeader,
   appendOutputSuffix: !!options?.output?.suffix,
   fixChecksum: !!options?.compatibility?.fixChecksum,
   outputExtension: options?.output?.extension,
   outputName,
+  ...(outputExport
+    ? {
+        compress_codec: outputExport.codecs || [],
+        compress_format: outputExport.format,
+        compress_level: outputExport.level || undefined,
+      }
+    : { no_compress: true }),
   removeHeader: !!options?.compatibility?.removeHeader,
   requireInputChecksumMatch:
     typeof options?.validation?.requireInputChecksumMatch === "boolean"
@@ -156,6 +174,43 @@ const createWorkerApplyOptions = (options: PatchInput["options"], outputName?: s
       : false,
   threads: getApplyThreads(options),
 });
+
+const getApplyOutputCompression = (options: ApplyPatchOptions, asset: InputAsset) =>
+  OutputCompressionManager.resolveOutputCompression(asset.file, {
+    compressionFormat:
+      options.output?.compression ||
+      (asset.file.metadata?.sourceFileName || asset.file.metadata?.cuePath || asset.file.metadata?.mode
+        ? "auto"
+        : "7z"),
+  });
+
+const getApplyWorkerExport = (
+  options: ApplyPatchOptions,
+  asset: InputAsset,
+): { outputName: string; outputExport: RuntimeOutputExportOptions } | null => {
+  const compression = getApplyOutputCompression(options, asset);
+  if (compression === "none") return null;
+  const requestedOutputName = String(options.output?.outputName || "").trim() || asset.fileName || "patched.bin";
+  const requestedChdMode = String(options.output?.container?.chdOutputMode || "auto");
+  const chdMode =
+    compression === "chd"
+      ? requestedChdMode === "auto"
+        ? getChdAutoCreateMode(asset.file)
+        : requestedChdMode
+      : undefined;
+  const plan = createPatchedOutputPlan({
+    chdOutputMode: requestedChdMode,
+    compressionFormat: compression,
+    compressionSettings: options.output?.container,
+    patchedFileName: requestedOutputName,
+    romFile: asset.file,
+  });
+  if (!shouldUseRustOutputExport(compression, options, asset.file)) return null;
+  return {
+    outputExport: getRustOutputExportOptions(compression, options, chdMode, plan.savePlan.archiveEntryFileName),
+    outputName: plan.finalOutputFileName,
+  };
+};
 
 const prepareApplyInputAssets = async (input: PatchInput, runtime: WorkflowRuntime) => {
   const options = input.options || {};
@@ -475,6 +530,7 @@ const applyPatchesToAsset = async ({
   patchFiles,
   patches,
   workerOutputName,
+  workerExport,
 }: {
   applyPatchInRuntime: ApplyPatchWorker;
   asset: InputAsset;
@@ -484,6 +540,7 @@ const applyPatchesToAsset = async ({
   patchFiles: PatchFileInstance[];
   patches: ParsedPatchLike[];
   workerOutputName?: string;
+  workerExport?: RuntimeOutputExportOptions;
 }) => {
   const patchIndices = assetPatches.map((patch) => patches.indexOf(patch));
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
@@ -502,7 +559,7 @@ const applyPatchesToAsset = async ({
         stage: "apply",
       }),
     options: {
-      ...createWorkerApplyOptions(options, workerOutputName),
+      ...createWorkerApplyOptions(options, workerOutputName, workerExport),
       headerModes: getPatchHeaderModes(patchIndices, patchOptions),
       n64ByteOrders: getPatchN64ByteOrders(patchIndices, patchOptions),
       outputHeader: options.output?.header || ("auto" as const),
@@ -529,6 +586,7 @@ const applyPreparedPatches = async ({
   patchFiles,
   patches,
   patchTargets,
+  workerExport,
   runtime,
 }: {
   assetCount: number;
@@ -539,6 +597,7 @@ const applyPreparedPatches = async ({
   patchFiles: PatchFileInstance[];
   patches: ParsedPatchLike[];
   patchTargets: Array<"auto" | string> | undefined;
+  workerExport?: { outputName: string; outputExport: RuntimeOutputExportOptions } | null;
   runtime: WorkflowRuntime;
 }) => {
   const targets: InputAsset[] = [];
@@ -577,7 +636,7 @@ const applyPreparedPatches = async ({
   for (const asset of assets) {
     const assetPatches = patchesByTarget.get(asset.id);
     if (!assetPatches?.length) continue;
-    const workerOutputName = resolveWorkerApplyOutputName(options, asset);
+    const workerOutputName = workerExport?.outputName || resolveWorkerApplyOutputName(options, asset);
     const patched = await traceWorkflowStageBlock(
       options,
       "apply",
@@ -592,6 +651,7 @@ const applyPreparedPatches = async ({
           patchFiles,
           patches,
           workerOutputName,
+          workerExport: workerExport?.outputExport,
         }),
       () => ({
         patchCount: assetPatches.length,
@@ -689,6 +749,10 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   const patchSize = patchFiles.reduce((total, patchFile) => total + patchFile.fileSize, 0);
 
   const patchTargets = input.patchTargets || getApplyPatchTargets(options);
+  const workerExport =
+    inputAssets.length === 1 && !options.retainUncompressedOutput
+      ? getApplyWorkerExport(options, inputAssets[0] as InputAsset)
+      : null;
   const { applyTimeMs, hasApplyTimeMs, patchedById, targets, workerOutputsById } = await applyPreparedPatches({
     assetCount: inputAssets.length,
     assets: inputAssets,
@@ -698,25 +762,32 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
     patchFiles,
     patches,
     patchTargets,
+    workerExport,
     runtime,
   });
-  await retainUncompressedWorkerOutputs({ inputAssets, options, workerOutputsById });
-
-  const {
-    compressionTimeMs,
-    files: outputFiles,
-    rawOutputSize,
-  } = await traceWorkflowStageBlock(
-    options,
-    "output.materialization",
-    "output",
-    () => buildSessionOutputFiles(inputAssets, patchedById, options, runtime),
-    () => ({
-      inputCount: inputAssets.length,
-      patchedCount: patchedById.size,
-    }),
-  );
-  const outputs = await Promise.all(outputFiles.map((file) => toPublicOutput(file, runtime)));
+  const builtInWorkerOutput =
+    workerExport && patchedById.size === 1 ? workerOutputsById.get(inputAssets[0]?.id || "") || null : null;
+  let compressionTimeMs: number | undefined;
+  let rawOutputSize: number | undefined;
+  let outputs: ApplyWorkflowResult["outputs"];
+  if (builtInWorkerOutput) {
+    outputs = [builtInWorkerOutput];
+  } else {
+    await retainUncompressedWorkerOutputs({ inputAssets, options, workerOutputsById });
+    const outputBuild = await traceWorkflowStageBlock(
+      options,
+      "output.materialization",
+      "output",
+      () => buildSessionOutputFiles(inputAssets, patchedById, options, runtime),
+      () => ({
+        inputCount: inputAssets.length,
+        patchedCount: patchedById.size,
+      }),
+    );
+    compressionTimeMs = outputBuild.compressionTimeMs;
+    rawOutputSize = outputBuild.rawOutputSize;
+    outputs = await Promise.all(outputBuild.files.map((file) => toPublicOutput(file, runtime)));
+  }
   traceWorkflowStage(options, "stage.finish", "result", "output", {
     inputCount: inputAssets.length,
     outputCount: outputs.length,
@@ -756,7 +827,7 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
           outputSize: outputs[0].size || 0,
           patchCompressedSize: patchCompressedSize || patchSize,
           patchSize,
-          rawSize: rawOutputSize,
+          ...(rawOutputSize === undefined ? {} : { rawSize: rawOutputSize }),
         }
       : undefined,
   };

@@ -3636,25 +3636,23 @@ impl CliApp {
             Some(0.0),
             compress_threads,
         );
-        let request = ContainerCreateRequest {
-            inputs,
-            output: plan.output_path.clone(),
-            format: plan.format.clone(),
-            codec: plan.codec.clone(),
-            level: plan.level,
-            parent: None,
-        };
-        let compress_report = handler
-            .create_with_input_overrides(&request, overrides, context)
-            .unwrap_or_else(|error| {
-                OperationReport::failed(
-                    OperationFamily::Container,
-                    Some(handler.descriptor().name.to_string()),
-                    "create",
-                    error.to_string(),
-                    context.single_thread_execution(),
-                )
-            });
+        let compress_report = self.export(
+            ExportRequest {
+                command: "patch-apply",
+                family: OperationFamily::Patch,
+                stage: "compress",
+                output_kind: "output",
+                inputs,
+                output: plan.output_path.clone(),
+                format: Some(plan.format.clone()),
+                codec: plan.codec.clone().into_iter().collect(),
+                explicit_level: plan.level,
+                level: None,
+                overrides: overrides.to_vec(),
+                parent: None,
+            },
+            context,
+        );
         Ok((compress_report, codec_label))
     }
 
