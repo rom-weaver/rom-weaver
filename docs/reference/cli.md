@@ -110,9 +110,7 @@ Not every command takes all four. `ingest` has `--select` and `--no-ignore` only
 
 The flags shared by `patch apply` (also spelled `weave`) and `patch validate`. The task-shaped recipes live in [Apply patches from the CLI](../how-to/cli-apply.md).
 
-Under `Basic`, `patch apply --help` puts the common `--input`, `--patch`, and
-`--output` task first. The complete list uses the `Basic`, `Archive/bundle`,
-`Compatibility`, `Diagnostics/authoring`, and `Performance` headings.
+Under `Basic`, `patch apply --help` puts the common `--input`, `--patch`, and `--output` task first. The complete list uses the `Basic`, `Archive/bundle`, `Compatibility`, `Diagnostics/authoring`, and `Performance` headings.
 
 ### Inputs
 
@@ -120,24 +118,13 @@ Repeat `--patch` to run several patches in order, each on the result of the last
 
 ### Output and compression
 
-For an ordinary file apply, `--output` is optional. Without it, the command
-writes a sibling named `<input-stem>-patched.<rom-extension>` and adds a
-numeric suffix when that path already exists. Bundle applies keep their
-bundle-provided output behavior.
+For an ordinary file apply, `--output` is optional. Without it, the command writes a sibling named `<input-stem>-patched.<rom-extension>` and adds a numeric suffix when that path already exists. Bundle applies keep their bundle-provided output behavior.
 
-Without an explicit compression flag, an output extension matching the
-selected ROM leaf writes raw ROM bytes. A registered creatable container
-extension selects that container. Unknown or ambiguous extensions fail rather
-than selecting a format silently.
+Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
 
-`--no-compress` and its compatibility alias `--raw` force raw output.
-`--compress-format`, `--compress-codec`, and `--compress-level` remain the
-canonical compression flags; `--format`, `--codec`, and `--level` are accepted
-aliases on `patch apply`.
+`--no-compress` and its compatibility alias `--raw` force raw output. `--compress-format`, `--compress-codec`, and `--compress-level` remain the canonical compression flags; `--format`, `--codec`, and `--level` are accepted aliases on `patch apply`.
 
-DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM
-data track and reassemble the whole disc, so they cannot be chained with
-another patch or combined with the header and checksum options.
+DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM data track and reassemble the whole disc, so they cannot be chained with another patch or combined with the header and checksum options.
 
 ### Bundle detection
 
