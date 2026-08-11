@@ -18,6 +18,7 @@ describe("rom-weaver command boundary helpers", () => {
       "extract",
       "checksum",
       "ingest",
+      "export",
       "compress",
       "trim",
       "patch",
