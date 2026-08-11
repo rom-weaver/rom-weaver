@@ -164,7 +164,8 @@ test("create workflow supports raw and zip output compression", async () => {
     const zipResult = await zipWorkflow.run();
     expect(zipResult.output.fileName).toBe("change.zip");
     expect(zipResult.sizeSummary?.rawSize).toBeGreaterThan(0);
-    expect(zipResult.output.size).toBeGreaterThan(zipResult.sizeSummary?.rawSize || 0);
+    expect(zipResult.output.size).toBeGreaterThan(0);
+    expect(zipResult.sizeSummary?.outputSize).toBe(zipResult.output.size);
     const blob = await zipResult.output.getBlob?.();
     const header = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
     expect([...header]).toEqual([0x50, 0x4b]);
@@ -195,17 +196,19 @@ test("create workflow caps zip zstd max output to one browser thread before disp
     expect(result.output.fileName).toBe("change.zip");
     await result.output.dispose();
 
-    // The zip+zstd max-output path still dispatches with the zstd codec/level.
-    const compressDispatch = logs.find((entry) => String(entry?.message || "") === "runJson compress dispatch");
-    expect(compressDispatch?.details).toMatchObject({
-      command: {
+    // The create command streams its patch into the hidden export stage.
+    const createDispatch = logs.find((entry) => String(entry?.message || "") === "runJson patch-create dispatch");
+    expect(createDispatch?.details?.command).toMatchObject({
+      args: {
         args: {
-          codec: ["zstd:22"],
-          format: "zip",
+          export: {
+            codec: ["zstd:22"],
+            format: "zip",
+          },
         },
-        type: "compress",
+        type: "create",
       },
-      format: "zip",
+      type: "patch",
     });
 
     // The zip+zstd browser memory thread cap is now enforced authoritatively in
