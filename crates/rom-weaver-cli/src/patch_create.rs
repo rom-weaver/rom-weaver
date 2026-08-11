@@ -642,7 +642,7 @@ impl CliApp {
             );
         }
 
-        let mut create_output = match Self::patch_create_output_path(
+        let create_output = match Self::patch_create_output_path(
             &context,
             &output,
             args.export.as_ref(),
@@ -660,14 +660,9 @@ impl CliApp {
                 );
             }
         };
-        if args.checksum_name {
-            // Prefer a caller-supplied source crc32 (the browser already hashes the
-            // original during input prep) to avoid re-reading the original here; fall
-            // back to computing it only when no crc32 assumption was supplied. A
-            // malformed or conflicting --assume-in is a hard error, not a silent
-            // recompute, so an invalid trusted value never passes unnoticed.
-            let provided_crc32 = match parse_expect_tokens(&args.assume_in, "--assume-in", false) {
-                Ok(spec) => spec.checksums.get("crc32").cloned(),
+        let create_output = if args.checksum_name {
+            match Self::patch_create_checksum_named_output(&create_output, &args, &context) {
+                Ok(output) => output,
                 Err(error) => {
                     return self.finish(
                         "patch-create",
@@ -678,35 +673,10 @@ impl CliApp {
                         ),
                     );
                 }
-            };
-            let crc32 = match provided_crc32 {
-                Some(crc32) => Some(crc32),
-                None => match checksum_file_values(&args.original, &["crc32"], &context) {
-                    Ok(values) => values.get("crc32").cloned(),
-                    Err(error) => {
-                        return self.finish(
-                            "patch-create",
-                            fail(
-                                Some(handler.descriptor().name.to_string()),
-                                "validate",
-                                error.to_string(),
-                            ),
-                        );
-                    }
-                },
-            };
-            if let Some(crc32) = crc32 {
-                let embedded = embed_checksum_in_filename(&create_output, "crc32", &crc32);
-                if embedded != create_output {
-                    trace!(
-                        output = %embedded.display(),
-                        crc32 = %crc32,
-                        "embedded source crc32 into patch file name"
-                    );
-                }
-                create_output = embedded;
             }
-        }
+        } else {
+            create_output
+        };
 
         // Guarded after --checksum-name has settled the final file name, so the
         // path checked is the path written.
@@ -779,5 +749,39 @@ impl CliApp {
             report = Self::attach_emitted_files_details(report, vec![output_detail], None);
         }
         self.finish("patch-create", report)
+    }
+
+    fn patch_create_checksum_named_output(
+        output: &Path,
+        args: &PatchCreateCommand,
+        context: &OperationContext,
+    ) -> Result<PathBuf> {
+        // Prefer a caller-supplied source crc32 (the browser already hashes the
+        // original during input prep) to avoid re-reading the original here; fall
+        // back to computing it only when no crc32 assumption was supplied. A
+        // malformed or conflicting --assume-in is a hard error, not a silent
+        // recompute, so an invalid trusted value never passes unnoticed.
+        let provided_crc32 = parse_expect_tokens(&args.assume_in, "--assume-in", false)?
+            .checksums
+            .get("crc32")
+            .cloned();
+        let crc32 = match provided_crc32 {
+            Some(crc32) => Some(crc32),
+            None => checksum_file_values(&args.original, &["crc32"], context)?
+                .get("crc32")
+                .cloned(),
+        };
+        let Some(crc32) = crc32 else {
+            return Ok(output.to_path_buf());
+        };
+        let embedded = embed_checksum_in_filename(output, "crc32", &crc32);
+        if embedded != output {
+            trace!(
+                output = %embedded.display(),
+                crc32 = %crc32,
+                "embedded source crc32 into patch file name"
+            );
+        }
+        Ok(embedded)
     }
 }

@@ -204,7 +204,7 @@ struct Cli {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Subcommand))]
 enum CliCommand {
     #[command(flatten)]
-    App(Commands),
+    App(Box<Commands>),
     /// Top-level spelling of `patch apply`. Normalized away in [`main_entry`]
     /// before dispatch, so it never reaches the shared `Commands` enum.
     #[command(
@@ -325,7 +325,9 @@ pub fn main_entry() -> ExitCode {
     }
     // `bundle schema` prints the raw JSON Schema to stdout (redirect it to a
     // file / point an editor at it), before any command runs.
-    if let CliCommand::App(Commands::Bundle(BundleCommands::Schema)) = &cli.command {
+    if let CliCommand::App(command) = &cli.command
+        && matches!(command.as_ref(), Commands::Bundle(BundleCommands::Schema))
+    {
         print!("{}", rom_weaver_app::BUNDLE_JSON_SCHEMA);
         return ExitCode::SUCCESS;
     }
@@ -333,11 +335,12 @@ pub fn main_entry() -> ExitCode {
     // enum so everything downstream sees exactly one command shape.
     cli.command = match cli.command {
         CliCommand::Weave(command) => {
-            CliCommand::App(Commands::Patch(PatchCommands::Apply(command)))
+            CliCommand::App(Box::new(Commands::Patch(PatchCommands::Apply(command))))
         }
         other => other,
     };
-    if let CliCommand::App(Commands::Patch(PatchCommands::Apply(command))) = &mut cli.command
+    if let CliCommand::App(command) = &mut cli.command
+        && let Commands::Patch(PatchCommands::Apply(command)) = command.as_mut()
         && let Some(apply_matches) = match matches.subcommand() {
             // Top-level `weave` puts the apply args one level shallower than `patch apply`.
             Some(("weave", apply_matches)) => Some(apply_matches),
@@ -348,13 +351,15 @@ pub fn main_entry() -> ExitCode {
         command.align_patch_header_modes(apply_matches);
         command.align_patch_basis(apply_matches);
     }
-    if let CliCommand::App(Commands::Bundle(BundleCommands::Create(command))) = &mut cli.command
+    if let CliCommand::App(command) = &mut cli.command
+        && let Commands::Bundle(BundleCommands::Create(command)) = command.as_mut()
         && let Some((_, bundle_matches)) = matches.subcommand()
         && let Some((_, create_matches)) = bundle_matches.subcommand()
     {
         command.align_bundle_patch_metadata(create_matches);
     }
-    if let CliCommand::App(Commands::Patch(PatchCommands::Validate(command))) = &mut cli.command
+    if let CliCommand::App(command) = &mut cli.command
+        && let Commands::Patch(PatchCommands::Validate(command)) = command.as_mut()
         && let Some((_, patch_matches)) = matches.subcommand()
         && let Some((_, validate_matches)) = patch_matches.subcommand()
     {
@@ -385,6 +390,7 @@ pub fn main_entry() -> ExitCode {
     let CliCommand::App(command) = cli.command else {
         unreachable!("completions handled and returned above");
     };
+    let command = *command;
     // `apply --tui` runs an interactive metadata wizard, then applies AND writes
     // the bundle. It needs a terminal; scripted runs use `bundle create` /
     // `apply --emit-bundle`.
