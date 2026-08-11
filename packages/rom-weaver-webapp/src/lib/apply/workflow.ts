@@ -629,7 +629,9 @@ const retainUncompressedWorkerOutputs = async ({
   for (const [assetId, workerOutput] of workerOutputsById) {
     if (!canReuseWorkerOutputPath(workerOutput)) continue;
     const asset = inputAssets.find((candidate) => candidate.id === assetId);
-    const fileName = asset?.fileName || workerOutput.fileName || "patched.bin";
+    // The worker output carries the resolved applied name, including the automatic
+    // ROM-plus-patch name. Keep that name on the retained test entry.
+    const fileName = workerOutput.fileName || asset?.fileName || "patched.bin";
     const size = Math.max(0, Math.floor(workerOutput.size || asset?.size || 0));
     const romType = workerOutput.romType || asset?.romType;
     try {
