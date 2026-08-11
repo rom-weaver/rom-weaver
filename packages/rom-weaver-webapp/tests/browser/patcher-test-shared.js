@@ -79,7 +79,7 @@ export const selectFileInput = (input, file) => selectFileInputs(input, [file]);
 export const createMockApplyResult = () => ({
   output: {
     cleanup: () => undefined,
-    fileName: "game - change.bin",
+    fileName: "game [change].bin",
     path: "",
     saveAs: () => Promise.resolve(),
     size: 4,
@@ -371,7 +371,7 @@ export const listOpfsStagedInputSourceFiles = async (fragment = "") => {
 
 export const listOpfsOutputFiles = async () => {
   const files = await listOpfsWorkFiles();
-  return files.filter((entry) => entry.name === "game - change" || /^game - change\.(?:7z|bin|zip)$/i.test(entry.name));
+  return files.filter((entry) => /^game \[change\](?:\.(?:7z|bin|zip))?$/i.test(entry.name));
 };
 
 const releaseRetainedSources = async () => {
