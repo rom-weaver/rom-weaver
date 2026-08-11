@@ -202,14 +202,26 @@
   color: var(--ink-3);
 }
 .rw-app .optsgrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-m);
 }
-/* A checkbox joins the options grid as a cell of its own; the notice-tuned
-   margins would push it off the row the selects sit on. */
-.rw-app .optsgrid > .checkrow {
+.rw-app .optsgroup {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-m);
+}
+.rw-app .optsgroup + .optsgroup {
+  padding-block-start: var(--sp-m);
+  border-block-start: 1px solid var(--seam-soft);
+}
+/* The test toggle is a secondary setting. Give it the full row so its label
+   stays readable instead of wrapping inside a narrow grid cell. */
+.rw-app .opts-extra-fields > .checkrow {
+  grid-column: 1 / -1;
+  padding-block-start: var(--sp-s);
   margin-block: 0;
+  border-block-start: 1px solid var(--seam);
 }
 .rw-app .patch-description-field {
   grid-column: 1 / -1;

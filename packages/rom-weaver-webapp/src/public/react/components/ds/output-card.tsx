@@ -19,6 +19,7 @@ type OutputCompressPanel = {
   /** The full header chip row - one accessible labelled chip per option, built by `buildOutputCompressionPanel`. */
   readouts?: ReactNode;
   children: ReactNode;
+  extraChildren?: ReactNode;
   formatValue?: string;
   formatOptions?: FormatOption[];
   formatLabel?: string;
@@ -81,6 +82,25 @@ const OutputCard = ({
   // The format selector appends the extension, so a name that already ends in
   // an output-looking extension would be saved doubled (`game.zip.zip`).
   const doubledExtension = detectOutputLikeExtension(fileName);
+  const compressionFields =
+    compress?.formatOptions?.length && compress.onFormatChange ? (
+      <OutputField label={compress.formatLabel || "Type"} labelInfo={compress.formatInfo}>
+        <select
+          aria-label={compress.formatLabel || "Type"}
+          className="select"
+          disabled={disabled}
+          id={compress.formatId}
+          onChange={(event) => compress.onFormatChange?.(event.currentTarget.value)}
+          value={compress.formatValue || ""}
+        >
+          {compress.formatOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </OutputField>
+    ) : null;
   return (
     <div className="card outcard">
       {doubledExtension ? (
@@ -141,25 +161,15 @@ const OutputCard = ({
               all. Said once at the top, since it holds for every option below. */}
           <p className="optsnote">These choices are not saved. Change your defaults in Settings.</p>
           <div className="optsgrid">
-            {compress.formatOptions?.length && compress.onFormatChange ? (
-              <OutputField label={compress.formatLabel || "Type"} labelInfo={compress.formatInfo}>
-                <select
-                  aria-label={compress.formatLabel || "Type"}
-                  className="select"
-                  disabled={disabled}
-                  id={compress.formatId}
-                  onChange={(event) => compress.onFormatChange?.(event.currentTarget.value)}
-                  value={compress.formatValue || ""}
-                >
-                  {compress.formatOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </OutputField>
+            {compressionFields || compress.children ? (
+              <div className="optsgroup opts-compression-fields">
+                {compressionFields}
+                {compress.children}
+              </div>
             ) : null}
-            {compress.children}
+            {compress.extraChildren ? (
+              <div className="optsgroup opts-extra-fields">{compress.extraChildren}</div>
+            ) : null}
           </div>
         </Drawer>
       ) : null}
