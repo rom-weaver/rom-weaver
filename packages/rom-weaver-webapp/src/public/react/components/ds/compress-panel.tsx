@@ -225,13 +225,9 @@ const buildOutputCompressionPanel = ({
 }: OutputCompressionPanelConfig): OutputCompressPanel => ({
   children:
     fields?.length && onFieldChange ? (
-      <>
-        <CompressPanelBody disabled={disabled} fields={fields} onChange={onFieldChange} />
-        {extraChildren}
-      </>
-    ) : (
-      (extraChildren ?? null)
-    ),
+      <CompressPanelBody disabled={disabled} fields={fields} onChange={onFieldChange} />
+    ) : null,
+  extraChildren,
   formatId,
   formatInfo:
     formatOptions?.length && onFormatChange ? (
