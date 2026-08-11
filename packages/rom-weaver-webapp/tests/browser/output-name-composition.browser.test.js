@@ -19,15 +19,19 @@ import {
 
 test("buildPatchedOutputBaseName strips duplicated input prefixes from patch names", () => {
   expect(buildPatchedOutputBaseName("Crash Bandicoot (USA)", ["Crash Bandicoot (USA)_Quality of Life"])).toBe(
-    "Crash Bandicoot (USA) - Quality of Life",
+    "Crash Bandicoot (USA) [Quality of Life]",
   );
   expect(buildPatchedOutputBaseName("Crash Bandicoot (USA)", ["Crash Bandicoot (USA) - Quality of Life"])).toBe(
-    "Crash Bandicoot (USA) - Quality of Life",
+    "Crash Bandicoot (USA) [Quality of Life]",
   );
 });
 
-test("buildPatchedOutputBaseName keeps non-prefixed patch names unchanged", () => {
-  expect(buildPatchedOutputBaseName("Crash Bandicoot (USA)", ["Hard Mode"])).toBe("Crash Bandicoot (USA) - Hard Mode");
+test("buildPatchedOutputBaseName wraps non-prefixed patch names in brackets", () => {
+  expect(buildPatchedOutputBaseName("Crash Bandicoot (USA)", ["Hard Mode"])).toBe("Crash Bandicoot (USA) [Hard Mode]");
+});
+
+test("buildPatchedOutputBaseName sanitizes bracket delimiters in fallback names", () => {
+  expect(buildPatchedOutputBaseName("Crash", ["Hard]Mode"])).toBe("Crash [Hard Mode]");
 });
 
 test("buildPatchedOutputBaseName appends a trailing bracket label verbatim", () => {
@@ -59,7 +63,7 @@ test("patch metadata removes bracket characters from the label", () => {
 
 test("buildPatchedOutputBaseName keeps bracket and plain patch names alongside each other", () => {
   expect(buildPatchedOutputBaseName("Crash", ["Hard Mode", "super awesome [big jump by foo v1.0]"])).toBe(
-    "Crash - Hard Mode [big jump by foo v1.0]",
+    "Crash [Hard Mode] [big jump by foo v1.0]",
   );
   expect(buildPatchedOutputBaseName("Crash", ["[color fix]", "[hud rework]"])).toBe("Crash [color fix] [hud rework]");
 });
@@ -72,6 +76,12 @@ test("browser output generation appends the patch bracket label to the rom name"
       {},
     ),
   ).toBe("Crash [big jump by foo v1.0]");
+});
+
+test("browser output generation brackets a patch filename without metadata", () => {
+  expect(getGeneratedOutputName({ fileName: "Crash.chd" }, [{ fileName: "hard-mode.ips" }], {})).toBe(
+    "Crash [hard-mode]",
+  );
 });
 
 test("browser output generation uses a generated metadata label", () => {
@@ -100,7 +110,7 @@ test("browser output generation prefers provided patch filenames over generated 
       ],
       {},
     ),
-  ).toBe("Crash Bandicoot (USA) - Quality of Life");
+  ).toBe("Crash Bandicoot (USA) [Quality of Life]");
 });
 
 test("z3ds output naming preserves cci source type when requested name has no extension", () => {

@@ -39,7 +39,7 @@ describe("apply automatic output name", () => {
   });
 
   it("appends patch names to the input stem", () => {
-    expect(autoOutputName(makeInput({ fileName: "game.gba" }), ["Hard Mode.ips"])).toBe("game - Hard Mode");
+    expect(autoOutputName(makeInput({ fileName: "game.gba" }), ["Hard Mode.ips"])).toBe("game [Hard Mode]");
   });
 
   it("uses a generated metadata label before the patch filename", () => {
