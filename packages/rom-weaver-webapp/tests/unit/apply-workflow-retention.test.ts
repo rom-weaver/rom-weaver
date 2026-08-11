@@ -54,7 +54,7 @@ const createVfs = () => {
 };
 
 const createWorkerOutput = (vfs: LargeFileVfs) => ({
-  fileName: "game.nes",
+  fileName: "game - Hard Mode.nes",
   path: "/work/patched.nes",
   size: 3,
   vfs,
@@ -79,7 +79,7 @@ describe("apply workflow emulator retention", () => {
 
     expect(retain).toHaveBeenCalledOnce();
     expect(retain.mock.calls[0]?.[0]).toMatchObject({
-      fileName: "game.nes",
+      fileName: "game - Hard Mode.nes",
       platform: "Nintendo Entertainment System",
       size: 3,
     });
