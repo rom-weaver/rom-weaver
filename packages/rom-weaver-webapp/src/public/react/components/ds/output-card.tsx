@@ -10,13 +10,13 @@ import { Drawer } from "./drawer.tsx";
  * caller-supplied action (run button or inline progress). Shared by apply,
  * create, and trim outputs.
  *
- * The drawer header carries every option as a labelled chip, so the values stay
- * readable while the drawer is shut.
+ * The drawer header carries every option as an accessible labelled chip, so the
+ * values stay readable while the drawer is shut.
  */
 
 type FormatOption = { value: string; label: string };
 type OutputCompressPanel = {
-  /** The full header chip row - one labelled chip per option, built by `buildOutputCompressionPanel`. */
+  /** The full header chip row - one accessible labelled chip per option, built by `buildOutputCompressionPanel`. */
   readouts?: ReactNode;
   children: ReactNode;
   formatValue?: string;
