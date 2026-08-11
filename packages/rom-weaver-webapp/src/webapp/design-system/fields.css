@@ -215,6 +215,11 @@
   padding-block-start: var(--sp-m);
   border-block-start: 1px solid var(--seam-soft);
 }
+/* Info buttons set a 24px label rail. Keep fields without one on that same
+   rail so every select in a row starts at the same y-coordinate. */
+.rw-app .optsgroup .ofld-l {
+  min-height: 24px;
+}
 /* The test toggle is a secondary setting. Give it the full row so its label
    stays readable instead of wrapping inside a narrow grid cell. */
 .rw-app .opts-extra-fields > .checkrow {
