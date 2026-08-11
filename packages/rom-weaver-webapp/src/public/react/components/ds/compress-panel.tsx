@@ -178,9 +178,10 @@ const getOutputCompressionFormatLabel = (
 
 /**
  * The collapsed header's chip row: the output format, any format-implied note,
- * then one labelled chip per option, the caller's extra chips, and the timing.
- * Chips are derived from the same field models the drawer body renders, so a
- * header value can never drift from its control.
+ * then one value chip per option, the caller's extra chips, and the timing.
+ * Labels stay in the markup for assistive technology. Chips are derived from
+ * the same field models the drawer body renders, so a header value can never
+ * drift from its control.
  */
 const OutputOptionReadouts = ({
   fields,
