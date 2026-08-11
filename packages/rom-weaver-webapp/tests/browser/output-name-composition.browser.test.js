@@ -7,7 +7,7 @@ import {
   getPreferredCreatePatchFormat,
   normalizeCreatePatchFormat,
 } from "../../src/lib/create/patch-format-limits.ts";
-import { buildPatchedOutputBaseName } from "../../src/lib/output/output-name-composition.ts";
+import { buildPatchedOutputBaseName, createPatchMetadataLabel } from "../../src/lib/output/output-name-composition.ts";
 import { createPatchedRomSavePlan } from "../../src/lib/output/output-save-plan.ts";
 import {
   createApplyOutputOptions,
@@ -36,6 +36,27 @@ test("buildPatchedOutputBaseName appends a trailing bracket label verbatim", () 
   );
 });
 
+test("patch metadata becomes an automatic bracket label", () => {
+  expect(
+    buildPatchedOutputBaseName("Crash Bandicoot (USA)", [
+      createPatchMetadataLabel({
+        author: "Jane Doe",
+        description: "Description fallback",
+        name: "Hard Mode",
+        version: "1.2",
+      }),
+    ]),
+  ).toBe("Crash Bandicoot (USA) [Hard Mode Jane Doe 1.2]");
+});
+
+test("patch metadata falls back to the description", () => {
+  expect(createPatchMetadataLabel({ author: "Jane Doe", description: "Hard Mode" })).toBe("[Hard Mode Jane Doe]");
+});
+
+test("patch metadata removes bracket characters from the label", () => {
+  expect(createPatchMetadataLabel({ author: "Jane] Doe", description: "Hard [Mode]" })).toBe("[Hard Mode Jane Doe]");
+});
+
 test("buildPatchedOutputBaseName keeps bracket and plain patch names alongside each other", () => {
   expect(buildPatchedOutputBaseName("Crash", ["Hard Mode", "super awesome [big jump by foo v1.0]"])).toBe(
     "Crash - Hard Mode [big jump by foo v1.0]",
@@ -51,6 +72,16 @@ test("browser output generation appends the patch bracket label to the rom name"
       {},
     ),
   ).toBe("Crash [big jump by foo v1.0]");
+});
+
+test("browser output generation uses a generated metadata label", () => {
+  expect(
+    getGeneratedOutputName(
+      { fileName: "Crash.chd" },
+      [{ _generatedPatchName: "[Hard Mode Jane Doe 1.2]", fileName: "hard-mode.ips" }],
+      {},
+    ),
+  ).toBe("Crash [Hard Mode Jane Doe 1.2]");
 });
 
 test("browser output generation strips an input archive extension without patches", () => {

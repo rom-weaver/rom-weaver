@@ -15,6 +15,29 @@ const readBracketLabel = (name: string): string => {
   return trimmed.slice(open + 1, close);
 };
 
+type PatchOutputMetadata = {
+  author?: string | null;
+  description?: string | null;
+  name?: string | null;
+  version?: string | null;
+};
+
+const sanitizePatchMetadataPart = (value: unknown): string =>
+  Array.from(String(value || ""))
+    .filter((character) => character.charCodeAt(0) >= 32)
+    .join("")
+    .replace(/[<>:"/\\|?*\u005b\u005d]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** Build the bracketed patch label used by automatic output names. */
+const createPatchMetadataLabel = (metadata: PatchOutputMetadata | null | undefined): string => {
+  if (!metadata) return "";
+  const patchName = sanitizePatchMetadataPart(metadata.name) || sanitizePatchMetadataPart(metadata.description);
+  const label = [patchName, metadata.author, metadata.version].map(sanitizePatchMetadataPart).filter(Boolean).join(" ");
+  return label ? `[${label}]` : "";
+};
+
 const stripRedundantPatchPrefix = (inputBaseName: string, patchName: string) => {
   const base = String(inputBaseName || "").trim();
   const patch = String(patchName || "").trim();
@@ -54,4 +77,4 @@ const buildPatchedOutputBaseName = (inputBaseName: string, patchNames: readonly 
   return `${base}${plainSuffix}${bracketSuffix}`;
 };
 
-export { buildPatchedOutputBaseName };
+export { buildPatchedOutputBaseName, createPatchMetadataLabel };
