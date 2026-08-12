@@ -292,6 +292,9 @@
 .rw-app .cks > .cks-head .rb.muted {
   color: var(--ink-3);
 }
+.rw-app .cks > .cks-head .rb .extract-size-source {
+  color: var(--ink-3);
+}
 /* Dimmed with the rest of a disabled card. Kept beside the chip's own colour:
    from file-cards.css this layer would win on order, not specificity. */
 .rw-app .card.is-disabled .cks > .cks-head .rb {

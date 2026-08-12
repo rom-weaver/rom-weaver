@@ -41,6 +41,7 @@ test("files drawer omits ratio for CUE sidecar outputs", async () => {
   await expect
     .poll(() => document.querySelector(".extract-d .rb:not(.time)")?.textContent || "")
     .toBe("1.0 KB \u2192 100 B");
+  expect(document.querySelector(".extract-size-source")?.textContent || "").toBe("1.0 KB");
 });
 
 test("files drawer keeps ratio for ROM extraction outputs", async () => {
@@ -136,4 +137,21 @@ test("files drawer lists sibling disc files below archive provenance", async () 
     "tree-row d1",
     "tree-row d1",
   ]);
+});
+
+test("files drawer totals multi-extract sizes when the output size is missing", async () => {
+  mount(
+    createElement(ExtractDrawer, {
+      fileEntries: [
+        { fileName: "game.cue", fileSize: 100 },
+        { fileName: "game.bin", fileSize: 300 },
+      ],
+      fileName: "game.bin",
+      parentCompressions: [{ fileName: "game.zip", sourceSize: 1000 }],
+    }),
+  );
+
+  await expect
+    .poll(() => document.querySelector(".extract-d .rb:not(.time)")?.textContent || "")
+    .toBe("1.0 KB → 400 B (250%)");
 });

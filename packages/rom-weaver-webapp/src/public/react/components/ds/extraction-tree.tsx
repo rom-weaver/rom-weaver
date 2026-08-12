@@ -63,6 +63,14 @@ const formatExtractionElapsedMs = (ms?: number) =>
 
 const formatExtractionTimingLabel = (timing?: string) => (timing ? `Extract ${timing}` : undefined);
 
+const getEntryTotalSize = (entries: ExtractionFileEntry[] | undefined) => {
+  if (!entries?.length) return undefined;
+  const sizes = entries
+    .map((entry) => entry.fileSize)
+    .filter((size): size is number => typeof size === "number" && Number.isFinite(size));
+  return sizes.length ? sizes.reduce((total, size) => total + size, 0) : undefined;
+};
+
 const addMissingLeafSize = (levels: ExtractionLevel[], fileName: string, fileSize: number | undefined) => {
   const last = levels.at(-1);
   if (
@@ -175,17 +183,39 @@ const ExtractDrawer = ({
   if (!last) return null;
   const hasFileEntries = !!fileEntries?.length;
   const typeText = typeLabel?.trim();
-  const sizeText = hasFileEntries
+  const outputSize = hasFileEntries
     ? typeof fileSize === "number"
-      ? first?.sizeLabel && first.sizeBytes && fileSize > 0
-        ? `${first.sizeLabel} → ${formatByteSize(fileSize)} (${Math.round((first.sizeBytes / fileSize) * 100)}%)`
-        : formatByteSize(fileSize)
-      : ""
-    : levels.length === 1
-      ? (last.sizeLabel ?? "")
-      : first?.sizeLabel && last.sizeLabel
-        ? `${first.sizeLabel} → ${last.sizeLabel}${formatRatio(first, last)}`
+      ? fileSize
+      : getEntryTotalSize(fileEntries)
+    : last.sizeBytes;
+  const sourceSize = hasFileEntries
+    ? parentCompressions?.length
+      ? first?.sizeBytes
+      : undefined
+    : levels.length > 1
+      ? first?.sizeBytes
+      : undefined;
+  const outputSizeLabel = formatByteSize(outputSize);
+  const ratioText =
+    !hasFileEntries && first && last
+      ? formatRatio(first, last)
+      : sourceSize && outputSize && outputSize > 0
+        ? ` (${Math.round((sourceSize / outputSize) * 100)}%)`
         : "";
+  const sizeReadout = outputSizeLabel ? (
+    <DrawerReadout>
+      {sourceSize && outputSize && outputSize > 0 ? (
+        <>
+          <span className="extract-size-source">{formatByteSize(sourceSize)}</span>
+          <span aria-hidden="true"> → </span>
+          {outputSizeLabel}
+          {ratioText}
+        </>
+      ) : (
+        outputSizeLabel
+      )}
+    </DrawerReadout>
+  ) : null;
   return (
     <Drawer
       bodyClassName="taskbody"
@@ -194,7 +224,7 @@ const ExtractDrawer = ({
       labelIcon={<Archive aria-hidden="true" />}
       readouts={
         <>
-          {sizeText ? <DrawerReadout>{sizeText}</DrawerReadout> : null}
+          {sizeReadout}
           {typeText ? <DrawerReadout>{typeText}</DrawerReadout> : null}
           {timingLabel ? <DrawerReadout time>{timingLabel}</DrawerReadout> : null}
         </>
