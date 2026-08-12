@@ -345,12 +345,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   }, [bundleSessionKey]);
   const activeBundleSession = bundleDismissed ? null : localBundleSession || props.bundleSession || null;
   const bundleControllersRef = useRef<BundleSessionControllers>({ output: null, patchStack: null });
-  const { bundleDefaultsPending, handleBundlePatchesChange, bundleMetaById, updateBundleMeta } = useBundleApplySession({
-    bundleSession: activeBundleSession,
-    controllersRef: bundleControllersRef,
-    getPatchIds,
-    seedPatchEnablement,
-  });
+  const { bundleDefaultsPending, handleBundlePatchesChange, bundleMetaById, updateBundleMeta, updateBundleMetaForIds } =
+    useBundleApplySession({
+      bundleSession: activeBundleSession,
+      controllersRef: bundleControllersRef,
+      getPatchIds,
+      seedPatchEnablement,
+    });
 
   useEffect(() => {
     if (!bundleMetaById.size) return;
@@ -1620,6 +1621,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           setBundlePackage: changeBundlePackage,
         }}
         onBundleMetaChange={updateBundleMeta}
+        onBundleMetaBulkChange={updateBundleMetaForIds}
         onSelectView={props.onSelectView}
         onTrace={emitApplyFormInputTrace}
         onUnifiedDrop={handleUnifiedDrop}

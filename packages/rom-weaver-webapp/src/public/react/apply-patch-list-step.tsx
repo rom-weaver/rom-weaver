@@ -1383,6 +1383,109 @@ const PatchCard = ({
   );
 };
 
+const commonPatchMetaValue = (
+  bundleMeta: readonly (BundlePatchMeta | undefined)[],
+  field: "author" | "version",
+): string | undefined => {
+  const values = bundleMeta.map((meta) => meta?.[field] || "");
+  return values.every((value) => value === values[0]) ? values[0] : undefined;
+};
+
+const SharedPatchMetaEditor = ({
+  bundleMeta,
+  onApply,
+}: {
+  bundleMeta: readonly (BundlePatchMeta | undefined)[];
+  onApply: (updates: Partial<BundlePatchMeta>) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [updateAuthor, setUpdateAuthor] = useState(false);
+  const [updateVersion, setUpdateVersion] = useState(false);
+  const [author, setAuthor] = useState("");
+  const [version, setVersion] = useState("");
+
+  const openEditor = () => {
+    setAuthor(commonPatchMetaValue(bundleMeta, "author") || "");
+    setVersion(commonPatchMetaValue(bundleMeta, "version") || "");
+    setUpdateAuthor(false);
+    setUpdateVersion(false);
+    setOpen(true);
+  };
+
+  if (!open) {
+    return (
+      <div className="patch-shared-meta-toolbar">
+        <button className="btn ghost slim" onClick={openEditor} type="button">
+          <Pencil aria-hidden="true" />
+          Set shared details
+        </button>
+      </div>
+    );
+  }
+
+  const apply = () => {
+    const updates: Partial<BundlePatchMeta> = {};
+    if (updateAuthor) updates.author = author.trim() || undefined;
+    if (updateVersion) updates.version = version.trim() || undefined;
+    onApply(updates);
+    setOpen(false);
+  };
+
+  return (
+    <fieldset className="patch-shared-meta-editor">
+      <legend className="sr-only">Shared patch details</legend>
+      <div className="patch-shared-meta-heading">
+        <strong>Shared details</strong>
+        <span>Apply values to every patch. You can still edit individual patches.</span>
+      </div>
+      <div className="patch-shared-meta-field">
+        <input
+          aria-label="Update version"
+          checked={updateVersion}
+          onChange={(event) => setUpdateVersion(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <label htmlFor="rom-weaver-shared-patch-version">Version</label>
+        <input
+          className="input popt-input"
+          disabled={!updateVersion}
+          id="rom-weaver-shared-patch-version"
+          onChange={(event) => setVersion(event.currentTarget.value)}
+          placeholder={commonPatchMetaValue(bundleMeta, "version") === undefined ? "Multiple values" : "Version"}
+          type="text"
+          value={version}
+        />
+      </div>
+      <div className="patch-shared-meta-field">
+        <input
+          aria-label="Update author"
+          checked={updateAuthor}
+          onChange={(event) => setUpdateAuthor(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <label htmlFor="rom-weaver-shared-patch-author">Author</label>
+        <input
+          className="input popt-input"
+          disabled={!updateAuthor}
+          id="rom-weaver-shared-patch-author"
+          onChange={(event) => setAuthor(event.currentTarget.value)}
+          placeholder={commonPatchMetaValue(bundleMeta, "author") === undefined ? "Multiple values" : "Author"}
+          type="text"
+          value={author}
+        />
+      </div>
+      <div className="patch-shared-meta-actions">
+        <button className="btn ghost slim" onClick={() => setOpen(false)} type="button">
+          Cancel
+        </button>
+        <button className="btn primary slim" disabled={!(updateAuthor || updateVersion)} onClick={apply} type="button">
+          Apply to all
+        </button>
+      </div>
+    </fieldset>
+  );
+};
+
 const ApplyPatchListStep = ({
   bundleOutputCheckHint,
   bundleSessionMatches,
@@ -1391,6 +1494,7 @@ const ApplyPatchListStep = ({
   fault,
   bundleMeta,
   onBundleMetaChange,
+  onBundleMetaBulkChange,
   onTogglePatch,
   notice,
   overrideAvailable,
@@ -1411,6 +1515,7 @@ const ApplyPatchListStep = ({
   /** Per-index editable bundle metadata. */
   bundleMeta?: readonly (BundlePatchMeta | undefined)[];
   onBundleMetaChange?: (index: number, updates: Partial<BundlePatchMeta>) => void;
+  onBundleMetaBulkChange?: (updates: Partial<BundlePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
   notice?: ReactNode;
   /** The 0x04 "Apply anyway…" override toggle is on offer - fault hints name it. */
@@ -1476,6 +1581,12 @@ const ApplyPatchListStep = ({
       title="Patches"
       woven={woven}
     >
+      {total > 1 && onBundleMetaBulkChange ? (
+        <SharedPatchMetaEditor
+          bundleMeta={bundleMeta || patches.map(() => undefined)}
+          onApply={onBundleMetaBulkChange}
+        />
+      ) : null}
       <div
         className="cards patch-cards workflow-file-list"
         id="rom-weaver-list-patch-stack"

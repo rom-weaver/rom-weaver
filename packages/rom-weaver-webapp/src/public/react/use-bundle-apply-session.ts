@@ -30,6 +30,16 @@ type BundleSessionControllers = {
   patchStack: PatcherStackController | null;
 };
 
+const mergeBundleMetaForIds = (
+  previous: ReadonlyMap<string, BundlePatchMeta>,
+  ids: readonly string[],
+  updates: Partial<BundlePatchMeta>,
+): ReadonlyMap<string, BundlePatchMeta> => {
+  const next = new Map(previous);
+  for (const id of ids) next.set(id, { ...next.get(id), ...updates });
+  return next;
+};
+
 type GeneratedPatchNameSource = BinarySource & { _generatedPatchName?: string };
 
 const setGeneratedPatchName = (source: BinarySource | undefined, metadata?: BundlePatchMeta): void => {
@@ -280,8 +290,18 @@ const useBundleApplySession = ({
     });
   }, []);
 
-  return { bundleDefaultsPending, bundleMetaById, handleBundlePatchesChange, updateBundleMeta };
+  const updateBundleMetaForIds = useCallback((ids: readonly string[], updates: Partial<BundlePatchMeta>) => {
+    setBundleMetaById((previous) => mergeBundleMetaForIds(previous, ids, updates));
+  }, []);
+
+  return {
+    bundleDefaultsPending,
+    bundleMetaById,
+    handleBundlePatchesChange,
+    updateBundleMeta,
+    updateBundleMetaForIds,
+  };
 };
 
 export type { BundlePatchMeta, BundleSessionControllers };
-export { useBundleApplySession };
+export { mergeBundleMetaForIds, useBundleApplySession };

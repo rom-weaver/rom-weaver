@@ -350,6 +350,67 @@
   flex: 1 1 0;
   min-width: 0;
 }
+.rw-app .patch-shared-meta-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: var(--sp-s);
+}
+.rw-app .patch-shared-meta-toolbar .btn,
+.rw-app .patch-shared-meta-actions .btn {
+  gap: 6px;
+}
+.rw-app .patch-shared-meta-toolbar svg {
+  width: 13px;
+  height: 13px;
+}
+.rw-app .patch-shared-meta-editor {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) repeat(2, minmax(11rem, 1fr)) auto;
+  gap: var(--sp-s);
+  align-items: end;
+  padding: var(--sp-s);
+  margin-block-end: var(--sp-s);
+  background: color-mix(in oklab, var(--thread) 5%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--thread) 22%, var(--line));
+  border-radius: var(--r-m);
+}
+.rw-app .patch-shared-meta-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-self: center;
+}
+.rw-app .patch-shared-meta-heading span {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.rw-app .patch-shared-meta-field {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 6px;
+  align-items: center;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rw-app .patch-shared-meta-field .input {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+.rw-app .patch-shared-meta-actions {
+  display: flex;
+  gap: 6px;
+}
+@media (max-width: 760px) {
+  .rw-app .patch-shared-meta-editor {
+    grid-template-columns: 1fr;
+  }
+  .rw-app .patch-shared-meta-actions {
+    justify-content: flex-end;
+  }
+}
 /* Patch actions menu */
 .rw-app .patch-menu {
   position: relative;
