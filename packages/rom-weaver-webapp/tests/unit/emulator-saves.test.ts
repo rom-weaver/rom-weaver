@@ -4,6 +4,7 @@ import {
   configureEmulatorSaveStorage,
   deleteEmulatorSave,
   importEmulatorSave,
+  importEmulatorSavePart,
   ensureEmulatorSaveBridge,
   listEmulatorSaves,
   parseSerializedEmulatorSave,
@@ -183,6 +184,8 @@ const record: EmulatorSaveRecord = {
   updatedAt: 1,
 };
 
+const sha1 = "0123456789abcdef0123456789abcdef01234567";
+
 beforeEach(() => {
   vi.stubGlobal("indexedDB", createFakeIndexedDb());
 });
@@ -264,6 +267,60 @@ describe("emulator saves", () => {
       label: "x".repeat(256),
     });
     expect(parseSerializedEmulatorSave(serialized).label).toHaveLength(255);
+  });
+
+  it("imports raw SRAM and save-state bytes with a normalized SHA-1", async () => {
+    const importedSram = await importEmulatorSavePart({
+      data: new Blob([new Uint8Array([7, 8, 9])]),
+      part: "sram",
+      sha1: `  ${sha1.toUpperCase()}  `,
+    });
+    expect(importedSram).toMatchObject({ gameId: sha1, gameName: sha1, label: "Imported save" });
+    expect(importedSram.sram).toEqual(new Uint8Array([7, 8, 9]));
+
+    const importedState = await importEmulatorSavePart({
+      data: new Uint8Array([1, 2, 3]),
+      part: "state",
+      sha1,
+    });
+    expect(importedState.sram).toEqual(new Uint8Array([7, 8, 9]));
+    expect(importedState.state).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it("rejects invalid direct-import SHA-1 and data", async () => {
+    await expect(
+      importEmulatorSavePart({ data: new Uint8Array([1]), part: "sram", sha1: "not-a-sha-1" }),
+    ).rejects.toThrow("40-character SHA-1 checksum");
+    await expect(importEmulatorSavePart({ data: new Uint8Array(), part: "state", sha1 })).rejects.toThrow(
+      "uploaded emulator save is empty",
+    );
+
+    const arrayBuffer = vi.fn();
+    const oversized = { arrayBuffer, size: 128 * 1024 * 1024 + 1 } as unknown as Blob;
+    await expect(importEmulatorSavePart({ data: oversized, part: "state", sha1 })).rejects.toThrow(
+      "uploaded emulator save is too large",
+    );
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
+  it("merges a direct import with existing save parts and metadata", async () => {
+    const existing: EmulatorSaveRecord = {
+      ...record,
+      gameId: sha1,
+      gameName: sha1,
+      label: "Known ROM.nes",
+    };
+    await writeEmulatorSave(existing);
+
+    const imported = await importEmulatorSavePart({
+      data: new Uint8Array([10, 11]),
+      part: "state",
+      sha1: sha1.toUpperCase(),
+    });
+
+    expect(imported).toMatchObject({ gameId: sha1, gameName: sha1, label: existing.label });
+    expect(imported.sram).toEqual(existing.sram);
+    expect(imported.state).toEqual(new Uint8Array([10, 11]));
   });
 
   it("rejects malformed save files and deletes a whole game record", async () => {

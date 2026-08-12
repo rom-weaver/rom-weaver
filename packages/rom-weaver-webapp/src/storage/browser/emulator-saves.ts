@@ -42,6 +42,7 @@ const SAVE_FORMAT_VERSION = 3;
 const SUPPORTED_SAVE_FORMAT_VERSIONS: readonly number[] = [1, 2, SAVE_FORMAT_VERSION];
 const MAX_IMPORT_BYTES = 128 * 1024 * 1024;
 const MAX_LABEL_LENGTH = 255;
+const IMPORTED_SAVE_LABEL = "Imported save";
 
 /**
  * `gameId` and `gameName` hold the ROM SHA-1. `label` is display metadata only.
@@ -60,6 +61,14 @@ type EmulatorSaveUpdate = {
   gameId: string;
   gameName: string;
   label: string;
+};
+
+type EmulatorSavePart = "sram" | "state";
+
+type EmulatorSavePartImport = {
+  data: Blob | ArrayBuffer | ArrayBufferView;
+  part: EmulatorSavePart;
+  sha1: string;
 };
 
 type SerializedEmulatorSave = {
@@ -299,18 +308,23 @@ const readEmulatorSave = async (gameId: string): Promise<EmulatorSaveRecord | un
   return record ? copyRecord(record) : undefined;
 };
 
-const updatePart = async (kind: "sram" | "state", update: EmulatorSaveUpdate): Promise<void> => {
+const updatePart = async (
+  kind: EmulatorSavePart,
+  update: EmulatorSaveUpdate,
+  { preserveMetadata = false }: { preserveMetadata?: boolean } = {},
+): Promise<EmulatorSaveRecord> => {
   const previous = await readEmulatorSave(update.gameId);
   const next: EmulatorSaveRecord = {
     gameId: update.gameId,
-    gameName: update.gameName,
-    label: update.label,
+    gameName: preserveMetadata && previous ? previous.gameName : update.gameName,
+    label: preserveMetadata && previous ? previous.label : update.label,
     ...(previous?.state ? { state: previous.state } : {}),
     ...(previous?.sram ? { sram: previous.sram } : {}),
     [kind]: copyBytes(update.data),
     updatedAt: Date.now(),
   };
   await writeRecord(next);
+  return copyRecord(next);
 };
 
 const listEmulatorSaves = async (): Promise<EmulatorSaveRecord[]> => {
@@ -431,6 +445,65 @@ const importEmulatorSave = async (file: Blob): Promise<EmulatorSaveRecord> => {
   return record;
 };
 
+const normalizeSha1 = (value: unknown): string => {
+  if (typeof value !== "string") throw new Error("The emulator save import requires a SHA-1 checksum.");
+  const normalized = value.trim().toLowerCase();
+  if (!/^[a-f0-9]{40}$/.test(normalized)) {
+    throw new Error("The emulator save import requires a 40-character SHA-1 checksum.");
+  }
+  return normalized;
+};
+
+const isBlobLike = (value: unknown): value is Blob => {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { arrayBuffer?: unknown; size?: unknown };
+  return typeof candidate.arrayBuffer === "function" && typeof candidate.size === "number";
+};
+
+const getImportSize = (value: unknown): number | undefined => {
+  if (isBlobLike(value)) return value.size;
+  if (value instanceof ArrayBuffer) return value.byteLength;
+  if (ArrayBuffer.isView(value)) return value.byteLength;
+  return undefined;
+};
+
+const validateImportSize = (size: number): void => {
+  if (!Number.isSafeInteger(size) || size <= 0) throw new Error("The uploaded emulator save is empty.");
+  if (size > MAX_IMPORT_BYTES) throw new Error("The uploaded emulator save is too large.");
+};
+
+const readImportBytes = async (value: unknown): Promise<Uint8Array> => {
+  const size = getImportSize(value);
+  if (size === undefined) throw new Error("The uploaded emulator save is not valid byte data.");
+  validateImportSize(size);
+
+  if (isBlobLike(value)) {
+    const bytes = copyBytes(await value.arrayBuffer());
+    if (!bytes) throw new Error("The uploaded emulator save is not valid byte data.");
+    validateImportSize(bytes.byteLength);
+    return bytes;
+  }
+  const bytes = copyBytes(value as ArrayBuffer | ArrayBufferView);
+  if (!bytes) throw new Error("The uploaded emulator save is not valid byte data.");
+  return bytes;
+};
+
+const importEmulatorSavePart = async ({ part, sha1, data }: EmulatorSavePartImport): Promise<EmulatorSaveRecord> => {
+  if (part !== "sram" && part !== "state") throw new Error("The emulator save part is not supported.");
+  const gameId = normalizeSha1(sha1);
+  const bytes = await readImportBytes(data);
+  return updatePart(
+    part,
+    {
+      data: bytes,
+      gameId,
+      gameName: gameId,
+      label: IMPORTED_SAVE_LABEL,
+    },
+    { preserveMetadata: true },
+  );
+};
+
 const isSaveMessage = (value: unknown): value is EmulatorSaveMessage => {
   if (!value || typeof value !== "object") return false;
   const message = value as Partial<EmulatorSaveMessage>;
@@ -503,6 +576,7 @@ export {
   deleteEmulatorSave,
   ensureEmulatorSaveBridge,
   importEmulatorSave,
+  importEmulatorSavePart,
   listEmulatorSaves,
   parseSerializedEmulatorSave,
   serializeEmulatorSave,
