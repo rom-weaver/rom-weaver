@@ -67,6 +67,9 @@
   align-items: center;
   margin-inline-start: 0;
 }
+.rw-app .patch-card-meta-controls {
+  display: contents;
+}
 .rw-app .card-actions {
   display: flex;
   flex: none;

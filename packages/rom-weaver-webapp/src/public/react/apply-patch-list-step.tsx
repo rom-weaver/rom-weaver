@@ -1069,27 +1069,30 @@ const PatchMetaDoneButton = ({ index, onToggle }: { index: number; onToggle: () 
  * so its actions keep stable, always-queryable ids. */
 const PatchActionsMenu = ({
   index,
+  onOpenChange,
   onEdit,
   onRemove,
   onReplace,
+  open,
 }: {
   index: number;
+  onOpenChange: (open: boolean) => void;
   /** Absent while the details form cannot be edited (no bundle meta channel). */
   onEdit?: () => void;
   onRemove: () => void;
   onReplace?: (file: File) => void;
+  open: boolean;
 }) => {
-  const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!open) return undefined;
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) onOpenChange(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
+  }, [onOpenChange, open]);
   return (
     <div className="patch-menu" ref={rootRef}>
       <button
@@ -1098,9 +1101,9 @@ const PatchActionsMenu = ({
         aria-label="Patch actions"
         className={open ? "rm patch-menu-btn is-open" : "rm patch-menu-btn"}
         id={`rom-weaver-patch-menu-${index}`}
-        onClick={() => setOpen(!open)}
+        onClick={() => onOpenChange(!open)}
         onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
+          if (event.key === "Escape") onOpenChange(false);
         }}
         title="Patch actions"
         type="button"
@@ -1112,7 +1115,7 @@ const PatchActionsMenu = ({
         className="patch-menu-list"
         hidden={!open}
         onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
+          if (event.key === "Escape") onOpenChange(false);
         }}
         role="menu"
       >
@@ -1121,7 +1124,7 @@ const PatchActionsMenu = ({
             className="patch-menu-item"
             id={`rom-weaver-patch-meta-edit-${index}`}
             onClick={() => {
-              setOpen(false);
+              onOpenChange(false);
               onEdit();
             }}
             role="menuitem"
@@ -1149,7 +1152,7 @@ const PatchActionsMenu = ({
           className="patch-menu-item is-danger"
           id={`rom-weaver-patch-menu-remove-${index}`}
           onClick={() => {
-            setOpen(false);
+            onOpenChange(false);
             onRemove();
           }}
           role="menuitem"
@@ -1168,7 +1171,7 @@ const PatchActionsMenu = ({
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
-            setOpen(false);
+            onOpenChange(false);
             if (file) onReplace(file);
           }}
           ref={fileRef}
@@ -1246,6 +1249,7 @@ const PatchCard = ({
 }) => {
   // Pencil edit state: the name and description editors open/close together.
   const [metaEditing, setMetaEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const editing = metaEditing && !!onMetaChange;
   const description = meta?.description || "";
   // Mirrors the ROM card: the resolved card structure (collapsed Extract +
@@ -1302,7 +1306,7 @@ const PatchCard = ({
         />
       }
       meta={
-        <>
+        <span className="patch-card-meta-controls" inert={menuOpen}>
           {onTogglePatch ? (
             <PatchEnableToggle disabled={isDisabled} fileName={item.fileName} onToggle={() => onTogglePatch(index)} />
           ) : null}
@@ -1346,7 +1350,7 @@ const PatchCard = ({
               percent={percent}
             />
           ) : null}
-        </>
+        </span>
       }
       name={
         <ExtractName
@@ -1374,8 +1378,10 @@ const PatchCard = ({
           <PatchActionsMenu
             index={index}
             onEdit={onMetaChange ? () => setMetaEditing(true) : undefined}
+            onOpenChange={setMenuOpen}
             onRemove={() => patchStack.removeItem(index)}
             onReplace={(file) => patchStack.replaceItem(index, file)}
+            open={menuOpen}
           />
         )
       }
