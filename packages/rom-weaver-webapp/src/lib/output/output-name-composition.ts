@@ -15,6 +15,29 @@ const readBracketLabel = (name: string): string => {
   return trimmed.slice(open + 1, close);
 };
 
+type PatchOutputMetadata = {
+  author?: string | null;
+  description?: string | null;
+  name?: string | null;
+  version?: string | null;
+};
+
+const sanitizePatchMetadataPart = (value: unknown): string =>
+  Array.from(String(value || ""))
+    .filter((character) => character.charCodeAt(0) >= 32)
+    .join("")
+    .replace(/[<>:"/\\|?*\u005b\u005d]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** Build the bracketed patch label used by automatic output names. */
+const createPatchMetadataLabel = (metadata: PatchOutputMetadata | null | undefined): string => {
+  if (!metadata) return "";
+  const patchName = sanitizePatchMetadataPart(metadata.name) || sanitizePatchMetadataPart(metadata.description);
+  const label = [patchName, metadata.author, metadata.version].map(sanitizePatchMetadataPart).filter(Boolean).join(" ");
+  return label ? `[${label}]` : "";
+};
+
 const stripRedundantPatchPrefix = (inputBaseName: string, patchName: string) => {
   const base = String(inputBaseName || "").trim();
   const patch = String(patchName || "").trim();
@@ -31,12 +54,11 @@ const stripRedundantPatchPrefix = (inputBaseName: string, patchName: string) => 
  *
  * A patch name ending in a `[label]` contributes that bracketed label verbatim
  * (`Crash` + `super awesome [big jump by foo v1.0]` -> `Crash [big jump by foo v1.0]`),
- * replacing the rest of the patch name. Patch names without a bracket label keep the
- * legacy ` - name + name` join.
+ * replacing the rest of the patch name. Patch names without a bracket label contribute their
+ * non-redundant name as a bracket label.
  */
 const buildPatchedOutputBaseName = (inputBaseName: string, patchNames: readonly string[]) => {
   const base = String(inputBaseName || "").trim() || "patched";
-  const plainNames: string[] = [];
   const bracketLabels: string[] = [];
   for (const patchName of patchNames) {
     const name = String(patchName || "").trim();
@@ -47,11 +69,11 @@ const buildPatchedOutputBaseName = (inputBaseName: string, patchNames: readonly 
       continue;
     }
     const stripped = stripRedundantPatchPrefix(base, name).trim();
-    if (stripped) plainNames.push(stripped);
+    const safeLabel = sanitizePatchMetadataPart(stripped);
+    if (safeLabel) bracketLabels.push(safeLabel);
   }
-  const plainSuffix = plainNames.length ? ` - ${plainNames.join(" + ")}` : "";
   const bracketSuffix = bracketLabels.map((label) => ` [${label}]`).join("");
-  return `${base}${plainSuffix}${bracketSuffix}`;
+  return `${base}${bracketSuffix}`;
 };
 
-export { buildPatchedOutputBaseName };
+export { buildPatchedOutputBaseName, createPatchMetadataLabel };

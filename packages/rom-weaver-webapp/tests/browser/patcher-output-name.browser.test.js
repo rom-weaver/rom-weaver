@@ -80,7 +80,7 @@ test("removing a patch refreshes generated output name", async () => {
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
 
   await waitForApplyButtonEnabled();
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game - change");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game [change]");
 
   const removePatchButton = document.querySelector("button[aria-label='Remove patch']");
   if (!(removePatchButton instanceof HTMLButtonElement)) throw new Error("Missing remove patch button");

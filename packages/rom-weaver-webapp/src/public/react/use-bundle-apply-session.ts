@@ -1,6 +1,7 @@
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { createLogger } from "../../lib/logging.ts";
+import { createPatchMetadataLabel } from "../../lib/output/output-name-composition.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import type { BinarySource, PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
@@ -27,6 +28,63 @@ type BundlePatchMeta = {
 type BundleSessionControllers = {
   output: PatcherOutputController | null;
   patchStack: PatcherStackController | null;
+};
+
+type GeneratedPatchNameSource = BinarySource & { _generatedPatchName?: string };
+
+const setGeneratedPatchName = (source: BinarySource | undefined, metadata?: BundlePatchMeta): void => {
+  if (!source || typeof source !== "object") return;
+  const generatedPatchName = createPatchMetadataLabel(metadata);
+  try {
+    (source as GeneratedPatchNameSource)._generatedPatchName = generatedPatchName || undefined;
+  } catch {
+    // Some host file handles may be non-extensible. The regular filename fallback still works.
+  }
+};
+
+const clearGeneratedPatchNames = (patches: BinarySource[]): void => {
+  for (const patch of patches) setGeneratedPatchName(patch);
+};
+
+const createBundlePatchMetadata = (
+  patches: BinarySource[],
+  entries: BundleApplySession["entries"],
+  ids: string[],
+): Map<string, BundlePatchMeta> => {
+  const metadataById = new Map<string, BundlePatchMeta>();
+  for (const [index, entry] of entries.entries()) {
+    const id = ids[index];
+    if (!id) continue;
+    const metadata = Object.fromEntries(
+      Object.entries({
+        author: entry.author,
+        basis: entry.basis,
+        description: entry.description,
+        id: entry.id,
+        inputChecks: entry.inputChecks,
+        label: entry.label,
+        name: entry.name,
+        outputChecks: entry.outputChecks,
+        version: entry.version,
+      }).filter(([, value]) => value !== undefined),
+    ) as BundlePatchMeta;
+    metadataById.set(id, metadata);
+    setGeneratedPatchName(patches[index], metadata);
+  }
+  return metadataById;
+};
+
+const restoreBundlePatchMetadata = (
+  patches: BinarySource[],
+  entries: BundleApplySession["entries"],
+  ids: string[],
+  metadataById: ReadonlyMap<string, BundlePatchMeta>,
+): void => {
+  for (const [index, entry] of entries.entries()) {
+    const id = ids[index];
+    if (!id) continue;
+    setGeneratedPatchName(patches[index], metadataById.get(id) || entry);
+  }
 };
 
 /** The output name field carries the name WITHOUT an extension (the format select owns it). */
@@ -80,6 +138,7 @@ const useBundleApplySession = ({
       lastPatchesRef.current = patches;
       const session = bundleSession;
       if (!session?.entries.length) {
+        clearGeneratedPatchNames(patches);
         if (activeSeedPatchNamesRef.current) {
           seedGenerationRef.current += 1;
           activeSeedPatchNamesRef.current = null;
@@ -95,6 +154,7 @@ const useBundleApplySession = ({
       const expected = session.entries.map((entry) => entry.fileName);
       const matchesSession = names.length === expected.length && expected.every((name, index) => names[index] === name);
       if (!matchesSession) {
+        clearGeneratedPatchNames(patches);
         if (activeSeedPatchNamesRef.current) {
           seedGenerationRef.current += 1;
           activeSeedPatchNamesRef.current = null;
@@ -107,7 +167,11 @@ const useBundleApplySession = ({
         }
         return;
       }
-      if (appliedKeyRef.current === session.key) return;
+      const ids = getPatchIds();
+      if (appliedKeyRef.current === session.key) {
+        restoreBundlePatchMetadata(patches, session.entries, ids, bundleMetaById);
+        return;
+      }
       appliedKeyRef.current = session.key;
       const generation = seedGenerationRef.current + 1;
       seedGenerationRef.current = generation;
@@ -117,7 +181,6 @@ const useBundleApplySession = ({
         key: session.key,
         patchCount: patches.length,
       });
-      const ids = getPatchIds();
       seedPatchEnablement(
         session.entries
           .map((entry, index) => ({
@@ -126,23 +189,7 @@ const useBundleApplySession = ({
           }))
           .filter((entry) => !!entry.id),
       );
-      const meta = new Map<string, BundlePatchMeta>();
-      session.entries.forEach((entry, index) => {
-        const id = ids[index];
-        if (!id) return;
-        meta.set(id, {
-          ...(entry.id ? { id: entry.id } : {}),
-          ...(entry.version ? { version: entry.version } : {}),
-          ...(entry.name ? { name: entry.name } : {}),
-          ...(entry.label ? { label: entry.label } : {}),
-          ...(entry.description ? { description: entry.description } : {}),
-          ...(entry.version ? { version: entry.version } : {}),
-          ...(entry.author ? { author: entry.author } : {}),
-          ...(entry.inputChecks ? { inputChecks: entry.inputChecks } : {}),
-          ...(entry.outputChecks ? { outputChecks: entry.outputChecks } : {}),
-          ...(entry.basis ? { basis: entry.basis } : {}),
-        });
-      });
+      const meta = createBundlePatchMetadata(patches, session.entries, ids);
       setBundleMetaById(meta);
       // The controller work runs task-chained straight from the match, so everything lands while the
       // patches are still staging - well before the apply button arms. Deferring longer would race a
@@ -205,7 +252,7 @@ const useBundleApplySession = ({
         }
       })();
     },
-    [controllersRef, bundleSession, getPatchIds, seedPatchEnablement],
+    [bundleMetaById, controllersRef, bundleSession, getPatchIds, seedPatchEnablement],
   );
 
   // Replay the match when the session lands AFTER its patches did (local
@@ -216,6 +263,14 @@ const useBundleApplySession = ({
     if (!lastPatchesRef.current.length) return;
     handleBundlePatchesChange(lastPatchesRef.current);
   }, [handleBundlePatchesChange, bundleSession]);
+
+  useEffect(() => {
+    const ids = getPatchIds();
+    for (const [id, metadata] of bundleMetaById) {
+      const index = ids.indexOf(id);
+      if (index >= 0) setGeneratedPatchName(lastPatchesRef.current[index], metadata);
+    }
+  }, [bundleMetaById, getPatchIds]);
 
   const updateBundleMeta = useCallback((id: string, updates: Partial<BundlePatchMeta>) => {
     setBundleMetaById((previous) => {

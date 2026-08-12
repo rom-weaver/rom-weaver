@@ -352,6 +352,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     seedPatchEnablement,
   });
 
+  useEffect(() => {
+    if (!bundleMetaById.size) return;
+    setResolvedOutputName("");
+    setResolvedOutputNameKey("");
+  }, [bundleMetaById]);
+
   // Declared chain metadata (bundle/user basis + checks) per patch index, forwarded into the
   // plan-mode validation so the engine resolves each patch's basis with the same declarations
   // the apply run will enforce.

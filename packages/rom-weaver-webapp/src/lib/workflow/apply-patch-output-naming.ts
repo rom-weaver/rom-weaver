@@ -5,6 +5,8 @@ import type { StagedSource } from "./apply-workflow-state.ts";
 const createPatchOutputLabel = (fileName: string | undefined) => extractPatchFileLabel(fileName);
 
 const resolvePatchOutputName = <TSource>(patch: StagedSource<TSource>, index: number): string => {
+  const generatedPatchName = (patch.source as TSource & { _generatedPatchName?: unknown })?._generatedPatchName;
+  if (typeof generatedPatchName === "string" && generatedPatchName.trim()) return generatedPatchName;
   if (patch.state.selectedCandidateId) {
     const selectedCandidate = patch.state.candidates.find(
       (candidate) => candidate.id === patch.state.selectedCandidateId,

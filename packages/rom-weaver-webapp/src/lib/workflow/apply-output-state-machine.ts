@@ -141,7 +141,14 @@ const buildAutomaticOutputName = (
 ): string => {
   if (!input?.fileName) return state.outputName;
   const inputBase = getFileNameWithoutExtension(getDiscOutputFileName(input) || input.fileName) || "patched";
-  const patchNames = patchOutputNames.map((fileName) => getFileNameWithoutExtension(fileName)).filter(Boolean);
+  const patchNames = patchOutputNames
+    .map((fileName) => {
+      const trimmedName = String(fileName || "").trim();
+      return trimmedName.startsWith("[") && trimmedName.endsWith("]")
+        ? trimmedName
+        : getFileNameWithoutExtension(trimmedName);
+    })
+    .filter(Boolean);
   return buildPatchedOutputBaseName(inputBase, patchNames);
 };
 

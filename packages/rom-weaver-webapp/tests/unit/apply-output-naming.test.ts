@@ -3,6 +3,7 @@ import {
   createApplyOutputState,
   recomputeApplyOutputState,
 } from "../../src/lib/workflow/apply-output-state-machine.ts";
+import { resolvePatchOutputName } from "../../src/lib/workflow/apply-patch-output-naming.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowResolvedInput } from "../../src/types/apply-workflow.ts";
 
 // Pins the controller's automatic apply output-name derivation - the single source of truth the
@@ -38,7 +39,24 @@ describe("apply automatic output name", () => {
   });
 
   it("appends patch names to the input stem", () => {
-    expect(autoOutputName(makeInput({ fileName: "game.gba" }), ["Hard Mode.ips"])).toBe("game - Hard Mode");
+    expect(autoOutputName(makeInput({ fileName: "game.gba" }), ["Hard Mode.ips"])).toBe("game [Hard Mode]");
+  });
+
+  it("uses a generated metadata label before the patch filename", () => {
+    expect(
+      resolvePatchOutputName(
+        {
+          source: { _generatedPatchName: "[Hard Mode Jane Doe 1.2]" },
+          state: {
+            candidates: [
+              { fileName: "hard-mode.ips", id: "patch-file", kind: "patch", selectable: true, type: "file" },
+            ],
+            selectedCandidateId: "patch-file",
+          },
+        } as never,
+        0,
+      ),
+    ).toBe("[Hard Mode Jane Doe 1.2]");
   });
 
   it("uses the .cue sheet name for a loose multi-track disc, not the primary track", () => {

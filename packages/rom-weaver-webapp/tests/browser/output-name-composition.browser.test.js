@@ -7,7 +7,7 @@ import {
   getPreferredCreatePatchFormat,
   normalizeCreatePatchFormat,
 } from "../../src/lib/create/patch-format-limits.ts";
-import { buildPatchedOutputBaseName } from "../../src/lib/output/output-name-composition.ts";
+import { buildPatchedOutputBaseName, createPatchMetadataLabel } from "../../src/lib/output/output-name-composition.ts";
 import { createPatchedRomSavePlan } from "../../src/lib/output/output-save-plan.ts";
 import {
   createApplyOutputOptions,
@@ -19,15 +19,19 @@ import {
 
 test("buildPatchedOutputBaseName strips duplicated input prefixes from patch names", () => {
   expect(buildPatchedOutputBaseName("Crash Bandicoot (USA)", ["Crash Bandicoot (USA)_Quality of Life"])).toBe(
-    "Crash Bandicoot (USA) - Quality of Life",
+    "Crash Bandicoot (USA) [Quality of Life]",
   );
   expect(buildPatchedOutputBaseName("Crash Bandicoot (USA)", ["Crash Bandicoot (USA) - Quality of Life"])).toBe(
-    "Crash Bandicoot (USA) - Quality of Life",
+    "Crash Bandicoot (USA) [Quality of Life]",
   );
 });
 
-test("buildPatchedOutputBaseName keeps non-prefixed patch names unchanged", () => {
-  expect(buildPatchedOutputBaseName("Crash Bandicoot (USA)", ["Hard Mode"])).toBe("Crash Bandicoot (USA) - Hard Mode");
+test("buildPatchedOutputBaseName wraps non-prefixed patch names in brackets", () => {
+  expect(buildPatchedOutputBaseName("Crash Bandicoot (USA)", ["Hard Mode"])).toBe("Crash Bandicoot (USA) [Hard Mode]");
+});
+
+test("buildPatchedOutputBaseName sanitizes bracket delimiters in fallback names", () => {
+  expect(buildPatchedOutputBaseName("Crash", ["Hard]Mode"])).toBe("Crash [Hard Mode]");
 });
 
 test("buildPatchedOutputBaseName appends a trailing bracket label verbatim", () => {
@@ -36,9 +40,30 @@ test("buildPatchedOutputBaseName appends a trailing bracket label verbatim", () 
   );
 });
 
+test("patch metadata becomes an automatic bracket label", () => {
+  expect(
+    buildPatchedOutputBaseName("Crash Bandicoot (USA)", [
+      createPatchMetadataLabel({
+        author: "Jane Doe",
+        description: "Description fallback",
+        name: "Hard Mode",
+        version: "1.2",
+      }),
+    ]),
+  ).toBe("Crash Bandicoot (USA) [Hard Mode Jane Doe 1.2]");
+});
+
+test("patch metadata falls back to the description", () => {
+  expect(createPatchMetadataLabel({ author: "Jane Doe", description: "Hard Mode" })).toBe("[Hard Mode Jane Doe]");
+});
+
+test("patch metadata removes bracket characters from the label", () => {
+  expect(createPatchMetadataLabel({ author: "Jane] Doe", description: "Hard [Mode]" })).toBe("[Hard Mode Jane Doe]");
+});
+
 test("buildPatchedOutputBaseName keeps bracket and plain patch names alongside each other", () => {
   expect(buildPatchedOutputBaseName("Crash", ["Hard Mode", "super awesome [big jump by foo v1.0]"])).toBe(
-    "Crash - Hard Mode [big jump by foo v1.0]",
+    "Crash [Hard Mode] [big jump by foo v1.0]",
   );
   expect(buildPatchedOutputBaseName("Crash", ["[color fix]", "[hud rework]"])).toBe("Crash [color fix] [hud rework]");
 });
@@ -51,6 +76,22 @@ test("browser output generation appends the patch bracket label to the rom name"
       {},
     ),
   ).toBe("Crash [big jump by foo v1.0]");
+});
+
+test("browser output generation brackets a patch filename without metadata", () => {
+  expect(getGeneratedOutputName({ fileName: "Crash.chd" }, [{ fileName: "hard-mode.ips" }], {})).toBe(
+    "Crash [hard-mode]",
+  );
+});
+
+test("browser output generation uses a generated metadata label", () => {
+  expect(
+    getGeneratedOutputName(
+      { fileName: "Crash.chd" },
+      [{ _generatedPatchName: "[Hard Mode Jane Doe 1.2]", fileName: "hard-mode.ips" }],
+      {},
+    ),
+  ).toBe("Crash [Hard Mode Jane Doe 1.2]");
 });
 
 test("browser output generation strips an input archive extension without patches", () => {
@@ -69,7 +110,7 @@ test("browser output generation prefers provided patch filenames over generated 
       ],
       {},
     ),
-  ).toBe("Crash Bandicoot (USA) - Quality of Life");
+  ).toBe("Crash Bandicoot (USA) [Quality of Life]");
 });
 
 test("z3ds output naming preserves cci source type when requested name has no extension", () => {

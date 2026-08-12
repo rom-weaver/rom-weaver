@@ -109,12 +109,11 @@ const generatePatchedFileName = (
 
   const romName = sanitizeFileNamePart(getFileNameWithoutExtension(romFileName), "patched");
   const patchNames = patchSources
-    .map((patchSource) =>
-      sanitizeFileNamePart(
-        getFileNameWithoutExtension(patchSource._generatedPatchName || patchSource.fileName || ""),
-        "",
-      ),
-    )
+    .map((patchSource) => {
+      const generatedName = patchSource._generatedPatchName;
+      const name = generatedName || getFileNameWithoutExtension(patchSource.fileName || "");
+      return sanitizeFileNamePart(name, "");
+    })
     .filter(Boolean);
   return buildPatchedOutputBaseName(romName, patchNames);
 };
