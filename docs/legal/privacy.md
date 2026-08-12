@@ -29,13 +29,14 @@ The app keeps a few things locally so it works across reloads and can handle fil
 - **Local storage**: your preferences, such as theme and settings, plus update state and a short recent log.
 - **Session storage**: coordinates service-worker and security-mode reloads, update prompts, and the docs shelf state for the current tab.
 - **Cache storage**: the app's own files, so it loads fast and works offline.
+- **IndexedDB**: emulator save states and SRAM. The saved records use a derived game key, not the ROM name or play history.
 - **Origin Private File System**: temporary inputs, working files, and outputs that are too large for memory.
 
 All of it belongs to the rom-weaver site in your browser and is under your browser's control. The app sets no advertising or tracking cookies.
 
 ## What the app downloads
 
-Opening the site downloads what any site downloads: HTML, styles, scripts, the WebAssembly module, fonts, and these pages. As with any website, whoever hosts and routes that traffic can see ordinary request information: an IP address, a browser user agent, the path requested, and a timestamp.
+Opening the site downloads what any site downloads: HTML, styles, scripts, the WebAssembly module, fonts, and these pages. Opening Test also downloads the selected, self-hosted EmulatorJS core. As with any website, whoever hosts and routes that traffic can see ordinary request information: an IP address, a browser user agent, the path requested, and a timestamp.
 
 There are no analytics, advertising, or tracking scripts in the deployed app.
 

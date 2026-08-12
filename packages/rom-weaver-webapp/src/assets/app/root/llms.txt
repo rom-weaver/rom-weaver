@@ -11,6 +11,7 @@
 - [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the browser's Apply workflow with loose patches, patch chains, archives, or bundles.
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
 - [Create bundles guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only bundle in the browser's Apply workflow.
+- [Test ROMs guide](https://rom-weaver.com/docs/test-roms): Play a local ROM or an Apply result in the browser with local saves.
 - [FAQ](https://rom-weaver.com/docs/faq): Common questions, each pointing at the page that owns the answer.
 - [How patching works](https://rom-weaver.com/docs/how-patching-works): Why the exact starting file matters, what a checksum proves, and why patch order matters.
 - [Why files stay on your device](https://rom-weaver.com/docs/local-first): How local-first processing works in the browser and what it costs.
