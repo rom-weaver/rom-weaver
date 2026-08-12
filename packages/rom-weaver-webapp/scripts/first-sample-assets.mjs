@@ -9,7 +9,7 @@ const HEADER_SIZE = 16;
 const PRG_SIZE = 16 * 1024;
 const CHR_SIZE = 8 * 1024;
 const CPU_BASE = 0x8000;
-const MESSAGE_LENGTH = 14;
+const MESSAGE_LENGTH = 15;
 
 const invariant = (condition, message) => {
   if (!condition) throw new Error(message);
@@ -26,6 +26,7 @@ const FONT = {
   M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
   O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
   R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+  V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
   W: ["10001", "10001", "10001", "10101", "10101", "10101", "01010"],
 };
 
@@ -131,7 +132,7 @@ const createPrg = (message) => {
   emit(0xa2, 0x00); // LDX #0
   label("write-message");
   absolute(0xbd, "message"); // LDA message,X
-  emit(0x8d, 0x07, 0x20, 0xe8, 0xe0, MESSAGE_LENGTH); // STA $2007; INX; CPX #14
+  emit(0x8d, 0x07, 0x20, 0xe8, 0xe0, MESSAGE_LENGTH); // STA $2007; INX; CPX #15
   relative(0xd0, "write-message"); // BNE
 
   emit(
@@ -250,29 +251,41 @@ const createZip = (entries) => {
 };
 
 const createFirstSampleAssets = () => {
-  const original = createRom(" HELLO WORLD  ");
-  const modified = createRom("MODIFIED WORLD");
-  const woven = createRom("MODIFIED ROM  ");
+  const original = createRom(" HELLO WORLD   ");
+  const modified = createRom("MODIFIED WORLD ");
+  const firstPatchResult = createRom(" ROM   WORLD   ");
+  const secondPatchResult = createRom(" HELLO WEAVER  ");
+  const woven = createRom(" ROM   WEAVER  ");
   invariant(original.rom.length === HEADER_SIZE + PRG_SIZE + CHR_SIZE, "ROM has an unexpected size");
   invariant(
-    original.messageOffset === modified.messageOffset && modified.messageOffset === woven.messageOffset,
+    original.messageOffset === modified.messageOffset &&
+      modified.messageOffset === firstPatchResult.messageOffset &&
+      firstPatchResult.messageOffset === secondPatchResult.messageOffset &&
+      secondPatchResult.messageOffset === woven.messageOffset,
     "message offsets must match",
   );
-  const changedOffsets = Array.from(original.rom.keys()).filter((index) => original.rom[index] !== modified.rom[index]);
+  const changedOffsets = Array.from(original.rom.keys()).filter(
+    (index) => original.rom[index] !== firstPatchResult.rom[index],
+  );
   invariant(
-    changedOffsets.length === MESSAGE_LENGTH &&
-      changedOffsets.every((offset, index) => offset === original.messageOffset + index),
+    changedOffsets.length > 0 &&
+      changedOffsets.every(
+        (offset) => offset >= original.messageOffset && offset < original.messageOffset + MESSAGE_LENGTH,
+      ),
     "only the message bytes may differ",
   );
   invariant(
-    Array.from(modified.rom.keys())
-      .filter((index) => modified.rom[index] !== woven.rom[index])
-      .every((offset) => offset >= modified.messageOffset && offset < modified.messageOffset + MESSAGE_LENGTH),
+    Array.from(secondPatchResult.rom.keys())
+      .filter((index) => secondPatchResult.rom[index] !== woven.rom[index])
+      .every(
+        (offset) =>
+          offset >= secondPatchResult.messageOffset && offset < secondPatchResult.messageOffset + MESSAGE_LENGTH,
+      ),
     "only the message bytes may differ",
   );
 
-  const helloToModifiedPatch = createIpsPatch(original.rom, modified.rom);
-  const worldToRomPatch = createIpsPatch(modified.rom, woven.rom);
+  const helloToRomPatch = createIpsPatch(original.rom, firstPatchResult.rom);
+  const worldToWeaverPatch = createIpsPatch(original.rom, secondPatchResult.rom);
   const manifest = Buffer.from(
     `${JSON.stringify(
       {
@@ -283,19 +296,19 @@ const createFirstSampleAssets = () => {
         },
         patches: [
           {
-            name: "Hello to Modified",
-            description: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
-            path: "hello-to-modified.ips",
-            outputChecks: { checksums: checksums(modified.rom), size: modified.rom.length },
+            name: "Hello to ROM",
+            description: "Changes HELLO to ROM in the message displayed by the NES ROM.",
+            path: "hello-to-rom.ips",
+            basis: "base",
           },
           {
-            name: "World to ROM",
-            description: "Changes WORLD to ROM in the message displayed by the NES ROM.",
-            path: "world-to-rom.ips",
-            inputChecks: { checksums: checksums(modified.rom), size: modified.rom.length },
+            name: "World to WEAVER",
+            description: "Changes WORLD to WEAVER in the message displayed by the NES ROM.",
+            path: "world-to-weaver.ips",
+            basis: "base",
           },
         ],
-        output: { name: "modified-rom.nes", checks: { checksums: checksums(woven.rom) } },
+        output: { name: "rom-weaver.nes", checks: { checksums: checksums(woven.rom) } },
       },
       null,
       2,
@@ -310,13 +323,15 @@ const createFirstSampleAssets = () => {
     firstWeaveZip: createZip([
       ["rom-weaver-bundle.json", manifest],
       ["hello-world.nes", original.rom],
-      ["hello-to-modified.ips", helloToModifiedPatch],
-      ["world-to-rom.ips", worldToRomPatch],
+      ["hello-to-rom.ips", helloToRomPatch],
+      ["world-to-weaver.ips", worldToWeaverPatch],
     ]),
-    helloToModifiedPatch,
+    firstPatchResult: firstPatchResult.rom,
+    helloToRomPatch,
     modifiedRom: modified.rom,
     originalRom: original.rom,
-    worldToRomPatch,
+    secondPatchResult: secondPatchResult.rom,
+    worldToWeaverPatch,
     wovenRom: woven.rom,
   };
 };

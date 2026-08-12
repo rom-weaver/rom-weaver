@@ -4,14 +4,14 @@ const DOCS_SCREENSHOT_CASES = [
     name: "apply-patches",
     route: "/apply?bundle=first-weave.zip",
     target: "#rom-weaver-row-patch-stack",
-    waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
+    waitFor: "Changes HELLO to ROM in the message displayed by the NES ROM.",
   },
   {
     docsRoute: "docs/apply-rom-patches",
     name: "apply-output",
     route: "/apply?bundle=first-weave.zip",
     target: "#rom-weaver-row-output-file-name",
-    waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
+    waitFor: "Changes HELLO to ROM in the message displayed by the NES ROM.",
   },
   {
     dismissGuide: true,
@@ -36,7 +36,7 @@ const DOCS_SCREENSHOT_CASES = [
     openOutputOptions: true,
     route: "/apply?guide=bundle",
     target: "#rom-weaver-row-output-file-name",
-    waitFor: "Changes HELLO to MODIFIED in the message displayed by the NES ROM.",
+    waitFor: "Changes HELLO to ROM in the message displayed by the NES ROM.",
   },
 ];
 const DOCS_SCREENSHOT_VIEWPORTS = [
@@ -60,8 +60,8 @@ const DOCS_SCREENSHOT_NAMES = [
     ),
   ),
   "first-sample-hello-world.webp",
-  "first-sample-modified-world.webp",
-  "first-sample-modified-rom.webp",
+  "first-sample-rom-world.webp",
+  "first-sample-rom-weaver.webp",
 ];
 
 export {

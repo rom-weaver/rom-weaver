@@ -14,6 +14,7 @@ import {
   mount,
   RAW_PATCH,
   RAW_ROM,
+  setFormControlValue,
   waitForApplyButtonEnabled,
   waitForApplyOutcome,
 } from "./patcher-test-shared.js";
@@ -241,7 +242,7 @@ test("url-session files fetched from same-origin urls flow through the drop pipe
   await Promise.all(fetched.map((entry) => entry.cleanup()));
 });
 
-test("sample action stays in-page and flows through the drop pipeline to a green apply", async () => {
+test("sample action applies with one patch disabled", async () => {
   mount(createElement(ApplyPatchForm));
   const href = location.href;
   await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
@@ -253,12 +254,52 @@ test("sample action stays in-page and flows through the drop pipeline to a green
   await expect.poll(() => getInputStackRows().length, { timeout: 30000 }).toBe(1);
   await expect
     .poll(() => getPatchStackFileNames(), { timeout: 30000 })
-    .toEqual(["hello-to-modified.ips", "world-to-rom.ips"]);
+    .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
   await expect
     .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length, {
       timeout: 30000,
     })
-    .toBe(1);
+    .toBe(2);
+  const patchToggles = () => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .patch-enable input"));
+  patchToggles()[0]?.click();
+  await expect.poll(() => patchToggles().map((toggle) => toggle.checked), { timeout: 30000 }).toEqual([false, true]);
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+});
+
+test("sample base patches apply after their order changes", async () => {
+  mount(createElement(ApplyPatchForm));
+  const href = location.href;
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+  expect(location.href).toBe(href);
+
+  await expect.poll(() => getInputStackRows().length, { timeout: 30000 }).toBe(1);
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
+  await expect
+    .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length, {
+      timeout: 30000,
+    })
+    .toBe(2);
+
+  const firstHandle = document.querySelector("#rom-weaver-list-patch-stack .handle");
+  firstHandle?.click();
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-patch-stack .phandle-input"), { timeout: 30000 })
+    .not.toBeNull();
+  const positionInput = document.querySelector("#rom-weaver-list-patch-stack .phandle-input");
+  if (!positionInput) throw new Error("Missing patch position input");
+  setFormControlValue(positionInput, "2");
+  positionInput.blur();
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["world-to-weaver.ips", "hello-to-rom.ips"]);
+  expect(document.getElementById("rom-weaver-patch-order-note")).toBeNull();
   await waitForApplyButtonEnabled();
   await clickApplyButton();
   expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
