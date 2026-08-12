@@ -1393,12 +1393,12 @@ const ApplyOutputAction = ({
       </p>
     </div>
     <div className="apply-primary-action-row">
+      <PostApplyBehaviorField disabled={outputState.disabled} localizer={localizer} settingValue={settingValue} />
       <PatcherPrimaryAction
         controller={controllers.output}
         disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
         totalTime={applyTotalTime || undefined}
       />
-      <PostApplyBehaviorField disabled={outputState.disabled} localizer={localizer} settingValue={settingValue} />
     </div>
     <EmulatorJsAction
       core={getEmulatorJsCore(

@@ -809,18 +809,18 @@
   font-size: var(--dropdown-fs, 0.82rem);
 }
 .rw-app .apply-primary-action-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
   gap: var(--sp-m);
-  align-items: stretch;
+  align-items: end;
 }
 .rw-app .apply-primary-action-row > .btn.run,
 .rw-app .apply-primary-action-row > .runprog {
-  flex: 1 1 auto;
   min-width: 0;
+  margin-block-start: 0;
 }
 .rw-app .apply-primary-action-row > .after-apply-field {
-  flex: 0 0 240px;
-  min-width: 180px;
+  min-width: 0;
 }
 .rw-app .after-apply-field .select {
   min-width: 0;

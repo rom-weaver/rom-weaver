@@ -499,8 +499,13 @@ describe("apply workflow view - outcome output choices", () => {
     const details = container.querySelector("#rom-weaver-select-output-format-compress") as HTMLSelectElement;
     expect(Array.from(details.options, (option) => option.textContent)).toEqual(["None", ".zip"]);
     expect(container.querySelector(".outopts #rom-weaver-select-post-apply-behavior")).toBeNull();
-    expect(container.querySelector(".apply-primary-action-row #rom-weaver-select-post-apply-behavior")).toBeTruthy();
-    expect(container.querySelector("#rom-weaver-button-apply")?.textContent).toContain("Apply");
+    const postApply = container.querySelector(
+      ".apply-primary-action-row #rom-weaver-select-post-apply-behavior",
+    ) as HTMLSelectElement;
+    const apply = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
+    expect(postApply).toBeTruthy();
+    expect(apply.textContent).toContain("Apply");
+    expect(postApply.compareDocumentPosition(apply)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("uses the detected disc medium for an uncompressed disc output", () => {

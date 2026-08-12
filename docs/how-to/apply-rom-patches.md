@@ -121,16 +121,16 @@ job in detail.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-light.avif" width="1170" height="1187">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-light.avif" width="1170" height="1496">
     <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-light.avif" width="2242" height="941">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-light.webp" width="1170" height="1187">
-    <img src="/docs/screenshots/apply-output-desktop-light.webp" width="2242" height="941" alt="Cropped Apply output card with filename, format, options, and Apply button in the light theme">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-light.webp" width="1170" height="1496">
+    <img src="/docs/screenshots/apply-output-desktop-light.webp" width="2242" height="941" alt="Cropped Apply output card with filename, result, options, after-apply choice, and Apply button in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-dark.avif" width="1170" height="1187">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-dark.avif" width="1170" height="1496">
     <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-dark.avif" width="2242" height="941">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-dark.webp" width="1170" height="1187">
-    <img src="/docs/screenshots/apply-output-desktop-dark.webp" width="2242" height="941" alt="Cropped Apply output card with filename, format, options, and Apply button in the dark theme">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-dark.webp" width="1170" height="1496">
+    <img src="/docs/screenshots/apply-output-desktop-dark.webp" width="2242" height="941" alt="Cropped Apply output card with filename, result, options, after-apply choice, and Apply button in the dark theme">
   </picture>
   <figcaption>The output card is shown at readable size instead of shrinking the entire page into one image.</figcaption>
 </figure>
