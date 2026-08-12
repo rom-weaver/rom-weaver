@@ -4,10 +4,10 @@ import { join } from "./cx.ts";
 
 /**
  * Loom file card for every workflow's input rows. The header is two columns:
- * the name (with its size·type sub-line) on the left and the action buttons
- * (drag handle / remove) on the right; the collapsible drawers (extraction
- * tree, checksums, options) follow as children. Verdict borders (ok / warn /
- * bad) belong to patches; ROM cards keep the plain seam border.
+ * the name and optional metadata on the left and the action buttons (drag
+ * handle / remove) on the right; the collapsible drawers (extraction tree,
+ * checksums, options) follow as children. Verdict borders (ok / warn / bad)
+ * belong to patches; ROM cards keep the plain seam border.
  */
 
 type FileState = "ok" | "bad" | "warn";
@@ -76,9 +76,9 @@ const FileCard = ({
   className?: string;
   style?: CSSProperties;
   name: ReactNode;
-  /** Optional description line rendered directly under the name, above the meta sub-line. */
+  /** Optional description line rendered directly under the name, above the metadata line. */
   description?: ReactNode;
-  /** size · format sub-line under the name (`.card-meta` content). */
+  /** Optional metadata line under the name (`.card-meta` content). */
   meta?: ReactNode;
   /**
    * Progress bar on the card's top edge while staging: a determinate width
@@ -141,7 +141,7 @@ const FileCard = ({
             {typeof index === "number" ? <span className="sr-only">{index}</span> : null}
             {name}
             {/* description sits directly under the name (read and edited there),
-                above the size/format meta line */}
+                above the metadata line */}
             {description}
             {meta ? <span className="card-meta">{meta}</span> : null}
           </div>

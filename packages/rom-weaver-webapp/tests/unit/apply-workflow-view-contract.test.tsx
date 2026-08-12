@@ -455,7 +455,9 @@ describe("apply workflow view - staged bench", () => {
   });
 
   it("renders ROM and patch cards with the structural classes the browser tests query", () => {
-    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const rom = romRow("game.bin");
+    rom.info.romType = { platform: "Nintendo Entertainment System" };
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
     const { container } = renderView({ patches: [patchItem("change.ips")], ui });
     // ROM card in the input stack
     const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
@@ -466,6 +468,10 @@ describe("apply workflow view - staged bench", () => {
     expect(nm?.getAttribute("title")).toBe("game.bin");
     expect(romCard?.querySelector(".extract-d .lab")?.textContent).toBe("Files");
     expect(romCard?.querySelector(".extract-d .tree-name")?.textContent).toBe("game.bin");
+    expect(Array.from(romCard?.querySelectorAll(".extract-d .rb") || []).map((el) => el.textContent)).toEqual([
+      "13 B",
+      "NES",
+    ]);
     // checksum rows use the .ck/.ck-k/.ck-v readout structure
     const checksumLabels = Array.from(romCard?.querySelectorAll(".ck .ck-k") || []).map((el) => el.textContent);
     expect(checksumLabels).toContain("CRC32");
@@ -473,10 +479,13 @@ describe("apply workflow view - staged bench", () => {
     const patchCard = container.querySelector("#rom-weaver-list-patch-stack .card.patch");
     expect(patchCard).toBeTruthy();
     expect(patchCard?.classList.contains("ok")).toBe(true);
-    expect(patchCard?.querySelector(".card-meta .meta-fmt")?.textContent).toBe("ips");
-    expect(patchCard?.querySelector(".card-meta .fsize")?.textContent).toBeTruthy();
     expect(patchCard?.querySelector(".extract-d .lab")?.textContent).toBe("Files");
     expect(patchCard?.querySelector(".extract-d .tree-name")?.textContent).toBe("change.ips");
+    expect(Array.from(patchCard?.querySelectorAll(".extract-d .rb") || []).map((el) => el.textContent)).toEqual([
+      "14 B",
+      "IPS",
+    ]);
+    expect(patchCard?.querySelector(".card-meta .meta-fmt")).toBeNull();
     const patchPosition = patchCard?.querySelector("button.phandle") as HTMLButtonElement;
     expect(patchPosition.textContent).toContain("1");
     expect(patchPosition.disabled).toBe(true);

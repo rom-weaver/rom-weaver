@@ -4,7 +4,7 @@ import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { POST_APPLY_ROM_BEHAVIOR_OPTIONS } from "../../lib/apply/post-apply-behavior.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
-import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
+import { type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
@@ -818,21 +818,12 @@ const buildExpectedChecks = (deps: RomRowDeps) => {
 
 const renderRomCardMeta = (input: {
   percent: number | null;
-  romBytes: number | undefined;
-  romTypeTag: string | undefined;
   stageLabel: string;
   staging: boolean;
   statusId: string;
 }) => {
-  const { percent, romBytes, romTypeTag, staging } = input;
-  if (!(typeof romBytes === "number" || romTypeTag || staging)) return undefined;
-  return (
-    <>
-      {typeof romBytes === "number" ? <span className="fsize mono">{formatByteSize(romBytes)}</span> : null}
-      {romTypeTag ? <span className="meta-fmt mono">{romTypeTag}</span> : null}
-      {staging ? <StageStatus id={input.statusId} label={input.stageLabel} percent={percent} /> : null}
-    </>
-  );
+  if (!input.staging) return undefined;
+  return <StageStatus id={input.statusId} label={input.stageLabel} percent={input.percent} />;
 };
 
 const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomRowDeps): WorkflowRomInputStepItem => {
@@ -868,11 +859,10 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         fileSize: romBytes,
         parentCompressions: romInput.archivePathEntries,
         timing: TIMING_LABEL(romInput.decompressionTimeMs),
+        typeLabel: romTypeTag,
       },
       meta: renderRomCardMeta({
         percent,
-        romBytes,
-        romTypeTag,
         stageLabel,
         staging,
         statusId: `rom-weaver-progress-${stagingPhase}-${index}`,
@@ -1069,11 +1059,10 @@ const renderDiscGroup = (
         fileEntries,
         fileSize: totalFileBytes || totalBytes || undefined,
         parentCompressions: groupRows.find((row) => row.archivePathEntries?.length)?.archivePathEntries,
+        typeLabel: discRomTypeTag,
       },
       meta: renderRomCardMeta({
         percent: overallPercent,
-        romBytes: totalBytes || undefined,
-        romTypeTag: discRomTypeTag,
         stageLabel: "Checksumming…",
         staging,
         statusId: `rom-weaver-progress-disc-${groupId}`,

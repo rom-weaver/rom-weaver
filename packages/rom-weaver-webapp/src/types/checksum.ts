@@ -27,7 +27,7 @@ type ChecksumVariant = {
 };
 
 /** Backend-derived ROM platform/disc-format tag (e.g. "Sony PlayStation" + "CD").
- * Both fields are optional; renders next to the file size on workflow cards. */
+ * Both fields are optional; the Files drawer renders them next to the file size. */
 type RomTypeTag = {
   platform?: string;
   discFormat?: string;
