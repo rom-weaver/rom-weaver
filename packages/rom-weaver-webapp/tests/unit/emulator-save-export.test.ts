@@ -6,13 +6,14 @@ import {
 } from "../../src/storage/browser/emulator-save-export.ts";
 
 const create = vi.fn();
+const probe = vi.fn();
 const extract = vi.fn();
 const getBlob = vi.fn();
 const dispose = vi.fn();
 
 vi.mock("../../src/platform/browser/workflow-runtime.ts", () => ({
   browserRuntime: {
-    compression: { create, extract },
+    compression: { create, extract, probe },
     publicOutput: { getBlob },
   },
 }));
@@ -22,6 +23,7 @@ const output = { dispose, fileName: "save.rw-emulator-save.zip" };
 beforeEach(() => {
   vi.clearAllMocks();
   create.mockResolvedValue({ output });
+  probe.mockResolvedValue({ entries: [{ fileName: "save.rw-emulator-save.json" }] });
   extract.mockResolvedValue({ outputs: [output] });
   getBlob.mockResolvedValue(new Blob(["compressed"]));
   dispose.mockResolvedValue(undefined);
@@ -52,9 +54,17 @@ describe("emulator save export compression", () => {
   it("extracts the exported JSON entry from a ZIP with rom-weaver", async () => {
     const result = await extractEmulatorSaveExport(new Blob(["zip"]));
 
-    expect(extract).toHaveBeenCalledWith(
-      expect.objectContaining({ descendSinglePayload: true, entries: [], format: "zip" }),
-    );
+    expect(probe).toHaveBeenCalledWith({
+      format: "zip",
+      options: { interactiveSelectionEnabled: false },
+      source: expect.any(Blob),
+    });
+    expect(extract).toHaveBeenCalledWith({
+      entries: ["save.rw-emulator-save.json"],
+      format: "zip",
+      options: { directExtract: true },
+      source: expect.any(Blob),
+    });
     expect(result).toBeInstanceOf(Blob);
     expect(dispose).toHaveBeenCalledTimes(1);
   });
