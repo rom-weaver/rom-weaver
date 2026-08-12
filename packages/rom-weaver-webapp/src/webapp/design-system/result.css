@@ -152,18 +152,14 @@
   display: grid;
   grid-template-columns: 3.2rem minmax(0, 1fr);
   gap: var(--sp-s);
-  align-items: baseline;
 }
 .rw-app .emulator-rom-identity dt {
   font-size: 0.66rem;
   color: var(--ink-3);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 .rw-app .emulator-rom-identity dd {
-  min-width: 0;
   margin: 0;
-  font-size: 0.74rem;
   color: var(--ink-2);
   overflow-wrap: anywhere;
 }
