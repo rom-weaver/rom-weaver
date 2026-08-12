@@ -1,4 +1,4 @@
-import { ArrowLeft, Maximize, Minimize } from "lucide-react";
+import { ArrowLeft, Check, Copy, Maximize, Minimize } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   createProgressViewModel,
@@ -21,6 +21,7 @@ import {
   useGuidedSampleStart,
 } from "./components/ds/sample-tutorial.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
+import { useClipboardCopy } from "./components/ds/use-clipboard-copy.ts";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
@@ -72,6 +73,22 @@ const createLocalEntryId = (fileName: string) => {
 };
 
 type EmulatorError = { blocksPlayer?: boolean; detail: string; summary: string };
+
+const EmulatorCopyButton = ({ copyLabel, label, text }: { copyLabel: string; label: string; text: string }) => {
+  const { copied, copy } = useClipboardCopy(text);
+  return (
+    <button
+      aria-label={`Copy ${copyLabel}`}
+      className="btn ghost slim emulator-player-copy"
+      onClick={copy}
+      title={`Copy ${copyLabel}`}
+      type="button"
+    >
+      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+      {label}
+    </button>
+  );
+};
 
 const errorDetail = (reason: unknown, fallback: string) =>
   reason instanceof Error && reason.message.trim() ? reason.message : fallback;
@@ -532,6 +549,12 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           <StepSection
             headerExtra={
               <div className="emulator-player-actions">
+                {currentGame ? (
+                  <EmulatorCopyButton copyLabel="game name" label="Game name" text={currentGame.fileName} />
+                ) : null}
+                {currentGame?.checksum ? (
+                  <EmulatorCopyButton copyLabel="SHA-1" label="SHA-1" text={currentGame.checksum} />
+                ) : null}
                 {currentGame?.source === "apply" ? (
                   <a className="btn ghost slim" href="apply">
                     <ArrowLeft aria-hidden="true" /> Back to Apply

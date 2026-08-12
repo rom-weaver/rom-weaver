@@ -7,6 +7,7 @@ import { EmulatorTestView } from "../../../src/public/react/emulator-test-view.t
 import { addEntry, disposeEntry, getEmulatorSessionState } from "../../../src/public/react/emulator-session-store.ts";
 import type { EmulatorSessionEntry } from "../../../src/public/react/emulator-session-store.ts";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
+import { navigatorWith } from "../navigator-test-utils.ts";
 
 const emulatorAudioMocks = vi.hoisted(() => ({
   disposeEmulatorAudioContext: vi.fn(),
@@ -91,6 +92,7 @@ afterEach(() => {
   while (getEmulatorSessionState().entries.length) disposeEntry(getEmulatorSessionState().entries[0].id);
   window.history.replaceState(null, "", "/test");
   Reflect.deleteProperty(window.navigator, "userActivation");
+  delete (document as { hasFocus?: () => boolean }).hasFocus;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -139,6 +141,24 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("b".repeat(40))).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Load a game" })).toBeTruthy());
     expect(screen.getByTitle("EmulatorJS test for hello-world.nes")).toBeTruthy();
+  });
+
+  it("copies the game name and SHA-1 from the player header", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
+    Object.defineProperty(document, "hasFocus", { configurable: true, value: vi.fn(() => true) });
+    addEntry(entry({ checksum: "A".repeat(40), fileName: "hello-world.nes" }));
+
+    render(withSettings(<EmulatorTestView />));
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy game name" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy SHA-1" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+    expect(writeText).toHaveBeenNthCalledWith(1, "hello-world.nes");
+    expect(writeText).toHaveBeenNthCalledWith(2, "A".repeat(40));
   });
 
   it("cancels a sample fetch when the guide exits", async () => {
