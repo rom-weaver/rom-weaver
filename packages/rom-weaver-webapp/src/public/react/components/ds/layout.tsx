@@ -102,6 +102,7 @@ const DropZone = ({
   accept,
   disabled,
   reading: readingLabel = "Reading folder…",
+  onBrowseStart,
   onDropStart,
   onFiles,
   id,
@@ -128,6 +129,8 @@ const DropZone = ({
   reading?: ReactNode;
   /** Fires as soon as the user supplies files, before any staging work begins. */
   onDropStart?: () => void;
+  /** Fires from the file input's user activation, before the picker opens. */
+  onBrowseStart?: () => void;
   onFiles: (files: File[]) => void;
   id?: string;
   inputId?: string;
@@ -282,6 +285,7 @@ const DropZone = ({
         disabled={disabled}
         id={resolvedInputId}
         multiple={multiple}
+        onClick={onBrowseStart}
         onChange={(event) => {
           emit(event.currentTarget.files);
           event.currentTarget.value = "";

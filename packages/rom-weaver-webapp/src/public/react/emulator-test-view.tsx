@@ -19,6 +19,12 @@ import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
+import {
+  disposeEmulatorAudioContext,
+  prepareEmulatorAudioContext,
+  registerEmulatorStartRequestHandler,
+  requestEmulatorStartFromUserAction,
+} from "./emulator-audio-context.ts";
 
 const WEBGL2_ERROR = "EmulatorJS testing requires a browser with WebGL 2.";
 let localEntryCounter = 0;
@@ -40,6 +46,12 @@ const createLocalEntryId = (fileName: string) => {
 const EmulatorSessionOutput = ({ entry, current }: { entry: EmulatorSessionEntry; current: boolean }) => {
   const core = entry.core || getEmulatorJsCore(entry.platform, entry.fileName);
   const reason = core ? "" : "No emulator core for this system";
+  const selectGame = () => {
+    const { gameName } = createEmulatorGameIdentity(entry);
+    prepareEmulatorAudioContext(gameName);
+    setCurrentGame(entry.id);
+    requestEmulatorStartFromUserAction(gameName);
+  };
   return (
     <FileCard
       className={core ? "emulator-session-entry" : "emulator-session-entry is-disabled"}
@@ -59,7 +71,7 @@ const EmulatorSessionOutput = ({ entry, current }: { entry: EmulatorSessionEntry
           aria-pressed={current}
           className="btn ghost slim"
           disabled={!core}
-          onClick={() => setCurrentGame(entry.id)}
+          onClick={selectGame}
           type="button"
         >
           Play
@@ -102,12 +114,30 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         : null,
     [currentGame],
   );
+  const currentGameName = currentIdentity?.gameName;
   const dataUrl =
     typeof document === "undefined" ? "/emulatorjs/data/" : new URL("emulatorjs/data/", document.baseURI).href;
 
   useEffect(() => {
     ensureEmulatorSaveBridge();
   }, []);
+
+  useEffect(
+    () =>
+      registerEmulatorStartRequestHandler((requestedGameName) => {
+        if (!currentIdentity || (requestedGameName && requestedGameName !== currentIdentity.gameName)) return false;
+        if (!prepareEmulatorAudioContext(currentIdentity.gameName)) return false;
+        const startButton = iframeRef.current?.contentDocument?.querySelector<HTMLElement>(".ejs_start_button");
+        startButton?.click();
+        return true;
+      }),
+    [currentIdentity],
+  );
+
+  useEffect(() => {
+    if (!currentGameName) return undefined;
+    return () => disposeEmulatorAudioContext(currentGameName);
+  }, [currentGameName]);
 
   useEffect(() => {
     if (!currentIdentity) return undefined;
@@ -224,27 +254,31 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     }
     setBusy(true);
     setError("");
-    let lastPlayableId: string | null = null;
+    let lastPlayableEntry: EmulatorSessionEntry | null = null;
     try {
       for (const file of files) {
         try {
           const loaded = await loadEmulatorRom(file, file.name);
           const id = createLocalEntryId(loaded.fileName);
           const core = getEmulatorJsCore(undefined, loaded.fileName);
-          addEntry({
+          const entry = {
             blob: loaded.blob,
             core,
             fileName: loaded.fileName,
             id,
             sizeBytes: loaded.blob.size,
-            source: "local",
-          });
-          if (core) lastPlayableId = id;
+            source: "local" as const,
+          };
+          addEntry(entry);
+          if (core) lastPlayableEntry = entry;
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : "Could not prepare the ROM for EmulatorJS.");
         }
       }
-      if (lastPlayableId) setCurrentGame(lastPlayableId);
+      if (lastPlayableEntry) {
+        prepareEmulatorAudioContext(createEmulatorGameIdentity(lastPlayableEntry).gameName);
+        setCurrentGame(lastPlayableEntry.id);
+      }
     } finally {
       setBusy(false);
     }
@@ -301,6 +335,8 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         info={<p>Loaded games and Apply outputs stay listed here for this session.</p>}
         inputId="emulator-test-file-input"
         lead={{ line1: "ui.hero.testThesis", line2: "ui.hero.testThesis2" }}
+        onBrowseStart={() => prepareEmulatorAudioContext()}
+        onDropStart={() => prepareEmulatorAudioContext()}
         onFiles={(files) => void handleFiles(files)}
         supported={[
           { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },

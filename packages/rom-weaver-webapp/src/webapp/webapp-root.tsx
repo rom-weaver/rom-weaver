@@ -11,6 +11,7 @@ import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
 import { ConfirmDialog } from "../public/react/components/ds/index.ts";
 import { notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
+import { requestEmulatorStartFromUserAction } from "../public/react/emulator-audio-context.ts";
 import type { PageFileDrop } from "../public/react/public-types.ts";
 // Deliberately NOT the ../public/react/index.tsx barrel: that barrel re-exports
 // every workflow form, so a static import of it pulls all four route chunks
@@ -602,6 +603,7 @@ function WebappRoot({
                 return;
               }
               const view = id as WebappRootProps["state"]["currentView"];
+              if (view === "test") requestEmulatorStartFromUserAction();
               if (view === "docs") {
                 // Keep the current panel visible until the lazy Docs route is ready;
                 // switching first leaves its navigation bar absent for one frame.

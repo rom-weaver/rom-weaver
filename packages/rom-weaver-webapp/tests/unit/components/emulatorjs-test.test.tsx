@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EmulatorTestView } from "../../../src/public/react/emulator-test-view.tsx";
@@ -11,6 +11,15 @@ import {
   type EmulatorSessionEntry,
 } from "../../../src/public/react/emulator-session-store.ts";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
+
+const emulatorAudioMocks = vi.hoisted(() => ({
+  disposeEmulatorAudioContext: vi.fn(),
+  prepareEmulatorAudioContext: vi.fn(() => true),
+  registerEmulatorStartRequestHandler: vi.fn(() => () => undefined),
+  requestEmulatorStartFromUserAction: vi.fn(() => true),
+}));
+
+vi.mock("../../../src/public/react/emulator-audio-context.ts", () => emulatorAudioMocks);
 
 vi.mock("../../../src/public/react/components/emulator-document.ts", () => ({
   createEmulatorDocument: () => "<!doctype html><html><body></body></html>",
@@ -89,5 +98,26 @@ describe("EmulatorTestView", () => {
 
     expect(getEmulatorSessionState().currentGameId).toBe("second");
     expect(screen.getByTitle("EmulatorJS test for second.sfc")).toBeTruthy();
+  });
+
+  it("keeps prepared audio when a retained game gains its blob", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    addEntry(
+      entry({
+        artifact: {
+          dispose: vi.fn(),
+          getBlob: vi.fn(async () => new Blob(["game"])),
+        },
+        blob: undefined,
+      }),
+    );
+    setCurrentGame("game");
+    emulatorAudioMocks.disposeEmulatorAudioContext.mockClear();
+
+    render(withSettings(<EmulatorTestView />));
+
+    await waitFor(() => expect(screen.getByTitle("EmulatorJS test for game.nes")).toBeTruthy());
+    expect(emulatorAudioMocks.disposeEmulatorAudioContext).not.toHaveBeenCalled();
   });
 });
