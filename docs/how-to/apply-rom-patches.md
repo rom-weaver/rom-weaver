@@ -53,29 +53,31 @@ Each patch card shows its format and position. Open **Checks** to see what that 
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-light.avif" width="1170" height="2348">
-    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-light.avif" width="2242" height="1045">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-light.webp" width="1170" height="2348">
-    <img src="/docs/screenshots/apply-patches-desktop-light.webp" width="2242" height="1045" alt="Cropped Apply patch stack with two ordered practice patches in the light theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-light.avif" width="1170" height="2930">
+    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-light.avif" width="2242" height="1334">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-light.webp" width="1170" height="2930">
+    <img src="/docs/screenshots/apply-patches-desktop-light.webp" width="2242" height="1334" alt="Cropped Apply patch stack with two ordered practice patches in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-dark.avif" width="1170" height="2348">
-    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-dark.avif" width="2242" height="1045">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-dark.webp" width="1170" height="2348">
-    <img src="/docs/screenshots/apply-patches-desktop-dark.webp" width="2242" height="1045" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-dark.avif" width="1170" height="2930">
+    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-dark.avif" width="2242" height="1334">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-dark.webp" width="1170" height="2930">
+    <img src="/docs/screenshots/apply-patches-desktop-dark.webp" width="2242" height="1334" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme">
   </picture>
   <figcaption>The focused patch stack. The site serves a mobile crop on small screens and matches the active theme.</figcaption>
 </figure>
 
 ## Put several patches in order
 
-Patches run from top to bottom. Patch 2 receives the output of patch 1, not the clean ROM. Order is part of the release instructions.
+Patches run from top to bottom and modify one result. **Patch inputs** tells rom-weaver which state each patch was made from.
+
+Keep **Original ROM** when every patch was made from the clean ROM. Choose **Previous patch output** when each later patch depends on the result above it. Choose **Detect automatically** when the patch checksums should decide.
 
 Drag a numbered handle to move a patch. With a keyboard, focus the handle and use its announced controls. The number changes when the card moves.
 
 The On or Off switch temporarily skips a patch. This is useful for optional add-ons, but only use combinations the author says are compatible. Turning off a required base patch can make everything below it fail.
 
-After changing order or switches, read the checks again. A valid chain should show each patch matching the bytes produced by the step before it.
+After changing the rule, order, or switches, read each input chip again. Use **Override input** only for a patch that differs from the shared rule.
 
 ## Choose the output and apply
 

@@ -122,7 +122,9 @@ Under `Basic`, `patch apply --help` puts the common `--input`, `--patch`, and `-
 
 ### Inputs
 
-Repeat `--patch` to run several patches in order, each on the result of the last. Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches sitting next to the ROM inside the input archive. A `rom-weaver-bundle.json` can supply the ROM, the patch order, the checks, and the output name instead.
+Repeat `--patch` to run several patches in order on one accumulated result. The shared input basis defaults to `base`, so each patch is verified as an original-ROM patch. `--default-patch-basis previous` declares a dependent chain. `auto` restores checksum inference. Repeat `--patch-basis` for mixed per-patch overrides.
+
+Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches sitting next to the ROM inside the input archive. A `rom-weaver-bundle.json` can supply the ROM, patch order, input rule, checks, and output name.
 
 ### Output and compression
 
@@ -137,6 +139,8 @@ DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM dat
 ### Bundle detection
 
 When `patch apply` detects a bundle from its positional input, the canonical `rom-weaver-bundle.json` name is the fast path. It also content-probes valid plain `.json` files and root-level `.json` members inside archives. A stream-compressed positional bundle needs a canonical name such as `rom-weaver-bundle.json.gz`; pass a differently named one explicitly with `--bundle`.
+
+Bundle version 2 requires `patchBasis`. Bundle version 1 remains readable and uses automatic inference. Per-entry `basis` values override the shared bundle rule.
 
 ### Checksum flags
 
@@ -164,7 +168,9 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 - `--expect-in` adds a check on the ROM itself, and accepts a checksum (`ALGO=HEX`), an exact size (`size=N`), or a minimum size (`min-size=N`).
 - `--strip-header` and `--n64-byte-order` put the ROM in the form the patches expect before checking; N64 byte order defaults to matching the patch's source CRC32.
-- Patches are checked as a chain by default, each against the output of the one before it. `--independent` checks each one against the original ROM instead and reports a verdict per patch, rather than stopping at the first failure.
+- `--default-patch-basis base|previous|auto` sets the shared input relationship. The default is `base`.
+- `--patch-basis base|previous|auto` overrides one patch. It binds to the preceding `--patch`.
+- `--independent` checks each patch separately against the original ROM. It reports every verdict instead of stopping at the first failure.
 
 ## Supported formats
 
