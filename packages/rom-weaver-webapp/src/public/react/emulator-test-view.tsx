@@ -7,12 +7,19 @@ import {
   type ProgressViewModel,
 } from "../../presentation/workflow-presentation.ts";
 import { ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
+import { resolveAssetUrl } from "./asset-url.ts";
 import { addEntry, disposeEntry, prepareEntry, useEmulatorSession } from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
 import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { prefersReducedMotion } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { StepSection } from "./components/ds/layout.tsx";
+import {
+  SampleTutorial,
+  SampleTutorialStart,
+  type SampleTutorialStep,
+  useGuidedSampleStart,
+} from "./components/ds/sample-tutorial.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "./components/emulatorjs.ts";
@@ -23,8 +30,31 @@ import {
   prepareEmulatorAudioContext,
   registerEmulatorStartRequestHandler,
 } from "./emulator-audio-context.ts";
+import { GUIDED_SAMPLE_HREFS } from "./guided-sample-start.ts";
+import { useRomWeaverAssetBaseUrl } from "./settings-context.tsx";
 
 const WEBGL2_ERROR = "EmulatorJS testing requires a browser with WebGL 2.";
+const TEST_SAMPLE_ASSET = "hello-world.nes";
+
+const TEST_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+  {
+    actions: [
+      ["drop", "Choose another ROM"],
+      ["remove", "Stop and unload"],
+    ],
+    body: "The sample is a tiny homebrew NES ROM. Test also accepts your local ROMs and supported archives.",
+    target: ".emulator-test-view .unified-drop-step",
+    title: "Load a game",
+  },
+  {
+    actions: [["play", "Emulator controls"]],
+    body: "Start the game inside the player. Use its menu for controls, save states, and SRAM saves.",
+    placement: "top",
+    target: "#emulator-test-player",
+    title: "Play the sample",
+  },
+];
+
 let localEntryCounter = 0;
 
 const hasWebgl2 = () => {
@@ -56,6 +86,8 @@ const progressValue = (progress: ProgressViewModel) => {
   return progress.percent === null ? "working" : `${progress.percent}%`;
 };
 
+const hasActiveUserGesture = () => typeof navigator !== "undefined" && navigator.userActivation?.isActive === true;
+
 type EmulatorTestViewProps = {
   /** False while another workflow tab is shown; the running game pauses until the view returns. */
   active?: boolean;
@@ -63,14 +95,19 @@ type EmulatorTestViewProps = {
 
 const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
+  const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadAbortControllerRef = useRef<AbortController | null>(null);
+  const sampleAbortControllerRef = useRef<AbortController | null>(null);
   const playerFrameRef = useRef<HTMLDivElement>(null);
   const fullscreenDialogRef = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<EmulatorError | null>(null);
   const [loadProgress, setLoadProgress] = useState<ProgressViewModel | null>(null);
   const [preparing, setPreparing] = useState(false);
+  const [sampleError, setSampleError] = useState("");
+  const [sampleLoading, setSampleLoading] = useState(false);
+  const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
   const currentGame = entries.find((entry) => entry.id === currentGameId) || null;
@@ -230,16 +267,16 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   }, []);
 
   const handleFiles = useCallback(
-    async (files: File[]) => {
+    async (files: File[], prepareAudio = true): Promise<boolean> => {
       const file = files[0];
-      if (!file || busy) return;
+      if (!file || busy) return false;
       if (!hasWebgl2()) {
         setError({
           blocksPlayer: true,
           detail: "Enable hardware acceleration, or use a browser that supports WebGL 2.",
           summary: WEBGL2_ERROR,
         });
-        return;
+        return false;
       }
       const abortController = new AbortController();
       loadAbortControllerRef.current = abortController;
@@ -266,14 +303,14 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           },
           signal: abortController.signal,
         });
-        if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return;
+        if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return false;
         const core = getEmulatorJsCore(undefined, loaded.fileName);
         if (!core) {
           setError({
             detail: "No emulator core is available for this file. Choose a supported ROM.",
             summary: `Cannot play ${loaded.fileName}.`,
           });
-          return;
+          return false;
         }
         const entry = {
           blob: loaded.blob,
@@ -283,14 +320,16 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           sizeBytes: loaded.blob.size,
           source: "local" as const,
         };
-        prepareEmulatorAudioContext(createEmulatorGameIdentity(entry).gameName);
+        if (prepareAudio) prepareEmulatorAudioContext(createEmulatorGameIdentity(entry).gameName);
         addEntry(entry);
+        return true;
       } catch (reason) {
-        if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return;
+        if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return false;
         setError({
           detail: errorDetail(reason, "The ROM could not be prepared for the emulator."),
           summary: `Could not load ${file.name}.`,
         });
+        return false;
       } finally {
         if (loadAbortControllerRef.current === abortController) {
           loadAbortControllerRef.current = null;
@@ -302,6 +341,64 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     [busy],
   );
 
+  const cancelSampleLoad = useCallback(() => {
+    const sampleAbortController = sampleAbortControllerRef.current;
+    if (!sampleAbortController) return;
+    sampleAbortController.abort();
+    sampleAbortControllerRef.current = null;
+    loadAbortControllerRef.current?.abort();
+    loadAbortControllerRef.current = null;
+    setBusy(false);
+    setLoadProgress(null);
+    setSampleLoading(false);
+  }, []);
+
+  const loadTestSample = useCallback(
+    async (prepareAudio: boolean) => {
+      cancelSampleLoad();
+      const abortController = new AbortController();
+      sampleAbortControllerRef.current = abortController;
+      setSampleLoading(true);
+      setSampleError("");
+      try {
+        const response = await fetch(resolveAssetUrl(assetBaseUrl, TEST_SAMPLE_ASSET), {
+          signal: abortController.signal,
+        });
+        if (abortController.signal.aborted || sampleAbortControllerRef.current !== abortController) return;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const file = new File([await response.blob()], TEST_SAMPLE_ASSET, { type: "application/octet-stream" });
+        if (abortController.signal.aborted || sampleAbortControllerRef.current !== abortController) return;
+        const playable = await handleFiles([file], prepareAudio);
+        if (abortController.signal.aborted) return;
+        if (!playable) setSampleTutorialActive(false);
+      } catch {
+        if (abortController.signal.aborted) return;
+        setSampleTutorialActive(false);
+        setSampleError("Could not load the sample. Try again.");
+      } finally {
+        if (sampleAbortControllerRef.current === abortController) {
+          sampleAbortControllerRef.current = null;
+          setSampleLoading(false);
+        }
+      }
+    },
+    [assetBaseUrl, cancelSampleLoad, handleFiles],
+  );
+
+  const startTestSample = useCallback(() => {
+    const prepareAudio = hasActiveUserGesture();
+    if (prepareAudio) prepareEmulatorAudioContext();
+    setSampleTutorialActive(true);
+    void loadTestSample(prepareAudio);
+  }, [loadTestSample]);
+
+  const closeTestSample = useCallback(() => {
+    cancelSampleLoad();
+    setSampleTutorialActive(false);
+  }, [cancelSampleLoad]);
+
+  useGuidedSampleStart("test", startTestSample, closeTestSample);
+
   const currentCore = currentGame
     ? currentGame.core || getEmulatorJsCore(currentGame.platform, currentGame.fileName)
     : null;
@@ -309,6 +406,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const canPlay = Boolean(currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked);
   const workflowEmpty = !(currentGame || busy);
   const showPlayer = Boolean(currentGame);
+  const sampleTutorialReady = !sampleLoading && currentGame?.fileName === TEST_SAMPLE_ASSET;
 
   const scrolledGameRef = useRef<string | null>(null);
   useEffect(() => {
@@ -341,6 +439,8 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
 
   useEffect(
     () => () => {
+      sampleAbortControllerRef.current?.abort();
+      sampleAbortControllerRef.current = null;
       loadAbortControllerRef.current?.abort();
       loadAbortControllerRef.current = null;
     },
@@ -358,6 +458,14 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
 
   return (
     <div className="emulator-test-view">
+      {sampleTutorialActive ? (
+        <SampleTutorial
+          loadingBody="RomWeaver is loading a tiny homebrew NES ROM for the Test guide."
+          onClose={closeTestSample}
+          ready={sampleTutorialReady}
+          steps={TEST_SAMPLE_TUTORIAL_STEPS}
+        />
+      ) : null}
       <UnifiedDropZone
         accept={getFileInputAcceptAttributes().unifiedRom}
         addLabel="Choose another ROM"
@@ -371,6 +479,18 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                 value={progressValue(loadProgress)}
               />
             </div>
+          ) : workflowEmpty ? (
+            <SampleTutorialStart
+              downloadHref={resolveAssetUrl(assetBaseUrl, TEST_SAMPLE_ASSET)}
+              downloadLabel="Download the sample ROM"
+              downloadName={TEST_SAMPLE_ASSET}
+              error={sampleError}
+              guideHref={GUIDED_SAMPLE_HREFS.test}
+              label="Start guided Test"
+              loading={sampleLoading}
+              onStart={startTestSample}
+              startAction="play"
+            />
           ) : undefined
         }
         beforeDropZone={
@@ -385,7 +505,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           ) : undefined
         }
         big={workflowEmpty}
-        disabled={busy}
+        disabled={busy || sampleLoading}
         heroLabel="Drop a ROM or choose a file"
         heroLabelCoarse="Choose a ROM file"
         id="emulator-test-input"

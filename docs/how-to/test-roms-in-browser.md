@@ -2,6 +2,8 @@
 
 Use the Test page to play a local ROM or check an Apply result. The ROM stays on your device.
 
+If you need a practice file, open [guided Test](https://rom-weaver.com/test?guide=test). It loads a tiny homebrew NES ROM from this project.
+
 <!-- START doctoc -->
 ## Table of contents
 

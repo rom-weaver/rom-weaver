@@ -57,13 +57,35 @@ const stubObjectUrls = () => {
 };
 
 beforeEach(() => {
+  vi.clearAllMocks();
   loadRomMock.mockReset();
   loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => ({ blob, fileName }));
 });
 
+const stubReducedMotion = () => {
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    (query) =>
+      ({
+        addEventListener: vi.fn(),
+        matches: query === "(prefers-reduced-motion: reduce)",
+        media: query,
+        removeEventListener: vi.fn(),
+      }) as unknown as MediaQueryList,
+  );
+};
+
+const stubUserActivation = (isActive: boolean) => {
+  Object.defineProperty(window.navigator, "userActivation", {
+    configurable: true,
+    value: { hasBeenActive: isActive, isActive },
+  });
+};
+
 afterEach(() => {
   cleanup();
   while (getEmulatorSessionState().entries.length) disposeEntry(getEmulatorSessionState().entries[0].id);
+  window.history.replaceState(null, "", "/test");
+  Reflect.deleteProperty(window.navigator, "userActivation");
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -79,6 +101,94 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("Next:")).toBeTruthy();
     expect(screen.getByText("Play")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    expect(screen.getByRole("link", { name: "Start guided Test" }).getAttribute("href")).toBe("/test?guide=test");
+    const download = screen.getByRole("link", { name: "Download the sample ROM" });
+    expect(download.getAttribute("href")).toBe("/hello-world.nes");
+    expect(download.hasAttribute("download")).toBe(true);
+  });
+
+  it("loads the homebrew ROM into the guided Test flow", async () => {
+    stubObjectUrls();
+    stubReducedMotion();
+    stubUserActivation(true);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const fetchSample = vi.fn().mockResolvedValue({
+      blob: () => Promise.resolve(new Blob(["sample"])),
+      ok: true,
+      status: 200,
+    } as Response);
+    vi.stubGlobal("fetch", fetchSample);
+
+    render(withSettings(<EmulatorTestView />));
+    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    fireEvent.click(screen.getByRole("link", { name: "Start guided Test" }));
+
+    expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith();
+    await waitFor(() => expect(getEmulatorSessionState().entries[0]?.fileName).toBe("hello-world.nes"));
+    expect(fetchSample).toHaveBeenCalledWith("/hello-world.nes", { signal: expect.any(AbortSignal) });
+    expect(getEmulatorSessionState().currentGameId).toBe(getEmulatorSessionState().entries[0]?.id);
+    expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith("rom-weaver-hello-world.nes");
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Load a game" })).toBeTruthy());
+    expect(screen.getByTitle("EmulatorJS test for hello-world.nes")).toBeTruthy();
+  });
+
+  it("cancels a sample fetch when the guide exits", async () => {
+    stubObjectUrls();
+    stubReducedMotion();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    let finishFetch: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            finishFetch = resolve;
+          }),
+      ),
+    );
+
+    render(withSettings(<EmulatorTestView />));
+    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    fireEvent.click(screen.getByRole("link", { name: "Start guided Test" }));
+    fireEvent.click(screen.getByRole("button", { name: "Exit tutorial" }));
+    fireEvent.change(screen.getByLabelText(/Drop a ROM or choose a file/), {
+      target: { files: [new File(["local"], "local.nes")] },
+    });
+
+    await waitFor(() => expect(getEmulatorSessionState().entries[0]?.fileName).toBe("local.nes"));
+    await act(async () =>
+      finishFetch?.({
+        blob: () => Promise.resolve(new Blob(["sample"])),
+        ok: true,
+        status: 200,
+      } as Response),
+    );
+    expect(loadRomMock).toHaveBeenCalledOnce();
+    expect(getEmulatorSessionState().entries[0]?.fileName).toBe("local.nes");
+  });
+
+  it("starts the homebrew guide from the Test guide URL", async () => {
+    window.history.replaceState(null, "", "/test?guide=test");
+    stubObjectUrls();
+    stubReducedMotion();
+    stubUserActivation(false);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        blob: () => Promise.resolve(new Blob(["sample"])),
+        ok: true,
+        status: 200,
+      } as Response),
+    );
+
+    render(withSettings(<EmulatorTestView />));
+
+    await waitFor(() => expect(getEmulatorSessionState().entries[0]?.fileName).toBe("hello-world.nes"));
+    expect(emulatorAudioMocks.prepareEmulatorAudioContext).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Load a game" })).toBeTruthy());
   });
 
   it("shows an actionable error and restores the hero for an unsupported file", async () => {

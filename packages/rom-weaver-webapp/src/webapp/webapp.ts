@@ -5,7 +5,11 @@ import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
-import { ONBOARDING_DISMISS_EVENT, requestGuidedSampleStart } from "../public/react/guided-sample-start.ts";
+import {
+  GUIDED_SAMPLE_VIEWS,
+  ONBOARDING_DISMISS_EVENT,
+  requestGuidedSampleStart,
+} from "../public/react/guided-sample-start.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
 import { resetBrowserTransientOpfs, startBrowserOpfsBootCleanup } from "../storage/browser/browser-opfs-cleanup.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
@@ -467,7 +471,7 @@ const renderWebappRoot = (): undefined => {
       },
       onSelectView: (view) => webappController.selectView(view),
       onStartGuide: (guide) => {
-        const view = guide === "create" ? "creator" : "patcher";
+        const view = GUIDED_SAMPLE_VIEWS[guide];
         if (webappController.selectView(view) !== view) return;
         const url = new URL(window.location.href);
         url.search = "";
