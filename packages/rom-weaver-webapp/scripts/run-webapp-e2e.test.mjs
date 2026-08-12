@@ -11,6 +11,7 @@ import {
   buildWorkerReuseManifestCase,
   checkCssCoverage,
   computeDocsRouteSlugs,
+  hasVisiblePrerenderedShell,
   sha256,
   shouldRejectUnauthorized,
 } from "./run-webapp-e2e.mjs";
@@ -53,6 +54,14 @@ describe("computeDocsRouteSlugs", () => {
 
   it("returns an empty array for an empty route table", () => {
     assert.deepEqual(computeDocsRouteSlugs([]), []);
+  });
+});
+
+describe("hasVisiblePrerenderedShell", () => {
+  it("requires both prerendering and an in-viewport dock", () => {
+    assert.equal(hasVisiblePrerenderedShell({ footerInFirstViewport: true, prerendered: true }), true);
+    assert.equal(hasVisiblePrerenderedShell({ footerInFirstViewport: false, prerendered: true }), false);
+    assert.equal(hasVisiblePrerenderedShell({ footerInFirstViewport: true, prerendered: false }), false);
   });
 });
 
