@@ -87,6 +87,8 @@ html:has(.rw-modal) {
   font-size: 0.76rem;
 }
 .rw-modal .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: var(--sp-l);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -140,9 +142,9 @@ html:has(.rw-modal) {
   .rw-modal.guide-sheet .rw-modal-card {
     width: 100%;
     max-width: none;
-    max-height: 82dvh;
-    /* stops on the dock, so switching mode stays one tap away */
-    margin-block-end: var(--dock-h, 0px);
+    max-height: min(82dvh, calc(100dvh - var(--dock-h, 0px) - var(--docs-trail-h, 0px)));
+    /* stops above the docs trail, so the contents button stays visible */
+    margin-block-end: calc(var(--dock-h, 0px) + var(--docs-trail-h, 0px));
     border-width: 1px 0 0;
     border-radius: var(--r-l) var(--r-l) 0 0;
   }

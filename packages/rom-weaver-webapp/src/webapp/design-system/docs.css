@@ -1022,6 +1022,9 @@ html:has(.docs-workbench) {
   .rw-app .docs-index {
     display: grid;
   }
+  .rw-app .rw-modal.guide-sheet .guide-nav {
+    overflow: visible;
+  }
 
   /* Fixed to the bottom, riding directly on top of the app dock: the two ways
      out of a guide - another guide, another mode - then sit under one thumb.
