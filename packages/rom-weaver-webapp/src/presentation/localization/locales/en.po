@@ -161,12 +161,12 @@ msgstr "Auto"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.autoBase"
-msgstr "auto (base ROM)"
+msgstr "auto (Original ROM)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.autoPrevious"
-msgstr "auto (previous)"
+msgstr "auto (Previous patch output)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

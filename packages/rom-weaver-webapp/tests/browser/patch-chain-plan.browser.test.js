@@ -1,5 +1,6 @@
 import { createElement } from "react";
-import { expect, test } from "vitest";
+import { afterEach, expect, test } from "vitest";
+import { page } from "vitest/browser";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import {
   clickApplyButton,
@@ -14,6 +15,8 @@ import {
 } from "./patcher-test-shared.js";
 
 installPatcherTestHooks();
+
+afterEach(async () => page.viewport(1280, 900));
 
 // A true BPS chain built from the 13-byte game.bin: a = base -> inter,
 // b = inter -> final, c = final -> final2. d is a SIBLING of a: also
@@ -56,6 +59,11 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   // with its link named - never dry-run against the wrong bytes.
   await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("matches your ROM");
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("applies after patch 1");
+  const basisSelect = await getPatchInputSelect(1);
+  expect(basisSelect.options[0]?.textContent).toBe("auto (Previous patch output)");
+  await page.viewport(390, 844);
+  const cardMeta = basisSelect.closest(".card-meta");
+  expect(cardMeta?.scrollWidth).toBeLessThanOrEqual(cardMeta?.clientWidth ?? 0);
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
   expect(document.getElementById("rom-weaver-patch-order-note")).toBeNull();
 
@@ -107,7 +115,7 @@ test("a patch input selector re-plans that patch", async () => {
 
   const basisSelect = await getPatchInputSelect(1);
   expect(basisSelect.value).toBe("auto");
-  expect(basisSelect.options[0]?.textContent).toBe("auto (base ROM)");
+  expect(basisSelect.options[0]?.textContent).toBe("auto (Original ROM)");
 
   // Pinning "previous output" overrides the inference: the re-plan stops
   // verifying this patch against the ROM and defers it to apply (where the
