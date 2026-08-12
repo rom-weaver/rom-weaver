@@ -45,8 +45,10 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
     <section aria-labelledby="emulator-saves-title" className="emulator-saves-panel">
       <div className="emulator-saves-heading">
         <div>
-          <h3 id="emulator-saves-title">Emulator saves</h3>
-          <p>The SHA-1 identifies the ROM. The file name is display metadata.</p>
+          <h3 className="dlg-section-title" id="emulator-saves-title">
+            Emulator saves
+          </h3>
+          <p>Save states and SRAM, matched to each ROM by SHA-1.</p>
         </div>
         <div className="emulator-saves-actions">
           <button
@@ -58,11 +60,11 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
             <RefreshCw aria-hidden="true" className={loading ? "spin" : undefined} />
           </button>
           <button className="btn slim ghost" onClick={() => inputRef.current?.click()} type="button">
-            <Upload aria-hidden="true" /> Import
+            <Upload aria-hidden="true" /> Import save
           </button>
           <input
             accept="application/json,.json"
-            className="visually-hidden"
+            hidden
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = "";
@@ -81,15 +83,20 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
           {error}
         </p>
       ) : null}
-      {loading || saves.length ? null : <p className="emulator-saves-empty">No save states or SRAM yet.</p>}
+      {loading || saves.length ? null : (
+        <div className="emulator-saves-empty">
+          <strong>No emulator saves yet</strong>
+          <span>Play a ROM in Test, or import a rom-weaver save.</span>
+        </div>
+      )}
       {saves.length ? (
         <ul className="emulator-saves-list">
           {saves.map((save) => (
             <li className="emulator-save-row" key={save.gameId}>
               <div className="emulator-save-info">
                 <strong>{save.label}</strong>
-                <span>SHA-1: {save.gameId}</span>
-                <span>
+                <span className="emulator-save-sha">SHA-1 {save.gameId}</span>
+                <span className="emulator-save-sizes">
                   State: {formatSaveSize(save.state)} · SRAM: {formatSaveSize(save.sram)}
                 </span>
               </div>
