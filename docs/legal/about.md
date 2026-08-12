@@ -23,7 +23,7 @@ rom-weaver is licensed under the [GNU Affero General Public License v3.0 or late
 
 ## What it is built on
 
-The heavy lifting comes from open-source projects — among them nod, libarchive, chd-rs, the 7-Zip LZMA SDK, and xdvdfs — each used under its own licence. The [notices and attribution](/docs/notices) page lists every component that ships in a build, with its licence text.
+The heavy lifting comes from open-source projects. They include EmulatorJS, nod, libarchive, chd-rs, the 7-Zip LZMA SDK, and xdvdfs. Each project uses its own licence. The [notices and attribution](/docs/notices) page lists the components that ship in a build. The self-hosted emulator has a separate [EmulatorJS licence](/emulatorjs/LICENSE) and [core notice](/emulatorjs/NOTICE).
 
 ## Where your files go
 

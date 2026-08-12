@@ -68,9 +68,12 @@ page is a signpost to it and changes nothing about it.
 ## Other people's code
 
 The browser app and the command-line tool are built on open-source components:
-React, marked, nod, libarchive, chd-rs, several compression libraries, and
-everything those depend on in turn. Each of those keeps its own license and
-copyright notice.
+React, marked, EmulatorJS, nod, libarchive, chd-rs, several compression
+libraries, and everything those depend on in turn. Each of those keeps its own
+license and copyright notice.
+
+The Test page uses a self-hosted EmulatorJS build and selected emulator cores.
+Read its [license](/emulatorjs/LICENSE) and [core notice](/emulatorjs/NOTICE).
 
 Those notices are generated from the dependencies that actually go into a
 build, rather than typed up by hand. A hand-kept list drifts out of date the

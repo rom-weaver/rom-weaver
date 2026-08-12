@@ -42,6 +42,7 @@ Recipes for a real job you already have in front of you.
 - [Apply a ROM patch](how-to/apply-rom-patches.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch bundle](how-to/create-bundles.md)
+- [Test a ROM in the browser](how-to/test-roms-in-browser.md)
 - [Fix a checksum error](how-to/fix-checksum-errors.md)
 
 ### From the terminal

@@ -36,6 +36,7 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/create-rom-patches",
   }),
   Object.freeze({ file: "how-to/create-bundles.md", label: "Create bundles (browser)", slug: "docs/create-bundles" }),
+  Object.freeze({ file: "how-to/test-roms-in-browser.md", label: "Test ROMs (browser)", slug: "docs/test-roms" }),
   Object.freeze({
     file: "how-to/fix-checksum-errors.md",
     label: "Fix checksum errors",
