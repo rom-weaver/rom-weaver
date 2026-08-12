@@ -49,14 +49,14 @@ Use the emulator menu to create a save state or save the game's SRAM. rom-weaver
 
 Use the fullscreen button above the player to enter or leave fullscreen. On iPhone and iPad, the button uses a full-viewport player because Safari does not offer fullscreen for this type of content.
 
-Clear the saves from **More**, then **Log**, then **Storage**. Your browser's site-data controls also remove all rom-weaver saves and cached emulator files.
+Use your browser's site-data controls to remove all rom-weaver saves and cached emulator files.
 
 ## Fix a game that does not start
 
 - **No emulator core for this system:** use one of the systems listed above.
 - **WebGL 2 is required:** enable hardware acceleration or use a browser that supports WebGL 2.
 - **An archive does not load:** extract it yourself, then add the ROM file.
-- **A save does not appear:** confirm that you loaded the same ROM bytes.
+- **A save does not appear:** load the ROM with the same filename and file size. Local ROMs use those two values to find their saves.
 - **The player has no sound on iPhone or iPad:** start the game inside the player. Safari requires that direct tap before it enables audio.
 
 The emulator and its selected cores download from rom-weaver's own origin. Open the Test page once while online before you depend on the installed app offline.
