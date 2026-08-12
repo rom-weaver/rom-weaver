@@ -84,8 +84,8 @@ describe("Masthead", () => {
     expect(container.querySelector(".tool-support")).toBeNull();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
     expect(container.querySelector('[aria-label="Reset"]')).toBeNull();
-    // More is a sibling of the rail inside the nav, never a tab in the tablist
-    expect(container.querySelector(".modes .desktop-more .mode-more")).toBeTruthy();
+    // More shares the visual rail, but it is never a tab in the tablist.
+    expect(container.querySelector(".mode-rail-shell > .desktop-more .mode-more")).toBeTruthy();
     expect(container.querySelector('.mode-rail [aria-haspopup="menu"]')).toBeNull();
   });
 

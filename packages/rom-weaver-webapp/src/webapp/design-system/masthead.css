@@ -393,14 +393,21 @@
 .rw-app .modes {
   display: inline-flex;
   grid-column: 2;
-  gap: var(--sp-2xs);
   align-items: center;
   justify-self: center;
   min-width: 0;
   max-width: 100%;
 }
-/* The scroll lives on this wrapper, not on `.modes`: the nav-level More menu is
-   a sibling of the rail and an overflow ancestor would clip it. */
+.rw-app .mode-rail-shell {
+  display: inline-flex;
+  gap: var(--sp-2xs);
+  min-width: 0;
+  padding: 3px;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+}
+/* Only the tabs scroll. The menu remains visible so its popup is not clipped. */
 .rw-app .mode-rail-scroll {
   min-width: 0;
   overflow-x: auto;
@@ -413,15 +420,11 @@
   position: relative;
   display: inline-flex;
   gap: var(--sp-2xs);
-  padding: 3px;
-  background: var(--well);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-m);
 }
 .rw-app .mode-thumb {
   position: absolute;
-  top: 3px;
-  bottom: 3px;
+  top: 0;
+  bottom: 0;
   left: 0;
   width: 0;
   background: var(--thread);
@@ -572,13 +575,13 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   position: relative;
   display: inline-flex;
 }
-/* Nav-level utility: wears the rail's type so it reads as part of primary
-   navigation, but stays unboxed so it never looks like a sixth tab. */
+/* The menu button shares the rail, but its popup semantics keep it out of the
+   tablist and the sliding selected-state thumb. */
 .rw-app .mode-more {
   display: inline-flex;
   gap: var(--sp-xs);
   align-items: center;
-  padding: var(--sp-s) var(--sp-m);
+  padding: var(--sp-s) var(--sp-l);
   font-size: 0.8rem;
   font-weight: 650;
   color: var(--ink-3);
