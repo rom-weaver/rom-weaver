@@ -137,7 +137,7 @@ describe("EmulatorTestView", () => {
     expect(fetchSample).toHaveBeenCalledWith("/hello-world.nes", { signal: expect.any(AbortSignal) });
     expect(getEmulatorSessionState().currentGameId).toBe(getEmulatorSessionState().entries[0]?.id);
     expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith("b".repeat(40));
-    expect(screen.getByText("hello-world.nes", { selector: ".emulator-rom-identity dd" })).toBeTruthy();
+    expect(screen.getByText("hello-world.nes", { selector: ".emulator-player-copy .ck-v" })).toBeTruthy();
     expect(screen.getByText("b".repeat(40))).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Load a game" })).toBeTruthy());
     expect(screen.getByTitle("EmulatorJS test for hello-world.nes")).toBeTruthy();
@@ -153,7 +153,7 @@ describe("EmulatorTestView", () => {
 
     render(withSettings(<EmulatorTestView />));
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy game name" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy NAME" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy SHA-1" }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
