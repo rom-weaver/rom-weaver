@@ -199,7 +199,7 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     await vi.waitFor(() => {
       expect(latestFakeWorkflow?.setInput).toHaveBeenCalled();
     });
-    expect(latestFakeWorkflow?.setDefaultPatchBasis).toHaveBeenCalledWith("base");
+    expect(latestFakeWorkflow?.setDefaultPatchBasis).toHaveBeenCalledWith("auto");
 
     await vi.waitFor(() => {
       expect(container.querySelector("section.step.is-input.is-empty")).toBeNull();

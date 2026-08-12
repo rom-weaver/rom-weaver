@@ -1,8 +1,8 @@
 export type PatchInputBasis = "auto" | "base" | "previous";
 type PatchInputOverride = "base" | "previous" | undefined;
 
-/** Resolve the rule shown in the shared Patch inputs fieldset. Disabled patches
- * do not consume a position in a previous-output chain. */
+/** Resolve the bundle's shared rule and its per-patch exceptions. Disabled
+ * patches do not consume a position in a previous-output chain. */
 const resolvePatchInputBasis = ({
   mode,
   override,

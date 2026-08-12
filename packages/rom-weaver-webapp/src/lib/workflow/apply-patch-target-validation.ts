@@ -369,7 +369,7 @@ const validatePreparedGroup = async <TSource>(
           first.headerRemoved,
           first.n64ByteOrder,
         ),
-        defaultPatchBasis: adapters.defaultPatchBasis ?? "base",
+        defaultPatchBasis: adapters.defaultPatchBasis ?? "auto",
         n64ByteOrder: first.n64ByteOrder,
         ...(prepared.some(({ entry }) => entry.chain?.basis && entry.chain.basis !== "auto")
           ? { patchBasis: prepared.map(({ entry }) => entry.chain?.basis ?? "auto") }

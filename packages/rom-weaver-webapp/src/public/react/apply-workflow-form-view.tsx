@@ -1701,7 +1701,7 @@ function ApplyWorkflowFormView({
   onUnifiedDrop?: (files: File[]) => void;
   patchEnablement?: PatchEnablement;
   patchInputBasis?: PatchInputBasis;
-  onPatchInputBasisChange?: (basis: PatchInputBasis) => void;
+  onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
   pendingDrops?: PendingDrop[];
   startup?: StartupState;
 }) {
@@ -2036,7 +2036,6 @@ function ApplyWorkflowFormView({
             patchInputBasis={patchInputBasis}
             patchInputBasisDisabled={bundleExport?.busy}
             onPatchInputBasisChange={onPatchInputBasisChange}
-            sourceRomName={romInputs.length === 1 ? romInputs[0]?.info.fileName : undefined}
             romActualsById={romActualsById}
             notice={
               <SectionNotice

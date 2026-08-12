@@ -116,7 +116,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private nextCandidateSequence = 0;
   private nextInputSequence = 0;
   private nextPatchSequence = 0;
-  private defaultPatchBasis: "auto" | "base" | "previous" = "base";
+  private defaultPatchBasis: "auto" | "base" | "previous" = "auto";
   private outputState: ApplyOutputState;
   private inputSession?: InputSession<TSource>;
   private patches: Array<StagedSource<TSource>> = [];
@@ -1422,7 +1422,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
             entry.chain?.inputChecks ?? "",
             entry.chain?.outputChecks ?? "",
           ]),
-          defaultPatchBasis: options?.defaultPatchBasis ?? "base",
+          defaultPatchBasis: options?.defaultPatchBasis ?? "auto",
           targetId,
         });
         for (const entry of chain) entry.chainFingerprint = fingerprint;
@@ -1439,7 +1439,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         });
       }
       const adapters: PatchTargetValidationAdapters = {
-        defaultPatchBasis: options?.defaultPatchBasis ?? "base",
+        defaultPatchBasis: options?.defaultPatchBasis ?? "auto",
         emitProgress: (event) => this.emitProgress(event),
         onChainPlan: (targetId, plan) => {
           this.latestChainPlans.set(targetId, plan);

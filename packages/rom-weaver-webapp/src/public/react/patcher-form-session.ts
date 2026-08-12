@@ -98,7 +98,7 @@ const useLocalApplyPatchFormSession = ({
   applyPatches,
   applyReady = false,
   downloadOutput,
-  defaultPatchBasis = "base",
+  defaultPatchBasis = "auto",
   resolvedOutputCompression,
   resolvedOutputName,
   resolvedOutputNameKey,
@@ -1199,6 +1199,7 @@ const useLocalApplyPatchFormSession = ({
     actions: {
       createStageSnapshot,
       getPatchKey,
+      invalidatePatchDependentOutput,
       onError,
       setPatchInfoByKey,
       setPatchOption,

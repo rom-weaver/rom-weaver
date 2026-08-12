@@ -384,6 +384,10 @@
   color: var(--ink-4);
   content: "·";
 }
+.rw-app .card-meta .target-grp + .target-grp::before {
+  color: var(--ink-4);
+  content: "·";
+}
 .rw-app .cks > .cks-head .rb,
 .rw-app .fsize,
 .rw-app .meta-fmt {

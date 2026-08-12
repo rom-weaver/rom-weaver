@@ -621,7 +621,7 @@ describe("apply workflow view - bundle controls", () => {
     expect(container.querySelector("#rom-weaver-button-export-bundle")?.textContent).toContain("Create ZIP ROM Bundle");
   });
 
-  it("locks the shared patch input rule while a bundle export runs", () => {
+  it("defaults each patch input to automatic and locks it during bundle export", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const onPatchInputBasisChange = vi.fn();
     const { container } = render(
@@ -637,17 +637,15 @@ describe("apply workflow view - bundle controls", () => {
             ui: storeOf(ui) as unknown as PatcherUiController,
           }}
           onPatchInputBasisChange={onPatchInputBasisChange}
-          patchInputBasis="base"
         />
       </RomWeaverSettingsProvider>,
     );
 
-    const radios = Array.from(
-      container.querySelectorAll<HTMLInputElement>('input[name="rom-weaver-patch-input-rule"]'),
-    );
-    expect(radios).toHaveLength(3);
-    expect(radios.every((radio) => radio.disabled)).toBe(true);
-    fireEvent.click(radios[1] as HTMLInputElement);
+    const selects = Array.from(container.querySelectorAll<HTMLSelectElement>('select[id^="rom-weaver-patch-basis-"]'));
+    expect(selects).toHaveLength(2);
+    expect(selects.every((select) => select.value === "auto")).toBe(true);
+    expect(selects.every((select) => select.disabled)).toBe(true);
+    fireEvent.change(selects[1] as HTMLSelectElement, { target: { value: "base" } });
     expect(onPatchInputBasisChange).not.toHaveBeenCalled();
   });
 

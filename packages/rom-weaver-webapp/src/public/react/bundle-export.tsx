@@ -331,6 +331,7 @@ const useBundleExport = ({
   const [downloadableOutput, setDownloadableOutput] = useState<PublicOutput | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const downloadableOutputRef = useRef<PublicOutput | null>(null);
+  const bundleMetaByIdRef = useRef(bundleMetaById);
   const patchBasisRef = useRef(patchBasis);
   // The sources captured when the export ran, so the run stays aligned even if
   // the bench changes underneath it.
@@ -505,6 +506,10 @@ const useBundleExport = ({
     if (patchBasisRef.current !== patchBasis) clearDownloadable();
     patchBasisRef.current = patchBasis;
   }, [clearDownloadable, patchBasis]);
+  useEffect(() => {
+    if (bundleMetaByIdRef.current !== bundleMetaById) clearDownloadable();
+    bundleMetaByIdRef.current = bundleMetaById;
+  }, [bundleMetaById, clearDownloadable]);
   const selectFormat = useCallback(
     (value: string) => {
       clearDownloadable();

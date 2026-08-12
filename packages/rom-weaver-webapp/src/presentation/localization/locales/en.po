@@ -30,6 +30,36 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.help"
+#~ msgstr "Choose the ROM state each enabled patch reads. Checksums still prove the ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.inherit"
+#~ msgstr "Use shared rule"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.override"
+#~ msgstr "Override input"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.overrideLabel"
+#~ msgstr "Override input for patch {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.mapLabel"
+#~ msgstr "Patch input thread map"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.legend"
+#~ msgstr "Patch inputs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” applied first."
 
@@ -140,6 +170,11 @@ msgstr "auto (previous)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.auto"
+msgstr "Automatic"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
 msgstr "base ROM"
 
@@ -200,11 +235,6 @@ msgstr "Checksum validation failed."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchInputs.help"
-msgstr "Choose the ROM state each enabled patch reads. Checksums still prove the ROM."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.common.close"
 msgstr "Close"
 
@@ -247,11 +277,6 @@ msgstr "Dark"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.defaults"
 msgstr "Defaults"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchInputs.auto"
-msgstr "Detect automatically"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -332,11 +357,6 @@ msgstr "Fix order"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Fix ROM header"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchInputs.inherit"
-msgstr "Use shared rule"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -520,16 +540,6 @@ msgstr "Output won't be verified - the patches are out of order."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchInputs.override"
-msgstr "Override input"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchInputs.overrideLabel"
-msgstr "Override input for patch {n}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.log.viewLabel"
 msgstr "Page Logs"
 
@@ -537,16 +547,6 @@ msgstr "Page Logs"
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_CREATE_FAILED"
 msgstr "Patch creation failed."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchInputs.mapLabel"
-msgstr "Patch input thread map"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchInputs.legend"
-msgstr "Patch inputs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
