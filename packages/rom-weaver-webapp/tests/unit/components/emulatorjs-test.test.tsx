@@ -135,6 +135,7 @@ describe("EmulatorTestView", () => {
     expect(fetchSample).toHaveBeenCalledWith("/hello-world.nes", { signal: expect.any(AbortSignal) });
     expect(getEmulatorSessionState().currentGameId).toBe(getEmulatorSessionState().entries[0]?.id);
     expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith("b".repeat(40));
+    expect(screen.getByTitle(`ROM SHA-1: ${"b".repeat(40)}`).textContent).toBe("SHA-1 bbbbbbbbbbbb…");
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Load a game" })).toBeTruthy());
     expect(screen.getByTitle("EmulatorJS test for hello-world.nes")).toBeTruthy();
   });

@@ -52,6 +52,8 @@ Use the emulator menu to create a save state or save the game's SRAM. rom-weaver
 
 Each save uses the ROM's SHA-1 checksum as its identity. The record also stores the file name as a display name. Thus, the same ROM finds its save after you rename the file.
 
+The Play heading shows an abbreviated SHA-1 for the current ROM. Storage shows the complete value as a ROM fingerprint. You only need these values when you troubleshoot a save mismatch.
+
 Use the fullscreen button above the player to enter or leave fullscreen. On iPhone and iPad, the button uses a full-viewport player because Safari does not offer fullscreen for this type of content.
 
 ## Export and restore a save

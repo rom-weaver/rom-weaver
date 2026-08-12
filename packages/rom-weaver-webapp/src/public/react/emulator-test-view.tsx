@@ -566,6 +566,11 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                     {currentGame.fileName}
                   </span>
                   <span>{formatByteSize(currentGame.sizeBytes)}</span>
+                  {currentGame.checksum ? (
+                    <span className="emulator-current-checksum" title={`ROM SHA-1: ${currentGame.checksum}`}>
+                      SHA-1 {currentGame.checksum.slice(0, 12)}…
+                    </span>
+                  ) : null}
                 </>
               ) : undefined
             }

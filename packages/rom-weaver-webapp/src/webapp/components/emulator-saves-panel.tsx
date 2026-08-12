@@ -48,7 +48,7 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
           <h3 className="dlg-section-title" id="emulator-saves-title">
             Emulator saves
           </h3>
-          <p>Save states and SRAM, matched to each ROM by SHA-1.</p>
+          <p>Each backup can hold both a save state and SRAM. Matching to the same ROM is automatic.</p>
         </div>
         <div className="emulator-saves-actions">
           <button
@@ -95,7 +95,7 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
             <li className="emulator-save-row" key={save.gameId}>
               <div className="emulator-save-info">
                 <strong>{save.label}</strong>
-                <span className="emulator-save-sha">SHA-1 {save.gameId}</span>
+                <span className="emulator-save-sha">ROM fingerprint · SHA-1 {save.gameId}</span>
                 <span className="emulator-save-sizes">
                   State: {formatSaveSize(save.state)} · SRAM: {formatSaveSize(save.sram)}
                 </span>
