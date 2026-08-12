@@ -1,6 +1,14 @@
 import { type I18n, type Messages, setupI18n } from "@lingui/core";
-import { formatBytes, formatCount, formatDuration, formatList } from "../formatting/index.ts";
+import {
+  formatBytes,
+  formatCount,
+  formatDuration,
+  formatList,
+  getByteUnitSystem,
+  normalizeByteUnitSystem,
+} from "../formatting/index.ts";
 import { DEFAULT_LOCALE, LOCALE_OPTIONS, type LocaleCode, MESSAGE_CATALOGS, type MessageId } from "./catalog.ts";
+import type { ByteUnitSystem } from "../../types/settings.ts";
 
 type Localizer = {
   locale: LocaleCode;
@@ -77,11 +85,12 @@ const getI18n = (catalogLocale: LocaleCode): I18n => {
   return i18n;
 };
 
-const createLocalizer = (locale?: string): Localizer => {
+const createLocalizer = (locale?: string, byteUnitSystem?: ByteUnitSystem): Localizer => {
   const normalizedLocale = negotiateLocale([locale || ""]);
+  const normalizedByteUnitSystem = normalizeByteUnitSystem(byteUnitSystem ?? getByteUnitSystem());
   const i18n = getI18n(resolveCatalogLocale(normalizedLocale));
   return {
-    formatBytes: (bytes) => formatBytes(bytes, normalizedLocale),
+    formatBytes: (bytes) => formatBytes(bytes, normalizedLocale, normalizedByteUnitSystem),
     formatCount: (count, unit) => formatCount(count, normalizedLocale, unit),
     formatDuration: (milliseconds) => formatDuration(milliseconds, normalizedLocale),
     formatList: (items) => formatList(items, normalizedLocale),
@@ -91,8 +100,8 @@ const createLocalizer = (locale?: string): Localizer => {
   };
 };
 
-const createBrowserLocalizer = (locale?: string): Localizer =>
-  createLocalizer(locale || negotiateLocale(getBrowserLocaleCandidates()));
+const createBrowserLocalizer = (locale?: string, byteUnitSystem?: ByteUnitSystem): Localizer =>
+  createLocalizer(locale || negotiateLocale(getBrowserLocaleCandidates()), byteUnitSystem);
 
 export type { Localizer };
 export { createBrowserLocalizer, createLocalizer, getBrowserLocaleCandidates, LOCALE_OPTIONS, negotiateLocale };

@@ -51,6 +51,7 @@ describe("getDefaultSettings", () => {
     expect(settings.zipCodec).toBe("deflate");
     expect(settings.chdCreateCdCodecs).toBe("cdlz,cdzl,cdfl");
     expect(settings.fixChecksum).toBe(false);
+    expect(settings.byteUnits).toBe("decimal");
     expect(settings.bundlePackage).toBe("");
     expect(settings.postApplyRomBehavior).toBe("auto-download");
     expect(settings.requireInputChecksumMatch).toBe(true);
@@ -99,6 +100,18 @@ describe("validateSettingsDraft", () => {
     const result = validateSettingsDraft(validDraft({ bundlePackage: "ZIP:ROM" }));
     expect(result.settings.bundlePackage).toBe("zip:rom");
     expect(result.invalidFields).not.toContain(getSettingsFieldId("bundlePackage"));
+  });
+
+  it("accepts binary file size units", () => {
+    const result = validateSettingsDraft(validDraft({ byteUnits: "binary" }));
+    expect(result.settings.byteUnits).toBe("binary");
+    expect(result.invalidFields).not.toContain(getSettingsFieldId("byteUnits"));
+  });
+
+  it("rejects an unknown file size unit system", () => {
+    const result = validateSettingsDraft(validDraft({ byteUnits: "metric" }));
+    expect(result.invalidFields).toContain(getSettingsFieldId("byteUnits"));
+    expect(result.settings.byteUnits).toBe("decimal");
   });
 
   it.each(["none", "auto-download", "auto-test", "auto-test-download"] as const)(
@@ -198,6 +211,14 @@ describe("serializeSettingsForStorage", () => {
     const json = serializeSettingsForStorage(settings);
     const parsed = JSON.parse(json as string);
     expect(parsed.common.language).toBe("de");
+  });
+
+  it("serializes and loads the file size unit system under common", () => {
+    const settings = { ...getDefaultSettings(), byteUnits: "binary" as const };
+    const json = serializeSettingsForStorage(settings);
+    const parsed = JSON.parse(json as string);
+    expect(parsed.common.byteUnits).toBe("binary");
+    expect(loadSettings(makeStorage(json)).byteUnits).toBe("binary");
   });
 
   it("serializes and loads the beta tools setting under common", () => {

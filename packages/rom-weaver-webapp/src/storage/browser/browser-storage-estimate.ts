@@ -1,3 +1,5 @@
+import { getByteUnitSystem } from "../../presentation/formatting/index.ts";
+
 type BrowserStorageEstimateState = {
   availableBytes?: number;
   error?: string;
@@ -49,8 +51,12 @@ const getBrowserStorageEstimateState = async (
 
 const formatByteCount = (value: number | undefined): string => {
   if (typeof value !== "number" || !Number.isFinite(value)) return "unknown";
-  const unitBase = 1000;
-  const units = ["B", "KB", "MB", "GB", "TB"];
+  const unitConfig =
+    getByteUnitSystem() === "binary"
+      ? { base: 1024, units: ["B", "KiB", "MiB", "GiB", "TiB"] }
+      : { base: 1000, units: ["B", "KB", "MB", "GB", "TB"] };
+  const unitBase = unitConfig.base;
+  const units = unitConfig.units;
   let size = Math.max(0, value);
   let unitIndex = 0;
   while (size >= unitBase && unitIndex + 1 < units.length) {

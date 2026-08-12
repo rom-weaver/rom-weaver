@@ -19,7 +19,7 @@ import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/setting
 import { ACCENTS } from "../accent.ts";
 import { DEFAULT_CHANNEL_ACCENT } from "../build-channel.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
-import type { PostApplyRomBehavior } from "../../types/settings.ts";
+import type { ByteUnitSystem, PostApplyRomBehavior } from "../../types/settings.ts";
 import { getDefaultWebappLogLevel } from "../development-defaults.ts";
 import {
   COMPRESSION_PROFILES,
@@ -36,6 +36,7 @@ type SettingsState = {
   defaultCompression: string;
   accent: string;
   language: string;
+  byteUnits: ByteUnitSystem;
   logLevel: string;
   bundlePackage: string;
   postApplyRomBehavior: PostApplyRomBehavior;
@@ -153,6 +154,7 @@ const SETTINGS_FIELD_ORDER = [
   "defaultCompression",
   "accent",
   "language",
+  "byteUnits",
   "logLevel",
   "betaToolsEnabled",
   "applyPlayButtonEnabled",
@@ -221,6 +223,20 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getSettingsLabel("betaToolsEnabled"),
     labelDataLocalize: "Enable beta tools (Trim and Tools)",
     layout: "large",
+  },
+  byteUnits: {
+    defaultValue: "decimal",
+    id: "settings-byte-units",
+    key: "byteUnits",
+    kind: "select",
+    label: getSettingsLabel("byteUnits"),
+    options: [
+      { label: "Decimal (KB, MB, GB)", value: "decimal" },
+      { label: "Binary (KiB, MiB, GiB)", value: "binary" },
+    ],
+    suggestion: "Choose decimal or binary units for file sizes.",
+    validationLabel: "File size units",
+    validValues: ["decimal", "binary"],
   },
   bundlePackage: {
     defaultValue: "",

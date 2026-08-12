@@ -60,3 +60,16 @@ test("language selection lives in Settings", async () => {
 
   await expect.element(page.getByRole("combobox", { name: "Language" })).toHaveValue("en");
 });
+
+test("file size units selection lives in Settings and keeps decimal units by default", async () => {
+  mountSettingsPanel();
+
+  const select = page.getByRole("combobox", { name: "File size units" });
+  await expect.element(select).toHaveValue("decimal");
+  expect(
+    [...document.querySelector("#settings-byte-units").options].map((option) => [option.text, option.value]),
+  ).toEqual([
+    ["Decimal (KB, MB, GB) (Default)", "decimal"],
+    ["Binary (KiB, MiB, GiB)", "binary"],
+  ]);
+});
