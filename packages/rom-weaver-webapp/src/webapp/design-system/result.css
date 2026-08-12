@@ -146,6 +146,10 @@
   border-block-end: 1px solid var(--seam);
   border-radius: 0;
 }
+.rw-app .emulator-player-copy .ckrows {
+  display: flex;
+  margin-inline: 0;
+}
 .rw-app .emulator-player-copy .ck:not(.req) {
   width: 100%;
   margin-inline: 0;
