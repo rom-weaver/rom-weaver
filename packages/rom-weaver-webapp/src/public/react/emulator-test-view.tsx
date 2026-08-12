@@ -533,14 +533,6 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           <StepSection
             headerExtra={
               <div className="emulator-player-actions">
-                {currentGame ? (
-                  <div className="cks emulator-player-copy">
-                    <div className="ckrows">
-                      <ChecksumRow label="NAME" value={currentGame.fileName} />
-                      {currentGame.checksum ? <ChecksumRow label="SHA-1" value={currentGame.checksum} /> : null}
-                    </div>
-                  </div>
-                ) : null}
                 {currentGame?.source === "apply" ? (
                   <a className="btn ghost slim" href="apply">
                     <ArrowLeft aria-hidden="true" /> Back to Apply
@@ -573,6 +565,14 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
             title="Play"
           >
             <div className="card emulator-player">
+              {currentGame ? (
+                <div className="cks emulator-player-copy">
+                  <div className="ckrows">
+                    <ChecksumRow label="NAME" value={currentGame.fileName} />
+                    {currentGame.checksum ? <ChecksumRow label="SHA-1" value={currentGame.checksum} /> : null}
+                  </div>
+                </div>
+              ) : null}
               {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
                   <div

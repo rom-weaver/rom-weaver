@@ -142,10 +142,9 @@
   margin-inline-start: auto;
 }
 .rw-app .emulator-player-copy {
-  flex: 1 1 18rem;
-  min-width: 0;
-  max-width: 24rem;
   overflow: hidden;
+  border-block-end: 1px solid var(--seam);
+  border-radius: 0;
 }
 .rw-app .emulator-player-copy .ck:not(.req) {
   width: 100%;
