@@ -19,8 +19,11 @@ const getFocusableElements = (root: HTMLElement): HTMLElement[] =>
     if (element.tabIndex === -1 || element.matches(":disabled") || element.closest('[aria-hidden="true"]'))
       return false;
     if (element.hidden || element.closest("[hidden]")) return false;
-    const style = getComputedStyle(element);
-    return style.display !== "none" && style.visibility !== "hidden";
+    for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+      const style = getComputedStyle(current);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+    }
+    return true;
   });
 
 /**

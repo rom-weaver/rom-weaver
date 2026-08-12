@@ -100,11 +100,10 @@ html:has(.rw-modal) {
 .rw-modal.select-modal .rw-modal-card {
   width: 100%;
 }
-/* The guide sheet rises from the bottom edge instead of sitting centred - it
-   belongs to the trail that opens it, and the trail holds the bottom of the
-   guide above the dock. The rest of its styling is in docs.css with the guide;
-   only the modal-frame overrides are here, where they outrank the
-   `.rw-modal-card` defaults above. */
+/* The guide sheet rises from the bottom edge instead of sitting centred. On
+   narrow screens, its footer replaces the trail controls. The rest of its
+   styling is in docs.css with the guide; only the modal-frame overrides are
+   here, where they outrank the `.rw-modal-card` defaults above. */
 /* The sheet's head is one line of title and the close button, so the two share a
    centre line. `flex-start` is for the heads that carry a subtitle under the
    title, where the button belongs beside the first line, not beside the pair. */
@@ -166,6 +165,9 @@ html:has(.rw-modal) {
     display: grid;
     gap: var(--sp-l);
     align-content: start;
+  }
+  .rw-modal.guide-sheet .modal-head .dlg-x {
+    display: none;
   }
   .rw-modal.guide-sheet .modal-foot {
     display: block;

@@ -604,7 +604,6 @@ const TrailHead = ({
         }
         onClose={closeSheet}
         open={sheetOpen}
-        showCloseButton={false}
         title={route.title}
         variant="guide-sheet"
       >
