@@ -37,6 +37,8 @@ type ExtractPanelProps = {
   decompressionTimeMs?: number;
   fileName: string;
   fileSize?: number;
+  /** Short file type shown in the Files drawer header. */
+  typeLabel?: string;
   /** Folder path within the source archive (e.g. "patches › v1.2"), shown as a
    * muted prefix on the name line. The archive itself is intentionally omitted. */
   folderPath?: string;
@@ -149,6 +151,7 @@ const ExtractDrawer = ({
   fileEntries,
   parentCompressions,
   timing,
+  typeLabel,
 }: ExtractPanelProps) => {
   const levels = buildExtractionLevels(fileName, fileSize, fileEntries, parentCompressions);
   const resolvedTiming = timing ?? formatExtractionElapsedMs(decompressionTimeMs);
@@ -157,6 +160,7 @@ const ExtractDrawer = ({
   const last = levels.at(-1);
   if (!last) return null;
   const hasFileEntries = !!fileEntries?.length;
+  const typeText = typeLabel?.trim();
   const sizeText = hasFileEntries
     ? typeof fileSize === "number"
       ? first?.sizeLabel && first.sizeBytes && fileSize > 0
@@ -177,6 +181,7 @@ const ExtractDrawer = ({
       readouts={
         <>
           {sizeText ? <DrawerReadout>{sizeText}</DrawerReadout> : null}
+          {typeText ? <DrawerReadout>{typeText}</DrawerReadout> : null}
           {timingLabel ? <DrawerReadout time>{timingLabel}</DrawerReadout> : null}
         </>
       }

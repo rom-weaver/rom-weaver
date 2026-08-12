@@ -1274,11 +1274,8 @@ const PatchCard = ({
           {onTogglePatch ? (
             <PatchEnableToggle disabled={isDisabled} fileName={item.fileName} onToggle={() => onTogglePatch(index)} />
           ) : null}
-          {item.fileSize ? <span className="fsize mono">{formatByteSize(item.fileSize)}</span> : null}
-          {item.format ? <span className="meta-fmt mono">{item.format.toLowerCase()}</span> : null}
           {meta?.label ? <span className="meta-fmt mono">{meta.label}</span> : null}
-          {/* Icon chips mark these as authored metadata (release tag, credit)
-              among the plain file-fact chips. */}
+          {/* Icon chips mark authored metadata such as a release tag or credit. */}
           {meta?.version ? (
             <span className="meta-fmt mono meta-ic" id={`rom-weaver-patch-card-version-${index}`}>
               <Tag aria-hidden="true" />
@@ -1294,8 +1291,7 @@ const PatchCard = ({
             </span>
           ) : null}
           {/* The patch's single contextual control (target OR header OR byte
-              order - never more than one applies) closes the meta line, in
-              the same slot after size and format. */}
+              order - never more than one applies) closes the metadata line. */}
           {staging ? null : <PatchTarget index={index} item={item} patchStack={patchStack} />}
           {staging || isDisabled ? null : <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} />}
           {staging || isDisabled ? null : <PatchN64ByteOrderSelect index={index} item={item} patchStack={patchStack} />}
@@ -1355,6 +1351,7 @@ const PatchCard = ({
               fileSize={item.fileSize}
               parentCompressions={item.archivePathEntries}
               timing={TIMING_LABEL(item.decompressionTimeMs)}
+              typeLabel={item.format?.toUpperCase()}
             />
           )}
           {/* Reserve the Checks drawer through staging even before the parse

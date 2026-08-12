@@ -63,11 +63,16 @@ test("files drawer keeps extract metadata for prepared single-level inputs", asy
       fileName: "game.iso",
       fileSize: 4096,
       timing: "1.2 s",
+      typeLabel: "ISO",
     }),
   );
 
   await expect.poll(() => document.querySelector(".extract-d .lab")?.textContent || "").toBe("Files");
   expect(document.querySelector(".extract-d .rb:not(.time)")?.textContent || "").toBe("4.1 KB");
+  expect(Array.from(document.querySelectorAll(".extract-d .rb:not(.time)"), (entry) => entry.textContent)).toEqual([
+    "4.1 KB",
+    "ISO",
+  ]);
   expect(document.querySelector(".extract-d .rb.time")?.textContent || "").toBe("Extract 1.2 s");
   expect(document.querySelector(".extract-d .tree-name")?.textContent || "").toBe("game.iso");
 });
