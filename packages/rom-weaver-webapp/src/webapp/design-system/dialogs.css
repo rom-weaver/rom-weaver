@@ -1293,23 +1293,7 @@ html.vt-mode .drop:has(#tools-input-picker) {
 .rw-app .emulator-save-import-form {
   display: grid;
   gap: var(--sp-xs);
-  padding: var(--sp-s) var(--sp-m);
   margin-block-start: var(--sp-m);
-  background: var(--plate-2);
-  border: 1px solid var(--seam-soft);
-  border-radius: var(--r-s);
-}
-.rw-app .emulator-save-import-form > div:first-child {
-  display: grid;
-  gap: var(--sp-2xs);
-}
-.rw-app .emulator-save-import-form > div:first-child span {
-  font-size: 0.74rem;
-  color: var(--ink-3);
-}
-.rw-app .emulator-save-import-form label {
-  font-size: 0.74rem;
-  color: var(--ink-2);
 }
 .rw-app .emulator-save-import-actions {
   display: flex;
