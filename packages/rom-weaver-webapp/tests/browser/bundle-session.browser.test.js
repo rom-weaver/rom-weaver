@@ -258,6 +258,30 @@ test("archive whose index is named rw.json (not canonical) is content-probed and
   await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 }).toEqual([true, false]);
 });
 
+test("local v2 bundle keeps a per-patch input override", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const bundleFile = new File(
+    [
+      JSON.stringify({
+        patchBasis: "base",
+        patches: [{ basis: "previous", path: patchFile.name }],
+        rom: { path: romFile.name },
+        version: 2,
+      }),
+    ],
+    "rom-weaver-bundle.json",
+    { type: "application/json" },
+  );
+
+  const loaded = await loadLocalBundleSession(bundleFile, [romFile, patchFile]);
+  try {
+    expect(loaded.session.patchBasis).toBe("base");
+    expect(loaded.session.entries[0]?.basis).toBe("previous");
+  } finally {
+    await loaded.cleanup();
+  }
+});
+
 test("local bundle remote sources remain live until the workflow owner is disposed", async () => {
   const truncateSpy = vi.spyOn(browserVfs, "truncate");
   const bundleFile = new File(

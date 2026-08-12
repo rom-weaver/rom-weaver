@@ -22,6 +22,7 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 const TRANSIENT_VALIDATION_ERROR_CODES = new Set(["CANCELLED", "WORKER_FAILED", "WORKER_UNAVAILABLE"]);
 
 type PatchTargetValidationAdapters = {
+  defaultPatchBasis?: "auto" | "base" | "previous";
   emitProgress: (event: {
     details?: Record<string, unknown>;
     id: string;
@@ -368,6 +369,7 @@ const validatePreparedGroup = async <TSource>(
           first.headerRemoved,
           first.n64ByteOrder,
         ),
+        defaultPatchBasis: adapters.defaultPatchBasis ?? "base",
         n64ByteOrder: first.n64ByteOrder,
         ...(prepared.some(({ entry }) => entry.chain?.basis && entry.chain.basis !== "auto")
           ? { patchBasis: prepared.map(({ entry }) => entry.chain?.basis ?? "auto") }

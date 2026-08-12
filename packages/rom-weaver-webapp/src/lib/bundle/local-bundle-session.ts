@@ -148,6 +148,7 @@ function buildBundleApplySession(
     chainEndpointChecks: bundleChainEndpointChecks(result.bundle),
     entries: result.bundle.patches.map((patch, index) => toBundleSessionEntry(patch, patchFiles[index], index)),
     key: `local:${bundleFile.name}:${bundleFile.size}:${bundleFile.lastModified}`,
+    patchBasis: result.bundle.version >= 2 ? result.bundle.patchBasis || "auto" : "auto",
     ...(name ? { name } : {}),
     outputDefaults: {
       ...(output?.name ? { name: output.name } : {}),
@@ -199,6 +200,7 @@ function toBundleSessionEntry(
     ...(patch.author ? { author: patch.author } : {}),
     ...(patch.label ? { label: patch.label } : {}),
     ...(patch.header ? { header: patch.header } : {}),
+    ...(patch.basis ? { basis: patch.basis } : {}),
     ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),
     ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
   };

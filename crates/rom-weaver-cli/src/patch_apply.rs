@@ -70,6 +70,7 @@ struct EmitBundleInputs {
     patches: Vec<PathBuf>,
     headers: Vec<PatchApplyHeaderMode>,
     bases: Vec<PatchBasisMode>,
+    default_basis: PatchBasisMode,
     output: Option<PathBuf>,
     threads: ThreadBudget,
 }
@@ -212,6 +213,10 @@ impl CliApp {
             patches: args.patches.clone(),
             headers: args.patch_header.clone(),
             bases: args.patch_basis.clone(),
+            default_basis: bundle_resolution
+                .as_ref()
+                .map(|resolution| resolution.patch_basis)
+                .unwrap_or(args.default_patch_basis.unwrap_or(PatchBasisMode::Base)),
             output: args.output.clone(),
             threads: args.threads,
         });
@@ -284,6 +289,7 @@ impl CliApp {
             .and_then(|name| name.to_str())
             .map(str::to_owned);
         let create = BundleCreateCommand {
+            default_patch_basis: Some(inputs.default_basis),
             rom: Some(inputs.input),
             output: emit_path.to_path_buf(),
             output_name,
@@ -358,6 +364,7 @@ impl CliApp {
             expect_in,
             patch_header,
             patch_basis,
+            default_patch_basis,
             output_header,
             repair_checksum,
             n64_byte_order,
@@ -780,11 +787,17 @@ impl CliApp {
                 let step_verifications = match self.plan_apply_step_verifications(
                     &resolved_patches,
                     usize::from(!codes.is_empty()),
-                    bundle_resolution
-                        .as_ref()
-                        .map(|resolution| resolution.step_verifications.clone())
-                        .unwrap_or_default(),
-                    &patch_basis,
+                    PatchApplyBasisInputs {
+                        bundle_steps: bundle_resolution
+                            .as_ref()
+                            .map(|resolution| resolution.step_verifications.clone())
+                            .unwrap_or_default(),
+                        shared: bundle_resolution
+                            .as_ref()
+                            .map(|resolution| resolution.patch_basis)
+                            .unwrap_or(default_patch_basis.unwrap_or(PatchBasisMode::Base)),
+                        cli: &patch_basis,
+                    },
                     PatchApplyBaseInputs {
                         prepared: apply_input.as_path(),
                         original: resolved_input.as_path(),
@@ -2844,6 +2857,12 @@ struct PatchApplyBaseInputs<'a> {
     original_n64_byte_order: Option<N64ByteOrder>,
 }
 
+struct PatchApplyBasisInputs<'a> {
+    bundle_steps: Vec<patch_plan::PatchStepVerification>,
+    shared: PatchBasisMode,
+    cli: &'a [PatchBasisMode],
+}
+
 struct RunPatchApplyLoopInputs<'a> {
     resolved_patches: &'a [(PathBuf, PathBuf)],
     apply_input: PathBuf,
@@ -3276,11 +3295,15 @@ impl CliApp {
         &self,
         resolved_patches: &[(PathBuf, PathBuf)],
         cheat_steps: usize,
-        bundle_steps: Vec<patch_plan::PatchStepVerification>,
-        cli_basis: &[PatchBasisMode],
+        basis_inputs: PatchApplyBasisInputs<'_>,
         base_inputs: PatchApplyBaseInputs<'_>,
         context: &OperationContext,
     ) -> Result<Vec<patch_plan::PatchStepVerification>> {
+        let PatchApplyBasisInputs {
+            bundle_steps,
+            shared,
+            cli,
+        } = basis_inputs;
         let original_representation = Self::base_representation(
             base_inputs.original,
             None,
@@ -3311,19 +3334,27 @@ impl CliApp {
         // or archive expansion can change the resolved count, in which case
         // declarations cannot be attributed and only inference applies.
         let aligned = |declared_len: usize| declared_len == user_count;
+        let mut bundle_steps_applied = false;
         if !bundle_steps.is_empty() && aligned(bundle_steps.len()) {
             for (user_index, bundle_step) in bundle_steps.into_iter().enumerate() {
                 steps[cheat_steps + user_index] = bundle_step;
             }
+            bundle_steps_applied = true;
         }
-        if !cli_basis.is_empty() {
-            if !aligned(cli_basis.len()) {
+        if !bundle_steps_applied {
+            for step in steps.iter_mut().skip(cheat_steps) {
+                step.basis = shared.declared();
+                step.basis_source = step.basis.map(|_| PatchBasisSource::Declared);
+            }
+        }
+        if !cli.is_empty() {
+            if !aligned(cli.len()) {
                 return Err(RomWeaverError::Validation(format!(
                     "--patch-basis must be given once per --patch (or not at all); got {} value(s) for {user_count} patch(es)",
-                    cli_basis.len()
+                    cli.len()
                 )));
             }
-            for (user_index, mode) in cli_basis.iter().enumerate() {
+            for (user_index, mode) in cli.iter().enumerate() {
                 let step = &mut steps[cheat_steps + user_index];
                 step.basis = mode.declared();
                 step.basis_source = step.basis.map(|_| PatchBasisSource::Declared);

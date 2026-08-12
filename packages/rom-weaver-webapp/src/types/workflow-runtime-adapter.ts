@@ -243,6 +243,8 @@ type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "outpu
   outputName?: string | null | undefined;
   /** One declared input basis per patch in chain order. */
   patchBasis?: PatchApplyCommand["patch_basis"];
+  /** Shared input rule. Per-patch `patchBasis` values override this default. */
+  defaultPatchBasis?: PatchBasisMode;
   removeHeader?: boolean;
   requireInputChecksumMatch?: boolean;
   validateWithChecksums?: PatchApplyCommand["expect_in"];
@@ -259,6 +261,8 @@ type RuntimePatchValidateOptions = Partial<Omit<PatchValidateCommand, "input" | 
   n64ByteOrder?: PatchValidateCommand["n64_byte_order"];
   /** Declared basis per patch, index-aligned with `patches` (auto entries defer to inference). */
   patchBasis?: PatchBasisMode[];
+  /** Shared input rule. Per-patch `patchBasis` values override this default. */
+  defaultPatchBasis?: PatchBasisMode;
   /** Declared input checks per patch (comma-separable `algo=hex`, empty skips), index-aligned. */
   patchInputChecks?: string[];
   /** Declared output checks per patch, index-aligned. */
@@ -497,6 +501,8 @@ type WorkflowRuntimeBundle = {
     }>;
     outputName?: string;
     outputHeader?: BundleHeaderMode;
+    /** Shared input rule emitted in the v2 bundle root. */
+    patchBasis?: "auto" | "base" | "previous";
     /** Advisory logical ROM file name written to bundle `rom.name`. */
     romName?: string;
     /** Cached checksums from apply staging; Rust hashes only when this is absent. */

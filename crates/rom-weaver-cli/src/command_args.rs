@@ -1265,12 +1265,12 @@ copier size rules."
             value_enum,
             action = ArgAction::Append,
             help_heading = "Compatibility",
-            help = "Which ROM the preceding --patch was built against: auto, base, or previous [default: auto]",
+            help = "Override the preceding --patch input rule: auto, base, or previous",
             long_help = "\
 Which ROM the preceding --patch was built against, and so which one its
 checksums describe.
 
-  auto      Work it out from the checksums (the default).
+  auto      Clear the shared rule and work it out from the checksums.
   base      The original ROM. It is verified once up front, and the patch's own
             checks are skipped when it runs later in the chain.
   previous  The output of the patch before it.
@@ -1286,6 +1286,24 @@ This flag must follow the --patch it describes; it binds to the most recent
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_basis: Vec<PatchBasisMode>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "default-patch-basis",
+            value_enum,
+            help_heading = "Compatibility",
+            help = "Shared input ROM rule for every patch: auto, base, or previous [default: base]",
+            long_help = "\
+Set one input ROM rule for every patch. An individual --patch-basis can override it.
+
+  base      Every patch was made from the original ROM (the default).
+  previous  Each later patch was made from the previous result.
+  auto      Infer the input ROM from checksums."
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub default_patch_basis: Option<PatchBasisMode>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1703,12 +1721,29 @@ pub struct PatchValidateCommand {
         arg(
             long = "patch-basis",
             value_enum,
-            help = "Which ROM the preceding --patch was built against: auto, base, or previous [default: auto]"
+            help = "Override the preceding --patch input rule: auto, base, or previous"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_basis: Vec<PatchBasisMode>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "default-patch-basis",
+            value_enum,
+            help = "Shared input ROM rule for every patch: auto, base, or previous [default: base]",
+            long_help = "\
+Set one input ROM rule for every patch. An individual --patch-basis can override it.
+
+  base      Every patch was made from the original ROM (the default).
+  previous  Each later patch was made from the previous result.
+  auto      Infer the input ROM from checksums."
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub default_patch_basis: Option<PatchBasisMode>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -2301,7 +2336,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "rom-name",
-            help = "Expected ROM file name to show and use for output naming; a supplied ROM with a different name only warns"
+            help = "Expected source ROM file name to show and use for output naming; a mismatch is advisory"
         )
     )]
     #[serde(default)]
@@ -2431,13 +2466,30 @@ patches reads left to right:
         arg(
             long = "patch-basis",
             value_enum,
-            help = "Which ROM the preceding --patch was built against: base (the bundle's ROM) or previous (the patch before it). Use auto to leave it out and let apply infer it",
-            long_help = patch_adjacency_long_help!("Which ROM the preceding --patch was built against: base (the bundle's ROM) or previous (the patch before it). Use auto to leave it out and let apply infer it")
+            help = "Override the preceding --patch input rule: base or previous. Use auto to inherit the bundle rule",
+            long_help = patch_adjacency_long_help!("Override the preceding --patch input rule: base (the bundle's ROM) or previous (the patch before it). Use auto to inherit the bundle rule")
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_basis: Vec<PatchBasisMode>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "default-patch-basis",
+            value_enum,
+            help = "Shared input ROM rule recorded in the v2 bundle: auto, base, or previous [default: base]",
+            long_help = "\
+Record one input ROM rule for every patch. An individual --patch-basis overrides it.
+
+  base      Every patch was made from the original ROM (the default).
+  previous  Each later patch was made from the previous result.
+  auto      Infer the input ROM from checksums."
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub default_patch_basis: Option<PatchBasisMode>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

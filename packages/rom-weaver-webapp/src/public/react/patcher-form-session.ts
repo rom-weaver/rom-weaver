@@ -98,6 +98,7 @@ const useLocalApplyPatchFormSession = ({
   applyPatches,
   applyReady = false,
   downloadOutput,
+  defaultPatchBasis = "base",
   resolvedOutputCompression,
   resolvedOutputName,
   resolvedOutputNameKey,
@@ -321,6 +322,7 @@ const useLocalApplyPatchFormSession = ({
   );
   const createStageSnapshot = useCallback(
     (): ApplyWorkflowStageSnapshot => ({
+      defaultPatchBasis,
       inputs: effectiveInputs,
       options: {
         ...activeSettings,
@@ -341,6 +343,7 @@ const useLocalApplyPatchFormSession = ({
       activePatches,
       activeSettings,
       containerInputsEnabled,
+      defaultPatchBasis,
       effectiveInputs,
       requestedOutputName,
       requestedCompression,
@@ -893,6 +896,33 @@ const useLocalApplyPatchFormSession = ({
   // Enablement changes alter the chain plan. Recheck both directions: disabled patches are skipped
   // from the run, while re-enabled patches need a fresh verdict before the next manual Apply.
   const previousDisabledPatchIdsRef = useRef<ReadonlySet<string> | null>(null);
+
+  const previousDefaultPatchBasisRef = useRef<typeof defaultPatchBasis | null>(null);
+  useEffect(() => {
+    const previous = previousDefaultPatchBasisRef.current;
+    previousDefaultPatchBasisRef.current = defaultPatchBasis;
+    if (!previous || previous === defaultPatchBasis || !(validatePatches && activePatches.length)) return;
+    patchChangePendingRef.current = true;
+    setPatchChangePending(true);
+    invalidatePatchDependentOutput("patch input rule changed", { defaultPatchBasis, previous });
+    const generation = patchStageMachine.invalidateStage();
+    emitSessionTrace("patch input rule changed; re-planning chain validation", {
+      defaultPatchBasis,
+      generation,
+      previous,
+    });
+    validatePatchesDeferred(createStageSnapshot(), generation);
+  }, [
+    activePatches.length,
+    createStageSnapshot,
+    defaultPatchBasis,
+    emitSessionTrace,
+    invalidatePatchDependentOutput,
+    patchStageMachine,
+    validatePatches,
+    validatePatchesDeferred,
+  ]);
+
   useEffect(() => {
     const previous = previousDisabledPatchIdsRef.current;
     const current = disabledPatchIds ?? new Set<string>();
@@ -1221,6 +1251,7 @@ const useLocalApplyPatchFormSession = ({
       canStartApply,
       checksumOverrideChecked,
       containerInputsEnabled,
+      defaultPatchBasis,
       effectiveInputs,
       effectiveResolvedOutputName,
       hasPendingDownload,

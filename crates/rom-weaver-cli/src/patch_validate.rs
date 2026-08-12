@@ -29,6 +29,7 @@ impl CliApp {
             independent = args.independent,
             plan = args.plan,
             patch_basis = args.patch_basis.len(),
+            default_patch_basis = ?args.default_patch_basis,
             patch_input_checks = args.patch_input_check.len(),
             patch_output_checks = args.patch_output_check.len(),
             threads = %args.threads,
@@ -49,6 +50,7 @@ impl CliApp {
             independent,
             plan,
             patch_basis,
+            default_patch_basis,
             patch_input_check,
             patch_output_check,
             threads,
@@ -377,6 +379,7 @@ impl CliApp {
                     },
                     flags: PlanFlagInputs {
                         basis: patch_basis,
+                        default_basis: default_patch_basis.unwrap_or(PatchBasisMode::Base),
                         input_checks: patch_input_check,
                         output_checks: patch_output_check,
                     },
@@ -1039,7 +1042,7 @@ impl CliApp {
                 patch_path,
                 resolved_patch_path,
                 handlers[index].as_deref(),
-                basis_modes[index].unwrap_or_default().declared(),
+                basis_modes[index].unwrap_or(flags.default_basis).declared(),
                 declared_input,
                 declared_output,
                 context,
@@ -1807,6 +1810,7 @@ impl CliApp {
 /// index-aligned with `patches` (native argv alignment or wasm vectors).
 struct PlanFlagInputs {
     basis: Vec<PatchBasisMode>,
+    default_basis: PatchBasisMode,
     input_checks: Vec<String>,
     output_checks: Vec<String>,
 }

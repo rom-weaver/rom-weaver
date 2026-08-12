@@ -46,3 +46,24 @@ describe("ApplyWorkflowController patch options: N64 byte order", () => {
     expect(options.resolvedN64ByteOrder).toBeUndefined();
   });
 });
+
+describe("ApplyWorkflowController shared patch input rule", () => {
+  it.each(["auto", "base", "previous"] as const)("forwards %s to execution", async (basis) => {
+    const controller = new ApplyWorkflowController<unknown, unknown>({ workerIo: {} } as never, {}) as never as {
+      createExecutionOptions: unknown;
+      createPatchInput: () => { defaultPatchBasis?: string };
+      getEffectiveInputSources: unknown;
+      getPreparedInputAssets: unknown;
+      patches: unknown[];
+      setDefaultPatchBasis: (value: typeof basis) => Promise<void>;
+    };
+    controller.getEffectiveInputSources = () => [];
+    controller.createExecutionOptions = () => ({});
+    controller.getPreparedInputAssets = () => [];
+    controller.patches = [];
+
+    await controller.setDefaultPatchBasis(basis);
+
+    expect(controller.createPatchInput().defaultPatchBasis).toBe(basis);
+  });
+});

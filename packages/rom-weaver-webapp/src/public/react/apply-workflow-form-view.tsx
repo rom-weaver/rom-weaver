@@ -53,6 +53,7 @@ import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-r
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { PatchInputBasis } from "./patch-input-basis.ts";
 import {
   setApplyPlayButtonOverride,
   setPostApplyRomBehaviorOverride,
@@ -1509,9 +1510,9 @@ const BundleOutputFields = ({
         </select>
       </OutputField>
       {bundleTools?.exportVisible && !bundleExport.bundleRom ? (
-        <OutputField label="Expected ROM name">
+        <OutputField label="Expected source ROM filename">
           <input
-            aria-label="Expected ROM name"
+            aria-label="Expected source ROM filename"
             autoComplete="off"
             className="input"
             disabled={bundleExport.busy}
@@ -1521,6 +1522,7 @@ const BundleOutputFields = ({
             type="text"
             value={bundleExport.romName}
           />
+          <small className="ofld-hint">The filename helps search. Checksums prove the ROM.</small>
         </OutputField>
       ) : null}
     </>
@@ -1669,6 +1671,8 @@ function ApplyWorkflowFormView({
   onSelectView,
   onUnifiedDrop,
   patchEnablement,
+  patchInputBasis,
+  onPatchInputBasisChange,
   pendingDrops = [],
   startup = { message: "", status: "ready" },
 }: {
@@ -1696,6 +1700,8 @@ function ApplyWorkflowFormView({
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[]) => void;
   patchEnablement?: PatchEnablement;
+  patchInputBasis?: PatchInputBasis;
+  onPatchInputBasisChange?: (basis: PatchInputBasis) => void;
   pendingDrops?: PendingDrop[];
   startup?: StartupState;
 }) {
@@ -2027,6 +2033,9 @@ function ApplyWorkflowFormView({
             overrideAvailable={uiState.checksumOverride.visible}
             patches={patches}
             patchStack={controllers.patchStack}
+            patchInputBasis={patchInputBasis}
+            onPatchInputBasisChange={onPatchInputBasisChange}
+            sourceRomName={romInputs.length === 1 ? romInputs[0]?.info.fileName : undefined}
             romActualsById={romActualsById}
             notice={
               <SectionNotice

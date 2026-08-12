@@ -200,6 +200,11 @@ msgstr "La validación de la suma de comprobación falló."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.help"
+msgstr "Elige el estado de ROM que lee cada parche activo. Las sumas de comprobación aún prueban la ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.close"
 msgstr "Cerrar"
 
@@ -242,6 +247,11 @@ msgstr "Oscuro"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.defaults"
 msgstr "Valores predeterminados"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.auto"
+msgstr "Detectar automáticamente"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -322,6 +332,11 @@ msgstr "Corregir orden"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Corregir cabecera ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.inherit"
+msgstr "Usar regla compartida"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -470,6 +485,11 @@ msgstr "Original"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.original"
+msgstr "ROM original"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.output"
 msgstr "Salida"
 
@@ -500,6 +520,16 @@ msgstr "La salida no se verificará: los parches están desordenados."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.override"
+msgstr "Anular entrada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.overrideLabel"
+msgstr "Anular entrada para el parche {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.viewLabel"
 msgstr "Registro mostrado"
 
@@ -507,6 +537,16 @@ msgstr "Registro mostrado"
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_CREATE_FAILED"
 msgstr "La creación del parche falló."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.mapLabel"
+msgstr "Mapa de hilos de entrada de parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.legend"
+msgstr "Entradas de parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -537,6 +577,11 @@ msgstr "Compilación de vista previa"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "salida anterior"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.previous"
+msgstr "Salida del parche anterior"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

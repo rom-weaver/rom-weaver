@@ -323,9 +323,9 @@ export type TrimCommand = { input: Array<string>, output?: string, extension?: s
  */
 rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, threads?: ThreadBudget, force?: boolean, };
 
-export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, expect_out?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
+export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, default_patch_basis?: PatchBasisMode, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, expect_out?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
 
-export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
+export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
 
 export type PatchCreateCommand = { original: string, modified?: string, format?: string, output?: string, plan?: boolean, ignore_checksum_validation?: boolean, checksum_name?: boolean, assume_in?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, solid_system?: string, solid_game?: string, solid_hack?: string, solid_version?: string, solid_author?: string, solid_contact?: string, solid_comment?: string, solid_extended?: boolean, xdelta_secondary?: string, force?: boolean, };
 
@@ -439,7 +439,12 @@ export type RomWeaverBundle = {
  * but never auto-injected by create (keeps emitted bytes stable). First
  * field so it serializes at the top, the conventional position.
  */
-$schema?: string, version: number, rom?: BundleRom,
+$schema?: string, version: number,
+/**
+ * Shared input-basis declaration for the chain. Version 2 requires this
+ * value; version 1 omits it and retains automatic inference.
+ */
+patchBasis?: PatchBasisMode, rom?: BundleRom,
 /**
  * Ordered: array order is the apply order.
  */
@@ -487,7 +492,7 @@ export type BundleCreateCommand = { rom?: string,
  * export skips re-hashing the same prepared leaf. `algo=hex` tokens supply
  * the emitted rom checks; a `size=N` token supplies the prepared size.
  */
-assume_in?: Array<string>, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_id?: Array<string>, patch_version?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_author?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode, output: string, bundle?: string,
+assume_in?: Array<string>, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_id?: Array<string>, patch_version?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_author?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode, output: string, bundle?: string,
 /**
  * Optional packaged ROM payload. Checks are still calculated from `rom`.
  */

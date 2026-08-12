@@ -72,13 +72,28 @@ pub(crate) fn parse_bundle_bytes(bytes: &[u8]) -> Result<RomWeaverBundle> {
 }
 
 fn validate_bundle(bundle: &mut RomWeaverBundle) -> Result<()> {
-    if bundle.version != BUNDLE_VERSION {
+    if !matches!(bundle.version, 1 | BUNDLE_VERSION) {
         return Err(RomWeaverError::ValidationCode(
             ValidationCodeError::new("bundle.version.unsupported")
                 .with_message("unsupported bundle version")
                 .with_field("found", bundle.version)
                 .with_field("supported", BUNDLE_VERSION),
         ));
+    }
+    match bundle.version {
+        1 if bundle.patch_basis.is_some() => {
+            return Err(bundle_validation(
+                "bundle.patch_basis.unsupported",
+                "version 1 bundles cannot declare patchBasis",
+            ));
+        }
+        BUNDLE_VERSION if bundle.patch_basis.is_none() => {
+            return Err(bundle_validation(
+                "bundle.patch_basis.missing",
+                "version 2 bundles must declare patchBasis",
+            ));
+        }
+        _ => {}
     }
     if bundle.patches.is_empty() {
         return Err(bundle_validation(
@@ -227,11 +242,10 @@ mod tests {
 
     #[test]
     fn parses_minimal_bundle() {
-        // Version 1 is the only public bundle version.
         let bundle =
             parse_bundle_bytes(br#"{ "version": 1, "patches": [ { "path": "patches/x.bps" } ] }"#)
                 .expect("minimal bundle parses");
-        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.version, 1);
         assert_eq!(bundle.patches.len(), 1);
         assert!(!bundle.patches[0].optional);
         assert_eq!(bundle.patches[0].header, None);
@@ -249,7 +263,7 @@ mod tests {
             ] }"#,
         )
         .expect("v1 bundle parses");
-        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.version, 1);
         assert_eq!(bundle.patches[0].basis, Some(PatchInputBasis::Base));
         assert_eq!(bundle.patches[1].basis, Some(PatchInputBasis::Previous));
         assert_eq!(bundle.patches[2].basis, None);
@@ -261,10 +275,34 @@ mod tests {
             br#"{ "version": 1, "patches": [ { "id": "main", "version": "1.4.0", "author": "Weaver", "path": "main.bps" } ] }"#,
         )
         .expect("v1 bundle parses");
-        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.version, 1);
         assert_eq!(bundle.patches[0].id.as_deref(), Some("main"));
         assert_eq!(bundle.patches[0].version.as_deref(), Some("1.4.0"));
         assert_eq!(bundle.patches[0].author.as_deref(), Some("Weaver"));
+    }
+
+    #[test]
+    fn parses_v2_shared_patch_basis() {
+        let bundle = parse_bundle_bytes(
+            br#"{ "version": 2, "patchBasis": "previous", "patches": [ { "path": "a.ips" } ] }"#,
+        )
+        .expect("v2 bundle parses");
+        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.patch_basis, Some(PatchBasisMode::Previous));
+    }
+
+    #[test]
+    fn rejects_patch_basis_on_v1_and_missing_patch_basis_on_v2() {
+        assert_eq!(
+            parse_err(
+                r#"{ "version": 1, "patchBasis": "base", "patches": [ { "path": "x.ips" } ] }"#
+            ),
+            "bundle.patch_basis.unsupported"
+        );
+        assert_eq!(
+            parse_err(r#"{ "version": 2, "patches": [ { "path": "x.ips" } ] }"#),
+            "bundle.patch_basis.missing"
+        );
     }
 
     #[test]
@@ -311,7 +349,7 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_version() {
-        for version in [2, 3, 4] {
+        for version in [3, 4] {
             assert_eq!(
                 parse_err(&format!(
                     r#"{{ "version": {version}, "patches": [ {{ "path": "x.ips" }} ] }}"#
@@ -441,6 +479,7 @@ mod tests {
         let bundle = RomWeaverBundle {
             schema: None,
             version: BUNDLE_VERSION,
+            patch_basis: Some(PatchBasisMode::Base),
             rom: Some(BundleRom {
                 name: Some("Game (USA).sfc".to_owned()),
                 url: Some("https://example.test/game.sfc".to_owned()),

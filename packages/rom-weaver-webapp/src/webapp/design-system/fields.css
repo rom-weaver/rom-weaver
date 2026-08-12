@@ -706,6 +706,97 @@
   text-transform: none;
   letter-spacing: 0.02em;
 }
+.rw-app .patch-input-rules {
+  display: grid;
+  gap: var(--sp-s);
+  padding: var(--sp-m);
+  margin-block-end: var(--sp-m);
+  background: var(--well);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-m);
+}
+.rw-app .patch-input-rules legend {
+  padding-inline: var(--sp-xs);
+  font-weight: 700;
+  color: var(--thread-text);
+}
+.rw-app .patch-input-rules > p {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--ink-2);
+}
+.rw-app .patch-input-radios,
+.rw-app .patch-input-map {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+  align-items: center;
+}
+.rw-app .patch-input-radios label {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  min-block-size: 24px;
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+.rw-app .patch-input-radios input {
+  inline-size: 24px;
+  block-size: 24px;
+  margin: 0;
+}
+.rw-app .patch-input-map {
+  padding-block-start: var(--sp-xs);
+  color: var(--thread-text);
+  border-block-start: 1px dashed var(--seam);
+}
+.rw-app .patch-input-thread {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+.rw-app .patch-input-thread.is-base > span:first-child {
+  color: var(--verified);
+}
+.rw-app .patch-input-thread.is-previous > span:first-child {
+  color: var(--thread);
+}
+.rw-app .patch-input-chip {
+  padding: 2px 5px;
+  font-size: 0.62rem;
+  color: var(--thread-text);
+  background: var(--plate-2);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+.rw-app .patch-input-override {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  padding: 0;
+  margin-inline-start: var(--sp-s);
+  font: inherit;
+  font-size: 0.66rem;
+  color: var(--thread-text);
+  text-decoration: underline;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+@media (hover: hover) {
+  .rw-app .patch-input-override:hover {
+    color: var(--thread);
+  }
+}
+.rw-app .patch-input-override:active {
+  color: var(--thread);
+}
 .rw-app .ckrows .patch-off-note {
   margin-block-start: 7px;
   margin-inline: 9px;

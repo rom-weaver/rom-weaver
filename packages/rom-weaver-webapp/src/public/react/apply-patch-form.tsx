@@ -54,6 +54,7 @@ import { addEntry } from "./emulator-session-store.ts";
 import { shouldRetainEmulatorOutput } from "./emulator-retention-policy.ts";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
 import { type BundleSessionControllers, useBundleApplySession } from "./use-bundle-apply-session.ts";
+import { patchInputOverridesForRuntime, resolvePatchInputBases, type PatchInputBasis } from "./patch-input-basis.ts";
 import { useUnifiedApplyDrop } from "./use-unified-apply-drop.ts";
 import { createWorkflowFormError, getReactBinarySourceFileName, toReactProgressEvent } from "./workflow-adapters.ts";
 import { usePageDropForwarder } from "./workflow-form-effects.ts";
@@ -218,6 +219,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     onCancelSelection: (request) => handleSelectionCancelledRef.current(request),
   });
   const [applyReady, setApplyReady] = useState(false);
+  const [patchInputBasis, setPatchInputBasis] = useState<PatchInputBasis>("base");
   const [completedOutput, setCompletedOutput] = useState<BrowserApplyResult["output"] | null>(null);
   const [resolvedOutputCompression, setResolvedOutputCompression] = useState<CompressionFormat | undefined>(undefined);
   const [resolvedOutputName, setResolvedOutputName] = useState("");
@@ -344,6 +346,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     setBundleDismissed(false);
   }, [bundleSessionKey]);
   const activeBundleSession = bundleDismissed ? null : localBundleSession || props.bundleSession || null;
+  useEffect(() => {
+    setPatchInputBasis(activeBundleSession?.patchBasis || "base");
+  }, [activeBundleSession]);
   const bundleControllersRef = useRef<BundleSessionControllers>({ output: null, patchStack: null });
   const { bundleDefaultsPending, handleBundlePatchesChange, bundleMetaById, updateBundleMeta } = useBundleApplySession({
     bundleSession: activeBundleSession,
@@ -373,23 +378,28 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         number,
         { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
       >();
-      getPatchIds()
-        .slice(0, patches.length)
-        .forEach((id, index) => {
-          const meta = bundleMetaRef.current.get(id || "");
-          if (!meta) return;
-          const inputChecks = toTokens(meta.inputChecks);
-          const outputChecks = toTokens(meta.outputChecks);
-          if (!(meta.basis || inputChecks || outputChecks)) return;
-          chainMeta.set(index, {
-            ...(meta.basis ? { basis: meta.basis } : {}),
-            ...(inputChecks ? { inputChecks } : {}),
-            ...(outputChecks ? { outputChecks } : {}),
-          });
+      const disabled = getDisabledPatchIndexes(patches);
+      const ids = getPatchIds().slice(0, patches.length);
+      const resolved = resolvePatchInputBases({
+        disabled: patches.map((_, index) => disabled.has(index)),
+        mode: patchInputBasis,
+        overrides: ids.map((id) => bundleMetaRef.current.get(id || "")?.basis),
+      });
+      ids.forEach((id, index) => {
+        const meta = bundleMetaRef.current.get(id || "");
+        const inputChecks = toTokens(meta?.inputChecks);
+        const outputChecks = toTokens(meta?.outputChecks);
+        const basis = resolved[index] || "auto";
+        if (!(basis !== "auto" || inputChecks || outputChecks)) return;
+        chainMeta.set(index, {
+          ...(basis === "auto" ? {} : { basis }),
+          ...(inputChecks ? { inputChecks } : {}),
+          ...(outputChecks ? { outputChecks } : {}),
         });
+      });
       return chainMeta;
     },
-    [getPatchIds],
+    [getDisabledPatchIndexes, getPatchIds, patchInputBasis],
   );
 
   // Latest patch list mirror for flows outside the staging pipeline (bundle export).
@@ -711,6 +721,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           workflowPatchesChanged,
         });
         await setWorkflowSettingsIfChanged({ baseSettings, changed: executionSettingsChanged, snapshot, workflow });
+        await workflow.setDefaultPatchBasis(snapshot.defaultPatchBasis ?? "base");
         if (patchesChanged && !patchesAppended && singleReplaceIndex < 0) {
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearPatches start");
           await workflow.clearPatches();
@@ -1031,7 +1042,27 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         };
       });
       const filteredRun = filterEnabledPatchRun(rawInput.patches, runOptions);
-      const input: ApplyWorkflowSessionInput = { ...rawInput, ...filteredRun };
+      const disabled = rawInput.patches.map((_, index) => disabledPatchIds.has(patchIds[index] || ""));
+      const overrides = patchInputOverridesForRuntime({
+        disabled,
+        mode: patchInputBasis,
+        overrides: runOptions.map((option) => option.basis),
+      });
+      const input: ApplyWorkflowSessionInput = {
+        ...rawInput,
+        ...filteredRun,
+        defaultPatchBasis: patchInputBasis,
+        ...(overrides
+          ? {
+              patchOptions: overrides
+                .filter((_, index) => !disabled[index])
+                .map((basis, index) => ({
+                  ...filteredRun.patchOptions?.[index],
+                  ...(basis === "auto" ? {} : { basis }),
+                })),
+            }
+          : {}),
+      };
       const runPreparedWorkflow = async ({
         input: stagedInput,
         patches,
@@ -1110,6 +1141,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       });
     },
     [
+      disabledPatchIds,
       emitWorkflowProgress,
       handleApplyComplete,
       threads,
@@ -1119,6 +1151,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       prepareWorkflow,
       filterEnabledPatchRun,
       getPatchIds,
+      patchInputBasis,
       workflowHandle,
     ],
   );
@@ -1339,6 +1372,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           });
           await workflow.validatePatches({
             chainMeta: buildChainMeta(input.patches),
+            defaultPatchBasis: patchInputBasis,
             disabledIndexes,
           });
           setChainPlans(new Map(workflow.latestChainPlans));
@@ -1346,7 +1380,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
       );
     },
-    [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, withPreparedWorkflow],
+    [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, patchInputBasis, withPreparedWorkflow],
   );
 
   const setPatchTarget = useCallback(
@@ -1432,6 +1466,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           if (revalidate) {
             await workflow.validatePatches({
               chainMeta: buildChainMeta(input.patches),
+              defaultPatchBasis: patchInputBasis,
               disabledIndexes: getDisabledPatchIndexes(input.patches),
             });
             setChainPlans(new Map(workflow.latestChainPlans));
@@ -1459,7 +1494,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
       );
     },
-    [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, withPreparedWorkflow],
+    [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, patchInputBasis, withPreparedWorkflow],
   );
 
   const { localUiController, localStackController, localOutputController, localNoticeController } =
@@ -1467,6 +1502,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       ...propsWithSettings,
       applyPatches,
       applyReady: applyReady && !bundleDefaultsPending,
+      defaultPatchBasis: patchInputBasis,
       disabledPatchIds,
       downloadOutput,
       onApplyComplete: () => undefined,
@@ -1500,6 +1536,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       : "");
   const bundleExport = useBundleExport({
     bundleMetaById,
+    patchBasis: patchInputBasis,
     disabledPatchIds,
     getPatchIds,
     getName: () => resolvedOutputController.getState().displayFileName,
@@ -1628,6 +1665,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           getPatchIds,
           onToggle: togglePatchEnabled,
         }}
+        patchInputBasis={patchInputBasis}
+        onPatchInputBasisChange={setPatchInputBasis}
         pendingDrops={pendingDrops}
         startup={startup}
       />

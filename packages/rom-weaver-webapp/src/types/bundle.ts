@@ -46,9 +46,7 @@ type ParsedBundlePatchEntry = {
   /** Expected post-apply state, only when it differs from the final `output.checks`. */
   outputChecks?: ParsedBundleChecks;
   header?: BundleHeaderMode;
-  /** What this patch's input checks were authored against: the bundle's rom (`base`, verified
-   * once up front) or the previous selected patch's output (`previous`, the default). Absent
-   * means previous/inferred. */
+  /** Per-entry override of the bundle's shared patch input rule. */
   basis?: "base" | "previous";
 };
 
@@ -61,6 +59,8 @@ type ParsedBundleOutput = {
 
 type ParsedBundle = {
   version: number;
+  /** v2 shared patch input rule. v1 bundles omit this and preserve automatic inference. */
+  patchBasis?: "auto" | "base" | "previous";
   rom?: ParsedBundleRom;
   /** Ordered: array order is the apply order. */
   patches: ParsedBundlePatchEntry[];

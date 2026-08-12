@@ -44,6 +44,7 @@ import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { formatHeaderAutoLabel } from "./patcher-view-models.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import { resolvePatchInputBases, type PatchInputBasis } from "./patch-input-basis.ts";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
 const TIMING_LABEL = (ms?: number) =>
@@ -603,12 +604,27 @@ const chainChipText = (
   return null;
 };
 
-/** The auto option names what inference resolved so pinning is a conscious
- * override; with a pin active (or no plan yet) it stays a plain "auto". */
-const autoBasisLabel = (item: PatchStackItemState, localizer: Localizer, meta?: BundlePatchMeta): string => {
-  const verdict = item.chainVerdict;
-  if (meta?.basis || !verdict || verdict.basisSource === "declared") return localizer.message("ui.basis.auto");
-  return verdict.basis === "base" ? localizer.message("ui.basis.autoBase") : localizer.message("ui.basis.autoPrevious");
+const resolvedBasisLabel = (
+  basis: PatchInputBasis,
+  localizer: Localizer,
+  verdictBasis?: "base" | "previous",
+): string => {
+  const effective = basis === "auto" ? verdictBasis : basis;
+  if (!effective) return localizer.message("ui.patchInputs.auto");
+  const resolved =
+    effective === "base" ? localizer.message("ui.patchInputs.original") : localizer.message("ui.patchInputs.previous");
+  return basis === "auto" ? `${localizer.message("ui.patchInputs.auto")} → ${resolved}` : resolved;
+};
+
+const effectivePatchInputBasis = (
+  basis: PatchInputBasis,
+  verdictBasis?: "base" | "previous",
+): "base" | "previous" | undefined => (basis === "auto" ? verdictBasis : basis);
+
+const patchInputMarker = (basis?: "base" | "previous"): string => {
+  if (basis === "previous") return "↳";
+  if (basis === "base") return "●";
+  return "?";
 };
 
 const PatchChecksDrawer = ({
@@ -623,6 +639,7 @@ const PatchChecksDrawer = ({
   onMetaChange,
   outputCheckHint,
   patchStack,
+  previousBasisAvailable,
   romActuals,
 }: {
   /** Show the author's input-basis select in the Input group head (a stack of
@@ -648,6 +665,7 @@ const PatchChecksDrawer = ({
    * expected output only describes the full chain. */
   outputCheckHint?: boolean;
   patchStack: PatcherStackController;
+  previousBasisAvailable: boolean;
   /** The chain-input patch's target ROM computed checks - the actual values a
    * user-entered INPUT check is compared against for its per-row match mark. */
   romActuals?: RomCheckActuals;
@@ -655,6 +673,7 @@ const PatchChecksDrawer = ({
   const setOption = patchStack.setPatchOption;
   const localizer = useUiLocalizer();
   const [invalidChecks, setInvalidChecks] = useState<Record<string, boolean>>({});
+  const [basisOverrideVisible, setBasisOverrideVisible] = useState(false);
   // Fields opened via "Add check" that have no committed value yet.
   const [draftFields, setDraftFields] = useState<Record<string, boolean>>({});
   const { inputRows, outputRows } = getPatchVerificationRows(item);
@@ -766,27 +785,34 @@ const PatchChecksDrawer = ({
             <span>{side === "input" ? "Input" : "Output"}</span>
             {side === "input" && onMetaChange && basisSelectVisible ? (
               <>
-                <label className="sr-only" htmlFor={`rom-weaver-patch-basis-${index}`}>
-                  Which ROM the input checks describe
-                </label>
-                <select
-                  className="meta-target-select mono ck-basis-select"
-                  id={`rom-weaver-patch-basis-${index}`}
-                  onChange={(event) => {
-                    const next = event.currentTarget.value;
-                    const basis = next === "base" || next === "previous" ? next : undefined;
-                    // Auto clears the pin - checksum inference decides again. The basis
-                    // feeds the chain plan, so re-resolve the verdicts either way.
-                    onMetaChange({ basis });
-                    setOption?.(index, { basis, revalidate: true });
-                  }}
-                  title="Which ROM this patch's input checks describe: the base ROM (verified once up front) or the previous patch's output."
-                  value={meta?.basis || ""}
-                >
-                  <option value="">{autoBasisLabel(item, localizer, meta)}</option>
-                  <option value="base">{localizer.message("ui.basis.base")}</option>
-                  <option value="previous">{localizer.message("ui.basis.previous")}</option>
-                </select>
+                {basisOverrideVisible || !!meta?.basis ? (
+                  <>
+                    <label className="sr-only" htmlFor={`rom-weaver-patch-basis-${index}`}>
+                      {localizer.message("ui.patchInputs.overrideLabel", { n: index + 1 })}
+                    </label>
+                    <select
+                      className="meta-target-select mono ck-basis-select"
+                      id={`rom-weaver-patch-basis-${index}`}
+                      onChange={(event) => {
+                        const next = event.currentTarget.value;
+                        const basis = next === "base" || next === "previous" ? next : undefined;
+                        onMetaChange({ basis });
+                        setOption?.(index, { basis, revalidate: true });
+                      }}
+                      value={!previousBasisAvailable && meta?.basis === "previous" ? "base" : meta?.basis || ""}
+                    >
+                      <option value="">{localizer.message("ui.patchInputs.inherit")}</option>
+                      <option value="base">{localizer.message("ui.patchInputs.original")}</option>
+                      <option disabled={!previousBasisAvailable} value="previous">
+                        {localizer.message("ui.patchInputs.previous")}
+                      </option>
+                    </select>
+                  </>
+                ) : (
+                  <button className="patch-input-override" onClick={() => setBasisOverrideVisible(true)} type="button">
+                    {localizer.message("ui.patchInputs.override")}
+                  </button>
+                )}
               </>
             ) : null}
           </div>
@@ -1181,6 +1207,8 @@ const PatchCard = ({
   outputCheckHint,
   overrideAvailable,
   patchStack,
+  previousBasisAvailable,
+  resolvedBasis,
   position,
   romActuals,
   rowProps,
@@ -1206,6 +1234,8 @@ const PatchCard = ({
   outputCheckHint?: boolean;
   overrideAvailable?: boolean;
   patchStack: PatcherStackController;
+  previousBasisAvailable: boolean;
+  resolvedBasis: PatchInputBasis;
   position: number;
   /** This patch's target ROM computed checks, for verifying input checks. */
   romActuals?: RomCheckActuals;
@@ -1214,6 +1244,7 @@ const PatchCard = ({
 }) => {
   // Pencil edit state: the name and description editors open/close together.
   const [metaEditing, setMetaEditing] = useState(false);
+  const localizer = useUiLocalizer();
   const editing = metaEditing && !!onMetaChange;
   const description = meta?.description || "";
   // Mirrors the ROM card: the resolved card structure (collapsed Extract +
@@ -1277,6 +1308,9 @@ const PatchCard = ({
           {item.fileSize ? <span className="fsize mono">{formatByteSize(item.fileSize)}</span> : null}
           {item.format ? <span className="meta-fmt mono">{item.format.toLowerCase()}</span> : null}
           {meta?.label ? <span className="meta-fmt mono">{meta.label}</span> : null}
+          <span className="patch-input-chip mono" id={`rom-weaver-patch-input-${index}`}>
+            {resolvedBasisLabel(resolvedBasis, localizer, item.chainVerdict?.basis)}
+          </span>
           {/* Icon chips mark these as authored metadata (release tag, credit)
               among the plain file-fact chips. */}
           {meta?.version ? (
@@ -1375,6 +1409,7 @@ const PatchCard = ({
             onMetaChange={onMetaChange}
             outputCheckHint={outputCheckHint}
             patchStack={patchStack}
+            previousBasisAvailable={previousBasisAvailable}
             romActuals={romActuals}
           />
         </div>
@@ -1396,6 +1431,9 @@ const ApplyPatchListStep = ({
   overrideAvailable,
   patches,
   patchStack,
+  patchInputBasis = "base",
+  onPatchInputBasisChange,
+  sourceRomName,
   romActualsById,
   woven,
 }: {
@@ -1420,6 +1458,9 @@ const ApplyPatchListStep = ({
   romActualsById?: ReadonlyMap<string, RomCheckActuals>;
   patches: PatchStackItemState[];
   patchStack: PatcherStackController;
+  patchInputBasis?: PatchInputBasis;
+  onPatchInputBasisChange?: (basis: PatchInputBasis) => void;
+  sourceRomName?: string;
   woven?: boolean;
 }) => {
   const total = patches.length;
@@ -1443,6 +1484,22 @@ const ApplyPatchListStep = ({
   const chainInputIndex = enabledIndexes[0] ?? -1;
   const chainOutputIndex = enabledIndexes.at(-1) ?? -1;
   const localizer = useUiLocalizer();
+  const resolvedBases = resolvePatchInputBases({
+    disabled: patches.map((_, index) => !!disabledFlags?.[index]),
+    mode: patchInputBasis,
+    overrides: patches.map((_, index) => bundleMeta?.[index]?.basis),
+  });
+  const sourceLabel = sourceRomName || localizer.message("ui.patchInputs.original");
+  const mapLabel = `${localizer.message("ui.patchInputs.mapLabel")}: ${sourceLabel}; ${enabledIndexes
+    .map((index) => {
+      const patchLabel = patches[index]?.fileName || `Patch ${index + 1}`;
+      return `${patchLabel}: ${resolvedBasisLabel(
+        resolvedBases[index] || "auto",
+        localizer,
+        patches[index]?.chainVerdict?.basis,
+      )}`;
+    })
+    .join("; ")}`;
   return (
     <StepSection
       fault={fault}
@@ -1476,6 +1533,60 @@ const ApplyPatchListStep = ({
       title="Patches"
       woven={woven}
     >
+      {enabledIndexes.length >= 2 ? (
+        <fieldset
+          aria-describedby="rom-weaver-patch-input-help"
+          className="patch-input-rules"
+          id="rom-weaver-patch-inputs"
+        >
+          <legend>{localizer.message("ui.patchInputs.legend")}</legend>
+          <p id="rom-weaver-patch-input-help">{localizer.message("ui.patchInputs.help")}</p>
+          <div className="patch-input-radios">
+            {(
+              [
+                ["base", "ui.patchInputs.original"],
+                ["previous", "ui.patchInputs.previous"],
+                ["auto", "ui.patchInputs.auto"],
+              ] as const
+            ).map(([value, label]) => (
+              <label key={value}>
+                <input
+                  checked={patchInputBasis === value}
+                  name="rom-weaver-patch-input-rule"
+                  onChange={() => onPatchInputBasisChange?.(value)}
+                  type="radio"
+                  value={value}
+                />
+                <span>{localizer.message(label)}</span>
+              </label>
+            ))}
+          </div>
+          <div aria-label={mapLabel} className="patch-input-map" role="img">
+            <span className="patch-input-thread patch-input-origin is-base">
+              <span>●</span>
+              {sourceLabel}
+            </span>
+            {enabledIndexes.map((index) => {
+              const basis = resolvedBases[index] || "auto";
+              const effectiveBasis = effectivePatchInputBasis(basis, patches[index]?.chainVerdict?.basis);
+              return (
+                <span
+                  className={`patch-input-thread is-${effectiveBasis || "auto"}`}
+                  key={patches[index]?.key || index}
+                >
+                  <span>{patchInputMarker(effectiveBasis)}</span>
+                  <span className="sr-only">
+                    {patchInputBasis === "auto"
+                      ? `${resolvedBasisLabel(basis, localizer, patches[index]?.chainVerdict?.basis)}: `
+                      : ""}
+                  </span>
+                  {patches[index]?.fileName || `Patch ${index + 1}`}
+                </span>
+              );
+            })}
+          </div>
+        </fieldset>
+      ) : null}
       <div
         className="cards patch-cards workflow-file-list"
         id="rom-weaver-list-patch-stack"
@@ -1501,6 +1612,8 @@ const ApplyPatchListStep = ({
             outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}
             overrideAvailable={overrideAvailable}
             patchStack={patchStack}
+            previousBasisAvailable={index !== chainInputIndex}
+            resolvedBasis={resolvedBases[index] || "auto"}
             position={reorderList.displayIndex(index) + 1}
             romActuals={item.targetValue ? romActualsById?.get(item.targetValue) : undefined}
             rowProps={reorderList.rowProps(index)}

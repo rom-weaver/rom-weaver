@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v2.schema.json",
+  "title": "rom-weaver bundle",
+  "description": "Schema revision v2 for the distributable patching-workflow definition. It adds a required shared patchBasis rule. Unknown fields are rejected.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "patchBasis", "patches"],
+  "properties": {
+    "$schema": { "description": "Optional editor JSON Schema reference.", "type": "string" },
+    "version": { "description": "Bundle schema version.", "type": "integer", "const": 2 },
+    "patchBasis": {
+      "description": "Shared input basis for patch entries. Entry basis overrides this rule. auto uses checksum inference.",
+      "type": "string",
+      "enum": ["auto", "base", "previous"]
+    },
+    "rom": { "description": "The input ROM for the patch chain.", "$ref": "#/$defs/rom" },
+    "patches": {
+      "description": "Ordered patch chain: array order is the apply order. At least one entry.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/patch" }
+    },
+    "output": { "description": "Defaults for the final patched output.", "$ref": "#/$defs/output" }
+  },
+  "$defs": {
+    "checks": {
+      "description": "Expected checksums (algorithm -> lowercase hex) and/or exact byte size.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "checksums": {
+          "description": "Map of checksum algorithm to expected lowercase hex digest.",
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "propertyNames": { "enum": ["crc32", "md5", "sha1"] }
+        },
+        "size": { "description": "Exact expected byte size.", "type": "integer", "minimum": 0 }
+      }
+    },
+    "headerMode": {
+      "description": "ROM copier-header handling.",
+      "type": "string",
+      "enum": ["auto", "keep", "strip"]
+    },
+    "rom": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "description": "Expected source ROM filename. A mismatch is advisory; checks and size verify the bytes.", "type": "string" },
+        "url": { "description": "Download URL for the ROM. Mutually exclusive with path.", "type": "string" },
+        "path": { "description": "Bundle-relative ROM path. Mutually exclusive with url.", "type": "string" },
+        "checks": { "description": "Expected checksums and size for the ROM.", "$ref": "#/$defs/checks" }
+      },
+      "not": { "required": ["url", "path"] }
+    },
+    "patch": {
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [{ "required": ["url"] }, { "required": ["path"] }],
+      "properties": {
+        "id": { "description": "Stable patch-slot identity.", "type": "string", "minLength": 1 },
+        "version": { "description": "Patch release version.", "type": "string", "minLength": 1 },
+        "author": { "description": "Patch author credit.", "type": "string", "minLength": 1 },
+        "name": { "description": "Display name for the patch.", "type": "string" },
+        "description": { "description": "Patch description.", "type": "string" },
+        "optional": { "description": "When true the patch starts deselected.", "type": "boolean" },
+        "label": { "description": "Maturity or display label.", "type": "string" },
+        "url": { "description": "Download URL for the patch. Mutually exclusive with path.", "type": "string" },
+        "path": { "description": "Bundle-relative patch path. Mutually exclusive with url.", "type": "string" },
+        "inputChecks": { "description": "Expected pre-apply state when it differs from rom checks.", "$ref": "#/$defs/checks" },
+        "outputChecks": { "description": "Expected post-apply state when it differs from final output checks.", "$ref": "#/$defs/checks" },
+        "header": { "description": "Per-patch header-mode override.", "$ref": "#/$defs/headerMode" },
+        "basis": {
+          "description": "Per-entry base or previous override of patchBasis. Omit when it equals the shared rule.",
+          "type": "string",
+          "enum": ["base", "previous"]
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "description": "Default output file name.", "type": "string" },
+        "header": { "description": "Default output header mode.", "$ref": "#/$defs/headerMode" },
+        "checks": { "description": "Expected checksums and size after the full chain.", "$ref": "#/$defs/checks" }
+      }
+    }
+  }
+}

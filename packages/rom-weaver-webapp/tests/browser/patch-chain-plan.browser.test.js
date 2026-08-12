@@ -42,9 +42,26 @@ const dropFixtures = async (paths) => {
   }
 };
 
+const chooseSharedPatchInput = async (value) => {
+  const findInput = () => document.querySelector(`input[name="rom-weaver-patch-input-rule"][value="${value}"]`);
+  await expect.poll(findInput).toBeInstanceOf(HTMLInputElement);
+  const input = findInput();
+  input.click();
+  await expect.poll(() => input.checked).toBe(true);
+};
+
+const showPatchInputOverride = async (index) => {
+  await expect.poll(() => document.querySelectorAll(".patch-input-override").length).toBeGreaterThan(index);
+  document.querySelectorAll(".patch-input-override")[index].click();
+  const findSelect = () => document.getElementById(`rom-weaver-patch-basis-${index}`);
+  await expect.poll(findSelect).toBeInstanceOf(HTMLSelectElement);
+  return findSelect();
+};
+
 test("a true BPS chain defers the dependent patch instead of failing it", async () => {
   mount(createElement(ApplyPatchForm, {}));
   await dropFixtures([RAW_ROM, CHAIN_A, CHAIN_B]);
+  await chooseSharedPatchInput("auto");
 
   // The chain head verifies against the ROM; the dependent patch is deferred
   // with its link named - never dry-run against the wrong bytes.
@@ -94,16 +111,14 @@ test("checksumless patches with no evidence each verify against the ROM regardle
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
 }, 120000);
 
-test("the basis select names the inferred basis and a pin re-plans the chain", async () => {
+test("an advanced patch input override re-plans the shared rule", async () => {
   mount(createElement(ApplyPatchForm, {}));
   await dropFixtures([RAW_ROM, CHAIN_A, SAME_BASE_D]);
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("matches your ROM");
 
-  // The select's auto option names what inference resolved.
-  const basisSelect = document.getElementById("rom-weaver-patch-basis-1");
-  expect(basisSelect).toBeInstanceOf(HTMLSelectElement);
+  const basisSelect = await showPatchInputOverride(1);
   expect(basisSelect.value).toBe("");
-  expect(basisSelect.options[0]?.textContent).toBe("auto (base ROM)");
+  expect(basisSelect.options[0]?.textContent).toBe("Use shared rule");
 
   // Pinning "previous output" overrides the inference: the re-plan stops
   // verifying this patch against the ROM and defers it to apply (where the
@@ -111,7 +126,7 @@ test("the basis select names the inferred basis and a pin re-plans the chain", a
   setFormControlValue(basisSelect, "previous");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("verified during apply");
 
-  // Back to auto: inference decides again and the chip recovers.
+  // Return to the shared original-ROM rule.
   setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("matches your ROM");
 }, 180000);
@@ -129,7 +144,7 @@ test("a Previous basis pin reaches Apply execution", async () => {
   // real apply command, which then checks it against patch 1's intermediate
   // and rejects that checksum. If execution drops the pin, inference chooses
   // base and the same run incorrectly succeeds.
-  setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "previous");
+  setFormControlValue(await showPatchInputOverride(1), "previous");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("verified during apply");
   await waitForApplyButtonEnabled();
   await clickApplyButton();
@@ -143,6 +158,7 @@ test("an out-of-order chain names its predecessor and Fix order repairs it", asy
   mount(createElement(ApplyPatchForm, {}));
   // c expects b's output but is listed before b.
   await dropFixtures([RAW_ROM, CHAIN_A, CHAIN_C, CHAIN_B]);
+  await chooseSharedPatchInput("auto");
 
   await expect.poll(() => chipText(1), { timeout: 60000 }).toContain("expects patch 3 first");
   await expect

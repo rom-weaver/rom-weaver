@@ -110,6 +110,8 @@ type PatchInput = {
   patches?: Array<SourceRef> | SourceRef;
   patchTargets?: Array<"auto" | string>;
   patchOptions?: PatchApplyUserOptions[];
+  /** Shared default sent once to the Rust patch planner. */
+  defaultPatchBasis?: "auto" | "base" | "previous";
   preparedInputAssets?: InputAsset[];
   preparedPatchFiles?: PatchFileInstance[];
   parsedPatches?: ParsedPatchLike[];

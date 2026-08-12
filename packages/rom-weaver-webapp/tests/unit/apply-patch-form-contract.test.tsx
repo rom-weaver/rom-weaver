@@ -119,6 +119,7 @@ const createFakeApplyWorkflow = () => {
         handlers?.onFinalized?.(input);
       },
     ),
+    setDefaultPatchBasis: vi.fn(async () => undefined),
     setOutputFormat: vi.fn(async () => undefined),
     setOutputName: vi.fn(async () => undefined),
     setPatchOption: vi.fn(async () => undefined),
@@ -198,6 +199,7 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     await vi.waitFor(() => {
       expect(latestFakeWorkflow?.setInput).toHaveBeenCalled();
     });
+    expect(latestFakeWorkflow?.setDefaultPatchBasis).toHaveBeenCalledWith("base");
 
     await vi.waitFor(() => {
       expect(container.querySelector("section.step.is-input.is-empty")).toBeNull();

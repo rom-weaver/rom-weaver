@@ -40,6 +40,7 @@ type ApplyWorkflowSessionInput = {
   patches: BinarySource[];
   /** Index-aligned with `patches`. */
   patchOptions?: ApplyPatchRunOptions[];
+  defaultPatchBasis?: "auto" | "base" | "previous";
   options: ApplyPatchFormSettings & {
     output: NonNullable<ApplyPatchFormSettings["output"]> & {
       compression: "auto" | CompressionFormat;
