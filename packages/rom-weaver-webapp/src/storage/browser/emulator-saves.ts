@@ -142,7 +142,7 @@ const deleteBuiltinRecords = async (gameName: string): Promise<void> => {
   const databaseNames = new Set<string>(["EmulatorJS-states"]);
   const databases = (factory as IDBFactory & { databases?: () => Promise<IDBDatabaseInfo[]> }).databases;
   if (databases) {
-    for (const database of await databases()) {
+    for (const database of await databases.call(factory)) {
       if (database.name?.startsWith("EM_FS_")) databaseNames.add(database.name);
     }
   }

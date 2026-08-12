@@ -150,7 +150,11 @@ class FakeDatabase {
 // `upgrade: false` stands in for a database already on the current version, so
 // the open runs without the migration the upgrade would otherwise perform.
 const createFakeIndexedDb = (database = new FakeDatabase(), { upgrade = true } = {}) => {
-  return {
+  const factory = {
+    databases() {
+      if (this !== factory) throw new Error("IDBFactory.databases requires its receiver.");
+      return Promise.resolve([]);
+    },
     open: () => {
       const request: FakeRequest & { transaction: FakeTransaction } = {
         error: null,
@@ -166,7 +170,8 @@ const createFakeIndexedDb = (database = new FakeDatabase(), { upgrade = true } =
       });
       return request;
     },
-  } as unknown as IDBFactory;
+  };
+  return factory as unknown as IDBFactory;
 };
 
 const record: EmulatorSaveRecord = {
