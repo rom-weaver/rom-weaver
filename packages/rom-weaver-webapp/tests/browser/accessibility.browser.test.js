@@ -967,18 +967,9 @@ describe("webapp keyboard navigation", () => {
           createElement("button", { id: "background-action", type: "button" }, "Background action"),
           createElement(
             Modal,
-            {
-              footer: createElement(
-                "div",
-                { style: { display: "none" } },
-                createElement("button", { type: "button" }, "Hidden footer action"),
-              ),
-              onClose: noop,
-              open: true,
-              title: "Settings",
-            },
+            { onClose: noop, open: true, title: "Settings" },
             createElement("button", { type: "button" }, "First action"),
-            createElement("button", { id: "last-action", type: "button" }, "Last action"),
+            createElement("button", { type: "button" }, "Last action"),
           ),
         ),
       ),
@@ -988,7 +979,7 @@ describe("webapp keyboard navigation", () => {
 
     const dialog = document.body.querySelector('[role="dialog"]');
     const first = dialog?.querySelector("button.dlg-x");
-    const last = dialog?.querySelector("#last-action");
+    const last = Array.from(document.body.querySelectorAll(".rw-modal button")).at(-1);
     expect(dialog).toBeTruthy();
     expect(dialog?.getAttribute("aria-modal")).toBe("true");
     expect(host.querySelector("#background-action")?.closest("[inert]")).toBeTruthy();

@@ -19,11 +19,8 @@ const getFocusableElements = (root: HTMLElement): HTMLElement[] =>
     if (element.tabIndex === -1 || element.matches(":disabled") || element.closest('[aria-hidden="true"]'))
       return false;
     if (element.hidden || element.closest("[hidden]")) return false;
-    for (let current: HTMLElement | null = element; current; current = current.parentElement) {
-      const style = getComputedStyle(current);
-      if (style.display === "none" || style.visibility === "hidden") return false;
-    }
-    return true;
+    const style = getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
   });
 
 /**
@@ -140,7 +137,6 @@ const Modal = ({
   onClose,
   title,
   subtitle,
-  footer,
   headerActions,
   showCloseButton = true,
   variant,
@@ -150,7 +146,6 @@ const Modal = ({
   onClose: () => void;
   title?: ReactNode;
   subtitle?: ReactNode;
-  footer?: ReactNode;
   headerActions?: ReactNode;
   showCloseButton?: boolean;
   variant?: string;
@@ -177,7 +172,6 @@ const Modal = ({
         </div>
       ) : null}
       <div className="modal-body">{children}</div>
-      {footer ? <div className="modal-foot">{footer}</div> : null}
     </ModalShell>
   );
 };

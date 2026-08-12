@@ -1,12 +1,11 @@
 import "./design-system/docs-route.css";
-import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree, X } from "lucide-react";
+import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import type { DocSearchEntry } from "virtual:rom-weaver-docs-search";
 import { createLogger } from "../lib/logging.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
-import { Modal } from "../public/react/components/ds/modal.tsx";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { findSearchToken, searchDocs } from "./docs-search.mjs";
@@ -489,32 +488,36 @@ const DocsFaqPreview = () => (
 );
 
 const TrailRow = ({
+  buttonRef,
   onNavigate,
   onSearchQueryChange,
   onSearchSelect,
   onToggle,
   query,
   results,
-  sheetOpen,
+  menuOpen,
 }: {
+  buttonRef?: { current: HTMLButtonElement | null };
   onNavigate: () => void;
   onSearchQueryChange: (query: string) => void;
   onSearchSelect: (result: DocSearchResult, query: string) => void;
   onToggle: () => void;
   query: string;
   results: readonly DocSearchResult[];
-  sheetOpen: boolean;
+  menuOpen: boolean;
 }) => (
   <div className="docs-trail-row">
     <button
-      aria-expanded={sheetOpen}
-      aria-label={sheetOpen ? "Close contents" : undefined}
+      aria-controls="docs-contents-menu"
+      aria-expanded={menuOpen}
+      aria-haspopup="true"
       className="docs-trail-menu"
       onClick={onToggle}
+      ref={buttonRef}
       type="button"
     >
-      {sheetOpen ? <X aria-hidden="true" /> : <ListTree aria-hidden="true" />}
-      <span>{sheetOpen ? "Close" : "Contents"}</span>
+      <ListTree aria-hidden="true" />
+      <span>Contents</span>
     </button>
     <div className="docs-trail-search">
       <DocsSearch
@@ -533,8 +536,8 @@ const TrailRow = ({
  *
  * It holds the bottom of the screen, immediately above the app's own dock, so
  * the two ways out of a guide - another guide, another mode - sit under the
- * same thumb. The desktop rails are the sidebar; here they are one sheet the
- * Contents button opens.
+ * same thumb. The desktop rails are the sidebar; here they are a menu above
+ * the trail that the Contents button opens.
  *
  * The gauge rides the bar's top edge, which is the seam between the guide and
  * the chrome, so the reader can see where they are in a long guide without
@@ -565,12 +568,34 @@ const TrailHead = ({
   searchResults: readonly DocSearchResult[];
   weights: readonly number[];
 }) => {
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const closeSheet = useCallback(() => setSheetOpen(false), []);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const trailRef = useRef<HTMLDivElement | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
   const outlined = route.sections.length > 0;
 
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeMenu();
+      menuButtonRef.current?.focus();
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && trailRef.current?.contains(event.target)) return;
+      closeMenu();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [closeMenu, menuOpen]);
+
   return (
-    <div className="docs-trail">
+    <div className="docs-trail" ref={trailRef}>
       {outlined ? (
         <span aria-hidden="true" className="warp-gauge">
           {route.sections.map((section, index) => (
@@ -580,43 +605,28 @@ const TrailHead = ({
         </span>
       ) : null}
       <TrailRow
-        onNavigate={closeSheet}
+        buttonRef={menuButtonRef}
+        onNavigate={closeMenu}
         onSearchQueryChange={onSearchQueryChange}
         onSearchSelect={onSearchSelect}
-        onToggle={() => setSheetOpen((open) => !open)}
+        onToggle={() => setMenuOpen((open) => !open)}
         query={searchQuery}
         results={searchResults}
-        sheetOpen={sheetOpen}
+        menuOpen={menuOpen}
       />
-      {/* Both lists at once: the outline the reader is inside, then every guide.
-          Two separate sheets meant guessing which one a single button promised. */}
-      <Modal
-        footer={
-          <TrailRow
-            onNavigate={closeSheet}
-            onSearchQueryChange={onSearchQueryChange}
-            onSearchSelect={onSearchSelect}
-            onToggle={closeSheet}
-            query={searchQuery}
-            results={searchResults}
-            sheetOpen
+      {menuOpen ? (
+        <aside aria-label="Documentation contents" className="docs-contents-menu" id="docs-contents-menu">
+          {outlined ? (
+            <SectionRail activeIndex={activeIndex} initializing={initializing} onNavigate={closeMenu} route={route} />
+          ) : null}
+          <DocsNav
+            currentSlug={route.slug}
+            onNavigate={closeMenu}
+            onShelfToggle={onShelfToggle}
+            openShelves={openShelves}
           />
-        }
-        onClose={closeSheet}
-        open={sheetOpen}
-        title={route.title}
-        variant="guide-sheet"
-      >
-        {outlined ? (
-          <SectionRail activeIndex={activeIndex} initializing={initializing} onNavigate={closeSheet} route={route} />
-        ) : null}
-        <DocsNav
-          currentSlug={route.slug}
-          onNavigate={closeSheet}
-          onShelfToggle={onShelfToggle}
-          openShelves={openShelves}
-        />
-      </Modal>
+        </aside>
+      ) : null}
     </div>
   );
 };

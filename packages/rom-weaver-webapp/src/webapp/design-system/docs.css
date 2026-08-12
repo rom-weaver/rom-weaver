@@ -1022,10 +1022,6 @@ html:has(.docs-workbench) {
   .rw-app .docs-index {
     display: grid;
   }
-  .rw-app .rw-modal.guide-sheet .guide-nav {
-    overflow: visible;
-  }
-
   /* Fixed to the bottom, riding directly on top of the app dock: the two ways
      out of a guide - another guide, another mode - then sit under one thumb.
      It clears the dock through the same `--dock-h` the dock pad uses, so the
@@ -1059,6 +1055,7 @@ html:has(.docs-workbench) {
     gap: var(--sp-s);
     align-items: center;
     height: var(--docs-trail-h);
+    padding-inline: var(--sp-s);
   }
   .rw-app .docs-trail-menu {
     display: inline-flex;
@@ -1111,14 +1108,20 @@ html:has(.docs-workbench) {
   .rw-app .docs-trail-search .docs-search input {
     background: var(--plate);
   }
-  .rw-app .rw-modal.guide-sheet .modal-foot .docs-trail-row {
-    position: relative;
-  }
-  .rw-app .rw-modal.guide-sheet .modal-foot .docs-trail-search .docs-search {
-    position: static;
-  }
-  .rw-app .rw-modal.guide-sheet .modal-foot .docs-search-results {
-    inset: auto var(--gutter) calc(100% + 5px);
+  .rw-app .docs-contents-menu {
+    position: fixed;
+    inset: auto var(--gutter) calc(var(--dock-h, 0px) + var(--docs-trail-h) + var(--sp-s));
+    z-index: 999;
+    display: grid;
+    gap: var(--sp-m);
+    max-height: min(70dvh, calc(100dvh - var(--dock-h, 0px) - var(--docs-trail-h) - 2 * var(--sp-s)));
+    padding: var(--sp-s);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--plate);
+    border: 1px solid var(--seam-strong);
+    border-radius: var(--r-l);
+    box-shadow: var(--overlay-shadow);
   }
   /* Results open upward - the bar is the floor of the screen now - and against
      the bar rather than the input, so a phone gets the full width to read them
