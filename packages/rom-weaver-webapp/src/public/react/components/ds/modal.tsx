@@ -137,6 +137,7 @@ const Modal = ({
   onClose,
   title,
   subtitle,
+  footer,
   headerActions,
   showCloseButton = true,
   variant,
@@ -146,6 +147,7 @@ const Modal = ({
   onClose: () => void;
   title?: ReactNode;
   subtitle?: ReactNode;
+  footer?: ReactNode;
   headerActions?: ReactNode;
   showCloseButton?: boolean;
   variant?: string;
@@ -172,6 +174,7 @@ const Modal = ({
         </div>
       ) : null}
       <div className="modal-body">{children}</div>
+      {footer ? <div className="modal-foot">{footer}</div> : null}
     </ModalShell>
   );
 };

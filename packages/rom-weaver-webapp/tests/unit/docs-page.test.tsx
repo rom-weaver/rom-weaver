@@ -511,9 +511,16 @@ Fixture description.
     expect(sheet?.querySelector(".warp-rail")).toBeTruthy();
     expect(sheet?.querySelectorAll(".guide-nav .guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
     expect(sheet?.querySelector('.guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
+    expect(sheet?.querySelector(".modal-foot .docs-trail-menu")?.textContent).toContain("Close");
+    expect(sheet?.querySelector(".modal-foot input[aria-label='Search documentation']")).toBeTruthy();
+    fireEvent.click(sheet?.querySelector(".modal-foot .docs-trail-menu") as HTMLElement);
+    expect(document.querySelector(".rw-modal.guide-sheet")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Contents" }));
+    const reopenedSheet = document.querySelector(".rw-modal.guide-sheet");
 
     // Choosing a guide has to take the sheet with it - the reader asked to leave.
-    fireEvent.click(sheet?.querySelector(".guide-nav .guide-nav-list a") as HTMLElement);
+    fireEvent.click(reopenedSheet?.querySelector(".guide-nav .guide-nav-list a") as HTMLElement);
     expect(document.querySelector(".rw-modal.guide-sheet")).toBeNull();
   });
 

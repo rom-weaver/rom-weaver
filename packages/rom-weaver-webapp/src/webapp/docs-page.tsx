@@ -1,5 +1,5 @@
 import "./design-system/docs-route.css";
-import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
+import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree, X } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
@@ -488,6 +488,46 @@ const DocsFaqPreview = () => (
   </section>
 );
 
+const TrailRow = ({
+  onNavigate,
+  onSearchQueryChange,
+  onSearchSelect,
+  onToggle,
+  query,
+  results,
+  sheetOpen,
+}: {
+  onNavigate: () => void;
+  onSearchQueryChange: (query: string) => void;
+  onSearchSelect: (result: DocSearchResult, query: string) => void;
+  onToggle: () => void;
+  query: string;
+  results: readonly DocSearchResult[];
+  sheetOpen: boolean;
+}) => (
+  <div className="docs-trail-row">
+    <button
+      aria-expanded={sheetOpen}
+      aria-label={sheetOpen ? "Close contents" : undefined}
+      className="docs-trail-menu"
+      onClick={onToggle}
+      type="button"
+    >
+      {sheetOpen ? <X aria-hidden="true" /> : <ListTree aria-hidden="true" />}
+      <span>{sheetOpen ? "Close" : "Contents"}</span>
+    </button>
+    <div className="docs-trail-search">
+      <DocsSearch
+        onNavigate={onNavigate}
+        onQueryChange={onSearchQueryChange}
+        onSelect={onSearchSelect}
+        query={query}
+        results={results}
+      />
+    </div>
+  </div>
+);
+
 /**
  * The trail: phone-width navigation, search, and reading progress.
  *
@@ -539,29 +579,35 @@ const TrailHead = ({
           <span className="warp-gauge-weft" style={{ width: `${fraction * 100}%` }} />
         </span>
       ) : null}
-      <div className="docs-trail-row">
-        <button
-          aria-expanded={sheetOpen}
-          className="docs-trail-menu"
-          onClick={() => setSheetOpen((open) => !open)}
-          type="button"
-        >
-          <ListTree aria-hidden="true" />
-          <span>Contents</span>
-        </button>
-        <div className="docs-trail-search">
-          <DocsSearch
-            onNavigate={closeSheet}
-            onQueryChange={onSearchQueryChange}
-            onSelect={onSearchSelect}
-            query={searchQuery}
-            results={searchResults}
-          />
-        </div>
-      </div>
+      <TrailRow
+        onNavigate={closeSheet}
+        onSearchQueryChange={onSearchQueryChange}
+        onSearchSelect={onSearchSelect}
+        onToggle={() => setSheetOpen((open) => !open)}
+        query={searchQuery}
+        results={searchResults}
+        sheetOpen={sheetOpen}
+      />
       {/* Both lists at once: the outline the reader is inside, then every guide.
           Two separate sheets meant guessing which one a single button promised. */}
-      <Modal onClose={closeSheet} open={sheetOpen} title={route.title} variant="guide-sheet">
+      <Modal
+        footer={
+          <TrailRow
+            onNavigate={closeSheet}
+            onSearchQueryChange={onSearchQueryChange}
+            onSearchSelect={onSearchSelect}
+            onToggle={closeSheet}
+            query={searchQuery}
+            results={searchResults}
+            sheetOpen
+          />
+        }
+        onClose={closeSheet}
+        open={sheetOpen}
+        showCloseButton={false}
+        title={route.title}
+        variant="guide-sheet"
+      >
         {outlined ? (
           <SectionRail activeIndex={activeIndex} initializing={initializing} onNavigate={closeSheet} route={route} />
         ) : null}

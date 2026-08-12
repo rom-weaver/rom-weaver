@@ -1111,6 +1111,15 @@ html:has(.docs-workbench) {
   .rw-app .docs-trail-search .docs-search input {
     background: var(--plate);
   }
+  .rw-app .rw-modal.guide-sheet .modal-foot .docs-trail-row {
+    position: relative;
+  }
+  .rw-app .rw-modal.guide-sheet .modal-foot .docs-trail-search .docs-search {
+    position: static;
+  }
+  .rw-app .rw-modal.guide-sheet .modal-foot .docs-search-results {
+    inset: auto var(--gutter) calc(100% + 5px);
+  }
   /* Results open upward - the bar is the floor of the screen now - and against
      the bar rather than the input, so a phone gets the full width to read them
      in instead of the strip left over beside the Contents button. */
