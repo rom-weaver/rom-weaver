@@ -362,11 +362,10 @@
 .rw-app .storage-section-opfs {
   flex: 1 1 auto;
 }
-/* Compound so it outranks the shared `.dlg-section-title` margin declared later
-   in this file - the storage head is the one that carries the panel's gutter. */
-.rw-app .dlg-section-title.storage-section-title {
-  flex: none;
-  margin: var(--sp-m) var(--sp-l) var(--sp-xs);
+/* The OPFS title belongs to the control stack. This keeps the filter between
+   the section name and the data it filters. */
+.rw-app .dlg-subhead .storage-section-title {
+  margin: 0;
 }
 .rw-app .opfs-inspector {
   flex: 1 1 auto;

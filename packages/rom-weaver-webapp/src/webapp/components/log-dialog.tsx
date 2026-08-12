@@ -711,6 +711,11 @@ const LogsStoragePanel = ({
     <>
       {showingOpfs ? <EmulatorSavesPanel active /> : null}
       <div className="dlg-subhead">
+        {showingOpfs ? (
+          <h3 className="dlg-section-title storage-section-title" id="storage-opfs-title">
+            OPFS
+          </h3>
+        ) : null}
         {/* The controls take the row; the filter gets the next one to itself.
             Sharing one row meant the filter and the view toggle fought for the
             same width, and on a phone both lost - the toggle ellipsed its labels
@@ -759,9 +764,6 @@ const LogsStoragePanel = ({
       >
         {showingOpfs ? (
           <section aria-labelledby="storage-opfs-title" className="storage-section storage-section-opfs">
-            <h3 className="dlg-section-title storage-section-title" id="storage-opfs-title">
-              OPFS
-            </h3>
             <OpfsInspector entries={opfsEntries} error={opfsError} filter={filter} loading={opfsLoading} />
           </section>
         ) : (
