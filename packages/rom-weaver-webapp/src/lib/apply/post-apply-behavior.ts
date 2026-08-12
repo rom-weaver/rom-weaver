@@ -4,17 +4,15 @@ type PostApplyAutomaticAction = "download" | "test" | null;
 
 type PostApplyRomBehaviorOption = {
   automaticAction: PostApplyAutomaticAction;
+  hideDownload?: boolean;
+  hideTest?: boolean;
   label: string;
-  showDownload: boolean;
-  showTest: boolean;
   value: PostApplyRomBehavior;
 };
 
 const DEFAULT_POST_APPLY_ROM_BEHAVIOR_OPTION: PostApplyRomBehaviorOption = {
   automaticAction: "download",
   label: "Download & Show Test (Default)",
-  showDownload: false,
-  showTest: true,
   value: "download-show-test",
 };
 
@@ -28,43 +26,37 @@ const POST_APPLY_ROM_BEHAVIOR_OPTIONS: readonly PostApplyRomBehaviorOption[] = [
   {
     automaticAction: null,
     label: "Show Download & Show Test",
-    showDownload: true,
-    showTest: true,
     value: "show-download-show-test",
   },
   {
     automaticAction: "test",
     label: "Show Download & Test",
-    showDownload: true,
-    showTest: false,
     value: "show-download-test",
   },
   {
     automaticAction: null,
+    hideTest: true,
     label: "Show Download Only",
-    showDownload: true,
-    showTest: false,
     value: "show-download",
   },
   {
     automaticAction: null,
+    hideDownload: true,
     label: "Show Test Only",
-    showDownload: false,
-    showTest: true,
     value: "show-test",
   },
   {
     automaticAction: "test",
+    hideDownload: true,
+    hideTest: true,
     label: "Test Only",
-    showDownload: false,
-    showTest: false,
     value: "test",
   },
   {
     automaticAction: "download",
+    hideDownload: true,
+    hideTest: true,
     label: "Download Only",
-    showDownload: false,
-    showTest: false,
     value: "download",
   },
 ];
@@ -89,8 +81,8 @@ const migrateLegacyPostApplyRomBehavior = (value: unknown, showTestButton = true
 
 const postApplyRomBehaviorWithDownloadFallback = (value: unknown): PostApplyRomBehavior => {
   const option = postApplyRomBehaviorOption(normalizePostApplyRomBehavior(value));
-  if (option.showDownload) return option.value;
-  return option.showTest ? "show-download-show-test" : "show-download";
+  if (!option.hideDownload) return option.value;
+  return option.hideTest ? "show-download" : "show-download-show-test";
 };
 
 export {

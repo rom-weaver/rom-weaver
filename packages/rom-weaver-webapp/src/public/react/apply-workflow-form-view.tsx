@@ -1358,7 +1358,7 @@ const ApplyOutputAction = ({
     romInputs[0]?.info.romType?.platform,
     romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || outputState.pendingDownloadFileName || undefined,
   );
-  const showDownloadFallback = !core && (postApplyOption.showTest || postApplyOption.automaticAction === "test");
+  const showDownloadFallback = !core && (!postApplyOption.hideTest || postApplyOption.automaticAction === "test");
   return (
     <>
       <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
@@ -1372,7 +1372,7 @@ const ApplyOutputAction = ({
       <PatcherPrimaryAction
         controller={controllers.output}
         disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
-        showCompletedDownload={postApplyOption.showDownload || showDownloadFallback}
+        showCompletedDownload={!postApplyOption.hideDownload || showDownloadFallback}
         totalTime={applyTotalTime || undefined}
       />
       <EmulatorJsAction
@@ -1381,7 +1381,7 @@ const ApplyOutputAction = ({
         onSelectView={onSelectView}
         output={emulatorOutput}
         platform={romInputs[0]?.info.romType?.platform}
-        shown={postApplyOption.showTest}
+        shown={!postApplyOption.hideTest}
       />
       {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
       {bundleTools?.outputVerification ? (

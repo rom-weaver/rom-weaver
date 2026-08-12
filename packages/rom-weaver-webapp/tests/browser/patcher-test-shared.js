@@ -173,12 +173,8 @@ export const clickApplyButton = async () => {
 export const waitForApplyOutcome = async () => {
   return waitForState(() => {
     const applyButton = document.getElementById("rom-weaver-button-apply");
-    const testButton = document.getElementById("rom-weaver-button-test-emulator");
     const errorText = getAnyErrorText();
     if (errorText) return { errorText, kind: "error" };
-    if (!(applyButton instanceof HTMLButtonElement) && testButton instanceof HTMLButtonElement) {
-      return { kind: "download" };
-    }
     if (!(applyButton instanceof HTMLButtonElement)) return null;
     const isDownloadReady = !applyButton.disabled && (applyButton.textContent || "").includes("Download");
     if (isDownloadReady) return { kind: "download" };

@@ -545,9 +545,9 @@ describe("apply workflow view - completed output actions", () => {
     });
 
   it.each<[PostApplyRomBehavior, boolean, boolean]>([
-    ["download-show-test", false, true],
+    ["download-show-test", true, true],
     ["show-download-show-test", true, true],
-    ["show-download-test", true, false],
+    ["show-download-test", true, true],
     ["show-download", true, false],
     ["show-test", false, true],
     ["test", false, false],
