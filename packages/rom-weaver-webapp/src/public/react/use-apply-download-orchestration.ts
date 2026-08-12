@@ -8,6 +8,11 @@ import {
   useSyncExternalStore,
 } from "react";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
+import {
+  normalizePostApplyRomBehavior,
+  postApplyRomBehaviorOption,
+  postApplyRomBehaviorWithDownloadFallback,
+} from "../../lib/apply/post-apply-behavior.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import type { CompressionFormat, PostApplyRomBehavior } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
@@ -239,16 +244,6 @@ const downloadPendingOutput = async ({
   }
 };
 
-const normalizePostApplyRomBehavior = (value: unknown): PostApplyRomBehavior => {
-  if (value === "none" || value === "auto-test" || value === "auto-test-download") return value;
-  // Auto-download is the default: it preserves the pre-setting behavior of
-  // downloading the output as soon as an apply completes.
-  return "auto-download";
-};
-
-/** A checkbox in the Apply step's output options reads the setting as "on unless stored false". */
-const normalizeApplyPlayButton = (value: unknown): boolean => value !== false;
-
 /**
  * Session-local override for a setting the Apply step's output options repeat:
  * the public form has no write path back into the host app's persisted
@@ -292,12 +287,6 @@ const setPostApplyRomBehaviorOverride = postApplyRomBehaviorStore.set;
 const subscribePostApplyRomBehaviorOverride = postApplyRomBehaviorStore.subscribe;
 const syncPostApplyRomBehaviorSetting = postApplyRomBehaviorStore.syncSetting;
 
-const applyPlayButtonStore = createSettingSessionOverride(normalizeApplyPlayButton);
-const getApplyPlayButtonOverride = applyPlayButtonStore.get;
-const setApplyPlayButtonOverride = applyPlayButtonStore.set;
-const subscribeApplyPlayButtonOverride = applyPlayButtonStore.subscribe;
-const syncApplyPlayButtonSetting = applyPlayButtonStore.syncSetting;
-
 /** The "After applying" select's controlled value: the override once set, else the live setting. */
 const usePostApplyRomBehaviorValue = (settingValue: unknown): PostApplyRomBehavior => {
   const override = useSyncExternalStore(
@@ -311,19 +300,6 @@ const usePostApplyRomBehaviorValue = (settingValue: unknown): PostApplyRomBehavi
   return normalizePostApplyRomBehavior(override ?? settingValue);
 };
 
-/** The "Show the test button" checkbox's controlled value, and the button's own gate. */
-const useApplyPlayButtonValue = (settingValue: unknown): boolean => {
-  const override = useSyncExternalStore(
-    subscribeApplyPlayButtonOverride,
-    getApplyPlayButtonOverride,
-    getApplyPlayButtonOverride,
-  );
-  useEffect(() => {
-    syncApplyPlayButtonSetting(settingValue);
-  }, [settingValue]);
-  return normalizeApplyPlayButton(override ?? settingValue);
-};
-
 type PostApplyRomBehaviorOptions = {
   addSessionEntry: (entry: EmulatorSessionEntry) => void;
   behavior: PostApplyRomBehavior;
@@ -332,6 +308,7 @@ type PostApplyRomBehaviorOptions = {
   fileName: string;
   focusDownload: () => void;
   loadRom?: typeof loadEmulatorRom;
+  onAutomaticActionFailed?: (action: "download" | "test") => void;
   onSelectTestView?: () => void;
   output: ApplyWorkflowResult;
   platform?: string;
@@ -366,35 +343,43 @@ const runPostApplyRomBehavior = async ({
   fileName,
   focusDownload,
   loadRom = loadEmulatorRom,
+  onAutomaticActionFailed,
   onSelectTestView,
   output,
   platform,
   retainedEntry,
   setCurrentGame: selectCurrentGame,
 }: PostApplyRomBehaviorOptions): Promise<PostApplyRomBehaviorResult> => {
-  const shouldDownload = behavior === "auto-download" || behavior === "auto-test-download";
-  const shouldTest = behavior === "auto-test" || behavior === "auto-test-download";
+  const { automaticAction } = postApplyRomBehaviorOption(behavior);
   let downloaded = false;
 
-  if (shouldDownload) {
+  if (automaticAction === "download") {
     try {
       await Promise.resolve(download());
       downloaded = true;
     } catch {
+      onAutomaticActionFailed?.("download");
       // Browsers can reject a download started after the Run gesture expired. The pending
       // button remains available, and focusing it gives the user a direct recovery path.
       focusDownload();
     }
   }
 
-  if (!(shouldTest && core)) return { downloaded, tested: false };
+  if (automaticAction !== "test") return { downloaded, tested: false };
+  if (!core) {
+    onAutomaticActionFailed?.("test");
+    return { downloaded, tested: false };
+  }
 
   let entry = retainedEntry || null;
   if (!entry) {
     try {
       const playableOutput = output.output as EmulatorPlayableOutput;
       const blob = await playableOutput.getBlob?.();
-      if (!blob) return { downloaded, tested: false };
+      if (!blob) {
+        onAutomaticActionFailed?.("test");
+        return { downloaded, tested: false };
+      }
       const outputFileName = playableOutput.fileName || fileName;
       const loaded = await loadRom(blob, outputFileName);
       entry = {
@@ -409,12 +394,13 @@ const runPostApplyRomBehavior = async ({
       };
       addSessionEntry(entry);
     } catch {
+      onAutomaticActionFailed?.("test");
       return { downloaded, tested: false };
     }
   }
 
   selectCurrentGame(entry.id);
-  if (behavior === "auto-test") onSelectTestView?.();
+  onSelectTestView?.();
   return { downloaded, tested: true };
 };
 
@@ -700,6 +686,11 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
               download: () => downloadOutput(result, initialDownloadFileName, { interactive: false }),
               fileName: emulatorFileName,
               focusDownload: focusPendingDownload,
+              onAutomaticActionFailed: () => {
+                setPostApplyRomBehaviorOverride(
+                  postApplyRomBehaviorWithDownloadFallback(postApplyRomBehaviorRef.current),
+                );
+              },
               onSelectTestView: selectTestView,
               output: result,
               platform,
@@ -742,15 +733,11 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
 export {
   claimPostApplyRun,
   deriveApplyCompletion,
-  getApplyPlayButtonOverride,
   getPostApplyRomBehaviorOverride,
   runPostApplyRomBehavior,
-  setApplyPlayButtonOverride,
   setPostApplyRomBehaviorOverride,
   subscribePostApplyRomBehaviorOverride,
-  syncApplyPlayButtonSetting,
   syncPostApplyRomBehaviorSetting,
   useApplyDownloadOrchestration,
-  useApplyPlayButtonValue,
   usePostApplyRomBehaviorValue,
 };

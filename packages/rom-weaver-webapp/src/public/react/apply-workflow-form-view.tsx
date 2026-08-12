@@ -1,7 +1,7 @@
 import { Archive, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
-import { POST_APPLY_ROM_BEHAVIOR_OPTIONS } from "../../lib/apply/post-apply-behavior.ts";
+import { postApplyRomBehaviorOption, POST_APPLY_ROM_BEHAVIOR_OPTIONS } from "../../lib/apply/post-apply-behavior.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import { type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
@@ -55,12 +55,7 @@ import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-r
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
-import {
-  setApplyPlayButtonOverride,
-  setPostApplyRomBehaviorOverride,
-  useApplyPlayButtonValue,
-  usePostApplyRomBehaviorValue,
-} from "./use-apply-download-orchestration.ts";
+import { setPostApplyRomBehaviorOverride, usePostApplyRomBehaviorValue } from "./use-apply-download-orchestration.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import type { PostApplyRomBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -77,17 +72,17 @@ const EmulatorJsAction = ({
   onSelectView,
   output,
   platform,
+  shown,
 }: {
   core: string | undefined;
   fileName?: string;
   onSelectView?: (view: "test") => void;
   output?: BrowserApplyResult["output"] | null;
   platform?: string;
+  shown: boolean;
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const settings = useRomWeaverSettings();
-  const shown = useApplyPlayButtonValue(settings.applyPlayButtonEnabled);
   if (!(core && output && shown)) return null;
   const openInEmulator = async () => {
     setLoading(true);
@@ -1239,28 +1234,6 @@ const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean;
   );
 };
 
-/**
- * "Show the test button" checkbox for the Apply step's output options, the
- * session-only twin of the persisted `applyPlayButtonEnabled` setting (same
- * read-only-settings limit as the select above). The setting key keeps its
- * `play` spelling because it is persisted; only the wording changed.
- */
-const PlayButtonField = ({ disabled, settingValue }: { disabled: boolean; settingValue: unknown }) => {
-  const checked = useApplyPlayButtonValue(settingValue);
-  return (
-    <label className="checkrow">
-      <input
-        checked={checked}
-        disabled={disabled}
-        id="rom-weaver-checkbox-play-button"
-        onChange={(event) => setApplyPlayButtonOverride(event.currentTarget.checked)}
-        type="checkbox"
-      />
-      <span>Show the test button</span>
-    </label>
-  );
-};
-
 /** Export while running shows the live bar; otherwise the create/download button. */
 const BundleExportAction = ({
   bundleActionLabel,
@@ -1377,51 +1350,57 @@ const ApplyOutputAction = ({
   romInputs: RomInputRowState[];
   uiController: PatcherUiController;
   uiState: ReturnType<PatcherUiController["getState"]>;
-}) => (
-  <>
-    <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
-    <ChecksumOverrideRow state={uiState.checksumOverride} uiController={uiController} />
-    <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
-      <p aria-live="polite" className="patch-off-note">
-        <TriangleAlert aria-hidden="true" />
-        <span>{disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}</span>
-      </p>
-    </div>
-    <PatcherPrimaryAction
-      controller={controllers.output}
-      disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
-      totalTime={applyTotalTime || undefined}
-    />
-    <EmulatorJsAction
-      core={getEmulatorJsCore(
-        romInputs[0]?.info.romType?.platform,
-        romInputs[0]?.info.fileName ||
-          romInputs[0]?.info.archiveName ||
-          outputState.pendingDownloadFileName ||
-          undefined,
-      )}
-      fileName={romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || undefined}
-      onSelectView={onSelectView}
-      output={emulatorOutput}
-      platform={romInputs[0]?.info.romType?.platform}
-    />
-    {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
-    {bundleTools?.outputVerification ? (
-      <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
-        <TriangleAlert aria-hidden="true" />
-        <span>{bundleTools.outputVerification.message}</span>
-      </p>
-    ) : null}
-    {bundleExport && bundleTools?.exportVisible ? (
-      <BundleExportAction
-        bundleActionLabel={bundleActionLabel}
-        bundleExport={bundleExport}
-        disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+}) => {
+  const settings = useRomWeaverSettings();
+  const postApplyBehavior = usePostApplyRomBehaviorValue(settings.postApplyRomBehavior);
+  const postApplyOption = postApplyRomBehaviorOption(postApplyBehavior);
+  const core = getEmulatorJsCore(
+    romInputs[0]?.info.romType?.platform,
+    romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || outputState.pendingDownloadFileName || undefined,
+  );
+  const showDownloadFallback = !core && (postApplyOption.showTest || postApplyOption.automaticAction === "test");
+  return (
+    <>
+      <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
+      <ChecksumOverrideRow state={uiState.checksumOverride} uiController={uiController} />
+      <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
+        <p aria-live="polite" className="patch-off-note">
+          <TriangleAlert aria-hidden="true" />
+          <span>{disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}</span>
+        </p>
+      </div>
+      <PatcherPrimaryAction
+        controller={controllers.output}
+        disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
+        showCompletedDownload={postApplyOption.showDownload || showDownloadFallback}
+        totalTime={applyTotalTime || undefined}
       />
-    ) : null}
-    {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
-  </>
-);
+      <EmulatorJsAction
+        core={core}
+        fileName={romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || undefined}
+        onSelectView={onSelectView}
+        output={emulatorOutput}
+        platform={romInputs[0]?.info.romType?.platform}
+        shown={postApplyOption.showTest}
+      />
+      {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
+      {bundleTools?.outputVerification ? (
+        <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
+          <TriangleAlert aria-hidden="true" />
+          <span>{bundleTools.outputVerification.message}</span>
+        </p>
+      ) : null}
+      {bundleExport && bundleTools?.exportVisible ? (
+        <BundleExportAction
+          bundleActionLabel={bundleActionLabel}
+          bundleExport={bundleExport}
+          disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+        />
+      ) : null}
+      {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+    </>
+  );
+};
 
 const buildRomActualsById = (romInputs: RomInputRowState[]) => {
   const actualsById = new Map<string, RomCheckActuals>();
@@ -1826,7 +1805,6 @@ function ApplyWorkflowFormView({
     <>
       {bundleOutputFields}
       <PostApplyBehaviorField disabled={outputState.disabled} settingValue={settings.postApplyRomBehavior} />
-      <PlayButtonField disabled={outputState.disabled} settingValue={settings.applyPlayButtonEnabled} />
     </>
   );
 

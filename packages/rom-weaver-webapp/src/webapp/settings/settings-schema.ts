@@ -1,5 +1,6 @@
 import { getCompressionCodecLevelMax, getCompressionCodecLevelMin } from "../../lib/compression/codec-fields.ts";
 import { createLogger } from "../../lib/logging.ts";
+import { migrateLegacyPostApplyRomBehavior } from "../../lib/apply/post-apply-behavior.ts";
 import {
   getChdCodecsForMode,
   normalizeBrowserThreadCount,
@@ -33,16 +34,16 @@ import {
 
 const logger = createLogger("settings");
 
-const SETTINGS_STORAGE_VERSION = 6;
+const SETTINGS_STORAGE_VERSION = 7;
 // Versions whose payload loads under the current schema, so stored settings
 // survive the upgrade; the next save rewrites the payload at the current
 // version. A version bump must keep its predecessors loadable - list the old
 // version here (additive changes load as-is because the loader defaults every
 // missing field) or reshape the payload before the field reads. Wiping is a
-// last resort for payloads that cannot be mapped. v6 added postApplyRomBehavior;
-// v5 loads unchanged, and newer additive fields also use their defaults. v4 and
-// older never shipped publicly and are not worth mapping.
-const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5]);
+// last resort for payloads that cannot be mapped. v7 combines the automatic
+// post-apply action and completed-output buttons. v5 and v6 map their separate
+// behavior and Test-button fields into that choice. v4 and older never shipped.
+const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5, 6]);
 
 type GroupedStoredSettings = {
   apply?: {
@@ -397,7 +398,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   const validation = isRecord(applySettings.validation) ? applySettings.validation : {};
   return {
     betaToolsEnabled: commonSettings.betaToolsEnabled,
-    applyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
+    legacyApplyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
     emulatorSaveStorageEnabled: commonSettings.emulatorSaveStorageEnabled,
     onboardingEnabled: commonSettings.onboardingEnabled,
     accent: commonSettings.accent,
@@ -472,12 +473,22 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
       settings.bundlePackage = normalizeChoiceField("bundlePackage", bundlePackage, settings.bundlePackage);
 
     const postApplyRomBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyRomBehavior);
-    if (postApplyRomBehavior !== undefined)
+    const legacyApplyPlayButtonEnabled = readStoredField(
+      storedBooleanSchema,
+      loadedSettings.legacyApplyPlayButtonEnabled,
+    );
+    if (parsedSettings.version === 5 || parsedSettings.version === 6) {
+      settings.postApplyRomBehavior = migrateLegacyPostApplyRomBehavior(
+        postApplyRomBehavior,
+        legacyApplyPlayButtonEnabled !== false,
+      );
+    } else if (postApplyRomBehavior !== undefined) {
       settings.postApplyRomBehavior = normalizeChoiceField(
         "postApplyRomBehavior",
         postApplyRomBehavior,
         settings.postApplyRomBehavior,
       );
+    }
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
@@ -485,12 +496,8 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const onboardingEnabled = readStoredField(storedBooleanSchema, loadedSettings.onboardingEnabled);
     if (onboardingEnabled !== undefined) settings.onboardingEnabled = onboardingEnabled;
 
-    const applyPlayButtonEnabled = readStoredField(storedBooleanSchema, loadedSettings.applyPlayButtonEnabled);
-    if (applyPlayButtonEnabled !== undefined) settings.applyPlayButtonEnabled = applyPlayButtonEnabled;
-
     const emulatorSaveStorageEnabled = readStoredField(storedBooleanSchema, loadedSettings.emulatorSaveStorageEnabled);
     if (emulatorSaveStorageEnabled !== undefined) settings.emulatorSaveStorageEnabled = emulatorSaveStorageEnabled;
-
     const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
     if (defaultCompression !== undefined) {
       settings.defaultCompression = normalizeChoiceField(
@@ -588,7 +595,6 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     if (
       fieldKey === "accent" ||
       fieldKey === "betaToolsEnabled" ||
-      fieldKey === "applyPlayButtonEnabled" ||
       fieldKey === "emulatorSaveStorageEnabled" ||
       fieldKey === "onboardingEnabled" ||
       fieldKey === "language" ||
@@ -666,11 +672,8 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
   applyBooleanFields(rawDraft, validation.settings, BOOLEAN_SETTINGS_FIELDS);
   validation.settings.requireInputChecksumMatch =
     readStoredField(storedBooleanSchema, rawDraft.requireInputChecksumMatch) !== false;
-  validation.settings.applyPlayButtonEnabled =
-    readStoredField(storedBooleanSchema, rawDraft.applyPlayButtonEnabled) !== false;
   validation.settings.emulatorSaveStorageEnabled =
     readStoredField(storedBooleanSchema, rawDraft.emulatorSaveStorageEnabled) !== false;
-
   for (const fieldKey of FORMAT_CODEC_FIELDS)
     assignSetting(
       validation.settings,

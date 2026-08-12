@@ -12,10 +12,8 @@ import type { PatcherOutputState, PatchStackItemState } from "../../src/public/r
 import type { PatcherUiState, RomInputRowState } from "../../src/public/react/patcher-ui-state.ts";
 import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-state.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
-import {
-  setApplyPlayButtonOverride,
-  setPostApplyRomBehaviorOverride,
-} from "../../src/public/react/use-apply-download-orchestration.ts";
+import { setPostApplyRomBehaviorOverride } from "../../src/public/react/use-apply-download-orchestration.ts";
+import type { PostApplyRomBehavior } from "../../src/types/settings.ts";
 
 /**
  * Apply-view markup contract. The browser suites drive the form through
@@ -350,23 +348,6 @@ describe("apply workflow view - staged bench", () => {
     expect(unsupported.container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });
 
-  it("hides only the play button when the play-button setting is off", () => {
-    const { container } = renderView({
-      emulatorOutput: { fileName: "game.nes", getBlob: async () => new Blob(["rom"]), id: "output-1" },
-      outputOverrides: { pendingDownloadFileName: "game.nes" },
-      settings: { applyPlayButtonEnabled: false },
-      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
-    });
-    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
-    // Nothing else the setting could reach is touched, so every post-apply
-    // behavior stays selectable.
-    const behaviors = Array.from(
-      container.querySelectorAll("#rom-weaver-select-post-apply-behavior option"),
-      (option) => option.getAttribute("value"),
-    );
-    expect(behaviors).toEqual(["auto-download", "auto-test", "auto-test-download", "none"]);
-  });
-
   it("keeps likely drawers visible while ROMs and patches are still staging", () => {
     const rom = romRow("game.zip");
     rom.info.validationPhase = "extract";
@@ -505,31 +486,40 @@ describe("apply workflow view - post-apply behavior select", () => {
 
   it("defaults the select from the postApplyRomBehavior setting", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
-    const { container } = renderView({ settings: { postApplyRomBehavior: "auto-test" }, ui });
+    const { container } = renderView({ settings: { postApplyRomBehavior: "show-test" }, ui });
     const select = container.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
     expect(select).toBeTruthy();
-    expect(select.value).toBe("auto-test");
+    expect(select.value).toBe("show-test");
   });
 
-  it("falls back to auto-download when no setting is provided", () => {
+  it("falls back to Download & Show Test when no setting is provided", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({ ui });
     const select = container.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
-    expect(select.value).toBe("auto-download");
+    expect(select.value).toBe("download-show-test");
+    expect(Array.from(select.options, (option) => option.textContent)).toEqual([
+      "Download & Show Test (Default)",
+      "Show Download & Show Test",
+      "Show Download & Test",
+      "Show Download Only",
+      "Show Test Only",
+      "Test Only",
+      "Download Only",
+    ]);
   });
 
   it("overrides the session value on change without touching the persisted setting", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
-    const { container } = renderView({ settings: { postApplyRomBehavior: "auto-download" }, ui });
+    const { container } = renderView({ settings: { postApplyRomBehavior: "download-show-test" }, ui });
     const select = container.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: "auto-test-download" } });
-    expect(select.value).toBe("auto-test-download");
+    fireEvent.change(select, { target: { value: "show-download-test" } });
+    expect(select.value).toBe("show-download-test");
 
     // A second view mounted in the same session (e.g. after a re-render
     // elsewhere) picks up the override rather than the original setting.
-    const { container: second } = renderView({ settings: { postApplyRomBehavior: "auto-download" }, ui });
+    const { container: second } = renderView({ settings: { postApplyRomBehavior: "download-show-test" }, ui });
     const secondSelect = second.querySelector("#rom-weaver-select-post-apply-behavior") as HTMLSelectElement;
-    expect(secondSelect.value).toBe("auto-test-download");
+    expect(secondSelect.value).toBe("show-download-test");
   });
 });
 
@@ -543,46 +533,42 @@ describe("apply workflow view - output options notice", () => {
   });
 });
 
-describe("apply workflow view - test button checkbox", () => {
-  // Session state, same as the select's override above.
-  afterEach(() => setApplyPlayButtonOverride(null));
+describe("apply workflow view - completed output actions", () => {
+  afterEach(() => setPostApplyRomBehaviorOverride(null));
 
-  const playButtonView = (settings: Record<string, unknown>) =>
+  const completedOutputView = (postApplyRomBehavior: PostApplyRomBehavior, fileName = "game.nes") =>
     renderView({
-      emulatorOutput: { fileName: "game.nes", getBlob: async () => new Blob(["rom"]), id: "output-1" },
-      outputOverrides: { disabled: false, pendingDownloadFileName: "game.nes" },
-      settings,
-      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+      emulatorOutput: { fileName, getBlob: async () => new Blob(["rom"]), id: "output-1" },
+      outputOverrides: { disabled: false, pendingDownloadFileName: fileName },
+      settings: { postApplyRomBehavior },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow(fileName)] },
     });
 
-  it("defaults the checkbox from the applyPlayButtonEnabled setting", () => {
-    const shown = playButtonView({});
-    expect((shown.container.querySelector("#rom-weaver-checkbox-play-button") as HTMLInputElement).checked).toBe(true);
-    shown.unmount();
+  it.each<[PostApplyRomBehavior, boolean, boolean]>([
+    ["download-show-test", false, true],
+    ["show-download-show-test", true, true],
+    ["show-download-test", true, false],
+    ["show-download", true, false],
+    ["show-test", false, true],
+    ["test", false, false],
+    ["download", false, false],
+  ])("shows the selected actions for %s", (behavior, showDownload, showTest) => {
+    const { container } = completedOutputView(behavior);
+    expect(!!container.querySelector("#rom-weaver-button-apply")).toBe(showDownload);
+    expect(!!container.querySelector("#rom-weaver-button-test-emulator")).toBe(showTest);
+    expect(container.querySelector("#rom-weaver-checkbox-play-button")).toBeNull();
+  });
 
-    const { container } = playButtonView({ applyPlayButtonEnabled: false });
-    expect((container.querySelector("#rom-weaver-checkbox-play-button") as HTMLInputElement).checked).toBe(false);
+  it("keeps Download available when the selected Test action is unsupported", () => {
+    const { container } = completedOutputView("test", "game.bin");
+    expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });
 
   it("labels the button by where it goes, not by playing", () => {
-    const { container } = playButtonView({});
+    const { container } = completedOutputView("show-test");
     const label = container.querySelector("#rom-weaver-button-test-emulator .play-label");
     expect(label?.textContent).toBe("Open in the Test tab");
-  });
-
-  it("hides the test button for the session when unticked", () => {
-    const { container } = playButtonView({});
-    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeTruthy();
-    const checkbox = container.querySelector("#rom-weaver-checkbox-play-button") as HTMLInputElement;
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(false);
-    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
-
-    // A second view mounted in the same session follows the override, not the
-    // untouched persisted setting.
-    const { container: second } = playButtonView({});
-    expect((second.querySelector("#rom-weaver-checkbox-play-button") as HTMLInputElement).checked).toBe(false);
-    expect(second.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });
 });
 

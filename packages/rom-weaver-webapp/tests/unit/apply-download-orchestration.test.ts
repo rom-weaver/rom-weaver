@@ -4,15 +4,13 @@ import type { EmulatorSessionEntry } from "../../src/public/react/emulator-sessi
 import {
   claimPostApplyRun,
   deriveApplyCompletion,
-  getApplyPlayButtonOverride,
   getPostApplyRomBehaviorOverride,
   runPostApplyRomBehavior,
-  setApplyPlayButtonOverride,
   setPostApplyRomBehaviorOverride,
   subscribePostApplyRomBehaviorOverride,
-  syncApplyPlayButtonSetting,
   syncPostApplyRomBehaviorSetting,
 } from "../../src/public/react/use-apply-download-orchestration.ts";
+import type { PostApplyRomBehavior } from "../../src/types/settings.ts";
 import type { ApplyWorkflowResult } from "../../src/types/workflow-runtime-types.ts";
 
 const result = (sizeSummary?: Record<string, number>): ApplyWorkflowResult =>
@@ -68,7 +66,7 @@ const retainedEntry: EmulatorSessionEntry = {
   sizeBytes: 1024,
 };
 
-const runBehavior = (behavior: "none" | "auto-download" | "auto-test" | "auto-test-download", core?: string) => {
+const runBehavior = (behavior: PostApplyRomBehavior, core?: string) => {
   const calls: string[] = [];
   return runPostApplyRomBehavior({
     addSessionEntry: () => calls.push("add"),
@@ -77,6 +75,7 @@ const runBehavior = (behavior: "none" | "auto-download" | "auto-test" | "auto-te
     download: () => calls.push("download"),
     fileName: "patched.sfc",
     focusDownload: () => calls.push("focus"),
+    onAutomaticActionFailed: (action) => calls.push(`fallback:${action}`),
     onSelectTestView: () => calls.push("navigate"),
     output: result(),
     platform: "snes",
@@ -87,10 +86,13 @@ const runBehavior = (behavior: "none" | "auto-download" | "auto-test" | "auto-te
 
 describe("runPostApplyRomBehavior", () => {
   it.each([
-    ["none", [], { downloaded: false, tested: false }],
-    ["auto-download", ["download"], { downloaded: true, tested: false }],
-    ["auto-test", ["current", "navigate"], { downloaded: false, tested: true }],
-    ["auto-test-download", ["download", "current"], { downloaded: true, tested: true }],
+    ["download-show-test", ["download"], { downloaded: true, tested: false }],
+    ["show-download-show-test", [], { downloaded: false, tested: false }],
+    ["show-download-test", ["current", "navigate"], { downloaded: false, tested: true }],
+    ["show-download", [], { downloaded: false, tested: false }],
+    ["show-test", [], { downloaded: false, tested: false }],
+    ["test", ["current", "navigate"], { downloaded: false, tested: true }],
+    ["download", ["download"], { downloaded: true, tested: false }],
   ] as const)("handles %s", async (behavior, expectedCalls, expectedOutcome) => {
     const { calls, outcome } = await runBehavior(behavior, "snes");
     expect(calls).toEqual(expectedCalls);
@@ -98,23 +100,24 @@ describe("runPostApplyRomBehavior", () => {
   });
 
   it("does not test when the platform has no core", async () => {
-    const { calls, outcome } = await runBehavior("auto-test-download");
-    expect(calls).toEqual(["download"]);
-    expect(outcome).toEqual({ downloaded: true, tested: false });
+    const { calls, outcome } = await runBehavior("test");
+    expect(calls).toEqual(["fallback:test"]);
+    expect(outcome).toEqual({ downloaded: false, tested: false });
   });
 
   it("focuses the pending download when automatic download fails", async () => {
     const calls: string[] = [];
     const outcome = await runPostApplyRomBehavior({
       addSessionEntry: () => undefined,
-      behavior: "auto-download",
+      behavior: "download",
       download: () => Promise.reject(new Error("user activation expired")),
       fileName: "patched.sfc",
       focusDownload: () => calls.push("focus"),
+      onAutomaticActionFailed: (action) => calls.push(`fallback:${action}`),
       output: result(),
       setCurrentGame: () => undefined,
     });
-    expect(calls).toEqual(["focus"]);
+    expect(calls).toEqual(["fallback:download", "focus"]);
     expect(outcome).toEqual({ downloaded: false, tested: false });
   });
 });
@@ -138,18 +141,18 @@ describe("postApplyRomBehavior session override", () => {
   });
 
   it("stores the chosen behavior until cleared", () => {
-    setPostApplyRomBehaviorOverride("auto-test");
-    expect(getPostApplyRomBehaviorOverride()).toBe("auto-test");
+    setPostApplyRomBehaviorOverride("test");
+    expect(getPostApplyRomBehaviorOverride()).toBe("test");
     setPostApplyRomBehaviorOverride(null);
     expect(getPostApplyRomBehaviorOverride()).toBeNull();
   });
 
   it("clears the override when the committed setting changes", () => {
-    syncPostApplyRomBehaviorSetting("auto-download");
-    setPostApplyRomBehaviorOverride("auto-test");
-    syncPostApplyRomBehaviorSetting("auto-download");
-    expect(getPostApplyRomBehaviorOverride()).toBe("auto-test");
-    syncPostApplyRomBehaviorSetting("none");
+    syncPostApplyRomBehaviorSetting("download-show-test");
+    setPostApplyRomBehaviorOverride("test");
+    syncPostApplyRomBehaviorSetting("download-show-test");
+    expect(getPostApplyRomBehaviorOverride()).toBe("test");
+    syncPostApplyRomBehaviorSetting("show-download");
     expect(getPostApplyRomBehaviorOverride()).toBeNull();
   });
 
@@ -158,35 +161,11 @@ describe("postApplyRomBehavior session override", () => {
     const unsubscribe = subscribePostApplyRomBehaviorOverride(() => {
       notifications += 1;
     });
-    setPostApplyRomBehaviorOverride("auto-test-download");
-    setPostApplyRomBehaviorOverride("auto-test-download");
-    setPostApplyRomBehaviorOverride("none");
+    setPostApplyRomBehaviorOverride("show-download-test");
+    setPostApplyRomBehaviorOverride("show-download-test");
+    setPostApplyRomBehaviorOverride("show-download");
     unsubscribe();
-    setPostApplyRomBehaviorOverride("auto-download");
+    setPostApplyRomBehaviorOverride("download");
     expect(notifications).toBe(2);
-  });
-});
-
-describe("play button session override", () => {
-  afterEach(() => setApplyPlayButtonOverride(null));
-
-  it("defaults to null (follow the setting)", () => {
-    expect(getApplyPlayButtonOverride()).toBeNull();
-  });
-
-  it("stores false until cleared", () => {
-    setApplyPlayButtonOverride(false);
-    expect(getApplyPlayButtonOverride()).toBe(false);
-    setApplyPlayButtonOverride(null);
-    expect(getApplyPlayButtonOverride()).toBeNull();
-  });
-
-  it("clears the override when the committed setting changes", () => {
-    syncApplyPlayButtonSetting(true);
-    setApplyPlayButtonOverride(false);
-    syncApplyPlayButtonSetting(true);
-    expect(getApplyPlayButtonOverride()).toBe(false);
-    syncApplyPlayButtonSetting(false);
-    expect(getApplyPlayButtonOverride()).toBeNull();
   });
 });
