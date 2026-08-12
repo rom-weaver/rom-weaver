@@ -1393,62 +1393,31 @@ const commonPatchMetaValue = (
 
 const SharedPatchMetaEditor = ({
   bundleMeta,
+  onCancel,
   onApply,
 }: {
   bundleMeta: readonly (BundlePatchMeta | undefined)[];
+  onCancel: () => void;
   onApply: (updates: Partial<BundlePatchMeta>) => void;
 }) => {
-  const [open, setOpen] = useState(false);
-  const [updateAuthor, setUpdateAuthor] = useState(false);
-  const [updateVersion, setUpdateVersion] = useState(false);
-  const [author, setAuthor] = useState("");
-  const [version, setVersion] = useState("");
-
-  const openEditor = () => {
-    setAuthor(commonPatchMetaValue(bundleMeta, "author") || "");
-    setVersion(commonPatchMetaValue(bundleMeta, "version") || "");
-    setUpdateAuthor(false);
-    setUpdateVersion(false);
-    setOpen(true);
-  };
-
-  if (!open) {
-    return (
-      <div className="patch-shared-meta-toolbar">
-        <button className="btn ghost slim" onClick={openEditor} type="button">
-          <Pencil aria-hidden="true" />
-          Set shared details
-        </button>
-      </div>
-    );
-  }
+  const [author, setAuthor] = useState(commonPatchMetaValue(bundleMeta, "author") || "");
+  const [version, setVersion] = useState(commonPatchMetaValue(bundleMeta, "version") || "");
 
   const apply = () => {
-    const updates: Partial<BundlePatchMeta> = {};
-    if (updateAuthor) updates.author = author.trim() || undefined;
-    if (updateVersion) updates.version = version.trim() || undefined;
-    onApply(updates);
-    setOpen(false);
+    onApply({ author: author.trim() || undefined, version: version.trim() || undefined });
   };
 
   return (
-    <fieldset className="patch-shared-meta-editor">
+    <fieldset className="patch-shared-meta-editor" id="rom-weaver-bulk-patch-meta">
       <legend className="sr-only">Shared patch details</legend>
       <div className="patch-shared-meta-heading">
         <strong>Shared details</strong>
         <span>Apply values to every patch. You can still edit individual patches.</span>
       </div>
       <div className="patch-shared-meta-field">
-        <input
-          aria-label="Update version"
-          checked={updateVersion}
-          onChange={(event) => setUpdateVersion(event.currentTarget.checked)}
-          type="checkbox"
-        />
         <label htmlFor="rom-weaver-shared-patch-version">Version</label>
         <input
           className="input popt-input"
-          disabled={!updateVersion}
           id="rom-weaver-shared-patch-version"
           onChange={(event) => setVersion(event.currentTarget.value)}
           placeholder={commonPatchMetaValue(bundleMeta, "version") === undefined ? "Multiple values" : "Version"}
@@ -1457,16 +1426,9 @@ const SharedPatchMetaEditor = ({
         />
       </div>
       <div className="patch-shared-meta-field">
-        <input
-          aria-label="Update author"
-          checked={updateAuthor}
-          onChange={(event) => setUpdateAuthor(event.currentTarget.checked)}
-          type="checkbox"
-        />
         <label htmlFor="rom-weaver-shared-patch-author">Author</label>
         <input
           className="input popt-input"
-          disabled={!updateAuthor}
           id="rom-weaver-shared-patch-author"
           onChange={(event) => setAuthor(event.currentTarget.value)}
           placeholder={commonPatchMetaValue(bundleMeta, "author") === undefined ? "Multiple values" : "Author"}
@@ -1475,10 +1437,10 @@ const SharedPatchMetaEditor = ({
         />
       </div>
       <div className="patch-shared-meta-actions">
-        <button className="btn ghost slim" onClick={() => setOpen(false)} type="button">
+        <button className="btn ghost slim" onClick={onCancel} type="button">
           Cancel
         </button>
-        <button className="btn primary slim" disabled={!(updateAuthor || updateVersion)} onClick={apply} type="button">
+        <button className="btn primary slim" onClick={apply} type="button">
           Apply to all
         </button>
       </div>
@@ -1527,6 +1489,7 @@ const ApplyPatchListStep = ({
   patchStack: PatcherStackController;
   woven?: boolean;
 }) => {
+  const [bulkEditing, setBulkEditing] = useState(false);
   const total = patches.length;
   // Reordering only makes sense for a multi-patch stack. A patch may still be
   // moved while it is staging; other busy/locked rows remain non-reorderable.
@@ -1566,6 +1529,20 @@ const ApplyPatchListStep = ({
           </ul>
         </InfoPopover>
       }
+      headerExtra={
+        total > 1 && onBundleMetaBulkChange ? (
+          <button
+            aria-controls="rom-weaver-bulk-patch-meta"
+            aria-expanded={bulkEditing}
+            className="btn ghost slim patch-bulk-edit-button"
+            onClick={() => setBulkEditing((editing) => !editing)}
+            type="button"
+          >
+            <Pencil aria-hidden="true" />
+            Bulk edit
+          </button>
+        ) : undefined
+      }
       meta={
         total > 0 ? (
           <>
@@ -1581,10 +1558,15 @@ const ApplyPatchListStep = ({
       title="Patches"
       woven={woven}
     >
-      {total > 1 && onBundleMetaBulkChange ? (
+      {bulkEditing && onBundleMetaBulkChange ? (
         <SharedPatchMetaEditor
+          key="bulk-patch-meta-editor"
           bundleMeta={bundleMeta || patches.map(() => undefined)}
-          onApply={onBundleMetaBulkChange}
+          onApply={(updates) => {
+            onBundleMetaBulkChange(updates);
+            setBulkEditing(false);
+          }}
+          onCancel={() => setBulkEditing(false)}
         />
       ) : null}
       <div

@@ -87,7 +87,9 @@ const patchItem = (fileName: string): PatchStackItemState =>
   }) as unknown as PatchStackItemState;
 
 const renderView = ({
+  bundleMetaById,
   emulatorOutput,
+  onBundleMetaBulkChange,
   onUnifiedDrop,
   outputOverrides,
   patches = [] as PatchStackItemState[],
@@ -96,7 +98,9 @@ const renderView = ({
   settings = {},
   ui,
 }: {
+  bundleMetaById?: Parameters<typeof ApplyWorkflowFormView>[0]["bundleMetaById"];
   emulatorOutput?: unknown;
+  onBundleMetaBulkChange?: Parameters<typeof ApplyWorkflowFormView>[0]["onBundleMetaBulkChange"];
   onUnifiedDrop?: Parameters<typeof ApplyWorkflowFormView>[0]["onUnifiedDrop"];
   outputOverrides?: Partial<PatcherOutputState>;
   patches?: PatchStackItemState[];
@@ -117,8 +121,10 @@ const renderView = ({
   return render(
     <RomWeaverSettingsProvider settings={settings}>
       <ApplyWorkflowFormView
+        bundleMetaById={bundleMetaById}
         controllers={controllers}
         emulatorOutput={emulatorOutput as never}
+        onBundleMetaBulkChange={onBundleMetaBulkChange}
         onUnifiedDrop={onUnifiedDrop}
         patchEnablement={patchEnablement}
         pendingDrops={pendingDrops}
@@ -282,6 +288,39 @@ describe("apply workflow view - empty bench", () => {
 });
 
 describe("apply workflow view - staged bench", () => {
+  it("edits shared patch details from the patches header", () => {
+    const onBundleMetaBulkChange = vi.fn();
+    const { container, getByLabelText, getByRole } = renderView({
+      bundleMetaById: new Map([
+        ["patch-a", { author: "Author", version: "1.0" }],
+        ["patch-b", { author: "Author", version: "1.0" }],
+      ]),
+      onBundleMetaBulkChange,
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a", "patch-b"],
+        onToggle: () => undefined,
+      },
+      patches: [patchItem("first.ips"), patchItem("second.ips")],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
+    });
+
+    const button = getByRole("button", { name: "Bulk edit" });
+    expect(button.closest(".step-head")).toBe(container.querySelector("#rom-weaver-row-patch-stack .step-head"));
+    fireEvent.click(button);
+    expect((getByLabelText("Version") as HTMLInputElement).value).toBe("1.0");
+    expect((getByLabelText("Author") as HTMLInputElement).value).toBe("Author");
+
+    fireEvent.change(getByLabelText("Version"), { target: { value: "2.0" } });
+    fireEvent.change(getByLabelText("Author"), { target: { value: "New author" } });
+    fireEvent.click(getByRole("button", { name: "Apply to all" }));
+
+    expect(onBundleMetaBulkChange).toHaveBeenCalledWith(["patch-a", "patch-b"], {
+      author: "New author",
+      version: "2.0",
+    });
+  });
+
   it("shows the emulator action only when the input resolves to a supported core", () => {
     const output = {
       fileName: "game.nes",

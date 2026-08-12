@@ -350,16 +350,14 @@
   flex: 1 1 0;
   min-width: 0;
 }
-.rw-app .patch-shared-meta-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-block-end: var(--sp-s);
-}
-.rw-app .patch-shared-meta-toolbar .btn,
 .rw-app .patch-shared-meta-actions .btn {
   gap: 6px;
 }
-.rw-app .patch-shared-meta-toolbar svg {
+.rw-app .patch-bulk-edit-button {
+  flex: none;
+  gap: 6px;
+}
+.rw-app .patch-bulk-edit-button svg {
   width: 13px;
   height: 13px;
 }
@@ -385,10 +383,9 @@
   color: var(--muted);
 }
 .rw-app .patch-shared-meta-field {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 6px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--muted);
