@@ -39,9 +39,9 @@ const SETTINGS_STORAGE_VERSION = 6;
 // version. A version bump must keep its predecessors loadable - list the old
 // version here (additive changes load as-is because the loader defaults every
 // missing field) or reshape the payload before the field reads. Wiping is a
-// last resort for payloads that cannot be mapped. v6 only added
-// postApplyRomBehavior, so v5 loads unchanged; v4 and older never shipped
-// publicly and are not worth mapping.
+// last resort for payloads that cannot be mapped. v6 added postApplyRomBehavior;
+// v5 loads unchanged, and newer additive fields also use their defaults. v4 and
+// older never shipped publicly and are not worth mapping.
 const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5]);
 
 type GroupedStoredSettings = {
@@ -83,6 +83,7 @@ const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
   "accent",
   "language",
+  "byteUnits",
   "logLevel",
   "bundlePackage",
   "postApplyRomBehavior",
@@ -398,6 +399,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     applyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
     onboardingEnabled: commonSettings.onboardingEnabled,
     accent: commonSettings.accent,
+    byteUnits: commonSettings.byteUnits,
     bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
     postApplyRomBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyRomBehavior : undefined,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
@@ -456,6 +458,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const language = readStoredField(storedStringSchema, loadedSettings.language);
     if (language !== undefined) settings.language = normalizeChoiceField("language", language, settings.language);
+
+    const byteUnits = readStoredField(storedStringSchema, loadedSettings.byteUnits);
+    if (byteUnits !== undefined) settings.byteUnits = normalizeChoiceField("byteUnits", byteUnits, settings.byteUnits);
 
     const logLevel = readStoredField(storedStringSchema, loadedSettings.logLevel);
     if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
@@ -581,6 +586,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       fieldKey === "applyPlayButtonEnabled" ||
       fieldKey === "onboardingEnabled" ||
       fieldKey === "language" ||
+      fieldKey === "byteUnits" ||
       fieldKey === "logLevel"
     ) {
       (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
