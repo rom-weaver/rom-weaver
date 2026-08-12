@@ -8,6 +8,7 @@ const DOCS_SCREENSHOT_CASES = [
   },
   {
     docsRoute: "docs/apply-rom-patches",
+    hideDock: true,
     name: "apply-output",
     route: "/apply?bundle=first-weave.zip",
     target: "#rom-weaver-row-output-file-name",

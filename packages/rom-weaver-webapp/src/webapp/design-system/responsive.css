@@ -99,6 +99,25 @@
     font-size: 0.82rem;
     line-height: 1.35;
   }
+  .rw-app #rom-weaver-row-output-file-name .fname {
+    flex-direction: column;
+  }
+  .rw-app #rom-weaver-row-output-file-name .fname .sep {
+    width: 100%;
+    height: 1px;
+  }
+  .rw-app #rom-weaver-row-output-file-name .fname .select {
+    width: 100%;
+    min-height: 44px;
+  }
+  .rw-app .apply-primary-action-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-s);
+  }
+  .rw-app .apply-primary-action-row > .btn.run,
+  .rw-app .apply-primary-action-row > .runprog {
+    min-height: 52px;
+  }
   .rw-app .patch-description-field .popt-input {
     font-size: 0.82rem;
     line-height: 1.35;

@@ -58,7 +58,7 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
   it("exposes an actionable apply button before any run", () => {
     const { result } = renderSession();
     const output = result.current.localOutputController.getState();
-    expect(output.applyButton.label).toBe("Apply & download");
+    expect(output.applyButton.label).toBe("Apply");
     expect(output.applyButton.disabled).toBe(false);
     expect(output.pendingDownloadFileName).toBeNull();
   });
@@ -237,7 +237,7 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
     await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull());
     expect(applyPatches).toHaveBeenCalledTimes(1);
     expect(downloadOutput).toHaveBeenCalledTimes(1);
-    expect(result.current.localOutputController.getState().applyButton.label).toBe("Apply & download");
+    expect(result.current.localOutputController.getState().applyButton.label).toBe("Apply");
 
     await act(async () => {
       rerender({ ...options, disabledPatchIds: new Set(getBinarySourceListStableIds(patches)) });

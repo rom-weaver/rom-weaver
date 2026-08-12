@@ -305,6 +305,12 @@ test("output compression selector keeps expected apply options", async () => {
   expect(outputFormatValues).toContain("none");
   expect(outputFormatValues).toContain("zip");
   expect(outputFormatValues).toContain("7z");
+  const outputFormatLabels = Array.from(outputFormatSelect.options || []).map((entry) => entry.textContent);
+  expect(outputFormatLabels).toContain("Plain ROM");
+  expect(outputFormatLabels).toContain("Smaller ZIP download");
+  expect(document.querySelector(".outopts #rom-weaver-select-post-apply-behavior")).toBeNull();
+  expect(document.querySelector(".apply-primary-action-row #rom-weaver-select-post-apply-behavior")).not.toBeNull();
+  expect(document.querySelector("#rom-weaver-button-apply")?.textContent || "").toContain("Apply");
 
   setFormControlValue(outputFormatSelect, "zip");
   expect(document.getElementById("rom-weaver-select-output-format")?.value).toBe("zip");

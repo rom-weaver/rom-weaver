@@ -345,7 +345,7 @@ describe("design-system sections + states (expanded)", () => {
 // their empty bench. All page scans add best-practice + landmark rules.
 
 const outputState = () => ({
-  applyButton: { disabled: true, label: "APPLY & DOWNLOAD", loading: false, progress: null, title: "" },
+  applyButton: { disabled: true, label: "Apply", loading: false, progress: null, title: "" },
   applyTiming: "",
   compress: null,
   compressionFormat: "zip",

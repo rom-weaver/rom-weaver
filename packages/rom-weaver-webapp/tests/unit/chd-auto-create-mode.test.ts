@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { discFormatToChdMode, getChdAutoCreateMode } from "../../src/lib/input/rom-specific-file-utils.ts";
+import {
+  discFormatToChdMode,
+  getChdAutoCreateMode,
+  getDiscFormatLabel,
+} from "../../src/lib/input/rom-specific-file-utils.ts";
 
 describe("discFormatToChdMode", () => {
   it("maps the engine disc_format verdict to a CHD mode", () => {
@@ -8,6 +12,18 @@ describe("discFormatToChdMode", () => {
     expect(discFormatToChdMode("GD-ROM")).toBe("cd");
     expect(discFormatToChdMode(undefined)).toBeUndefined();
     expect(discFormatToChdMode("")).toBeUndefined();
+  });
+});
+
+describe("getDiscFormatLabel", () => {
+  it.each([
+    ["CD", "CD-ROM"],
+    ["CD-ROM", "CD-ROM"],
+    ["DVD", "DVD"],
+    ["DVD-ROM", "DVD"],
+    ["GD-ROM", "GD-ROM"],
+  ])("normalizes %s", (discFormat, expected) => {
+    expect(getDiscFormatLabel(discFormat)).toBe(expected);
   });
 });
 

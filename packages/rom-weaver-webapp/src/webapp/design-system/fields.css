@@ -808,6 +808,23 @@
   height: 32px;
   font-size: var(--dropdown-fs, 0.82rem);
 }
+.rw-app .apply-primary-action-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: var(--sp-m);
+  align-items: end;
+}
+.rw-app .apply-primary-action-row > .btn.run,
+.rw-app .apply-primary-action-row > .runprog {
+  min-width: 0;
+  margin-block-start: 0;
+}
+.rw-app .apply-primary-action-row > .after-apply-field {
+  min-width: 0;
+}
+.rw-app .after-apply-field .select {
+  min-width: 0;
+}
 .rw-app .btn.run,
 .rw-app .runprog {
   margin-block-start: 2px;

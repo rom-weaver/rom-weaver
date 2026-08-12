@@ -53,7 +53,7 @@ touch anything.
 
 ## Step 3: apply the patches
 
-In the **Apply** section, choose **APPLY & DOWNLOAD**.
+In the **Apply** section, choose **Apply**.
 
 Your browser downloads a new ROM. The sample ROM you started from is
 untouched.

@@ -124,7 +124,7 @@ artifact another person will receive:
 2. Add a fresh copy of the documented Original.
 3. Add the patch you just downloaded.
 4. Confirm the card accepts the Original without a checksum warning.
-5. Choose **APPLY & DOWNLOAD**.
+5. Choose **Apply**.
 6. Compare the result's checksum with the Modified checksum shown on Create.
 7. Launch the rebuilt result in the emulator or hardware you support.
 

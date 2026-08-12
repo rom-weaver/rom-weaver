@@ -29,6 +29,15 @@ const LOAD_BEARING_UI_IDS = [
   "ui.step.apply",
   "ui.bundleExport.shareDescription",
   "ui.bundleExport.shareTitle",
+  "ui.output.afterApplying",
+  "ui.output.afterApplying.autoDownload",
+  "ui.output.afterApplying.autoTest",
+  "ui.output.afterApplying.autoTestDownload",
+  "ui.output.afterApplying.none",
+  "ui.output.plainRom",
+  "ui.output.smallerDownload",
+  "ui.output.uncompressedDisc",
+  "ui.output.uncompressedIsoImage",
 ] as const;
 
 describe("ui catalog", () => {
@@ -54,6 +63,29 @@ describe("ui catalog", () => {
     expect(en.message("ui.step.apply")).toBe("Apply");
     expect(es.message("ui.bundleExport.shareTitle")).toBe("Comparte esta configuración");
     expect(de.message("ui.bundleExport.shareTitle")).toBe("Diese Konfiguration teilen");
+    expect(es.message("ui.output.afterApplying")).toBe("Después de aplicar");
+    expect(de.message("ui.output.afterApplying")).toBe("Nach dem Anwenden");
+    expect(en.message("ui.output.afterApplying.autoDownload")).toBe("Download automatically");
+    expect(en.message("ui.output.afterApplying.autoTest")).toBe("Test automatically");
+    expect(en.message("ui.output.afterApplying.autoTestDownload")).toBe("Test and download");
+    expect(en.message("ui.output.afterApplying.none")).toBe("Do nothing");
+    expect(es.message("ui.output.afterApplying.autoDownload")).toBe("Descargar automáticamente");
+    expect(es.message("ui.output.afterApplying.autoTest")).toBe("Probar automáticamente");
+    expect(es.message("ui.output.afterApplying.autoTestDownload")).toBe("Probar y descargar");
+    expect(es.message("ui.output.afterApplying.none")).toBe("No hacer nada");
+    expect(de.message("ui.output.afterApplying.autoDownload")).toBe("Automatisch herunterladen");
+    expect(de.message("ui.output.afterApplying.autoTest")).toBe("Automatisch testen");
+    expect(de.message("ui.output.afterApplying.autoTestDownload")).toBe("Testen und herunterladen");
+    expect(de.message("ui.output.afterApplying.none")).toBe("Nichts tun");
+    expect(es.message("ui.output.plainRom")).toBe("ROM sin comprimir");
+    expect(de.message("ui.output.plainRom")).toBe("Unkomprimierte ROM");
+    expect(es.message("ui.output.smallerDownload", { format: "ZIP" })).toBe("Descarga ZIP más pequeña");
+    expect(de.message("ui.output.smallerDownload", { format: "ZIP" })).toBe("Kleinerer ZIP-Download");
+    expect(es.message("ui.output.uncompressedDisc", { format: "CD-ROM" })).toBe("CD-ROM sin comprimir");
+    expect(de.message("ui.output.uncompressedDisc", { format: "CD-ROM" })).toBe("Unkomprimiertes CD-ROM");
+    expect(en.message("ui.output.uncompressedIsoImage")).toBe("Uncompressed ISO image");
+    expect(es.message("ui.output.uncompressedIsoImage")).toBe("Imagen ISO sin comprimir");
+    expect(de.message("ui.output.uncompressedIsoImage")).toBe("Unkomprimiertes ISO-Image");
   });
 
   it("falls back to English per-id for unknown ids in a partial locale", () => {

@@ -132,17 +132,17 @@ test("archive compression appends archive extension after explicit rom extension
 
 test("apply output options preserve configured compression order and labels", () => {
   expect(createApplyOutputOptions(["none", "zip", "7z"], { fileName: "game.gba" })).toEqual([
-    { label: ".gba", value: "none" },
-    { label: ".zip", value: "zip" },
-    { label: ".7z", value: "7z" },
+    { label: "Plain ROM", value: "none" },
+    { label: "Smaller ZIP download", value: "zip" },
+    { label: "Smaller 7z download", value: "7z" },
   ]);
 });
 
 test("apply output options label unknown uncompressed output as none", () => {
   expect(createApplyOutputOptions(["none", "zip", "7z"])).toEqual([
-    { label: "None", value: "none" },
-    { label: ".zip", value: "zip" },
-    { label: ".7z", value: "7z" },
+    { label: "Plain ROM", value: "none" },
+    { label: "Smaller ZIP download", value: "zip" },
+    { label: "Smaller 7z download", value: "7z" },
   ]);
 });
 

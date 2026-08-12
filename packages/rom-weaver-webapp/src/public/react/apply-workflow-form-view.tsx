@@ -3,7 +3,9 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, typ
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { POST_APPLY_ROM_BEHAVIOR_OPTIONS } from "../../lib/apply/post-apply-behavior.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
+import { getDiscFormatLabel } from "../../lib/input/rom-specific-file-utils.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
+import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { formatByteSize, type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
@@ -38,7 +40,7 @@ import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
-import { createCompressionTypeOptions } from "./output-view-model.ts";
+import { createApplyOutputOptions, createCompressionTypeOptions } from "./output-view-model.ts";
 import type {
   NoticeController,
   PatcherOutputController,
@@ -62,6 +64,13 @@ import {
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import type { PostApplyRomBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
+
+const POST_APPLY_ROM_BEHAVIOR_LABEL_IDS: Record<PostApplyRomBehavior, MessageId> = {
+  "auto-download": "ui.output.afterApplying.autoDownload",
+  "auto-test": "ui.output.afterApplying.autoTest",
+  "auto-test-download": "ui.output.afterApplying.autoTestDownload",
+  none: "ui.output.afterApplying.none",
+};
 
 /**
  * The finished apply's companion to the download button: the patched ROM is
@@ -314,9 +323,9 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
     actions: [
       ["options", "Options"],
-      ["apply", "Apply & download"],
+      ["apply", "Apply"],
     ],
-    body: "Choose the output name, format, compression, and header. Then press APPLY & DOWNLOAD to apply both patches.",
+    body: "Choose the output name, result, and optional details. Then press APPLY to apply both patches.",
     cta: ".btn.run",
     openDrawers: true,
     placement: "top",
@@ -1206,12 +1215,21 @@ const OutputHeaderField = ({
  * `use-apply-download-orchestration.ts`'s `postApplyRomBehaviorOverride`); the
  * select still defaults from the live `postApplyRomBehavior` setting.
  */
-const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean; settingValue: unknown }) => {
+const PostApplyBehaviorField = ({
+  disabled,
+  localizer,
+  settingValue,
+}: {
+  disabled: boolean;
+  localizer: ReturnType<typeof useUiLocalizer>;
+  settingValue: unknown;
+}) => {
   const value = usePostApplyRomBehaviorValue(settingValue);
+  const label = localizer.message("ui.output.afterApplying");
   return (
-    <OutputField label="After applying">
+    <OutputField className="after-apply-field" label={label}>
       <select
-        aria-label="After applying"
+        aria-label={label}
         className="select"
         disabled={disabled}
         id="rom-weaver-select-post-apply-behavior"
@@ -1220,7 +1238,7 @@ const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean;
       >
         {POST_APPLY_ROM_BEHAVIOR_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
-            {option.label}
+            {localizer.message(POST_APPLY_ROM_BEHAVIOR_LABEL_IDS[option.value])}
           </option>
         ))}
       </select>
@@ -1343,6 +1361,7 @@ const ApplyOutputAction = ({
   outputState,
   patches,
   romInputs,
+  settingValue,
   uiController,
   uiState,
 }: {
@@ -1360,6 +1379,7 @@ const ApplyOutputAction = ({
   outputState: PatcherOutputState;
   patches: PatchStackItemState[];
   romInputs: RomInputRowState[];
+  settingValue: unknown;
   uiController: PatcherUiController;
   uiState: ReturnType<PatcherUiController["getState"]>;
 }) => (
@@ -1372,11 +1392,14 @@ const ApplyOutputAction = ({
         <span>{disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}</span>
       </p>
     </div>
-    <PatcherPrimaryAction
-      controller={controllers.output}
-      disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
-      totalTime={applyTotalTime || undefined}
-    />
+    <div className="apply-primary-action-row">
+      <PostApplyBehaviorField disabled={outputState.disabled} localizer={localizer} settingValue={settingValue} />
+      <PatcherPrimaryAction
+        controller={controllers.output}
+        disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
+        totalTime={applyTotalTime || undefined}
+      />
+    </div>
     <EmulatorJsAction
       core={getEmulatorJsCore(
         romInputs[0]?.info.romType?.platform,
@@ -1806,6 +1829,25 @@ function ApplyWorkflowFormView({
   });
   const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
+  // CHD mode survives inputs whose identity has no disc medium, such as an unknown disc image.
+  // Reuse it only after the engine's disc-format verdict, never a filename guess.
+  const discFormatLabel = romInputs
+    .map((input) => getDiscFormatLabel(input.info.romType?.discFormat ?? input.chdMode))
+    .find((label) => label !== null);
+  // The uncompressed option's explicit extension describes the result. `.iso` is an unambiguous
+  // disc-image output; do not infer this from `.bin`, which can also be a cartridge ROM. Content-
+  // derived disc metadata above always wins when available.
+  const uncompressedOutputOption = outputState.options.find((option) => option.value === "none");
+  const hasIsoImageOutput = uncompressedOutputOption?.label.trim().toLowerCase() === ".iso";
+  let uncompressedOutputLabel = localizer.message("ui.output.plainRom");
+  if (hasIsoImageOutput) uncompressedOutputLabel = localizer.message("ui.output.uncompressedIsoImage");
+  if (discFormatLabel) {
+    uncompressedOutputLabel = localizer.message("ui.output.uncompressedDisc", { format: discFormatLabel });
+  }
+  const applyOutputOptions = createApplyOutputOptions(outputState.options, undefined, {
+    compressed: (format) => localizer.message("ui.output.smallerDownload", { format }),
+    plain: uncompressedOutputLabel,
+  });
   const header = resolveOutputHeaderOptions(romInputs);
   const outputHeaderField = (
     <OutputHeaderField
@@ -1826,7 +1868,6 @@ function ApplyWorkflowFormView({
   const outputExtraFields = (
     <>
       {outputHeaderField}
-      <PostApplyBehaviorField disabled={outputState.disabled} settingValue={settings.postApplyRomBehavior} />
       <PlayButtonField disabled={outputState.disabled} settingValue={settings.applyPlayButtonEnabled} />
     </>
   );
@@ -1895,6 +1936,7 @@ function ApplyWorkflowFormView({
       outputState={outputState}
       patches={patches}
       romInputs={romInputs}
+      settingValue={settings.postApplyRomBehavior}
       uiController={uiController}
       uiState={uiState}
     />
@@ -2083,7 +2125,7 @@ function ApplyWorkflowFormView({
             fileNamePlaceholder="Output filename (no extension)"
             format={outputState.compressionFormat}
             formatId="rom-weaver-select-output-format"
-            formatOptions={outputState.options}
+            formatOptions={applyOutputOptions}
             id="rom-weaver-row-output-file-name"
             info={
               <InfoPopover title="Output options">

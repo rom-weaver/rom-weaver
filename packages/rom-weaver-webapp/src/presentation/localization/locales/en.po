@@ -75,6 +75,11 @@ msgstr "Accent"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.afterApplying"
+msgstr "After applying"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "All local, in your browser — files never leave your machine."
 
@@ -245,6 +250,11 @@ msgstr "Dismiss"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.afterApplying.none"
+msgstr "Do nothing"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.nav.docs"
 msgstr "Docs"
 
@@ -262,6 +272,11 @@ msgstr "Download {format} Bundle"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.downloadRom"
 msgstr "Download {format} ROM Bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.afterApplying.autoDownload"
+msgstr "Download automatically"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,6 +530,11 @@ msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.plainRom"
+msgstr "Plain ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
 msgstr "Play a patched ROM in an emulator, right in the browser,"
 
@@ -670,6 +690,11 @@ msgstr "Skip to main content"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.smallerDownload"
+msgstr "Smaller {format} download"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.tabStatus"
 msgstr "Status"
 
@@ -712,6 +737,16 @@ msgstr "Tap to choose files"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabTest"
 msgstr "Test"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.afterApplying.autoTestDownload"
+msgstr "Test and download"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.afterApplying.autoTest"
+msgstr "Test automatically"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -797,6 +832,16 @@ msgstr "Threads"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis"
 msgstr "Turn an original ROM and its modified version, whether compressed or raw,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.uncompressedDisc"
+msgstr "Uncompressed {format}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.uncompressedIsoImage"
+msgstr "Uncompressed ISO image"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
