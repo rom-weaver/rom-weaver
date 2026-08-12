@@ -2,6 +2,7 @@ import {
   Archive,
   Download,
   EllipsisVertical,
+  Gamepad2,
   GitCompare,
   ListChecks,
   ListOrdered,
@@ -19,6 +20,7 @@ import { createLogger } from "../../../../lib/logging.ts";
 import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
 import {
   GUIDED_SAMPLE_START_EVENT,
+  GUIDED_SAMPLE_VIEWS,
   GUIDED_SAMPLE_VIEW_EVENT,
   clearGuidedSampleQuery,
   type GuidedSample,
@@ -42,6 +44,7 @@ type SampleTutorialAction =
   | "menu"
   | "options"
   | "package"
+  | "play"
   | "remove"
   | "reorder"
   | "swap"
@@ -53,7 +56,7 @@ const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismis
   onDismissRef.current = onDismiss;
   onStartRef.current = onStart;
   useEffect(() => {
-    const ownerView = guide === "create" ? "creator" : "patcher";
+    const ownerView = GUIDED_SAMPLE_VIEWS[guide];
     const startRequestedGuide = (event: Event) => {
       if (!(event instanceof CustomEvent) || event.detail !== guide) return;
       onStartRef.current();
@@ -98,6 +101,7 @@ const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: str
   menu: EllipsisVertical,
   options: SlidersHorizontal,
   package: Package,
+  play: Gamepad2,
   remove: X,
   reorder: ListOrdered,
   swap: SwapIcon,
