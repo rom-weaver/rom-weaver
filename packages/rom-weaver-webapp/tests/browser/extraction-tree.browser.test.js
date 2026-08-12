@@ -57,6 +57,24 @@ test("files drawer keeps ratio for ROM extraction outputs", async () => {
     .toBe("1.0 KB \u2192 100 B (1000%)");
 });
 
+test("files drawer keeps the ROM size when the chain already names the leaf", async () => {
+  mount(
+    createElement(ExtractDrawer, {
+      fileName: "game.bin",
+      fileSize: 4096,
+      parentCompressions: [{ fileName: "game.bin" }],
+      typeLabel: "NES",
+    }),
+  );
+
+  await expect.poll(() => document.querySelector(".extract-d .rb:not(.time)")?.textContent || "").toBe("4.1 KB");
+  expect(Array.from(document.querySelectorAll(".extract-d .rb:not(.time)"), (entry) => entry.textContent)).toEqual([
+    "4.1 KB",
+    "NES",
+  ]);
+  expect(document.querySelector(".extract-d .tree-size")?.textContent || "").toBe("4.1 KB");
+});
+
 test("files drawer keeps extract metadata for prepared single-level inputs", async () => {
   mount(
     createElement(ExtractDrawer, {

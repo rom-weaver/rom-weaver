@@ -63,6 +63,20 @@ const formatExtractionElapsedMs = (ms?: number) =>
 
 const formatExtractionTimingLabel = (timing?: string) => (timing ? `Extract ${timing}` : undefined);
 
+const addMissingLeafSize = (levels: ExtractionLevel[], fileName: string, fileSize: number | undefined) => {
+  const last = levels.at(-1);
+  if (
+    !last ||
+    getBaseFileName(last.name) !== getBaseFileName(fileName) ||
+    typeof last.sizeBytes === "number" ||
+    typeof fileSize !== "number" ||
+    !Number.isFinite(fileSize)
+  ) {
+    return levels;
+  }
+  return [...levels.slice(0, -1), { ...last, sizeBytes: fileSize, sizeLabel: formatByteSize(fileSize) }];
+};
+
 const buildExtractionLevels = (
   fileName: string,
   fileSize: number | undefined,
@@ -89,7 +103,7 @@ const buildExtractionLevels = (
         timing: formatExtractionElapsedMs(entry.decompressionTimeMs),
       })),
     );
-    return levels;
+    return addMissingLeafSize(levels, fileName, fileSize);
   }
   // Compare by basename: when the chain already ends with the extracted leaf (whose name may carry
   // its full in-archive path), don't append a duplicate bare-basename level for the same file.
@@ -101,7 +115,7 @@ const buildExtractionLevels = (
       sizeLabel: typeof fileSize === "number" ? formatByteSize(fileSize) : undefined,
     });
   }
-  return levels;
+  return addMissingLeafSize(levels, fileName, fileSize);
 };
 
 const TreeRow = ({ level, depth }: { level: ExtractionLevel; depth: number }) => (
