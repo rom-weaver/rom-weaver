@@ -32,6 +32,7 @@ html:has(.docs-workbench) {
 }
 .rw-app .docs-search-header .docs-search {
   grid-column: 2;
+  margin-inline-end: 2px;
 }
 
 /* --- layout --- */
@@ -956,7 +957,7 @@ html:has(.docs-workbench) {
   transform: translateY(0) scale(0.99);
 }
 .rw-app .docs-source-link {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: fit-content;
