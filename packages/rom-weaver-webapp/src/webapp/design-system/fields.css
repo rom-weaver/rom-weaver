@@ -357,6 +357,7 @@
 .rw-app .patch-bulk-edit-button {
   flex: none;
   gap: 6px;
+  margin-inline-end: 4px;
 }
 .rw-app .patch-bulk-edit-button svg {
   width: 13px;

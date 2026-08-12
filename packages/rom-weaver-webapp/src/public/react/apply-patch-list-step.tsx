@@ -1426,8 +1426,8 @@ const SharedPatchMetaEditor = ({
       }}
     >
       <div className="patch-shared-meta-heading" id="rom-weaver-bulk-patch-meta-title">
-        <strong>Shared details</strong>
-        <span>Apply values to every patch. Press Enter to apply or Escape to cancel.</span>
+        <strong>Bulk Edit</strong>
+        <span>Set metadata values for every patch.</span>
       </div>
       <div className="patch-shared-meta-field">
         <label htmlFor="rom-weaver-shared-patch-version">Version</label>
