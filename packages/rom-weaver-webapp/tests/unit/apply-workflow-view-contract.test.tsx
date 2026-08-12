@@ -491,12 +491,12 @@ describe("apply workflow view - post-apply behavior selects", () => {
   it("defaults both selects from their settings", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({
-      settings: { postApplyDownloadBehavior: "hide", postApplyTestBehavior: "auto-show" },
+      settings: { postApplyDownloadBehavior: "show", postApplyTestBehavior: "auto-show" },
       ui,
     });
     const download = container.querySelector("#rom-weaver-select-post-apply-download") as HTMLSelectElement;
     const test = container.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
-    expect(download.value).toBe("hide");
+    expect(download.value).toBe("show");
     expect(test.value).toBe("auto-show");
   });
 
@@ -507,17 +507,14 @@ describe("apply workflow view - post-apply behavior selects", () => {
     const test = container.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
     expect(download.value).toBe("auto-show");
     expect(Array.from(download.options, (option) => option.textContent)).toEqual([
-      "Auto Download & Show Download (Default)",
-      "Auto Download & Hide Download",
-      "Show Download",
-      "Hide Download",
+      "Automatic & Show Button (Default)",
+      "Show Button",
     ]);
     expect(test.value).toBe("show");
     expect(Array.from(test.options, (option) => option.textContent)).toEqual([
-      "Show Test (Default)",
-      "Auto Test & Show Test",
-      "Auto Test & Hide Test",
-      "Hide Test",
+      "Show Button (Default)",
+      "Automatic & Show Button",
+      "Hide Button",
     ]);
   });
 
@@ -527,14 +524,14 @@ describe("apply workflow view - post-apply behavior selects", () => {
     const { container } = renderView({ settings, ui });
     const download = container.querySelector("#rom-weaver-select-post-apply-download") as HTMLSelectElement;
     const test = container.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
-    fireEvent.change(download, { target: { value: "hide" } });
-    fireEvent.change(test, { target: { value: "auto-hide" } });
+    fireEvent.change(download, { target: { value: "show" } });
+    fireEvent.change(test, { target: { value: "hide" } });
 
     const { container: second } = renderView({ settings, ui });
     const secondDownload = second.querySelector("#rom-weaver-select-post-apply-download") as HTMLSelectElement;
     const secondTest = second.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
-    expect(secondDownload.value).toBe("hide");
-    expect(secondTest.value).toBe("auto-hide");
+    expect(secondDownload.value).toBe("show");
+    expect(secondTest.value).toBe("hide");
   });
 });
 
@@ -566,37 +563,27 @@ describe("apply workflow view - completed output actions", () => {
       ui: { ...createEmptyPatcherUiState(), romInputs: [romRow(fileName)] },
     });
 
-  const behaviorValues = ["auto-show", "auto-hide", "show", "hide"] as const;
-  const visibilityCases = behaviorValues.flatMap((downloadBehavior) =>
-    behaviorValues.map(
-      (testBehavior) =>
-        [
-          downloadBehavior,
-          testBehavior,
-          downloadBehavior === "auto-show" || downloadBehavior === "show",
-          testBehavior === "auto-show" || testBehavior === "show",
-        ] as const,
-    ),
+  const downloadBehaviorValues = ["auto-show", "show"] as const;
+  const testBehaviorValues = ["show", "auto-show", "hide"] as const;
+  const visibilityCases = downloadBehaviorValues.flatMap((downloadBehavior) =>
+    testBehaviorValues.map((testBehavior) => [downloadBehavior, testBehavior, testBehavior !== "hide"] as const),
   );
 
-  it.each(visibilityCases)(
-    "shows Download %s and Test %s",
-    (downloadBehavior, testBehavior, showDownload, showTest) => {
-      const { container } = completedOutputView(downloadBehavior, testBehavior);
-      expect(!!container.querySelector("#rom-weaver-button-apply")).toBe(showDownload);
-      expect(!!container.querySelector("#rom-weaver-button-test-emulator")).toBe(showTest);
-      expect(container.querySelector("#rom-weaver-checkbox-play-button")).toBeNull();
-    },
-  );
+  it.each(visibilityCases)("shows Download %s and Test %s", (downloadBehavior, testBehavior, showTest) => {
+    const { container } = completedOutputView(downloadBehavior, testBehavior);
+    expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
+    expect(!!container.querySelector("#rom-weaver-button-test-emulator")).toBe(showTest);
+    expect(container.querySelector("#rom-weaver-checkbox-play-button")).toBeNull();
+  });
 
   it("keeps Download available when automatic Test is unsupported", () => {
-    const { container } = completedOutputView("hide", "auto-hide", "game.bin");
+    const { container } = completedOutputView("show", "auto-show", "game.bin");
     expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });
 
   it("keeps Download available when visible Test is unsupported", () => {
-    const { container } = completedOutputView("hide", "show", "game.bin");
+    const { container } = completedOutputView("show", "show", "game.bin");
     expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });

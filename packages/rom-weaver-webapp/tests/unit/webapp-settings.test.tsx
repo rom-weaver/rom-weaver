@@ -7,7 +7,7 @@ import { SettingsPanel } from "../../src/webapp/webapp-settings.tsx";
 import { createEmptyValidationState } from "../../src/webapp/webapp-state-types.ts";
 
 describe("SettingsPanel sections", () => {
-  it("groups Bundle and both post-apply settings under Webapp", () => {
+  it("separates Webapp presentation and Behavior workflow settings", () => {
     const draftSettings = getDefaultSettings();
     const { container } = render(
       <RomWeaverSettingsProvider settings={draftSettings}>
@@ -19,15 +19,32 @@ describe("SettingsPanel sections", () => {
         />
       </RomWeaverSettingsProvider>,
     );
-    const bundleGroup = container.querySelector("#settings-bundle-package")?.closest(".setgroup");
-    const postApplyDownloadGroup = container
-      .querySelector("#settings-post-apply-download-behavior")
-      ?.closest(".setgroup");
-    const postApplyTestGroup = container.querySelector("#settings-post-apply-test-behavior")?.closest(".setgroup");
+    const groupFor = (id: string) => container.querySelector(id)?.closest(".setgroup");
+    const webappGroup = groupFor("#settings-theme");
+    const behaviorGroup = groupFor("#settings-bundle-package");
 
-    expect(bundleGroup?.querySelector(".gtitle")?.textContent).toBe("Webapp");
-    expect(postApplyDownloadGroup).toBe(bundleGroup);
-    expect(postApplyTestGroup).toBe(bundleGroup);
+    expect(webappGroup?.querySelector(".gtitle")?.textContent).toBe("Webapp");
+    for (const id of [
+      "#settings-language",
+      "#settings-accent",
+      "#settings-byte-units",
+      "#settings-log-level",
+      "#settings-onboarding-enabled",
+      "#settings-beta-tools-enabled",
+    ])
+      expect(groupFor(id)).toBe(webappGroup);
+
+    expect(behaviorGroup?.querySelector(".gtitle")?.textContent).toBe("Behavior");
+    for (const id of [
+      "#settings-post-apply-download-behavior",
+      "#settings-post-apply-test-behavior",
+      "#settings-emulator-save-storage-enabled",
+      "#settings-fix-checksum",
+      "#settings-require-input-checksum-match",
+    ])
+      expect(groupFor(id)).toBe(behaviorGroup);
+
+    expect(webappGroup).not.toBe(behaviorGroup);
     expect(container.querySelector("#settings-apply-play-button-enabled")).toBeNull();
   });
 });

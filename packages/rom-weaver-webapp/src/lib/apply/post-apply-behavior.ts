@@ -14,14 +14,14 @@ type PostApplyBehaviorSettings = {
 
 const DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
   automatic: true,
-  label: "Auto Download & Show Download (Default)",
+  label: "Automatic & Show Button (Default)",
   value: "auto-show",
   visible: true,
 };
 
 const DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
   automatic: false,
-  label: "Show Test (Default)",
+  label: "Show Button (Default)",
   value: "show",
   visible: true,
 };
@@ -33,22 +33,10 @@ const DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
 const POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS: readonly PostApplyActionBehaviorOption[] = [
   DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION,
   {
-    automatic: true,
-    label: "Auto Download & Hide Download",
-    value: "auto-hide",
-    visible: false,
-  },
-  {
     automatic: false,
-    label: "Show Download",
+    label: "Show Button",
     value: "show",
     visible: true,
-  },
-  {
-    automatic: false,
-    label: "Hide Download",
-    value: "hide",
-    visible: false,
   },
 ];
 
@@ -56,19 +44,13 @@ const POST_APPLY_TEST_BEHAVIOR_OPTIONS: readonly PostApplyActionBehaviorOption[]
   DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION,
   {
     automatic: true,
-    label: "Auto Test & Show Test",
+    label: "Automatic & Show Button",
     value: "auto-show",
     visible: true,
   },
   {
-    automatic: true,
-    label: "Auto Test & Hide Test",
-    value: "auto-hide",
-    visible: false,
-  },
-  {
     automatic: false,
-    label: "Hide Test",
+    label: "Hide Button",
     value: "hide",
     visible: false,
   },
@@ -90,15 +72,20 @@ const postApplyDownloadBehaviorOption = (value: unknown): PostApplyActionBehavio
 const postApplyTestBehaviorOption = (value: unknown): PostApplyActionBehaviorOption =>
   findPostApplyActionBehaviorOption(value, POST_APPLY_TEST_BEHAVIOR_OPTIONS, DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION);
 
-const normalizePostApplyDownloadBehavior = (value: unknown): PostApplyActionBehavior =>
-  postApplyDownloadBehaviorOption(value).value;
+const normalizePostApplyDownloadBehavior = (value: unknown): PostApplyActionBehavior => {
+  if (value === "hide") return "show";
+  if (value === "auto-hide") return "auto-show";
+  return postApplyDownloadBehaviorOption(value).value;
+};
 
-const normalizePostApplyTestBehavior = (value: unknown): PostApplyActionBehavior =>
-  postApplyTestBehaviorOption(value).value;
+const normalizePostApplyTestBehavior = (value: unknown): PostApplyActionBehavior => {
+  if (value === "auto-hide") return "auto-show";
+  return postApplyTestBehaviorOption(value).value;
+};
 
 const migrateLegacyPostApplyBehavior = (value: unknown, showTestButton = true): PostApplyBehaviorSettings => {
   const visibleTestBehavior: PostApplyActionBehavior = showTestButton ? "show" : "hide";
-  const automaticTestBehavior: PostApplyActionBehavior = showTestButton ? "auto-show" : "auto-hide";
+  const automaticTestBehavior: PostApplyActionBehavior = "auto-show";
 
   if (value === "auto-test" || value === "show-download-test") {
     return { postApplyDownloadBehavior: "show", postApplyTestBehavior: automaticTestBehavior };
@@ -113,21 +100,19 @@ const migrateLegacyPostApplyBehavior = (value: unknown, showTestButton = true): 
     return { postApplyDownloadBehavior: "show", postApplyTestBehavior: "hide" };
   }
   if (value === "show-test") {
-    return { postApplyDownloadBehavior: "hide", postApplyTestBehavior: "show" };
+    return { postApplyDownloadBehavior: "show", postApplyTestBehavior: "show" };
   }
   if (value === "test") {
-    return { postApplyDownloadBehavior: "hide", postApplyTestBehavior: "auto-hide" };
+    return { postApplyDownloadBehavior: "show", postApplyTestBehavior: "auto-show" };
   }
   if (value === "download") {
-    return { postApplyDownloadBehavior: "auto-hide", postApplyTestBehavior: "hide" };
+    return { postApplyDownloadBehavior: "auto-show", postApplyTestBehavior: "hide" };
   }
   return { postApplyDownloadBehavior: "auto-show", postApplyTestBehavior: visibleTestBehavior };
 };
 
-const postApplyDownloadBehaviorWithFallback = (value: unknown): PostApplyActionBehavior => {
-  const option = postApplyDownloadBehaviorOption(value);
-  return option.visible ? option.value : "show";
-};
+const postApplyDownloadBehaviorWithFallback = (value: unknown): PostApplyActionBehavior =>
+  normalizePostApplyDownloadBehavior(value);
 
 export {
   migrateLegacyPostApplyBehavior,

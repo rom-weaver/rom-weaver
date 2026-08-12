@@ -1,4 +1,8 @@
-import { migrateLegacyPostApplyBehavior } from "../../lib/apply/post-apply-behavior.ts";
+import {
+  migrateLegacyPostApplyBehavior,
+  normalizePostApplyDownloadBehavior,
+  normalizePostApplyTestBehavior,
+} from "../../lib/apply/post-apply-behavior.ts";
 import { getCompressionCodecLevelMax, getCompressionCodecLevelMin } from "../../lib/compression/codec-fields.ts";
 import { createLogger } from "../../lib/logging.ts";
 import {
@@ -34,16 +38,17 @@ import {
 
 const logger = createLogger("settings");
 
-const SETTINGS_STORAGE_VERSION = 8;
+const SETTINGS_STORAGE_VERSION = 9;
 // Versions whose payload loads under the current schema, so stored settings
 // survive the upgrade; the next save rewrites the payload at the current
 // version. A version bump must keep its predecessors loadable - list the old
 // version here (additive changes load as-is because the loader defaults every
 // missing field) or reshape the payload before the field reads. Wiping is a
-// last resort for payloads that cannot be mapped. v8 separates Download and
-// Test behavior. v7 combined them. v5 and v6 stored the automatic action and
-// Test-button visibility separately. v4 and older never shipped.
-const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5, 6, 7]);
+// last resort for payloads that cannot be mapped. v9 removes hidden automatic
+// actions and always shows Download. v8 separates Download and Test behavior.
+// v7 combined them. v5 and v6 stored the automatic action and Test-button
+// visibility separately. v4 and older never shipped.
+const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5, 6, 7, 8]);
 
 type GroupedStoredSettings = {
   apply?: {
@@ -491,6 +496,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
       );
       settings.postApplyDownloadBehavior = migrated.postApplyDownloadBehavior;
       settings.postApplyTestBehavior = migrated.postApplyTestBehavior;
+    } else if (parsedSettings.version === 8) {
+      settings.postApplyDownloadBehavior = normalizePostApplyDownloadBehavior(postApplyDownloadBehavior);
+      settings.postApplyTestBehavior = normalizePostApplyTestBehavior(postApplyTestBehavior);
     } else {
       if (postApplyDownloadBehavior !== undefined) {
         settings.postApplyDownloadBehavior = normalizeChoiceField(

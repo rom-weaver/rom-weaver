@@ -20,7 +20,7 @@ type StringNumber = number | string;
 
 type BundlePackage = "" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
 
-type PostApplyActionBehavior = "auto-show" | "auto-hide" | "show" | "hide";
+type PostApplyActionBehavior = "auto-show" | "show" | "hide";
 
 type ByteUnitSystem = "binary" | "decimal";
 

@@ -96,11 +96,11 @@ const runBehavior = (
 describe("runPostApplyActions", () => {
   it.each([
     ["auto-show", "show", ["download"], { downloaded: true, tested: false }],
-    ["auto-hide", "hide", ["download"], { downloaded: true, tested: false }],
     ["show", "auto-show", ["current", "navigate"], { downloaded: false, tested: true }],
-    ["hide", "auto-hide", ["current", "navigate"], { downloaded: false, tested: true }],
     ["auto-show", "auto-show", ["download", "current", "navigate"], { downloaded: true, tested: true }],
+    ["auto-show", "hide", ["download"], { downloaded: true, tested: false }],
     ["show", "show", [], { downloaded: false, tested: false }],
+    ["show", "hide", [], { downloaded: false, tested: false }],
   ] as const)(
     "handles Download %s and Test %s",
     async (downloadBehavior, testBehavior, expectedCalls, expectedOutcome) => {
@@ -111,7 +111,7 @@ describe("runPostApplyActions", () => {
   );
 
   it("does not test when the platform has no core", async () => {
-    const { calls, outcome } = await runBehavior("show", "auto-hide");
+    const { calls, outcome } = await runBehavior("show", "auto-show");
     expect(calls).toEqual(["fallback:test"]);
     expect(outcome).toEqual({ downloaded: false, tested: false });
   });
@@ -121,7 +121,7 @@ describe("runPostApplyActions", () => {
     const outcome = await runPostApplyActions({
       addSessionEntry: () => undefined,
       download: () => Promise.reject(new Error("user activation expired")),
-      downloadBehavior: "auto-hide",
+      downloadBehavior: "auto-show",
       fileName: "patched.sfc",
       focusDownload: () => calls.push("focus"),
       onAutomaticActionFailed: (action) => calls.push(`fallback:${action}`),
@@ -157,20 +157,20 @@ describe("post-apply session overrides", () => {
   });
 
   it("stores the chosen behaviors independently", () => {
-    setPostApplyDownloadBehaviorOverride("hide");
-    setPostApplyTestBehaviorOverride("auto-hide");
-    expect(getPostApplyDownloadBehaviorOverride()).toBe("hide");
-    expect(getPostApplyTestBehaviorOverride()).toBe("auto-hide");
+    setPostApplyDownloadBehaviorOverride("show");
+    setPostApplyTestBehaviorOverride("hide");
+    expect(getPostApplyDownloadBehaviorOverride()).toBe("show");
+    expect(getPostApplyTestBehaviorOverride()).toBe("hide");
   });
 
   it("clears only the override whose committed setting changes", () => {
     syncPostApplyDownloadBehaviorSetting("auto-show");
     syncPostApplyTestBehaviorSetting("show");
-    setPostApplyDownloadBehaviorOverride("hide");
-    setPostApplyTestBehaviorOverride("auto-hide");
+    setPostApplyDownloadBehaviorOverride("show");
+    setPostApplyTestBehaviorOverride("hide");
     syncPostApplyDownloadBehaviorSetting("auto-show");
-    syncPostApplyTestBehaviorSetting("hide");
-    expect(getPostApplyDownloadBehaviorOverride()).toBe("hide");
+    syncPostApplyTestBehaviorSetting("auto-show");
+    expect(getPostApplyDownloadBehaviorOverride()).toBe("show");
     expect(getPostApplyTestBehaviorOverride()).toBeNull();
   });
 
@@ -188,7 +188,7 @@ describe("post-apply session overrides", () => {
     setPostApplyTestBehaviorOverride("hide");
     unsubscribeDownload();
     unsubscribeTest();
-    setPostApplyDownloadBehaviorOverride("hide");
+    setPostApplyDownloadBehaviorOverride("auto-show");
     setPostApplyTestBehaviorOverride("show");
     expect(downloadNotifications).toBe(1);
     expect(testNotifications).toBe(1);

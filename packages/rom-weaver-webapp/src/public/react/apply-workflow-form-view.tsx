@@ -1263,7 +1263,7 @@ const PostApplyBehaviorFields = ({
   const downloadValue = usePostApplyDownloadBehaviorValue(downloadSetting);
   const testValue = usePostApplyTestBehaviorValue(testSetting);
   return (
-    <div className="post-apply-fields">
+    <>
       <PostApplyActionField
         disabled={disabled}
         id="rom-weaver-select-post-apply-download"
@@ -1280,7 +1280,7 @@ const PostApplyBehaviorFields = ({
         options={POST_APPLY_TEST_BEHAVIOR_OPTIONS}
         value={testValue}
       />
-    </div>
+    </>
   );
 };
 
@@ -1855,12 +1855,12 @@ function ApplyWorkflowFormView({
   );
   const outputExtraFields = (
     <>
-      {bundleOutputFields}
       <PostApplyBehaviorFields
         disabled={outputState.disabled}
         downloadSetting={settings.postApplyDownloadBehavior}
         testSetting={settings.postApplyTestBehavior}
       />
+      {bundleOutputFields}
     </>
   );
 

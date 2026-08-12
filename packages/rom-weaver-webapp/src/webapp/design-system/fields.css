@@ -220,12 +220,6 @@
 .rw-app .optsgroup .ofld-l {
   min-height: 24px;
 }
-.rw-app .post-apply-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-column: 1 / -1;
-  gap: var(--sp-m);
-}
 /* The test toggle is a secondary setting. Give it the full row so its label
    stays readable instead of wrapping inside a narrow grid cell. */
 .rw-app .opts-extra-fields > .checkrow {
