@@ -202,7 +202,6 @@
      itself - and axe measures the element, not a halo drawn over it. */
   min-block-size: 24px;
   padding: 0;
-  margin-inline-end: 4px;
   font: inherit;
   font-size: 0.74rem;
   font-weight: 650;

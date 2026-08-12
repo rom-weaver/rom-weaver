@@ -86,9 +86,6 @@
   color: inherit;
   border-radius: var(--r-s);
 }
-.rw-app .brand-word-link:focus-visible {
-  outline-offset: -2px;
-}
 .rw-app .brand-word {
   display: inline;
   margin: 0;
