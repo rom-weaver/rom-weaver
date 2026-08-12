@@ -559,25 +559,25 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
               </div>
             }
             id="emulator-test-player"
-            meta={
-              currentGame ? (
-                <>
-                  <span className="emulator-current-game" title={currentGame.fileName}>
-                    {currentGame.fileName}
-                  </span>
-                  <span>{formatByteSize(currentGame.sizeBytes)}</span>
-                  {currentGame.checksum ? (
-                    <span className="emulator-current-checksum" title={`ROM SHA-1: ${currentGame.checksum}`}>
-                      SHA-1 {currentGame.checksum.slice(0, 12)}…
-                    </span>
-                  ) : null}
-                </>
-              ) : undefined
-            }
+            meta={currentGame ? <span>{formatByteSize(currentGame.sizeBytes)}</span> : undefined}
             num="0x02"
             title="Play"
           >
             <div className="card emulator-player">
+              {currentGame ? (
+                <dl className="emulator-rom-identity">
+                  <div>
+                    <dt>ROM</dt>
+                    <dd>{currentGame.fileName}</dd>
+                  </div>
+                  {currentGame.checksum ? (
+                    <div>
+                      <dt>SHA-1</dt>
+                      <dd className="mono">{currentGame.checksum}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
               {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
                   <div
