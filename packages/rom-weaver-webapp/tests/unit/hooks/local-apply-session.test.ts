@@ -36,7 +36,11 @@ const renderSession = (overrides: Partial<LocalApplyPatchFormSessionOptions> = {
     ...overrides,
   } as LocalApplyPatchFormSessionOptions;
   const wrapper = ({ children }: { children?: ReactNode }) =>
-    createElement(RomWeaverSettingsProvider, { settings: { postApplyRomBehavior: "download-show-test" } }, children);
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: { postApplyDownloadBehavior: "auto-show", postApplyTestBehavior: "show" } },
+      children,
+    );
   const utils = renderHook((props: LocalApplyPatchFormSessionOptions) => useLocalApplyPatchFormSession(props), {
     initialProps: options,
     wrapper,

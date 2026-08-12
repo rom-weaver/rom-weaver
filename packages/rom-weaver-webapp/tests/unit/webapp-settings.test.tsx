@@ -7,7 +7,7 @@ import { SettingsPanel } from "../../src/webapp/webapp-settings.tsx";
 import { createEmptyValidationState } from "../../src/webapp/webapp-state-types.ts";
 
 describe("SettingsPanel sections", () => {
-  it("groups Bundle and After applying under Webapp", () => {
+  it("groups Bundle and both post-apply settings under Webapp", () => {
     const draftSettings = getDefaultSettings();
     const { container } = render(
       <RomWeaverSettingsProvider settings={draftSettings}>
@@ -20,10 +20,14 @@ describe("SettingsPanel sections", () => {
       </RomWeaverSettingsProvider>,
     );
     const bundleGroup = container.querySelector("#settings-bundle-package")?.closest(".setgroup");
-    const postApplyGroup = container.querySelector("#settings-post-apply-rom-behavior")?.closest(".setgroup");
+    const postApplyDownloadGroup = container
+      .querySelector("#settings-post-apply-download-behavior")
+      ?.closest(".setgroup");
+    const postApplyTestGroup = container.querySelector("#settings-post-apply-test-behavior")?.closest(".setgroup");
 
     expect(bundleGroup?.querySelector(".gtitle")?.textContent).toBe("Webapp");
-    expect(postApplyGroup).toBe(bundleGroup);
+    expect(postApplyDownloadGroup).toBe(bundleGroup);
+    expect(postApplyTestGroup).toBe(bundleGroup);
     expect(container.querySelector("#settings-apply-play-button-enabled")).toBeNull();
   });
 });

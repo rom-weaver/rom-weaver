@@ -1,94 +1,141 @@
-import type { PostApplyRomBehavior } from "../../types/settings.ts";
+import type { PostApplyActionBehavior } from "../../types/settings.ts";
 
-type PostApplyAutomaticAction = "download" | "test" | null;
-
-type PostApplyRomBehaviorOption = {
-  automaticAction: PostApplyAutomaticAction;
-  hideDownload?: boolean;
-  hideTest?: boolean;
+type PostApplyActionBehaviorOption = {
+  automatic: boolean;
   label: string;
-  value: PostApplyRomBehavior;
+  value: PostApplyActionBehavior;
+  visible: boolean;
 };
 
-const DEFAULT_POST_APPLY_ROM_BEHAVIOR_OPTION: PostApplyRomBehaviorOption = {
-  automaticAction: "download",
-  label: "Download & Show Test (Default)",
-  value: "download-show-test",
+type PostApplyBehaviorSettings = {
+  postApplyDownloadBehavior: PostApplyActionBehavior;
+  postApplyTestBehavior: PostApplyActionBehavior;
+};
+
+const DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
+  automatic: true,
+  label: "Auto Download & Show Download (Default)",
+  value: "auto-show",
+  visible: true,
+};
+
+const DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
+  automatic: false,
+  label: "Show Test (Default)",
+  value: "show",
+  visible: true,
 };
 
 /**
- * What a finished apply does on its own. Shared because both the Settings
- * dialog (`webapp/`) and the embeddable Apply form (`public/react/`) offer the
- * same choice, and `public/react` must not import from `webapp/`.
+ * The Settings dialog and the embeddable Apply form MUST use the same
+ * post-apply options. The public React package cannot import from `webapp/`.
  */
-const POST_APPLY_ROM_BEHAVIOR_OPTIONS: readonly PostApplyRomBehaviorOption[] = [
-  DEFAULT_POST_APPLY_ROM_BEHAVIOR_OPTION,
+const POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS: readonly PostApplyActionBehaviorOption[] = [
+  DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION,
   {
-    automaticAction: null,
-    label: "Show Download & Show Test",
-    value: "show-download-show-test",
+    automatic: true,
+    label: "Auto Download & Hide Download",
+    value: "auto-hide",
+    visible: false,
   },
   {
-    automaticAction: "test",
-    label: "Show Download & Test",
-    value: "show-download-test",
+    automatic: false,
+    label: "Show Download",
+    value: "show",
+    visible: true,
   },
   {
-    automaticAction: null,
-    hideTest: true,
-    label: "Show Download Only",
-    value: "show-download",
-  },
-  {
-    automaticAction: null,
-    hideDownload: true,
-    label: "Show Test Only",
-    value: "show-test",
-  },
-  {
-    automaticAction: "test",
-    hideDownload: true,
-    hideTest: true,
-    label: "Test Only",
-    value: "test",
-  },
-  {
-    automaticAction: "download",
-    hideDownload: true,
-    hideTest: true,
-    label: "Download Only",
-    value: "download",
+    automatic: false,
+    label: "Hide Download",
+    value: "hide",
+    visible: false,
   },
 ];
 
-const postApplyRomBehaviorOption = (value: unknown): PostApplyRomBehaviorOption =>
-  POST_APPLY_ROM_BEHAVIOR_OPTIONS.find((option) => option.value === value) || DEFAULT_POST_APPLY_ROM_BEHAVIOR_OPTION;
+const POST_APPLY_TEST_BEHAVIOR_OPTIONS: readonly PostApplyActionBehaviorOption[] = [
+  DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION,
+  {
+    automatic: true,
+    label: "Auto Test & Show Test",
+    value: "auto-show",
+    visible: true,
+  },
+  {
+    automatic: true,
+    label: "Auto Test & Hide Test",
+    value: "auto-hide",
+    visible: false,
+  },
+  {
+    automatic: false,
+    label: "Hide Test",
+    value: "hide",
+    visible: false,
+  },
+];
 
-const normalizePostApplyRomBehavior = (value: unknown): PostApplyRomBehavior => {
-  const current = POST_APPLY_ROM_BEHAVIOR_OPTIONS.find((option) => option.value === value)?.value;
-  if (current) return current;
-  if (value === "auto-test") return "show-download-test";
-  if (value === "none") return "show-download-show-test";
-  return DEFAULT_POST_APPLY_ROM_BEHAVIOR_OPTION.value;
+const findPostApplyActionBehaviorOption = (
+  value: unknown,
+  options: readonly PostApplyActionBehaviorOption[],
+  fallback: PostApplyActionBehaviorOption,
+): PostApplyActionBehaviorOption => options.find((option) => option.value === value) || fallback;
+
+const postApplyDownloadBehaviorOption = (value: unknown): PostApplyActionBehaviorOption =>
+  findPostApplyActionBehaviorOption(
+    value,
+    POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS,
+    DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION,
+  );
+
+const postApplyTestBehaviorOption = (value: unknown): PostApplyActionBehaviorOption =>
+  findPostApplyActionBehaviorOption(value, POST_APPLY_TEST_BEHAVIOR_OPTIONS, DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION);
+
+const normalizePostApplyDownloadBehavior = (value: unknown): PostApplyActionBehavior =>
+  postApplyDownloadBehaviorOption(value).value;
+
+const normalizePostApplyTestBehavior = (value: unknown): PostApplyActionBehavior =>
+  postApplyTestBehaviorOption(value).value;
+
+const migrateLegacyPostApplyBehavior = (value: unknown, showTestButton = true): PostApplyBehaviorSettings => {
+  const visibleTestBehavior: PostApplyActionBehavior = showTestButton ? "show" : "hide";
+  const automaticTestBehavior: PostApplyActionBehavior = showTestButton ? "auto-show" : "auto-hide";
+
+  if (value === "auto-test" || value === "show-download-test") {
+    return { postApplyDownloadBehavior: "show", postApplyTestBehavior: automaticTestBehavior };
+  }
+  if (value === "auto-test-download" || value === "download-test") {
+    return { postApplyDownloadBehavior: "auto-show", postApplyTestBehavior: automaticTestBehavior };
+  }
+  if (value === "none" || value === "show-download-show-test") {
+    return { postApplyDownloadBehavior: "show", postApplyTestBehavior: visibleTestBehavior };
+  }
+  if (value === "show-download") {
+    return { postApplyDownloadBehavior: "show", postApplyTestBehavior: "hide" };
+  }
+  if (value === "show-test") {
+    return { postApplyDownloadBehavior: "hide", postApplyTestBehavior: "show" };
+  }
+  if (value === "test") {
+    return { postApplyDownloadBehavior: "hide", postApplyTestBehavior: "auto-hide" };
+  }
+  if (value === "download") {
+    return { postApplyDownloadBehavior: "auto-hide", postApplyTestBehavior: "hide" };
+  }
+  return { postApplyDownloadBehavior: "auto-show", postApplyTestBehavior: visibleTestBehavior };
 };
 
-const migrateLegacyPostApplyRomBehavior = (value: unknown, showTestButton = true): PostApplyRomBehavior => {
-  if (value === "auto-test") return "show-download-test";
-  if (value === "none") return showTestButton ? "show-download-show-test" : "show-download";
-  if (value === "auto-test-download") return showTestButton ? "download-show-test" : "download";
-  return showTestButton ? "download-show-test" : "download";
-};
-
-const postApplyRomBehaviorWithDownloadFallback = (value: unknown): PostApplyRomBehavior => {
-  const option = postApplyRomBehaviorOption(normalizePostApplyRomBehavior(value));
-  if (!option.hideDownload) return option.value;
-  return option.hideTest ? "show-download" : "show-download-show-test";
+const postApplyDownloadBehaviorWithFallback = (value: unknown): PostApplyActionBehavior => {
+  const option = postApplyDownloadBehaviorOption(value);
+  return option.visible ? option.value : "show";
 };
 
 export {
-  migrateLegacyPostApplyRomBehavior,
-  normalizePostApplyRomBehavior,
-  postApplyRomBehaviorOption,
-  postApplyRomBehaviorWithDownloadFallback,
-  POST_APPLY_ROM_BEHAVIOR_OPTIONS,
+  migrateLegacyPostApplyBehavior,
+  normalizePostApplyDownloadBehavior,
+  normalizePostApplyTestBehavior,
+  postApplyDownloadBehaviorOption,
+  postApplyDownloadBehaviorWithFallback,
+  postApplyTestBehaviorOption,
+  POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS,
+  POST_APPLY_TEST_BEHAVIOR_OPTIONS,
 };

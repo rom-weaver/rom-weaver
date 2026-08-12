@@ -1,6 +1,6 @@
+import { migrateLegacyPostApplyBehavior } from "../../lib/apply/post-apply-behavior.ts";
 import { getCompressionCodecLevelMax, getCompressionCodecLevelMin } from "../../lib/compression/codec-fields.ts";
 import { createLogger } from "../../lib/logging.ts";
-import { migrateLegacyPostApplyRomBehavior } from "../../lib/apply/post-apply-behavior.ts";
 import {
   getChdCodecsForMode,
   normalizeBrowserThreadCount,
@@ -34,16 +34,16 @@ import {
 
 const logger = createLogger("settings");
 
-const SETTINGS_STORAGE_VERSION = 7;
+const SETTINGS_STORAGE_VERSION = 8;
 // Versions whose payload loads under the current schema, so stored settings
 // survive the upgrade; the next save rewrites the payload at the current
 // version. A version bump must keep its predecessors loadable - list the old
 // version here (additive changes load as-is because the loader defaults every
 // missing field) or reshape the payload before the field reads. Wiping is a
-// last resort for payloads that cannot be mapped. v7 combines the automatic
-// post-apply action and completed-output buttons. v5 and v6 map their separate
-// behavior and Test-button fields into that choice. v4 and older never shipped.
-const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5, 6]);
+// last resort for payloads that cannot be mapped. v8 separates Download and
+// Test behavior. v7 combined them. v5 and v6 stored the automatic action and
+// Test-button visibility separately. v4 and older never shipped.
+const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5, 6, 7]);
 
 type GroupedStoredSettings = {
   apply?: {
@@ -88,7 +88,8 @@ const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "byteUnits",
   "logLevel",
   "bundlePackage",
-  "postApplyRomBehavior",
+  "postApplyDownloadBehavior",
+  "postApplyTestBehavior",
   "compressionProfile",
 ] as const satisfies readonly SettingsFieldKey[];
 const CHD_CODEC_FIELDS = ["chdCreateCdCodecs", "chdCreateDvdCodecs"] as const satisfies readonly SettingsFieldKey[];
@@ -404,7 +405,11 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     accent: commonSettings.accent,
     byteUnits: commonSettings.byteUnits,
     bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
-    postApplyRomBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyRomBehavior : undefined,
+    legacyPostApplyRomBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyRomBehavior : undefined,
+    postApplyDownloadBehavior: isRecord(applySettings.output)
+      ? applySettings.output.postApplyDownloadBehavior
+      : undefined,
+    postApplyTestBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyTestBehavior : undefined,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
@@ -472,22 +477,35 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     if (bundlePackage !== undefined)
       settings.bundlePackage = normalizeChoiceField("bundlePackage", bundlePackage, settings.bundlePackage);
 
-    const postApplyRomBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyRomBehavior);
+    const postApplyDownloadBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyDownloadBehavior);
+    const postApplyTestBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyTestBehavior);
+    const legacyPostApplyRomBehavior = readStoredField(storedStringSchema, loadedSettings.legacyPostApplyRomBehavior);
     const legacyApplyPlayButtonEnabled = readStoredField(
       storedBooleanSchema,
       loadedSettings.legacyApplyPlayButtonEnabled,
     );
-    if (parsedSettings.version === 5 || parsedSettings.version === 6) {
-      settings.postApplyRomBehavior = migrateLegacyPostApplyRomBehavior(
-        postApplyRomBehavior,
+    if (parsedSettings.version === 5 || parsedSettings.version === 6 || parsedSettings.version === 7) {
+      const migrated = migrateLegacyPostApplyBehavior(
+        legacyPostApplyRomBehavior,
         legacyApplyPlayButtonEnabled !== false,
       );
-    } else if (postApplyRomBehavior !== undefined) {
-      settings.postApplyRomBehavior = normalizeChoiceField(
-        "postApplyRomBehavior",
-        postApplyRomBehavior,
-        settings.postApplyRomBehavior,
-      );
+      settings.postApplyDownloadBehavior = migrated.postApplyDownloadBehavior;
+      settings.postApplyTestBehavior = migrated.postApplyTestBehavior;
+    } else {
+      if (postApplyDownloadBehavior !== undefined) {
+        settings.postApplyDownloadBehavior = normalizeChoiceField(
+          "postApplyDownloadBehavior",
+          postApplyDownloadBehavior,
+          settings.postApplyDownloadBehavior,
+        );
+      }
+      if (postApplyTestBehavior !== undefined) {
+        settings.postApplyTestBehavior = normalizeChoiceField(
+          "postApplyTestBehavior",
+          postApplyTestBehavior,
+          settings.postApplyTestBehavior,
+        );
+      }
     }
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
@@ -618,7 +636,11 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       };
       return;
     }
-    if (fieldKey === "bundlePackage" || fieldKey === "postApplyRomBehavior") {
+    if (
+      fieldKey === "bundlePackage" ||
+      fieldKey === "postApplyDownloadBehavior" ||
+      fieldKey === "postApplyTestBehavior"
+    ) {
       storedSettings.apply = {
         ...storedSettings.apply,
         output: { ...storedSettings.apply?.output, [fieldKey]: value },

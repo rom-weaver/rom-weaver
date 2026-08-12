@@ -9,12 +9,14 @@ import {
 } from "react";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import {
-  normalizePostApplyRomBehavior,
-  postApplyRomBehaviorOption,
-  postApplyRomBehaviorWithDownloadFallback,
+  normalizePostApplyDownloadBehavior,
+  normalizePostApplyTestBehavior,
+  postApplyDownloadBehaviorOption,
+  postApplyDownloadBehaviorWithFallback,
+  postApplyTestBehaviorOption,
 } from "../../lib/apply/post-apply-behavior.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
-import type { CompressionFormat, PostApplyRomBehavior } from "../../types/settings.ts";
+import type { CompressionFormat, PostApplyActionBehavior } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import {
   getChecksumProgressInfoPatch,
@@ -281,30 +283,49 @@ const createSettingSessionOverride = <T>(normalize: (value: unknown) => T) => {
   return { get, set, subscribe, syncSetting };
 };
 
-const postApplyRomBehaviorStore = createSettingSessionOverride(normalizePostApplyRomBehavior);
-const getPostApplyRomBehaviorOverride = postApplyRomBehaviorStore.get;
-const setPostApplyRomBehaviorOverride = postApplyRomBehaviorStore.set;
-const subscribePostApplyRomBehaviorOverride = postApplyRomBehaviorStore.subscribe;
-const syncPostApplyRomBehaviorSetting = postApplyRomBehaviorStore.syncSetting;
+const postApplyDownloadBehaviorStore = createSettingSessionOverride(normalizePostApplyDownloadBehavior);
+const getPostApplyDownloadBehaviorOverride = postApplyDownloadBehaviorStore.get;
+const setPostApplyDownloadBehaviorOverride = postApplyDownloadBehaviorStore.set;
+const subscribePostApplyDownloadBehaviorOverride = postApplyDownloadBehaviorStore.subscribe;
+const syncPostApplyDownloadBehaviorSetting = postApplyDownloadBehaviorStore.syncSetting;
 
-/** The "After applying" select's controlled value: the override once set, else the live setting. */
-const usePostApplyRomBehaviorValue = (settingValue: unknown): PostApplyRomBehavior => {
+const postApplyTestBehaviorStore = createSettingSessionOverride(normalizePostApplyTestBehavior);
+const getPostApplyTestBehaviorOverride = postApplyTestBehaviorStore.get;
+const setPostApplyTestBehaviorOverride = postApplyTestBehaviorStore.set;
+const subscribePostApplyTestBehaviorOverride = postApplyTestBehaviorStore.subscribe;
+const syncPostApplyTestBehaviorSetting = postApplyTestBehaviorStore.syncSetting;
+
+/** The Post Apply Download select's controlled value: the override once set, else the live setting. */
+const usePostApplyDownloadBehaviorValue = (settingValue: unknown): PostApplyActionBehavior => {
   const override = useSyncExternalStore(
-    subscribePostApplyRomBehaviorOverride,
-    getPostApplyRomBehaviorOverride,
-    getPostApplyRomBehaviorOverride,
+    subscribePostApplyDownloadBehaviorOverride,
+    getPostApplyDownloadBehaviorOverride,
+    getPostApplyDownloadBehaviorOverride,
   );
   useEffect(() => {
-    syncPostApplyRomBehaviorSetting(settingValue);
+    syncPostApplyDownloadBehaviorSetting(settingValue);
   }, [settingValue]);
-  return normalizePostApplyRomBehavior(override ?? settingValue);
+  return normalizePostApplyDownloadBehavior(override ?? settingValue);
 };
 
-type PostApplyRomBehaviorOptions = {
+/** The Post Apply Test select's controlled value: the override once set, else the live setting. */
+const usePostApplyTestBehaviorValue = (settingValue: unknown): PostApplyActionBehavior => {
+  const override = useSyncExternalStore(
+    subscribePostApplyTestBehaviorOverride,
+    getPostApplyTestBehaviorOverride,
+    getPostApplyTestBehaviorOverride,
+  );
+  useEffect(() => {
+    syncPostApplyTestBehaviorSetting(settingValue);
+  }, [settingValue]);
+  return normalizePostApplyTestBehavior(override ?? settingValue);
+};
+
+type PostApplyActionsOptions = {
   addSessionEntry: (entry: EmulatorSessionEntry) => void;
-  behavior: PostApplyRomBehavior;
   core?: string;
   download: () => void | Promise<void>;
+  downloadBehavior: PostApplyActionBehavior;
   fileName: string;
   focusDownload: () => void;
   loadRom?: typeof loadEmulatorRom;
@@ -314,6 +335,7 @@ type PostApplyRomBehaviorOptions = {
   platform?: string;
   retainedEntry?: EmulatorSessionEntry | null;
   setCurrentGame: (id: string) => void;
+  testBehavior: PostApplyActionBehavior;
 };
 
 type EmulatorPlayableOutput = ApplyWorkflowResult["output"] & {
@@ -321,7 +343,7 @@ type EmulatorPlayableOutput = ApplyWorkflowResult["output"] & {
   id?: string;
 };
 
-type PostApplyRomBehaviorResult = {
+type PostApplyActionsResult = {
   downloaded: boolean;
   tested: boolean;
 };
@@ -335,11 +357,11 @@ const claimPostApplyRun = (
   return true;
 };
 
-const runPostApplyRomBehavior = async ({
+const runPostApplyActions = async ({
   addSessionEntry,
-  behavior,
   core,
   download,
+  downloadBehavior,
   fileName,
   focusDownload,
   loadRom = loadEmulatorRom,
@@ -349,11 +371,13 @@ const runPostApplyRomBehavior = async ({
   platform,
   retainedEntry,
   setCurrentGame: selectCurrentGame,
-}: PostApplyRomBehaviorOptions): Promise<PostApplyRomBehaviorResult> => {
-  const { automaticAction } = postApplyRomBehaviorOption(behavior);
+  testBehavior,
+}: PostApplyActionsOptions): Promise<PostApplyActionsResult> => {
+  const shouldDownload = postApplyDownloadBehaviorOption(downloadBehavior).automatic;
+  const shouldTest = postApplyTestBehaviorOption(testBehavior).automatic;
   let downloaded = false;
 
-  if (automaticAction === "download") {
+  if (shouldDownload) {
     try {
       await Promise.resolve(download());
       downloaded = true;
@@ -365,7 +389,7 @@ const runPostApplyRomBehavior = async ({
     }
   }
 
-  if (automaticAction !== "test") return { downloaded, tested: false };
+  if (!shouldTest) return { downloaded, tested: false };
   if (!core) {
     onAutomaticActionFailed?.("test");
     return { downloaded, tested: false };
@@ -485,7 +509,10 @@ const handleApplyPrimaryGate = async ({
 const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContext) => {
   const contextRef = useLatestRef(context);
   const settings = useRomWeaverSettings();
-  const postApplyRomBehaviorRef = useLatestRef(usePostApplyRomBehaviorValue(settings.postApplyRomBehavior));
+  const postApplyDownloadBehaviorRef = useLatestRef(
+    usePostApplyDownloadBehaviorValue(settings.postApplyDownloadBehavior),
+  );
+  const postApplyTestBehaviorRef = useLatestRef(usePostApplyTestBehaviorValue(settings.postApplyTestBehavior));
   const postApplyResultRef = useRef<ApplyWorkflowResult | null>(null);
   return useMemo(
     () => ({
@@ -679,16 +706,16 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
               result.output.fileName;
             const platform = romInput?.info.romType?.platform;
             const core = getEmulatorJsCore(platform, emulatorFileName);
-            await runPostApplyRomBehavior({
+            await runPostApplyActions({
               addSessionEntry: addEntry,
-              behavior: postApplyRomBehaviorRef.current,
               core,
               download: () => downloadOutput(result, initialDownloadFileName, { interactive: false }),
+              downloadBehavior: postApplyDownloadBehaviorRef.current,
               fileName: emulatorFileName,
               focusDownload: focusPendingDownload,
               onAutomaticActionFailed: () => {
-                setPostApplyRomBehaviorOverride(
-                  postApplyRomBehaviorWithDownloadFallback(postApplyRomBehaviorRef.current),
+                setPostApplyDownloadBehaviorOverride(
+                  postApplyDownloadBehaviorWithFallback(postApplyDownloadBehaviorRef.current),
                 );
               },
               onSelectTestView: selectTestView,
@@ -696,6 +723,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
               platform,
               retainedEntry: core ? getApplyEntry(emulatorFileName) || getApplyEntry() : null,
               setCurrentGame,
+              testBehavior: postApplyTestBehaviorRef.current,
             });
           }
           onApplyComplete?.(result);
@@ -726,18 +754,23 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         }
       },
     }),
-    [contextRef, postApplyRomBehaviorRef],
+    [contextRef, postApplyDownloadBehaviorRef, postApplyTestBehaviorRef],
   );
 };
 
 export {
   claimPostApplyRun,
   deriveApplyCompletion,
-  getPostApplyRomBehaviorOverride,
-  runPostApplyRomBehavior,
-  setPostApplyRomBehaviorOverride,
-  subscribePostApplyRomBehaviorOverride,
-  syncPostApplyRomBehaviorSetting,
+  getPostApplyDownloadBehaviorOverride,
+  getPostApplyTestBehaviorOverride,
+  runPostApplyActions,
+  setPostApplyDownloadBehaviorOverride,
+  setPostApplyTestBehaviorOverride,
+  subscribePostApplyDownloadBehaviorOverride,
+  subscribePostApplyTestBehaviorOverride,
+  syncPostApplyDownloadBehaviorSetting,
+  syncPostApplyTestBehaviorSetting,
   useApplyDownloadOrchestration,
-  usePostApplyRomBehaviorValue,
+  usePostApplyDownloadBehaviorValue,
+  usePostApplyTestBehaviorValue,
 };

@@ -1,7 +1,12 @@
 import { Archive, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
-import { postApplyRomBehaviorOption, POST_APPLY_ROM_BEHAVIOR_OPTIONS } from "../../lib/apply/post-apply-behavior.ts";
+import {
+  postApplyDownloadBehaviorOption,
+  postApplyTestBehaviorOption,
+  POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS,
+  POST_APPLY_TEST_BEHAVIOR_OPTIONS,
+} from "../../lib/apply/post-apply-behavior.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import { type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
@@ -55,9 +60,14 @@ import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-r
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
-import { setPostApplyRomBehaviorOverride, usePostApplyRomBehaviorValue } from "./use-apply-download-orchestration.ts";
+import {
+  setPostApplyDownloadBehaviorOverride,
+  setPostApplyTestBehaviorOverride,
+  usePostApplyDownloadBehaviorValue,
+  usePostApplyTestBehaviorValue,
+} from "./use-apply-download-orchestration.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
-import type { PostApplyRomBehavior } from "../../types/settings.ts";
+import type { PostApplyActionBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
 /**
@@ -1205,32 +1215,72 @@ const OutputHeaderField = ({
   );
 };
 
-/**
- * "After applying" select for the Apply step's output options. The public form
- * has no write path into the host app's persisted settings, so a choice here
- * only overrides the behavior for this session (see
- * `use-apply-download-orchestration.ts`'s `postApplyRomBehaviorOverride`); the
- * select still defaults from the live `postApplyRomBehavior` setting.
- */
-const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean; settingValue: unknown }) => {
-  const value = usePostApplyRomBehaviorValue(settingValue);
+const PostApplyActionField = ({
+  disabled,
+  id,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  disabled: boolean;
+  id: string;
+  label: string;
+  onChange: (value: PostApplyActionBehavior) => void;
+  options: readonly { label: string; value: PostApplyActionBehavior }[];
+  value: PostApplyActionBehavior;
+}) => {
   return (
-    <OutputField label="After applying">
+    <OutputField label={label}>
       <select
-        aria-label="After applying"
+        aria-label={label}
         className="select"
         disabled={disabled}
-        id="rom-weaver-select-post-apply-behavior"
-        onChange={(event) => setPostApplyRomBehaviorOverride(event.currentTarget.value as PostApplyRomBehavior)}
+        id={id}
+        onChange={(event) => onChange(event.currentTarget.value as PostApplyActionBehavior)}
         value={value}
       >
-        {POST_APPLY_ROM_BEHAVIOR_OPTIONS.map((option) => (
+        {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
         ))}
       </select>
     </OutputField>
+  );
+};
+
+/** These fields override the read-only host settings for the current Apply session. */
+const PostApplyBehaviorFields = ({
+  disabled,
+  downloadSetting,
+  testSetting,
+}: {
+  disabled: boolean;
+  downloadSetting: unknown;
+  testSetting: unknown;
+}) => {
+  const downloadValue = usePostApplyDownloadBehaviorValue(downloadSetting);
+  const testValue = usePostApplyTestBehaviorValue(testSetting);
+  return (
+    <div className="post-apply-fields">
+      <PostApplyActionField
+        disabled={disabled}
+        id="rom-weaver-select-post-apply-download"
+        label="Post Apply Download"
+        onChange={setPostApplyDownloadBehaviorOverride}
+        options={POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS}
+        value={downloadValue}
+      />
+      <PostApplyActionField
+        disabled={disabled}
+        id="rom-weaver-select-post-apply-test"
+        label="Post Apply Test"
+        onChange={setPostApplyTestBehaviorOverride}
+        options={POST_APPLY_TEST_BEHAVIOR_OPTIONS}
+        value={testValue}
+      />
+    </div>
   );
 };
 
@@ -1352,13 +1402,15 @@ const ApplyOutputAction = ({
   uiState: ReturnType<PatcherUiController["getState"]>;
 }) => {
   const settings = useRomWeaverSettings();
-  const postApplyBehavior = usePostApplyRomBehaviorValue(settings.postApplyRomBehavior);
-  const postApplyOption = postApplyRomBehaviorOption(postApplyBehavior);
+  const postApplyDownloadBehavior = usePostApplyDownloadBehaviorValue(settings.postApplyDownloadBehavior);
+  const postApplyTestBehavior = usePostApplyTestBehaviorValue(settings.postApplyTestBehavior);
+  const postApplyDownloadOption = postApplyDownloadBehaviorOption(postApplyDownloadBehavior);
+  const postApplyTestOption = postApplyTestBehaviorOption(postApplyTestBehavior);
   const core = getEmulatorJsCore(
     romInputs[0]?.info.romType?.platform,
     romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || outputState.pendingDownloadFileName || undefined,
   );
-  const showDownloadFallback = !core && (!postApplyOption.hideTest || postApplyOption.automaticAction === "test");
+  const showDownloadFallback = !core && (postApplyTestOption.visible || postApplyTestOption.automatic);
   return (
     <>
       <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
@@ -1372,7 +1424,7 @@ const ApplyOutputAction = ({
       <PatcherPrimaryAction
         controller={controllers.output}
         disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
-        showCompletedDownload={!postApplyOption.hideDownload || showDownloadFallback}
+        showCompletedDownload={postApplyDownloadOption.visible || showDownloadFallback}
         totalTime={applyTotalTime || undefined}
       />
       <EmulatorJsAction
@@ -1381,7 +1433,7 @@ const ApplyOutputAction = ({
         onSelectView={onSelectView}
         output={emulatorOutput}
         platform={romInputs[0]?.info.romType?.platform}
-        shown={!postApplyOption.hideTest}
+        shown={postApplyTestOption.visible}
       />
       {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
       {bundleTools?.outputVerification ? (
@@ -1804,7 +1856,11 @@ function ApplyWorkflowFormView({
   const outputExtraFields = (
     <>
       {bundleOutputFields}
-      <PostApplyBehaviorField disabled={outputState.disabled} settingValue={settings.postApplyRomBehavior} />
+      <PostApplyBehaviorFields
+        disabled={outputState.disabled}
+        downloadSetting={settings.postApplyDownloadBehavior}
+        testSetting={settings.postApplyTestBehavior}
+      />
     </>
   );
 

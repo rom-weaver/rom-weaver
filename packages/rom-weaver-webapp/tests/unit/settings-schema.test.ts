@@ -41,7 +41,7 @@ const makeStorage = (initial?: string | null): StubStorage => {
 describe("getDefaultSettings", () => {
   it("returns every field in SETTINGS_FIELD_ORDER with the documented defaults", () => {
     const settings = getDefaultSettings();
-    expect(SETTINGS_STORAGE_VERSION).toBe(7);
+    expect(SETTINGS_STORAGE_VERSION).toBe(8);
     expect(Object.keys(settings).sort()).toEqual([...SETTINGS_FIELD_ORDER].sort());
     expect(settings.defaultCompression).toBe("zip/special");
     expect(settings.compressionProfile).toBe("max");
@@ -53,35 +53,37 @@ describe("getDefaultSettings", () => {
     expect(settings.fixChecksum).toBe(false);
     expect(settings.byteUnits).toBe("decimal");
     expect(settings.bundlePackage).toBe("");
-    expect(settings.postApplyRomBehavior).toBe("download-show-test");
+    expect(settings.postApplyDownloadBehavior).toBe("auto-show");
+    expect(settings.postApplyTestBehavior).toBe("show");
     expect(settings.requireInputChecksumMatch).toBe(true);
     expect(settings.betaToolsEnabled).toBe(false);
     expect(settings.threads).toBe("auto");
   });
 
-  it("places post-apply behavior after the bundle output setting", () => {
-    const field = SETTINGS_FIELD_METADATA.postApplyRomBehavior;
-    expect(field.kind).toBe("select");
-    expect(field.options?.map((option) => option.value)).toEqual([
-      "download-show-test",
-      "show-download-show-test",
-      "show-download-test",
-      "show-download",
-      "show-test",
-      "test",
-      "download",
+  it("places both post-apply settings after the bundle output setting", () => {
+    const downloadField = SETTINGS_FIELD_METADATA.postApplyDownloadBehavior;
+    const testField = SETTINGS_FIELD_METADATA.postApplyTestBehavior;
+    expect(downloadField.kind).toBe("select");
+    expect(downloadField.options?.map((option) => option.value)).toEqual(["auto-show", "auto-hide", "show", "hide"]);
+    expect(downloadField.options?.map((option) => option.label)).toEqual([
+      "Auto Download & Show Download (Default)",
+      "Auto Download & Hide Download",
+      "Show Download",
+      "Hide Download",
     ]);
-    expect(field.options?.map((option) => option.label)).toEqual([
-      "Download & Show Test (Default)",
-      "Show Download & Show Test",
-      "Show Download & Test",
-      "Show Download Only",
-      "Show Test Only",
-      "Test Only",
-      "Download Only",
+    expect(testField.kind).toBe("select");
+    expect(testField.options?.map((option) => option.value)).toEqual(["show", "auto-show", "auto-hide", "hide"]);
+    expect(testField.options?.map((option) => option.label)).toEqual([
+      "Show Test (Default)",
+      "Auto Test & Show Test",
+      "Auto Test & Hide Test",
+      "Hide Test",
     ]);
-    expect(SETTINGS_FIELD_ORDER.indexOf("postApplyRomBehavior")).toBeGreaterThan(
+    expect(SETTINGS_FIELD_ORDER.indexOf("postApplyDownloadBehavior")).toBeGreaterThan(
       SETTINGS_FIELD_ORDER.indexOf("bundlePackage"),
+    );
+    expect(SETTINGS_FIELD_ORDER.indexOf("postApplyTestBehavior")).toBeGreaterThan(
+      SETTINGS_FIELD_ORDER.indexOf("postApplyDownloadBehavior"),
     );
   });
 
@@ -125,24 +127,20 @@ describe("validateSettingsDraft", () => {
     expect(result.settings.byteUnits).toBe("decimal");
   });
 
-  it.each([
-    "download-show-test",
-    "show-download-show-test",
-    "show-download-test",
-    "show-download",
-    "show-test",
-    "test",
-    "download",
-  ] as const)("accepts post-apply behavior %s", (postApplyRomBehavior) => {
-    const result = validateSettingsDraft(validDraft({ postApplyRomBehavior }));
-    expect(result.settings.postApplyRomBehavior).toBe(postApplyRomBehavior);
-    expect(result.invalidFields).not.toContain(getSettingsFieldId("postApplyRomBehavior"));
+  it.each(["auto-show", "auto-hide", "show", "hide"] as const)("accepts post-apply action %s", (behavior) => {
+    const result = validateSettingsDraft(
+      validDraft({ postApplyDownloadBehavior: behavior, postApplyTestBehavior: behavior }),
+    );
+    expect(result.settings.postApplyDownloadBehavior).toBe(behavior);
+    expect(result.settings.postApplyTestBehavior).toBe(behavior);
+    expect(result.invalidFields).not.toContain(getSettingsFieldId("postApplyDownloadBehavior"));
+    expect(result.invalidFields).not.toContain(getSettingsFieldId("postApplyTestBehavior"));
   });
 
-  it("rejects an unknown post-apply behavior", () => {
-    const result = validateSettingsDraft(validDraft({ postApplyRomBehavior: "open-in-new-window" }));
-    expect(result.invalidFields).toContain(getSettingsFieldId("postApplyRomBehavior"));
-    expect(result.settings.postApplyRomBehavior).toBe("download-show-test");
+  it.each(["postApplyDownloadBehavior", "postApplyTestBehavior"] as const)("rejects an unknown %s value", (field) => {
+    const result = validateSettingsDraft(validDraft({ [field]: "open-in-new-window" }));
+    expect(result.invalidFields).toContain(getSettingsFieldId(field));
+    expect(result.settings[field]).toBe(SETTINGS_FIELD_METADATA[field].options?.[0]?.value);
   });
 
   it("flags an out-of-range choice value and falls back to the first valid value", () => {
@@ -250,12 +248,19 @@ describe("serializeSettingsForStorage", () => {
     expect(loadSettings(makeStorage(json)).betaToolsEnabled).toBe(true);
   });
 
-  it("serializes and loads post-apply behavior under apply.output", () => {
-    const settings = { ...getDefaultSettings(), postApplyRomBehavior: "show-download-test" as const };
+  it("serializes and loads both post-apply behaviors under apply.output", () => {
+    const settings = {
+      ...getDefaultSettings(),
+      postApplyDownloadBehavior: "hide" as const,
+      postApplyTestBehavior: "auto-hide" as const,
+    };
     const json = serializeSettingsForStorage(settings);
     const parsed = JSON.parse(json as string);
-    expect(parsed.apply.output.postApplyRomBehavior).toBe("show-download-test");
-    expect(loadSettings(makeStorage(json)).postApplyRomBehavior).toBe("show-download-test");
+    expect(parsed.apply.output.postApplyDownloadBehavior).toBe("hide");
+    expect(parsed.apply.output.postApplyTestBehavior).toBe("auto-hide");
+    const loaded = loadSettings(makeStorage(json));
+    expect(loaded.postApplyDownloadBehavior).toBe("hide");
+    expect(loaded.postApplyTestBehavior).toBe("auto-hide");
   });
 });
 
@@ -336,31 +341,55 @@ describe("loadSettings", () => {
     expect(storage.removedKeys).toEqual([LOCAL_STORAGE_SETTINGS_ID]);
   });
 
-  it("loads a version 5 payload and defaults the post-apply behavior it predates", () => {
+  it("loads a version 5 payload and defaults the post-apply behaviors it predates", () => {
     const payload = JSON.stringify({ common: { language: "de" }, version: 5 });
     const storage = makeStorage(payload);
     const settings = loadSettings(storage);
     expect(settings.language).toBe("de");
-    expect(settings.postApplyRomBehavior).toBe("download-show-test");
+    expect(settings.postApplyDownloadBehavior).toBe("auto-show");
+    expect(settings.postApplyTestBehavior).toBe("show");
     expect(storage.removedKeys).toEqual([]);
   });
 
   it.each([
-    ["auto-download", true, "download-show-test"],
-    ["auto-download", false, "download"],
-    ["auto-test", true, "show-download-test"],
-    ["auto-test", false, "show-download-test"],
-    ["auto-test-download", true, "download-show-test"],
-    ["auto-test-download", false, "download"],
-    ["none", true, "show-download-show-test"],
-    ["none", false, "show-download"],
-  ] as const)("migrates v6 behavior %s with Test button %s", (behavior, showTest, expected) => {
+    ["auto-download", true, "auto-show", "show"],
+    ["auto-download", false, "auto-show", "hide"],
+    ["auto-test", true, "show", "auto-show"],
+    ["auto-test", false, "show", "auto-hide"],
+    ["auto-test-download", true, "auto-show", "auto-show"],
+    ["auto-test-download", false, "auto-show", "auto-hide"],
+    ["none", true, "show", "show"],
+    ["none", false, "show", "hide"],
+  ] as const)("migrates v6 behavior %s with Test button %s", (behavior, showTest, download, test) => {
     const payload = JSON.stringify({
       apply: { output: { postApplyRomBehavior: behavior } },
       common: { applyPlayButtonEnabled: showTest },
       version: 6,
     });
-    expect(loadSettings(makeStorage(payload)).postApplyRomBehavior).toBe(expected);
+    expect(loadSettings(makeStorage(payload))).toMatchObject({
+      postApplyDownloadBehavior: download,
+      postApplyTestBehavior: test,
+    });
+  });
+
+  it.each([
+    ["download-show-test", "auto-show", "show"],
+    ["show-download-show-test", "show", "show"],
+    ["show-download-test", "show", "auto-show"],
+    ["download-test", "auto-show", "auto-show"],
+    ["show-download", "show", "hide"],
+    ["show-test", "hide", "show"],
+    ["test", "hide", "auto-hide"],
+    ["download", "auto-hide", "hide"],
+  ] as const)("migrates v7 behavior %s", (behavior, download, test) => {
+    const payload = JSON.stringify({
+      apply: { output: { postApplyRomBehavior: behavior } },
+      version: 7,
+    });
+    expect(loadSettings(makeStorage(payload))).toMatchObject({
+      postApplyDownloadBehavior: download,
+      postApplyTestBehavior: test,
+    });
   });
 
   it("resets when the payload is the right version but not an object", () => {

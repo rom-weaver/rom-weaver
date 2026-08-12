@@ -8,7 +8,7 @@ import type {
   CreateSettings,
 } from "../../platform/browser/browser-api.ts";
 import type { ProgressEvent } from "../../types/workflow-runtime-types.ts";
-import type { PostApplyRomBehavior } from "../../types/settings.ts";
+import type { PostApplyActionBehavior } from "../../types/settings.ts";
 import type {
   BinarySource,
   ApplyPatchFormProps as BaseApplyPatchFormProps,
@@ -16,7 +16,11 @@ import type {
   StartupState,
 } from "./patcher-form.ts";
 
-type RomWeaverReactSettings = ApplySettings & CreateSettings & { postApplyRomBehavior?: PostApplyRomBehavior };
+type RomWeaverReactSettings = ApplySettings &
+  CreateSettings & {
+    postApplyDownloadBehavior?: PostApplyActionBehavior;
+    postApplyTestBehavior?: PostApplyActionBehavior;
+  };
 type ApplyWorkflowSettings = ApplySettings;
 type CreateWorkflowSettings = CreateSettings;
 type CandidateSelectionPrompt = CandidateSelectionRequest;

@@ -20,14 +20,7 @@ type StringNumber = number | string;
 
 type BundlePackage = "" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
 
-type PostApplyRomBehavior =
-  | "download-show-test"
-  | "show-download-show-test"
-  | "show-download-test"
-  | "show-download"
-  | "show-test"
-  | "test"
-  | "download";
+type PostApplyActionBehavior = "auto-show" | "auto-hide" | "show" | "hide";
 
 type ByteUnitSystem = "binary" | "decimal";
 
@@ -122,6 +115,6 @@ export type {
   CompressionFormat,
   CreateSettings,
   PatchFormat,
-  PostApplyRomBehavior,
+  PostApplyActionBehavior,
   WorkerSettings,
 };
