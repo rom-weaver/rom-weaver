@@ -199,6 +199,7 @@ function toBundleSessionEntry(
     ...(patch.author ? { author: patch.author } : {}),
     ...(patch.label ? { label: patch.label } : {}),
     ...(patch.header ? { header: patch.header } : {}),
+    ...(patch.basis ? { basis: patch.basis } : {}),
     ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),
     ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
   };

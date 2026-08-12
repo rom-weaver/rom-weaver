@@ -23,15 +23,15 @@ Run a complete patch with the tiny original homebrew NES ROM the webapp uses. Th
 
 ```bash
 curl --fail --location --output first-weave.zip https://rom-weaver.com/first-weave.zip
-rom-weaver patch apply --input first-weave.zip --output modified-rom.nes
-rom-weaver checksum --input modified-rom.nes --algo sha256
+rom-weaver patch apply --input first-weave.zip --output rom-weaver.nes
+rom-weaver checksum --input rom-weaver.nes --algo sha256
 ```
 
-The original ROM displays `HELLO WORLD`; the first IPS patch changes `HELLO` to `MODIFIED`, and the second changes `WORLD` to `ROM`. The final ROM displays `MODIFIED ROM`. The final SHA-256 should be `e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e`. Open the result in an NES emulator to run it.
+The original ROM displays `HELLO WORLD`. One IPS patch changes `HELLO` to `ROM`, and the other changes `WORLD` to `WEAVER`. Both patches target the original ROM, so either order works. The final ROM displays `ROM WEAVER`. The final SHA-256 should be `7ac8001dcbcbff45cd5cebb5b0655192021fbbdf27533aa961347194ab3e836e`. Open the result in an NES emulator to run it.
 
 | Original ROM | After the first patch | After both patches |
 | :---: | :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../screenshots/first-sample-hello-world.webp) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../screenshots/first-sample-modified-world.webp) | ![The sample ROM displaying MODIFIED ROM after both patches](../screenshots/first-sample-modified-rom.webp) |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../screenshots/first-sample-hello-world.webp) | ![The sample ROM displaying ROM WORLD after the first patch](../screenshots/first-sample-rom-world.webp) | ![The sample ROM displaying ROM WEAVER after both patches](../screenshots/first-sample-rom-weaver.webp) |
 
 ## Practice patch creation and bundles
 
@@ -59,7 +59,7 @@ rom-weaver patch apply \
 rom-weaver checksum --input rebuilt.nes --algo sha256
 ```
 
-The final SHA-256 should be `f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e`. That match proves the patch rebuilt Modified byte for byte.
+The final SHA-256 should be `00639b0b8586e10c67d6d15217478786cebed6e2cd6495ed94b6a338c0de0afd`. That match proves the patch rebuilt Modified byte for byte.
 
 Now package that tested patch as a public-safe bundle. `--no-bundle-rom` keeps the Original out of the ZIP while recording its checksums:
 
@@ -69,7 +69,7 @@ rom-weaver bundle create \
   --patch sample.bps \
   --patch-id sample \
   --patch-name "HELLO to MODIFIED" \
-  --expect-out sha256=f203a199694d5a67a43857ce7e37a79e14a9fa1e7554ddd316b84f8df508b45e \
+  --expect-out sha256=00639b0b8586e10c67d6d15217478786cebed6e2cd6495ed94b6a338c0de0afd \
   --output rom-weaver-bundle.json \
   --bundle sample-bundle.zip \
   --no-bundle-rom

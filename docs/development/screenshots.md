@@ -76,7 +76,7 @@ The [mobile capture](../screenshots/bundle-output-mobile-light.webp) keeps the e
 
 | Original ROM | After the first patch | After both patches |
 | :---: | :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../screenshots/first-sample-hello-world.webp) | ![The sample ROM displaying MODIFIED WORLD after the first patch](../screenshots/first-sample-modified-world.webp) | ![The sample ROM displaying MODIFIED ROM after both patches](../screenshots/first-sample-modified-rom.webp) |
+| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../screenshots/first-sample-hello-world.webp) | ![The sample ROM displaying ROM WORLD after the first patch](../screenshots/first-sample-rom-world.webp) | ![The sample ROM displaying ROM WEAVER after both patches](../screenshots/first-sample-rom-weaver.webp) |
 
 The webapp generates `first-weave.zip`, `first-create.zip`, and the loose homebrew ROMs from [`first-sample-assets.mjs`](../../packages/rom-weaver-webapp/scripts/first-sample-assets.mjs). The guided tours and automated tests use the same assets.
 
