@@ -332,7 +332,6 @@ html:has(.docs-workbench) {
   text-wrap: balance;
 }
 .rw-app .docs-article h1 {
-  max-width: 17ch;
   margin: 0 0 var(--sp-l);
   font-size: clamp(2rem, 1.4rem + 2.6vw, 2.9rem);
   font-weight: 780;
