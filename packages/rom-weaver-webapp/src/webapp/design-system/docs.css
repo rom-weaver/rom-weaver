@@ -48,9 +48,6 @@ html:has(.docs-workbench) {
   top: var(--sp-l);
   display: grid;
   gap: var(--sp-l);
-  max-height: calc(100vh - var(--sp-xl));
-  overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 /* --- guide switcher --- */
