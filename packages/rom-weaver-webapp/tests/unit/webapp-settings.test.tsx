@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { getDefaultSettings, getSettingsUiState } from "../../src/webapp/settings/settings-state.ts";
 import { SettingsPanel } from "../../src/webapp/webapp-settings.tsx";
@@ -46,5 +46,45 @@ describe("SettingsPanel sections", () => {
 
     expect(webappGroup).not.toBe(behaviorGroup);
     expect(container.querySelector("#settings-apply-play-button-enabled")).toBeNull();
+  });
+
+  it("places toggle labels before their controls", () => {
+    const draftSettings = getDefaultSettings();
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={draftSettings}>
+        <SettingsPanel
+          draftSettings={draftSettings}
+          onDraftChange={() => undefined}
+          uiState={getSettingsUiState(draftSettings)}
+          validation={createEmptyValidationState()}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const inputs = container.querySelectorAll<HTMLInputElement>(".settoggle input[type='checkbox']");
+    expect(inputs.length).toBeGreaterThan(0);
+    for (const input of inputs) {
+      expect(input.closest("label")?.firstElementChild?.classList).toContain("popt");
+      expect(input.closest("label")?.lastElementChild).toBe(input);
+    }
+  });
+
+  it("keeps each toggle row clickable", () => {
+    const draftSettings = getDefaultSettings();
+    const onDraftChange = vi.fn();
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={draftSettings}>
+        <SettingsPanel
+          draftSettings={draftSettings}
+          onDraftChange={onDraftChange}
+          uiState={getSettingsUiState(draftSettings)}
+          validation={createEmptyValidationState()}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const input = container.querySelector<HTMLInputElement>("#settings-beta-tools-enabled");
+    fireEvent.click(input?.closest("label") as HTMLLabelElement);
+    expect(onDraftChange).toHaveBeenCalledWith("betaToolsEnabled", true);
   });
 });

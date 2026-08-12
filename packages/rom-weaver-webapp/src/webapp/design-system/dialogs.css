@@ -683,14 +683,9 @@
   height: 34px;
   font-size: 0.85rem;
 }
-.rw-app .setchecks {
+.rw-app .settoggle {
   display: flex;
-  flex-direction: column;
   gap: var(--sp-s);
-  padding-block-start: 4px;
-}
-.rw-app .setchecks .popt {
-  font-size: 0.82rem;
 }
 /* About folded into the Status tab: licence, attribution, privacy - the build
    facts above it are the status rows, never repeated here. The plates above

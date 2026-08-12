@@ -26,7 +26,7 @@ import type { ValidationState } from "./webapp-state-types.ts";
 
 /**
  * Settings panel rendered in the dark-pro grouped layout (`.setgroup` /
- * `.setrow` / `.setchecks` / `.srange`). All field metadata, value resolution,
+ * `.setrow` / `.settoggle` / `.srange`). All field metadata, value resolution,
  * change handling, and validation wiring are preserved from the original
  * field-driven implementation; only the surrounding markup changed.
  */
@@ -341,7 +341,8 @@ const SettingsToggle = ({ fieldKey, draftSettings, uiState, onDraftChange }: Fie
       ? getChoiceCheckboxValue(fieldKey, draftSettings) === field.checkedValue
       : getCheckboxValue(fieldKey, draftSettings);
   return (
-    <label className="popt opt">
+    <label className="setrow settoggle">
+      <span className="popt">{field.label}</span>
       <input
         checked={checked}
         disabled={disabled}
@@ -349,7 +350,6 @@ const SettingsToggle = ({ fieldKey, draftSettings, uiState, onDraftChange }: Fie
         onChange={(event) => handleSettingsEvent(event.currentTarget, onDraftChange)}
         type="checkbox"
       />
-      {field.label}
     </label>
   );
 };
@@ -412,13 +412,9 @@ const SettingsGroup = ({
           <SettingsRow fieldKey={fieldKey} key={fieldKey} {...shared} />
         ),
       )}
-      {toggles.length ? (
-        <div className="setchecks">
-          {toggles.map((fieldKey) => (
-            <SettingsToggle fieldKey={fieldKey} key={fieldKey} {...shared} />
-          ))}
-        </div>
-      ) : null}
+      {toggles.map((fieldKey) => (
+        <SettingsToggle fieldKey={fieldKey} key={fieldKey} {...shared} />
+      ))}
     </div>
   );
 };

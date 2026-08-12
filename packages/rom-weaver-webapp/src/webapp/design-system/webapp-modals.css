@@ -164,7 +164,7 @@ html:has(.rw-modal) {
 }
 /* Stack labels when the card, not the viewport, runs narrow. */
 @container settings-card (max-width: 560px) {
-  .rw-app .setgroup .setrow {
+  .rw-app .setgroup .setrow:not(.settoggle) {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--sp-xs);
   }
