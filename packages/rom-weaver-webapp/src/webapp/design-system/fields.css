@@ -352,6 +352,7 @@
 }
 .rw-app .patch-shared-meta-actions .btn {
   gap: 6px;
+  height: 32px;
 }
 .rw-app .patch-bulk-edit-button {
   flex: none;
@@ -395,6 +396,7 @@
 .rw-app .patch-shared-meta-field .input {
   grid-column: 1 / -1;
   width: 100%;
+  height: 32px;
 }
 .rw-app .patch-shared-meta-actions {
   display: flex;
@@ -402,10 +404,17 @@
 }
 @media (max-width: 760px) {
   .rw-app .patch-shared-meta-editor {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rw-app .patch-shared-meta-heading,
+  .rw-app .patch-shared-meta-actions {
+    grid-column: 1 / -1;
   }
   .rw-app .patch-shared-meta-actions {
     justify-content: flex-end;
+  }
+  .rw-app .patch-shared-meta-actions .btn {
+    flex: 1 1 0;
   }
 }
 /* Patch actions menu */

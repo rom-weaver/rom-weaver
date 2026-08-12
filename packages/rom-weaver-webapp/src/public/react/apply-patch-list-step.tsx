@@ -1402,17 +1402,32 @@ const SharedPatchMetaEditor = ({
 }) => {
   const [author, setAuthor] = useState(commonPatchMetaValue(bundleMeta, "author") || "");
   const [version, setVersion] = useState(commonPatchMetaValue(bundleMeta, "version") || "");
+  const versionInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => versionInputRef.current?.focus(), []);
 
   const apply = () => {
     onApply({ author: author.trim() || undefined, version: version.trim() || undefined });
   };
 
   return (
-    <fieldset className="patch-shared-meta-editor" id="rom-weaver-bulk-patch-meta">
-      <legend className="sr-only">Shared patch details</legend>
-      <div className="patch-shared-meta-heading">
+    <form
+      aria-labelledby="rom-weaver-bulk-patch-meta-title"
+      className="patch-shared-meta-editor"
+      id="rom-weaver-bulk-patch-meta"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        onCancel();
+      }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        apply();
+      }}
+    >
+      <div className="patch-shared-meta-heading" id="rom-weaver-bulk-patch-meta-title">
         <strong>Shared details</strong>
-        <span>Apply values to every patch. You can still edit individual patches.</span>
+        <span>Apply values to every patch. Press Enter to apply or Escape to cancel.</span>
       </div>
       <div className="patch-shared-meta-field">
         <label htmlFor="rom-weaver-shared-patch-version">Version</label>
@@ -1421,6 +1436,7 @@ const SharedPatchMetaEditor = ({
           id="rom-weaver-shared-patch-version"
           onChange={(event) => setVersion(event.currentTarget.value)}
           placeholder={commonPatchMetaValue(bundleMeta, "version") === undefined ? "Multiple values" : "Version"}
+          ref={versionInputRef}
           type="text"
           value={version}
         />
@@ -1437,14 +1453,14 @@ const SharedPatchMetaEditor = ({
         />
       </div>
       <div className="patch-shared-meta-actions">
-        <button className="btn ghost slim" onClick={onCancel} type="button">
+        <button className="btn ghost" onClick={onCancel} type="button">
           Cancel
         </button>
-        <button className="btn primary slim" onClick={apply} type="button">
+        <button className="btn primary" type="submit">
           Apply to all
         </button>
       </div>
-    </fieldset>
+    </form>
   );
 };
 
@@ -1490,6 +1506,11 @@ const ApplyPatchListStep = ({
   woven?: boolean;
 }) => {
   const [bulkEditing, setBulkEditing] = useState(false);
+  const bulkEditButtonRef = useRef<HTMLButtonElement>(null);
+  const closeBulkEditor = () => {
+    setBulkEditing(false);
+    queueMicrotask(() => bulkEditButtonRef.current?.focus());
+  };
   const total = patches.length;
   // Reordering only makes sense for a multi-patch stack. A patch may still be
   // moved while it is staging; other busy/locked rows remain non-reorderable.
@@ -1536,6 +1557,7 @@ const ApplyPatchListStep = ({
             aria-expanded={bulkEditing}
             className="btn ghost slim patch-bulk-edit-button"
             onClick={() => setBulkEditing((editing) => !editing)}
+            ref={bulkEditButtonRef}
             type="button"
           >
             <Pencil aria-hidden="true" />
@@ -1564,9 +1586,9 @@ const ApplyPatchListStep = ({
           bundleMeta={bundleMeta || patches.map(() => undefined)}
           onApply={(updates) => {
             onBundleMetaBulkChange(updates);
-            setBulkEditing(false);
+            closeBulkEditor();
           }}
-          onCancel={() => setBulkEditing(false)}
+          onCancel={closeBulkEditor}
         />
       ) : null}
       <div

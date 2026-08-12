@@ -288,7 +288,7 @@ describe("apply workflow view - empty bench", () => {
 });
 
 describe("apply workflow view - staged bench", () => {
-  it("edits shared patch details from the patches header", () => {
+  it("edits shared patch details from the patches header", async () => {
     const onBundleMetaBulkChange = vi.fn();
     const { container, getByLabelText, getByRole } = renderView({
       bundleMetaById: new Map([
@@ -311,14 +311,21 @@ describe("apply workflow view - staged bench", () => {
     expect((getByLabelText("Version") as HTMLInputElement).value).toBe("1.0");
     expect((getByLabelText("Author") as HTMLInputElement).value).toBe("Author");
 
-    fireEvent.change(getByLabelText("Version"), { target: { value: "2.0" } });
+    const versionInput = getByLabelText("Version");
+    fireEvent.change(versionInput, { target: { value: "2.0" } });
     fireEvent.change(getByLabelText("Author"), { target: { value: "New author" } });
-    fireEvent.click(getByRole("button", { name: "Apply to all" }));
+    fireEvent.submit(versionInput.closest("form") as HTMLFormElement);
 
     expect(onBundleMetaBulkChange).toHaveBeenCalledWith(["patch-a", "patch-b"], {
       author: "New author",
       version: "2.0",
     });
+    await vi.waitFor(() => expect(document.activeElement).toBe(button));
+
+    fireEvent.click(button);
+    fireEvent.keyDown(getByLabelText("Version"), { key: "Escape" });
+    expect(container.querySelector("#rom-weaver-bulk-patch-meta")).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(button));
   });
 
   it("shows the emulator action only when the input resolves to a supported core", () => {
