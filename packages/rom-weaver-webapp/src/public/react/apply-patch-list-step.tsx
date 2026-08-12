@@ -1383,6 +1383,87 @@ const PatchCard = ({
   );
 };
 
+const commonPatchMetaValue = (
+  bundleMeta: readonly (BundlePatchMeta | undefined)[],
+  field: "author" | "version",
+): string | undefined => {
+  const values = bundleMeta.map((meta) => meta?.[field] || "");
+  return values.every((value) => value === values[0]) ? values[0] : undefined;
+};
+
+const SharedPatchMetaEditor = ({
+  bundleMeta,
+  onCancel,
+  onApply,
+}: {
+  bundleMeta: readonly (BundlePatchMeta | undefined)[];
+  onCancel: () => void;
+  onApply: (updates: Partial<BundlePatchMeta>) => void;
+}) => {
+  const [author, setAuthor] = useState(commonPatchMetaValue(bundleMeta, "author") || "");
+  const [version, setVersion] = useState(commonPatchMetaValue(bundleMeta, "version") || "");
+  const versionInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => versionInputRef.current?.focus(), []);
+
+  const apply = () => {
+    onApply({ author: author.trim() || undefined, version: version.trim() || undefined });
+  };
+
+  return (
+    <form
+      aria-labelledby="rom-weaver-bulk-patch-meta-title"
+      className="patch-shared-meta-editor"
+      id="rom-weaver-bulk-patch-meta"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        onCancel();
+      }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        apply();
+      }}
+    >
+      <div className="patch-shared-meta-heading" id="rom-weaver-bulk-patch-meta-title">
+        <strong>Bulk Edit</strong>
+        <span>Set metadata values for every patch.</span>
+      </div>
+      <div className="patch-shared-meta-field">
+        <label htmlFor="rom-weaver-shared-patch-version">Version</label>
+        <input
+          className="input popt-input"
+          id="rom-weaver-shared-patch-version"
+          onChange={(event) => setVersion(event.currentTarget.value)}
+          placeholder={commonPatchMetaValue(bundleMeta, "version") === undefined ? "Multiple values" : "Version"}
+          ref={versionInputRef}
+          type="text"
+          value={version}
+        />
+      </div>
+      <div className="patch-shared-meta-field">
+        <label htmlFor="rom-weaver-shared-patch-author">Author</label>
+        <input
+          className="input popt-input"
+          id="rom-weaver-shared-patch-author"
+          onChange={(event) => setAuthor(event.currentTarget.value)}
+          placeholder={commonPatchMetaValue(bundleMeta, "author") === undefined ? "Multiple values" : "Author"}
+          type="text"
+          value={author}
+        />
+      </div>
+      <div className="patch-shared-meta-actions">
+        <button className="btn ghost" onClick={onCancel} type="button">
+          Cancel
+        </button>
+        <button className="btn primary" type="submit">
+          Apply to all
+        </button>
+      </div>
+    </form>
+  );
+};
+
 const ApplyPatchListStep = ({
   bundleOutputCheckHint,
   bundleSessionMatches,
@@ -1391,6 +1472,7 @@ const ApplyPatchListStep = ({
   fault,
   bundleMeta,
   onBundleMetaChange,
+  onBundleMetaBulkChange,
   onTogglePatch,
   notice,
   overrideAvailable,
@@ -1411,6 +1493,7 @@ const ApplyPatchListStep = ({
   /** Per-index editable bundle metadata. */
   bundleMeta?: readonly (BundlePatchMeta | undefined)[];
   onBundleMetaChange?: (index: number, updates: Partial<BundlePatchMeta>) => void;
+  onBundleMetaBulkChange?: (updates: Partial<BundlePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
   notice?: ReactNode;
   /** The 0x04 "Apply anyway…" override toggle is on offer - fault hints name it. */
@@ -1422,6 +1505,12 @@ const ApplyPatchListStep = ({
   patchStack: PatcherStackController;
   woven?: boolean;
 }) => {
+  const [bulkEditing, setBulkEditing] = useState(false);
+  const bulkEditButtonRef = useRef<HTMLButtonElement>(null);
+  const closeBulkEditor = () => {
+    setBulkEditing(false);
+    queueMicrotask(() => bulkEditButtonRef.current?.focus());
+  };
   const total = patches.length;
   // Reordering only makes sense for a multi-patch stack. A patch may still be
   // moved while it is staging; other busy/locked rows remain non-reorderable.
@@ -1461,6 +1550,21 @@ const ApplyPatchListStep = ({
           </ul>
         </InfoPopover>
       }
+      headerExtra={
+        total > 1 && onBundleMetaBulkChange ? (
+          <button
+            aria-controls="rom-weaver-bulk-patch-meta"
+            aria-expanded={bulkEditing}
+            className="btn ghost slim patch-bulk-edit-button"
+            onClick={() => setBulkEditing((editing) => !editing)}
+            ref={bulkEditButtonRef}
+            type="button"
+          >
+            <Pencil aria-hidden="true" />
+            Bulk edit
+          </button>
+        ) : undefined
+      }
       meta={
         total > 0 ? (
           <>
@@ -1476,6 +1580,17 @@ const ApplyPatchListStep = ({
       title="Patches"
       woven={woven}
     >
+      {bulkEditing && onBundleMetaBulkChange ? (
+        <SharedPatchMetaEditor
+          key="bulk-patch-meta-editor"
+          bundleMeta={bundleMeta || patches.map(() => undefined)}
+          onApply={(updates) => {
+            onBundleMetaBulkChange(updates);
+            closeBulkEditor();
+          }}
+          onCancel={closeBulkEditor}
+        />
+      ) : null}
       <div
         className="cards patch-cards workflow-file-list"
         id="rom-weaver-list-patch-stack"

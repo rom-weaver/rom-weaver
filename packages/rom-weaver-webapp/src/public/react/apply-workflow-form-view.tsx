@@ -1676,6 +1676,7 @@ function ApplyWorkflowFormView({
   bundleRomExpectation,
   bundleTools,
   onBundleMetaChange,
+  onBundleMetaBulkChange,
   onSelectView,
   onUnifiedDrop,
   patchEnablement,
@@ -1702,6 +1703,7 @@ function ApplyWorkflowFormView({
   /** Shown while the bundle session waits for the user to supply the expected ROM. */
   bundleRomExpectation?: BundleRomExpectation;
   onBundleMetaChange?: (id: string, updates: Partial<BundlePatchMeta>) => void;
+  onBundleMetaBulkChange?: (ids: readonly string[], updates: Partial<BundlePatchMeta>) => void;
   onSelectView?: (view: "test") => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[]) => void;
@@ -2033,6 +2035,7 @@ function ApplyWorkflowFormView({
               const id = patchIds[index];
               if (id) onBundleMetaChange?.(id, updates);
             }}
+            onBundleMetaBulkChange={(updates) => onBundleMetaBulkChange?.(patchIds, updates)}
             onTogglePatch={patchEnablement?.onToggle}
             overrideAvailable={uiState.checksumOverride.visible}
             patches={patches}
