@@ -24,6 +24,7 @@ const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
 // Derived from the route table, so a new guide is audited without a second edit.
 export const computeDocsRouteSlugs = (docSources) => docSources.map((source) => source.slug);
+export const hasVisiblePrerenderedShell = (layout) => layout.prerendered && layout.footerInFirstViewport;
 const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
 const A11Y_VIEWPORTS = [
   { height: 720, label: "desktop", width: 1280 },
@@ -187,7 +188,16 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         navigation.catch(() => undefined);
         if (testCase.replayClick) {
           const settings = page.getByRole("button", { name: "Settings" });
-          await settings.waitFor({ state: "visible" });
+          const dock = page.locator(".dock");
+          const workflow = page.locator("#panel-patcher .workflow-body");
+          // WebKit can expose the masthead before it finishes parsing the
+          // prerendered dock and workflow. Wait for the complete shell, then
+          // keep the geometry assertion below as the real visibility check.
+          await Promise.all([
+            settings.waitFor({ state: "visible" }),
+            dock.waitFor({ state: "attached" }),
+            workflow.waitFor({ state: "attached" }),
+          ]);
           // Standalone iOS paints with device insets before the app bundle can
           // run. Apply representative values to exercise that same first shell
           // geometry instead of only testing the browser-tab zero-inset case.
@@ -217,7 +227,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             };
           });
           initialShellLayout = initialShell;
-          if (!(initialShell.prerendered && initialShell.footerInFirstViewport)) {
+          if (!hasVisiblePrerenderedShell(initialShell)) {
             throw new Error(`initial shell dock is not visible: ${JSON.stringify(initialShell)}`);
           }
           await settings.click();
