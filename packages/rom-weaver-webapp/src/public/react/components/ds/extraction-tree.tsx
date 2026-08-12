@@ -1,7 +1,7 @@
 import { Archive } from "lucide-react";
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
-import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../../../storage/shared/timing.ts";
+import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 import { Drawer, DrawerReadout } from "./drawer.tsx";
 
@@ -63,6 +63,12 @@ const formatExtractionElapsedMs = (ms?: number) =>
 
 const formatExtractionTimingLabel = (timing?: string) => (timing ? `Extract ${timing}` : undefined);
 
+const isValidExtractionSize = (value: number | undefined): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+const formatExtractionSize = (value: number | undefined, formatBytes: (bytes: number) => string) =>
+  isValidExtractionSize(value) ? formatBytes(value) : undefined;
+
 const getEntryTotalSize = (entries: ExtractionFileEntry[] | undefined) => {
   if (!entries?.length) return undefined;
   const sizes = entries
@@ -71,7 +77,12 @@ const getEntryTotalSize = (entries: ExtractionFileEntry[] | undefined) => {
   return sizes.length ? sizes.reduce((total, size) => total + size, 0) : undefined;
 };
 
-const addMissingLeafSize = (levels: ExtractionLevel[], fileName: string, fileSize: number | undefined) => {
+const addMissingLeafSize = (
+  levels: ExtractionLevel[],
+  fileName: string,
+  fileSize: number | undefined,
+  formatBytes: (bytes: number) => string,
+) => {
   const last = levels.at(-1);
   if (
     !last ||
@@ -82,7 +93,10 @@ const addMissingLeafSize = (levels: ExtractionLevel[], fileName: string, fileSiz
   ) {
     return levels;
   }
-  return [...levels.slice(0, -1), { ...last, sizeBytes: fileSize, sizeLabel: formatByteSize(fileSize) }];
+  return [
+    ...levels.slice(0, -1),
+    { ...last, sizeBytes: fileSize, sizeLabel: formatExtractionSize(fileSize, formatBytes) },
+  ];
 };
 
 const buildExtractionLevels = (
@@ -90,13 +104,14 @@ const buildExtractionLevels = (
   fileSize: number | undefined,
   fileEntries: ExtractionFileEntry[] | undefined,
   parentCompressions: ExtractionParentLevel[] | undefined,
+  formatBytes: (bytes: number) => string,
 ): ExtractionLevel[] => {
   const levels: ExtractionLevel[] = (parentCompressions || []).map((entry) => {
     const sizeBytes = entry.sourceSize ?? entry.outputSize;
     return {
       name: entry.fileName,
       sizeBytes,
-      sizeLabel: typeof sizeBytes === "number" ? formatByteSize(sizeBytes) : undefined,
+      sizeLabel: formatExtractionSize(sizeBytes, formatBytes),
       timing: formatExtractionElapsedMs(entry.decompressionTimeMs),
     };
   });
@@ -107,11 +122,11 @@ const buildExtractionLevels = (
         depth,
         name: entry.fileName,
         sizeBytes: entry.fileSize,
-        sizeLabel: typeof entry.fileSize === "number" ? formatByteSize(entry.fileSize) : undefined,
+        sizeLabel: formatExtractionSize(entry.fileSize, formatBytes),
         timing: formatExtractionElapsedMs(entry.decompressionTimeMs),
       })),
     );
-    return addMissingLeafSize(levels, fileName, fileSize);
+    return addMissingLeafSize(levels, fileName, fileSize, formatBytes);
   }
   // Compare by basename: when the chain already ends with the extracted leaf (whose name may carry
   // its full in-archive path), don't append a duplicate bare-basename level for the same file.
@@ -120,10 +135,10 @@ const buildExtractionLevels = (
     levels.push({
       name: fileName,
       sizeBytes: fileSize,
-      sizeLabel: typeof fileSize === "number" ? formatByteSize(fileSize) : undefined,
+      sizeLabel: formatExtractionSize(fileSize, formatBytes),
     });
   }
-  return addMissingLeafSize(levels, fileName, fileSize);
+  return addMissingLeafSize(levels, fileName, fileSize, formatBytes);
 };
 
 const TreeRow = ({ level, depth }: { level: ExtractionLevel; depth: number }) => (
@@ -143,6 +158,7 @@ const isCueLevel = (level: ExtractionLevel) => /\.cue$/i.test(level.name);
 
 const formatRatio = (first: ExtractionLevel, last: ExtractionLevel) => {
   if (isCueLevel(last)) return "";
+  if (!(isValidExtractionSize(first.sizeBytes) && isValidExtractionSize(last.sizeBytes))) return "";
   if (!(first.sizeBytes && last.sizeBytes)) return "";
   const ratio = Math.round((first.sizeBytes / last.sizeBytes) * 100);
   return Number.isFinite(ratio) ? ` (${ratio}%)` : "";
@@ -175,7 +191,8 @@ const ExtractDrawer = ({
   timing,
   typeLabel,
 }: ExtractPanelProps) => {
-  const levels = buildExtractionLevels(fileName, fileSize, fileEntries, parentCompressions);
+  const localizer = useUiLocalizer();
+  const levels = buildExtractionLevels(fileName, fileSize, fileEntries, parentCompressions, localizer.formatBytes);
   const resolvedTiming = timing ?? formatExtractionElapsedMs(decompressionTimeMs);
   const timingLabel = formatExtractionTimingLabel(resolvedTiming);
   const first = levels[0];
@@ -195,18 +212,20 @@ const ExtractDrawer = ({
     : levels.length > 1
       ? first?.sizeBytes
       : undefined;
-  const outputSizeLabel = formatByteSize(outputSize);
+  const validOutputSize = isValidExtractionSize(outputSize) ? outputSize : undefined;
+  const validSourceSize = isValidExtractionSize(sourceSize) ? sourceSize : undefined;
+  const outputSizeLabel = formatExtractionSize(validOutputSize, localizer.formatBytes) || "";
   const ratioText =
     !hasFileEntries && first && last
       ? formatRatio(first, last)
-      : sourceSize && outputSize && outputSize > 0
-        ? ` (${Math.round((sourceSize / outputSize) * 100)}%)`
+      : validSourceSize && validOutputSize && validOutputSize > 0
+        ? ` (${Math.round((validSourceSize / validOutputSize) * 100)}%)`
         : "";
   const sizeReadout = outputSizeLabel ? (
     <DrawerReadout>
-      {sourceSize && outputSize && outputSize > 0 ? (
+      {validSourceSize && validOutputSize && validOutputSize > 0 ? (
         <>
-          <span className="extract-size-source">{formatByteSize(sourceSize)}</span>
+          <span className="extract-size-source">{formatExtractionSize(validSourceSize, localizer.formatBytes)}</span>
           <span aria-hidden="true"> → </span>
           {outputSizeLabel}
           {ratioText}

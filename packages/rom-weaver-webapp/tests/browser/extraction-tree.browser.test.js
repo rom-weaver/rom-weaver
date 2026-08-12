@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { ExtractDrawer } from "../../src/public/react/components/ds/extraction-tree.tsx";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 
 let mountedRoot = null;
 
@@ -96,6 +97,19 @@ test("files drawer keeps extract metadata for prepared single-level inputs", asy
   expect(document.querySelector(".extract-d .tree-name")?.textContent || "").toBe("game.iso");
 });
 
+test("files drawer formats sizes with the selected locale", async () => {
+  mount(
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: { language: "de" } },
+      createElement(ExtractDrawer, { fileName: "game.bin", fileSize: 4096 }),
+    ),
+  );
+
+  await expect.poll(() => document.querySelector(".extract-d .rb:not(.time)")?.textContent || "").toBe("4,1 KB");
+  expect(document.querySelector(".extract-d .tree-size")?.textContent || "").toBe("4,1 KB");
+});
+
 test("files drawer stays available for raw single-file inputs", async () => {
   mount(
     createElement(ExtractDrawer, {
@@ -154,4 +168,17 @@ test("files drawer totals multi-extract sizes when the output size is missing", 
   await expect
     .poll(() => document.querySelector(".extract-d .rb:not(.time)")?.textContent || "")
     .toBe("1.0 KB → 400 B (250%)");
+});
+
+test("files drawer omits invalid source sizes from the summary", async () => {
+  mount(
+    createElement(ExtractDrawer, {
+      fileEntries: [{ fileName: "game.bin", fileSize: 100 }],
+      fileName: "game.bin",
+      fileSize: 100,
+      parentCompressions: [{ fileName: "game.zip", sourceSize: Number.POSITIVE_INFINITY }],
+    }),
+  );
+
+  await expect.poll(() => document.querySelector(".extract-d .rb:not(.time)")?.textContent || "").toBe("100 B");
 });
