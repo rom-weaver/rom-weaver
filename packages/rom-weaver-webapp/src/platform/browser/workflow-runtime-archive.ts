@@ -5,6 +5,7 @@ import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
+  invokeRomWeaverExtractWorker,
   invokeRomWeaverIngestWorker,
   runRomWeaverProbeWorker,
 } from "../../lib/runtime/wasm-command-runtime.ts";
@@ -262,6 +263,48 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
     });
     try {
+      if (workflowInput.options?.directExtract) {
+        const selectedEntries = Array.isArray(workflowInput.entries)
+          ? workflowInput.entries.map((entryName) => String(entryName || "").trim()).filter((entryName) => !!entryName)
+          : [];
+        if (selectedEntries.length !== 1) {
+          throw new Error("Direct archive extraction requires exactly one selected entry.");
+        }
+        const outputScope = createRomWeaverOutputScope();
+        let outputCleanup: (() => Promise<void>) | undefined;
+        try {
+          const extracted = await invokeRomWeaverExtractWorker(
+            {
+              inputPath: archive.filePath,
+              knownInputPaths: [archive.filePath],
+              logLevel: workflowInput.options?.logLevel,
+              noIgnore: true,
+              noNestedExtract: true,
+              outDirPath: outputScope.rootPath,
+              select: selectedEntries,
+              signal: workflowInput.options?.signal,
+              threads: workflowInput.options?.threads,
+            },
+            forwardArchiveProgress("input", workflowInput.options?.onProgress, `Extracting ${archive.fileName}...`),
+            workflowInput.options?.onLog,
+          );
+          if (!extracted.filePath) throw new Error("Direct archive extraction returned no output path.");
+          [outputCleanup] = await outputScope.createOutputCleanups([extracted.filePath], (filePath) =>
+            browserVfs.remove(filePath),
+          );
+          return createCompressionExtractResult([
+            await workerIo.createWorkerOutput(
+              { ...extracted, cleanup: outputCleanup },
+              extracted.fileName || selectedEntries[0] || "output.bin",
+              "direct archive extract worker did not return browser output",
+            ),
+          ]);
+        } catch (error) {
+          await outputCleanup?.().catch(() => undefined);
+          await outputScope.cleanup().catch(() => undefined);
+          throw error;
+        }
+      }
       if (workflowInput.descendSinglePayload) {
         const outputScope = createRomWeaverOutputScope();
         const outDirPath = outputScope.rootPath;

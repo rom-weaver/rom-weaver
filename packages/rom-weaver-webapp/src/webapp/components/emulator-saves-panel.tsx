@@ -6,17 +6,32 @@ import {
   createEmulatorSaveExport,
   deleteEmulatorSave,
   importEmulatorSave,
+  importEmulatorSavePart,
   listEmulatorSaves,
   type EmulatorSaveRecord,
 } from "../../storage/browser/emulator-saves.ts";
+import { compressEmulatorSaveExport, extractEmulatorSaveExport } from "../../storage/browser/emulator-save-export.ts";
 
 const formatSaveSize = (value?: Uint8Array) => (value ? formatByteSize(value.byteLength) : "none");
+
+type ReadyEmulatorSaveExport = {
+  blob: Blob;
+  fileName: string;
+  gameId: string;
+};
 
 const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [saves, setSaves] = useState<EmulatorSaveRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [readyExport, setReadyExport] = useState<ReadyEmulatorSaveExport | null>(null);
+  const [pendingImport, setPendingImport] = useState<{
+    file: File;
+    kind: "combined" | "sram" | "state";
+  } | null>(null);
+  const [importSha1, setImportSha1] = useState("");
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -36,9 +51,57 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
     setError(reason instanceof Error ? reason.message : String(reason));
   };
 
-  const exportSave = (save: EmulatorSaveRecord) => {
-    const exported = createEmulatorSaveExport(save);
-    void triggerBrowserDownload(exported.blob, exported.fileName, { interactive: true }).catch(reportActionError);
+  const exportSave = async (save: EmulatorSaveRecord) => {
+    setExportingId(save.gameId);
+    setError("");
+    const cached = readyExport?.gameId === save.gameId ? readyExport : undefined;
+    try {
+      const exported = cached || (await compressEmulatorSaveExport(createEmulatorSaveExport(save)));
+      try {
+        await triggerBrowserDownload(exported.blob, exported.fileName, { interactive: true });
+        setReadyExport(null);
+      } catch (reason) {
+        setReadyExport({ ...exported, gameId: save.gameId });
+        throw reason;
+      }
+    } catch (reason) {
+      reportActionError(reason);
+    } finally {
+      setExportingId(null);
+    }
+  };
+
+  const beginImport = () => {
+    inputRef.current?.click();
+  };
+
+  const importSelectedFile = (file: File) => {
+    let kind: "combined" | "sram" | "state" = "sram";
+    if (/\.(json|zip)$/i.test(file.name) || file.type === "application/zip") kind = "combined";
+    else if (/\.(state|ss\d*|savestate)$/i.test(file.name)) kind = "state";
+    setImportSha1("");
+    setPendingImport({ file, kind });
+  };
+
+  const submitImport = async () => {
+    if (!pendingImport) return;
+    setError("");
+    try {
+      if (pendingImport.kind === "combined") {
+        const source =
+          /\.zip$/i.test(pendingImport.file.name) || pendingImport.file.type === "application/zip"
+            ? await extractEmulatorSaveExport(pendingImport.file)
+            : pendingImport.file;
+        await importEmulatorSave(source);
+      } else {
+        await importEmulatorSavePart({ data: pendingImport.file, part: pendingImport.kind, sha1: importSha1 });
+      }
+      setPendingImport(null);
+      setImportSha1("");
+      await refresh();
+    } catch (reason) {
+      reportActionError(reason);
+    }
   };
 
   return (
@@ -59,19 +122,16 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
           >
             <RefreshCw aria-hidden="true" className={loading ? "spin" : undefined} />
           </button>
-          <button className="btn slim ghost" onClick={() => inputRef.current?.click()} type="button">
+          <button className="btn slim ghost" onClick={beginImport} type="button">
             <Upload aria-hidden="true" /> Import save
           </button>
           <input
-            accept="application/json,.json"
+            accept="application/json,application/zip,.json,.zip,*/*"
             hidden
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = "";
-              if (file)
-                void importEmulatorSave(file)
-                  .then(refresh)
-                  .catch((reason) => setError(String(reason)));
+              if (file) importSelectedFile(file);
             }}
             ref={inputRef}
             type="file"
@@ -82,6 +142,67 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
         <p className="emulator-saves-error" role="alert">
           {error}
         </p>
+      ) : null}
+      {pendingImport ? (
+        <form
+          className="emulator-save-import-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitImport();
+          }}
+        >
+          <div>
+            <strong>Import {pendingImport.file.name}</strong>
+            <span>Choose the file type. Raw saves also need the ROM SHA-1.</span>
+          </div>
+          <label htmlFor="emulator-save-import-kind">File type</label>
+          <select
+            className="select"
+            id="emulator-save-import-kind"
+            onChange={(event) =>
+              setPendingImport((current) =>
+                current ? { ...current, kind: event.currentTarget.value as "combined" | "sram" | "state" } : current,
+              )
+            }
+            value={pendingImport.kind}
+          >
+            <option value="combined">rom-weaver exported save</option>
+            <option value="sram">SRAM</option>
+            <option value="state">Save state</option>
+          </select>
+          {pendingImport.kind === "combined" ? null : (
+            <>
+              <label htmlFor="emulator-save-import-sha1">ROM SHA-1</label>
+              <input
+                autoComplete="off"
+                className="input mono"
+                id="emulator-save-import-sha1"
+                onChange={(event) => setImportSha1(event.currentTarget.value)}
+                spellCheck="false"
+                value={importSha1}
+              />
+            </>
+          )}
+          <div className="emulator-save-import-actions">
+            <button
+              className="btn slim primary"
+              disabled={pendingImport.kind !== "combined" && !importSha1.trim()}
+              type="submit"
+            >
+              Import
+            </button>
+            <button
+              className="btn slim ghost"
+              onClick={() => {
+                setPendingImport(null);
+                setImportSha1("");
+              }}
+              type="button"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       ) : null}
       {loading || saves.length ? null : (
         <div className="emulator-saves-empty">
@@ -101,8 +222,14 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
                 </span>
               </div>
               <div className="emulator-save-actions">
-                <button className="btn slim ghost" onClick={() => exportSave(save)} type="button">
-                  <Download aria-hidden="true" /> Export
+                <button
+                  aria-busy={exportingId === save.gameId}
+                  className="btn slim ghost"
+                  disabled={exportingId !== null}
+                  onClick={() => void exportSave(save)}
+                  type="button"
+                >
+                  <Download aria-hidden="true" /> {readyExport?.gameId === save.gameId ? "Download" : "Export"}
                 </button>
                 <button
                   className="btn slim ghost"

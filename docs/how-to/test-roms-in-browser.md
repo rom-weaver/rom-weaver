@@ -64,18 +64,28 @@ Export a save before you clear browser data or move to another browser.
 2. Create a save state or save the game's SRAM from the emulator menu.
 3. Open **Settings**, then select **Storage**.
 4. Find the ROM under **Emulator saves**.
-5. Select **Export** and keep the downloaded JSON file.
+5. Select **Export** and keep the downloaded ZIP file.
 
 Restore the save in a browser that has the same ROM:
 
 1. Open **Settings**, then select **Storage**.
 2. Select **Import save**.
-3. Choose the exported rom-weaver save file.
+3. Choose the exported rom-weaver ZIP file.
 4. Confirm that the ROM name and SHA-1 appear under **Emulator saves**.
 5. Load the same ROM on the Test page.
 6. Select **Load State** from the emulator menu.
 
-You can select **Delete** before the import if you want to test the complete restore process. The import replaces an existing record that has the same SHA-1.
+Storage also accepts the older uncompressed JSON export.
+
+To import a raw SRAM or save-state file:
+
+1. Open **Settings**, then select **Storage**.
+2. Select **Import save**.
+3. Choose the file exported by the emulator settings.
+4. Select **SRAM** or **Save state**.
+5. Enter the ROM's 40-character SHA-1.
+
+The import merges with any other save part for the same SHA-1. You can select **Delete** before the import if you want to test the complete restore process.
 
 ## Disable save storage
 

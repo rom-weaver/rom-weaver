@@ -196,6 +196,65 @@ const invokeRomWeaverCompressionCreateWorker = async (
   });
 };
 
+const invokeRomWeaverExtractWorker = async (
+  input: {
+    inputPath: string;
+    knownInputPaths?: string[];
+    logLevel?: LogLevel | string;
+    noIgnore?: boolean;
+    noNestedExtract?: boolean;
+    outDirPath: string;
+    select?: string[];
+    signal?: AbortSignal;
+    threads?: RuntimeThreadBudgetInput;
+  },
+  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
+  const inputPath = String(input.inputPath || "").trim();
+  if (!inputPath) throw new Error("Extract input path is required");
+  const outDirPath = String(input.outDirPath || "").trim();
+  if (!outDirPath) throw new Error("Extract output directory is required");
+  const select = Array.isArray(input.select)
+    ? input.select.map((entryName) => String(entryName || "").trim()).filter((entryName) => !!entryName)
+    : [];
+  const threadArg = toThreadBudget(input.threads);
+  const command = createRomWeaverCommand("extract", {
+    input: inputPath,
+    output: outDirPath,
+    ...(select.length ? { select } : {}),
+    ...(input.noIgnore ? { no_ignore: true } : {}),
+    ...(input.noNestedExtract ? { no_nested_extract: true } : {}),
+    ...(threadArg ? { threads: threadArg } : {}),
+  });
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson extract dispatch", {
+    command,
+    inputPath,
+    outDirPath,
+    select,
+    threadArg,
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      knownInputPaths: input.knownInputPaths,
+      logLevel: input.logLevel,
+      onEvent: relaySimpleProgress(onProgress),
+      onLog,
+      signal: input.signal,
+    }),
+  );
+  ensureRomWeaverSuccess(result, "Extraction failed");
+  const emitted = getEmittedFiles(result)[0];
+  if (!emitted?.path) throw new Error("Extraction returned no output file");
+  return {
+    fileName: emitted.fileName || select[0] || getPathBaseName(emitted.path, "output.bin"),
+    filePath: emitted.path,
+    size: emitted.sizeBytes,
+    timing: getRunResultTiming(result),
+  };
+};
+
 // Enumerate a container's selectable entries without extracting, via the `probe` command's
 // metadata-only (`no_extract`) path. Replaces the former `list` command - `probe` is a strict
 // superset (it reports the same `details.container.entries`) and auto-detects the handler, so no
@@ -1324,6 +1383,7 @@ export {
   invokeRomWeaverBundleCreateWorker,
   invokeRomWeaverBundleParseWorker,
   invokeRomWeaverCompressionCreateWorker,
+  invokeRomWeaverExtractWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverIngestWorker,

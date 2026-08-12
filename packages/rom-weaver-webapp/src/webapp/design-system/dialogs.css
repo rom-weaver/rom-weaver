@@ -1290,3 +1290,13 @@ html.vt-mode .drop:has(#tools-input-picker) {
 .rw-app .emulator-saves-error {
   color: var(--fault) !important;
 }
+.rw-app .emulator-save-import-form {
+  display: grid;
+  gap: var(--sp-xs);
+  margin-block-start: var(--sp-m);
+}
+.rw-app .emulator-save-import-actions {
+  display: flex;
+  gap: var(--sp-xs);
+  margin-block-start: var(--sp-2xs);
+}

@@ -189,6 +189,8 @@ type CompressionWorkflowOptions = {
   chdSplitBin?: boolean;
   romFilter?: boolean;
   patchFilter?: boolean;
+  /** Extract the selected archive entries without classifying them as ROMs or patches. */
+  directExtract?: boolean;
   /** When false, suppress the host selection prompt for ambiguous containers so a multi-branch
    * archive auto-extracts every branch instead of pausing for input. */
   interactiveSelectionEnabled?: boolean;
