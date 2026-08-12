@@ -1,10 +1,14 @@
-import type { BrowserApplyResult } from "../../../platform/browser/browser-api.ts";
+import type { BrowserApplyResult, WorkflowProgress } from "../../../platform/browser/browser-api.ts";
 import { isRomFileName } from "../file-classification.ts";
 import { getEmulatorJsCore } from "./emulatorjs.ts";
 
 const isEmulatorArchive = (fileName: string) => /\.(?:7z|zip)$/i.test(fileName);
 
 type ArchiveOutput = BrowserApplyResult["outputs"][number];
+type LoadEmulatorRomOptions = {
+  onProgress?: (progress: WorkflowProgress) => void;
+  signal?: AbortSignal;
+};
 
 /**
  * Pick the ROM to hand to EmulatorJS out of an archive's extracted outputs.
@@ -32,13 +36,18 @@ const renameRomToOutput = (outputFileName: string, romFileName: string) => {
   return `${stem}${extension}`;
 };
 
-const loadEmulatorRom = async (blob: Blob, fileName: string) => {
+const loadEmulatorRom = async (blob: Blob, fileName: string, options: LoadEmulatorRomOptions = {}) => {
   if (!isEmulatorArchive(fileName)) return { blob, fileName };
   // Imported here, not at module scope: a static import would pull the whole
   // browser API out of its own dynamic chunk for every visitor.
   const { ApplyWorkflow } = await import("../../../platform/browser/browser-api.ts");
-  const workflow = new ApplyWorkflow({ settings: { output: { compression: "none" } } });
+  const workflow = new ApplyWorkflow({
+    settings: { output: { compression: "none" } },
+    signal: options.signal,
+  });
+  const handleProgress = (progress: WorkflowProgress) => options.onProgress?.(progress);
   let result: BrowserApplyResult | undefined;
+  workflow.on("progress", handleProgress);
   try {
     await workflow.setInput(new File([blob], fileName, { type: blob.type }));
     result = await workflow.run();
@@ -47,6 +56,7 @@ const loadEmulatorRom = async (blob: Blob, fileName: string) => {
     if (!extracted) throw new Error("The ROM could not be extracted for EmulatorJS.");
     return { blob: extracted, fileName: chosen.fileName };
   } finally {
+    workflow.off("progress", handleProgress);
     await Promise.all(result?.outputs.map((output) => output.dispose().catch(() => undefined)) || []);
     await workflow.dispose().catch(() => undefined);
   }

@@ -8,9 +8,9 @@ import { DropZone, InfoPopover, StepSection } from "./layout.tsx";
 /**
  * The 0x01 INPUTS step - the single combined drop surface shared by every
  * workflow tab. A hero drop target while the form is empty, shrinking to the
- * compact add-row once files are staged. Always accepts multiple files,
- * traces what it receives, and lists every supported format. Routing is decided
- * by the per-tab caller (see `unified-drop-routing.ts`).
+ * compact add-row once files are staged. It traces what it receives and lists
+ * every supported format. The caller controls single- or multi-file selection
+ * and routing (see `unified-drop-routing.ts`).
  */
 
 const logger = createLogger("unified-drop-zone");
@@ -29,6 +29,8 @@ type UnifiedDropZoneProps = {
   big?: boolean;
   disabled?: boolean;
   accept?: string;
+  /** Allow one or more files. Workflows accept multiple files by default. */
+  multiple?: boolean;
   id?: string;
   inputId?: string;
   /** Extra content for the step-header info popover (above the supported-file lists). */
@@ -50,16 +52,20 @@ type UnifiedDropZoneProps = {
   /** Extra content rendered inside the 0x01 step body, below the drop target (e.g. the
    * "identifying…" placeholders for dropped archives) so it shares the step's content width. */
   afterDropZone?: ReactNode;
+  /** Status content rendered inside the 0x01 step body, above the drop target. */
+  beforeDropZone?: ReactNode;
 };
 
 const UnifiedDropZone = ({
   addLabel,
   afterDropZone,
+  beforeDropZone,
   headerExtra,
   heroLabel,
   heroLabelCoarse,
   info,
   lead = { line1: "ui.hero.thesis", line2: "ui.hero.thesis2" },
+  multiple = true,
   num = "0x01",
   onBrowseStart,
   onDropStart,
@@ -121,6 +127,7 @@ const UnifiedDropZone = ({
       num={num}
       title={title}
     >
+      {beforeDropZone}
       <DropZone
         {...dropZoneProps}
         bare
@@ -130,7 +137,7 @@ const UnifiedDropZone = ({
         label={big ? heroLabel : addLabel}
         labelCoarse={big ? heroLabelCoarse : undefined}
         lead={heroLead}
-        multiple
+        multiple={multiple}
         onBrowseStart={onBrowseStart}
         onDropStart={onDropStart}
         onFiles={emit}
