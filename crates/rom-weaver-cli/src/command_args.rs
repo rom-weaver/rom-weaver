@@ -1278,9 +1278,8 @@ checksums describe.
 Reach for this when several patches in a chain were each written against the
 unmodified ROM rather than against each other.
 
-This flag must follow the --patch it describes; it binds to the most recent
---patch and carries forward until the next occurrence. An occurrence before any
---patch applies to every patch."
+This flag must follow the --patch it describes and applies only to that patch.
+Use --default-patch-basis to set one rule for every patch."
         )
     )]
     #[serde(default)]
