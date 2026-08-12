@@ -32,6 +32,7 @@ html:has(.docs-workbench) {
 }
 .rw-app .docs-search-header .docs-search {
   grid-column: 2;
+  margin-inline-end: 2px;
 }
 
 /* --- layout --- */
@@ -332,7 +333,6 @@ html:has(.docs-workbench) {
   text-wrap: balance;
 }
 .rw-app .docs-article h1 {
-  max-width: 17ch;
   margin: 0 0 var(--sp-l);
   font-size: clamp(2rem, 1.4rem + 2.6vw, 2.9rem);
   font-weight: 780;
@@ -956,7 +956,7 @@ html:has(.docs-workbench) {
   transform: translateY(0) scale(0.99);
 }
 .rw-app .docs-source-link {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: fit-content;

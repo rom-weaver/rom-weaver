@@ -1,9 +1,17 @@
-type GuidedSample = "apply" | "bundle" | "create";
+const GUIDED_SAMPLE_VIEWS = {
+  apply: "patcher",
+  bundle: "patcher",
+  create: "creator",
+  test: "test",
+} as const;
+
+type GuidedSample = keyof typeof GUIDED_SAMPLE_VIEWS;
 
 const GUIDED_SAMPLE_HREFS = {
   apply: "/apply?guide=apply",
   bundle: "/apply?guide=bundle",
   create: "/create?guide=create",
+  test: "/test?guide=test",
 } as const;
 
 const GUIDED_SAMPLE_START_EVENT = "rom-weaver:guided-sample-start";
@@ -36,6 +44,7 @@ const requestOnboardingDismiss = () => {
 export {
   GUIDED_SAMPLE_START_EVENT,
   GUIDED_SAMPLE_HREFS,
+  GUIDED_SAMPLE_VIEWS,
   GUIDED_SAMPLE_VIEW_EVENT,
   clearGuidedSampleQuery,
   type GuidedSample,

@@ -144,6 +144,13 @@
   align-self: center;
   margin-inline-start: auto;
 }
+.rw-app .emulator-current-game {
+  max-inline-size: min(36vw, 28rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
 .rw-app .emulator-fullscreen-btn {
   flex: 0 0 auto;
   inline-size: 30px;
@@ -245,33 +252,11 @@
   height: 100%;
   border: 0;
 }
-.rw-app .emulator-player-empty {
-  display: grid;
-  gap: var(--sp-m);
-  place-content: center;
-  justify-items: center;
-  min-height: 260px;
-  padding: var(--sp-xl);
-  margin: 0;
-  color: var(--ink-3);
-  text-align: center;
+.rw-app .emulator-player-loading {
+  min-height: 116px;
 }
-.rw-app .emulator-player-empty svg {
-  width: 34px;
-  height: 34px;
-  color: var(--thread-text);
-}
-.rw-app .emulator-session-list {
-  gap: var(--sp-s);
+.rw-app .emulator-load-progress {
   margin-block-start: var(--sp-s);
-}
-.rw-app .emulator-session-entry.is-disabled {
-  opacity: 0.72;
-}
-.rw-app .emulator-session-reason {
-  margin: 0;
-  font-size: 0.78rem;
-  color: var(--fault);
 }
 /* The play button sits under the run button as its quieter twin: same full
    width and uppercase weave, dyed with the accent thread instead of filled by
@@ -314,12 +299,6 @@
   background: var(--well);
   border: 1px solid var(--seam-soft);
   border-radius: var(--r-s);
-}
-/* Still worn by the Test view's "Preparing the ROM…" line. */
-.rw-app .emulatorjs-note {
-  margin: 0;
-  font-size: 0.78rem;
-  color: var(--ink-3);
 }
 .rw-app .emulatorjs-test .emulatorjs-error {
   margin: 0;

@@ -23,15 +23,17 @@ afterEach(() => {
 });
 
 describe("emulator session store", () => {
-  it("disposes the predecessor when a retained apply entry is replaced", () => {
+  it("keeps one current game and disposes its predecessor", () => {
     const firstDispose = vi.fn(async () => undefined);
     const secondDispose = vi.fn(async () => undefined);
     const first = entry({
       artifact: { dispose: firstDispose, getBlob: async () => new Blob(["one"]) },
+      id: "first",
       source: "apply",
     });
     const second = entry({
       artifact: { dispose: secondDispose, getBlob: async () => new Blob(["two"]) },
+      id: "second",
       source: "apply",
     });
 
@@ -40,7 +42,8 @@ describe("emulator session store", () => {
 
     expect(firstDispose).toHaveBeenCalledOnce();
     expect(secondDispose).not.toHaveBeenCalled();
-    disposeEntry("game");
+    expect(getEmulatorSessionState()).toMatchObject({ currentGameId: "second", entries: [second] });
+    disposeEntry("second");
     expect(secondDispose).toHaveBeenCalledOnce();
   });
 
@@ -49,7 +52,10 @@ describe("emulator session store", () => {
     addEntry(entry({ blob: new Blob(["one"]) }));
     addEntry(entry({ blob: replacement, fileName: "updated.nes" }));
 
-    expect(getEmulatorSessionState().entries).toEqual([entry({ blob: replacement, fileName: "updated.nes" })]);
+    expect(getEmulatorSessionState()).toEqual({
+      currentGameId: "game",
+      entries: [entry({ blob: replacement, fileName: "updated.nes" })],
+    });
   });
 
   it("clears the current game when its entry is disposed", () => {
@@ -72,14 +78,20 @@ describe("emulator session store", () => {
     expect(getBlob).toHaveBeenCalledOnce();
   });
 
-  it("clears apply entries while retaining local entries", () => {
-    addEntry(entry({ id: "local" }));
+  it("clears the current Apply entry", () => {
     addEntry(entry({ id: "apply", source: "apply" }));
-    setCurrentGame("apply");
+
+    clearApplyEntries();
+
+    expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
+  });
+
+  it("retains the current local entry when Apply entries are cleared", () => {
+    addEntry(entry({ id: "local" }));
 
     clearApplyEntries();
 
     expect(getEmulatorSessionState().entries.map(({ id }) => id)).toEqual(["local"]);
-    expect(getEmulatorSessionState().currentGameId).toBeNull();
+    expect(getEmulatorSessionState().currentGameId).toBe("local");
   });
 });

@@ -62,6 +62,22 @@ const CLEAR_HIDDEN_SETTINGS = `
         }
       })();`;
 
+const createEmulatorAudioContextBridgeScript = (gameName: string) => `
+      (() => {
+        const bridge = window.parent !== window ? window.parent.__romWeaverEmulatorAudio : null;
+        const NativeAudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!bridge || !NativeAudioContext) return;
+        function RomWeaverAudioContext(options) {
+          const prepared = bridge.takePrepared(${toScriptString(gameName)}, options);
+          if (prepared) return prepared;
+          return arguments.length ? new NativeAudioContext(options) : new NativeAudioContext();
+        }
+        RomWeaverAudioContext.prototype = NativeAudioContext.prototype;
+        Object.setPrototypeOf(RomWeaverAudioContext, NativeAudioContext);
+        window.AudioContext = RomWeaverAudioContext;
+        window.webkitAudioContext = RomWeaverAudioContext;
+      })();`;
+
 const createEmulatorBridgeScript = (gameName: string) => `
       (() => {
         const source = "rom-weaver-emulator";
@@ -82,6 +98,12 @@ const createEmulatorBridgeScript = (gameName: string) => `
         EJS_onLoadState = () => request("request-load-state");
         EJS_onSaveSave = (payload) => send("save-sram", payload && payload.save);
         EJS_onLoadSave = () => request("request-load-sram");
+        EJS_ready = () => {
+          const bridge = window.parent !== window ? window.parent.__romWeaverEmulatorAudio : null;
+          if (!bridge || !bridge.hasPrepared(gameId)) return;
+          const button = document.querySelector('.ejs_start_button');
+          if (button && typeof button.click === "function") button.click();
+        };
         EJS_onGameStart = () => {
           const emulator = window.EJS_emulator;
           if (emulator && typeof emulator.on === "function") emulator.on("saveSaveFiles", (data) => send("save-sram", data));
@@ -143,6 +165,11 @@ const createEmulatorDocument = (
   <body>
     <div id="game"></div>
     <script>
+      try {
+        if (navigator.audioSession) navigator.audioSession.type = 'playback';
+      } catch (error) {
+        console.warn('Could not configure the EmulatorJS audio session', error);
+      }
       EJS_DEBUG_XX = false;
       EJS_threads = true;
       EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: 'enabled' };
@@ -157,13 +184,11 @@ const createEmulatorDocument = (
       // route in.
       if (navigator.maxTouchPoints > 0) EJS_Buttons = { rightClick: false };
       EJS_disableLocalStorage = false;
-      // Autostart only where audio may begin without a gesture. iOS keeps the
-      // AudioContext suspended until the *iframe itself* is tapped - the Play
-      // button lives in the parent document, so its activation does not carry
-      // over. Autostarting there lands on the core's "Click to resume Emulator"
-      // popup, which reads as a game that never started. Letting the core show
-      // its own start button puts that first tap inside the iframe instead.
-      EJS_startOnLoaded = !(navigator.maxTouchPoints > 0);
+      // WebKit MUST receive the context created by the parent user action.
+      // EmulatorJS creates its own context after the activation has expired.
+      const romWeaverAudioBridge = window.parent !== window ? window.parent.__romWeaverEmulatorAudio : null;
+      const romWeaverHasPreparedAudio = !!romWeaverAudioBridge && romWeaverAudioBridge.hasPrepared(${toScriptString(gameName)});
+      EJS_startOnLoaded = !(navigator.maxTouchPoints > 0) || romWeaverHasPreparedAudio;
       EJS_gameID = ${options.gameId ?? hashString(gameName)};
       EJS_player = '#game';
       EJS_core = ${toScriptString(core)};
@@ -171,6 +196,7 @@ const createEmulatorDocument = (
       EJS_gameUrl = ${toScriptString(gameUrl)};
       EJS_pathtodata = ${toScriptString(dataUrl)};
     </script>
+    <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
     <script>${CLEAR_HIDDEN_SETTINGS}</script>
     <script>${createEmulatorBridgeScript(gameName)}</script>
     <script src="${dataUrl}loader.js"></script>

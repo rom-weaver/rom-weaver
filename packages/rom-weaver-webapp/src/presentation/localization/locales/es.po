@@ -340,6 +340,11 @@ msgstr "espera primero el parche {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.byteUnits"
+msgstr "Unidades de tamaño de archivo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.filter"
 msgstr "Filtrar"
 

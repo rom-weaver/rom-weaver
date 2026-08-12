@@ -1,25 +1,46 @@
 import type { LocaleCode } from "../localization/catalog.ts";
+import type { ByteUnitSystem } from "../../types/settings.ts";
 
-const BYTE_UNIT_BASE = 1000;
-const BYTE_UNITS = ["KB", "MB", "GB", "TB"] as const;
+const DEFAULT_BYTE_UNIT_SYSTEM: ByteUnitSystem = "decimal";
+const BYTE_UNIT_SYSTEMS = {
+  binary: { base: 1024, units: ["KiB", "MiB", "GiB", "TiB"] },
+  decimal: { base: 1000, units: ["KB", "MB", "GB", "TB"] },
+} as const satisfies Record<ByteUnitSystem, { base: number; units: readonly string[] }>;
 const BYTE_FRACTION_DIGITS = {
   maximumFractionDigits: 2,
   minimumFractionDigits: 1,
 } as const;
 
+let activeByteUnitSystem: ByteUnitSystem = DEFAULT_BYTE_UNIT_SYSTEM;
+
+const normalizeByteUnitSystem = (value: unknown): ByteUnitSystem =>
+  value === "binary" ? "binary" : DEFAULT_BYTE_UNIT_SYSTEM;
+
+const setByteUnitSystem = (value: unknown): ByteUnitSystem => {
+  activeByteUnitSystem = normalizeByteUnitSystem(value);
+  return activeByteUnitSystem;
+};
+
+const getByteUnitSystem = (): ByteUnitSystem => activeByteUnitSystem;
+
 const getNumberFormatter = (locale: LocaleCode, options: Intl.NumberFormatOptions = {}) =>
   new Intl.NumberFormat(locale, options);
 
-const formatBytes = (bytes: number, locale: LocaleCode): string => {
+const formatBytes = (
+  bytes: number,
+  locale: LocaleCode,
+  byteUnitSystem: ByteUnitSystem = getByteUnitSystem(),
+): string => {
+  const unitConfig = BYTE_UNIT_SYSTEMS[normalizeByteUnitSystem(byteUnitSystem)];
   const normalizedBytes = Number.isFinite(bytes) && bytes >= 0 ? Math.floor(bytes) : 0;
-  if (normalizedBytes < BYTE_UNIT_BASE) return `${getNumberFormatter(locale).format(normalizedBytes)} B`;
-  let value = normalizedBytes / BYTE_UNIT_BASE;
+  if (normalizedBytes < unitConfig.base) return `${getNumberFormatter(locale).format(normalizedBytes)} B`;
+  let value = normalizedBytes / unitConfig.base;
   let unitIndex = 0;
-  while (value >= BYTE_UNIT_BASE && unitIndex < BYTE_UNITS.length - 1) {
-    value /= BYTE_UNIT_BASE;
+  while (value >= unitConfig.base && unitIndex < unitConfig.units.length - 1) {
+    value /= unitConfig.base;
     unitIndex++;
   }
-  return `${getNumberFormatter(locale, BYTE_FRACTION_DIGITS).format(value)} ${BYTE_UNITS[unitIndex]}`;
+  return `${getNumberFormatter(locale, BYTE_FRACTION_DIGITS).format(value)} ${unitConfig.units[unitIndex]}`;
 };
 
 const formatDuration = (milliseconds: number, locale: LocaleCode): string => {
@@ -48,4 +69,12 @@ const formatList = (items: string[], locale: LocaleCode): string => {
   return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
 };
 
-export { formatBytes, formatCount, formatDuration, formatList };
+export {
+  formatBytes,
+  formatCount,
+  formatDuration,
+  formatList,
+  getByteUnitSystem,
+  normalizeByteUnitSystem,
+  setByteUnitSystem,
+};

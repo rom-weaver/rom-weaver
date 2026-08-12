@@ -53,6 +53,10 @@ describe("createEmulatorDocument", () => {
     expect(document).toContain("EJS_disableLocalStorage = false");
     expect(document).toContain("EJS_onSaveState");
     expect(document).toContain("EJS_onSaveSave");
+    expect(document).toContain("navigator.audioSession.type = 'playback'");
+    expect(document).toContain("bridge.takePrepared");
+    expect(document).toContain("romWeaverHasPreparedAudio");
+    expect(document).toContain("EJS_ready");
   });
 
   it("clears both hidden settings before the loader runs", () => {

@@ -56,6 +56,7 @@ import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
 import {
   type BundlePatchMeta,
   type BundleSessionControllers,
+  mergeBundleMetaForIds,
   useBundleApplySession,
 } from "./use-bundle-apply-session.ts";
 import { patchInputOverridesForRuntime, resolvePatchInputBases, type PatchInputBasis } from "./patch-input-basis.ts";
@@ -356,12 +357,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     setPatchInputBasis(activeBundleSession?.patchBasis || "auto");
   }, [activeBundleSession]);
   const bundleControllersRef = useRef<BundleSessionControllers>({ output: null, patchStack: null });
-  const { bundleDefaultsPending, handleBundlePatchesChange, bundleMetaById, updateBundleMeta } = useBundleApplySession({
-    bundleSession: activeBundleSession,
-    controllersRef: bundleControllersRef,
-    getPatchIds,
-    seedPatchEnablement,
-  });
+  const { bundleDefaultsPending, handleBundlePatchesChange, bundleMetaById, updateBundleMeta, updateBundleMetaForIds } =
+    useBundleApplySession({
+      bundleSession: activeBundleSession,
+      controllersRef: bundleControllersRef,
+      getPatchIds,
+      seedPatchEnablement,
+    });
 
   useEffect(() => {
     if (!bundleMetaById.size) return;
@@ -382,6 +384,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       updateBundleMeta(id, updates);
     },
     [updateBundleMeta],
+  );
+  const updateBundleMetaForIdsImmediately = useCallback(
+    (ids: readonly string[], updates: Partial<BundlePatchMeta>) => {
+      bundleMetaRef.current = mergeBundleMetaForIds(bundleMetaRef.current, ids, updates);
+      updateBundleMetaForIds(ids, updates);
+    },
+    [updateBundleMetaForIds],
   );
   const buildChainMeta = useCallback(
     (patches: BinarySource[]) => {
@@ -1700,6 +1709,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           setBundlePackage: changeBundlePackage,
         }}
         onBundleMetaChange={updateBundleMetaImmediately}
+        onBundleMetaBulkChange={updateBundleMetaForIdsImmediately}
         onSelectView={props.onSelectView}
         onTrace={emitApplyFormInputTrace}
         onUnifiedDrop={handleUnifiedDrop}

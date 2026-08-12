@@ -22,6 +22,8 @@ type BundlePackage = "" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
 
 type PostApplyRomBehavior = "none" | "auto-download" | "auto-test" | "auto-test-download";
 
+type ByteUnitSystem = "binary" | "decimal";
+
 type WorkerSettings = {
   threads?: StringNumber | "auto";
 };
@@ -38,6 +40,7 @@ type LoggingSettings = {
 
 type CommonSettings = {
   betaToolsEnabled?: boolean;
+  byteUnits?: ByteUnitSystem;
   defaultCompression?: DefaultCompression;
   applyPlayButtonEnabled?: boolean;
   input?: InputSettings;
@@ -107,6 +110,7 @@ type CreateSettings = CommonSettings & {
 
 export type {
   ApplySettings,
+  ByteUnitSystem,
   CommonSettings,
   CompressionFormat,
   CreateSettings,

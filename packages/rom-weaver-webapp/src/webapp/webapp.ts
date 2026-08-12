@@ -5,8 +5,13 @@ import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
-import { ONBOARDING_DISMISS_EVENT, requestGuidedSampleStart } from "../public/react/guided-sample-start.ts";
+import {
+  GUIDED_SAMPLE_VIEWS,
+  ONBOARDING_DISMISS_EVENT,
+  requestGuidedSampleStart,
+} from "../public/react/guided-sample-start.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
+import { setByteUnitSystem } from "../presentation/formatting/index.ts";
 import { resetBrowserTransientOpfs, startBrowserOpfsBootCleanup } from "../storage/browser/browser-opfs-cleanup.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
@@ -186,10 +191,12 @@ for (const warning of urlSessionParse.warnings) {
 }
 
 const applySettingsToRuntime = (settings: SettingsState) => {
+  setByteUnitSystem(settings.byteUnits);
   configureLogger({ level: typeof settings.logLevel === "string" ? settings.logLevel : undefined });
   if (applicationStatusReady) logApplicationStatus("Application status changed");
   logger.debug("Applying runtime settings", {
     logLevel: settings.logLevel,
+    byteUnits: settings.byteUnits,
     threads: settings.threads,
   });
 };
@@ -467,7 +474,7 @@ const renderWebappRoot = (): undefined => {
       },
       onSelectView: (view) => webappController.selectView(view),
       onStartGuide: (guide) => {
-        const view = guide === "create" ? "creator" : "patcher";
+        const view = GUIDED_SAMPLE_VIEWS[guide];
         if (webappController.selectView(view) !== view) return;
         const url = new URL(window.location.href);
         url.search = "";

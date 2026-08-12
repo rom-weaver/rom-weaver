@@ -38,12 +38,10 @@ const disposeEntryResources = (entry: EmulatorSessionEntry) => {
 
 const addEntry = (entry: EmulatorSessionEntry) => {
   store.setState((state) => {
-    const existing = state.entries.find((candidate) => candidate.id === entry.id);
-    if (existing) disposeEntryResources(existing);
-    const entries = existing
-      ? state.entries.map((candidate) => (candidate.id === entry.id ? entry : candidate))
-      : [...state.entries, entry];
-    return { entries };
+    for (const existing of state.entries) {
+      if (existing !== entry) disposeEntryResources(existing);
+    }
+    return { currentGameId: entry.id, entries: [entry] };
   });
 };
 
@@ -69,7 +67,10 @@ const getApplyEntry = (fileName?: string) =>
   store.getState().entries.find((entry) => entry.source === "apply" && (!fileName || entry.fileName === fileName));
 
 const setCurrentGame = (id: string | null) => {
-  store.setState({ currentGameId: id });
+  store.setState((state) => {
+    if (id && !state.entries.some((entry) => entry.id === id)) return {};
+    return { currentGameId: id };
+  });
 };
 
 const disposeEntry = (id: string) => {

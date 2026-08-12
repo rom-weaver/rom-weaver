@@ -1192,8 +1192,7 @@ describe("webapp responsive navigation", () => {
     await setViewport({ height: 900, width: 1000 });
     await renderMastheadOnly(ALL_TABS);
     const modes = host.querySelector(".modes");
-    // The scroll sits on the inner wrapper now: the nav-level More menu is a
-    // sibling of the rail, and an overflow ancestor would clip it.
+    // Only the tabs scroll. The menu popup remains outside the overflow box.
     expect(getComputedStyle(host.querySelector(".mode-rail-scroll")).overflowX).toBe("auto");
     expect(modes.getBoundingClientRect().width).toBeLessThanOrEqual(
       host.querySelector(".masthead").getBoundingClientRect().width,

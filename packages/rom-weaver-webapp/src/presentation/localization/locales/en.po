@@ -340,6 +340,11 @@ msgstr "expects patch {n} first"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.byteUnits"
+msgstr "File size units"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.filter"
 msgstr "Filter"
 

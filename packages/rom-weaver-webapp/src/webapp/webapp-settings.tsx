@@ -53,6 +53,7 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
     fields: [
       "accent",
       "language",
+      "byteUnits",
       "logLevel",
       "bundlePackage",
       "betaToolsEnabled",
