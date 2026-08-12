@@ -49,6 +49,8 @@ import type {
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { addEntry, getApplyEntry, setCurrentGame } from "./emulator-session-store.ts";
+import { prepareEmulatorAudioContext, requestEmulatorStartFromUserAction } from "./emulator-audio-context.ts";
+import { createEmulatorGameIdentity } from "./components/emulator-document.ts";
 import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-rom.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
@@ -93,23 +95,31 @@ const EmulatorJsAction = ({
     try {
       const retained = getApplyEntry(fileName) || getApplyEntry();
       if (retained) {
+        const { gameName } = createEmulatorGameIdentity(retained);
+        prepareEmulatorAudioContext(gameName);
         setCurrentGame(retained.id);
+        requestEmulatorStartFromUserAction(gameName);
         onSelectView?.("test");
         return;
       }
+      prepareEmulatorAudioContext();
       const blob = await output.getBlob?.();
       if (!blob) throw new Error("The finished output cannot be opened in EmulatorJS.");
       const loaded = await loadEmulatorRom(blob, output.fileName);
-      addEntry({
+      const entry = {
         blob: loaded.blob,
         core,
         fileName: renameRomToOutput(output.fileName, loaded.fileName),
         id: output.id,
         platform,
         sizeBytes: loaded.blob.size,
-        source: "apply",
-      });
+        source: "apply" as const,
+      };
+      addEntry(entry);
+      const { gameName } = createEmulatorGameIdentity(entry);
+      prepareEmulatorAudioContext(gameName);
       setCurrentGame(output.id);
+      requestEmulatorStartFromUserAction(gameName);
       onSelectView?.("test");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not prepare the output for EmulatorJS.");

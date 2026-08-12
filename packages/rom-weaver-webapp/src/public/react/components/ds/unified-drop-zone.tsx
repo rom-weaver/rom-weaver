@@ -44,6 +44,8 @@ type UnifiedDropZoneProps = {
   headerExtra?: ReactNode;
   /** Fires at the drop gesture, before files enter routing or staging. */
   onDropStart?: () => void;
+  /** Fires from the file input's user activation, before the picker opens. */
+  onBrowseStart?: () => void;
   onFiles: (files: File[]) => void;
   /** Extra content rendered inside the 0x01 step body, below the drop target (e.g. the
    * "identifying…" placeholders for dropped archives) so it shares the step's content width. */
@@ -59,6 +61,7 @@ const UnifiedDropZone = ({
   info,
   lead = { line1: "ui.hero.thesis", line2: "ui.hero.thesis2" },
   num = "0x01",
+  onBrowseStart,
   onDropStart,
   onFiles,
   supported,
@@ -128,6 +131,7 @@ const UnifiedDropZone = ({
         labelCoarse={big ? heroLabelCoarse : undefined}
         lead={heroLead}
         multiple
+        onBrowseStart={onBrowseStart}
         onDropStart={onDropStart}
         onFiles={emit}
       />
