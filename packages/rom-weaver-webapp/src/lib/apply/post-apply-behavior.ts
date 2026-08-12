@@ -1,15 +1,126 @@
-import type { PostApplyRomBehavior } from "../../types/settings.ts";
+import type { PostApplyActionBehavior } from "../../types/settings.ts";
+
+type PostApplyActionBehaviorOption = {
+  automatic: boolean;
+  label: string;
+  value: PostApplyActionBehavior;
+  visible: boolean;
+};
+
+type PostApplyBehaviorSettings = {
+  postApplyDownloadBehavior: PostApplyActionBehavior;
+  postApplyTestBehavior: PostApplyActionBehavior;
+};
+
+const DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
+  automatic: true,
+  label: "Automatic & Show Button (Default)",
+  value: "auto-show",
+  visible: true,
+};
+
+const DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
+  automatic: false,
+  label: "Show Button (Default)",
+  value: "show",
+  visible: true,
+};
 
 /**
- * What a finished apply does on its own. Shared because both the Settings
- * dialog (`webapp/`) and the embeddable Apply form (`public/react/`) offer the
- * same choice, and `public/react` must not import from `webapp/`.
+ * The Settings dialog and the embeddable Apply form MUST use the same
+ * post-apply options. The public React package cannot import from `webapp/`.
  */
-const POST_APPLY_ROM_BEHAVIOR_OPTIONS: ReadonlyArray<{ label: string; value: PostApplyRomBehavior }> = [
-  { label: "Download automatically", value: "auto-download" },
-  { label: "Test automatically", value: "auto-test" },
-  { label: "Test and download", value: "auto-test-download" },
-  { label: "Do nothing", value: "none" },
+const POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS: readonly PostApplyActionBehaviorOption[] = [
+  DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION,
+  {
+    automatic: false,
+    label: "Show Button",
+    value: "show",
+    visible: true,
+  },
 ];
 
-export { POST_APPLY_ROM_BEHAVIOR_OPTIONS };
+const POST_APPLY_TEST_BEHAVIOR_OPTIONS: readonly PostApplyActionBehaviorOption[] = [
+  DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION,
+  {
+    automatic: true,
+    label: "Automatic & Show Button",
+    value: "auto-show",
+    visible: true,
+  },
+  {
+    automatic: false,
+    label: "Hide Button",
+    value: "hide",
+    visible: false,
+  },
+];
+
+const findPostApplyActionBehaviorOption = (
+  value: unknown,
+  options: readonly PostApplyActionBehaviorOption[],
+  fallback: PostApplyActionBehaviorOption,
+): PostApplyActionBehaviorOption => options.find((option) => option.value === value) || fallback;
+
+const postApplyDownloadBehaviorOption = (value: unknown): PostApplyActionBehaviorOption =>
+  findPostApplyActionBehaviorOption(
+    value,
+    POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS,
+    DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION,
+  );
+
+const postApplyTestBehaviorOption = (value: unknown): PostApplyActionBehaviorOption =>
+  findPostApplyActionBehaviorOption(value, POST_APPLY_TEST_BEHAVIOR_OPTIONS, DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION);
+
+const normalizePostApplyDownloadBehavior = (value: unknown): PostApplyActionBehavior => {
+  if (value === "hide") return "show";
+  if (value === "auto-hide") return "auto-show";
+  return postApplyDownloadBehaviorOption(value).value;
+};
+
+const normalizePostApplyTestBehavior = (value: unknown): PostApplyActionBehavior => {
+  if (value === "auto-hide") return "auto-show";
+  return postApplyTestBehaviorOption(value).value;
+};
+
+const migrateLegacyPostApplyBehavior = (value: unknown, showTestButton = true): PostApplyBehaviorSettings => {
+  const visibleTestBehavior: PostApplyActionBehavior = showTestButton ? "show" : "hide";
+  const automaticTestBehavior: PostApplyActionBehavior = "auto-show";
+
+  if (value === "auto-test" || value === "show-download-test") {
+    return { postApplyDownloadBehavior: "show", postApplyTestBehavior: automaticTestBehavior };
+  }
+  if (value === "auto-test-download" || value === "download-test") {
+    return { postApplyDownloadBehavior: "auto-show", postApplyTestBehavior: automaticTestBehavior };
+  }
+  if (value === "none" || value === "show-download-show-test") {
+    return { postApplyDownloadBehavior: "show", postApplyTestBehavior: visibleTestBehavior };
+  }
+  if (value === "show-download") {
+    return { postApplyDownloadBehavior: "show", postApplyTestBehavior: "hide" };
+  }
+  if (value === "show-test") {
+    return { postApplyDownloadBehavior: "show", postApplyTestBehavior: "show" };
+  }
+  if (value === "test") {
+    return { postApplyDownloadBehavior: "show", postApplyTestBehavior: "auto-show" };
+  }
+  if (value === "download") {
+    return { postApplyDownloadBehavior: "auto-show", postApplyTestBehavior: "hide" };
+  }
+  return { postApplyDownloadBehavior: "auto-show", postApplyTestBehavior: visibleTestBehavior };
+};
+
+const postApplyDownloadBehaviorWithFallback = (value: unknown): PostApplyActionBehavior =>
+  normalizePostApplyDownloadBehavior(value);
+
+export {
+  migrateLegacyPostApplyBehavior,
+  normalizePostApplyDownloadBehavior,
+  normalizePostApplyTestBehavior,
+  postApplyDownloadBehaviorOption,
+  postApplyDownloadBehaviorWithFallback,
+  postApplyTestBehaviorOption,
+  POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS,
+  POST_APPLY_TEST_BEHAVIOR_OPTIONS,
+};

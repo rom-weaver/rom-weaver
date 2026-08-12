@@ -30,6 +30,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "settings.applyPlayButtonEnabled"
+#~ msgstr "Test-Schaltfläche nach dem Anwenden anzeigen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
 
@@ -667,11 +672,6 @@ msgstr "Download der geteilten Sitzung fehlgeschlagen"
 #: src/presentation/localization/messages.ts
 msgid "settings.onboardingEnabled"
 msgstr "Schnellstart-Tipps („New here?“) anzeigen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.applyPlayButtonEnabled"
-msgstr "Test-Schaltfläche nach dem Anwenden anzeigen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

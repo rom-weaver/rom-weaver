@@ -629,22 +629,18 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Apply ${step}/4`);
       if (step === 4) {
-        await page.locator("#rom-weaver-button-apply").click();
+        const [download] = await Promise.all([
+          page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+          page.locator("#rom-weaver-button-apply").click(),
+        ]);
+        await download.cancel();
       } else {
         await tutorial.getByRole("button", { name: "Continue" }).click();
       }
     }
     await tutorial.waitFor({ state: "hidden" });
-    await page.waitForFunction(
-      () => {
-        const button = document.getElementById("rom-weaver-button-apply");
-        if (!(button instanceof HTMLButtonElement)) return false;
-        const label = button.textContent || "";
-        return !button.disabled && /download/i.test(label) && !/apply/i.test(label);
-      },
-      undefined,
-      { timeout: 60_000 },
-    );
+    await page.locator("#rom-weaver-button-apply").waitFor({ state: "visible", timeout: 60_000 });
+    await page.locator("#rom-weaver-button-test-emulator").waitFor({ state: "visible", timeout: 60_000 });
 
     await page.goto(new URL("weave?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });

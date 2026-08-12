@@ -20,7 +20,7 @@ type StringNumber = number | string;
 
 type BundlePackage = "" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
 
-type PostApplyRomBehavior = "none" | "auto-download" | "auto-test" | "auto-test-download";
+type PostApplyActionBehavior = "auto-show" | "show" | "hide";
 
 type ByteUnitSystem = "binary" | "decimal";
 
@@ -42,7 +42,6 @@ type CommonSettings = {
   betaToolsEnabled?: boolean;
   byteUnits?: ByteUnitSystem;
   defaultCompression?: DefaultCompression;
-  applyPlayButtonEnabled?: boolean;
   emulatorSaveStorageEnabled?: boolean;
   input?: InputSettings;
   logging?: LoggingSettings;
@@ -116,6 +115,6 @@ export type {
   CompressionFormat,
   CreateSettings,
   PatchFormat,
-  PostApplyRomBehavior,
+  PostApplyActionBehavior,
   WorkerSettings,
 };

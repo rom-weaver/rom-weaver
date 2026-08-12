@@ -50,20 +50,19 @@ type FieldRenderProps = SettingsFieldShared & {
 
 const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }> = [
   {
-    fields: [
-      "accent",
-      "language",
-      "byteUnits",
-      "betaToolsEnabled",
-      "applyPlayButtonEnabled",
-      "emulatorSaveStorageEnabled",
-      "onboardingEnabled",
-    ],
+    fields: ["language", "accent", "byteUnits", "logLevel", "onboardingEnabled", "betaToolsEnabled"],
     title: "Webapp",
   },
   {
-    fields: ["logLevel", "bundlePackage", "fixChecksum", "requireInputChecksumMatch", "postApplyRomBehavior"],
-    title: "General",
+    fields: [
+      "bundlePackage",
+      "postApplyDownloadBehavior",
+      "postApplyTestBehavior",
+      "emulatorSaveStorageEnabled",
+      "fixChecksum",
+      "requireInputChecksumMatch",
+    ],
+    title: "Behavior",
   },
   { fields: ["defaultCompression", "compressionProfile", "threads"], title: "Compression" },
   {

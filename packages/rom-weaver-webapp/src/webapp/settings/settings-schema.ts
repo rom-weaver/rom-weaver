@@ -1,3 +1,8 @@
+import {
+  migrateLegacyPostApplyBehavior,
+  normalizePostApplyDownloadBehavior,
+  normalizePostApplyTestBehavior,
+} from "../../lib/apply/post-apply-behavior.ts";
 import { getCompressionCodecLevelMax, getCompressionCodecLevelMin } from "../../lib/compression/codec-fields.ts";
 import { createLogger } from "../../lib/logging.ts";
 import {
@@ -33,16 +38,17 @@ import {
 
 const logger = createLogger("settings");
 
-const SETTINGS_STORAGE_VERSION = 6;
+const SETTINGS_STORAGE_VERSION = 9;
 // Versions whose payload loads under the current schema, so stored settings
 // survive the upgrade; the next save rewrites the payload at the current
 // version. A version bump must keep its predecessors loadable - list the old
 // version here (additive changes load as-is because the loader defaults every
 // missing field) or reshape the payload before the field reads. Wiping is a
-// last resort for payloads that cannot be mapped. v6 added postApplyRomBehavior;
-// v5 loads unchanged, and newer additive fields also use their defaults. v4 and
-// older never shipped publicly and are not worth mapping.
-const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5]);
+// last resort for payloads that cannot be mapped. v9 removes hidden automatic
+// actions and always shows Download. v8 separates Download and Test behavior.
+// v7 combined them. v5 and v6 stored the automatic action and Test-button
+// visibility separately. v4 and older never shipped.
+const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5, 6, 7, 8]);
 
 type GroupedStoredSettings = {
   apply?: {
@@ -87,7 +93,8 @@ const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "byteUnits",
   "logLevel",
   "bundlePackage",
-  "postApplyRomBehavior",
+  "postApplyDownloadBehavior",
+  "postApplyTestBehavior",
   "compressionProfile",
 ] as const satisfies readonly SettingsFieldKey[];
 const CHD_CODEC_FIELDS = ["chdCreateCdCodecs", "chdCreateDvdCodecs"] as const satisfies readonly SettingsFieldKey[];
@@ -397,13 +404,17 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   const validation = isRecord(applySettings.validation) ? applySettings.validation : {};
   return {
     betaToolsEnabled: commonSettings.betaToolsEnabled,
-    applyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
+    legacyApplyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
     emulatorSaveStorageEnabled: commonSettings.emulatorSaveStorageEnabled,
     onboardingEnabled: commonSettings.onboardingEnabled,
     accent: commonSettings.accent,
     byteUnits: commonSettings.byteUnits,
     bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
-    postApplyRomBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyRomBehavior : undefined,
+    legacyPostApplyRomBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyRomBehavior : undefined,
+    postApplyDownloadBehavior: isRecord(applySettings.output)
+      ? applySettings.output.postApplyDownloadBehavior
+      : undefined,
+    postApplyTestBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyTestBehavior : undefined,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
@@ -471,13 +482,39 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     if (bundlePackage !== undefined)
       settings.bundlePackage = normalizeChoiceField("bundlePackage", bundlePackage, settings.bundlePackage);
 
-    const postApplyRomBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyRomBehavior);
-    if (postApplyRomBehavior !== undefined)
-      settings.postApplyRomBehavior = normalizeChoiceField(
-        "postApplyRomBehavior",
-        postApplyRomBehavior,
-        settings.postApplyRomBehavior,
+    const postApplyDownloadBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyDownloadBehavior);
+    const postApplyTestBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyTestBehavior);
+    const legacyPostApplyRomBehavior = readStoredField(storedStringSchema, loadedSettings.legacyPostApplyRomBehavior);
+    const legacyApplyPlayButtonEnabled = readStoredField(
+      storedBooleanSchema,
+      loadedSettings.legacyApplyPlayButtonEnabled,
+    );
+    if (parsedSettings.version === 5 || parsedSettings.version === 6 || parsedSettings.version === 7) {
+      const migrated = migrateLegacyPostApplyBehavior(
+        legacyPostApplyRomBehavior,
+        legacyApplyPlayButtonEnabled !== false,
       );
+      settings.postApplyDownloadBehavior = migrated.postApplyDownloadBehavior;
+      settings.postApplyTestBehavior = migrated.postApplyTestBehavior;
+    } else if (parsedSettings.version === 8) {
+      settings.postApplyDownloadBehavior = normalizePostApplyDownloadBehavior(postApplyDownloadBehavior);
+      settings.postApplyTestBehavior = normalizePostApplyTestBehavior(postApplyTestBehavior);
+    } else {
+      if (postApplyDownloadBehavior !== undefined) {
+        settings.postApplyDownloadBehavior = normalizeChoiceField(
+          "postApplyDownloadBehavior",
+          postApplyDownloadBehavior,
+          settings.postApplyDownloadBehavior,
+        );
+      }
+      if (postApplyTestBehavior !== undefined) {
+        settings.postApplyTestBehavior = normalizeChoiceField(
+          "postApplyTestBehavior",
+          postApplyTestBehavior,
+          settings.postApplyTestBehavior,
+        );
+      }
+    }
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
@@ -485,12 +522,8 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const onboardingEnabled = readStoredField(storedBooleanSchema, loadedSettings.onboardingEnabled);
     if (onboardingEnabled !== undefined) settings.onboardingEnabled = onboardingEnabled;
 
-    const applyPlayButtonEnabled = readStoredField(storedBooleanSchema, loadedSettings.applyPlayButtonEnabled);
-    if (applyPlayButtonEnabled !== undefined) settings.applyPlayButtonEnabled = applyPlayButtonEnabled;
-
     const emulatorSaveStorageEnabled = readStoredField(storedBooleanSchema, loadedSettings.emulatorSaveStorageEnabled);
     if (emulatorSaveStorageEnabled !== undefined) settings.emulatorSaveStorageEnabled = emulatorSaveStorageEnabled;
-
     const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
     if (defaultCompression !== undefined) {
       settings.defaultCompression = normalizeChoiceField(
@@ -588,7 +621,6 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     if (
       fieldKey === "accent" ||
       fieldKey === "betaToolsEnabled" ||
-      fieldKey === "applyPlayButtonEnabled" ||
       fieldKey === "emulatorSaveStorageEnabled" ||
       fieldKey === "onboardingEnabled" ||
       fieldKey === "language" ||
@@ -612,7 +644,11 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       };
       return;
     }
-    if (fieldKey === "bundlePackage" || fieldKey === "postApplyRomBehavior") {
+    if (
+      fieldKey === "bundlePackage" ||
+      fieldKey === "postApplyDownloadBehavior" ||
+      fieldKey === "postApplyTestBehavior"
+    ) {
       storedSettings.apply = {
         ...storedSettings.apply,
         output: { ...storedSettings.apply?.output, [fieldKey]: value },
@@ -666,11 +702,8 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
   applyBooleanFields(rawDraft, validation.settings, BOOLEAN_SETTINGS_FIELDS);
   validation.settings.requireInputChecksumMatch =
     readStoredField(storedBooleanSchema, rawDraft.requireInputChecksumMatch) !== false;
-  validation.settings.applyPlayButtonEnabled =
-    readStoredField(storedBooleanSchema, rawDraft.applyPlayButtonEnabled) !== false;
   validation.settings.emulatorSaveStorageEnabled =
     readStoredField(storedBooleanSchema, rawDraft.emulatorSaveStorageEnabled) !== false;
-
   for (const fieldKey of FORMAT_CODEC_FIELDS)
     assignSetting(
       validation.settings,

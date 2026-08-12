@@ -1,4 +1,7 @@
-import { POST_APPLY_ROM_BEHAVIOR_OPTIONS } from "../../lib/apply/post-apply-behavior.ts";
+import {
+  POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS,
+  POST_APPLY_TEST_BEHAVIOR_OPTIONS,
+} from "../../lib/apply/post-apply-behavior.ts";
 import {
   type CompressionCodecOption,
   getCompressionCodecLevelMax,
@@ -19,7 +22,7 @@ import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/setting
 import { ACCENTS } from "../accent.ts";
 import { DEFAULT_CHANNEL_ACCENT } from "../build-channel.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
-import type { ByteUnitSystem, PostApplyRomBehavior } from "../../types/settings.ts";
+import type { ByteUnitSystem, PostApplyActionBehavior } from "../../types/settings.ts";
 import { getDefaultWebappLogLevel } from "../development-defaults.ts";
 import {
   COMPRESSION_PROFILES,
@@ -39,9 +42,9 @@ type SettingsState = {
   byteUnits: ByteUnitSystem;
   logLevel: string;
   bundlePackage: string;
-  postApplyRomBehavior: PostApplyRomBehavior;
+  postApplyDownloadBehavior: PostApplyActionBehavior;
+  postApplyTestBehavior: PostApplyActionBehavior;
   betaToolsEnabled: boolean;
-  applyPlayButtonEnabled: boolean;
   emulatorSaveStorageEnabled: boolean;
   onboardingEnabled: boolean;
   fixChecksum: boolean;
@@ -158,13 +161,13 @@ const SETTINGS_FIELD_ORDER = [
   "byteUnits",
   "logLevel",
   "betaToolsEnabled",
-  "applyPlayButtonEnabled",
   "emulatorSaveStorageEnabled",
   "onboardingEnabled",
   "fixChecksum",
   "requireInputChecksumMatch",
   "bundlePackage",
-  "postApplyRomBehavior",
+  "postApplyDownloadBehavior",
+  "postApplyTestBehavior",
   "compressionProfile",
   "chdCreateCdCodecs",
   "chdCreateDvdCodecs",
@@ -257,16 +260,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validationLabel: "Bundle",
     validValues: ["", "zip:patches", "zip:rom", "7z:patches", "7z:rom"],
   },
-  applyPlayButtonEnabled: {
-    defaultValue: true,
-    id: "settings-apply-play-button-enabled",
-    key: "applyPlayButtonEnabled",
-    kind: "checkbox",
-    label: getSettingsLabel("applyPlayButtonEnabled"),
-    labelDataLocalize: "Show the test button after applying",
-    layout: "large",
-    suggestion: "Turn this off to hide the test button on a finished apply. Nothing else changes.",
-  },
   emulatorSaveStorageEnabled: {
     defaultValue: true,
     id: "settings-emulator-save-storage-enabled",
@@ -277,18 +270,27 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestion:
       "Warning: If you turn this off, new save states and SRAM are not stored. Existing saves remain until you delete them in Storage.",
   },
-  postApplyRomBehavior: {
-    // Auto-download preserves the pre-setting behavior: a completed apply
-    // downloads its output without a second click.
-    defaultValue: "auto-download",
-    id: "settings-post-apply-rom-behavior",
-    key: "postApplyRomBehavior",
+  postApplyDownloadBehavior: {
+    defaultValue: "auto-show",
+    id: "settings-post-apply-download-behavior",
+    key: "postApplyDownloadBehavior",
     kind: "select",
-    label: "After applying",
-    options: [...POST_APPLY_ROM_BEHAVIOR_OPTIONS],
-    suggestion: "Choose whether a completed patch should download or open in the Test tab automatically.",
-    validationLabel: "After applying",
-    validValues: ["auto-download", "auto-test", "auto-test-download", "none"],
+    label: "Post Apply Download",
+    options: [...POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS],
+    suggestion: "Choose whether Download runs automatically and whether its button stays visible.",
+    validationLabel: "Post Apply Download",
+    validValues: POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS.map((option) => option.value),
+  },
+  postApplyTestBehavior: {
+    defaultValue: "show",
+    id: "settings-post-apply-test-behavior",
+    key: "postApplyTestBehavior",
+    kind: "select",
+    label: "Post Apply Test",
+    options: [...POST_APPLY_TEST_BEHAVIOR_OPTIONS],
+    suggestion: "Choose whether Test opens automatically and whether its button stays visible.",
+    validationLabel: "Post Apply Test",
+    validValues: POST_APPLY_TEST_BEHAVIOR_OPTIONS.map((option) => option.value),
   },
   chdCreateCdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateCdCodecs"),

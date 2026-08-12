@@ -30,6 +30,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "settings.applyPlayButtonEnabled"
+#~ msgstr "Show the test button after applying"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” applied first."
 
@@ -667,11 +672,6 @@ msgstr "Shared session download failed"
 #: src/presentation/localization/messages.ts
 msgid "settings.onboardingEnabled"
 msgstr "Show the \"New here?\" quick-start tips"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.applyPlayButtonEnabled"
-msgstr "Show the test button after applying"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
