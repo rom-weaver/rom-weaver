@@ -142,7 +142,7 @@ const ModeRail = ({
   navLabel: string;
   onSelect: (id: string) => void;
   controlsPanels?: boolean;
-  /** Nav-level utility slot, kept outside the tablist so More is not a tab. */
+  /** Menu slot inside the visual rail, but outside the tablist. */
   trailing?: ReactNode;
 }) => {
   const railRef = useRef<HTMLDivElement | null>(null);
@@ -194,37 +194,39 @@ const ModeRail = ({
 
   return (
     <nav aria-label={navLabel} className="modes">
-      <div className="mode-rail-scroll">
-        <div
-          aria-label={navLabel}
-          aria-orientation="horizontal"
-          className="mode-rail"
-          onKeyDown={handleKeyDown}
-          ref={railRef}
-          role="tablist"
-        >
-          <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
-          {railTabs.map((tab) => (
-            <a
-              aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
-              aria-selected={tab.id === current}
-              className="mode"
-              data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
-              data-mode={tab.id}
-              href={tab.href}
-              id={`tab-${tab.id}`}
-              key={tab.id}
-              onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
-              role="tab"
-              tabIndex={tab.id === focusedId ? 0 : -1}
-            >
-              {tab.icon}
-              <span className="mode-label">{tab.label}</span>
-            </a>
-          ))}
+      <div className="mode-rail-shell">
+        <div className="mode-rail-scroll">
+          <div
+            aria-label={navLabel}
+            aria-orientation="horizontal"
+            className="mode-rail"
+            onKeyDown={handleKeyDown}
+            ref={railRef}
+            role="tablist"
+          >
+            <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
+            {railTabs.map((tab) => (
+              <a
+                aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
+                aria-selected={tab.id === current}
+                className="mode"
+                data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
+                data-mode={tab.id}
+                href={tab.href}
+                id={`tab-${tab.id}`}
+                key={tab.id}
+                onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
+                role="tab"
+                tabIndex={tab.id === focusedId ? 0 : -1}
+              >
+                {tab.icon}
+                <span className="mode-label">{tab.label}</span>
+              </a>
+            ))}
+          </div>
         </div>
+        {trailing}
       </div>
-      {trailing}
     </nav>
   );
 };
