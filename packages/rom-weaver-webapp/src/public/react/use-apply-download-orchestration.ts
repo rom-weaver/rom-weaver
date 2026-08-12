@@ -399,6 +399,7 @@ const runPostApplyRomBehavior = async ({
       const loaded = await loadRom(blob, outputFileName);
       entry = {
         blob: loaded.blob,
+        checksum: loaded.checksum,
         core,
         fileName: renameRomToOutput(outputFileName, loaded.fileName),
         id: playableOutput.id || `apply-${fileName}`,

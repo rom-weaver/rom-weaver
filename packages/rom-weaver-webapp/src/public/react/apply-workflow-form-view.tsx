@@ -48,7 +48,7 @@ import type {
 } from "./patcher-form.ts";
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
-import { addEntry, getApplyEntry, setCurrentGame } from "./emulator-session-store.ts";
+import { addEntry, getApplyEntry, prepareEntry, setCurrentGame } from "./emulator-session-store.ts";
 import { prepareEmulatorAudioContext, requestEmulatorStartFromUserAction } from "./emulator-audio-context.ts";
 import { createEmulatorGameIdentity } from "./components/emulator-document.ts";
 import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-rom.ts";
@@ -93,9 +93,14 @@ const EmulatorJsAction = ({
     setLoading(true);
     setError("");
     try {
-      const retained = getApplyEntry(fileName) || getApplyEntry();
+      let retained = getApplyEntry(fileName) || getApplyEntry();
       if (retained) {
-        const { gameName } = createEmulatorGameIdentity(retained);
+        if (!retained.checksum) {
+          await prepareEntry(retained.id);
+          retained = getApplyEntry(fileName) || getApplyEntry();
+        }
+        if (!retained?.checksum) throw new Error("The retained ROM has no SHA-1 checksum.");
+        const { gameName } = createEmulatorGameIdentity({ checksum: retained.checksum });
         prepareEmulatorAudioContext(gameName);
         setCurrentGame(retained.id);
         requestEmulatorStartFromUserAction(gameName);
@@ -108,6 +113,7 @@ const EmulatorJsAction = ({
       const loaded = await loadEmulatorRom(blob, output.fileName);
       const entry = {
         blob: loaded.blob,
+        checksum: loaded.checksum,
         core,
         fileName: renameRomToOutput(output.fileName, loaded.fileName),
         id: output.id,

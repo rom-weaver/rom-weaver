@@ -132,10 +132,6 @@
   overflow: clip;
   background: var(--well);
 }
-/* Keep the game name beside the title while the controls stay at the end. */
-.rw-app .step-head:has(> .emulator-player-actions) > .step-meta {
-  margin-inline-start: 0;
-}
 .rw-app .emulator-player-actions {
   display: flex;
   flex: 0 0 auto;
@@ -144,12 +140,32 @@
   align-self: center;
   margin-inline-start: auto;
 }
-.rw-app .emulator-current-game {
-  max-inline-size: min(36vw, 28rem);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.rw-app .emulator-rom-identity {
+  display: grid;
+  gap: 4px;
+  padding: var(--sp-s) var(--sp-m);
+  margin: 0;
+  background: var(--plate-2);
+  border-block-end: 1px solid var(--seam);
+}
+.rw-app .emulator-rom-identity > div {
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr);
+  gap: var(--sp-s);
+}
+.rw-app .emulator-rom-identity dt {
+  font-size: 0.66rem;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+.rw-app .emulator-rom-identity dd {
+  margin: 0;
   color: var(--ink-2);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+.rw-app .emulator-rom-identity dd.mono {
+  font-size: 0.68rem;
+  color: var(--weft);
 }
 .rw-app .emulator-fullscreen-btn {
   flex: 0 0 auto;

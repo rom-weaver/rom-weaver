@@ -25,9 +25,9 @@ vi.mock("../../../src/public/react/components/emulator-load-rom.ts", () => ({
 
 vi.mock("../../../src/public/react/components/emulator-document.ts", () => ({
   createEmulatorDocument: () => "<!doctype html><html><body></body></html>",
-  createEmulatorGameIdentity: ({ fileName }: { fileName: string }) => ({
+  createEmulatorGameIdentity: ({ checksum }: { checksum: string }) => ({
     gameId: 1,
-    gameName: `rom-weaver-${fileName}`,
+    gameName: checksum,
   }),
 }));
 
@@ -39,6 +39,7 @@ const withSettings = (children: ReactNode) => (
 
 const entry = (overrides: Partial<EmulatorSessionEntry> = {}): EmulatorSessionEntry => ({
   blob: new Blob(["game"]),
+  checksum: "a".repeat(40),
   core: "nes",
   fileName: "game.nes",
   id: "game",
@@ -59,7 +60,11 @@ const stubObjectUrls = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   loadRomMock.mockReset();
-  loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => ({ blob, fileName }));
+  loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => ({
+    blob,
+    checksum: "b".repeat(40),
+    fileName,
+  }));
 });
 
 const stubReducedMotion = () => {
@@ -129,7 +134,9 @@ describe("EmulatorTestView", () => {
     await waitFor(() => expect(getEmulatorSessionState().entries[0]?.fileName).toBe("hello-world.nes"));
     expect(fetchSample).toHaveBeenCalledWith("/hello-world.nes", { signal: expect.any(AbortSignal) });
     expect(getEmulatorSessionState().currentGameId).toBe(getEmulatorSessionState().entries[0]?.id);
-    expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith("rom-weaver-hello-world.nes");
+    expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith("b".repeat(40));
+    expect(screen.getByText("hello-world.nes", { selector: ".emulator-rom-identity dd" })).toBeTruthy();
+    expect(screen.getByText("b".repeat(40))).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Load a game" })).toBeTruthy());
     expect(screen.getByTitle("EmulatorJS test for hello-world.nes")).toBeTruthy();
   });
@@ -194,7 +201,7 @@ describe("EmulatorTestView", () => {
   it("shows an actionable error and restores the hero for an unsupported file", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
-    loadRomMock.mockResolvedValue({ blob: new Blob(["disc"]), fileName: "game.iso" });
+    loadRomMock.mockResolvedValue({ blob: new Blob(["disc"]), checksum: "b".repeat(40), fileName: "game.iso" });
 
     render(withSettings(<EmulatorTestView />));
     fireEvent.change(screen.getByLabelText(/Drop a ROM or choose a file/), {
@@ -223,7 +230,7 @@ describe("EmulatorTestView", () => {
   it("shows extraction progress before it opens the selected game", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
-    let finishLoad: ((value: { blob: Blob; fileName: string }) => void) | undefined;
+    let finishLoad: ((value: { blob: Blob; checksum: string; fileName: string }) => void) | undefined;
     loadRomMock.mockImplementation(
       async (_blob: Blob, _fileName: string, options: { onProgress?: (progress: WorkflowProgress) => void }) => {
         options.onProgress?.({
@@ -235,7 +242,7 @@ describe("EmulatorTestView", () => {
           stage: "decompress",
           workflow: "apply",
         });
-        return new Promise<{ blob: Blob; fileName: string }>((resolve) => {
+        return new Promise<{ blob: Blob; checksum: string; fileName: string }>((resolve) => {
           finishLoad = resolve;
         });
       },
@@ -248,18 +255,18 @@ describe("EmulatorTestView", () => {
 
     expect(await screen.findByText("Extracting games.zip...")).toBeTruthy();
     expect(screen.getByText("42%")).toBeTruthy();
-    await act(async () => finishLoad?.({ blob: new Blob(["game"]), fileName: "game.nes" }));
+    await act(async () => finishLoad?.({ blob: new Blob(["game"]), checksum: "b".repeat(40), fileName: "game.nes" }));
     expect(await screen.findByTitle("EmulatorJS test for game.nes")).toBeTruthy();
-    expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith("rom-weaver-game.nes");
+    expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith("b".repeat(40));
   });
 
   it("ignores a replacement that finishes after Stop is pressed", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
-    let finishLoad: ((value: { blob: Blob; fileName: string }) => void) | undefined;
+    let finishLoad: ((value: { blob: Blob; checksum: string; fileName: string }) => void) | undefined;
     loadRomMock.mockImplementation(
       async () =>
-        new Promise<{ blob: Blob; fileName: string }>((resolve) => {
+        new Promise<{ blob: Blob; checksum: string; fileName: string }>((resolve) => {
           finishLoad = resolve;
         }),
     );
@@ -271,7 +278,9 @@ describe("EmulatorTestView", () => {
     });
     await waitFor(() => expect(loadRomMock).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByRole("button", { name: "Stop and unload game" }));
-    await act(async () => finishLoad?.({ blob: new Blob(["replacement"]), fileName: "replacement.nes" }));
+    await act(async () =>
+      finishLoad?.({ blob: new Blob(["replacement"]), checksum: "b".repeat(40), fileName: "replacement.nes" }),
+    );
 
     expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
     expect(screen.getByText("Play a patched ROM in an emulator, right in the browser,")).toBeTruthy();
@@ -333,6 +342,7 @@ describe("EmulatorTestView", () => {
           getBlob: vi.fn(async () => new Blob(["game"])),
         },
         blob: undefined,
+        checksum: undefined,
       }),
     );
     emulatorAudioMocks.disposeEmulatorAudioContext.mockClear();

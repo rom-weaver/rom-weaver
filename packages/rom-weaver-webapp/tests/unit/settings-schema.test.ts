@@ -189,12 +189,24 @@ describe("validateSettingsDraft", () => {
     const disabled = validateSettingsDraft(validDraft({ requireInputChecksumMatch: false }));
     expect(disabled.settings.requireInputChecksumMatch).toBe(false);
   });
+
+  it("keeps emulator save storage enabled unless the draft opts out", () => {
+    expect(validateSettingsDraft(validDraft()).settings.emulatorSaveStorageEnabled).toBe(true);
+    expect(
+      validateSettingsDraft(validDraft({ emulatorSaveStorageEnabled: false })).settings.emulatorSaveStorageEnabled,
+    ).toBe(false);
+  });
 });
 
 describe("serializeSettingsForStorage", () => {
   it("returns null when settings equal the defaults", () => {
     expect(serializeSettingsForStorage(getDefaultSettings())).toBeNull();
     expect(serializeSettingsForStorage(null)).toBeNull();
+  });
+
+  it("persists the emulator save storage opt-out", () => {
+    const settings = { ...getDefaultSettings(), emulatorSaveStorageEnabled: false };
+    expect(loadSettings(makeStorage(serializeSettingsForStorage(settings))).emulatorSaveStorageEnabled).toBe(false);
   });
 
   it("serializes a changed boolean field under apply.patch with the storage version", () => {

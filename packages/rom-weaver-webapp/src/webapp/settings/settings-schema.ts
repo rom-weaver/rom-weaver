@@ -77,6 +77,7 @@ const isCodecSettingValue = (value: unknown): value is string | string[] | numbe
 const BOOLEAN_SETTINGS_FIELDS = [
   "betaToolsEnabled",
   "onboardingEnabled",
+  "emulatorSaveStorageEnabled",
   "fixChecksum",
 ] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
@@ -397,6 +398,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   return {
     betaToolsEnabled: commonSettings.betaToolsEnabled,
     applyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
+    emulatorSaveStorageEnabled: commonSettings.emulatorSaveStorageEnabled,
     onboardingEnabled: commonSettings.onboardingEnabled,
     accent: commonSettings.accent,
     byteUnits: commonSettings.byteUnits,
@@ -485,6 +487,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const applyPlayButtonEnabled = readStoredField(storedBooleanSchema, loadedSettings.applyPlayButtonEnabled);
     if (applyPlayButtonEnabled !== undefined) settings.applyPlayButtonEnabled = applyPlayButtonEnabled;
+
+    const emulatorSaveStorageEnabled = readStoredField(storedBooleanSchema, loadedSettings.emulatorSaveStorageEnabled);
+    if (emulatorSaveStorageEnabled !== undefined) settings.emulatorSaveStorageEnabled = emulatorSaveStorageEnabled;
 
     const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
     if (defaultCompression !== undefined) {
@@ -584,6 +589,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       fieldKey === "accent" ||
       fieldKey === "betaToolsEnabled" ||
       fieldKey === "applyPlayButtonEnabled" ||
+      fieldKey === "emulatorSaveStorageEnabled" ||
       fieldKey === "onboardingEnabled" ||
       fieldKey === "language" ||
       fieldKey === "byteUnits" ||
@@ -662,6 +668,8 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
     readStoredField(storedBooleanSchema, rawDraft.requireInputChecksumMatch) !== false;
   validation.settings.applyPlayButtonEnabled =
     readStoredField(storedBooleanSchema, rawDraft.applyPlayButtonEnabled) !== false;
+  validation.settings.emulatorSaveStorageEnabled =
+    readStoredField(storedBooleanSchema, rawDraft.emulatorSaveStorageEnabled) !== false;
 
   for (const fieldKey of FORMAT_CODEC_FIELDS)
     assignSetting(

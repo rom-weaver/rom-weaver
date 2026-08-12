@@ -43,6 +43,7 @@ type CommonSettings = {
   byteUnits?: ByteUnitSystem;
   defaultCompression?: DefaultCompression;
   applyPlayButtonEnabled?: boolean;
+  emulatorSaveStorageEnabled?: boolean;
   input?: InputSettings;
   logging?: LoggingSettings;
   bundlePackage?: BundlePackage;

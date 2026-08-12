@@ -1,13 +1,17 @@
-import type { BrowserApplyResult, WorkflowProgress } from "../../../platform/browser/browser-api.ts";
+import type { WorkflowProgress } from "../../../platform/browser/browser-api.ts";
 import { isRomFileName } from "../file-classification.ts";
 import { getEmulatorJsCore } from "./emulatorjs.ts";
 
-const isEmulatorArchive = (fileName: string) => /\.(?:7z|zip)$/i.test(fileName);
-
-type ArchiveOutput = BrowserApplyResult["outputs"][number];
+type IngestRom = (typeof import("../../../platform/browser/browser-api.ts"))["ingestRom"];
+type ArchiveOutput = Awaited<ReturnType<IngestRom>>["outputs"][number];
 type LoadEmulatorRomOptions = {
   onProgress?: (progress: WorkflowProgress) => void;
   signal?: AbortSignal;
+};
+
+const normalizedSha1 = (value: string | undefined): string | undefined => {
+  const sha1 = value?.trim().toLowerCase();
+  return sha1 && /^[a-f0-9]{40}$/.test(sha1) ? sha1 : undefined;
 };
 
 /**
@@ -37,28 +41,35 @@ const renameRomToOutput = (outputFileName: string, romFileName: string) => {
 };
 
 const loadEmulatorRom = async (blob: Blob, fileName: string, options: LoadEmulatorRomOptions = {}) => {
-  if (!isEmulatorArchive(fileName)) return { blob, fileName };
-  // Imported here, not at module scope: a static import would pull the whole
-  // browser API out of its own dynamic chunk for every visitor.
-  const { ApplyWorkflow } = await import("../../../platform/browser/browser-api.ts");
-  const workflow = new ApplyWorkflow({
-    settings: { output: { compression: "none" } },
+  const { getIngestOutputBlob, ingestRom } = await import("../../../platform/browser/browser-api.ts");
+  let sequence = 0;
+  const { outputs, result } = await ingestRom(blob, fileName, {
+    onProgress: (progress) =>
+      options.onProgress?.({
+        id: "emulator-ingest",
+        label: progress.label || progress.message || "Reading ROM...",
+        percent: progress.percent,
+        role: "input",
+        sequence: ++sequence,
+        stage: (progress.stage as WorkflowProgress["stage"]) || "checksum",
+        workflow: "apply",
+      }),
     signal: options.signal,
   });
-  const handleProgress = (progress: WorkflowProgress) => options.onProgress?.(progress);
-  let result: BrowserApplyResult | undefined;
-  workflow.on("progress", handleProgress);
   try {
-    await workflow.setInput(new File([blob], fileName, { type: blob.type }));
-    result = await workflow.run();
-    const chosen = pickEmulatorRomOutput(result.outputs);
-    const extracted = await chosen.getBlob?.();
-    if (!extracted) throw new Error("The ROM could not be extracted for EmulatorJS.");
-    return { blob: extracted, fileName: chosen.fileName };
+    const bare = result.assets.find((asset) => asset.copiedInPlace);
+    if (bare) {
+      const checksum = normalizedSha1(bare.checksums?.sha1);
+      if (!checksum) throw new Error("rom-weaver did not return the ROM SHA-1 checksum.");
+      return { blob, checksum, fileName };
+    }
+    const chosen = pickEmulatorRomOutput(outputs);
+    const extracted = await getIngestOutputBlob(chosen);
+    const checksum = normalizedSha1(chosen.checksums?.sha1);
+    if (!checksum) throw new Error("rom-weaver did not return the extracted ROM SHA-1 checksum.");
+    return { blob: extracted, checksum, fileName: chosen.fileName };
   } finally {
-    workflow.off("progress", handleProgress);
-    await Promise.all(result?.outputs.map((output) => output.dispose().catch(() => undefined)) || []);
-    await workflow.dispose().catch(() => undefined);
+    await Promise.all(outputs.map((output) => output.dispose().catch(() => undefined)));
   }
 };
 

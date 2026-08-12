@@ -34,24 +34,22 @@ import { createLogger } from "../../lib/logging.ts";
 
 const logger = createLogger("emulator-saves");
 const DATABASE_NAME = "rom-weaver-emulator-saves";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const STORE_NAME = "games";
 const MESSAGE_SOURCE = "rom-weaver-emulator";
 const SAVE_FORMAT = "rom-weaver-emulator-save";
-// Version 2 dropped the `label` field that carried the ROM's file name.
-const SAVE_FORMAT_VERSION = 2;
-const SUPPORTED_SAVE_FORMAT_VERSIONS: readonly number[] = [1, SAVE_FORMAT_VERSION];
+const SAVE_FORMAT_VERSION = 3;
+const SUPPORTED_SAVE_FORMAT_VERSIONS: readonly number[] = [1, 2, SAVE_FORMAT_VERSION];
 const MAX_IMPORT_BYTES = 128 * 1024 * 1024;
+const MAX_LABEL_LENGTH = 255;
 
 /**
- * A record holds save data and the derived key it belongs to - nothing that
- * describes the game itself. `gameId` and `gameName` are checksum- or
- * hash-derived (see `createEmulatorGameIdentity`), so no ROM name, platform,
- * or play history is ever written to disk.
+ * `gameId` and `gameName` hold the ROM SHA-1. `label` is display metadata only.
  */
 type EmulatorSaveRecord = {
   gameId: string;
   gameName: string;
+  label: string;
   state?: Uint8Array;
   sram?: Uint8Array;
   updatedAt: number;
@@ -61,6 +59,7 @@ type EmulatorSaveUpdate = {
   data: Uint8Array;
   gameId: string;
   gameName: string;
+  label: string;
 };
 
 type SerializedEmulatorSave = {
@@ -68,6 +67,7 @@ type SerializedEmulatorSave = {
   version: typeof SAVE_FORMAT_VERSION;
   gameId: string;
   gameName: string;
+  label: string;
   state?: string;
   sram?: string;
 };
@@ -77,10 +77,12 @@ type EmulatorSaveMessage = {
   kind: "ready" | "request-load-sram" | "request-load-state" | "save-sram" | "save-state";
   gameId: string;
   gameName?: string;
+  gameLabel?: string;
   data?: ArrayBuffer | ArrayBufferView | null;
 };
 
 let bridgeInstalled = false;
+let saveStorageEnabled = true;
 
 const storageUnavailable = () => new Error("Emulator save storage is unavailable in this browser.");
 
@@ -107,33 +109,6 @@ const openDatabase = (): Promise<IDBDatabase> => {
         request.result.createObjectStore(STORE_NAME);
         return;
       }
-      // Version 1 stored the ROM file name as `label`. Rewrite those records
-      // without it. Every request here swallows its own error: an unhandled
-      // one aborts the versionchange transaction, which fails this open and
-      // every later one, so a best-effort cleanup would take the whole save
-      // store down with it (a quota error mid-rewrite is the likely trigger).
-      const swallowError = (target: IDBRequest) => {
-        target.onerror = (event) => {
-          event.preventDefault();
-          logger.warn("EmulatorJS save record cleanup failed", {
-            message: target.error?.message || "unknown IndexedDB error",
-          });
-        };
-      };
-      const store = request.transaction?.objectStore(STORE_NAME);
-      const cursorRequest = store?.openCursor();
-      if (!cursorRequest) return;
-      swallowError(cursorRequest);
-      cursorRequest.onsuccess = () => {
-        const cursor = cursorRequest.result;
-        if (!cursor) return;
-        const value = cursor.value as Record<string, unknown>;
-        if (value && typeof value === "object" && "label" in value) {
-          const { label: _label, ...rest } = value;
-          swallowError(cursor.update(rest));
-        }
-        cursor.continue();
-      };
     };
     let settled = false;
     // Without this, a tab holding an older connection open leaves the upgrade
@@ -167,7 +142,7 @@ const deleteBuiltinRecords = async (gameName: string): Promise<void> => {
   const databaseNames = new Set<string>(["EmulatorJS-states"]);
   const databases = (factory as IDBFactory & { databases?: () => Promise<IDBDatabaseInfo[]> }).databases;
   if (databases) {
-    for (const database of await databases()) {
+    for (const database of await databases.call(factory)) {
       if (database.name?.startsWith("EM_FS_")) databaseNames.add(database.name);
     }
   }
@@ -281,10 +256,16 @@ const copyBytes = (value: ArrayBuffer | ArrayBufferView | null | undefined): Uin
 const copyRecord = (record: EmulatorSaveRecord): EmulatorSaveRecord => ({
   gameId: record.gameId,
   gameName: record.gameName,
+  label: record.label,
   ...(record.state ? { state: copyBytes(record.state) } : {}),
   ...(record.sram ? { sram: copyBytes(record.sram) } : {}),
   updatedAt: record.updatedAt,
 });
+
+const normalizeLabel = (label: unknown, fallback: string): string => {
+  if (typeof label !== "string" || !label.trim()) return fallback;
+  return label.slice(0, MAX_LABEL_LENGTH);
+};
 
 const normalizeRecord = (value: unknown): EmulatorSaveRecord | undefined => {
   if (!value || typeof value !== "object") return undefined;
@@ -296,6 +277,7 @@ const normalizeRecord = (value: unknown): EmulatorSaveRecord | undefined => {
   return {
     gameId: record.gameId,
     gameName: record.gameName,
+    label: normalizeLabel(record.label, record.gameName),
     ...(state ? { state } : {}),
     ...(sram ? { sram } : {}),
     updatedAt: typeof record.updatedAt === "number" ? record.updatedAt : 0,
@@ -311,21 +293,9 @@ const writeRecord = async (record: EmulatorSaveRecord): Promise<void> => {
  * swallows its errors and never runs again, so without this a record that
  * failed to migrate would keep the ROM's name until that game is played again.
  */
-const purgeLegacyFields = (raw: unknown, record: EmulatorSaveRecord | undefined) => {
-  if (!record) return;
-  if (!raw || typeof raw !== "object") return;
-  if (!("label" in raw)) return;
-  void writeRecord(record).catch((error) => {
-    logger.warn("EmulatorJS save record cleanup failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-  });
-};
-
 const readEmulatorSave = async (gameId: string): Promise<EmulatorSaveRecord | undefined> => {
   const result = await readTransaction<unknown>((store) => store.get(gameId));
   const record = normalizeRecord(result);
-  purgeLegacyFields(result, record);
   return record ? copyRecord(record) : undefined;
 };
 
@@ -334,6 +304,7 @@ const updatePart = async (kind: "sram" | "state", update: EmulatorSaveUpdate): P
   const next: EmulatorSaveRecord = {
     gameId: update.gameId,
     gameName: update.gameName,
+    label: update.label,
     ...(previous?.state ? { state: previous.state } : {}),
     ...(previous?.sram ? { sram: previous.sram } : {}),
     [kind]: copyBytes(update.data),
@@ -346,9 +317,7 @@ const listEmulatorSaves = async (): Promise<EmulatorSaveRecord[]> => {
   const result = await readTransaction<unknown[]>((store) => store.getAll());
   return (result || [])
     .map((raw) => {
-      const record = normalizeRecord(raw);
-      purgeLegacyFields(raw, record);
-      return record;
+      return normalizeRecord(raw);
     })
     .filter((record): record is EmulatorSaveRecord => !!record)
     .map(copyRecord)
@@ -398,6 +367,7 @@ const serializeEmulatorSave = (record: EmulatorSaveRecord): string => {
     version: SAVE_FORMAT_VERSION,
     gameId: record.gameId,
     gameName: record.gameName,
+    label: record.label,
     ...(record.state ? { state: bytesToBase64(record.state) } : {}),
     ...(record.sram ? { sram: bytesToBase64(record.sram) } : {}),
   };
@@ -429,6 +399,7 @@ const parseSerializedEmulatorSave = (serialized: string): EmulatorSaveRecord => 
   return {
     gameId: value.gameId,
     gameName: value.gameName,
+    label: normalizeLabel(value.label, value.gameName),
     ...(state ? { state } : {}),
     ...(sram ? { sram } : {}),
     updatedAt: Date.now(),
@@ -436,7 +407,7 @@ const parseSerializedEmulatorSave = (serialized: string): EmulatorSaveRecord => 
 };
 
 const createEmulatorSaveExport = (record: EmulatorSaveRecord): { blob: Blob; fileName: string } => {
-  const safeName = record.gameId.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "");
+  const safeName = record.label.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "");
   return {
     blob: new Blob([serializeEmulatorSave(record)], { type: "application/json" }),
     fileName: `${safeName || "emulator-save"}.rw-emulator-save.json`,
@@ -474,10 +445,26 @@ const postToSource = (source: MessageEventSource | null, message: unknown) => {
 const handleSaveMessage = async (event: MessageEvent<unknown>) => {
   if (!isSaveMessage(event.data)) return;
   const message = event.data;
+  if (!saveStorageEnabled) {
+    if (message.kind === "request-load-state" || message.kind === "request-load-sram") {
+      postToSource(event.source, {
+        data: null,
+        gameId: message.gameId,
+        kind: message.kind === "request-load-state" ? "load-state" : "load-sram",
+        source: MESSAGE_SOURCE,
+      });
+    }
+    return;
+  }
   if (message.kind === "save-state" || message.kind === "save-sram") {
     const data = copyBytes(message.data);
     if (!data) return;
-    const update = { data, gameId: message.gameId, gameName: message.gameName || message.gameId };
+    const update = {
+      data,
+      gameId: message.gameId,
+      gameName: message.gameName || message.gameId,
+      label: message.gameLabel || message.gameName || message.gameId,
+    };
     if (message.kind === "save-state") await saveEmulatorState(update);
     else await saveEmulatorSram(update);
     return;
@@ -505,9 +492,14 @@ const ensureEmulatorSaveBridge = () => {
   });
 };
 
+const configureEmulatorSaveStorage = (enabled: boolean) => {
+  saveStorageEnabled = enabled;
+};
+
 export type { EmulatorSaveRecord };
 export {
   createEmulatorSaveExport,
+  configureEmulatorSaveStorage,
   deleteEmulatorSave,
   ensureEmulatorSaveBridge,
   importEmulatorSave,
