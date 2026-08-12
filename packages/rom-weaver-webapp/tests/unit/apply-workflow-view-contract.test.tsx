@@ -621,6 +621,36 @@ describe("apply workflow view - bundle controls", () => {
     expect(container.querySelector("#rom-weaver-button-export-bundle")?.textContent).toContain("Create ZIP ROM Bundle");
   });
 
+  it("locks the shared patch input rule while a bundle export runs", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const onPatchInputBasisChange = vi.fn();
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={{ ...bundleExport(), busy: true }}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({
+              items: [patchItem("first.ips"), patchItem("second.ips")],
+            }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+          onPatchInputBasisChange={onPatchInputBasisChange}
+          patchInputBasis="base"
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const radios = Array.from(
+      container.querySelectorAll<HTMLInputElement>('input[name="rom-weaver-patch-input-rule"]'),
+    );
+    expect(radios).toHaveLength(3);
+    expect(radios.every((radio) => radio.disabled)).toBe(true);
+    fireEvent.click(radios[1] as HTMLInputElement);
+    expect(onPatchInputBasisChange).not.toHaveBeenCalled();
+  });
+
   it("keeps the bundle dropdown in Output options and drops the create action when hidden", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = render(

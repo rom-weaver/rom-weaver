@@ -640,7 +640,7 @@ const getPatchApplyCommandOptions = (input: RuntimePatchApplyWorkerInput) => {
       (input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true,
     n64ByteOrders: getPatchApplyN64ByteOrders(options).map((mode) => normalizeN64ByteOrder(mode) || "auto"),
     outputHeader: getPatchApplyOutputHeader(options, removeHeader, addHeader),
-    defaultPatchBasis: normalizePatchBasisMode(options?.defaultPatchBasis),
+    defaultPatchBasis: normalizePatchApplyDefaultBasis(input.options),
     patchBasis: Array.isArray(options?.patchBasis)
       ? (options.patchBasis as PatchBasisMode[])
       : Array.isArray(options?.patch_basis)
@@ -655,6 +655,11 @@ const getPatchApplyCommandOptions = (input: RuntimePatchApplyWorkerInput) => {
       options?.validateWithOutputChecksums ?? options?.validate_with_output_checksums,
     ),
   };
+};
+
+const normalizePatchApplyDefaultBasis = (options: RuntimePatchApplyWorkerInput["options"]) => {
+  const record = asRecord(options);
+  return normalizePatchBasisMode(record?.defaultPatchBasis ?? record?.default_patch_basis);
 };
 
 type RomWeaverJsonResult = Awaited<ReturnType<typeof runRomWeaverJson>>;
@@ -1347,6 +1352,7 @@ export {
   invokeRomWeaverTrimWorker,
   normalizeChdCodecArgs,
   normalizeCodecEntries,
+  normalizePatchApplyDefaultBasis,
   resolvePatchApplyThreadArg,
   runRomWeaverIngestSidecarsWorker,
   runRomWeaverProbeWorker,

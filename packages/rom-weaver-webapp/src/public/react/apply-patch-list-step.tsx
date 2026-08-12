@@ -1432,6 +1432,7 @@ const ApplyPatchListStep = ({
   patches,
   patchStack,
   patchInputBasis = "base",
+  patchInputBasisDisabled = false,
   onPatchInputBasisChange,
   sourceRomName,
   romActualsById,
@@ -1459,6 +1460,7 @@ const ApplyPatchListStep = ({
   patches: PatchStackItemState[];
   patchStack: PatcherStackController;
   patchInputBasis?: PatchInputBasis;
+  patchInputBasisDisabled?: boolean;
   onPatchInputBasisChange?: (basis: PatchInputBasis) => void;
   sourceRomName?: string;
   woven?: boolean;
@@ -1552,6 +1554,7 @@ const ApplyPatchListStep = ({
               <label key={value}>
                 <input
                   checked={patchInputBasis === value}
+                  disabled={patchInputBasisDisabled}
                   name="rom-weaver-patch-input-rule"
                   onChange={() => onPatchInputBasisChange?.(value)}
                   type="radio"

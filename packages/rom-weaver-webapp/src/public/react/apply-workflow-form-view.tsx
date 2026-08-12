@@ -2034,6 +2034,7 @@ function ApplyWorkflowFormView({
             patches={patches}
             patchStack={controllers.patchStack}
             patchInputBasis={patchInputBasis}
+            patchInputBasisDisabled={bundleExport?.busy}
             onPatchInputBasisChange={onPatchInputBasisChange}
             sourceRomName={romInputs.length === 1 ? romInputs[0]?.info.fileName : undefined}
             romActualsById={romActualsById}
