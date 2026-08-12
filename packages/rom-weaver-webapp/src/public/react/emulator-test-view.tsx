@@ -13,6 +13,7 @@ import { createEmulatorDocument, createEmulatorGameIdentity } from "./components
 import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { prefersReducedMotion } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
+import { ChecksumRow } from "./components/ds/checksum-list.tsx";
 import { StepSection } from "./components/ds/layout.tsx";
 import {
   SampleTutorial,
@@ -565,18 +566,12 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           >
             <div className="card emulator-player">
               {currentGame ? (
-                <dl className="emulator-rom-identity">
-                  <div>
-                    <dt>ROM</dt>
-                    <dd>{currentGame.fileName}</dd>
+                <div className="cks emulator-player-copy">
+                  <div className="ckrows">
+                    <ChecksumRow label="NAME" value={currentGame.fileName} />
+                    {currentGame.checksum ? <ChecksumRow label="SHA-1" value={currentGame.checksum} /> : null}
                   </div>
-                  {currentGame.checksum ? (
-                    <div>
-                      <dt>SHA-1</dt>
-                      <dd className="mono">{currentGame.checksum}</dd>
-                    </div>
-                  ) : null}
-                </dl>
+                </div>
               ) : null}
               {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
