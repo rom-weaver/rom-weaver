@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { RetainedRuntimeOutput } from "../../storage/vfs/types.ts";
 import { createStore } from "../../webapp/vanilla-store.ts";
+import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 
 type EmulatorSessionSource = "apply" | "local";
 
@@ -51,13 +52,14 @@ const prepareEntry = async (id: string): Promise<Blob | null> => {
   if (entry.blob) return entry.blob;
   if (!entry.artifact) return null;
   const blob = await entry.artifact.getBlob();
+  const { checksum } = await loadEmulatorRom(blob, entry.fileName);
   let accepted = false;
   store.setState((state) => {
     const current = state.entries.find((candidate) => candidate.id === id);
     if (!current || current.artifact !== entry.artifact) return {};
     accepted = true;
     return {
-      entries: state.entries.map((candidate) => (candidate.id === id ? { ...candidate, blob } : candidate)),
+      entries: state.entries.map((candidate) => (candidate.id === id ? { ...candidate, blob, checksum } : candidate)),
     };
   });
   return accepted ? blob : null;

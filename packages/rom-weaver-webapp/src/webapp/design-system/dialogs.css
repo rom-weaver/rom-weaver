@@ -1191,3 +1191,52 @@ html.vt-mode .drop:has(#tools-input-picker) {
     border-radius: 0;
   }
 }
+.rw-app .emulator-saves-panel {
+  flex: none;
+  padding: var(--sp-m) var(--sp-l);
+  border-block-end: 1px solid var(--seam);
+}
+.rw-app .emulator-saves-heading,
+.rw-app .emulator-save-row {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  justify-content: space-between;
+}
+.rw-app .emulator-saves-heading h3,
+.rw-app .emulator-saves-heading p {
+  margin: 0;
+}
+.rw-app .emulator-saves-heading p,
+.rw-app .emulator-saves-panel > p,
+.rw-app .emulator-save-info span {
+  font-size: 0.74rem;
+  color: var(--ink-3);
+}
+.rw-app .emulator-saves-actions,
+.rw-app .emulator-save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs);
+}
+.rw-app .emulator-saves-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  padding: 0;
+  margin: var(--sp-m) 0 0;
+  list-style: none;
+}
+.rw-app .emulator-save-row {
+  padding-block: var(--sp-xs);
+  border-block-start: 1px solid var(--seam);
+}
+.rw-app .emulator-save-info {
+  display: grid;
+  gap: var(--sp-2xs);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rw-app .emulator-saves-error {
+  color: var(--fault) !important;
+}

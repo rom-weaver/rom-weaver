@@ -38,6 +38,31 @@ type BrowserPpfUndoInput = {
   signal?: AbortSignal;
 };
 
+type BrowserIngestRomOptions = {
+  onProgress?: Parameters<NonNullable<NonNullable<typeof browserRuntime.ingest>["run"]>>[0]["onProgress"];
+  signal?: AbortSignal;
+};
+
+const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestRomOptions = {}) => {
+  const ingest = browserRuntime.ingest;
+  if (!ingest?.run) throw new Error("The rom-weaver checksum runtime is unavailable.");
+  return ingest.run({
+    checksumAlgorithms: ["sha1"],
+    fileName,
+    onProgress: options.onProgress,
+    signal: options.signal,
+    source,
+  });
+};
+
+const getIngestOutputBlob = async (
+  output: Parameters<NonNullable<typeof browserRuntime.publicOutput>["getBlob"]>[0],
+) => {
+  const adapter = browserRuntime.publicOutput;
+  if (!adapter) throw new Error("The rom-weaver output adapter is unavailable.");
+  return adapter.getBlob(output);
+};
+
 let runtimePreloadKey = "";
 let runtimePreloadPromise = Promise.resolve();
 const resolveRuntimePreloadThreads = (threads: BrowserRuntimePreloadOptions["threads"]) => {
@@ -157,4 +182,13 @@ class TrimWorkflow extends TrimWorkflowController<BrowserSourceRef, BrowserSaveD
   }
 }
 
-export { ApplyWorkflow, CreateWorkflow, getCreatePatchFormatCandidates, preloadBrowserRuntime, TrimWorkflow, undoPpf };
+export {
+  ApplyWorkflow,
+  CreateWorkflow,
+  getCreatePatchFormatCandidates,
+  getIngestOutputBlob,
+  ingestRom,
+  preloadBrowserRuntime,
+  TrimWorkflow,
+  undoPpf,
+};

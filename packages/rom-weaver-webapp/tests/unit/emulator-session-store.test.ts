@@ -1,4 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const loadEmulatorRom = vi.hoisted(() =>
+  vi.fn(async (blob: Blob, fileName: string) => ({ blob, checksum: "a".repeat(40), fileName })),
+);
+
+vi.mock("../../src/public/react/components/emulator-load-rom.ts", () => ({ loadEmulatorRom }));
+
 import {
   addEntry,
   clearApplyEntries,
@@ -74,6 +81,8 @@ describe("emulator session store", () => {
 
     expect(await prepareEntry("game")).toBe(retained);
     expect(getEmulatorSessionState().entries[0]?.blob).toBe(retained);
+    expect(getEmulatorSessionState().entries[0]?.checksum).toBe("a".repeat(40));
+    expect(loadEmulatorRom).toHaveBeenCalledWith(retained, "game.nes");
     expect(await prepareEntry("game")).toBe(retained);
     expect(getBlob).toHaveBeenCalledOnce();
   });

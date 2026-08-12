@@ -173,7 +173,7 @@ describe("LogDialog", () => {
     expect(container.querySelector(".opfs-row")?.textContent).toContain("/user-files");
   });
 
-  it("keeps EmulatorJS controls out of Storage", () => {
+  it("shows emulator save controls in Storage", () => {
     vi.mocked(listBrowserOpfs).mockResolvedValue([]);
     const { container: storageContainer } = render(
       <RomWeaverSettingsProvider settings={{}}>
@@ -181,7 +181,7 @@ describe("LogDialog", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(storageContainer.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
-    expect(storageContainer.querySelector(".emulator-saves-panel")).toBeNull();
+    expect(storageContainer.querySelector(".emulator-saves-panel")).not.toBeNull();
   });
 
   it("shows active virtual input files with their size", async () => {

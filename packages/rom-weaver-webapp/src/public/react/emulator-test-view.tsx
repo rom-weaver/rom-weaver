@@ -1,12 +1,12 @@
 import { ArrowLeft, Maximize, Minimize } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   createProgressViewModel,
   createProgressViewModelFromEvent,
   formatByteSize,
   type ProgressViewModel,
 } from "../../presentation/workflow-presentation.ts";
-import { ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
+import { configureEmulatorSaveStorage, ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { addEntry, disposeEntry, prepareEntry, useEmulatorSession } from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
@@ -31,7 +31,7 @@ import {
   registerEmulatorStartRequestHandler,
 } from "./emulator-audio-context.ts";
 import { GUIDED_SAMPLE_HREFS } from "./guided-sample-start.ts";
-import { useRomWeaverAssetBaseUrl } from "./settings-context.tsx";
+import { useRomWeaverAssetBaseUrl, useRomWeaverSettings } from "./settings-context.tsx";
 
 const WEBGL2_ERROR = "EmulatorJS testing requires a browser with WebGL 2.";
 const TEST_SAMPLE_ASSET = "hello-world.nes";
@@ -96,6 +96,7 @@ type EmulatorTestViewProps = {
 const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
+  const settings = useRomWeaverSettings();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadAbortControllerRef = useRef<AbortController | null>(null);
   const sampleAbortControllerRef = useRef<AbortController | null>(null);
@@ -113,11 +114,9 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const currentGame = entries.find((entry) => entry.id === currentGameId) || null;
   const currentIdentity = useMemo(
     () =>
-      currentGame
+      currentGame?.checksum
         ? createEmulatorGameIdentity({
             checksum: currentGame.checksum,
-            fileName: currentGame.fileName,
-            sizeBytes: currentGame.sizeBytes,
           })
         : null,
     [currentGame],
@@ -129,6 +128,10 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   useEffect(() => {
     ensureEmulatorSaveBridge();
   }, []);
+
+  useLayoutEffect(() => {
+    configureEmulatorSaveStorage(settings.emulatorSaveStorageEnabled !== false);
+  }, [settings.emulatorSaveStorageEnabled]);
 
   useEffect(
     () =>
@@ -314,6 +317,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         }
         const entry = {
           blob: loaded.blob,
+          checksum: loaded.checksum,
           core,
           fileName: loaded.fileName,
           id: createLocalEntryId(loaded.fileName),
@@ -586,6 +590,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                       referrerPolicy="no-referrer"
                       srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {
                         gameId: currentIdentity.gameId,
+                        gameLabel: currentGame.fileName,
                       })}
                       title={`EmulatorJS test for ${currentGame.fileName}`}
                     />

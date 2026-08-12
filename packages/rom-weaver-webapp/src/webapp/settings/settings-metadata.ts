@@ -42,6 +42,7 @@ type SettingsState = {
   postApplyRomBehavior: PostApplyRomBehavior;
   betaToolsEnabled: boolean;
   applyPlayButtonEnabled: boolean;
+  emulatorSaveStorageEnabled: boolean;
   onboardingEnabled: boolean;
   fixChecksum: boolean;
   requireInputChecksumMatch: boolean;
@@ -158,6 +159,7 @@ const SETTINGS_FIELD_ORDER = [
   "logLevel",
   "betaToolsEnabled",
   "applyPlayButtonEnabled",
+  "emulatorSaveStorageEnabled",
   "onboardingEnabled",
   "fixChecksum",
   "requireInputChecksumMatch",
@@ -264,6 +266,16 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelDataLocalize: "Show the test button after applying",
     layout: "large",
     suggestion: "Turn this off to hide the test button on a finished apply. Nothing else changes.",
+  },
+  emulatorSaveStorageEnabled: {
+    defaultValue: true,
+    id: "settings-emulator-save-storage-enabled",
+    key: "emulatorSaveStorageEnabled",
+    kind: "checkbox",
+    label: "Store emulator saves on this device",
+    layout: "large",
+    suggestion:
+      "Warning: If you turn this off, new save states and SRAM are not stored. Existing saves remain until you delete them in Storage.",
   },
   postApplyRomBehavior: {
     // Auto-download preserves the pre-setting behavior: a completed apply

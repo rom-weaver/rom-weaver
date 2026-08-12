@@ -27,6 +27,7 @@ import { CHANNEL_BADGE } from "../build-channel.ts";
 import { ABOUT_URL, GITHUB_URL } from "../project-links.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
+import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
   prefersReducedMotion,
   readPwaState,
@@ -708,6 +709,7 @@ const LogsStoragePanel = ({
   const exportText = showingOpfs ? opfsEntries.map(formatOpfsEntry).join("\n") : entries.map(formatCopyLine).join("\n");
   return (
     <>
+      {showingOpfs ? <EmulatorSavesPanel active /> : null}
       <div className="dlg-subhead">
         {/* The controls take the row; the filter gets the next one to itself.
             Sharing one row meant the filter and the view toggle fought for the

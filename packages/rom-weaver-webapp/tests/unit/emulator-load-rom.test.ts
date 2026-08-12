@@ -7,54 +7,14 @@ import {
 } from "../../src/public/react/components/emulator-load-rom.ts";
 
 const workflowMocks = vi.hoisted(() => ({
-  constructorOptions: null as { signal?: AbortSignal } | null,
-  dispose: vi.fn(async () => undefined),
-  getBlob: vi.fn(async () => new Blob(["game"])),
-  listener: null as ((progress: WorkflowProgress) => void) | null,
+  getIngestOutputBlob: vi.fn(async () => new Blob(["game"])),
+  ingestRom: vi.fn(),
   outputDispose: vi.fn(async () => undefined),
 }));
 
 vi.mock("../../src/platform/browser/browser-api.ts", () => ({
-  ApplyWorkflow: class {
-    constructor(options: { signal?: AbortSignal }) {
-      workflowMocks.constructorOptions = options;
-    }
-
-    on(_event: "progress", listener: (progress: WorkflowProgress) => void) {
-      workflowMocks.listener = listener;
-    }
-
-    off(_event: "progress", listener: (progress: WorkflowProgress) => void) {
-      if (workflowMocks.listener === listener) workflowMocks.listener = null;
-    }
-
-    async setInput() {
-      return undefined;
-    }
-
-    async run() {
-      workflowMocks.listener?.({
-        id: "extract",
-        label: "Extracting games.zip...",
-        percent: 42,
-        role: "input",
-        sequence: 1,
-        stage: "decompress",
-        workflow: "apply",
-      });
-      return {
-        outputs: [
-          {
-            dispose: workflowMocks.outputDispose,
-            fileName: "game.nes",
-            getBlob: workflowMocks.getBlob,
-          },
-        ],
-      };
-    }
-
-    dispose = workflowMocks.dispose;
-  },
+  getIngestOutputBlob: workflowMocks.getIngestOutputBlob,
+  ingestRom: workflowMocks.ingestRom,
 }));
 
 type ArchiveOutput = Parameters<typeof pickEmulatorRomOutput>[0][number];
@@ -62,11 +22,30 @@ type ArchiveOutput = Parameters<typeof pickEmulatorRomOutput>[0][number];
 const output = (fileName: string): ArchiveOutput => ({ fileName }) as ArchiveOutput;
 
 beforeEach(() => {
-  workflowMocks.constructorOptions = null;
-  workflowMocks.dispose.mockClear();
-  workflowMocks.getBlob.mockClear();
-  workflowMocks.listener = null;
+  workflowMocks.getIngestOutputBlob.mockClear();
+  workflowMocks.ingestRom.mockReset();
   workflowMocks.outputDispose.mockClear();
+  workflowMocks.ingestRom.mockImplementation(async (_blob, _fileName, options) => {
+    options.onProgress?.({
+      id: "extract",
+      label: "Extracting games.zip...",
+      percent: 42,
+      role: "input",
+      sequence: 1,
+      stage: "decompress",
+      workflow: "apply",
+    } satisfies WorkflowProgress);
+    return {
+      outputs: [
+        {
+          checksums: { sha1: "a".repeat(40) },
+          dispose: workflowMocks.outputDispose,
+          fileName: "game.nes",
+        },
+      ],
+      result: { assets: [{ copiedInPlace: false }] },
+    };
+  });
 });
 
 it("forwards archive extraction progress and releases the workflow", async () => {
@@ -79,11 +58,28 @@ it("forwards archive extraction progress and releases the workflow", async () =>
   });
 
   expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ label: "Extracting games.zip...", percent: 42 }));
-  expect(workflowMocks.constructorOptions?.signal).toBe(abortController.signal);
+  expect(workflowMocks.ingestRom).toHaveBeenCalledWith(
+    expect.any(Blob),
+    "games.zip",
+    expect.objectContaining({ signal: abortController.signal }),
+  );
   expect(loaded.fileName).toBe("game.nes");
-  expect(workflowMocks.listener).toBeNull();
+  expect(loaded.checksum).toBe("a".repeat(40));
   expect(workflowMocks.outputDispose).toHaveBeenCalledOnce();
-  expect(workflowMocks.dispose).toHaveBeenCalledOnce();
+});
+
+it("uses ingest to checksum a bare playable ROM in place", async () => {
+  workflowMocks.ingestRom.mockResolvedValueOnce({
+    outputs: [],
+    result: { assets: [{ checksums: { sha1: "b".repeat(40) }, copiedInPlace: true }] },
+  });
+  const blob = new Blob(["game"]);
+
+  await expect(loadEmulatorRom(blob, "game.nes")).resolves.toEqual({
+    blob,
+    checksum: "b".repeat(40),
+    fileName: "game.nes",
+  });
 });
 
 describe("pickEmulatorRomOutput", () => {

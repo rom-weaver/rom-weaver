@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createEmulatorSaveExport,
+  configureEmulatorSaveStorage,
   deleteEmulatorSave,
   importEmulatorSave,
   ensureEmulatorSaveBridge,
@@ -171,6 +172,7 @@ const createFakeIndexedDb = (database = new FakeDatabase(), { upgrade = true } =
 const record: EmulatorSaveRecord = {
   gameId: "rom-weaver-nes",
   gameName: "rom-weaver-nes",
+  label: "Some Game (USA).nes",
   sram: new Uint8Array([4, 5, 6]),
   state: new Uint8Array([1, 2, 3]),
   updatedAt: 1,
@@ -197,14 +199,14 @@ describe("emulator saves", () => {
     expect(imported.sram).toEqual(record.sram);
   });
 
-  it("stores only save data and its derived key", async () => {
+  it("stores display metadata beside the derived key", async () => {
     await writeEmulatorSave(record);
     const [stored] = await listEmulatorSaves();
-    expect(Object.keys(stored || {}).sort()).toEqual(["gameId", "gameName", "sram", "state", "updatedAt"]);
-    expect(JSON.parse(serializeEmulatorSave(record))).not.toHaveProperty("label");
+    expect(Object.keys(stored || {}).sort()).toEqual(["gameId", "gameName", "label", "sram", "state", "updatedAt"]);
+    expect(JSON.parse(serializeEmulatorSave(record))).toHaveProperty("label", record.label);
   });
 
-  it("drops the ROM name a version 1 record carries", async () => {
+  it("keeps the ROM name a version 1 record carries", async () => {
     const database = new FakeDatabase();
     database.seed(record.gameId, { ...record, label: "Some Game (USA).nes" });
     vi.stubGlobal("indexedDB", createFakeIndexedDb(database));
@@ -212,11 +214,11 @@ describe("emulator saves", () => {
     await listEmulatorSaves();
     await vi.waitFor(() => {
       expect(database.stored(record.gameId)).toMatchObject({ gameId: record.gameId });
-      expect(database.stored(record.gameId)).not.toHaveProperty("label");
+      expect(database.stored(record.gameId)).toHaveProperty("label", "Some Game (USA).nes");
     });
   });
 
-  it("drops the ROM name a record kept when the upgrade could not rewrite it", async () => {
+  it("keeps the ROM name without an upgrade", async () => {
     const database = new FakeDatabase();
     database.seed(record.gameId, { ...record, label: "Some Game (USA).nes" });
     vi.stubGlobal("indexedDB", createFakeIndexedDb(database, { upgrade: false }));
@@ -224,7 +226,7 @@ describe("emulator saves", () => {
     await listEmulatorSaves();
     await vi.waitFor(() => {
       expect(database.stored(record.gameId)).toMatchObject({ gameId: record.gameId });
-      expect(database.stored(record.gameId)).not.toHaveProperty("label");
+      expect(database.stored(record.gameId)).toHaveProperty("label", "Some Game (USA).nes");
     });
   });
 
@@ -240,15 +242,23 @@ describe("emulator saves", () => {
     expect(listed.map((entry) => entry.gameId)).toEqual(["rom-weaver-z", "rom-weaver-a"]);
   });
 
-  it("drops the ROM name a version 1 export file carries", async () => {
+  it("restores the ROM name from a version 1 export", async () => {
     const legacy = JSON.stringify({
       ...JSON.parse(serializeEmulatorSave(record)),
       label: "Some Game (USA).nes",
       version: 1,
     });
     const imported = await importEmulatorSave(new Blob([legacy]));
-    expect(imported).not.toHaveProperty("label");
+    expect(imported).toHaveProperty("label", "Some Game (USA).nes");
     expect(imported.state).toEqual(record.state);
+  });
+
+  it("limits imported display names", () => {
+    const serialized = JSON.stringify({
+      ...JSON.parse(serializeEmulatorSave(record)),
+      label: "x".repeat(256),
+    });
+    expect(parseSerializedEmulatorSave(serialized).label).toHaveLength(255);
   });
 
   it("rejects malformed save files and deletes a whole game record", async () => {
@@ -289,5 +299,18 @@ describe("emulator saves", () => {
       }),
       "*",
     );
+
+    source.postMessage.mockClear();
+    configureEmulatorSaveStorage(false);
+    listeners[0]?.({
+      data: {
+        gameId: record.gameId,
+        kind: "request-load-sram",
+        source: "rom-weaver-emulator",
+      },
+      source,
+    } as unknown as MessageEvent<unknown>);
+    expect(source.postMessage).toHaveBeenCalledWith(expect.objectContaining({ data: null, kind: "load-sram" }), "*");
+    configureEmulatorSaveStorage(true);
   });
 });

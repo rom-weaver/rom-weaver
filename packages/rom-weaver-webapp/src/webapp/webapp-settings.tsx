@@ -50,7 +50,15 @@ type FieldRenderProps = SettingsFieldShared & {
 
 const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }> = [
   {
-    fields: ["accent", "language", "byteUnits", "betaToolsEnabled", "applyPlayButtonEnabled", "onboardingEnabled"],
+    fields: [
+      "accent",
+      "language",
+      "byteUnits",
+      "betaToolsEnabled",
+      "applyPlayButtonEnabled",
+      "emulatorSaveStorageEnabled",
+      "onboardingEnabled",
+    ],
     title: "Webapp",
   },
   {
