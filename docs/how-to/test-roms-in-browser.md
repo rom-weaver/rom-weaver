@@ -17,10 +17,9 @@ Use the Test page to play a local ROM or check an Apply result. The ROM stays on
 
 1. Open [Test](https://rom-weaver.com/test).
 2. Drop a ROM onto **0x01 Load a game**, or choose **Choose a ROM file**.
-3. Select **Play** beside the game if it does not start automatically.
-4. Use the controls inside the emulator player.
+3. Use the controls inside the emulator player.
 
-You can also add a ZIP or 7z archive. rom-weaver extracts it locally and picks a supported ROM from the archive.
+You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, then opens a supported ROM from the archive.
 
 The Test page recognizes local ROMs for Atari 7800 and Lynx; Nintendo NES, Famicom Disk System, Game Boy, Game Boy Advance, Nintendo 64, Nintendo DS, and Super Nintendo; and Sega Game Gear, Master System, and Mega Drive or Genesis.
 
@@ -39,7 +38,7 @@ An emulator test does not prove that every part of a patch works. Keep the clean
 
 ## Switch games or stop
 
-Loaded games and Apply outputs stay in the list for the current browser tab. Select **Play** beside another game to switch to it. Select **Stop** to close the current player. Remove a card when you no longer need that game in the list.
+Select **Choose another ROM** to replace the current game. Select **Stop** to unload the game and return to the Test start screen.
 
 The emulator pauses when you leave the Test page or hide the browser tab. It resumes when you return.
 

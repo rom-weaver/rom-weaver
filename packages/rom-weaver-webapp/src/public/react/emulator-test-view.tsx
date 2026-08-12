@@ -1,20 +1,19 @@
-import { ArrowLeft, Gamepad2, Maximize, Minimize } from "lucide-react";
+import { ArrowLeft, Maximize, Minimize } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { formatByteSize } from "../../presentation/workflow-presentation.ts";
-import { ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
 import {
-  addEntry,
-  disposeEntry,
-  prepareEntry,
-  setCurrentGame,
-  useEmulatorSession,
-  type EmulatorSessionEntry,
-} from "./emulator-session-store.ts";
+  createProgressViewModel,
+  createProgressViewModelFromEvent,
+  formatByteSize,
+  type ProgressViewModel,
+} from "../../presentation/workflow-presentation.ts";
+import { ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
+import { addEntry, disposeEntry, prepareEntry, useEmulatorSession } from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
+import { FileProgress, Notice } from "./components/ds/feedback.tsx";
+import { prefersReducedMotion } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { StepSection } from "./components/ds/layout.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
-import { FileCard } from "./components/ds/file-card.tsx";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
@@ -23,7 +22,6 @@ import {
   disposeEmulatorAudioContext,
   prepareEmulatorAudioContext,
   registerEmulatorStartRequestHandler,
-  requestEmulatorStartFromUserAction,
 } from "./emulator-audio-context.ts";
 
 const WEBGL2_ERROR = "EmulatorJS testing requires a browser with WebGL 2.";
@@ -43,48 +41,19 @@ const createLocalEntryId = (fileName: string) => {
   return `local-${Date.now()}-${localEntryCounter}-${fileName}`;
 };
 
-const EmulatorSessionOutput = ({ entry, current }: { entry: EmulatorSessionEntry; current: boolean }) => {
-  const core = entry.core || getEmulatorJsCore(entry.platform, entry.fileName);
-  const reason = core ? "" : "No emulator core for this system";
-  const selectGame = () => {
-    const { gameName } = createEmulatorGameIdentity(entry);
-    prepareEmulatorAudioContext(gameName);
-    setCurrentGame(entry.id);
-    requestEmulatorStartFromUserAction(gameName);
-  };
-  return (
-    <FileCard
-      className={core ? "emulator-session-entry" : "emulator-session-entry is-disabled"}
-      meta={
-        <>
-          <span className="fsize mono">{formatByteSize(entry.sizeBytes)}</span>
-          <span className="meta-fmt">{entry.source === "apply" ? "Applied output" : "Local file"}</span>
-          {entry.platform ? <span className="meta-fmt">{entry.platform}</span> : null}
-        </>
-      }
-      name={<span className="nm">{entry.fileName}</span>}
-      onRemove={() => disposeEntry(entry.id)}
-      removeLabel={`Remove ${entry.fileName}`}
-      menu={
-        <button
-          aria-describedby={reason ? `emulator-session-reason-${entry.id}` : undefined}
-          aria-pressed={current}
-          className="btn ghost slim"
-          disabled={!core}
-          onClick={selectGame}
-          type="button"
-        >
-          Play
-        </button>
-      }
-    >
-      {reason ? (
-        <p className="emulator-session-reason" id={`emulator-session-reason-${entry.id}`}>
-          {reason}
-        </p>
-      ) : null}
-    </FileCard>
-  );
+type EmulatorError = { blocksPlayer?: boolean; detail: string; summary: string };
+
+const errorDetail = (reason: unknown, fallback: string) =>
+  reason instanceof Error && reason.message.trim() ? reason.message : fallback;
+
+const isCoarsePointer = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(pointer: coarse)").matches;
+
+const progressValue = (progress: ProgressViewModel) => {
+  if (progress.throughputText) return progress.throughputText;
+  return progress.percent === null ? "working" : `${progress.percent}%`;
 };
 
 type EmulatorTestViewProps = {
@@ -95,10 +64,12 @@ type EmulatorTestViewProps = {
 const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const loadAbortControllerRef = useRef<AbortController | null>(null);
   const playerFrameRef = useRef<HTMLDivElement>(null);
   const fullscreenDialogRef = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<EmulatorError | null>(null);
+  const [loadProgress, setLoadProgress] = useState<ProgressViewModel | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
@@ -158,7 +129,12 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
 
   useEffect(() => {
     if (!currentGame) return;
-    setError(hasWebgl2() ? "" : WEBGL2_ERROR);
+    if (hasWebgl2()) return;
+    setError({
+      blocksPlayer: true,
+      detail: "Enable hardware acceleration, or use a browser that supports WebGL 2.",
+      summary: WEBGL2_ERROR,
+    });
   }, [currentGame]);
 
   // Each mount gets its own object URL: EmulatorJS revokes the game URL it is
@@ -185,7 +161,13 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     setPreparing(true);
     void prepareEntry(currentGame.id)
       .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not read the retained ROM.");
+        if (!cancelled) {
+          setError({
+            detail: errorDetail(reason, "The retained ROM could not be read."),
+            summary: `Could not open ${currentGame.fileName}.`,
+          });
+          disposeEntry(currentGame.id);
+        }
         return null;
       })
       .finally(() => {
@@ -247,72 +229,132 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     void frame.requestFullscreen().catch(() => undefined);
   }, []);
 
-  const handleFiles = useCallback(async (files: File[]) => {
-    if (!hasWebgl2()) {
-      setError(WEBGL2_ERROR);
-      return;
-    }
-    setBusy(true);
-    setError("");
-    let lastPlayableEntry: EmulatorSessionEntry | null = null;
-    try {
-      for (const file of files) {
-        try {
-          const loaded = await loadEmulatorRom(file, file.name);
-          const id = createLocalEntryId(loaded.fileName);
-          const core = getEmulatorJsCore(undefined, loaded.fileName);
-          const entry = {
-            blob: loaded.blob,
-            core,
-            fileName: loaded.fileName,
-            id,
-            sizeBytes: loaded.blob.size,
-            source: "local" as const,
-          };
-          addEntry(entry);
-          if (core) lastPlayableEntry = entry;
-        } catch (reason) {
-          setError(reason instanceof Error ? reason.message : "Could not prepare the ROM for EmulatorJS.");
+  const handleFiles = useCallback(
+    async (files: File[]) => {
+      const file = files[0];
+      if (!file || busy) return;
+      if (!hasWebgl2()) {
+        setError({
+          blocksPlayer: true,
+          detail: "Enable hardware acceleration, or use a browser that supports WebGL 2.",
+          summary: WEBGL2_ERROR,
+        });
+        return;
+      }
+      const abortController = new AbortController();
+      loadAbortControllerRef.current = abortController;
+      setBusy(true);
+      setError(null);
+      setLoadProgress(
+        createProgressViewModel({
+          fallbackLabel: `Preparing ${file.name}...`,
+          hasProgress: true,
+          percent: null,
+          stage: "decompress",
+        }),
+      );
+      try {
+        const loaded = await loadEmulatorRom(file, file.name, {
+          onProgress: (progress) => {
+            if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return;
+            setLoadProgress(
+              createProgressViewModelFromEvent(progress, {
+                fallbackLabel: `Extracting ${file.name}...`,
+                hasProgress: true,
+              }),
+            );
+          },
+          signal: abortController.signal,
+        });
+        if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return;
+        const core = getEmulatorJsCore(undefined, loaded.fileName);
+        if (!core) {
+          setError({
+            detail: "No emulator core is available for this file. Choose a supported ROM.",
+            summary: `Cannot play ${loaded.fileName}.`,
+          });
+          return;
+        }
+        const entry = {
+          blob: loaded.blob,
+          core,
+          fileName: loaded.fileName,
+          id: createLocalEntryId(loaded.fileName),
+          sizeBytes: loaded.blob.size,
+          source: "local" as const,
+        };
+        prepareEmulatorAudioContext(createEmulatorGameIdentity(entry).gameName);
+        addEntry(entry);
+      } catch (reason) {
+        if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return;
+        setError({
+          detail: errorDetail(reason, "The ROM could not be prepared for the emulator."),
+          summary: `Could not load ${file.name}.`,
+        });
+      } finally {
+        if (loadAbortControllerRef.current === abortController) {
+          loadAbortControllerRef.current = null;
+          setLoadProgress(null);
+          setBusy(false);
         }
       }
-      if (lastPlayableEntry) {
-        prepareEmulatorAudioContext(createEmulatorGameIdentity(lastPlayableEntry).gameName);
-        setCurrentGame(lastPlayableEntry.id);
-      }
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-
-  /*
-   * Select a playable entry on arrival so the player exists before the first
-   * tap. iOS only unlocks audio for a gesture inside the iframe, so the tap
-   * that starts the game has to land on the core's own start button; without
-   * this, coming from Apply costs a Play tap first just to create the frame.
-   * Each entry is offered once, so Stop is not undone.
-   */
-  const autoSelectedRef = useRef<string | null>(null);
-  useEffect(() => {
-    // Any selection counts as offered, including the one handleFiles makes, or
-    // Stop would be undone the moment it cleared the current game.
-    if (currentGameId) {
-      autoSelectedRef.current = currentGameId;
-      return;
-    }
-    const playable = entries
-      .slice()
-      .reverse()
-      .find((entry) => entry.core || getEmulatorJsCore(entry.platform, entry.fileName));
-    if (!playable || autoSelectedRef.current === playable.id) return;
-    autoSelectedRef.current = playable.id;
-    setCurrentGame(playable.id);
-  }, [currentGameId, entries]);
+    },
+    [busy],
+  );
 
   const currentCore = currentGame
     ? currentGame.core || getEmulatorJsCore(currentGame.platform, currentGame.fileName)
     : null;
-  const canPlay = Boolean(currentGame && currentCore && gameUrl && currentIdentity);
-  const workflowEmpty = !(entries.length || error || busy);
+  const webglBlocked = error?.blocksPlayer === true;
+  const canPlay = Boolean(currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked);
+  const workflowEmpty = !(currentGame || busy);
+  const showPlayer = Boolean(currentGame);
+
+  const scrolledGameRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!(active && canPlay && currentGame && isCoarsePointer())) return undefined;
+    if (scrolledGameRef.current === currentGame.id) return undefined;
+    scrolledGameRef.current = currentGame.id;
+    const frame = requestAnimationFrame(() => {
+      const player = playerFrameRef.current;
+      if (typeof player?.scrollIntoView !== "function") return;
+      player.scrollIntoView({
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+        block: "center",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [active, canPlay, currentGame]);
+
+  useEffect(() => {
+    if (!(active && error)) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const notice = document.getElementById("emulator-test-error");
+      if (typeof notice?.scrollIntoView !== "function") return;
+      notice.scrollIntoView({
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+        block: "nearest",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [active, error]);
+
+  useEffect(
+    () => () => {
+      loadAbortControllerRef.current?.abort();
+      loadAbortControllerRef.current = null;
+    },
+    [],
+  );
+
+  const stopGame = () => {
+    loadAbortControllerRef.current?.abort();
+    loadAbortControllerRef.current = null;
+    if (currentGame) disposeEntry(currentGame.id);
+    setBusy(false);
+    setError(null);
+    setLoadProgress(null);
+  };
 
   return (
     <div className="emulator-test-view">
@@ -320,21 +362,37 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         accept={getFileInputAcceptAttributes().unifiedRom}
         addLabel="Choose another ROM"
         afterDropZone={
-          entries.length ? (
-            <div className="cards emulator-session-list">
-              {entries.map((entry) => (
-                <EmulatorSessionOutput current={entry.id === currentGameId} entry={entry} key={entry.id} />
-              ))}
+          loadProgress ? (
+            <div aria-live="polite" className="emulator-load-progress">
+              <FileProgress
+                indeterminate={loadProgress.indeterminate}
+                label={loadProgress.label || "Preparing the ROM..."}
+                percent={loadProgress.visualPercent}
+                value={progressValue(loadProgress)}
+              />
             </div>
           ) : undefined
         }
+        beforeDropZone={
+          error ? (
+            <Notice
+              id="emulator-test-error"
+              level="error"
+              onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
+            >
+              <b>{error.summary}</b> {error.detail}
+            </Notice>
+          ) : undefined
+        }
         big={workflowEmpty}
+        disabled={busy}
         heroLabel="Drop a ROM or choose a file"
         heroLabelCoarse="Choose a ROM file"
         id="emulator-test-input"
-        info={<p>Loaded games and Apply outputs stay listed here for this session.</p>}
+        info={<p>Choosing another ROM stops and replaces the current game.</p>}
         inputId="emulator-test-file-input"
         lead={{ line1: "ui.hero.testThesis", line2: "ui.hero.testThesis2" }}
+        multiple={false}
         onBrowseStart={() => prepareEmulatorAudioContext()}
         onDropStart={() => prepareEmulatorAudioContext()}
         onFiles={(files) => void handleFiles(files)}
@@ -345,9 +403,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         title="Load a game"
       />
 
-      {workflowEmpty ? (
-        <GhostSteps steps={[{ num: "0x02", title: "Play" }]} />
-      ) : (
+      {showPlayer ? (
         <>
           <StepSection
             headerExtra={
@@ -357,11 +413,11 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                     <ArrowLeft aria-hidden="true" /> Back to Apply
                   </a>
                 ) : null}
+                <button aria-label="Stop and unload game" className="btn ghost slim" onClick={stopGame} type="button">
+                  Stop
+                </button>
                 {canPlay ? (
                   <>
-                    <button className="btn ghost slim" onClick={() => setCurrentGame(null)} type="button">
-                      Stop
-                    </button>
                     <button
                       aria-label={fullscreen || pseudoFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                       className="btn ghost slim emulator-fullscreen-btn"
@@ -378,15 +434,22 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                 ) : null}
               </div>
             }
+            id="emulator-test-player"
+            meta={
+              currentGame ? (
+                <>
+                  <span className="emulator-current-game" title={currentGame.fileName}>
+                    {currentGame.fileName}
+                  </span>
+                  <span>{formatByteSize(currentGame.sizeBytes)}</span>
+                </>
+              ) : undefined
+            }
             num="0x02"
             title="Play"
           >
             <div className="card emulator-player">
-              {error ? (
-                <p className="emulatorjs-error" role="alert">
-                  {error}
-                </p>
-              ) : currentGame && currentCore && gameUrl && currentIdentity ? (
+              {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
                   <div
                     className={
@@ -419,29 +482,18 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                   </div>
                 </dialog>
               ) : currentGame && currentCore && preparing ? (
-                <p className="emulator-player-empty">Preparing the ROM…</p>
-              ) : currentGame ? (
-                <p className="emulator-player-empty">No emulator core for this system.</p>
-              ) : entries.length ? (
-                <p className="emulator-player-empty">Choose a game from the list above to start playing.</p>
-              ) : (
-                <div className="emulator-player-empty">
-                  <Gamepad2 aria-hidden="true" />
-                  <p>No game is loaded.</p>
-                  <a className="btn ghost slim" href="apply">
-                    Patch a ROM first
-                  </a>
+                <div className="emulator-player-loading">
+                  <FileProgress indeterminate label="Preparing the ROM..." value="working" />
                 </div>
-              )}
+              ) : currentGame && !webglBlocked ? (
+                <div className="emulator-player-loading" />
+              ) : null}
             </div>
           </StepSection>
         </>
+      ) : (
+        <GhostSteps steps={[{ num: "0x02", title: "Play" }]} />
       )}
-      {busy ? (
-        <p aria-live="polite" className="emulatorjs-note">
-          Preparing the ROM…
-        </p>
-      ) : null}
     </div>
   );
 };

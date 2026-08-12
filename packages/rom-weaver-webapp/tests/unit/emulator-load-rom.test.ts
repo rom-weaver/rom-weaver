@@ -1,9 +1,90 @@
-import { describe, expect, it } from "vitest";
-import { pickEmulatorRomOutput, renameRomToOutput } from "../../src/public/react/components/emulator-load-rom.ts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { WorkflowProgress } from "../../src/platform/browser/browser-api.ts";
+import {
+  loadEmulatorRom,
+  pickEmulatorRomOutput,
+  renameRomToOutput,
+} from "../../src/public/react/components/emulator-load-rom.ts";
+
+const workflowMocks = vi.hoisted(() => ({
+  constructorOptions: null as { signal?: AbortSignal } | null,
+  dispose: vi.fn(async () => undefined),
+  getBlob: vi.fn(async () => new Blob(["game"])),
+  listener: null as ((progress: WorkflowProgress) => void) | null,
+  outputDispose: vi.fn(async () => undefined),
+}));
+
+vi.mock("../../src/platform/browser/browser-api.ts", () => ({
+  ApplyWorkflow: class {
+    constructor(options: { signal?: AbortSignal }) {
+      workflowMocks.constructorOptions = options;
+    }
+
+    on(_event: "progress", listener: (progress: WorkflowProgress) => void) {
+      workflowMocks.listener = listener;
+    }
+
+    off(_event: "progress", listener: (progress: WorkflowProgress) => void) {
+      if (workflowMocks.listener === listener) workflowMocks.listener = null;
+    }
+
+    async setInput() {
+      return undefined;
+    }
+
+    async run() {
+      workflowMocks.listener?.({
+        id: "extract",
+        label: "Extracting games.zip...",
+        percent: 42,
+        role: "input",
+        sequence: 1,
+        stage: "decompress",
+        workflow: "apply",
+      });
+      return {
+        outputs: [
+          {
+            dispose: workflowMocks.outputDispose,
+            fileName: "game.nes",
+            getBlob: workflowMocks.getBlob,
+          },
+        ],
+      };
+    }
+
+    dispose = workflowMocks.dispose;
+  },
+}));
 
 type ArchiveOutput = Parameters<typeof pickEmulatorRomOutput>[0][number];
 
 const output = (fileName: string): ArchiveOutput => ({ fileName }) as ArchiveOutput;
+
+beforeEach(() => {
+  workflowMocks.constructorOptions = null;
+  workflowMocks.dispose.mockClear();
+  workflowMocks.getBlob.mockClear();
+  workflowMocks.listener = null;
+  workflowMocks.outputDispose.mockClear();
+});
+
+it("forwards archive extraction progress and releases the workflow", async () => {
+  const onProgress = vi.fn();
+  const abortController = new AbortController();
+
+  const loaded = await loadEmulatorRom(new Blob(["archive"]), "games.zip", {
+    onProgress,
+    signal: abortController.signal,
+  });
+
+  expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ label: "Extracting games.zip...", percent: 42 }));
+  expect(workflowMocks.constructorOptions?.signal).toBe(abortController.signal);
+  expect(loaded.fileName).toBe("game.nes");
+  expect(workflowMocks.listener).toBeNull();
+  expect(workflowMocks.outputDispose).toHaveBeenCalledOnce();
+  expect(workflowMocks.dispose).toHaveBeenCalledOnce();
+});
 
 describe("pickEmulatorRomOutput", () => {
   it("throws when the archive produced no files", () => {
