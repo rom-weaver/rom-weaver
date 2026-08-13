@@ -56,10 +56,11 @@ test("export bundle bundles the session from main-page options with a checks-onl
   const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
   expect(formatSelect).not.toBeNull();
   expect(document.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
-  expect(document.getElementById("rom-weaver-bundle-job")?.textContent).toContain("Share this setup");
-  expect(document.getElementById("rom-weaver-bundle-job")?.textContent).toContain(
-    "Save this setup for someone else to run.",
-  );
+  const bundleDrawer = document.querySelector("#rom-weaver-bundle-job .cks-head");
+  expect(bundleDrawer?.textContent).toContain("Download a bundle of this setup to share");
+  expect(bundleDrawer?.getAttribute("aria-expanded")).toBe("false");
+  bundleDrawer?.click();
+  await expect.poll(() => bundleDrawer?.getAttribute("aria-expanded")).toBe("true");
   expect(formatSelect.value).toBe("zip");
   expect(Array.from(formatSelect.options, (option) => option.textContent)).toEqual(["ZIP (.zip)", "7z (.7z)"]);
   expect(document.getElementById("rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
@@ -208,7 +209,7 @@ test("keeps the sharing job after an ordinary Apply completes", async () => {
 
   const applyButton = document.getElementById("rom-weaver-button-apply");
   const job = document.getElementById("rom-weaver-bundle-job");
-  expect(job?.textContent).toContain("Share this setup");
+  expect(job?.textContent).toContain("Download a bundle of this setup to share");
   expect(applyButton?.compareDocumentPosition(job || document.body)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   expect(document.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
 

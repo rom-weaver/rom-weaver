@@ -280,6 +280,11 @@ msgstr "{format}-ROM-Bundle herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.shareTitle"
+msgstr "Ein Bundle dieser Konfiguration zum Teilen herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.chdDvd"
 msgstr "DVD"
 
@@ -307,11 +312,6 @@ msgstr "erwartete eine andere ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.expectsFirst"
 msgstr "erwartet zuerst Patch {n}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.shareDescription"
-msgstr "Das Exportieren eines Rezepts wendet keine Patches an. Es speichert diese Patch-Konfiguration, damit jemand anderes sie ausführen kann."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -682,11 +682,6 @@ msgstr "Einstellungen und Status"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.share"
 msgstr "Bundle teilen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.shareTitle"
-msgstr "Diese Konfiguration teilen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

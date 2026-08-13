@@ -280,6 +280,11 @@ msgstr "Descargar bundle {format} con ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.shareTitle"
+msgstr "Descarga un paquete de esta configuración para compartirlo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.chdDvd"
 msgstr "DVD"
 
@@ -307,11 +312,6 @@ msgstr "esperaba una ROM distinta"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.expectsFirst"
 msgstr "espera primero el parche {n}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.shareDescription"
-msgstr "Exportar una receta no aplica parches. Guarda esta configuración de parches para que otra persona pueda ejecutarla."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -682,11 +682,6 @@ msgstr "Ajustes y estado"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.share"
 msgstr "Compartir bundle"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.shareTitle"
-msgstr "Comparte esta configuración"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

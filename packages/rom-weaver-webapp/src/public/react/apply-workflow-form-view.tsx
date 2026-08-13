@@ -1549,17 +1549,17 @@ const BundleSecondaryJob = ({
 }) => {
   const localizer = useUiLocalizer();
   return (
-    <section aria-labelledby="rom-weaver-bundle-job-title" className="bundle-job" id="rom-weaver-bundle-job">
-      <div className="bundle-job-heading">
-        <h3 id="rom-weaver-bundle-job-title">{localizer.message("ui.bundleExport.shareTitle")}</h3>
-        <p>{localizer.message("ui.bundleExport.shareDescription")}</p>
-      </div>
-      <div className="bundle-job-content">
+    <div id="rom-weaver-bundle-job">
+      <Drawer
+        bodyClassName="bundle-job-content"
+        className="bundle-job"
+        label={localizer.message("ui.bundleExport.shareTitle")}
+      >
         <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
         {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
-      </div>
-      <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
-    </section>
+        <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+      </Drawer>
+    </div>
   );
 };
 

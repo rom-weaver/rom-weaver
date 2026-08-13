@@ -663,14 +663,11 @@ describe("apply workflow view - bundle controls", () => {
   it("keeps the sharing action full width at every panel size", () => {
     const shareRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-share\s*\{([^}]*)\}/)?.[1];
     const fullRowRule = BUNDLE_FIELDS_CSS.match(
-      /\.rw-app \.bundle-share,\s*\.rw-app \.bundle-job > \.runprog\s*\{([^}]*)\}/,
+      /\.rw-app \.bundle-share,\s*\.rw-app \.bundle-job-content > \.runprog\s*\{([^}]*)\}/,
     )?.[1];
     const romOptionRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-rom-option\s*\{([^}]*)\}/)?.[1];
-    const jobRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-job\s*\{([^}]*)\}/)?.[1];
 
-    expect(jobRule).toContain("align-items: start");
     expect(romOptionRule).toContain("align-self: end");
-    expect(fullRowRule).toContain("grid-column: 1 / -1");
     expect(fullRowRule).toContain("width: 100%");
     expect(shareRule).toContain("min-height: 40px");
     expect(BUNDLE_RESPONSIVE_CSS).not.toContain(".bundle-job .bundle-share");
@@ -727,7 +724,7 @@ describe("apply workflow view - bundle controls", () => {
     const shareButton = container.querySelector("#rom-weaver-button-export-bundle");
     expect(shareButton?.textContent).toContain("Share bundle");
     expect(shareButton?.classList).toContain("bundle-share");
-    expect(shareButton?.parentElement?.classList).toContain("bundle-job");
+    expect(shareButton?.parentElement?.classList).toContain("bundle-job-content");
     expect(container.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
     expect(container.querySelector(".bundle-rom-warning .notice")?.textContent).toContain("right to distribute it");
   });
@@ -750,7 +747,7 @@ describe("apply workflow view - bundle controls", () => {
 
     const progress = container.querySelector("#rom-weaver-bundle-export-progress");
     expect(progress?.classList).toContain("runprog");
-    expect(progress?.parentElement?.classList).toContain("bundle-job");
+    expect(progress?.parentElement?.classList).toContain("bundle-job-content");
   });
 
   it("keeps bundle settings out of ordinary Apply options", () => {
@@ -798,8 +795,13 @@ describe("apply workflow view - bundle controls", () => {
     );
 
     const job = container.querySelector("#rom-weaver-bundle-job");
-    expect(job?.textContent).toContain("Share this setup");
-    expect(job?.textContent).toContain("Save this setup for someone else to run.");
+    const toggle = job?.querySelector(".cks-head");
+    expect(toggle?.textContent).toContain("Download a bundle of this setup to share");
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(job?.querySelector(".bundle-job")?.classList).not.toContain("is-open");
+    fireEvent.click(toggle as HTMLButtonElement);
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(job?.querySelector(".bundle-job")?.classList).toContain("is-open");
     expect(container.querySelector("#rom-weaver-button-apply")?.compareDocumentPosition(job || container)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );

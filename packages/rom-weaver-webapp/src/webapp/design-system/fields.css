@@ -239,20 +239,7 @@
   text-overflow: ellipsis;
 }
 .rw-app .bundle-job {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.72fr) minmax(360px, 1.28fr);
-  gap: var(--sp-l) var(--sp-xl);
-  align-items: start;
-  padding: var(--sp-m);
   margin-block-start: var(--sp-l);
-  border: 1px dashed color-mix(in oklab, var(--thread) 42%, var(--seam));
-}
-.rw-app .bundle-job-heading {
-  padding-inline-end: var(--sp-xl);
-  border-inline-end: 1px solid var(--seam-soft);
-}
-.rw-app .bundle-job-heading h3 {
-  margin: 0;
 }
 .rw-app .bundle-job-content {
   display: grid;
@@ -273,8 +260,7 @@
   grid-column: 1 / -1;
 }
 .rw-app .bundle-share,
-.rw-app .bundle-job > .runprog {
-  grid-column: 1 / -1;
+.rw-app .bundle-job-content > .runprog {
   width: 100%;
 }
 .rw-app .bundle-share {

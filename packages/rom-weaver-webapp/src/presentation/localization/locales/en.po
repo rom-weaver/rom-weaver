@@ -280,6 +280,11 @@ msgstr "Download {format} ROM Bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.shareTitle"
+msgstr "Download a bundle of this setup to share"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.chdDvd"
 msgstr "DVD"
 
@@ -307,11 +312,6 @@ msgstr "expected a different ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.expectsFirst"
 msgstr "expects patch {n} first"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.shareDescription"
-msgstr "Save this setup for someone else to run."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -682,11 +682,6 @@ msgstr "Settings and status"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.share"
 msgstr "Share bundle"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.shareTitle"
-msgstr "Share this setup"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
