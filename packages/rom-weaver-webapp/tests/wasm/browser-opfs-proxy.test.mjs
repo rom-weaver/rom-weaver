@@ -10,16 +10,24 @@ import {
 } from "./test-helpers.mjs";
 
 const SCRATCH_DIRECTORY_NAME = ".rom-weaver-opfs-scratch";
+const NOT_FOUND_ERROR_REGEX = /not\s+found|object\s+can\s+not\s+be\s+found/i;
+
+const isNotFoundError = (error) =>
+  (typeof error === "object" && error !== null && error.name === "NotFoundError") ||
+  (error instanceof Error && NOT_FOUND_ERROR_REGEX.test(error.message));
 
 async function countScratchEntries(rootHandle) {
+  let scratchHandle;
   try {
-    const scratchHandle = await rootHandle.getDirectoryHandle(SCRATCH_DIRECTORY_NAME, { create: false });
-    let count = 0;
-    for await (const _entry of scratchHandle.entries()) count += 1;
-    return count;
-  } catch {
-    return 0;
+    scratchHandle = await rootHandle.getDirectoryHandle(SCRATCH_DIRECTORY_NAME, { create: false });
+  } catch (error) {
+    if (isNotFoundError(error)) return 0;
+    throw error;
   }
+
+  let count = 0;
+  for await (const _entry of scratchHandle.entries()) count += 1;
+  return count;
 }
 
 async function readGuestFile(rootHandle, guestPath) {

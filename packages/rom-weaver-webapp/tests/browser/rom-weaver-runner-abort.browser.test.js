@@ -20,6 +20,13 @@ const resetWorkerClientState = () => {
   workerClientState.terminateCalls = 0;
 };
 
+const requireSharedMemory = () => {
+  expect(
+    typeof SharedArrayBuffer === "function" && globalThis.crossOriginIsolated === true,
+    "threaded runner integration tests require SharedArrayBuffer and crossOriginIsolated",
+  ).toBe(true);
+};
+
 vi.mock("../../src/wasm/workers/browser-worker-client.ts", () => ({
   createBrowserWorkerClient: () => {
     const pendingRuns = new Set();
@@ -77,7 +84,7 @@ afterEach(async () => {
 });
 
 test("aborting a runner run terminates the active worker and recycles the next run", async () => {
-  if (!(typeof SharedArrayBuffer === "function" && globalThis.crossOriginIsolated === true)) return;
+  requireSharedMemory();
 
   const controller = new AbortController();
   const pendingRun = runRomWeaverJson(
@@ -116,7 +123,7 @@ test("aborting a runner run terminates the active worker and recycles the next r
 });
 
 test("terminates a newly-created client when runner initialization fails", async () => {
-  if (!(typeof SharedArrayBuffer === "function" && globalThis.crossOriginIsolated === true)) return;
+  requireSharedMemory();
 
   workerClientState.initError = new Error("init boom");
   await expect(
