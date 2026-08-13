@@ -8,6 +8,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 - [Commands](#commands)
   - [Alternate names](#alternate-names)
 - [Reaching inside archives](#reaching-inside-archives)
+- [Identify](#identify)
 - [Checksum](#checksum)
 - [Patching](#patching)
   - [Inputs](#inputs)
@@ -32,6 +33,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | --- | --- |
 | `probe` | Identify a file: its format, its platform, and any header it carries. |
 | `extract` | Unpack an archive or single-payload compressed format. |
+| `identify` | Match a ROM checksum to an exact dump name in local title data. |
 | `checksum` | Hash a file, a byte range, or a ROM inside an archive. |
 | `formats` | List the formats this build supports, and what it can do with each. |
 | `compress` | Pack files into an archive, disc image, or ROM-specific compressed format. |
@@ -49,7 +51,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 
 Nearly every command takes `-i`/`--input` and `-o`/`--output`; `patch create` is the exception, taking `--original` and `--modified` instead. The other short flags are `-j` threads, `-f` format, `-s` select, `-a` algorithm, `-e` extension, `-n` dry run, `-v` verbose, and `-q` quiet. Run `rom-weaver <command> --help` for the full list.
 
-`probe` and `checksum` accept `-` as the `--input` value to read from stdin, so they fit into a pipeline:
+`identify`, `probe`, and `checksum` accept `-` as the `--input` value to read from stdin.
 
 ```bash
 curl -sL https://example.com/game.gba | rom-weaver checksum --input - --algo sha256
@@ -98,7 +100,7 @@ rom-weaver only asks interactive questions when stdin and stderr are both termin
 ## Reaching inside archives
 
 
-`probe`, `extract`, `checksum`, `trim`, `bundle parse`, and the patching commands all open archives for you, so you can point them at a `.zip` and they will work on the ROM inside it. Four flags steer that, and they mean the same thing everywhere they appear:
+`probe`, `extract`, `identify`, `checksum`, `trim`, `bundle parse`, and the patching commands open archives automatically. Four flags control archive selection:
 
 - `-s`/`--select` picks which file to use, by exact name, prefix, or glob.
 - `--filter rom` considers only files that look like ROMs; `--filter patch` only patches. Both judge by extension, and the flag is repeatable and comma-separable (`--filter rom,patch`).
@@ -109,6 +111,14 @@ Not every command takes all four. `extract` has no `--no-extract`, since unpacki
 --help` is authoritative.
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
+
+## Identify
+
+`identify` computes CRC32, MD5, and SHA-1. It searches the raw ROM and common checksum variants.
+
+Native builds include CC0 OpenGood data for 17 cartridge systems. `--database PACK` replaces that data with a local RWFP1 pack. The flag is repeatable.
+
+The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON reports put the typed result in `details.identify`.
 
 ## Checksum
 

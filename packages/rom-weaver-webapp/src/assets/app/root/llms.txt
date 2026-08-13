@@ -6,6 +6,7 @@
 
 - [Apply ROM patches](https://rom-weaver.com/apply): Apply patches with format detection, checksum validation, and ordered patch chains.
 - [Create ROM patches](https://rom-weaver.com/create): Create patches with format-aware settings and distributable bundles.
+- [Identify a ROM](https://rom-weaver.com/identify): Match a ROM to its exact dump name with local title data.
 - [Documentation](https://rom-weaver.com/docs): Tutorials, how-to guides, reference tables, and explanation, for the browser app and the CLI.
 - [Your first patch](https://rom-weaver.com/docs/get-started): Tutorial that patches a homebrew ROM in the browser and verifies the result.
 - [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the browser's Apply workflow with loose patches, patch chains, archives, or bundles.
@@ -22,7 +23,7 @@
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
 - [Verify a download](https://rom-weaver.com/docs/verify-downloads): Check that a release archive, npm package, or container image carries the release workflow's build provenance.
 - [Your first apply in the terminal](https://rom-weaver.com/docs/cli-get-started): Tutorial covering Apply, Create, and Bundle in the terminal with the same test assets.
-- [Identify and hash files (CLI)](https://rom-weaver.com/docs/identify-and-hash-files): Use probe and checksum to identify a file and prove which bytes it holds.
+- [Identify and hash ROMs (CLI)](https://rom-weaver.com/docs/identify-and-hash-files): Match an exact dump name, inspect a file, or compute checksums.
 - [Bake cheat codes (CLI)](https://rom-weaver.com/docs/bake-cheat-codes): Write Game Genie or GameShark/Pro Action Replay codes permanently into a ROM.
 - [Trim a ROM (CLI)](https://rom-weaver.com/docs/cli-trim): Trim, preview, and revert ROM padding from the command line.
 - [Work with archives](https://rom-weaver.com/docs/work-with-archives): Extract, convert, and create ZIP and 7z archives from the command line.

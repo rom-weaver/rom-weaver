@@ -151,6 +151,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Play a patched ROM in an emulator, right in the browser,",
   }),
   "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "with saves that stay on this device —" }),
+  "ui.hero.identifyThesis": msg({
+    id: "ui.hero.identifyThesis",
+    message: "Match a ROM to its exact dump name,",
+  }),
+  "ui.hero.identifyThesis2": msg({ id: "ui.hero.identifyThesis2", message: "with a database that stays local —" }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
     message: "Revert a patched ROM to its original dump,",

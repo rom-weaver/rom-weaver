@@ -82,6 +82,7 @@ export function createRomWeaverCommand<TType extends RomWeaverCommandLabel>(
     case "probe":
     case "extract":
     case "checksum":
+    case "identify":
     case "ingest":
     case "compress":
     case "trim":
@@ -142,6 +143,7 @@ function normalizeRomWeaverCommand(command: RomWeaverCommand): RomWeaverCommand 
     case "probe":
     case "extract":
     case "checksum":
+    case "identify":
     case "ingest":
     case "compress":
     case "trim":
@@ -179,6 +181,7 @@ function readRomWeaverCommandBranch(command: RomWeaverCommand): RomWeaverCommand
     case "probe":
     case "extract":
     case "checksum":
+    case "identify":
     case "ingest":
     case "compress":
     case "trim":
@@ -217,10 +220,12 @@ export function collectRomWeaverRunInputPaths(
     case "probe":
     case "extract":
     case "checksum":
+    case "identify":
     case "ingest":
       if (command.type !== "ingest" || !command.args.sidecar_only) {
         pushPathValue(paths, command.args.input);
       }
+      if (command.type === "identify") pushPathValues(paths, command.args.database);
       break;
     case "compress":
       pushPathValues(paths, command.args.input);
@@ -315,6 +320,7 @@ export function romWeaverCommandSupportsThreads(command: RomWeaverCommand): bool
       return false;
     case "extract":
     case "checksum":
+    case "identify":
     case "ingest":
     case "compress":
     case "trim":
@@ -486,6 +492,7 @@ function replaceRomWeaverCommandArgs(command: RomWeaverCommand, args: Record<str
     case "probe":
     case "extract":
     case "checksum":
+    case "identify":
     case "ingest":
     case "compress":
     case "trim":

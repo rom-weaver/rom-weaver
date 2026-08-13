@@ -99,6 +99,14 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/create");
   });
 
+  it("loads the identify workflow from its path", () => {
+    window.history.replaceState({}, "", "/identify");
+    const controller = createController();
+    expect(controller.getState().currentView).toBe("identify");
+    expect(readWorkflowViewFromPath()).toBe("identify");
+    expect(window.location.pathname).toBe("/identify");
+  });
+
   it("routes the Test workflow", () => {
     window.history.replaceState({}, "", "/test");
     const controller = createController();
@@ -114,6 +122,7 @@ describe("createWebappRootController over the vanilla store", () => {
   it("resolves a candidate URL without changing the current browser path", () => {
     expect(readWorkflowViewFromPath("/docs/apply-rom-patches")).toBe("docs");
     expect(readWorkflowViewFromPath("/create")).toBe("creator");
+    expect(readWorkflowViewFromPath("/identify")).toBe("identify");
     expect(window.location.pathname).toBe("/");
   });
 

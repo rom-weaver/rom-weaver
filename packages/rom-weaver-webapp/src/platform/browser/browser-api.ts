@@ -1,4 +1,4 @@
-import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
+import { invokeRomWeaverIdentifyWorker, invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
 import { TrimWorkflowController } from "../../lib/workflow/trim-workflow-controller.ts";
@@ -43,6 +43,8 @@ type BrowserIngestRomOptions = {
   signal?: AbortSignal;
 };
 
+type BrowserIdentifyRomOptions = BrowserIngestRomOptions;
+
 const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestRomOptions = {}) => {
   const ingest = browserRuntime.ingest;
   if (!ingest?.run) throw new Error("The rom-weaver checksum runtime is unavailable.");
@@ -53,6 +55,42 @@ const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestR
     signal: options.signal,
     source,
   });
+};
+
+const identifyRom = async (source: Blob, fileName: string, options: BrowserIdentifyRomOptions = {}) => {
+  const { loadIdentifyPacks } = await import("./identify-packs.ts");
+  const packs = await loadIdentifyPacks(fileName);
+  const staged = await browserRuntime.workerIo.stageSources([
+    {
+      fallbackFileName: fileName || "rom.bin",
+      pathPrefix: "identify-input",
+      scope: "checksum",
+      source,
+    },
+    ...packs.map((pack, index) => ({
+      fallbackFileName: pack.fileName,
+      pathPrefix: `identify-pack-${index + 1}`,
+      pathPrefixInPath: true as const,
+      scope: "checksum" as const,
+      source: pack.blob,
+    })),
+  ]);
+  const [stagedRom, ...stagedPacks] = staged;
+  if (!stagedRom) throw new Error("The ROM could not be staged for identification");
+  try {
+    const knownInputPaths = staged.map((entry) => entry.filePath);
+    return await invokeRomWeaverIdentifyWorker(
+      {
+        databasePaths: stagedPacks.map((entry) => entry.filePath),
+        knownInputPaths,
+        signal: options.signal,
+        sourcePath: stagedRom.filePath,
+      },
+      options.onProgress,
+    );
+  } finally {
+    await Promise.all(staged.map((entry) => entry.cleanup().catch(() => undefined)));
+  }
 };
 
 const getIngestOutputBlob = async (
@@ -187,6 +225,7 @@ export {
   CreateWorkflow,
   getCreatePatchFormatCandidates,
   getIngestOutputBlob,
+  identifyRom,
   ingestRom,
   preloadBrowserRuntime,
   TrimWorkflow,

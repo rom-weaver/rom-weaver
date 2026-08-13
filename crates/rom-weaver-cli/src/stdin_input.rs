@@ -1,4 +1,4 @@
-//! Accept `-` as the `--input` value for `checksum`/`probe`, reading the ROM
+//! Accept `-` as the `--input` value for `checksum`, `probe`, or `identify`, reading the ROM
 //! bytes from stdin. Stdin is spooled to a temp file so the existing
 //! path-based, seek-driven command code (range resolution, container probing,
 //! ROM identity) runs unchanged. Native-only: the wasm entry point receives a

@@ -5,6 +5,7 @@ import {
 } from "../../storage/browser/browser-storage-estimate.ts";
 import type { BundleHeaderMode, ParsedBundleCreateResult, ParsedBundleParseResult } from "../../types/bundle.ts";
 import type { ParsedIngestResult } from "../../types/ingest.ts";
+import type { ParsedIdentifyResult } from "../../types/identify.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type {
   PatchValidatePerPatchVerdict,
@@ -39,6 +40,7 @@ import {
 } from "./compression-codec-args.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
 import { parseIngestResult } from "./ingest-result.ts";
+import { parseIdentifyResult } from "./identify-result.ts";
 import {
   getPatchApplyOutputFileName,
   getPatchValidationRequirements,
@@ -1094,6 +1096,52 @@ const invokeRomWeaverPpfUndoWorker = async (input: {
 // Classify a dropped source as ROM or patch, nested-extract + checksum ROMs (in place for bare
 // ROMs), and describe patches - the consolidated `ingest` command. One round-trip replaces the
 // webapp's separate classify → descend → checksum (ROM) and classify → describe (patch) calls.
+const invokeRomWeaverIdentifyWorker = async (
+  input: {
+    databasePaths: string[];
+    knownInputPaths?: string[];
+    logLevel?: LogLevel | string;
+    signal?: AbortSignal;
+    sourcePath: string;
+    threads?: RuntimeThreadBudgetInput;
+  },
+  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+): Promise<ParsedIdentifyResult> => {
+  const sourcePath = String(input.sourcePath || "").trim();
+  if (!sourcePath) throw new Error("Identify source path is required");
+  const database = toTrimmedList(input.databasePaths);
+  if (!database.length) throw new Error("Identify requires at least one database pack");
+  const threadArg = toThreadBudget(input.threads);
+  const command = createRomWeaverCommand("identify", {
+    database,
+    input: sourcePath,
+    ...(threadArg ? { threads: threadArg } : {}),
+  });
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson identify dispatch", {
+    command,
+    databaseCount: database.length,
+    sourcePath,
+    threadArg,
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      knownInputPaths: input.knownInputPaths,
+      logLevel: input.logLevel,
+      onEvent: relaySimpleProgress(onProgress),
+      onLog,
+      signal: input.signal,
+    }),
+  );
+  ensureRomWeaverSuccess(result, "ROM identification failed");
+  const terminal = getLastEvent(result);
+  const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
+  const parsed = parseIdentifyResult(details);
+  if (!parsed) throw withRomWeaverFailureKind(new Error("Identify result was missing or malformed"), result);
+  return parsed;
+};
+
 const invokeRomWeaverIngestWorker = async (
   input: {
     checksumAlgorithms?: string[];
@@ -1387,6 +1435,7 @@ export {
   invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverIngestWorker,
+  invokeRomWeaverIdentifyWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
   invokeRomWeaverPpfUndoWorker,

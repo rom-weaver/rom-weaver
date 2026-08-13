@@ -349,7 +349,7 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
 // Views the build emits a prerendered shell for. Trim and Tools deliberately
 // inherit the patcher's markup, so they hydrate as "patcher" - that is what is
 // actually in the document.
-const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs", "test"]);
+const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs", "identify", "test"]);
 
 // Hydration has to start from the view the *served document* was rendered as,
 // or React discards the whole shell - never from controller state, which may

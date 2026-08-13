@@ -140,6 +140,19 @@ match a file that is stored slightly differently."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
+            about = "Identify a ROM title from its checksums",
+            long_about = "\
+Identify a ROM title from its checksums and a local RWFP1 database pack.
+
+Archives are opened automatically. The command checks the raw ROM and its
+common header and byte-order variants. Repeat --database to search more than
+one system pack. Nothing is uploaded."
+        )
+    )]
+    Identify(IdentifyCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
             // Webapp plumbing: the browser drop handler runs this. It stays
             // functional on the CLI but is not part of the advertised surface.
             hide = true,
@@ -1317,6 +1330,13 @@ mod extract_command;
 #[path = "checksum_command.rs"]
 mod checksum_command;
 
+#[path = "identify_command.rs"]
+mod identify_command;
+pub use identify_command::{IdentifyResult, IdentifyStatus, IdentifyTitleMatch};
+
+#[path = "identify_builtin.rs"]
+mod identify_builtin;
+
 #[path = "ingest_command.rs"]
 mod ingest_command;
 pub use ingest_command::{IngestKind, IngestResult, IngestRomAsset, PatchDescriptor};
@@ -1407,9 +1427,9 @@ pub use bundle_create::BundleCreateResult;
 mod command_args;
 pub use command_args::{
     BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, ChecksumCommand,
-    CompressCommand, ExtractCommand, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
-    PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
-    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,
+    CompressCommand, ExtractCommand, IdentifyCommand, IngestCommand, PATCH_APPLY_ABOUT,
+    PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand,
+    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,
 };
 
 mod expect_tokens;

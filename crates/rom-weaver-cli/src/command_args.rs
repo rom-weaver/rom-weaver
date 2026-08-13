@@ -610,6 +610,79 @@ pub struct ChecksumCommand {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'i',
+            long = "input",
+            value_name = "INPUT",
+            help = "ROM to identify. Use - to read from stdin"
+        )
+    )]
+    pub input: PathBuf,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'd',
+            long = "database",
+            value_name = "PACK",
+            help = "RWFP1 identify pack to search instead of the built-in OpenGood data (repeatable)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub database: Vec<PathBuf>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(short = 's', long = "select", help = SELECT_HELP))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub select: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(long = "filter", value_enum, value_delimiter = ',', help = FILTER_HELP)
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub filter: Vec<FilterKind>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(long, help = "Do not look inside archives; identify the file itself")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_extract: bool,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = NO_IGNORE_HELP))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_ignore: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Skip extra checksums for trimmed and untrimmed ROM forms"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_trim_fix: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'j',
+            long,
+            default_value = "auto",
+            value_name = "auto|N",
+            help = THREADS_HELP
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub threads: ThreadBudget,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct IngestCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),

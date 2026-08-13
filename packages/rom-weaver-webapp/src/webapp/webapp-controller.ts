@@ -30,7 +30,7 @@ import {
 } from "./webapp-state-types.ts";
 
 const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
-const VALID_WORKFLOW_VIEWS: readonly WebappView[] = ["patcher", "creator", "docs", "trim", "tools", "test"];
+const VALID_WORKFLOW_VIEWS: readonly WebappView[] = ["patcher", "creator", "docs", "identify", "trim", "tools", "test"];
 
 const normalizeWorkflowView = (value: unknown): WebappView | null => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -45,6 +45,7 @@ const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsSt
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   creator: "create",
   docs: "docs",
+  identify: "identify",
   patcher: "apply",
   test: "test",
   tools: "tools",
@@ -57,6 +58,8 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "create.html": "creator",
   docs: "docs",
   "docs.html": "docs",
+  identify: "identify",
+  "identify.html": "identify",
   test: "test",
   "test.html": "test",
   tools: "tools",

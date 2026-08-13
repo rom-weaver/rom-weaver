@@ -22,6 +22,10 @@ const rootDir = process.cwd();
 /** Shared chunks below this many raw bytes are folded back into their importer; see build.rollupOptions.output. */
 const SHARED_CHUNK_MIN_SIZE = 30_000;
 const repoRoot = path.resolve(rootDir, "../..");
+const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
+const identifyDataSources = Object.fromEntries(
+  fs.readdirSync(identifyDataDir).map((name) => [`/identify-data/v1/${name}`, path.join(identifyDataDir, name)]),
+);
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
@@ -51,6 +55,7 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/social-preview.avif": path.join(rootDir, "design", "social-preview.avif"),
   "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
   "/social-preview.webp": path.join(rootDir, "design", "social-preview.webp"),
+  ...identifyDataSources,
   ...docsScreenshotSources,
 });
 const generatedSampleAssetPaths = new Set([
@@ -119,6 +124,7 @@ const setEmulatorJsContentType = (requestPath, res) => {
   else if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
   else if (requestPath.endsWith(".css")) res.setHeader("Content-Type", "text/css; charset=utf-8");
   else if (requestPath.endsWith(".zip")) res.setHeader("Content-Type", "application/zip");
+  else if (requestPath.endsWith(".pack")) res.setHeader("Content-Type", "application/octet-stream");
   else if (requestPath.endsWith(".wasm.data")) res.setHeader("Content-Type", "application/octet-stream");
 };
 
@@ -416,6 +422,7 @@ const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://rom-weaver.com/apply</loc></url>
   <url><loc>https://rom-weaver.com/create</loc></url>
+  <url><loc>https://rom-weaver.com/identify</loc></url>
   <url><loc>https://rom-weaver.com/test</loc></url>
 ${DOC_ROUTES.map(({ slug }) => `  <url><loc>https://rom-weaver.com/${slug}</loc></url>`).join("\n")}
 </urlset>
@@ -515,6 +522,19 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         WORKFLOW_SEO_ROUTES.creator,
       );
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
+      const identifyHtml = injectLdJson(
+        createWorkflowRouteHtml(
+          withRoutePreloadLinks(
+            indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("identify"))),
+            routePreloadLinks.get("identify"),
+          ),
+          WORKFLOW_SEO_ROUTES.identify,
+          channel,
+          channelLabel,
+        ),
+        WORKFLOW_SEO_ROUTES.identify,
+      );
+      fs.writeFileSync(path.join(distDir, "identify.html"), identifyHtml);
       const testHtml = injectLdJson(
         createWorkflowRouteHtml(
           withRoutePreloadLinks(
@@ -546,6 +566,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       for (const [slug, html] of [
         ["apply", applyHtml],
         ["create", createHtml],
+        ["identify", identifyHtml],
         ["test", testHtml],
         ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
         ["tools", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
@@ -602,7 +623,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/identify-data/v1/*.pack\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/identify-data/v1/index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {
@@ -751,9 +772,11 @@ const devPrerenderRoute = (url) => {
     view:
       slug === "create" || slug === "create.html"
         ? "creator"
-        : slug === "test" || slug === "test.html"
-          ? "test"
-          : "patcher",
+        : slug === "identify" || slug === "identify.html"
+          ? "identify"
+          : slug === "test" || slug === "test.html"
+            ? "test"
+            : "patcher",
   };
 };
 
@@ -809,6 +832,7 @@ const prerenderWebappShell = (prerenderedShells) => ({
           prerender.renderLandingShellWithServer(server, view, notFound, docsSlug);
         prerenderedShells.set("patcher", await render("patcher"));
         prerenderedShells.set("creator", await render("creator"));
+        prerenderedShells.set("identify", await render("identify"));
         prerenderedShells.set("test", await render("test"));
         prerenderedShells.set("notFound", await render("patcher", true));
         for (const route of DOC_ROUTES) {
@@ -838,6 +862,7 @@ const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
 const WORKFLOW_ROUTE_MODULES = {
   creator: "src/public/react/create-patch-form.tsx",
   docs: "src/webapp/docs-page.tsx",
+  identify: "src/webapp/components/identify-form.tsx",
   patcher: "src/public/react/apply-patch-form.tsx",
   test: "src/public/react/emulator-test-view.tsx",
   tools: "src/webapp/components/tools-form.tsx",
@@ -1185,6 +1210,7 @@ export default defineConfig(({ command, mode }) => {
             "apple-touch-icon.png",
             "hello-world.nes",
             "modified-world.nes",
+            "identify-data/v1/index.json",
             "icon-maskable-192.png",
             "icon-maskable-512.png",
             "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",

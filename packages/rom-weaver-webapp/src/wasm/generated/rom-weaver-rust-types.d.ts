@@ -307,6 +307,14 @@ export type ExtractCommand = { input: string, select?: Array<string>, filter?: A
 
 export type ChecksumCommand = { input: string, algo?: Array<string>, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, start?: bigint, length?: bigint, probe?: boolean, threads?: ThreadBudget, };
 
+export type IdentifyStatus = "matched" | "ambiguous" | "unknown";
+
+export type IdentifyTitleMatch = { name: string, platform: string, algorithm: string, variant: string, database: string, };
+
+export type IdentifyResult = { status: IdentifyStatus, input: string, detected_platform?: string | null, checksums: { [key in string]: string }, checksum_variants: Array<JsonValue>, matches: Array<IdentifyTitleMatch>, };
+
+export type IdentifyCommand = { input: string, database?: Array<string>, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
+
 export type IngestCommand = { input: string, output: string, select?: Array<string>,
 /**
  * Optional loose patch names to match against `source` without ingesting it. This keeps the
@@ -503,7 +511,7 @@ export type BundleCommands = { "type": "create", "args": BundleCreateCommand } |
 
 export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, memory_ceiling_bytes?: bigint | null, };
 
-export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "bundle", "args": BundleCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
+export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "bundle", "args": BundleCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, log_level?: LogLevel, dep_trace?: boolean, interactive_selection_enabled?: boolean,
 /**

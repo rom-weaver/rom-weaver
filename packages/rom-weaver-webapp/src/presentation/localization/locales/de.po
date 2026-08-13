@@ -405,6 +405,11 @@ msgstr "Protokoll"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis"
+msgstr "Ordne eine ROM ihrem genauen Dump-Namen zu,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.matchesRom"
 msgstr "passt zu deiner ROM"
 
@@ -867,6 +872,11 @@ msgstr "Was die Offline-Zustände bedeuten"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Neuigkeiten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis2"
+msgstr "mit einer Datenbank, die lokal bleibt —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -2,6 +2,7 @@ import { type ComponentType, lazy } from "react";
 import { createLogger } from "../lib/logging.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
 import type { ToolsFormProps } from "./components/tools-form.tsx";
+import type { IdentifyFormProps } from "./components/identify-form.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
 
 /**
@@ -26,6 +27,7 @@ type WorkflowRouteProps = {
     active: boolean;
     slug: string;
   };
+  identify: IdentifyFormProps;
   patcher: ApplyPatchFormProps;
   test: {
     active?: boolean;
@@ -94,6 +96,9 @@ const DocsRoute = createWorkflowRoute("docs", () =>
 const PatcherRoute = createWorkflowRoute("patcher", () =>
   import("../public/react/apply-patch-form.tsx").then((module) => ({ default: module.ApplyPatchForm })),
 );
+const IdentifyRoute = createWorkflowRoute("identify", () =>
+  import("./components/identify-form.tsx").then((module) => ({ default: module.IdentifyForm })),
+);
 const TestRoute = createWorkflowRoute("test", () =>
   import("../public/react/emulator-test-view.tsx").then((module) => ({ default: module.EmulatorTestView })),
 );
@@ -107,6 +112,7 @@ const TrimRoute = createWorkflowRoute("trim", () =>
 const WORKFLOW_ROUTES = {
   creator: CreatorRoute,
   docs: DocsRoute,
+  identify: IdentifyRoute,
   patcher: PatcherRoute,
   test: TestRoute,
   tools: ToolsRoute,
@@ -117,6 +123,7 @@ const CreatePatchRoute = CreatorRoute.Component;
 const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
 const EmulatorTestRoute = TestRoute.Component;
+const IdentifyRouteForm = IdentifyRoute.Component;
 const ToolsRouteForm = ToolsRoute.Component;
 const TrimPatchRoute = TrimRoute.Component;
 
@@ -136,6 +143,7 @@ export {
   CreatePatchRoute,
   DocsPageRoute,
   EmulatorTestRoute,
+  IdentifyRouteForm,
   preloadDocsRouteHtml,
   preloadWorkflowRoute,
   ToolsRouteForm,

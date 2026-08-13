@@ -1,11 +1,14 @@
-# Identify and hash files from the CLI
+# Identify and hash ROMs from the CLI
 
-Find out what a file is with `rom-weaver probe`, and prove which bytes it holds with `rom-weaver checksum`.
+Match a ROM to an exact dump name with `rom-weaver identify`.
+
+Use `probe` to inspect the file type. Use `checksum` to prove which bytes it holds.
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Identify a file](#identify-a-file)
+- [Identify a ROM title](#identify-a-rom-title)
+- [Inspect a file](#inspect-a-file)
 - [Hash a file](#hash-a-file)
 - [Hash the ROM inside an archive](#hash-the-rom-inside-an-archive)
 - [Hash part of a file](#hash-part-of-a-file)
@@ -15,13 +18,37 @@ Find out what a file is with `rom-weaver probe`, and prove which bytes it holds 
 
 <!-- END doctoc -->
 
-## Identify a file
+## Identify a ROM title
+
+```bash
+rom-weaver identify --input game.nes
+```
+
+The command checks the built-in OpenGood title data. It also checks common header, trim, and byte-order variants.
+
+Point it at an archive to identify the ROM inside:
+
+```bash
+rom-weaver identify --input games.zip
+```
+
+Use `--select` when the archive holds more than one candidate.
+
+Use a locally built RWFP1 pack instead of the built-in data:
+
+```bash
+rom-weaver identify --input game.iso --database playstation.pack
+```
+
+Repeat `--database` to search more packs.
+
+## Inspect a file
 
 ```bash
 rom-weaver probe --input game.iso
 ```
 
-`probe` reports the detected format, the platform, and any copier header the file carries. It also answers to `rom-weaver inspect`.
+`probe` reports the detected format, platform, and copier header. It also answers to `rom-weaver inspect`.
 
 Point it at an archive and it looks inside:
 
@@ -57,7 +84,7 @@ Skip a copier header, or hash only the region a patch touches, with a byte range
 
 ## Read from a pipeline
 
-`probe` and `checksum` accept `-` as the input, so they can read stdin:
+`identify`, `probe`, and `checksum` accept `-` as the input. Thus, they can read stdin:
 
 ```bash
 curl -sL https://example.com/game.gba | rom-weaver checksum --input - --algo sha256
@@ -66,7 +93,7 @@ xz -dc game.iso.xz | rom-weaver probe --input - --json
 
 ## Get machine-readable output
 
-Add `--json` to either command for one JSON object per line:
+Add `--json` to a command for one JSON object per line:
 
 ```bash
 rom-weaver probe --input game.sfc --json | jq

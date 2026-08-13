@@ -405,6 +405,11 @@ msgstr "Registros"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis"
+msgstr "Relaciona una ROM con el nombre exacto de su volcado,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.matchesRom"
 msgstr "coincide con tu ROM"
 
@@ -867,6 +872,11 @@ msgstr "Qué significan los estados sin conexión"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Novedades"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis2"
+msgstr "con una base de datos que permanece local —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
