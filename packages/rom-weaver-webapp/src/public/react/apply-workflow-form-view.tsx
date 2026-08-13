@@ -370,7 +370,8 @@ const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [["package", "Bundle + patches (.zip)"]],
-    body: "Share this setup is separate from Apply. Bundle + patches (.zip) shares the recipe and patch files without putting a copyrighted ROM in the download.",
+    body: "The bundle download is separate from Apply. Bundle + patches (.zip) shares the recipe and patch files without putting a copyrighted ROM in the download.",
+    openDrawers: true,
     placement: "top",
     target: "#rom-weaver-bundle-job",
     title: "Choose a safe bundle",
@@ -379,6 +380,7 @@ const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     actions: [["package", "Share bundle"]],
     body: "Exporting a recipe does not apply patches. Press Share bundle to check and download the setup; the same control then becomes Download ZIP Bundle.",
     cta: "#rom-weaver-button-export-bundle",
+    openDrawers: true,
     placement: "top",
     target: "#rom-weaver-bundle-job",
     title: "Build and download",
