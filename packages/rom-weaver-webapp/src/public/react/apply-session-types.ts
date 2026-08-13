@@ -1,5 +1,5 @@
 import type { ChecksumVariant } from "../../types/checksum.ts";
-import type { IdentifyStatus } from "../../types/identify.ts";
+import type { ParsedIdentifyResolution, IdentifyStatus } from "../../types/identify.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { ApplyPatchFormProps, ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
@@ -29,6 +29,7 @@ type StagedInputInfo = {
   checksumVariants?: ChecksumVariant[];
   checksumVariantPlan?: RomInputRowState["info"]["checksumVariantPlan"];
   identificationStatus?: IdentifyStatus;
+  identification?: ParsedIdentifyResolution;
   checksumTiming?: string;
   romProbe?: RomInputRowState["info"]["romProbe"];
   romType?: RomInputRowState["info"]["romType"];

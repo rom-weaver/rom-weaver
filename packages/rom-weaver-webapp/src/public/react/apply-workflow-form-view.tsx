@@ -1,4 +1,4 @@
-import { Archive, Check, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
+import { Archive, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import {
@@ -38,6 +38,7 @@ import { GUIDED_SAMPLE_HREFS } from "./guided-sample-start.ts";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
+import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
 import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
@@ -702,14 +703,21 @@ const buildRomVerificationStates = (
   return states;
 };
 
-type RomIdentificationState = { name?: string; status: "matched" | "ambiguous" };
+type RomIdentificationState = {
+  aliases?: string[];
+  name?: string;
+  names?: string[];
+  status: "matched" | "ambiguous";
+};
 
 const getConfirmedPatchIdentification = (patch: PatchStackItemState): RomIdentificationState | undefined => {
   if (patch.validationState === "invalid") return undefined;
   if (!(patch.validationState === "valid" || patch.sourceChecksumState === "valid")) return undefined;
-  const names = [...new Set((patch.sourceTitles || []).map((title) => title.trim()).filter(Boolean))];
+  const aliases = [...new Set((patch.sourceTitles || []).map((title) => title.trim()).filter(Boolean))];
+  const names = [...new Set(aliases.map(formatIdentifyTitle).filter(Boolean))];
   if (!names.length) return undefined;
-  return names.length === 1 ? { name: names[0], status: "matched" } : { status: "ambiguous" };
+  const display = { aliases, names, status: names.length === 1 ? ("matched" as const) : ("ambiguous" as const) };
+  return names.length === 1 ? { ...display, name: names[0] } : display;
 };
 
 const buildRomIdentificationStates = (patches: PatchStackItemState[], disabledFlags: boolean[]) => {
@@ -746,6 +754,22 @@ const resolveRomIdentification = (
     return { status: "ambiguous" };
   }
   return undefined;
+};
+
+const buildPatchIdentificationLookup = (identification: RomIdentificationState | undefined) => {
+  if (!(identification?.names?.length || identification?.name)) return undefined;
+  const names = identification.names || [identification.name as string];
+  const aliases = identification.aliases?.length ? identification.aliases : names;
+  return {
+    matches: aliases.map((name) => ({
+      algorithm: "",
+      database: "patch requirement",
+      name,
+      platform: "",
+      variant: "source",
+    })),
+    status: identification.status,
+  } as const;
 };
 
 /** Dependencies threaded into the ROM-row renderers. */
@@ -893,19 +917,10 @@ const resolveRomCardState = (
   return undefined;
 };
 
-const renderRomIdentificationMeta = (identification: RomIdentificationState | undefined) => {
-  if (identification?.status !== "matched") return undefined;
-  return (
-    <span className="verdict ok">
-      <Check aria-hidden="true" />
-      Identified
-    </span>
-  );
-};
-
 const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomRowDeps): WorkflowRomInputStepItem => {
   const { romInputs, verificationStates, ui } = deps;
   const identification = resolveRomIdentification(romInput, deps.identificationStates.get(romInput.id));
+  const identificationLookup = romInput.info.identification || buildPatchIdentificationLookup(identification);
   const state = resolveRomCardState(verificationStates.get(romInput.id), identification?.status);
   const { percent, staging, stagingPhase } = resolveRomStaging(romInput);
   // A container ROM extracts and checksums in one pass (Rust hashes inline), so it
@@ -940,18 +955,18 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         typeLabel: romTypeTag,
       },
       displayName: !staging && identification?.status === "matched" ? identification.name : undefined,
-      meta:
-        renderRomCardMeta({
-          percent,
-          stageLabel,
-          staging,
-          statusId: `rom-weaver-progress-${stagingPhase}-${index}`,
-        }) || renderRomIdentificationMeta(identification),
+      meta: renderRomCardMeta({
+        percent,
+        stageLabel,
+        staging,
+        statusId: `rom-weaver-progress-${stagingPhase}-${index}`,
+      }),
       onRemove: () => {
         if (romInputs.length === 1 && ui.clearRomInput) ui.clearRomInput();
         else ui.removeRomInput?.(romInput.id);
       },
       panels: {
+        ...(identificationLookup ? { identification: identificationLookup } : {}),
         info: {
           bytes: romBytes,
           checksums: staging

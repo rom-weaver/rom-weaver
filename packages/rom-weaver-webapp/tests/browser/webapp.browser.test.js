@@ -1,4 +1,4 @@
-import { createElement, useMemo } from "react";
+import { createElement, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
@@ -90,6 +90,7 @@ const createNoopActions = () => ({
   onRestoreDefaults: () => undefined,
   onSaveClose: () => undefined,
   onSelectView: () => undefined,
+  onToolsSessionChange: () => undefined,
 });
 
 const createServiceWorkerCacheState = () => ({
@@ -101,9 +102,9 @@ const createServiceWorkerCacheState = () => ({
   updateTitle: "",
 });
 
-const createWebappState = (settings = getDefaultSettings()) => ({
+const createWebappState = (settings = getDefaultSettings(), currentView = "patcher") => ({
   creatorSession: createEmptyCreatorSessionState(),
-  currentView: "patcher",
+  currentView,
   draftSettings: settings,
   patcherSession: createEmptyPatcherSessionState(),
   settings,
@@ -115,16 +116,17 @@ const createWebappState = (settings = getDefaultSettings()) => ({
   validation: createEmptyValidationState(),
 });
 
-function WebappRootHarness({ settings } = {}) {
+function WebappRootHarness({ initialView = "patcher", settings } = {}) {
+  const [currentView, setCurrentView] = useState(initialView);
   const props = useMemo(
     () => ({
-      actions: createNoopActions(),
+      actions: { ...createNoopActions(), onSelectView: setCurrentView },
       confirmationDialog: createEmptyConfirmationDialogState(),
       pageUpdate: createEmptyPageUpdateState(),
       serviceWorkerCache: createServiceWorkerCacheState(),
-      state: createWebappState(settings),
+      state: createWebappState(settings, currentView),
     }),
-    [settings],
+    [currentView, settings],
   );
   return createElement(WebappRoot, props);
 }
@@ -199,7 +201,7 @@ test("WebappRoot keeps Trim gated and Tools behind More", async () => {
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply", "Create", "Identify", "Docs", "Test"]);
+    .toEqual(["Apply", "Create", "Docs", "Test"]);
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "Tools" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
@@ -211,10 +213,17 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
     [390, 844],
   ]) {
     await page.viewport(width, height);
-    mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
+    mountWebappRoot({ initialView: "identify", settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
     await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
     await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
+    await page.getByRole("menuitem", { name: "Tools" }).click();
+    await expect.element(page.getByRole("tab", { name: "Identify" })).toBeInTheDocument();
+    await page.getByRole("tab", { name: "Identify" }).click();
+    await expect.element(page.getByRole("tabpanel", { name: "Identify" })).toBeInTheDocument();
+    expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
+    expect(document.querySelectorAll("#tools-identify-input-picker")).toHaveLength(1);
+    await page.getByRole("button", { name: "More" }).click();
     expect(document.querySelector(`[role="tab"][data-mode="tools"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="tools"]`)).toBeNull();
     if (width >= 1000) {

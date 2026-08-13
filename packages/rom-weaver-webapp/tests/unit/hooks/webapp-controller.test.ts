@@ -15,13 +15,13 @@ const createStorage = () => {
   };
 };
 
-const createController = () =>
+const createController = (storage = createStorage()) =>
   createWebappRootController({
     onApplySettings: vi.fn(),
     onCreatorViewRequested: vi.fn(() => true),
     onFocusField: vi.fn(),
     onLocalizationChange: vi.fn(),
-    storage: createStorage(),
+    storage,
   });
 
 // Exercises the controller through the hand-rolled store that replaced zustand: the public
@@ -71,6 +71,7 @@ describe("createWebappRootController over the vanilla store", () => {
 
   it("hides beta workflow views until enabled", () => {
     const controller = createController();
+    expect(controller.selectView("identify")).toBe("patcher");
     expect(controller.selectView("trim")).toBe("patcher");
     expect(controller.getState().currentView).toBe("patcher");
 
@@ -78,6 +79,8 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.selectView("trim")).toBe("trim");
     expect(controller.getState().currentView).toBe("trim");
+    expect(controller.selectView("identify")).toBe("identify");
+    expect(controller.getState().currentView).toBe("identify");
 
     controller.updateDraftSetting("betaToolsEnabled", false);
     expect(controller.saveDraftSettings()).toBe(true);
@@ -100,9 +103,17 @@ describe("createWebappRootController over the vanilla store", () => {
   });
 
   it("loads the identify workflow from its path", () => {
+    const storage = createStorage();
     window.history.replaceState({}, "", "/identify");
-    const controller = createController();
-    expect(controller.getState().currentView).toBe("identify");
+    const controller = createController(storage);
+    expect(controller.getState().currentView).toBe("patcher");
+    expect(window.location.pathname).toBe("/apply");
+
+    controller.updateDraftSetting("betaToolsEnabled", true);
+    expect(controller.saveDraftSettings()).toBe(true);
+    window.history.replaceState({}, "", "/identify");
+    const enabledController = createController(storage);
+    expect(enabledController.getState().currentView).toBe("identify");
     expect(readWorkflowViewFromPath()).toBe("identify");
     expect(window.location.pathname).toBe("/identify");
   });

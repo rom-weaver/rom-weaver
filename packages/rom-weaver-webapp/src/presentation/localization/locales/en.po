@@ -291,7 +291,7 @@ msgstr "DVD Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Enable beta tools (Trim and Tools)"
+msgstr "Enable beta tools (Trim, Tools, and Identify)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

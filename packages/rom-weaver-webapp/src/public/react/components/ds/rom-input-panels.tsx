@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
+import type { ParsedIdentifyLookupResult } from "../../../../types/identify.ts";
 import { DiscSheetsPanel } from "./cue-panel.tsx";
+import { IdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
 import {
   type ChecksumPendingGroup,
   type DiscTrackPanelInfo,
@@ -32,6 +34,7 @@ type RomInputInfoPanelProps = {
 
 type RomInputPanelsProps = {
   info?: RomInputInfoPanelProps;
+  identification?: ParsedIdentifyLookupResult;
   /**
    * Per-track checksums for a multi-track disc. When present, the disc's tracks
    * are listed under one "Tracks" section instead of the single `info` panel.
@@ -44,7 +47,15 @@ type RomInputPanelsProps = {
   showCue?: boolean;
 };
 
-const RomInputPanels = ({ info = {}, tracks, cue, gdi, showInfo = true, showCue = true }: RomInputPanelsProps) => {
+const RomInputPanels = ({
+  info = {},
+  identification,
+  tracks,
+  cue,
+  gdi,
+  showInfo = true,
+  showCue = true,
+}: RomInputPanelsProps) => {
   const isDisc = Array.isArray(tracks) && tracks.length > 0;
   const renderInfo = () => {
     if (isDisc) return <DiscTracksPanel timing={info.timing} tracks={tracks} />;
@@ -56,6 +67,7 @@ const RomInputPanels = ({ info = {}, tracks, cue, gdi, showInfo = true, showCue 
   return (
     <>
       {showCue ? <DiscSheetsPanel cueText={cue?.cueText} gdiText={gdi?.gdiText} /> : null}
+      {identification ? <IdentifyDrawer identification={identification} /> : null}
       {renderInfo()}
     </>
   );

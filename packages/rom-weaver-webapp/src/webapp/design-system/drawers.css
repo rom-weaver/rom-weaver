@@ -286,6 +286,37 @@
 .rw-app .cks > .cks-head .rb.time {
   color: var(--thread-text);
 }
+
+.rw-app .identify-drawer-body {
+  display: grid;
+  gap: var(--sp-xs);
+  padding: var(--sp-s) var(--sp-m);
+}
+.rw-app .identify-drawer-label {
+  margin-block-start: var(--sp-xs);
+  font-size: var(--badge-fs);
+  font-weight: 650;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rw-app .identify-drawer-title {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.rw-app .identify-drawer-alias {
+  padding: var(--sp-xs) var(--sp-s);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+  background: var(--well);
+  border: 1px solid var(--seam-soft);
+  border-radius: var(--r-s);
+}
+.rw-app .identify-drawer-meta {
+  margin-block-start: var(--sp-xs);
+  font-size: var(--badge-fs);
+  color: var(--ink-3);
+}
 /* Secondary chips (a format-implied note, a hidden bundle) recede beside the
    values the user picked. Previously only `.step-meta` styled `.muted`, so the
    drawer headers rendered it at full emphasis. */

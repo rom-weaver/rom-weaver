@@ -1,5 +1,5 @@
 import type { ChecksumRomProbe, ChecksumVariant, ChecksumVariantPlanEntry, RomTypeTag } from "../../types/checksum.ts";
-import type { IdentifyStatus } from "../../types/identify.ts";
+import type { ParsedIdentifyResolution, IdentifyStatus } from "../../types/identify.ts";
 import type { JsonValue } from "../../types/runtime.ts";
 
 type StoreController<TState> = {
@@ -40,6 +40,7 @@ type RomInputInfoState = {
    * checksums land, so the checks skeleton can reserve one group per eventual variant. */
   checksumVariantPlan?: ChecksumVariantPlanEntry[];
   identificationStatus?: IdentifyStatus;
+  identification?: ParsedIdentifyResolution;
   romInfo: string;
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;

@@ -163,7 +163,7 @@ assertIncludes(testHtml, WORKFLOW_SEO_ROUTES.test.description, "test description
 assertIncludes(read("test/index.html"), WORKFLOW_SEO_ROUTES.test.description, "static-host test description");
 assertIncludes(applyHtml, 'aria-selected="true" class="mode" data-mode="patcher"', "apply prerendered workflow");
 assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator"', "create prerendered workflow");
-assertIncludes(identifyHtml, 'aria-selected="true" class="mode" data-mode="identify"', "identify prerendered workflow");
+assertIncludes(identifyHtml, 'id="panel-identify" role="tabpanel"', "identify prerendered workflow");
 assertHasClass(applyHtml, "build-tag", "preloaded build tag");
 assertHasClass(applyHtml, "masthead-threads-count", "preloaded thread count");
 assertHasClass(applyHtml, "sub-status", "preloaded runtime status control");

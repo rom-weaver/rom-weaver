@@ -1,6 +1,7 @@
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
+import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { ChecksumList, ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -9,14 +10,21 @@ import { NeedsInput, StepSection } from "../../public/react/components/ds/layout
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { ParsedIdentifyResult } from "../../types/identify.ts";
+import { IdentifyDrawer } from "./identify-drawer.tsx";
 
 const IDENTIFY_ACTIVITY_KEY = "identify";
 
 type IdentifyFormProps = {
+  containerId?: string;
+  inputId?: string;
   pageDrop?: PageFileDrop | null;
 };
 
-const IdentifyForm = ({ pageDrop }: IdentifyFormProps) => {
+const IdentifyForm = ({
+  containerId = "identify-container",
+  inputId = "identify-input-picker",
+  pageDrop,
+}: IdentifyFormProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ParsedIdentifyResult | null>(null);
   const [error, setError] = useState("");
@@ -73,7 +81,7 @@ const IdentifyForm = ({ pageDrop }: IdentifyFormProps) => {
   };
 
   return (
-    <section className="panel" id="identify-container">
+    <section className="panel" id={containerId}>
       <UnifiedDropZone
         addLabel="Replace the ROM"
         big={!file}
@@ -81,7 +89,7 @@ const IdentifyForm = ({ pageDrop }: IdentifyFormProps) => {
         heroLabel="Drop a ROM to identify it"
         heroLabelCoarse="Tap to add a ROM"
         info={<p>The title database stays on this device. ROM bytes never leave the browser.</p>}
-        inputId="identify-input-picker"
+        inputId={inputId}
         lead={{ line1: "ui.hero.identifyThesis", line2: "ui.hero.identifyThesis2" }}
         multiple={false}
         onFiles={(files) => {
@@ -134,7 +142,7 @@ const IdentifyForm = ({ pageDrop }: IdentifyFormProps) => {
             />
           </div>
         ) : (
-          <NeedsInput onClick={() => document.getElementById("identify-input-picker")?.click()}>
+          <NeedsInput onClick={() => document.getElementById(inputId)?.click()}>
             Add a ROM in the <b className="hexref mono">0x01</b> drop zone.
           </NeedsInput>
         )}
@@ -155,13 +163,14 @@ const IdentifyForm = ({ pageDrop }: IdentifyFormProps) => {
                 <FileCard
                   description={`${match.platform} · ${match.algorithm.toUpperCase()} · ${match.variant}`}
                   key={`${match.platform}:${match.name}`}
-                  name={<span className="nm">{match.name}</span>}
+                  name={<span className="nm">{formatIdentifyTitle(match.name)}</span>}
                   state={result.status === "ambiguous" ? "warn" : "ok"}
                 />
               ))
             ) : (
               <Notice level="warn">No title in the local database matched this ROM.</Notice>
             )}
+            <IdentifyDrawer identification={result} />
             <div className="card">
               <ChecksumList defaultOpen={false} label="Checksums">
                 {Object.entries(result.checksums).map(([algorithm, checksum]) => (

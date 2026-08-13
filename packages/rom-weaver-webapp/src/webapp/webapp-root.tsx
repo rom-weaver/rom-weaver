@@ -1,4 +1,4 @@
-import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, ScanSearch, Scissors, Settings, Wrench } from "lucide-react";
+import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, Scissors, Settings, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -51,7 +51,6 @@ const WORKFLOW_TABS = [
   // "Apply": the tab both applies patch chains and edits/exports them as bundles.
   { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
-  { href: "identify", icon: <ScanSearch aria-hidden="true" />, id: "identify", label: "Identify" },
   // Reference rather than a workflow. It stays direct in the desktop rail and
   // moves into More on the phone dock.
   { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },

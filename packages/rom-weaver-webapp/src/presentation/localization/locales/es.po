@@ -291,7 +291,7 @@ msgstr "Códecs DVD"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Recortar y Herramientas)"
+msgstr "Activar herramientas beta (Recortar, Herramientas e Identificar)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -5,6 +5,7 @@ import { getFileNameWithoutExtension } from "../../lib/path-utils.ts";
 import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
 import type { ParsedIdentifyResolution } from "../../types/identify.ts";
+import { formatIdentifyTitle, uniqueIdentifyTitles } from "../../presentation/identify-title.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import { createStageSettingsKey } from "./apply-session-settings.ts";
@@ -149,7 +150,7 @@ const formatPatchValidationValue = (label: string, value: number | string | unde
 
 const formatRomIdentification = (identification: ParsedIdentifyResolution | undefined): string => {
   if (!identification?.matches.length) return "";
-  const names = [...new Set(identification.matches.map((match) => match.name))];
+  const names = uniqueIdentifyTitles(identification.matches.map((match) => match.name));
   if (identification.status === "matched") return names[0] || "";
   return `Possible titles: ${names.join("; ")}`;
 };
@@ -177,7 +178,7 @@ const getPatchValidationMessage = (status: string, deep: ApplyWorkflowPatchState
 
 const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
   const sourceTitleValues = (patch.requirements?.sourceTitles || []).map((title) =>
-    formatPatchValidationValue("in rom", title),
+    formatPatchValidationValue("in rom", formatIdentifyTitle(title)),
   );
   const enforceableRequirementValues = [
     formatPatchValidationValue("in size", patch.requirements?.sourceSize),
@@ -505,6 +506,7 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
       gdiText: resolved.gdiText,
       groupId: resolved.groupId,
       id: resolved.id,
+      identification: resolved.identification || input.identification,
       identificationStatus: (resolved.identification || input.identification)?.status,
       kind: resolved.kind,
       order: resolved.order ?? index,
