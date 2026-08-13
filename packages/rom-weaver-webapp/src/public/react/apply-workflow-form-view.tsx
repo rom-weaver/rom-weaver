@@ -1557,9 +1557,11 @@ const BundleSecondaryJob = ({
           <p>{localizer.message("ui.bundleExport.shareDescription")}</p>
         </div>
       </div>
-      <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
-      <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
-      {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+      <div className="bundle-job-content">
+        <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
+        <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+        {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+      </div>
     </section>
   );
 };
