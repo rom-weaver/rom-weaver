@@ -58,8 +58,6 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(document.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
   const bundleDrawer = document.querySelector("#rom-weaver-bundle-job .cks-head");
   expect(bundleDrawer?.textContent).toContain("Download a bundle of this setup to share");
-  expect(bundleDrawer?.getAttribute("aria-expanded")).toBe("false");
-  bundleDrawer?.click();
   await expect.poll(() => bundleDrawer?.getAttribute("aria-expanded")).toBe("true");
   expect(formatSelect.value).toBe("zip");
   expect(Array.from(formatSelect.options, (option) => option.textContent)).toEqual(["ZIP (.zip)", "7z (.7z)"]);
