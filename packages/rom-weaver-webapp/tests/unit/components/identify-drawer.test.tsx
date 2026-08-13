@@ -31,7 +31,7 @@ describe("IdentifyDrawer", () => {
             {
               algorithm: "crc32",
               database: "OpenGood",
-              name: "Pokemon - Emerald Version (U) [!]",
+              name: "Pokemon - Emerald Version (UE) [b1]",
               platform: "Nintendo Game Boy Advance",
               variant: "raw",
             },
@@ -44,11 +44,18 @@ describe("IdentifyDrawer", () => {
     expect(container.querySelector(".identify-drawer-title")?.textContent).toBe(
       "Pokemon - Emerald Version (USA, Europe)",
     );
-    expect(container.querySelectorAll(".identify-alias-row")).toHaveLength(2);
+    expect(container.querySelectorAll(".identify-alias-row")).toHaveLength(3);
+    expect(container.querySelector(".identify-alias-row .ck-k")?.textContent).toBe("Standard");
     expect(container.querySelector(".identify-alias-row .ck-v")?.textContent).toBe(
+      "Pokemon - Emerald Version (USA, Europe)",
+    );
+    expect(container.querySelector('button[aria-label^="Copy alias name "] .ck-v')?.textContent).toBe(
       "Pokemon - Emerald Version (UE) [!]",
     );
-    expect(container.querySelectorAll('button[aria-label^="Copy alias "]')).toHaveLength(2);
+    expect(container.querySelectorAll('button[aria-label^="Copy alias name "]')).toHaveLength(2);
+    expect(
+      container.querySelector('button[aria-label="Copy standard name Pokemon - Emerald Version (USA, Europe)"]'),
+    ).toBeTruthy();
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("Nintendo Game Boy Advance");
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("CRC32");
     expect(container.querySelector('button[aria-label="Copy Platform"]')).toBeTruthy();
@@ -56,7 +63,7 @@ describe("IdentifyDrawer", () => {
 
     const writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
-    fireEvent.click(container.querySelector('button[aria-label^="Copy alias "]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector('button[aria-label^="Copy alias name "]') as HTMLButtonElement);
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("Pokemon - Emerald Version (UE) [!]"));
   });
 });

@@ -10,6 +10,10 @@ const IdentifyDrawer = ({ identification }: { identification: ParsedIdentifyLook
   const aliases = [...new Set(identification.matches.map((match) => match.name.trim()).filter(Boolean))].filter(
     (name) => !canonicalNames.includes(name),
   );
+  const aliasRows = [
+    ...canonicalNames.map((name) => ({ label: "Standard", name })),
+    ...aliases.map((name) => ({ label: "Alias", name })),
+  ];
   const platforms = [...new Set(identification.matches.map((match) => match.platform.trim()).filter(Boolean))];
   const algorithms = [
     ...new Set(identification.matches.map((match) => match.algorithm.trim().toUpperCase()).filter(Boolean)),
@@ -32,18 +36,18 @@ const IdentifyDrawer = ({ identification }: { identification: ParsedIdentifyLook
             {name}
           </div>
         ))}
-        {aliases.length ? (
+        {aliasRows.length ? (
           <div className="ck-group identify-drawer-group">
             <div className="ck-group-head">Aliases</div>
             <div className="ckrows identify-drawer-aliases">
-              {aliases.map((alias) => (
+              {aliasRows.map(({ label, name }) => (
                 <ChecksumRow
-                  ariaLabel={`Copy alias ${alias}`}
+                  ariaLabel={`Copy ${label.toLowerCase()} name ${name}`}
                   className="identify-alias-row ck-half"
-                  copyValue={alias}
-                  key={alias}
-                  label="Alias"
-                  value={alias}
+                  copyValue={name}
+                  key={`${label}:${name}`}
+                  label={label}
+                  value={name}
                 />
               ))}
             </div>
