@@ -619,19 +619,33 @@ describe("apply workflow view - patch enable toggles", () => {
 });
 
 describe("apply workflow view - bundle controls", () => {
-  const bundleExport = (bundleRom = false) => ({
-    bundleRom,
-    busy: false,
-    cancelExport: () => undefined,
-    downloadable: false,
-    error: "",
-    format: "zip",
-    progress: null,
-    ready: true,
-    runExport: async () => undefined,
-    setBundleRom: () => undefined,
-    setFormat: () => undefined,
-  });
+  const bundleExport = (bundleRom = false) => {
+    const state = {
+      bundleRom,
+      format: "zip",
+    };
+    return {
+      busy: false,
+      cancelExport: () => undefined,
+      downloadable: false,
+      error: "",
+      progress: null,
+      ready: true,
+      runExport: async () => undefined,
+      setBundleRom: (value: boolean) => {
+        state.bundleRom = value;
+      },
+      setFormat: (value: string) => {
+        state.format = value;
+      },
+      get bundleRom() {
+        return state.bundleRom;
+      },
+      get format() {
+        return state.format;
+      },
+    };
+  };
 
   const bundleTools = (setBundlePackage: (value: string) => void) => ({
     hasOptionalEntries: false,
@@ -640,12 +654,17 @@ describe("apply workflow view - bundle controls", () => {
   });
 
   it("persists archive and ROM choices from the sharing controls", () => {
-    const setBundlePackage = vi.fn();
+    const exported = bundleExport();
+    const setBundlePackage = vi.fn((value: string) => {
+      const [format = "", contents = ""] = value.split(":");
+      exported.setFormat(format);
+      exported.setBundleRom(contents === "rom");
+    });
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
-    const { container } = render(
+    const view = () => (
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={bundleExport()}
+          bundleExport={exported}
           bundleTools={bundleTools(setBundlePackage)}
           controllers={{
             output: storeOf(outputState()) as unknown as PatcherOutputController,
@@ -653,15 +672,17 @@ describe("apply workflow view - bundle controls", () => {
             ui: storeOf(ui) as unknown as PatcherUiController,
           }}
         />
-      </RomWeaverSettingsProvider>,
+      </RomWeaverSettingsProvider>
     );
+    const { container, rerender } = render(view());
 
     fireEvent.change(container.querySelector("#rom-weaver-bundle-export-format") as HTMLSelectElement, {
       target: { value: "7z" },
     });
     expect(setBundlePackage).toHaveBeenCalledWith("7z:patches");
+    rerender(view());
     fireEvent.click(container.querySelector("#rom-weaver-bundle-export-bundle-rom") as HTMLInputElement);
-    expect(setBundlePackage).toHaveBeenCalledWith("zip:rom");
+    expect(setBundlePackage).toHaveBeenCalledWith("7z:rom");
   });
 
   it("names the export action when the ROM is included", () => {
