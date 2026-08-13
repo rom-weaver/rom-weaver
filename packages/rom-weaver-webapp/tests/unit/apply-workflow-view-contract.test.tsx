@@ -666,7 +666,9 @@ describe("apply workflow view - bundle controls", () => {
       /\.rw-app \.bundle-share,\s*\.rw-app \.bundle-job > \.runprog\s*\{([^}]*)\}/,
     )?.[1];
     const romOptionRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-rom-option\s*\{([^}]*)\}/)?.[1];
+    const jobRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-job\s*\{([^}]*)\}/)?.[1];
 
+    expect(jobRule).toContain("align-items: start");
     expect(romOptionRule).toContain("align-self: end");
     expect(fullRowRule).toContain("grid-column: 1 / -1");
     expect(fullRowRule).toContain("width: 100%");
