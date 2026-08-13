@@ -3,12 +3,10 @@ import {
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
 } from "../../lib/compression/container-format-registry.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
-import { getCreatePatchFormatsForSizes, normalizeCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
+import { getCreatePatchFormatsForSizes } from "../../lib/create/patch-format-limits.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
-import { getFileNameExtension, replaceFileNameExtension } from "../../lib/path-utils.ts";
 import type { ApplySettings } from "../../types/settings.ts";
-import { ROM_WEAVER_PATCH_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 type OutputOption = {
   value: string;
@@ -166,108 +164,7 @@ const createOutputOptions = (
     value: option,
   }));
 
-const APPLY_OUTPUT_FORMAT_NAMES: Record<string, string> = {
-  chd: "CHD",
-  rvz: "RVZ",
-  z3ds: "Z3DS",
-};
-
-const getOutputOptionExtension = (option: OutputOption, source?: GeneratedOutputSource) => {
-  const labelExtension = option.label.trim().match(/^\.([^\s()]+)(?:\s|$)/)?.[1];
-  if (labelExtension) return labelExtension.toLowerCase();
-  return getOutputOptionExtensionLabel(option.value, source).replace(/^\./, "").toLowerCase();
-};
-
-const getApplyOutputLabel = (option: OutputOption) => {
-  if (option.value === "none") return "Raw ROM";
-  if (option.value === "7z") return "Smaller 7z";
-  const formatName = APPLY_OUTPUT_FORMAT_NAMES[option.value] || option.label.replace(/^\./, "").toUpperCase();
-  return ["chd", "rvz", "z3ds"].includes(option.value) ? `Smallest ${formatName}` : `Small ${formatName}`;
-};
-
-const createApplyOutputOptions = (
-  compressionOptions: readonly (string | OutputOption)[],
-  source?: GeneratedOutputSource,
-): OutputOption[] =>
-  compressionOptions
-    .flatMap((option) => (typeof option === "string" ? createOutputOptions([option], source) : [option]))
-    .map((option) => ({
-      label: getApplyOutputLabel(option),
-      value: option.value,
-    }));
-
-const getOutputFormatForFileName = (
-  fileName: string | null | undefined,
-  options: readonly OutputOption[],
-  { rawExtensions = [] }: { rawExtensions?: readonly string[] } = {},
-) => {
-  const extension = getFileNameExtension(fileName);
-  if (!extension) return null;
-  const directMatch = options.find((option) => getOutputOptionExtension(option) === extension);
-  if (directMatch) return directMatch.value;
-  if (rawExtensions.some((rawExtension) => rawExtension.toLowerCase() === extension)) {
-    return options.find((option) => option.value === "none")?.value || null;
-  }
-  return null;
-};
-
-const getOutputExtensionWarning = (
-  fileName: string | null | undefined,
-  options: readonly OutputOption[],
-  { rawExtensions = [] }: { rawExtensions?: readonly string[] } = {},
-) => {
-  const extension = getFileNameExtension(fileName);
-  if (!extension || getOutputFormatForFileName(fileName, options, { rawExtensions })) return null;
-  return `The extension .${extension} is not a valid output format. Choose a format from the dropdown.`;
-};
-
-const getOutputFileNameForFormat = (
-  fileName: string,
-  format: string,
-  options: readonly OutputOption[],
-  {
-    fallbackExtension = "",
-    rawExtensions = [],
-    source,
-  }: { fallbackExtension?: string; rawExtensions?: readonly string[]; source?: GeneratedOutputSource } = {},
-) => {
-  const currentExtension = getFileNameExtension(fileName);
-  if (!fileName.trim() || (currentExtension && !getOutputFormatForFileName(fileName, options, { rawExtensions })))
-    return fileName;
-  const nextOption = options.find((option) => option.value === format);
-  const nextExtension = nextOption ? getOutputOptionExtension(nextOption, source) || fallbackExtension : "";
-  if (!nextExtension) return fileName;
-  return currentExtension ? replaceFileNameExtension(fileName, nextExtension) : `${fileName}.${nextExtension}`;
-};
-
-const getCreatePatchFormatForFileName = (fileName: string | null | undefined, options: readonly OutputOption[]) => {
-  const extension = getFileNameExtension(fileName);
-  if (!extension) return null;
-  const format = ROM_WEAVER_PATCH_FORMATS.find((candidate) =>
-    candidate.extensions.some(
-      (candidateExtension) => candidateExtension.replace(/^\./, "").toLowerCase() === extension,
-    ),
-  );
-  const formatName = format ? normalizeCreatePatchFormat(format.name) : "";
-  return options.find((option) => option.value === formatName)?.value || null;
-};
-
-const getCreatePatchExtensionWarning = (
-  fileName: string | null | undefined,
-  options: readonly OutputOption[],
-  compressionOptions: readonly OutputOption[] = [],
-  selectedCompression?: string,
-) => {
-  const extension = getFileNameExtension(fileName);
-  const compressionFormat = getOutputFormatForFileName(fileName, compressionOptions);
-  if (
-    !extension ||
-    getCreatePatchFormatForFileName(fileName, options) ||
-    (compressionFormat && (!selectedCompression || compressionFormat === selectedCompression))
-  )
-    return null;
-  return `The extension .${extension} is not a valid patch format. Choose a format from the dropdown.`;
-};
+const createApplyOutputOptions = createOutputOptions;
 
 /**
  * Compression-type options for the output "Options" panel. The uncompressed
@@ -337,10 +234,5 @@ export {
   createCreatePatchFormatOptions,
   createOutputOptions,
   createTrimOutputOptions,
-  getCreatePatchExtensionWarning,
-  getCreatePatchFormatForFileName,
   getGeneratedOutputName,
-  getOutputExtensionWarning,
-  getOutputFileNameForFormat,
-  getOutputFormatForFileName,
 };

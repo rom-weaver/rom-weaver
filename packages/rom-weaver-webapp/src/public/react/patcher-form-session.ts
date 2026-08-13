@@ -30,8 +30,7 @@ import type {
   StagedInputInfo,
 } from "./apply-session-types.ts";
 import { getBinarySourceListStableIds, getBinarySourceSize, sameBinarySourceLists } from "./input-session-helpers.ts";
-import { getGeneratedOutputName, getOutputFileNameForFormat, getOutputFormatForFileName } from "./output-view-model.ts";
-import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
+import { getGeneratedOutputName } from "./output-view-model.ts";
 import type { ApplyPatchFormSettings, BinarySource, NoticeController } from "./patcher-form.ts";
 import {
   formatElapsedTiming,
@@ -135,9 +134,6 @@ const useLocalApplyPatchFormSession = ({
     setRomInputs,
   } = session;
   const [outputCompressionEdited, setOutputCompressionEdited] = useState(false);
-  const [outputNameEditing, setOutputNameEditing] = useState(false);
-  const outputNameEditingRef = useRef(false);
-  outputNameEditingRef.current = outputNameEditing;
   const [failurePlacement, setFailurePlacement] = useState<"input" | "output" | "patch" | null>(null);
   const {
     busy,
@@ -438,12 +434,8 @@ const useLocalApplyPatchFormSession = ({
   );
 
   useEffect(() => {
-    if (outputNameEditingRef.current) return;
     const configuredOutputName = activeSettings.output?.outputName || "";
-    const displayOutputName = getOutputFileNameForFormat(configuredOutputName, displayedCompression, outputOptions, {
-      rawExtensions: ROM_FILE_EXTENSIONS,
-    });
-    setOutputName(displayOutputName);
+    setOutputName(configuredOutputName);
     setOutputNameEdited(!!configuredOutputName.trim());
     if (pendingDownloadResultRef.current && hasPendingDownload) {
       setPendingDownloadReadyFileName(
@@ -458,8 +450,6 @@ const useLocalApplyPatchFormSession = ({
     activeSettings.output?.outputName,
     automaticResolvedOutputName,
     hasPendingDownload,
-    displayedCompression,
-    outputOptions,
     setPendingDownloadReadyFileName,
     setOutputName,
     setOutputNameEdited,
@@ -551,7 +541,6 @@ const useLocalApplyPatchFormSession = ({
         effectiveResolvedOutputName,
         hasPendingDownload,
         outputName,
-        outputNameEditing,
         outputNameEdited,
         outputOptions,
         pendingDownloadFileName,
@@ -572,7 +561,6 @@ const useLocalApplyPatchFormSession = ({
       displayedCompression,
       effectiveResolvedOutputName,
       hasPendingDownload,
-      outputNameEditing,
       pendingDownloadFileName,
       outputOptions,
       outputName,
@@ -1249,43 +1237,33 @@ const useLocalApplyPatchFormSession = ({
     () => ({
       ...applyDownloadOrchestration,
       getState: localOutputStoreController.getState,
-      commitDisplayFileName: () => setOutputNameEditing(false),
-      setDisplayFileName: (value: string, options: { userInitiated?: boolean } = {}) => {
+      setDisplayFileName: (value: string) => {
         const nextOutputName = getRequestedOutputName(value);
-        const inferredCompression = getOutputFormatForFileName(value, outputOptions, {
-          rawExtensions: ROM_FILE_EXTENSIONS,
-        });
         clearDismissibleErrors();
-        invalidateCompletedOutputState();
         setOutputName(value);
-        setOutputNameEditing(options.userInitiated !== false);
         setOutputNameEdited(!!nextOutputName);
-        if (inferredCompression) setOutputCompressionEdited(true);
+        if (pendingDownloadResultRef.current && hasPendingDownload) {
+          setPendingDownloadReadyFileName(
+            resolvePendingDownloadFileName({
+              automaticOutputName: automaticResolvedOutputName,
+              fallbackOutputName: effectiveResolvedOutputName,
+              requestedOutputName: nextOutputName,
+              resultOutputName: pendingDownloadResultRef.current.output.fileName,
+            }),
+          );
+        }
         commitSettings({
           ...activeSettings,
-          output: {
-            ...activeSettings.output,
-            ...(inferredCompression ? { compression: inferredCompression as "auto" | CompressionFormat } : {}),
-            outputName: nextOutputName,
-          },
+          output: { ...activeSettings.output, outputName: nextOutputName },
         });
       },
       setOutputCompression: (value: string) => {
-        const nextOutputName = getOutputFileNameForFormat(outputName, value, outputOptions, {
-          rawExtensions: ROM_FILE_EXTENSIONS,
-        });
         setOutputCompressionEdited(true);
-        setOutputNameEditing(false);
-        if (nextOutputName !== outputName) {
-          setOutputName(nextOutputName);
-          setOutputNameEdited(!!getRequestedOutputName(nextOutputName));
-        }
         updateSettings({
           ...activeSettings,
           output: {
             ...activeSettings.output,
             compression: value as "auto" | CompressionFormat,
-            ...(nextOutputName === outputName ? {} : { outputName: getRequestedOutputName(nextOutputName) }),
           },
         });
       },
@@ -1305,12 +1283,13 @@ const useLocalApplyPatchFormSession = ({
     [
       activeSettings,
       applyDownloadOrchestration,
+      automaticResolvedOutputName,
       clearDismissibleErrors,
       commitSettings,
-      invalidateCompletedOutputState,
+      effectiveResolvedOutputName,
+      hasPendingDownload,
       localOutputStoreController,
-      outputOptions,
-      outputName,
+      setPendingDownloadReadyFileName,
       setOutputName,
       setOutputNameEdited,
       updateSettings,

@@ -1,10 +1,9 @@
 import type { CompressionFormat } from "../../types/settings.ts";
-import { getFileNameExtension } from "../../lib/path-utils.ts";
 import { isCompressedInputFileName } from "./apply-session-inputs.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { buildCompressPanel } from "./compress-options.ts";
 import { getBinarySourceFileName, getBinarySourceSize, toApplyButtonProgress } from "./input-session-helpers.ts";
-import { getOutputFileNameForFormat, type OutputOption } from "./output-view-model.ts";
+import type { OutputOption } from "./output-view-model.ts";
 import type { ApplyPatchFormSettings, BinarySource, StackPatchItem } from "./patcher-form.ts";
 import { formatDownloadCompressionRatio } from "./patcher-form-session-utils.ts";
 import type { createOutputSizeSummary } from "./patcher-presentation.ts";
@@ -196,7 +195,6 @@ interface OutputViewStateInput {
   effectiveResolvedOutputName: string;
   hasPendingDownload: boolean;
   outputName: string;
-  outputNameEditing: boolean;
   outputNameEdited: boolean;
   outputOptions: OutputOption[];
   pendingDownloadFileName: string | null;
@@ -220,7 +218,6 @@ const buildOutputViewState = ({
   effectiveResolvedOutputName,
   hasPendingDownload,
   outputName,
-  outputNameEditing,
   outputNameEdited,
   outputOptions,
   pendingDownloadFileName,
@@ -247,15 +244,7 @@ const buildOutputViewState = ({
   compressionFormat: displayedCompression,
   compressTiming: compressTimingText,
   disabled: disabled || busy,
-  displayFileName: outputNameEditing
-    ? outputName
-    : outputNameEdited && getFileNameExtension(outputName)
-      ? outputName
-      : getOutputFileNameForFormat(
-          outputNameEdited ? outputName : effectiveResolvedOutputName,
-          displayedCompression,
-          outputOptions,
-        ),
+  displayFileName: outputNameEdited ? outputName : effectiveResolvedOutputName,
   downloadSummary: hasPendingDownload
     ? {
         format: selectedOutputOptionLabel || displayedCompression?.toUpperCase() || undefined,

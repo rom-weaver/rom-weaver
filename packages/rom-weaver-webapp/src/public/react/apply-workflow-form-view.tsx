@@ -43,11 +43,7 @@ import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
-import {
-  createApplyOutputOptions,
-  createCompressionTypeOptions,
-  getOutputExtensionWarning,
-} from "./output-view-model.ts";
+import { createCompressionTypeOptions } from "./output-view-model.ts";
 import type {
   NoticeController,
   PatcherOutputController,
@@ -2106,22 +2102,19 @@ function ApplyWorkflowFormView({
               timing: outputState.compressTiming || undefined,
             })}
             disabled={outputState.disabled}
-            extensionWarning={getOutputExtensionWarning(outputState.displayFileName, outputState.options, {
-              rawExtensions: ROM_FILE_EXTENSIONS,
-            })}
             fault={applyFailed}
             fileName={outputState.displayFileName}
             fileNameId="rom-weaver-input-output-file-name"
-            fileNamePlaceholder="Output filename"
+            fileNamePlaceholder="Output filename (no extension)"
             format={outputState.compressionFormat}
             formatId="rom-weaver-select-output-format"
-            formatOptions={createApplyOutputOptions(outputState.options)}
+            formatOptions={outputState.options}
             id="rom-weaver-row-output-file-name"
             info={
               <InfoPopover title="Output options">
                 <strong>Output</strong>
                 <ul>
-                  <li>Set the filename. The format selector controls its extension.</li>
+                  <li>Set the filename without an extension - the format selector controls it.</li>
                   <li>Container formats (zip, 7z, chd, rvz) are produced directly.</li>
                   <li>Compression defaults come from Settings › Compression and apply to compressed output.</li>
                 </ul>
@@ -2137,7 +2130,6 @@ function ApplyWorkflowFormView({
             }
             num="0x04"
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
-            onFileNameBlur={() => controllers.output.commitDisplayFileName?.()}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
             title="Apply"
             woven={applyDone || running}

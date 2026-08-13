@@ -80,13 +80,13 @@ test("removing a patch refreshes generated output name", async () => {
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
 
   await waitForApplyButtonEnabled();
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game [change].bin");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game [change]");
 
   const removePatchButton = document.querySelector("button[aria-label='Remove patch']");
   if (!(removePatchButton instanceof HTMLButtonElement)) throw new Error("Missing remove patch button");
   removePatchButton.click();
 
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game.bin");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game");
 });
 
 test("removing an input refreshes generated output name", async () => {
@@ -133,16 +133,16 @@ test("removing an input refreshes generated output name", async () => {
       timeout: 30000,
     })
     .toBe(2);
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game.zip");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game");
 
   const removeInputButton = document.querySelector("button[aria-label='Remove ROM input']");
   if (!(removeInputButton instanceof HTMLButtonElement)) throw new Error("Missing remove ROM input button");
   removeInputButton.click();
 
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("second.zip");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("second");
 });
 
-test("editing output name after download is ready resets the prepared output", async () => {
+test("editing output name after download is ready keeps the prepared output", async () => {
   const downloadNames = [];
   const downloadBlobTypes = [];
   let applyCompleteCount = 0;
@@ -191,13 +191,13 @@ test("editing output name after download is ready resets the prepared output", a
 
     await expect
       .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
-      .toContain("Apply & download");
+      .toContain("Download");
 
     await clickApplyButton();
 
     await expect.poll(() => downloadNames.at(-1)).toBe("renamed-output.bin");
     expect(downloadBlobTypes.at(-1)).toBe("application/octet-stream");
-    expect(applyCompleteCount).toBe(2);
+    expect(applyCompleteCount).toBe(1);
   } finally {
     HTMLAnchorElement.prototype.click = originalAnchorClick;
     URL.createObjectURL = originalCreateObjectUrl;

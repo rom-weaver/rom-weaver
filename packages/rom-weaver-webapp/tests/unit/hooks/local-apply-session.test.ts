@@ -71,17 +71,15 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
     const patches = [source("a.ips"), source("b.ips")];
     const disabledPatchIds = new Set([getBinarySourceListStableIds(patches)[1]]);
     const { result } = renderSession({ disabledPatchIds, patches });
-    expect(result.current.localOutputController.getState().displayFileName).toBe("rom [a].zip");
+    expect(result.current.localOutputController.getState().displayFileName).toBe("rom [a]");
     expect(result.current.localStackController.getState().items).toHaveLength(2);
   });
 
-  it("keeps a user-edited output name when a patch is disabled", async () => {
+  it("keeps a user-edited output name when a patch is disabled", () => {
     const inputs = [source("rom.bin")];
     const patches = [source("a.ips"), source("b.ips")];
     const { result, rerender } = renderSession({ inputs, patches });
     act(() => result.current.localOutputController.setDisplayFileName("custom"));
-    await waitFor(() => expect(result.current.localOutputController.getState().displayFileName).toBe("custom"));
-    act(() => result.current.localOutputController.commitDisplayFileName?.());
     rerender({
       applyPatches: vi.fn(async () => applyResult()),
       applyReady: true,
@@ -91,7 +89,7 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
       patches,
       settings: { output: { outputName: "custom" } },
     } as LocalApplyPatchFormSessionOptions);
-    expect(result.current.localOutputController.getState().displayFileName).toBe("custom.zip");
+    expect(result.current.localOutputController.getState().displayFileName).toBe("custom");
   });
 
   it("routes a compression change through onSettingsChange", () => {
@@ -100,25 +98,6 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
     expect(onSettingsChange).toHaveBeenCalled();
     const lastCall = onSettingsChange.mock.calls.at(-1)?.[0];
     expect(lastCall?.output?.compression).toBe("7z");
-  });
-
-  it("infers apply compression from a typed output extension", () => {
-    const { result, onSettingsChange } = renderSession();
-    act(() => result.current.localOutputController.setDisplayFileName("custom.zip"));
-    const lastCall = onSettingsChange.mock.calls.at(-1)?.[0];
-    expect(lastCall?.output?.compression).toBe("zip");
-    expect(lastCall?.output?.outputName).toBe("custom.zip");
-  });
-
-  it("changes a recognized output extension when compression changes", async () => {
-    const { result, onSettingsChange } = renderSession();
-    act(() => result.current.localOutputController.setDisplayFileName("custom.zip"));
-    await waitFor(() => expect(result.current.localOutputController.getState().displayFileName).toBe("custom.zip"));
-    act(() => result.current.localOutputController.setOutputCompression("7z"));
-    const lastCall = onSettingsChange.mock.calls.at(-1)?.[0];
-    expect(lastCall?.output?.compression).toBe("7z");
-    expect(lastCall?.output?.outputName).toBe("custom.7z");
-    expect(result.current.localOutputController.getState().displayFileName).toBe("custom.7z");
   });
 
   it("clears the top-level notice via the notice controller", () => {
@@ -237,36 +216,6 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
       const output = result.current.localOutputController.getState();
       expect(output.applyButton.label).toBe("Download rom.patched.zip");
       expect(output.pendingDownloadFileName).toBe("rom.patched.zip");
-    });
-  });
-
-  it("resets the completed apply when the output name changes", async () => {
-    const { result } = renderSession();
-    await act(async () => {
-      await result.current.localOutputController.runPrimaryAction();
-    });
-    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeTruthy());
-
-    act(() => result.current.localOutputController.setDisplayFileName("renamed"));
-
-    await waitFor(() => {
-      expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull();
-      expect(result.current.localOutputController.getState().applyButton.label).toBe("Apply & download");
-    });
-  });
-
-  it("resets the completed apply when the output type changes", async () => {
-    const { result } = renderSession();
-    await act(async () => {
-      await result.current.localOutputController.runPrimaryAction();
-    });
-    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeTruthy());
-
-    act(() => result.current.localOutputController.setOutputCompression("7z"));
-
-    await waitFor(() => {
-      expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull();
-      expect(result.current.localOutputController.getState().applyButton.label).toBe("Apply & download");
     });
   });
 

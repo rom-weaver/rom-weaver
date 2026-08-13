@@ -103,12 +103,6 @@
     font-size: 0.82rem;
     line-height: 1.35;
   }
-  .rw-app .fname .outformat {
-    flex: 0 1 auto;
-    width: fit-content;
-    max-width: 50%;
-    white-space: nowrap;
-  }
   .rw-app .patch-description-field .popt-input {
     font-size: 0.82rem;
     line-height: 1.35;

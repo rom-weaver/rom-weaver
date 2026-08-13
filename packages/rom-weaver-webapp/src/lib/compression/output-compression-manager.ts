@@ -156,18 +156,6 @@ const OutputCompressionManager = (() => {
     if (recommended === OUTPUT_COMPRESSION.Z3DS) return OUTPUT_COMPRESSION.Z3DS;
     return null;
   };
-  const _getRomSpecificSourceFormat = (source: CompressionSource | null | undefined): OutputCompressionValue | null => {
-    const engineRecommended = _engineRecommendedRomSpecific(source);
-    if (engineRecommended) return engineRecommended;
-    if (
-      _hasChdSourceMetadata(source) ||
-      (_isUnambiguousChdCompressionInput(source) && _isLikelyDiscImageSource(source))
-    )
-      return OUTPUT_COMPRESSION.CHD;
-    if (_isRvzSource(source) || _isUnambiguousRvzCompressionInput(source)) return OUTPUT_COMPRESSION.RVZ;
-    if (_isZ3dsSource(source) || _isUnambiguousZ3dsCompressionInput(source)) return OUTPUT_COMPRESSION.Z3DS;
-    return null;
-  };
   const _resolveAutomaticOutputCompression = (source: CompressionSource | null | undefined) => {
     const engineRecommended = _engineRecommendedRomSpecific(source);
     if (engineRecommended) return engineRecommended;
@@ -191,10 +179,8 @@ const OutputCompressionManager = (() => {
   };
   const _supportsOutputCompression = (source: CompressionSourceInput, compression: CompressionChoiceInput) => {
     const selected = _normalizeOutputCompression(compression);
-    if (selected === OUTPUT_COMPRESSION.AUTO) return true;
-    const romSpecificSourceFormat = _getRomSpecificSourceFormat(source as CompressionSource | null | undefined);
-    if (romSpecificSourceFormat) return selected === OUTPUT_COMPRESSION.NONE || selected === romSpecificSourceFormat;
     if (
+      selected === OUTPUT_COMPRESSION.AUTO ||
       selected === OUTPUT_COMPRESSION.NONE ||
       selected === OUTPUT_COMPRESSION.SEVEN_ZIP ||
       selected === OUTPUT_COMPRESSION.ZIP

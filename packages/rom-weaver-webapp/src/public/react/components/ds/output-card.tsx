@@ -30,8 +30,6 @@ type OutputCompressPanel = {
 type OutputCardProps = {
   fileName: string;
   onFileNameChange: (value: string) => void;
-  onFileNameBlur?: () => void;
-  extensionWarning?: string | null;
   fileNamePlaceholder?: string;
   fileNameLabel?: string;
   fileNameId?: string;
@@ -69,8 +67,6 @@ const OutputField = ({
 const OutputCard = ({
   fileName,
   onFileNameChange,
-  onFileNameBlur,
-  extensionWarning,
   fileNamePlaceholder,
   fileNameLabel = "Output filename",
   fileNameId,
@@ -83,9 +79,9 @@ const OutputCard = ({
   disabled,
   action,
 }: OutputCardProps) => {
-  // Trim still uses the legacy name-only warning. Apply and create pass their
-  // format-aware warning so valid extensions can select the matching format.
-  const doubledExtension = extensionWarning === undefined ? detectOutputLikeExtension(fileName) : null;
+  // The format selector appends the extension, so a name that already ends in
+  // an output-looking extension would be saved doubled (`game.zip.zip`).
+  const doubledExtension = detectOutputLikeExtension(fileName);
   const compressionFields =
     compress?.formatOptions?.length && compress.onFormatChange ? (
       <OutputField label={compress.formatLabel || "Type"} labelInfo={compress.formatInfo}>
@@ -107,16 +103,12 @@ const OutputCard = ({
     ) : null;
   return (
     <div className="card outcard">
-      {extensionWarning || doubledExtension ? (
+      {doubledExtension ? (
         <p aria-live="polite" className="patch-off-note outname-ext-warn" role="alert">
           <TriangleAlert aria-hidden="true" />
           <span>
-            {extensionWarning || (
-              <>
-                The name ends in <code>.{doubledExtension}</code>, an output extension. The format selector adds the
-                extension — remove it to avoid a doubled name.
-              </>
-            )}
+            The name ends in <code>.{doubledExtension}</code>, an output extension. The format selector adds the
+            extension — remove it to avoid a doubled name.
           </span>
         </p>
       ) : null}
@@ -128,7 +120,6 @@ const OutputCard = ({
             disabled={disabled}
             id={fileNameId}
             onChange={(event) => onFileNameChange(event.currentTarget.value)}
-            onBlur={onFileNameBlur}
             onKeyDown={(event) => {
               // The output name is a textarea only so it can grow - a filename
               // must never contain a newline.
@@ -142,7 +133,7 @@ const OutputCard = ({
           <span className="sep" />
           <select
             aria-label={formatLabel}
-            className="select mono outformat"
+            className="select mono"
             disabled={disabled}
             id={formatId}
             onChange={(event) => onFormatChange(event.currentTarget.value)}

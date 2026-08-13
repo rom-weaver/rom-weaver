@@ -42,14 +42,7 @@ import { buildCreateSourceStep, type CreateSourceStepRuntimeNotice } from "./cre
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, hasDuplicateBinarySources } from "./input-session-helpers.ts";
-import {
-  createCreateOutputCompressionOptions,
-  createCreatePatchFormatOptions,
-  getCreatePatchExtensionWarning,
-  getCreatePatchFormatForFileName,
-  getOutputFileNameForFormat,
-  getOutputFormatForFileName,
-} from "./output-view-model.ts";
+import { createCreateOutputCompressionOptions, createCreatePatchFormatOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
 import {
@@ -1250,32 +1243,17 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         formatValue: createCompression,
         note: createCompressPanel?.note,
         onFieldChange: (key, value, updates) => updateSettings({ ...settings, ...(updates || { [key]: value }) }),
-        onFormatChange: (value) => {
-          const nextOutputName = getOutputFileNameForFormat(resolvedOutputName, value, createCompressionOptions, {
-            fallbackExtension: patchType,
-          });
+        onFormatChange: (value) =>
           updateSettings({
             ...settings,
-            output: {
-              ...settings.output,
-              compression: value as "7z" | "none" | "zip",
-              ...(nextOutputName === resolvedOutputName ? {} : { outputName: nextOutputName }),
-            },
-          });
-          if (nextOutputName !== resolvedOutputName) setOutputName(nextOutputName);
-        },
+            output: { ...settings.output, compression: value as "7z" | "none" | "zip" },
+          }),
         timing: compressTimingText || undefined,
       }),
       disabled: outputDisabled,
       fileName: resolvedOutputName,
       fileNameId: "patch-builder-output-file",
       fileNamePlaceholder: "Patch filename",
-      extensionWarning: getCreatePatchExtensionWarning(
-        resolvedOutputName,
-        patchFormatOptions,
-        createCompressionOptions,
-        createCompression,
-      ),
       format: patchType,
       formatId: "patch-builder-select-patch-type",
       formatOptions: patchFormatOptions,
@@ -1306,30 +1284,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         ) : null,
       num: "0x04",
       onFileNameChange: (value) => {
-        const inferredPatchType = getCreatePatchFormatForFileName(value, patchFormatOptions);
-        const inferredCompression = getOutputFormatForFileName(value, createCompressionOptions);
-        if (inferredPatchType && inferredPatchType !== patchType) updatePatchType(inferredPatchType);
         setOutputName(value);
         updateSettings({
           ...settings,
-          output: {
-            ...settings.output,
-            ...(inferredCompression ? { compression: inferredCompression as "7z" | "none" | "zip" } : {}),
-            outputName: value.trim() || undefined,
-          },
+          output: { ...settings.output, outputName: value.trim() || undefined },
         });
       },
-      onFormatChange: (value) => {
-        const nextOutputName = getOutputFileNameForFormat(resolvedOutputName, value, patchFormatOptions);
-        if (nextOutputName !== resolvedOutputName) {
-          setOutputName(nextOutputName);
-          updateSettings({
-            ...settings,
-            output: { ...settings.output, outputName: nextOutputName.trim() || undefined },
-          });
-        }
-        updatePatchType(value);
-      },
+      onFormatChange: updatePatchType,
       title: "Patch",
     },
     sourcesEmpty: createSourcesActuallyEmpty,
