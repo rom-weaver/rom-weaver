@@ -31,7 +31,7 @@ describe("IdentifyDrawer", () => {
             {
               algorithm: "crc32",
               database: "OpenGood",
-              name: "Pokemon - Emerald Version (UE) [b1]",
+              name: "Pokemon - Emerald Version (U,E) [!]",
               platform: "Nintendo Game Boy Advance",
               variant: "raw",
             },
