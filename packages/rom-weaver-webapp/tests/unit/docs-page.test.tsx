@@ -507,14 +507,21 @@ Fixture description.
 
     fireEvent.click(screen.getByRole("button", { name: "Contents" }));
 
-    const sheet = document.querySelector(".rw-modal.guide-sheet");
-    expect(sheet?.querySelector(".warp-rail")).toBeTruthy();
-    expect(sheet?.querySelectorAll(".guide-nav .guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
-    expect(sheet?.querySelector('.guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
+    const menu = document.querySelector(".docs-contents-menu");
+    expect(menu?.querySelector(".warp-rail")).toBeTruthy();
+    expect(menu?.querySelectorAll(".guide-nav .guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+    expect(menu?.querySelector('.guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
+    const contents = screen.getByRole("button", { name: "Contents" });
+    expect(contents.getAttribute("aria-expanded")).toBe("true");
+    expect(document.querySelector(".docs-trail input[aria-label='Search documentation']")).toBeTruthy();
 
-    // Choosing a guide has to take the sheet with it - the reader asked to leave.
-    fireEvent.click(sheet?.querySelector(".guide-nav .guide-nav-list a") as HTMLElement);
-    expect(document.querySelector(".rw-modal.guide-sheet")).toBeNull();
+    fireEvent.click(contents);
+    expect(document.querySelector(".docs-contents-menu")).toBeNull();
+    fireEvent.click(contents);
+
+    // Choosing a guide has to take the menu with it - the reader asked to leave.
+    fireEvent.click(document.querySelector(".docs-contents-menu .guide-nav .guide-nav-list a") as HTMLElement);
+    expect(document.querySelector(".docs-contents-menu")).toBeNull();
   });
 
   it("shares search state with the mobile search", async () => {
