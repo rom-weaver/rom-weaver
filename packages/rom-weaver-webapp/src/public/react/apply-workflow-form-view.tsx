@@ -1556,9 +1556,9 @@ const BundleSecondaryJob = ({
       </div>
       <div className="bundle-job-content">
         <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
-        <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
         {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
       </div>
+      <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
     </section>
   );
 };

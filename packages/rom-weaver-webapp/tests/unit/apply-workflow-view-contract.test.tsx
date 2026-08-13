@@ -14,6 +14,7 @@ import type { PatcherOutputState, PatchStackItemState } from "../../src/public/r
 import type { PatcherUiState, RomInputRowState } from "../../src/public/react/patcher-ui-state.ts";
 import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-state.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import { createProgressViewModel } from "../../src/presentation/workflow-presentation.ts";
 import {
   setPostApplyDownloadBehaviorOverride,
   setPostApplyTestBehaviorOverride,
@@ -625,17 +626,17 @@ describe("apply workflow view - patch enable toggles", () => {
 });
 
 describe("apply workflow view - bundle controls", () => {
-  const bundleExport = (bundleRom = false) => {
+  const bundleExport = (bundleRom = false, busy = false) => {
     const state = {
       bundleRom,
       format: "zip",
     };
     return {
-      busy: false,
+      busy,
       cancelExport: () => undefined,
       downloadable: false,
       error: "",
-      progress: null,
+      progress: busy ? createProgressViewModel({ label: "Creating bundle", percent: 42 }) : null,
       ready: true,
       runExport: async () => undefined,
       setBundleRom: (value: boolean) => {
@@ -661,8 +662,14 @@ describe("apply workflow view - bundle controls", () => {
 
   it("keeps the sharing action full width at every panel size", () => {
     const shareRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-share\s*\{([^}]*)\}/)?.[1];
+    const fullRowRule = BUNDLE_FIELDS_CSS.match(
+      /\.rw-app \.bundle-share,\s*\.rw-app \.bundle-job > \.runprog\s*\{([^}]*)\}/,
+    )?.[1];
+    const romOptionRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-rom-option\s*\{([^}]*)\}/)?.[1];
 
-    expect(shareRule).toContain("width: 100%");
+    expect(romOptionRule).toContain("align-self: end");
+    expect(fullRowRule).toContain("grid-column: 1 / -1");
+    expect(fullRowRule).toContain("width: 100%");
     expect(shareRule).toContain("min-height: 40px");
     expect(BUNDLE_RESPONSIVE_CSS).not.toContain(".bundle-job .bundle-share");
   });
@@ -718,8 +725,30 @@ describe("apply workflow view - bundle controls", () => {
     const shareButton = container.querySelector("#rom-weaver-button-export-bundle");
     expect(shareButton?.textContent).toContain("Share bundle");
     expect(shareButton?.classList).toContain("bundle-share");
+    expect(shareButton?.parentElement?.classList).toContain("bundle-job");
     expect(container.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
     expect(container.querySelector(".bundle-rom-warning .notice")?.textContent).toContain("right to distribute it");
+  });
+
+  it("keeps the busy sharing action in the same full-row wrapper", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport(false, true)}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const progress = container.querySelector("#rom-weaver-bundle-export-progress");
+    expect(progress?.classList).toContain("runprog");
+    expect(progress?.parentElement?.classList).toContain("bundle-job");
   });
 
   it("keeps bundle settings out of ordinary Apply options", () => {
