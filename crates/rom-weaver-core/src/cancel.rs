@@ -85,3 +85,7 @@ pub fn clear_in_progress_outputs() {
         paths.clear();
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/cancel.rs"]
+mod tests;

@@ -128,4 +128,14 @@ mod tests {
         assert_eq!(roomy.waves[0].jobs, vec![0, 1]);
         assert_eq!(roomy.waves[0].threads_per_job, 4);
     }
+
+    #[test]
+    fn zero_explicit_ceiling_uses_derived_ceiling() {
+        let jobs = [50 * MB, 50 * MB];
+        let derived = plan_extract_batch(&jobs, 8, 8, Some(512 * MB), None);
+        let zero = plan_extract_batch(&jobs, 8, 8, Some(512 * MB), Some(0));
+
+        assert_eq!(derived.waves.len(), 1);
+        assert_eq!(zero, derived);
+    }
 }
