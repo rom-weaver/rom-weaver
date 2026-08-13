@@ -1,4 +1,4 @@
-import { Archive, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
+import { Archive, Disc3, Download, Gamepad2, ListChecks, Share2, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import {
@@ -476,9 +476,7 @@ const BundleRomExpectationCard = ({ expectation }: { expectation: BundleRomExpec
 
 /** Bundle-related notices and export reveal state, threaded from the form. */
 type BundleToolsState = {
-  /** True when a bundle package is selected (drives the export/create action). */
-  exportVisible: boolean;
-  /** Persist the bundle package choice ("" hides it), synced to user settings. */
+  /** Persist the bundle package choice, synced to user settings. */
   setBundlePackage: (value: string) => void;
   /** The run has optional entries (or patches toggled off): output checks only
    * describe the full chain. */
@@ -497,11 +495,9 @@ type BundleExportState = {
   format: string;
   progress: ProgressViewModel | null;
   ready: boolean;
-  romName: string;
   runExport: () => Promise<void>;
   setBundleRom: (value: boolean) => void;
   setFormat: (value: string) => void;
-  setRomName: (value: string) => void;
 };
 
 const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
@@ -1303,13 +1299,13 @@ const BundleExportAction = ({
   }
   return (
     <button
-      className="btn ghost slim bundle-dl"
+      className="btn primary slim bundle-share"
       disabled={disabled}
       id="rom-weaver-button-export-bundle"
       onClick={() => void bundleExport.runExport()}
       type="button"
     >
-      {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Package aria-hidden="true" />}
+      {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Share2 aria-hidden="true" />}
       {bundleActionLabel}
     </button>
   );
@@ -1464,27 +1460,12 @@ const getBundleActionLabel = (
   localizer: ReturnType<typeof useUiLocalizer>,
   downloadable: boolean,
 ) => {
-  if (!downloadable) {
-    if (!bundleExport) return "";
-    const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
-    const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
-    const createKey = bundleExport.bundleRom ? "ui.bundleExport.createRom" : "ui.bundleExport.create";
-    return localizer.message(createKey, { format: formatName });
-  }
+  if (!downloadable) return bundleExport ? localizer.message("ui.bundleExport.share") : "";
   if (!bundleExport?.downloadable) return "";
-  const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
+  const formatValue = bundleExport.format || "zip";
   const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
   const downloadKey = bundleExport.bundleRom ? "ui.bundleExport.downloadRom" : "ui.bundleExport.download";
   return localizer.message(downloadKey, { format: formatName });
-};
-
-const getBundleFormatValue = (
-  bundleExport: BundleExportState | undefined,
-  bundleTools: BundleToolsState | undefined,
-) => {
-  const format = bundleTools?.exportVisible ? bundleExport?.format : "";
-  if (!format || format === "bundle") return "";
-  return `${format}:${bundleExport?.bundleRom ? "rom" : "patches"}`;
 };
 
 const BundleOutputFields = ({
@@ -1494,56 +1475,56 @@ const BundleOutputFields = ({
   bundleExport?: BundleExportState;
   bundleTools?: BundleToolsState;
 }) => {
+  const localizer = useUiLocalizer();
   const exportTypeInfo = {
     items: [
       "A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM; it is not a pre-patched ROM.",
       "The required rom-weaver-bundle.json index contains the schema version, optional ROM description/checks, ordered patch entries, and optional output defaults/checks. Patch entries carry their sources, selections, header rules, and expected ROM-state checks.",
-      "The archive holds that index plus the patch files. The “+ ROM” variants also include the original ROM, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
+      "The archive holds that index plus the patch files. Including the original ROM is optional, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
       "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player applies it.",
     ],
-    summary:
-      "Exports this session as a distributable rom-weaver bundle: a portable patch recipe defined by rom-weaver-bundle.json.",
-    title: "Bundle",
+    summary: "Exports this session as a portable rom-weaver bundle defined by rom-weaver-bundle.json.",
+    title: "Archive",
   };
-  const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
   if (!bundleExport) return null;
+  const archiveType = bundleExport.format === "7z" ? "7z" : "zip";
+  const setBundleContents = (includeRom: boolean, format = archiveType) => {
+    bundleTools?.setBundlePackage(`${format}:${includeRom ? "rom" : "patches"}`);
+  };
   return (
     <div className="bundle-job-fields">
       <OutputField
         className="export-type-field"
-        label="Bundle"
-        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
+        label="Archive type"
+        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Archive type" />}
       >
         <select
-          aria-label="Bundle"
+          aria-label="Archive type"
           className="select"
           disabled={bundleExport.busy}
           id="rom-weaver-bundle-export-format"
-          onChange={(event) => bundleTools?.setBundlePackage(event.currentTarget.value)}
-          value={bundleFormatValue}
+          onChange={(event) => setBundleContents(bundleExport.bundleRom, event.currentTarget.value)}
+          value={archiveType}
         >
-          <option value="">Hide bundle creation</option>
-          <option value="zip:patches">Bundle + patches (.zip)</option>
-          <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
-          <option value="7z:patches">Bundle + patches (.7z)</option>
-          <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
+          <option value="zip">ZIP (.zip)</option>
+          <option value="7z">7z (.7z)</option>
         </select>
       </OutputField>
-      {bundleTools?.exportVisible && !bundleExport.bundleRom ? (
-        <OutputField label="Expected ROM name">
+      <div className="bundle-rom-option">
+        <label className="checkrow" htmlFor="rom-weaver-bundle-export-bundle-rom">
           <input
-            aria-label="Expected ROM name"
-            autoComplete="off"
-            className="input"
+            checked={bundleExport.bundleRom}
             disabled={bundleExport.busy}
-            id="rom-weaver-bundle-rom-name"
-            onChange={(event) => bundleExport.setRomName(event.currentTarget.value)}
-            spellCheck={false}
-            type="text"
-            value={bundleExport.romName}
+            id="rom-weaver-bundle-export-bundle-rom"
+            onChange={(event) => setBundleContents(event.currentTarget.checked)}
+            type="checkbox"
           />
-        </OutputField>
-      ) : null}
+          <span>{localizer.message("ui.bundleExport.includeRom")}</span>
+        </label>
+        {bundleExport.bundleRom ? (
+          <Notice level="warn">{localizer.message("ui.bundleExport.romDistributionWarning")}</Notice>
+        ) : null}
+      </div>
     </div>
   );
 };
@@ -1568,16 +1549,14 @@ const BundleSecondaryJob = ({
   return (
     <section aria-labelledby="rom-weaver-bundle-job-title" className="bundle-job" id="rom-weaver-bundle-job">
       <div className="bundle-job-heading">
-        <Package aria-hidden="true" className="bundle-job-icon" />
+        <Share2 aria-hidden="true" className="bundle-job-icon" />
         <div>
           <h3 id="rom-weaver-bundle-job-title">{localizer.message("ui.bundleExport.shareTitle")}</h3>
           <p>{localizer.message("ui.bundleExport.shareDescription")}</p>
         </div>
       </div>
       <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
-      {bundleTools.exportVisible ? (
-        <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
-      ) : null}
+      <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
       {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
     </section>
   );
@@ -1947,13 +1926,9 @@ function ApplyWorkflowFormView({
     />
   );
   // Keep the sharing job after Apply's primary action and result recovery. It
-  // remains available once the bench has content so direct bundle authoring
-  // still works, while saved settings and the guided Bundle URL can reveal it
-  // before staging completes.
+  // remains available once the bench has content for direct bundle authoring.
   const bundleSecondaryJob =
-    bundleExport &&
-    bundleTools &&
-    (romInputs.length > 0 || patches.length > 0 || bundleTools.exportVisible || applyDone) ? (
+    bundleExport && bundleTools && (romInputs.length > 0 || patches.length > 0 || applyDone) ? (
       <BundleSecondaryJob
         bundleActionLabel={bundleActionLabel}
         bundleExport={bundleExport}

@@ -78,10 +78,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.bundleExport.createRom": msg({ id: "ui.bundleExport.createRom", message: "Create {format} ROM Bundle" }),
   "ui.bundleExport.download": msg({ id: "ui.bundleExport.download", message: "Download {format} Bundle" }),
   "ui.bundleExport.downloadRom": msg({ id: "ui.bundleExport.downloadRom", message: "Download {format} ROM Bundle" }),
+  "ui.bundleExport.includeRom": msg({ id: "ui.bundleExport.includeRom", message: "Include ROM in bundle" }),
+  "ui.bundleExport.romDistributionWarning": msg({
+    id: "ui.bundleExport.romDistributionWarning",
+    message: "Only include a ROM if you have the right to distribute it. Sharing copyrighted ROMs may be illegal.",
+  }),
   "ui.bundleExport.shareDescription": msg({
     id: "ui.bundleExport.shareDescription",
     message: "Exporting a recipe does not apply patches. It saves this patch setup for someone else to run.",
   }),
+  "ui.bundleExport.share": msg({ id: "ui.bundleExport.share", message: "Share bundle" }),
   "ui.bundleExport.shareTitle": msg({ id: "ui.bundleExport.shareTitle", message: "Share this setup" }),
   "ui.chain.appliesAfter": msg({ id: "ui.chain.appliesAfter", message: "applies after patch {n}" }),
   "ui.chain.differentRom": msg({ id: "ui.chain.differentRom", message: "expected a different ROM" }),

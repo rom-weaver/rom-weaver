@@ -238,8 +238,6 @@
 .rw-app .export-type-field .select {
   text-overflow: ellipsis;
 }
-/* Bundle authoring is a secondary job, not another Apply output option. Keep
-   its controls together in a quieter stitched panel after the primary action. */
 .rw-app .bundle-job {
   display: grid;
   gap: var(--sp-m);
@@ -258,17 +256,14 @@
   flex: none;
   width: 18px;
   height: 18px;
-  margin-block-start: 2px;
   color: var(--thread-text);
 }
 .rw-app .bundle-job-heading h3 {
   margin: 0;
   font-size: 0.98rem;
-  font-weight: 700;
   color: var(--ink);
 }
 .rw-app .bundle-job-heading p {
-  max-width: 62ch;
   margin: 4px 0 0;
   font-size: 0.8rem;
   line-height: 1.45;
@@ -279,8 +274,10 @@
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
   gap: var(--sp-m);
 }
-.rw-app .bundle-job .bundle-dl {
-  justify-self: start;
+.rw-app .bundle-rom-option {
+  display: grid;
+  gap: var(--sp-s);
+  align-content: start;
 }
 .rw-app .patch-description-field textarea.input {
   height: auto;

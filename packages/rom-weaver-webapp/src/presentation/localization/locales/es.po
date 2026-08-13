@@ -340,6 +340,11 @@ msgstr "Corregir cabecera ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.includeRom"
+msgstr "Incluir la ROM en el bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.envPwa"
 msgstr "Aplicación instalada (PWA)"
 
@@ -477,6 +482,11 @@ msgstr "Lista sin conexión"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.disabled"
 msgstr "Soporte sin conexión desactivado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.romDistributionWarning"
+msgstr "Incluye una ROM solo si tienes derecho a distribuirla. Compartir ROMs con derechos de autor puede ser ilegal."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -667,6 +677,11 @@ msgstr "Ajustes"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.dialogLabel"
 msgstr "Ajustes y estado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.share"
+msgstr "Compartir bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
