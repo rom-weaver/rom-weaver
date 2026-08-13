@@ -72,6 +72,7 @@ const buildFinalRomInputRow = ({
       checksumVariants: info.checksumVariants ?? existing?.info.checksumVariants,
       crc32: info.checksums?.crc32 || existing?.info.crc32 || "",
       fileName: info.fileName || existing?.info.fileName || `Input ${index + 1}`,
+      identificationStatus: info.identificationStatus ?? existing?.info.identificationStatus,
       md5: info.checksums?.md5 || existing?.info.md5 || "",
       romProbe: info.romProbe ?? existing?.info.romProbe,
       romInfo: info.romInfo ?? existing?.info.romInfo ?? "",

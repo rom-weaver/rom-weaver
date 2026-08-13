@@ -1,4 +1,4 @@
-import { Archive, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
+import { Archive, Check, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import {
@@ -702,8 +702,55 @@ const buildRomVerificationStates = (
   return states;
 };
 
+type RomIdentificationState = { name?: string; status: "matched" | "ambiguous" };
+
+const getConfirmedPatchIdentification = (patch: PatchStackItemState): RomIdentificationState | undefined => {
+  if (patch.validationState === "invalid") return undefined;
+  if (!(patch.validationState === "valid" || patch.sourceChecksumState === "valid")) return undefined;
+  const names = [...new Set((patch.sourceTitles || []).map((title) => title.trim()).filter(Boolean))];
+  if (!names.length) return undefined;
+  return names.length === 1 ? { name: names[0], status: "matched" } : { status: "ambiguous" };
+};
+
+const buildRomIdentificationStates = (patches: PatchStackItemState[], disabledFlags: boolean[]) => {
+  const states = new Map<string, RomIdentificationState>();
+  for (const [patchIndex, patch] of patches.entries()) {
+    if (disabledFlags[patchIndex] || !patch.targetValue) continue;
+    const identification = getConfirmedPatchIdentification(patch);
+    if (!identification) continue;
+    const existing = states.get(patch.targetValue);
+    if (!existing) {
+      states.set(patch.targetValue, identification);
+      continue;
+    }
+    if (
+      existing.status === "ambiguous" ||
+      identification.status === "ambiguous" ||
+      existing.name !== identification.name
+    ) {
+      states.set(patch.targetValue, { status: "ambiguous" });
+    }
+  }
+  return states;
+};
+
+const resolveRomIdentification = (
+  romInput: RomInputRowState,
+  patchIdentification: RomIdentificationState | undefined,
+): RomIdentificationState | undefined => {
+  if (romInput.info.identificationStatus === "matched") {
+    return { name: romInput.info.romInfo, status: "matched" };
+  }
+  if (patchIdentification?.status === "matched") return patchIdentification;
+  if (romInput.info.identificationStatus === "ambiguous" || patchIdentification?.status === "ambiguous") {
+    return { status: "ambiguous" };
+  }
+  return undefined;
+};
+
 /** Dependencies threaded into the ROM-row renderers. */
 type RomRowDeps = {
+  identificationStates: ReadonlyMap<string, RomIdentificationState>;
   romInputs: RomInputRowState[];
   verificationStates: Map<string, "bad" | "ok">;
   ui: PatcherUiController;
@@ -836,9 +883,30 @@ const renderRomCardMeta = (input: {
   return <StageStatus id={input.statusId} label={input.stageLabel} percent={input.percent} />;
 };
 
+const resolveRomCardState = (
+  verificationState: "bad" | "ok" | undefined,
+  identificationStatus: RomInputRowState["info"]["identificationStatus"],
+): "bad" | "ok" | "warn" | undefined => {
+  if (verificationState === "bad") return "bad";
+  if (identificationStatus === "ambiguous") return "warn";
+  if (verificationState === "ok" || identificationStatus === "matched") return "ok";
+  return undefined;
+};
+
+const renderRomIdentificationMeta = (identification: RomIdentificationState | undefined) => {
+  if (identification?.status !== "matched") return undefined;
+  return (
+    <span className="verdict ok">
+      <Check aria-hidden="true" />
+      Identified
+    </span>
+  );
+};
+
 const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomRowDeps): WorkflowRomInputStepItem => {
   const { romInputs, verificationStates, ui } = deps;
-  const state = verificationStates.get(romInput.id);
+  const identification = resolveRomIdentification(romInput, deps.identificationStates.get(romInput.id));
+  const state = resolveRomCardState(verificationStates.get(romInput.id), identification?.status);
   const { percent, staging, stagingPhase } = resolveRomStaging(romInput);
   // A container ROM extracts and checksums in one pass (Rust hashes inline), so it
   // sits in the "extract" phase throughout - show both verbs. Phase comes from the
@@ -871,12 +939,14 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         timing: TIMING_LABEL(romInput.decompressionTimeMs),
         typeLabel: romTypeTag,
       },
-      meta: renderRomCardMeta({
-        percent,
-        stageLabel,
-        staging,
-        statusId: `rom-weaver-progress-${stagingPhase}-${index}`,
-      }),
+      displayName: !staging && identification?.status === "matched" ? identification.name : undefined,
+      meta:
+        renderRomCardMeta({
+          percent,
+          stageLabel,
+          staging,
+          statusId: `rom-weaver-progress-${stagingPhase}-${index}`,
+        }) || renderRomIdentificationMeta(identification),
       onRemove: () => {
         if (romInputs.length === 1 && ui.clearRomInput) ui.clearRomInput();
         else ui.removeRomInput?.(romInput.id);
@@ -891,8 +961,6 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
           // Also while staging: the bundle already declares these, so they reserve their own group
           // (and read) before the hashes land instead of appearing with them.
           ...(expected ? { expected } : {}),
-          fileName: romInput.info.fileName,
-          lead: !staging && romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
           onToggle: () => ui.toggleRomInputChecksums?.(romInput.id),
           open: staging ? true : romInput.info.checksumsExpanded,
           pending: staging ? pendingGroups : undefined,
@@ -1677,6 +1745,7 @@ const resolveApplyActivity = (input: {
 const buildRomRowDeps = (input: {
   bundleRomExpectation: BundleRomExpectation | undefined;
   expectedRomChecks: ParsedBundleChecks | undefined;
+  identificationStates: ReadonlyMap<string, RomIdentificationState>;
   romInputs: RomInputRowState[];
   romVerificationStates: RomRowDeps["verificationStates"];
   singleRom: boolean;
@@ -1684,6 +1753,7 @@ const buildRomRowDeps = (input: {
 }): RomRowDeps => {
   const { expectedRomChecks, singleRom } = input;
   return {
+    identificationStates: input.identificationStates,
     romInputs: input.romInputs,
     ui: input.uiController,
     verificationStates: input.romVerificationStates,
@@ -1806,6 +1876,7 @@ function ApplyWorkflowFormView({
   const wovenSteps = running || applyDone;
 
   const romVerificationStates = buildRomVerificationStates(patches, romInputs, disabledPatchFlags);
+  const romIdentificationStates = buildRomIdentificationStates(patches, disabledPatchFlags);
   // Each ROM's computed identity, keyed by id, for patch-card check verification.
   // Disc-track rows are targeted by FILE NAME (their row id is not what the
   // target select resolves), so those alias their actuals under the file name too.
@@ -1823,6 +1894,7 @@ function ApplyWorkflowFormView({
   const romRowDeps = buildRomRowDeps({
     bundleRomExpectation,
     expectedRomChecks,
+    identificationStates: romIdentificationStates,
     romInputs,
     romVerificationStates,
     singleRom,

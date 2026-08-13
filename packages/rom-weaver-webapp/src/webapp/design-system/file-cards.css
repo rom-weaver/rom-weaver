@@ -34,7 +34,7 @@
 .rw-app .workflow-body.quiet .card {
   animation: none;
 }
-/* Only patch cards use verification borders. */
+/* Patch checks and ROM identification use these verdict borders. */
 .rw-app .card.ok {
   border-color: color-mix(in oklab, var(--verified) 42%, var(--seam));
 }

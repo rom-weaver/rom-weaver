@@ -705,6 +705,8 @@ const useLocalApplyPatchFormSession = ({
               info.checksumVariantPlan ?? patch.info?.checksumVariantPlan ?? existing.info.checksumVariantPlan,
             crc32: info.checksums?.crc32 ?? patch.info?.crc32 ?? existing.info.crc32,
             fileName,
+            identificationStatus:
+              info.identificationStatus ?? patch.info?.identificationStatus ?? existing.info.identificationStatus,
             md5: info.checksums?.md5 ?? patch.info?.md5 ?? existing.info.md5,
             romProbe: info.romProbe ?? patch.info?.romProbe ?? existing.info.romProbe,
             romInfo: info.romInfo ?? patch.info?.romInfo ?? existing.info.romInfo,

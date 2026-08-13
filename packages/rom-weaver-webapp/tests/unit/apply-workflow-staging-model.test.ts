@@ -54,6 +54,7 @@ describe("apply workflow staging model", () => {
       warnings: [],
     };
 
+    expect(toStagedInputInfos(input, [])[0]?.identificationStatus).toBe("matched");
     expect(toStagedInputInfos(input, [])[0]?.romInfo).toBe("Advance Wars (USA)");
   });
 

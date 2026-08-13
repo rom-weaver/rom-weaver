@@ -1,6 +1,6 @@
 import type { ChecksumMap, ChecksumVariant } from "./checksum.ts";
 
-type IdentifyStatus = "matched" | "ambiguous" | "unknown";
+export type IdentifyStatus = "matched" | "ambiguous" | "unknown";
 
 export type ParsedIdentifyTitleMatch = {
   algorithm: string;

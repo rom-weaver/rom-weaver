@@ -1,4 +1,5 @@
 import type { ChecksumRomProbe, ChecksumVariant, ChecksumVariantPlanEntry, RomTypeTag } from "../../types/checksum.ts";
+import type { IdentifyStatus } from "../../types/identify.ts";
 import type { JsonValue } from "../../types/runtime.ts";
 
 type StoreController<TState> = {
@@ -38,6 +39,7 @@ type RomInputInfoState = {
   /** Early variant reservation from Rust's `probe-variant-plan`, present during staging before the
    * checksums land, so the checks skeleton can reserve one group per eventual variant. */
   checksumVariantPlan?: ChecksumVariantPlanEntry[];
+  identificationStatus?: IdentifyStatus;
   romInfo: string;
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;

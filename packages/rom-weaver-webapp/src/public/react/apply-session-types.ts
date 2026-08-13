@@ -1,4 +1,5 @@
 import type { ChecksumVariant } from "../../types/checksum.ts";
+import type { IdentifyStatus } from "../../types/identify.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { ApplyPatchFormProps, ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
@@ -27,6 +28,7 @@ type StagedInputInfo = {
   checksums?: Record<string, string>;
   checksumVariants?: ChecksumVariant[];
   checksumVariantPlan?: RomInputRowState["info"]["checksumVariantPlan"];
+  identificationStatus?: IdentifyStatus;
   checksumTiming?: string;
   romProbe?: RomInputRowState["info"]["romProbe"];
   romType?: RomInputRowState["info"]["romType"];
@@ -49,6 +51,7 @@ type StagedInputInfo = {
   validationMessage?: string;
   validationState?: string;
   validationValues?: string[];
+  sourceTitles?: string[];
   checksumPreflightMismatch?: boolean;
   /** This patch's slice of the chain verification plan (drives the chain chip). */
   chainVerdict?: {

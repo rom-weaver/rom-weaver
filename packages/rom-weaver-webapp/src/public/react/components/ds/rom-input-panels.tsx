@@ -20,7 +20,6 @@ type RomInputInfoPanelProps = {
   /** Bundle-expected ROM checks, rendered as an "Expected" group with match marks. */
   expected?: SourceInfoExpectedChecks;
   extractTiming?: ExtractTiming;
-  fileName?: string;
   lead?: ReactNode;
   onToggle?: (open: boolean) => void;
   open?: boolean;
