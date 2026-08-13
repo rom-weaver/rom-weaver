@@ -9,10 +9,10 @@ describe("loadIdentifyPacks", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads the current index and addresses the selected pack by checksum", async () => {
+  it("loads the current index and addresses the selected self-hosted pack", async () => {
     const fetchMock = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
       const url = new URL(String(input));
-      if (url.pathname.endsWith("/index.json")) {
+      if (url.pathname.endsWith("identify-index.json")) {
         expect(init).toEqual({ cache: "no-cache" });
         return new Response(
           JSON.stringify({
@@ -31,7 +31,7 @@ describe("loadIdentifyPacks", () => {
         );
       }
 
-      expect(url.pathname).toMatch(/\/identify-data\/v1\/sega-32x\.pack$/);
+      expect(url.pathname).toMatch(/\/assets\/identify-sega-32x\.pack$/);
       expect(url.searchParams.get("sha256")).toBe(SHA256_ABC);
       return new Response(new TextEncoder().encode("abc"));
     });

@@ -18,7 +18,7 @@ type BrowserIdentifyPack = {
   platform: string;
 };
 
-const DATA_ROOT = "identify-data/v1/";
+const DATA_ROOT = "assets/identify-";
 const PLATFORM_BY_EXTENSION: Record<string, string[]> = {
   "32x": ["sega-32x"],
   a26: ["atari-2600"],

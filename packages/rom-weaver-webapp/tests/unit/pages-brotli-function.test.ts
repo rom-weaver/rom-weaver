@@ -59,6 +59,7 @@ describe("pages brotli sidecar function", () => {
   it.each([
     ["https://rom-weaver.com/assets/index-DXHhOtA-.js", "text/javascript; charset=utf-8"],
     ["https://rom-weaver.com/assets/index-DqvtWSeD.css", "text/css; charset=utf-8"],
+    ["https://rom-weaver.com/assets/identify-atari-2600.pack", "application/octet-stream"],
   ])("serves %s as %s", async (url, contentType) => {
     const { context } = makeContext({ url, sidecarResponse: brSidecar() });
     const response = await onRequestGet(context);

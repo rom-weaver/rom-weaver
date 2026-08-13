@@ -10,10 +10,7 @@ const headersFile = `/*
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
-/identify-data/v1/*.pack
-  Cache-Control: public, max-age=31536000, immutable
-
-/identify-data/v1/index.json
+/assets/identify-index.json
   Cache-Control: no-cache
 
 /cache-service-worker.js
@@ -45,8 +42,8 @@ describe("pages _headers matching", () => {
   });
 
   it("revalidates the identify index and keeps content-addressed packs immutable", () => {
-    expect(matchPagesHeaders(rules, "/identify-data/v1/index.json")["Cache-Control"]).toBe("no-cache");
-    expect(matchPagesHeaders(rules, "/identify-data/v1/sega-32x.pack")["Cache-Control"]).toBe(
+    expect(matchPagesHeaders(rules, "/assets/identify-index.json")["Cache-Control"]).toBe("no-cache");
+    expect(matchPagesHeaders(rules, "/assets/identify-sega-32x.pack")["Cache-Control"]).toBe(
       "public, max-age=31536000, immutable",
     );
   });

@@ -49,7 +49,7 @@ const PRECACHE_NAME = cacheNames.precache;
 const RUNTIME_CACHE_NAME = cacheNames.runtime;
 const EMULATORJS_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
-const IDENTIFY_CACHE_NAME = `${cacheNames.prefix}-${PRECACHE_ID}-identify-v1`;
+const IDENTIFY_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-identify-`;
 const SW_LOG_PREFIX = "[rom-weaver-sw]";
 // In-memory COEP mode. Volatile: resets to the credentialless default whenever the worker thread is
 // terminated and respawned (notably on mobile Safari). The durable copy below survives that so a page
@@ -127,18 +127,11 @@ const getAppBasePath = () => {
 const APP_BASE_PATH = getAppBasePath().replace(/\/?$/, "/");
 const EMULATORJS_MANIFEST_PATH = `${APP_BASE_PATH}emulatorjs/manifest.json`;
 const EMULATORJS_DATA_PATH_PREFIX = `${APP_BASE_PATH}emulatorjs/data/`;
-const IDENTIFY_DATA_PATH_PREFIX = `${APP_BASE_PATH}identify-data/v1/`;
 
 const isEmulatorJsAssetRequest = (request: Request, url: URL) =>
   request.method === "GET" &&
   isSameOriginRequest(url) &&
   (url.pathname === EMULATORJS_MANIFEST_PATH || url.pathname.startsWith(EMULATORJS_DATA_PATH_PREFIX));
-
-const isIdentifyAssetRequest = (request: Request, url: URL) =>
-  request.method === "GET" &&
-  isSameOriginRequest(url) &&
-  url.pathname.startsWith(IDENTIFY_DATA_PATH_PREFIX) &&
-  url.pathname.endsWith(".pack");
 
 const isManifestRequest = (request: Request, url: URL) =>
   request.destination === "manifest" || MANIFEST_PATH_REGEX.test(url.pathname);
@@ -277,21 +270,9 @@ const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
 
 registerRoute(({ request, url }) => isEmulatorJsAssetRequest(request, url), serveEmulatorJsAsset);
 
-const serveIdentifyAsset = async ({ request }: { request: Request }) => {
-  const cache = await caches.open(IDENTIFY_CACHE_NAME);
-  const cached = await cache.match(request);
-  if (cached) return cached;
-  const response = await fetch(request);
-  if (response.ok) await cache.put(request, response.clone());
-  return response;
-};
-
-registerRoute(({ request, url }) => isIdentifyAssetRequest(request, url), serveIdentifyAsset);
-
 logServiceWorker("script initialized", {
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsVersion: __EMULATORJS_VERSION__,
-  identifyCacheName: IDENTIFY_CACHE_NAME,
   coepCredentialless,
   precacheName: PRECACHE_NAME,
   precacheVersion: PRECACHE_VERSION,
@@ -299,7 +280,7 @@ logServiceWorker("script initialized", {
 });
 
 addPlugins([crossOriginIsolationPrecachePlugin]);
-precacheAndRoute(self.__WB_MANIFEST);
+precacheAndRoute(self.__WB_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
 self.addEventListener("install", () => {
@@ -324,6 +305,7 @@ self.addEventListener("activate", (event) => {
       .then((cacheNames) =>
         cacheNames.filter((cacheName) => {
           if (cacheName.startsWith(EMULATORJS_CACHE_PREFIX)) return cacheName !== EMULATORJS_CACHE_NAME;
+          if (cacheName.startsWith(IDENTIFY_CACHE_PREFIX)) return true;
           return cacheName.startsWith(`precache-${PRECACHE_ID}-`) && !cacheName.endsWith(`-${PRECACHE_VERSION}`);
         }),
       )

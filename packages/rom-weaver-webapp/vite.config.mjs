@@ -23,9 +23,14 @@ const rootDir = process.cwd();
 const SHARED_CHUNK_MIN_SIZE = 30_000;
 const repoRoot = path.resolve(rootDir, "../..");
 const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
+const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
 const identifyDataSources = Object.fromEntries(
-  fs.readdirSync(identifyDataDir).map((name) => [`/identify-data/v1/${name}`, path.join(identifyDataDir, name)]),
+  fs.readdirSync(identifyDataDir).map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
 );
+const identifyPrecacheEntries = identifyDataIndex.systems.map(({ file, sha256 }) => ({
+  revision: sha256,
+  url: `assets/identify-${file}`,
+}));
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
@@ -623,7 +628,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/identify-data/v1/*.pack\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/identify-data/v1/index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {
@@ -633,18 +638,15 @@ const writeCloudflareHeadersAsset = (channel) => {
   };
 };
 
-// Every webapp bundle carries quality-11 brotli sidecars for hashed assets
+// Every webapp bundle carries quality-11 brotli sidecars for immutable assets
 // where q11 saves at least 2%. Cloudflare's Pages Function uses _routes.json
 // to serve those exact URLs; Docker and self-hosters can serve the same static
 // siblings directly. Already-compressed formats (woff2, png, zip) fail the
-// savings bar and stay on the ordinary static path. Only /assets/* is eligible:
-// mutable root files (index.html, the service worker, changelog.json) must keep
-// their no-cache semantics and never route through the function's immutable
-// response.
+// savings bar and stay on the ordinary static path. Mutable root files (such
+// as index.html, the service worker, and changelog.json) stay off this path.
 const PAGES_BROTLI_MIN_SAVINGS = 0.02;
-// _routes.json rejects more than 100 combined include/exclude entries; leave
-// headroom so an asset-count creep fails the build before Cloudflare does.
-const PAGES_ROUTES_MAX_INCLUDES = 90;
+// _routes.json rejects more than 100 combined include/exclude entries.
+const PAGES_ROUTES_MAX_INCLUDES = 100;
 
 const writeBrotliSidecars = () => {
   let outDir = "dist";
@@ -677,6 +679,9 @@ const writeBrotliSidecars = () => {
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
       assertSidecarTypeIsKnown(sidecarUrls[0]);
       for (const name of fs.readdirSync(assetsDir)) {
+        // The identify index is mutable so a deployment can advertise a new
+        // pack set without an immutable sidecar masking the update.
+        if (name === "identify-index.json") continue;
         // `.map` sidecars are devtools-only: nothing on a normal page load
         // requests them, so a q11 pass and a _routes.json include each would
         // buy nothing and eat the include budget.
@@ -1191,7 +1196,8 @@ export default defineConfig(({ command, mode }) => {
         },
         filename: "cache-service-worker.ts",
         injectManifest: {
-          globIgnores: ["**/*.map"],
+          additionalManifestEntries: identifyPrecacheEntries,
+          globIgnores: ["**/*.map", "assets/identify-*.pack"],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:
             // offline, a route the user has not visited yet has nothing in the runtime
@@ -1210,10 +1216,9 @@ export default defineConfig(({ command, mode }) => {
             "apple-touch-icon.png",
             "hello-world.nes",
             "modified-world.nes",
-            "identify-data/v1/index.json",
+            "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm,pack}",
             "icon-maskable-192.png",
             "icon-maskable-512.png",
-            "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
           ],
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         },

@@ -14,6 +14,9 @@ import {
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const distDir = path.join(packageDir, "dist");
+const identifyDataIndex = JSON.parse(
+  fs.readFileSync(path.resolve(packageDir, "../../crates/rom-weaver-cli/data/identify/v1/index.json"), "utf8"),
+);
 const channel = process.env.ROM_WEAVER_CHANNEL || "prod";
 const production = channel === "prod";
 const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
@@ -63,12 +66,7 @@ assertIncludes(
 );
 assertIncludes(
   headers,
-  "/identify-data/v1/*.pack\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable",
-  "identify pack cache headers",
-);
-assertIncludes(
-  headers,
-  "/identify-data/v1/index.json\n  ! Cache-Control\n  Cache-Control: no-cache",
+  "/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache",
   "identify index cache headers",
 );
 assertIncludes(
@@ -347,7 +345,16 @@ if (production) {
 // generated manifest is on disk.
 const precacheManifest = read("cache-service-worker.js");
 assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
-assertIncludes(precacheManifest, '"identify-data/v1/index.json"', "identify index precache entry");
+assertIncludes(precacheManifest, '"assets/identify-index.json"', "identify index precache entry");
+assertIncludes(precacheManifest, '"assets/identify-atari-2600.pack"', "identify pack precache entry");
+for (const system of identifyDataIndex.systems) {
+  assertIncludes(
+    precacheManifest,
+    `"revision":"${system.sha256}","url":"assets/identify-${system.file}"`,
+    `${system.file} identify pack revision`,
+  );
+}
+assertIncludes(read("_routes.json"), '"/assets/identify-atari-2600.pack"', "identify pack Brotli route");
 for (const slug of [...DOC_ROUTES.map((route) => route.slug), "apply", "create", "identify", "tools", "trim"]) {
   assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);
 }
