@@ -147,7 +147,7 @@ test("bundle-renamed patch keeps its source file in the Files drawer", async () 
     .toContain("change.ips");
 });
 
-test("bundle-expected ROM name and checks fold into the staged ROM card with match marks", async () => {
+test("bundle-expected ROM checks fold into the staged ROM card without a name row", async () => {
   const [romFile, bundleArchive] = await Promise.all([
     loadFixtureFile(RAW_ROM),
     buildWithoutRomBundle({ romCrc32: ROM_CRC32, romName: "GAME.BIN" }),
@@ -160,8 +160,8 @@ test("bundle-expected ROM name and checks fold into the staged ROM card with mat
   const expectedGroup = () => document.getElementById("rom-weaver-rom-expected-checks");
   await waitForState(expectedGroup, 30000);
   expect(expectedGroup().textContent).toContain("Expected");
-  expect(expectedGroup().textContent).toContain("GAME.BIN");
   expect(expectedGroup().textContent).toContain(ROM_CRC32);
+  expect(expectedGroup().textContent).not.toContain("GAME.BIN");
   // The matching ROM earns the per-row verified mark once its hash lands.
   await expect.poll(() => !!expectedGroup()?.querySelector(".ck-mark.ok"), { timeout: 30000 }).toBe(true);
   expect(expectedGroup().querySelector(".ck-mark.bad")).toBeNull();
@@ -178,11 +178,10 @@ test("a mismatching ROM flags the expected rows", async () => {
   const expectedGroup = () => document.getElementById("rom-weaver-rom-expected-checks");
   await waitForState(expectedGroup, 30000);
   await expect.poll(() => !!expectedGroup()?.querySelector(".ck-mark.bad"), { timeout: 30000 }).toBe(true);
-  // The filename can match even when the checksum does not.
-  expect(expectedGroup().querySelector(".ck-mark.ok")).not.toBeNull();
+  expect(expectedGroup().querySelector(".ck-mark.ok")).toBeNull();
 });
 
-test("a ROM name mismatch warns without blocking weave", async () => {
+test("a bundle ROM name does not appear in Checks or block weave", async () => {
   const [romFile, bundleArchive] = await Promise.all([
     loadFixtureFile(RAW_ROM),
     buildWithoutRomBundle({ romCrc32: ROM_CRC32, romName: "expected.bin" }),
@@ -191,9 +190,9 @@ test("a ROM name mismatch warns without blocking weave", async () => {
 
   await waitForApplyButtonEnabled();
   const expectedGroup = await waitForState(() => document.getElementById("rom-weaver-rom-expected-checks"), 30000);
-  expect(expectedGroup.textContent).toContain("expected.bin");
-  expect(expectedGroup.querySelector(".ck-mark.bad")).not.toBeNull();
-  expect(document.querySelector(".expected-mismatch-info")).not.toBeNull();
+  expect(expectedGroup.textContent).not.toContain("expected.bin");
+  expect(expectedGroup.querySelector(".ck-mark.bad")).toBeNull();
+  expect(document.querySelector(".expected-mismatch-info")).toBeNull();
   expect(document.getElementById("rom-weaver-button-apply")?.disabled).toBe(false);
 });
 
