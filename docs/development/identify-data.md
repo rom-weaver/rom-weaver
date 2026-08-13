@@ -2,7 +2,7 @@
 
 The `identify` and `ingest` commands use compact RWFP1 title packs. The native CLI embeds the shipped packs.
 
-The browser downloads applicable packs when it ingests a ROM or patch. It then caches the packs for later offline use.
+The browser receives all shipped packs in the app's offline cache. The packs are self-hosted Brotli assets.
 
 Ingest resolves ROM assets from their computed checksum variants. It also resolves a patch's expected source from embedded or file-name checksums. It does not hash the ROM or patch twice.
 
@@ -26,7 +26,7 @@ Rebuild all shipped packs:
 ```bash
 script=scripts/build-hasheous-identify-index.mjs
 out=crates/rom-weaver-cli/data/identify/v1
-node "$script" --opengood-only --no-brotli --out "$out"
+node "$script" --opengood-only --out "$out"
 ```
 
 Run the command a second time. Confirm that `git diff` shows no pack changes.
