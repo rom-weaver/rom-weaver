@@ -85,7 +85,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.bundleExport.shareDescription": msg({
     id: "ui.bundleExport.shareDescription",
-    message: "Exporting a recipe does not apply patches. It saves this patch setup for someone else to run.",
+    message: "Save this setup for someone else to run.",
   }),
   "ui.bundleExport.share": msg({ id: "ui.bundleExport.share", message: "Share bundle" }),
   "ui.bundleExport.shareTitle": msg({ id: "ui.bundleExport.shareTitle", message: "Share this setup" }),

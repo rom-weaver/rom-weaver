@@ -703,7 +703,7 @@ describe("apply workflow view - bundle controls", () => {
 
     expect(container.querySelector("#rom-weaver-button-export-bundle")?.textContent).toContain("Share bundle");
     expect(container.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
-    expect(container.querySelector(".bundle-rom-option .notice")?.textContent).toContain("right to distribute it");
+    expect(container.querySelector(".bundle-rom-warning .notice")?.textContent).toContain("right to distribute it");
   });
 
   it("keeps bundle settings out of ordinary Apply options", () => {
@@ -752,7 +752,7 @@ describe("apply workflow view - bundle controls", () => {
 
     const job = container.querySelector("#rom-weaver-bundle-job");
     expect(job?.textContent).toContain("Share this setup");
-    expect(job?.textContent).toContain("Exporting a recipe does not apply patches");
+    expect(job?.textContent).toContain("Save this setup for someone else to run.");
     expect(container.querySelector("#rom-weaver-button-apply")?.compareDocumentPosition(job || container)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );

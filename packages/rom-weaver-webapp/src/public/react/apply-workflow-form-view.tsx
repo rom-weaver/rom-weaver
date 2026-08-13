@@ -1521,10 +1521,12 @@ const BundleOutputFields = ({
           />
           <span>{localizer.message("ui.bundleExport.includeRom")}</span>
         </label>
-        {bundleExport.bundleRom ? (
-          <Notice level="warn">{localizer.message("ui.bundleExport.romDistributionWarning")}</Notice>
-        ) : null}
       </div>
+      {bundleExport.bundleRom ? (
+        <div className="bundle-rom-warning">
+          <Notice level="warn">{localizer.message("ui.bundleExport.romDistributionWarning")}</Notice>
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -167,14 +167,9 @@
   .rw-app .bundle-rom-expectation {
     margin-block-start: 9px;
   }
-  /* The bundle card has two independent choices. Keep them in one column on
-     phones so the ROM toggle does not compete with the archive selector for
-     the same narrow row. */
+  /* Keep the bundle choices in one compact row on phones. */
   .rw-app .bundle-job-fields {
-    grid-template-columns: 1fr;
-  }
-  .rw-app .bundle-rom-option {
-    border-block-start: 1px solid var(--seam-soft);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .rw-app .bundle-rom-option .checkrow {
     margin-block: 0;

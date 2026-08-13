@@ -58,7 +58,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(document.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
   expect(document.getElementById("rom-weaver-bundle-job")?.textContent).toContain("Share this setup");
   expect(document.getElementById("rom-weaver-bundle-job")?.textContent).toContain(
-    "Exporting a recipe does not apply patches",
+    "Save this setup for someone else to run.",
   );
   expect(formatSelect.value).toBe("zip");
   expect(Array.from(formatSelect.options, (option) => option.textContent)).toEqual(["ZIP (.zip)", "7z (.7z)"]);

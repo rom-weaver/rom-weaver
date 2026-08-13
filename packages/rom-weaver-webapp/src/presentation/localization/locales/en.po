@@ -311,7 +311,7 @@ msgstr "expects patch {n} first"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.shareDescription"
-msgstr "Exporting a recipe does not apply patches. It saves this patch setup for someone else to run."
+msgstr "Save this setup for someone else to run."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
