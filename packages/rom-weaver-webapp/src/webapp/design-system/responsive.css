@@ -104,10 +104,9 @@
     line-height: 1.35;
   }
   .rw-app .fname .outformat {
-    width: min(38%, 9rem);
-    max-width: 9rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex: 0 1 auto;
+    width: fit-content;
+    max-width: 50%;
     white-space: nowrap;
   }
   .rw-app .patch-description-field .popt-input {

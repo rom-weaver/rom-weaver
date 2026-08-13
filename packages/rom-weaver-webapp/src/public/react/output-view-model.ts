@@ -183,9 +183,9 @@ const getOutputOptionExtension = (option: OutputOption, source?: GeneratedOutput
 const getApplyOutputLabel = (option: OutputOption, source?: GeneratedOutputSource) => {
   const extension = getOutputOptionExtension(option, source);
   if (option.value === "none") return extension ? `Raw ROM (.${extension})` : "Raw ROM";
-  if (option.value === "7z") return "Smallest 7z download";
+  if (option.value === "7z") return "Smallest 7z";
   const formatName = APPLY_OUTPUT_FORMAT_NAMES[option.value] || option.label.replace(/^\./, "").toUpperCase();
-  const label = ["chd", "rvz", "z3ds"].includes(option.value) ? formatName : `Smaller ${formatName} download`;
+  const label = ["chd", "rvz", "z3ds"].includes(option.value) ? formatName : `Smaller ${formatName}`;
   return extension ? `${label} (.${extension})` : label;
 };
 
