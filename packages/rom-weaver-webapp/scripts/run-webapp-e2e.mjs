@@ -651,7 +651,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Bundle ${step}/4`);
       if (step === 4) {
-        const createBundleButton = page.getByRole("button", { name: "Create ZIP Bundle", exact: true });
+        const createBundleButton = page.getByRole("button", { name: "Share bundle", exact: true });
         await createBundleButton.waitFor({ state: "visible", timeout: 60_000 });
         await page.waitForFunction(
           () => {

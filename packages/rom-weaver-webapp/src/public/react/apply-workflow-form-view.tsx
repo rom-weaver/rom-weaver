@@ -376,8 +376,8 @@ const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     title: "Choose a safe bundle",
   },
   {
-    actions: [["package", "Create ZIP Bundle"]],
-    body: "Exporting a recipe does not apply patches. Press Create ZIP Bundle to check and download the setup; the same control then becomes Download ZIP Bundle.",
+    actions: [["package", "Share bundle"]],
+    body: "Exporting a recipe does not apply patches. Press Share bundle to check and download the setup; the same control then becomes Download ZIP Bundle.",
     cta: "#rom-weaver-button-export-bundle",
     placement: "top",
     target: "#rom-weaver-bundle-job",
@@ -1841,7 +1841,7 @@ function ApplyWorkflowFormView({
       visible={header.visible}
     />
   );
-  // "Create <format> [ROM] Bundle" until an export exists, then "Download ...".
+  // "Share bundle" until an export exists, then "Download ...".
   const bundleCreateLabel = getBundleActionLabel(bundleExport, localizer, false);
   const bundleActionLabel = bundleExport?.downloadable
     ? getBundleActionLabel(bundleExport, localizer, true)
