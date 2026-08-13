@@ -2112,7 +2112,7 @@ function ApplyWorkflowFormView({
             fault={applyFailed}
             fileName={outputState.displayFileName}
             fileNameId="rom-weaver-input-output-file-name"
-            fileNamePlaceholder="Output filename (no extension)"
+            fileNamePlaceholder="Output filename"
             format={outputState.compressionFormat}
             formatId="rom-weaver-select-output-format"
             formatOptions={createApplyOutputOptions(outputState.options)}
@@ -2121,7 +2121,7 @@ function ApplyWorkflowFormView({
               <InfoPopover title="Output options">
                 <strong>Output</strong>
                 <ul>
-                  <li>Set the filename without an extension - the format selector controls it.</li>
+                  <li>Set the filename. The format selector controls its extension.</li>
                   <li>Container formats (zip, 7z, chd, rvz) are produced directly.</li>
                   <li>Compression defaults come from Settings › Compression and apply to compressed output.</li>
                 </ul>

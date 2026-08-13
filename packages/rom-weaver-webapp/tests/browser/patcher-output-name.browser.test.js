@@ -80,13 +80,13 @@ test("removing a patch refreshes generated output name", async () => {
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
 
   await waitForApplyButtonEnabled();
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game [change]");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game [change].bin");
 
   const removePatchButton = document.querySelector("button[aria-label='Remove patch']");
   if (!(removePatchButton instanceof HTMLButtonElement)) throw new Error("Missing remove patch button");
   removePatchButton.click();
 
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game.bin");
 });
 
 test("removing an input refreshes generated output name", async () => {
@@ -133,13 +133,13 @@ test("removing an input refreshes generated output name", async () => {
       timeout: 30000,
     })
     .toBe(2);
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game.zip");
 
   const removeInputButton = document.querySelector("button[aria-label='Remove ROM input']");
   if (!(removeInputButton instanceof HTMLButtonElement)) throw new Error("Missing remove ROM input button");
   removeInputButton.click();
 
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("second");
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("second.zip");
 });
 
 test("editing output name after download is ready resets the prepared output", async () => {

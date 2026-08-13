@@ -71,7 +71,7 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
     const patches = [source("a.ips"), source("b.ips")];
     const disabledPatchIds = new Set([getBinarySourceListStableIds(patches)[1]]);
     const { result } = renderSession({ disabledPatchIds, patches });
-    expect(result.current.localOutputController.getState().displayFileName).toBe("rom [a]");
+    expect(result.current.localOutputController.getState().displayFileName).toBe("rom [a].zip");
     expect(result.current.localStackController.getState().items).toHaveLength(2);
   });
 
@@ -89,7 +89,7 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
       patches,
       settings: { output: { outputName: "custom" } },
     } as LocalApplyPatchFormSessionOptions);
-    expect(result.current.localOutputController.getState().displayFileName).toBe("custom");
+    expect(result.current.localOutputController.getState().displayFileName).toBe("custom.zip");
   });
 
   it("routes a compression change through onSettingsChange", () => {

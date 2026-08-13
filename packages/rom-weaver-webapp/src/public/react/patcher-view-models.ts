@@ -1,9 +1,10 @@
 import type { CompressionFormat } from "../../types/settings.ts";
+import { getFileNameExtension } from "../../lib/path-utils.ts";
 import { isCompressedInputFileName } from "./apply-session-inputs.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { buildCompressPanel } from "./compress-options.ts";
 import { getBinarySourceFileName, getBinarySourceSize, toApplyButtonProgress } from "./input-session-helpers.ts";
-import type { OutputOption } from "./output-view-model.ts";
+import { getOutputFileNameForFormat, type OutputOption } from "./output-view-model.ts";
 import type { ApplyPatchFormSettings, BinarySource, StackPatchItem } from "./patcher-form.ts";
 import { formatDownloadCompressionRatio } from "./patcher-form-session-utils.ts";
 import type { createOutputSizeSummary } from "./patcher-presentation.ts";
@@ -244,7 +245,14 @@ const buildOutputViewState = ({
   compressionFormat: displayedCompression,
   compressTiming: compressTimingText,
   disabled: disabled || busy,
-  displayFileName: outputNameEdited ? outputName : effectiveResolvedOutputName,
+  displayFileName:
+    outputNameEdited && getFileNameExtension(outputName)
+      ? outputName
+      : getOutputFileNameForFormat(
+          outputNameEdited ? outputName : effectiveResolvedOutputName,
+          displayedCompression,
+          outputOptions,
+        ),
   downloadSummary: hasPendingDownload
     ? {
         format: selectedOutputOptionLabel || displayedCompression?.toUpperCase() || undefined,

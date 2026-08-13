@@ -180,13 +180,11 @@ const getOutputOptionExtension = (option: OutputOption, source?: GeneratedOutput
   return getOutputOptionExtensionLabel(option.value, source).replace(/^\./, "").toLowerCase();
 };
 
-const getApplyOutputLabel = (option: OutputOption, source?: GeneratedOutputSource) => {
-  const extension = getOutputOptionExtension(option, source);
-  if (option.value === "none") return extension ? `Raw ROM (.${extension})` : "Raw ROM";
-  if (option.value === "7z") return "Smallest 7z";
+const getApplyOutputLabel = (option: OutputOption) => {
+  if (option.value === "none") return "Raw ROM";
+  if (option.value === "7z") return "Small 7z";
   const formatName = APPLY_OUTPUT_FORMAT_NAMES[option.value] || option.label.replace(/^\./, "").toUpperCase();
-  const label = ["chd", "rvz", "z3ds"].includes(option.value) ? formatName : `Smaller ${formatName}`;
-  return extension ? `${label} (.${extension})` : label;
+  return ["chd", "rvz", "z3ds"].includes(option.value) ? formatName : `Small ${formatName}`;
 };
 
 const createApplyOutputOptions = (
@@ -196,7 +194,7 @@ const createApplyOutputOptions = (
   compressionOptions
     .flatMap((option) => (typeof option === "string" ? createOutputOptions([option], source) : [option]))
     .map((option) => ({
-      label: getApplyOutputLabel(option, source),
+      label: getApplyOutputLabel(option),
       value: option.value,
     }));
 
@@ -235,10 +233,13 @@ const getOutputFileNameForFormat = (
     source,
   }: { fallbackExtension?: string; rawExtensions?: readonly string[]; source?: GeneratedOutputSource } = {},
 ) => {
-  if (!getOutputFormatForFileName(fileName, options, { rawExtensions })) return fileName;
+  const currentExtension = getFileNameExtension(fileName);
+  if (!fileName.trim() || (currentExtension && !getOutputFormatForFileName(fileName, options, { rawExtensions })))
+    return fileName;
   const nextOption = options.find((option) => option.value === format);
   const nextExtension = nextOption ? getOutputOptionExtension(nextOption, source) || fallbackExtension : "";
-  return nextExtension ? replaceFileNameExtension(fileName, nextExtension) : fileName;
+  if (!nextExtension) return fileName;
+  return currentExtension ? replaceFileNameExtension(fileName, nextExtension) : `${fileName}.${nextExtension}`;
 };
 
 const getCreatePatchFormatForFileName = (fileName: string | null | undefined, options: readonly OutputOption[]) => {

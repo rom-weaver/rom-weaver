@@ -178,17 +178,17 @@ test("archive compression appends archive extension after explicit rom extension
 
 test("apply output options preserve configured compression order and labels", () => {
   expect(createApplyOutputOptions(["none", "zip", "7z"], { fileName: "game.gba" })).toEqual([
-    { label: "Raw ROM (.gba)", value: "none" },
-    { label: "Smaller ZIP (.zip)", value: "zip" },
-    { label: "Smallest 7z", value: "7z" },
+    { label: "Raw ROM", value: "none" },
+    { label: "Small ZIP", value: "zip" },
+    { label: "Small 7z", value: "7z" },
   ]);
 });
 
 test("apply output options label unknown uncompressed output as none", () => {
   expect(createApplyOutputOptions(["none", "zip", "7z"])).toEqual([
     { label: "Raw ROM", value: "none" },
-    { label: "Smaller ZIP (.zip)", value: "zip" },
-    { label: "Smallest 7z", value: "7z" },
+    { label: "Small ZIP", value: "zip" },
+    { label: "Small 7z", value: "7z" },
   ]);
 });
 
@@ -201,10 +201,10 @@ test("apply output options name disc containers", () => {
       { label: ".zcci", value: "z3ds" },
     ]),
   ).toEqual([
-    { label: "Raw ROM (.gba)", value: "none" },
-    { label: "CHD disc image (.chd)", value: "chd" },
-    { label: "RVZ disc image (.rvz)", value: "rvz" },
-    { label: "Z3DS image (.zcci)", value: "z3ds" },
+    { label: "Raw ROM", value: "none" },
+    { label: "CHD disc image", value: "chd" },
+    { label: "RVZ disc image", value: "rvz" },
+    { label: "Z3DS image", value: "z3ds" },
   ]);
 });
 
@@ -218,6 +218,7 @@ test("output extension matching selects formats and warns on unknown extensions"
   expect(getOutputExtensionWarning("game.zip", options)).toBeNull();
   expect(getOutputExtensionWarning("game.bad", options)).toContain(".bad");
   expect(getOutputFileNameForFormat("game.zip", "none", options, { rawExtensions: ["sfc"] })).toBe("game.gba");
+  expect(getOutputFileNameForFormat("game", "zip", options)).toBe("game.zip");
   expect(
     getOutputFileNameForFormat("patch.bps", "xdelta", [
       { label: ".bps", value: "bps" },
