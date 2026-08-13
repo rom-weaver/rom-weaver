@@ -1244,19 +1244,10 @@ const useLocalApplyPatchFormSession = ({
           rawExtensions: ROM_FILE_EXTENSIONS,
         });
         clearDismissibleErrors();
+        invalidateCompletedOutputState();
         setOutputName(value);
         setOutputNameEdited(!!nextOutputName);
         if (inferredCompression) setOutputCompressionEdited(true);
-        if (pendingDownloadResultRef.current && hasPendingDownload) {
-          setPendingDownloadReadyFileName(
-            resolvePendingDownloadFileName({
-              automaticOutputName: automaticResolvedOutputName,
-              fallbackOutputName: effectiveResolvedOutputName,
-              requestedOutputName: nextOutputName,
-              resultOutputName: pendingDownloadResultRef.current.output.fileName,
-            }),
-          );
-        }
         commitSettings({
           ...activeSettings,
           output: {
@@ -1274,16 +1265,6 @@ const useLocalApplyPatchFormSession = ({
         if (nextOutputName !== outputName) {
           setOutputName(nextOutputName);
           setOutputNameEdited(!!getRequestedOutputName(nextOutputName));
-        }
-        if (nextOutputName !== outputName && pendingDownloadResultRef.current && hasPendingDownload) {
-          setPendingDownloadReadyFileName(
-            resolvePendingDownloadFileName({
-              automaticOutputName: automaticResolvedOutputName,
-              fallbackOutputName: effectiveResolvedOutputName,
-              requestedOutputName: getRequestedOutputName(nextOutputName),
-              resultOutputName: pendingDownloadResultRef.current.output.fileName,
-            }),
-          );
         }
         updateSettings({
           ...activeSettings,
@@ -1310,15 +1291,12 @@ const useLocalApplyPatchFormSession = ({
     [
       activeSettings,
       applyDownloadOrchestration,
-      automaticResolvedOutputName,
       clearDismissibleErrors,
       commitSettings,
-      effectiveResolvedOutputName,
-      hasPendingDownload,
+      invalidateCompletedOutputState,
       localOutputStoreController,
       outputOptions,
       outputName,
-      setPendingDownloadReadyFileName,
       setOutputName,
       setOutputNameEdited,
       updateSettings,

@@ -142,7 +142,7 @@ test("removing an input refreshes generated output name", async () => {
   await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("second");
 });
 
-test("editing output name after download is ready keeps the prepared output", async () => {
+test("editing output name after download is ready resets the prepared output", async () => {
   const downloadNames = [];
   const downloadBlobTypes = [];
   let applyCompleteCount = 0;
@@ -191,13 +191,13 @@ test("editing output name after download is ready keeps the prepared output", as
 
     await expect
       .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
-      .toContain("Download");
+      .toContain("Apply & download");
 
     await clickApplyButton();
 
     await expect.poll(() => downloadNames.at(-1)).toBe("renamed-output.bin");
     expect(downloadBlobTypes.at(-1)).toBe("application/octet-stream");
-    expect(applyCompleteCount).toBe(1);
+    expect(applyCompleteCount).toBe(2);
   } finally {
     HTMLAnchorElement.prototype.click = originalAnchorClick;
     URL.createObjectURL = originalCreateObjectUrl;

@@ -237,6 +237,36 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
     });
   });
 
+  it("resets the completed apply when the output name changes", async () => {
+    const { result } = renderSession();
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeTruthy());
+
+    act(() => result.current.localOutputController.setDisplayFileName("renamed"));
+
+    await waitFor(() => {
+      expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull();
+      expect(result.current.localOutputController.getState().applyButton.label).toBe("Apply & download");
+    });
+  });
+
+  it("resets the completed apply when the output type changes", async () => {
+    const { result } = renderSession();
+    await act(async () => {
+      await result.current.localOutputController.runPrimaryAction();
+    });
+    await waitFor(() => expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeTruthy());
+
+    act(() => result.current.localOutputController.setOutputCompression("7z"));
+
+    await waitFor(() => {
+      expect(result.current.localOutputController.getState().pendingDownloadFileName).toBeNull();
+      expect(result.current.localOutputController.getState().applyButton.label).toBe("Apply & download");
+    });
+  });
+
   it("invalidates a completed output without applying when patch enablement changes", async () => {
     const patches = [source("a.ips"), source("b.ips")];
     const initialDisabledPatchIds = new Set<string>();

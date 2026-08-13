@@ -139,7 +139,7 @@ const OutputCard = ({
           <span className="sep" />
           <select
             aria-label={formatLabel}
-            className="select mono"
+            className="select mono outformat"
             disabled={disabled}
             id={formatId}
             onChange={(event) => onFormatChange(event.currentTarget.value)}
