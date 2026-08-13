@@ -1,4 +1,5 @@
 import type { ChecksumRomProbe, ChecksumVariant, RomTypeTag } from "../../types/checksum.ts";
+import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type { WorkflowKind, WorkflowProgress, WorkflowProgressRole } from "../../types/progress.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -90,6 +91,16 @@ const cloneChecksumRomProbe = (romProbe: ChecksumRomProbe | undefined): Checksum
 const cloneRomType = (romType: RomTypeTag | undefined): RomTypeTag | undefined =>
   romType ? { ...romType } : undefined;
 
+const cloneIdentification = (
+  identification: ParsedIdentifyResolution | undefined,
+): ParsedIdentifyResolution | undefined =>
+  identification
+    ? {
+        matches: identification.matches.map((match) => ({ ...match })),
+        status: identification.status,
+      }
+    : undefined;
+
 const cloneChecksumVariants = (variants: ChecksumVariant[] | undefined): ChecksumVariant[] | undefined =>
   variants?.map((variant) => ({
     ...variant,
@@ -108,6 +119,15 @@ const getPatchFilePrecomputedChecksumVariants = (
 const getPatchFilePrecomputedRomType = (file: PatchFileInstance | undefined): RomTypeTag | undefined => {
   const romType = (file as (PatchFileInstance & { romType?: unknown }) | undefined)?.romType;
   return romType && typeof romType === "object" ? cloneRomType(romType as RomTypeTag) : undefined;
+};
+
+const getPatchFilePrecomputedIdentification = (
+  file: PatchFileInstance | undefined,
+): ParsedIdentifyResolution | undefined => {
+  const identification = (file as (PatchFileInstance & { identification?: unknown }) | undefined)?.identification;
+  return identification && typeof identification === "object"
+    ? cloneIdentification(identification as ParsedIdentifyResolution)
+    : undefined;
 };
 
 // Elapsed time of a precomputed checksum produced OUTSIDE an extract (a bare ROM checksummed in place
@@ -141,6 +161,7 @@ const calculateStandardInputChecksumsForFile = async ({
   workflow,
 }: StandardChecksumOptions): Promise<{
   checksums: StandardWorkflowChecksums;
+  identification?: ParsedIdentifyResolution;
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
   variants?: ChecksumVariant[];
@@ -189,6 +210,7 @@ const calculateStandardInputChecksumsForFile = async ({
   }
   return {
     checksums,
+    identification: cloneIdentification(asset?.identification),
     romProbe: undefined,
     romType: romTypeFromEmittedFile({
       discFormat: asset?.discFormat,
@@ -204,6 +226,7 @@ export {
   calculateStandardInputChecksumsForFile,
   cloneChecksumRomProbe,
   cloneChecksumVariants,
+  cloneIdentification,
   cloneRomType,
   getAssetDecompressionTimeMs,
   getAssetParentCompressions,
@@ -212,5 +235,6 @@ export {
   getPatchFilePrecomputedChecksumMs,
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
+  getPatchFilePrecomputedIdentification,
   getPatchFilePrecomputedRomType,
 };

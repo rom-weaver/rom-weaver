@@ -23,6 +23,18 @@ describe("parseIngestResult", () => {
             checksums: { CRC32: "deadbeef" },
             copied_in_place: true,
             file_name: "game.gba",
+            identification: {
+              matches: [
+                {
+                  algorithm: "sha1",
+                  database: "nintendo-game-boy-advance.pack",
+                  name: "Game (USA)",
+                  platform: "Game Boy Advance",
+                  variant: "raw",
+                },
+              ],
+              status: "matched",
+            },
             kind: "rom",
             path: "/work/game.gba",
             platform: "Game Boy Advance",
@@ -46,6 +58,18 @@ describe("parseIngestResult", () => {
     expect(asset?.copiedInPlace).toBe(true);
     expect(asset?.kind).toBe("rom");
     expect(asset?.platform).toBe("Game Boy Advance");
+    expect(asset?.identification).toEqual({
+      matches: [
+        {
+          algorithm: "sha1",
+          database: "nintendo-game-boy-advance.pack",
+          name: "Game (USA)",
+          platform: "Game Boy Advance",
+          variant: "raw",
+        },
+      ],
+      status: "matched",
+    });
     expect(asset?.checksums).toEqual({ crc32: "deadbeef" });
     expect(asset?.checksumVariants[0]?.id).toBe("raw");
   });
@@ -84,6 +108,43 @@ describe("parseIngestResult", () => {
     expect(asset?.checksumMs).toBeUndefined();
   });
 
+  it("keeps valid compact lookup states and drops a malformed state", () => {
+    const makeAsset = (path: string, identification: unknown) => ({
+      checksum_variants: [],
+      checksums: {},
+      copied_in_place: true,
+      file_name: path,
+      identification,
+      path: `/work/${path}`,
+      size_bytes: 1,
+    });
+    const match = {
+      algorithm: "md5",
+      database: "test.pack",
+      name: "Test ROM",
+      platform: "Test System",
+      variant: "raw",
+    };
+    const parsed = parseIngestResult({
+      ingest: {
+        assets: [
+          makeAsset("unknown.bin", { matches: [], status: "unknown" }),
+          makeAsset("ambiguous.bin", { matches: [match, { ...match, name: "Other ROM" }], status: "ambiguous" }),
+          makeAsset("malformed.bin", { matches: [match], status: "invalid" }),
+        ],
+        is_rom: true,
+        kind: "rom",
+        patches: [],
+        source_file_name: "roms.zip",
+      },
+    });
+
+    expect(parsed?.assets[0]?.identification).toEqual({ matches: [], status: "unknown" });
+    expect(parsed?.assets[1]?.identification?.status).toBe("ambiguous");
+    expect(parsed?.assets[1]?.identification?.matches).toHaveLength(2);
+    expect(parsed?.assets[2]?.identification).toBeUndefined();
+  });
+
   it("coerces a patch source descriptor with embedded metadata", () => {
     const parsed = parseIngestResult({
       ingest: {
@@ -99,6 +160,19 @@ describe("parseIngestResult", () => {
             leaf_path: "/work/hack.bps",
             size_bytes: 2048,
             source_crc32: 305419896,
+            source_identification: {
+              matches: [
+                {
+                  algorithm: "crc32",
+                  database: "nintendo-game-boy-advance.pack",
+                  name: "Game (USA)",
+                  platform: "Game Boy Advance",
+                  variant: "source",
+                },
+              ],
+              status: "matched",
+            },
+            source_checksum_variants: [{ MD5: "1234567890abcdef1234567890abcdef" }],
             target_size: 8388608,
           },
         ],
@@ -117,5 +191,8 @@ describe("parseIngestResult", () => {
     expect(patch?.sourceCrc32).toBe(305419896);
     expect(patch?.targetSize).toBe(8388608);
     expect(patch?.filenameChecksums).toEqual({ crc32: "abcd1234" });
+    expect(patch?.sourceIdentification?.status).toBe("matched");
+    expect(patch?.sourceIdentification?.matches[0]?.variant).toBe("source");
+    expect(patch?.sourceChecksumVariants).toEqual([{ md5: "1234567890abcdef1234567890abcdef" }]);
   });
 });

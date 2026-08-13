@@ -27,6 +27,7 @@ type PatchProbeRequirements = {
   patchCrc32?: string;
   recordCount?: number;
   sourceCrc32?: string;
+  sourceTitles?: string[];
   sourceSize?: number;
   targetCrc32?: string;
   targetSize?: number;
@@ -151,6 +152,9 @@ const patchProbeRequirementsFromDescriptor = (
   const targetCrc32 = toOptionalCrc32Hex(descriptor.targetCrc32);
   const patchCrc32 = toOptionalCrc32Hex(descriptor.patchCrc32);
   const filenameCrc32 = toOptionalCrc32Hex(descriptor.filenameChecksums?.crc32);
+  const sourceTitles = [
+    ...new Set(descriptor.sourceIdentification?.matches.map((match) => match.name.trim()).filter(Boolean) || []),
+  ];
   if (
     !(
       format ||
@@ -160,7 +164,8 @@ const patchProbeRequirementsFromDescriptor = (
       sourceCrc32 ||
       targetCrc32 ||
       patchCrc32 ||
-      filenameCrc32
+      filenameCrc32 ||
+      sourceTitles.length
     )
   )
     return undefined;
@@ -171,6 +176,7 @@ const patchProbeRequirementsFromDescriptor = (
     ...(patchCrc32 ? { patchCrc32 } : {}),
     ...(recordCount === undefined ? {} : { recordCount }),
     ...(sourceCrc32 ? { sourceCrc32 } : {}),
+    ...(sourceTitles.length ? { sourceTitles } : {}),
     ...(sourceSize === undefined ? {} : { sourceSize }),
     ...(targetCrc32 ? { targetCrc32 } : {}),
     ...(targetSize === undefined ? {} : { targetSize }),

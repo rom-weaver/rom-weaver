@@ -8,6 +8,7 @@ import {
   calculateStandardInputChecksumsForFile,
   cloneChecksumRomProbe,
   cloneChecksumVariants,
+  cloneIdentification,
   cloneRomType,
   getAssetDecompressionTimeMs,
   getAssetParentCompressions,
@@ -16,6 +17,7 @@ import {
   getPatchFilePrecomputedChecksumMs,
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
+  getPatchFilePrecomputedIdentification,
   getPatchFilePrecomputedRomType,
 } from "./staged-source-checksums.ts";
 
@@ -58,6 +60,7 @@ const finalizeApplyInputChecksums = async <TSource>(
       if (precomputed) {
         asset.checksums = precomputed;
         asset.checksumVariants = getPatchFilePrecomputedChecksumVariants(asset.file);
+        asset.identification = getPatchFilePrecomputedIdentification(asset.file);
         asset.romType = getPatchFilePrecomputedRomType(asset.file);
         // A bare ROM checksummed in place (`ingest`) carries its real elapsed time; an archive leaf
         // checksummed during extract has none → 0, which renders as "from extract".
@@ -90,6 +93,7 @@ const finalizeApplyInputChecksums = async <TSource>(
       });
       asset.checksums = checksumResult.checksums;
       asset.checksumVariants = checksumResult.variants;
+      asset.identification = checksumResult.identification;
       asset.romProbe = checksumResult.romProbe;
       asset.romType = checksumResult.romType;
       asset.checksumTimeMs = Date.now() - checksumStartedAt;
@@ -99,6 +103,7 @@ const finalizeApplyInputChecksums = async <TSource>(
     if (primaryChecksums) {
       stage.state.checksums = primaryChecksums;
       stage.state.checksumVariants = cloneChecksumVariants(primaryAsset?.checksumVariants);
+      stage.state.identification = cloneIdentification(primaryAsset?.identification);
       stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
       stage.state.romProbe = cloneChecksumRomProbe(primaryAsset?.romProbe);
       stage.state.romType = cloneRomType(primaryAsset?.romType);

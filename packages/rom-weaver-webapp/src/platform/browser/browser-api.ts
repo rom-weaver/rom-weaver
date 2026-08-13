@@ -1,4 +1,4 @@
-import { invokeRomWeaverIdentifyWorker, invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
+import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
 import { TrimWorkflowController } from "../../lib/workflow/trim-workflow-controller.ts";
@@ -39,6 +39,8 @@ type BrowserPpfUndoInput = {
 };
 
 type BrowserIngestRomOptions = {
+  checksumAlgorithms?: string[];
+  identify?: boolean;
   onProgress?: Parameters<NonNullable<NonNullable<typeof browserRuntime.ingest>["run"]>>[0]["onProgress"];
   signal?: AbortSignal;
 };
@@ -49,8 +51,9 @@ const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestR
   const ingest = browserRuntime.ingest;
   if (!ingest?.run) throw new Error("The rom-weaver checksum runtime is unavailable.");
   return ingest.run({
-    checksumAlgorithms: ["sha1"],
+    checksumAlgorithms: options.checksumAlgorithms || ["sha1"],
     fileName,
+    identify: options.identify,
     onProgress: options.onProgress,
     signal: options.signal,
     source,
@@ -58,38 +61,24 @@ const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestR
 };
 
 const identifyRom = async (source: Blob, fileName: string, options: BrowserIdentifyRomOptions = {}) => {
-  const { loadIdentifyPacks } = await import("./identify-packs.ts");
-  const packs = await loadIdentifyPacks(fileName);
-  const staged = await browserRuntime.workerIo.stageSources([
-    {
-      fallbackFileName: fileName || "rom.bin",
-      pathPrefix: "identify-input",
-      scope: "checksum",
-      source,
-    },
-    ...packs.map((pack, index) => ({
-      fallbackFileName: pack.fileName,
-      pathPrefix: `identify-pack-${index + 1}`,
-      pathPrefixInPath: true as const,
-      scope: "checksum" as const,
-      source: pack.blob,
-    })),
-  ]);
-  const [stagedRom, ...stagedPacks] = staged;
-  if (!stagedRom) throw new Error("The ROM could not be staged for identification");
+  const { outputs, patchOutputs, result } = await ingestRom(source, fileName, {
+    ...options,
+    checksumAlgorithms: ["crc32", "md5", "sha1"],
+    identify: true,
+  });
   try {
-    const knownInputPaths = staged.map((entry) => entry.filePath);
-    return await invokeRomWeaverIdentifyWorker(
-      {
-        databasePaths: stagedPacks.map((entry) => entry.filePath),
-        knownInputPaths,
-        signal: options.signal,
-        sourcePath: stagedRom.filePath,
-      },
-      options.onProgress,
-    );
+    const asset = result.assets[0];
+    const identification = asset?.identification;
+    return {
+      checksumVariants: asset?.checksumVariants || [],
+      checksums: asset?.checksums || {},
+      ...(asset?.platform ? { detectedPlatform: asset.platform } : {}),
+      input: asset?.path || fileName,
+      matches: identification?.matches || [],
+      status: identification?.status || "unknown",
+    };
   } finally {
-    await Promise.all(staged.map((entry) => entry.cleanup().catch(() => undefined)));
+    await Promise.all([...outputs, ...patchOutputs].map((output) => output.dispose().catch(() => undefined)));
   }
 };
 

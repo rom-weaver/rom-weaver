@@ -74,6 +74,7 @@ const buildFinalRomInputRow = ({
       fileName: info.fileName || existing?.info.fileName || `Input ${index + 1}`,
       md5: info.checksums?.md5 || existing?.info.md5 || "",
       romProbe: info.romProbe ?? existing?.info.romProbe,
+      romInfo: info.romInfo ?? existing?.info.romInfo ?? "",
       romType: info.romType ?? existing?.info.romType,
       sha1: info.checksums?.sha1 || existing?.info.sha1 || "",
       validationPhase: finalized ? "idle" : existing?.info.validationPhase || "idle",

@@ -503,6 +503,9 @@ const resolveArchiveInputAssetsByDescent = async (
       // The CHD recompress path keys off the disc format; ingest reports each leaf's optical medium.
       const discFormat = ingestResult.assets[index]?.discFormat;
       if (discFormat) file.metadata = { ...file.metadata, format: discFormat };
+      const identification = ingestResult.assets[index]?.identification;
+      if (identification)
+        (file as typeof file & { identification?: typeof identification }).identification = identification;
       return file;
     }),
   );
@@ -655,6 +658,9 @@ const attachBareRomIngestMetadata = async (
     }
     if (asset.checksumVariants?.length) {
       (file as { checksumVariants?: typeof asset.checksumVariants }).checksumVariants = asset.checksumVariants;
+    }
+    if (asset.identification) {
+      (file as { identification?: typeof asset.identification }).identification = asset.identification;
     }
     const romType = romTypeFromEmittedFile({
       discFormat: asset.discFormat,

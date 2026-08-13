@@ -10,6 +10,15 @@ export type ParsedIdentifyTitleMatch = {
   variant: string;
 };
 
+/** Compact title lookup attached to an ingest asset or patch descriptor. */
+export type ParsedIdentifyLookupResult = {
+  matches: ParsedIdentifyTitleMatch[];
+  status: IdentifyStatus;
+};
+
+/** Apply and patch workflows use the same compact lookup shape. */
+export type ParsedIdentifyResolution = ParsedIdentifyLookupResult;
+
 export type ParsedIdentifyResult = {
   checksumVariants: ChecksumVariant[];
   checksums: ChecksumMap;

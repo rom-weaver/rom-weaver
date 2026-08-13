@@ -95,4 +95,37 @@ describe("ROM identify WASM command", () => {
       },
     );
   });
+
+  it("attaches a title during browser ingest", async () => {
+    await withTempFixture(
+      async ({ dir, opfsHandle, sourcePath, worker }) => {
+        const databasePath = joinGuestPath(dir, "test.pack");
+        await writeGuestFile(opfsHandle, databasePath, identifyPack());
+
+        const result = await worker.runJson(
+          createRomWeaverCommand("ingest", {
+            database: [databasePath],
+            input: sourcePath,
+            output: joinGuestPath(dir, "output"),
+          }),
+        );
+        const terminal = assertRunJsonSucceeded(result, { command: "ingest" });
+
+        expect(terminal.details.ingest.assets[0].identification).toEqual({
+          matches: [
+            expect.objectContaining({
+              algorithm: "crc32",
+              name: "Hello World (WASM Test) [!]",
+              variant: "raw",
+            }),
+          ],
+          status: "matched",
+        });
+      },
+      {
+        prefix: "rom-weaver-ingest-identify-",
+        sourceContents: "hello",
+      },
+    );
+  });
 });

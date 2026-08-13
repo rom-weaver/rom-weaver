@@ -225,7 +225,9 @@ export function collectRomWeaverRunInputPaths(
       if (command.type !== "ingest" || !command.args.sidecar_only) {
         pushPathValue(paths, command.args.input);
       }
-      if (command.type === "identify") pushPathValues(paths, command.args.database);
+      if (command.type === "identify" || command.type === "ingest") {
+        pushPathValues(paths, command.args.database);
+      }
       break;
     case "compress":
       pushPathValues(paths, command.args.input);

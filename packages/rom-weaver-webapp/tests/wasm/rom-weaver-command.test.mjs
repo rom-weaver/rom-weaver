@@ -40,6 +40,18 @@ describe("rom-weaver command boundary helpers", () => {
     expect(collectRomWeaverRunInputPaths(request)).toEqual(["/work/game.nes", "/work/nes.pack", "/work/snes.pack"]);
   });
 
+  it("collects ingest database paths", () => {
+    const request = normalizeRomWeaverRunRequest(
+      createRomWeaverCommand("ingest", {
+        database: ["/work/gba.pack"],
+        input: "/work/game.gba",
+        output: "/work/output",
+      }),
+    );
+
+    expect(collectRomWeaverRunInputPaths(request)).toEqual(["/work/game.gba", "/work/gba.pack"]);
+  });
+
   it("builds nested patch commands and preserves patch labels", () => {
     const command = createRomWeaverCommand("patch-apply", {
       input: "/work/original.bin",

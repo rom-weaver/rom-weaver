@@ -30,6 +30,7 @@ type StagedInputInfo = {
   checksumTiming?: string;
   romProbe?: RomInputRowState["info"]["romProbe"];
   romType?: RomInputRowState["info"]["romType"];
+  romInfo?: string;
   /** Rust's probe-manifest verdict (`is_rom`): false marks an archive that holds only patches, so the
    * unified drop can reclassify it from the ROM bucket to the patch bucket. Undefined for inputs that
    * never produce a probe manifest (bare ROMs). */
