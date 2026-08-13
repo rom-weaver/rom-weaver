@@ -85,8 +85,7 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; exp
   expect(document.getElementById("rom-weaver-patch-name-0")).toBeNull();
   expect(document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
   expect(document.getElementById("rom-weaver-rom-bundle-crc32")).toBeNull();
-  // The bundle dropdown is always present in Output options but defaults to
-  // hidden ("") with no create action.
+  // The separate sharing job defaults to hidden ("") with no create action.
   const bundleFormat = document.getElementById("rom-weaver-bundle-export-format");
   expect(bundleFormat).not.toBeNull();
   expect(bundleFormat.value).toBe("");
@@ -121,7 +120,7 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; exp
   document.querySelector("#rom-weaver-list-patch-stack .ck-remove")?.click();
   await expect.poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
 
-  // Choosing a bundle package in Output options arms the export button.
+  // Choosing a bundle package in the sharing job arms the export button.
   setFormControlValue(document.getElementById("rom-weaver-bundle-export-format"), "zip:patches");
   await expect.poll(() => document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
 });

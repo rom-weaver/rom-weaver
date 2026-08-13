@@ -310,6 +310,11 @@ msgstr "espera primero el parche {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.shareDescription"
+msgstr "Exportar una receta no aplica parches. Guarda esta configuración de parches para que otra persona pueda ejecutarla."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.byteUnits"
 msgstr "Unidades de tamaño de archivo"
 
@@ -662,6 +667,11 @@ msgstr "Ajustes"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.dialogLabel"
 msgstr "Ajustes y estado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.shareTitle"
+msgstr "Comparte esta configuración"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

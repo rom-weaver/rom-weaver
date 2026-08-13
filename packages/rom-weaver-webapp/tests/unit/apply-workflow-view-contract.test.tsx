@@ -643,7 +643,7 @@ describe("apply workflow view - bundle controls", () => {
     setBundlePackage,
   });
 
-  it("persists the bundle package when the Output options dropdown changes", () => {
+  it("persists the bundle package when the sharing job dropdown changes", () => {
     const setBundlePackage = vi.fn();
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = render(
@@ -685,7 +685,7 @@ describe("apply workflow view - bundle controls", () => {
     expect(container.querySelector("#rom-weaver-button-export-bundle")?.textContent).toContain("Create ZIP ROM Bundle");
   });
 
-  it("keeps the bundle dropdown in Output options and drops the create action when hidden", () => {
+  it("keeps bundle settings out of ordinary Apply options when hidden", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
@@ -701,11 +701,37 @@ describe("apply workflow view - bundle controls", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    const select = container.querySelector("#rom-weaver-bundle-export-format") as HTMLSelectElement;
-    expect(select).toBeTruthy();
-    expect(select.value).toBe("");
+    expect(container.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
+    expect(container.querySelector("#rom-weaver-bundle-job")).toBeTruthy();
+    expect((container.querySelector("#rom-weaver-bundle-export-format") as HTMLSelectElement).value).toBe("");
     expect(container.querySelector("#rom-weaver-button-export-bundle")).toBeNull();
     expect(container.querySelector("#rom-weaver-button-create-bundle")).toBeNull();
+  });
+
+  it("offers sharing after a successful Apply, after the primary result controls", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(() => undefined, true)}
+          controllers={{
+            output: storeOf(outputState({ pendingDownloadFileName: "game.bin" })) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const job = container.querySelector("#rom-weaver-bundle-job");
+    expect(job?.textContent).toContain("Share this setup");
+    expect(job?.textContent).toContain("Exporting a recipe does not apply patches");
+    expect(container.querySelector("#rom-weaver-button-apply")?.compareDocumentPosition(job || container)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(job?.querySelector("#rom-weaver-bundle-export-format")).toBeTruthy();
+    expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
   });
 });
 

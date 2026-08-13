@@ -310,6 +310,11 @@ msgstr "erwartet zuerst Patch {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.shareDescription"
+msgstr "Das Exportieren eines Rezepts wendet keine Patches an. Es speichert diese Patch-Konfiguration, damit jemand anderes sie ausführen kann."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.byteUnits"
 msgstr "Dateigrößeneinheiten"
 
@@ -662,6 +667,11 @@ msgstr "Einstellungen"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.dialogLabel"
 msgstr "Einstellungen und Status"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.shareTitle"
+msgstr "Diese Konfiguration teilen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
