@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
@@ -17,6 +19,10 @@ import {
   setPostApplyTestBehaviorOverride,
 } from "../../src/public/react/use-apply-download-orchestration.ts";
 import type { PostApplyActionBehavior } from "../../src/types/settings.ts";
+
+const read = (relativePath: string) => readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
+const BUNDLE_FIELDS_CSS = read("../../src/webapp/design-system/fields.css");
+const BUNDLE_RESPONSIVE_CSS = read("../../src/webapp/design-system/responsive.css");
 
 /**
  * Apply-view markup contract. The browser suites drive the form through
@@ -653,6 +659,14 @@ describe("apply workflow view - bundle controls", () => {
     setBundlePackage,
   });
 
+  it("keeps the sharing action full width at every panel size", () => {
+    const shareRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-job \.bundle-share\s*\{([^}]*)\}/)?.[1];
+
+    expect(shareRule).toContain("width: 100%");
+    expect(shareRule).toContain("min-height: 40px");
+    expect(BUNDLE_RESPONSIVE_CSS).not.toContain(".bundle-job .bundle-share");
+  });
+
   it("persists archive and ROM choices from the sharing controls", () => {
     const exported = bundleExport();
     const setBundlePackage = vi.fn((value: string) => {
@@ -701,7 +715,9 @@ describe("apply workflow view - bundle controls", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    expect(container.querySelector("#rom-weaver-button-export-bundle")?.textContent).toContain("Share bundle");
+    const shareButton = container.querySelector("#rom-weaver-button-export-bundle");
+    expect(shareButton?.textContent).toContain("Share bundle");
+    expect(shareButton?.classList).toContain("bundle-share");
     expect(container.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
     expect(container.querySelector(".bundle-rom-warning .notice")?.textContent).toContain("right to distribute it");
   });

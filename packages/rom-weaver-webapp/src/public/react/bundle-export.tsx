@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  getCompressionOutputExtension,
+  getRomSpecificCompressionFormatRegistration,
+} from "../../lib/compression/container-format-registry.ts";
+import { getFileNameExtension } from "../../lib/path-utils.ts";
+import {
   createProgressViewModel,
   createProgressViewModelFromEvent,
   type ProgressViewModel,
@@ -8,6 +13,7 @@ import { createVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { ApplyWorkflowBundleSources } from "../../types/apply-workflow.ts";
 import type { BundleHeaderMode, ParsedBundleCreateResult } from "../../types/bundle.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
+import { ROM_WEAVER_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
@@ -269,19 +275,24 @@ const preparePackagedRom = async ({
   if (!bundleRom) return undefined;
   if (!wantsBundle) return undefined;
   const originalName = getReactBinarySourceFileName(rom.originalSource as BinarySource, rom.fileName);
-  const existingFormat = originalName.split(".").pop()?.toLowerCase();
-  const recommendedRomFormat = rom.recommendedFormat?.toLowerCase();
-  if (["chd", "rvz", "z3ds"].includes(existingFormat || "")) {
-    return { fileName: originalName, source: rom.originalSource };
-  }
-  if (!["chd", "rvz", "z3ds"].includes(recommendedRomFormat || "")) {
+  const recommendedRomFormat = rom.recommendedFormat?.trim().toLowerCase();
+  const targetMetadata = getRomSpecificCompressionFormatRegistration(recommendedRomFormat);
+  const targetFormat = targetMetadata?.format;
+  if (!targetFormat) {
     return { fileName: rom.fileName, source: rom.source };
   }
-  const targetFormat = recommendedRomFormat as "chd" | "rvz" | "z3ds";
+  const targetCompressedExtensions: readonly string[] =
+    ROM_WEAVER_CONTAINER_FORMATS.find((entry) => entry.name === targetFormat)?.extensions || [];
+  const isSuitableCompressedName = (fileName: string) =>
+    !!fileName && targetCompressedExtensions.includes(`.${getFileNameExtension(fileName)}`);
+  if (isSuitableCompressedName(originalName)) {
+    return { fileName: originalName, source: rom.originalSource };
+  }
   const createCompression = browserRuntime.compression.create;
   if (!createCompression) throw new Error("ROM compression is not available in this runtime");
   stepProgress(`ROM compression · ${targetFormat.toUpperCase()}`);
-  const outputName = `${stripFileExtension(rom.fileName)}.${targetFormat}`;
+  const outputExtension = getCompressionOutputExtension(targetFormat, { inputFileName: rom.fileName });
+  const outputName = `${stripFileExtension(rom.fileName)}.${outputExtension}`;
   const compressed = await createCompression({
     fileName: rom.fileName,
     format: targetFormat,
@@ -519,4 +530,4 @@ const useBundleExport = ({
   };
 };
 
-export { useBundleExport };
+export { preparePackagedRom, useBundleExport };
