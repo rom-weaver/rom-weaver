@@ -405,7 +405,8 @@ const useBundleExport = ({
       validateBundleRows(exportRows, items);
       stepProgress("Writing bundle");
       const wantsBundle = format !== BUNDLE_ONLY_FORMAT;
-      const bundleFileName = wantsBundle ? `${slugFileName(exportName) || "rw-bundle"}.${format}` : undefined;
+      const bundleBaseName = stripFileExtension(exportName);
+      const bundleFileName = wantsBundle ? `${slugFileName(bundleBaseName) || "rw-bundle"}.${format}` : undefined;
       const packagedRom = await preparePackagedRom({
         browserRuntime,
         bundleRom,

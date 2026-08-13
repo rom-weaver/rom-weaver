@@ -160,7 +160,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(result.bundle.version).toBe(1);
   // Bundles carry no display name; the export name feeds output naming only.
   expect(result.bundle.name).toBeUndefined();
-  expect(result.bundle.output?.name).toBe("Exported Hack");
+  expect(result.bundle.output?.name).toBe("Exported Hack.zip");
   expect(result.bundlePath.endsWith("rom-weaver-bundle.json")).toBe(true);
   // The bundle download is named from the export name.
   expect(result.archivePath?.endsWith("Exported-Hack.zip")).toBe(true);

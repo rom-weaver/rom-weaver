@@ -186,7 +186,7 @@ test("bundle keeps same-name apply usable after enabling several optional patche
   await expect
     .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
     .toEqual([true, true, false, false, false, false, false, false]);
-  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("same-output-name");
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("same-output-name.zip");
 
   await waitForApplyButtonEnabled();
   await clickApplyButton();
@@ -451,7 +451,7 @@ test("bundle url session seeds enablement + output defaults and applies to a dow
   expect(document.querySelector(".bundle-banner")).toBeNull();
   expect(document.getElementById("rom-weaver-patch-card-description-0")).toBeNull();
   // Output defaults applied once through the output controller.
-  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("bundle-output");
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("bundle-output.zip");
 
   await waitForApplyButtonEnabled();
   await clickApplyButton();
