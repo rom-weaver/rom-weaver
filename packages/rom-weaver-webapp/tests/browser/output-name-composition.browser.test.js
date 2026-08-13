@@ -180,7 +180,7 @@ test("apply output options preserve configured compression order and labels", ()
   expect(createApplyOutputOptions(["none", "zip", "7z"], { fileName: "game.gba" })).toEqual([
     { label: "Raw ROM", value: "none" },
     { label: "Small ZIP", value: "zip" },
-    { label: "Small 7z", value: "7z" },
+    { label: "Smaller 7z", value: "7z" },
   ]);
 });
 
@@ -188,7 +188,7 @@ test("apply output options label unknown uncompressed output as none", () => {
   expect(createApplyOutputOptions(["none", "zip", "7z"])).toEqual([
     { label: "Raw ROM", value: "none" },
     { label: "Small ZIP", value: "zip" },
-    { label: "Small 7z", value: "7z" },
+    { label: "Smaller 7z", value: "7z" },
   ]);
 });
 

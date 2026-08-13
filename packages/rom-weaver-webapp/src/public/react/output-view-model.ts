@@ -182,7 +182,7 @@ const getOutputOptionExtension = (option: OutputOption, source?: GeneratedOutput
 
 const getApplyOutputLabel = (option: OutputOption) => {
   if (option.value === "none") return "Raw ROM";
-  if (option.value === "7z") return "Small 7z";
+  if (option.value === "7z") return "Smaller 7z";
   const formatName = APPLY_OUTPUT_FORMAT_NAMES[option.value] || option.label.replace(/^\./, "").toUpperCase();
   return ["chd", "rvz", "z3ds"].includes(option.value) ? formatName : `Small ${formatName}`;
 };
