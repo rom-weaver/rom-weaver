@@ -43,7 +43,11 @@ import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
-import { createCompressionTypeOptions } from "./output-view-model.ts";
+import {
+  createApplyOutputOptions,
+  createCompressionTypeOptions,
+  getOutputExtensionWarning,
+} from "./output-view-model.ts";
 import type {
   NoticeController,
   PatcherOutputController,
@@ -2102,13 +2106,16 @@ function ApplyWorkflowFormView({
               timing: outputState.compressTiming || undefined,
             })}
             disabled={outputState.disabled}
+            extensionWarning={getOutputExtensionWarning(outputState.displayFileName, outputState.options, {
+              rawExtensions: ROM_FILE_EXTENSIONS,
+            })}
             fault={applyFailed}
             fileName={outputState.displayFileName}
             fileNameId="rom-weaver-input-output-file-name"
             fileNamePlaceholder="Output filename (no extension)"
             format={outputState.compressionFormat}
             formatId="rom-weaver-select-output-format"
-            formatOptions={outputState.options}
+            formatOptions={createApplyOutputOptions(outputState.options)}
             id="rom-weaver-row-output-file-name"
             info={
               <InfoPopover title="Output options">

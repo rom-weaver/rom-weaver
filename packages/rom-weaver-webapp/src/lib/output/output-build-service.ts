@@ -41,6 +41,7 @@ import {
   createArchiveEntryInputFromPatchFile,
   createArchivePatchFileOutput,
   createPatchFileFromRuntimeOutput,
+  hasArchiveFileName,
 } from "./archive-output-service.ts";
 import { createPatchedOutputPlan, type PatchedOutputPlan } from "./patched-output-plan.ts";
 
@@ -264,7 +265,7 @@ const createSingleFileRomSpecificOutput = async ({
     zipCodec: archiveSettings.zipCodec as string | null | undefined,
     zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
   });
-  const outputPlan = createPatchedOutputPlan({
+  const generatedOutputPlan = createPatchedOutputPlan({
     chdOutputMode: (archiveSettings.chdOutputMode as string | null | undefined) || "auto",
     compressionFormat: compression,
     compressionSettings: levels,
@@ -278,6 +279,11 @@ const createSingleFileRomSpecificOutput = async ({
       compressionLevel: levels.z3dsCompressionLevel,
     },
   });
+  const requestedOutputName = getRequestedOutputName(options);
+  const outputPlan =
+    requestedOutputName && hasFileNameExtension(requestedOutputName)
+      ? { ...generatedOutputPlan, finalOutputFileName: requestedOutputName }
+      : generatedOutputPlan;
   const outputs = await createRuntimeRomSpecificOutputFiles(compression, outputFile, outputPlan, options, runtime);
   if (!outputs?.[0]) return null;
   await Promise.resolve(getPatchFileCleanup(outputFile)?.()).catch(() => undefined);
@@ -296,6 +302,7 @@ const buildOutputFiles = async (
   });
   if (compression === "none") return [patchedRom];
 
+  const requestedOutputName = getRequestedOutputName(options);
   const archiveSettings = getContainerSettings(options);
   const levels = resolveCompressionLevels({
     compressionProfile: String(getCompressionProfile(options)),
@@ -307,11 +314,11 @@ const buildOutputFiles = async (
     zipCodec: archiveSettings.zipCodec as string | null | undefined,
     zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
   });
-  const outputPlan = createPatchedOutputPlan({
+  const generatedOutputPlan = createPatchedOutputPlan({
     chdOutputMode: (archiveSettings.chdOutputMode as string | null | undefined) || "auto",
     compressionFormat: compression,
     compressionSettings: levels,
-    patchedFileName: patchedRom.fileName,
+    patchedFileName: requestedOutputName || patchedRom.fileName,
     resolveChdCodecMode: (_fileName: string, mode: string | null) =>
       mode === "auto" ? getChdAutoCreateMode(patchedRom) : mode,
     resolveChdCompressionCodecs: (mode: string | null) => getChdCompressionCodecs(mode, options),
@@ -321,11 +328,19 @@ const buildOutputFiles = async (
       compressionLevel: levels.z3dsCompressionLevel,
     },
   });
+  const outputPlan =
+    requestedOutputName && hasFileNameExtension(requestedOutputName)
+      ? { ...generatedOutputPlan, finalOutputFileName: requestedOutputName }
+      : generatedOutputPlan;
   if (isArchiveCompressionFormat(compression)) {
     const archiveEntryFileName =
-      "archiveEntryFileName" in outputPlan && typeof outputPlan.archiveEntryFileName === "string"
-        ? outputPlan.archiveEntryFileName
-        : patchedRom.fileName;
+      requestedOutputName && hasFileNameExtension(requestedOutputName)
+        ? hasArchiveFileName(requestedOutputName, compression)
+          ? patchedRom.fileName
+          : requestedOutputName
+        : "archiveEntryFileName" in outputPlan && typeof outputPlan.archiveEntryFileName === "string"
+          ? outputPlan.archiveEntryFileName
+          : patchedRom.fileName;
     const entries = [createArchiveEntryInputFromPatchFile(patchedRom, archiveEntryFileName || patchedRom.fileName)];
     traceOutputName(options, "output.archive.plan", {
       archiveEntryFileName,
@@ -333,7 +348,7 @@ const buildOutputFiles = async (
       entryFileNames: entries.map((entry) => entry.entry.filename || entry.entry.fileName || entry.entry.name || ""),
       finalOutputFileName: outputPlan.finalOutputFileName,
       patchedRomFileName: patchedRom.fileName,
-      requestedOutputName: getRequestedOutputName(options),
+      requestedOutputName,
       romFileName: romFile?.fileName || "",
       sourceExtension: typeof romFile?.getExtension === "function" ? romFile.getExtension() : "",
     });
@@ -472,11 +487,8 @@ const buildSessionOutputFiles = async (
     const onlyOutput = outputAssets[0];
     if (!onlyOutput) throw new Error("No output file was produced");
     const onlyFile = onlyOutput.file;
-    if (requestedOutputName)
-      onlyFile.fileName =
-        compression === "none"
-          ? resolveRawRequestedOutputName(requestedOutputName, onlyOutput.asset.file)
-          : requestedOutputName;
+    if (requestedOutputName && compression === "none")
+      onlyFile.fileName = resolveRawRequestedOutputName(requestedOutputName, onlyOutput.asset.file);
     if (compression === "none") return { files: [onlyFile], rawOutputSize: onlyFile.fileSize };
     const builtFiles = await buildOutputFiles(onlyOutput.asset.file, onlyFile, options, runtime);
     return {
@@ -486,7 +498,11 @@ const buildSessionOutputFiles = async (
     };
   }
 
-  const baseName = requestedOutputName || getOutputBaseName(assets);
+  const requestedOutputHasExtension = hasFileNameExtension(requestedOutputName);
+  const baseName = requestedOutputHasExtension
+    ? getFileNameWithoutExtension(requestedOutputName)
+    : requestedOutputName || getOutputBaseName(assets);
+  const requestedArchiveName = requestedOutputHasExtension ? requestedOutputName : "";
   const entries = createArchiveEntriesFromOutputAssets(outputAssets, baseName);
   const rawOutputSize = entries.reduce((total, entry) => total + entry.size, 0);
 
@@ -502,7 +518,7 @@ const buildSessionOutputFiles = async (
         compression: "zip",
         entries: entries.map((entry) => entry.entry),
         options,
-        outputName: `${baseName}.zip`,
+        outputName: requestedArchiveName || `${baseName}.zip`,
         overrides: archiveOverrides,
         runtime,
         trace: (message, details) => traceOutputName(options, message, details),
@@ -521,7 +537,7 @@ const buildSessionOutputFiles = async (
         compression: "7z",
         entries: entries.map((entry) => entry.entry),
         options,
-        outputName: `${baseName}.7z`,
+        outputName: requestedArchiveName || `${baseName}.7z`,
         runtime,
         trace: (message, details) => traceOutputName(options, message, details),
       }),
@@ -568,7 +584,7 @@ const buildSessionOutputFiles = async (
         signal: options?.signal,
         threads: getThreads(options),
       },
-      outputName: `${baseName}.chd`,
+      outputName: requestedArchiveName || `${baseName}.chd`,
       romSpecific: {
         chd: {
           compressionCodecs: getChdCompressionCodecs("cd", options),
@@ -579,7 +595,7 @@ const buildSessionOutputFiles = async (
       source,
     });
     const output = "output" in result ? result.output : result;
-    const file = await createPatchFileFromRuntimeOutput(output, `${baseName}.chd`);
+    const file = await createPatchFileFromRuntimeOutput(output, requestedArchiveName || `${baseName}.chd`);
     await runPatchFileCleanups(outputAssetCleanups);
     return {
       compressionTimeMs: getPatchFileRuntimeTimingMs(file),
@@ -592,7 +608,7 @@ const buildSessionOutputFiles = async (
       compression: "7z",
       entries: entries.map((entry) => entry.entry),
       options,
-      outputName: `${baseName}.7z`,
+      outputName: requestedArchiveName || `${baseName}.7z`,
       runtime,
       trace: (message, details) => traceOutputName(options, message, details),
     }),

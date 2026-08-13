@@ -118,6 +118,42 @@ describe("buildSessionOutputFiles", () => {
     expect(result.files).toEqual([compressedFile]);
   });
 
+  it("preserves an explicit output extension for single-file archive compression", async () => {
+    const romFile = await makeFile("rom-bytes", "game.bin");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.bin");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    const compressedFile = await makeFile("compressed-bytes", "custom.zip");
+    mockCreateArchivePatchFileOutput.mockResolvedValue(compressedFile);
+    const options: ApplyWorkflowOptions = {
+      output: { compression: "zip", outputName: "custom.zip" },
+    } as never;
+
+    const result = await buildSessionOutputFiles(assets, patchedById, options);
+
+    const call = mockCreateArchivePatchFileOutput.mock.calls[0]?.[0];
+    expect(call?.outputName).toBe("custom.zip");
+    expect(vi.mocked(createArchiveEntryInputFromPatchFile).mock.calls[0]?.[1]).toBe("patched.bin");
+    expect(result.files).toEqual([compressedFile]);
+  });
+
+  it("preserves an explicit output extension for multi-file archive compression", async () => {
+    const romA = await makeFile("rom-a-bytes", "gameA.bin");
+    const romB = await makeFile("rom-b-bytes", "gameB.bin");
+    const assets = [makeAsset("a1", "rom", romA), makeAsset("a2", "rom", romB)];
+    const compressedFile = await makeFile("zip-bytes", "custom.data");
+    mockCreateArchivePatchFileOutput.mockResolvedValue(compressedFile);
+    const options: ApplyWorkflowOptions = {
+      output: { compression: "zip", outputName: "custom.data" },
+    } as never;
+
+    const result = await buildSessionOutputFiles(assets, new Map(), options);
+
+    const call = mockCreateArchivePatchFileOutput.mock.calls[0]?.[0];
+    expect(call?.outputName).toBe("custom.data");
+    expect(result.files).toEqual([compressedFile]);
+  });
+
   it("groups multiple ROM assets (no cue/track) into a single zip archive, defaulting compression 'none' to zip with store codec", async () => {
     const romA = await makeFile("rom-a-bytes", "gameA.bin");
     const romB = await makeFile("rom-b-bytes", "gameB.bin");
@@ -282,5 +318,22 @@ describe("createSingleFileRomSpecificOutput", () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  it("preserves an explicit mismatched extension for a single-file disc output", async () => {
+    const outputFile = await makeFile("rom-bytes", "game.iso");
+    const compressed = await makeFile("chd-bytes", "game.iso");
+    const create = vi.fn(async () => ({ output: { fileName: "game.iso" } }));
+    const runtime = { compression: { create } } as unknown as WorkflowRuntime;
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(compressed);
+
+    await createSingleFileRomSpecificOutput({
+      compression: "chd",
+      options: { output: { outputName: "game.iso" } } as never,
+      outputFile,
+      runtime,
+    });
+
+    expect(create.mock.calls[0]?.[0].outputName).toBe("game.iso");
   });
 });

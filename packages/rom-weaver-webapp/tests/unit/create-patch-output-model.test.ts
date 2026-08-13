@@ -6,10 +6,8 @@ describe("resolveCreateExecutionOutputName", () => {
     expect(resolveCreateExecutionOutputName("MyHack", "bps")).toBe("MyHack.bps");
   });
 
-  it("appends when a version dot is not the format extension", () => {
-    // Regression: "Game 2.2" must not read as extension ".2" and skip the append,
-    // else Rust's --checksum-name jams the crc into the version ("Game 2 [crc].2").
-    expect(resolveCreateExecutionOutputName("Game 2.2", "xdelta")).toBe("Game 2.2.xdelta");
+  it("preserves a user extension even when it does not match the selected format", () => {
+    expect(resolveCreateExecutionOutputName("Game 2.2", "xdelta")).toBe("Game 2.2");
   });
 
   it("leaves the name unchanged when it already ends with the patch extension", () => {

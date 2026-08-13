@@ -414,7 +414,9 @@ test("create output edits stay enabled while queued and cancel the queued run", 
 
   await queueCreate();
   expect(patchFormat.disabled).toBe(false);
-  setFormControlValue(patchFormat, "ips");
+  setFormControlValue(outputName, "changed.bps");
+  setFormControlValue(patchFormat, "xdelta");
+  await expect.poll(() => outputName.value).toBe("changed.xdelta");
   await expect.poll(getOutputWaitingText).toBe("");
 
   await queueCreate();

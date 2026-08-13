@@ -14,6 +14,11 @@ import {
   createCreateOutputCompressionOptions,
   createCreatePatchFormatOptions,
   createTrimOutputOptions,
+  getCreatePatchExtensionWarning,
+  getCreatePatchFormatForFileName,
+  getOutputExtensionWarning,
+  getOutputFileNameForFormat,
+  getOutputFormatForFileName,
   getGeneratedOutputName,
 } from "../../src/public/react/output-view-model.ts";
 
@@ -173,18 +178,66 @@ test("archive compression appends archive extension after explicit rom extension
 
 test("apply output options preserve configured compression order and labels", () => {
   expect(createApplyOutputOptions(["none", "zip", "7z"], { fileName: "game.gba" })).toEqual([
-    { label: ".gba", value: "none" },
-    { label: ".zip", value: "zip" },
-    { label: ".7z", value: "7z" },
+    { label: "Raw ROM (.gba)", value: "none" },
+    { label: "Smaller ZIP download (.zip)", value: "zip" },
+    { label: "Smallest 7z download", value: "7z" },
   ]);
 });
 
 test("apply output options label unknown uncompressed output as none", () => {
   expect(createApplyOutputOptions(["none", "zip", "7z"])).toEqual([
-    { label: "None", value: "none" },
-    { label: ".zip", value: "zip" },
-    { label: ".7z", value: "7z" },
+    { label: "Raw ROM", value: "none" },
+    { label: "Smaller ZIP download (.zip)", value: "zip" },
+    { label: "Smallest 7z download", value: "7z" },
   ]);
+});
+
+test("apply output options name disc containers", () => {
+  expect(
+    createApplyOutputOptions([
+      { label: ".gba", value: "none" },
+      { label: ".chd", value: "chd" },
+      { label: ".rvz", value: "rvz" },
+      { label: ".zcci", value: "z3ds" },
+    ]),
+  ).toEqual([
+    { label: "Raw ROM (.gba)", value: "none" },
+    { label: "CHD disc image (.chd)", value: "chd" },
+    { label: "RVZ disc image (.rvz)", value: "rvz" },
+    { label: "Z3DS image (.zcci)", value: "z3ds" },
+  ]);
+});
+
+test("output extension matching selects formats and warns on unknown extensions", () => {
+  const options = [
+    { label: ".gba", value: "none" },
+    { label: ".zip", value: "zip" },
+  ];
+  expect(getOutputFormatForFileName("game.zip", options)).toBe("zip");
+  expect(getOutputFormatForFileName("game.sfc", options, { rawExtensions: ["sfc"] })).toBe("none");
+  expect(getOutputExtensionWarning("game.zip", options)).toBeNull();
+  expect(getOutputExtensionWarning("game.bad", options)).toContain(".bad");
+  expect(getOutputFileNameForFormat("game.zip", "none", options, { rawExtensions: ["sfc"] })).toBe("game.gba");
+  expect(
+    getOutputFileNameForFormat("patch.bps", "xdelta", [
+      { label: ".bps", value: "bps" },
+      { label: ".xdelta", value: "xdelta" },
+    ]),
+  ).toBe("patch.xdelta");
+});
+
+test("create patch extension matching accepts registry aliases", () => {
+  const options = [
+    { label: ".bps", value: "bps" },
+    { label: ".xdelta", value: "xdelta" },
+  ];
+  expect(getCreatePatchFormatForFileName("game.vcdiff", options)).toBe("xdelta");
+  expect(getCreatePatchExtensionWarning("game.vcdiff", options)).toBeNull();
+  expect(getCreatePatchExtensionWarning("game.zip", options, [{ label: ".zip", value: "zip" }])).toBeNull();
+  expect(getCreatePatchExtensionWarning("game.zip", options, [{ label: ".zip", value: "zip" }], "none")).toContain(
+    ".zip",
+  );
+  expect(getCreatePatchExtensionWarning("game.bad", options)).toContain(".bad");
 });
 
 test("create output options expose patch format and archive choices", () => {

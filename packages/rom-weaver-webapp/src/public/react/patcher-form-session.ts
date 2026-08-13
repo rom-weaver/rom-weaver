@@ -30,7 +30,8 @@ import type {
   StagedInputInfo,
 } from "./apply-session-types.ts";
 import { getBinarySourceListStableIds, getBinarySourceSize, sameBinarySourceLists } from "./input-session-helpers.ts";
-import { getGeneratedOutputName } from "./output-view-model.ts";
+import { getGeneratedOutputName, getOutputFileNameForFormat, getOutputFormatForFileName } from "./output-view-model.ts";
+import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import type { ApplyPatchFormSettings, BinarySource, NoticeController } from "./patcher-form.ts";
 import {
   formatElapsedTiming,
@@ -1239,9 +1240,13 @@ const useLocalApplyPatchFormSession = ({
       getState: localOutputStoreController.getState,
       setDisplayFileName: (value: string) => {
         const nextOutputName = getRequestedOutputName(value);
+        const inferredCompression = getOutputFormatForFileName(value, outputOptions, {
+          rawExtensions: ROM_FILE_EXTENSIONS,
+        });
         clearDismissibleErrors();
         setOutputName(value);
         setOutputNameEdited(!!nextOutputName);
+        if (inferredCompression) setOutputCompressionEdited(true);
         if (pendingDownloadResultRef.current && hasPendingDownload) {
           setPendingDownloadReadyFileName(
             resolvePendingDownloadFileName({
@@ -1254,16 +1259,38 @@ const useLocalApplyPatchFormSession = ({
         }
         commitSettings({
           ...activeSettings,
-          output: { ...activeSettings.output, outputName: nextOutputName },
+          output: {
+            ...activeSettings.output,
+            ...(inferredCompression ? { compression: inferredCompression as "auto" | CompressionFormat } : {}),
+            outputName: nextOutputName,
+          },
         });
       },
       setOutputCompression: (value: string) => {
+        const nextOutputName = getOutputFileNameForFormat(outputName, value, outputOptions, {
+          rawExtensions: ROM_FILE_EXTENSIONS,
+        });
         setOutputCompressionEdited(true);
+        if (nextOutputName !== outputName) {
+          setOutputName(nextOutputName);
+          setOutputNameEdited(!!getRequestedOutputName(nextOutputName));
+        }
+        if (nextOutputName !== outputName && pendingDownloadResultRef.current && hasPendingDownload) {
+          setPendingDownloadReadyFileName(
+            resolvePendingDownloadFileName({
+              automaticOutputName: automaticResolvedOutputName,
+              fallbackOutputName: effectiveResolvedOutputName,
+              requestedOutputName: getRequestedOutputName(nextOutputName),
+              resultOutputName: pendingDownloadResultRef.current.output.fileName,
+            }),
+          );
+        }
         updateSettings({
           ...activeSettings,
           output: {
             ...activeSettings.output,
             compression: value as "auto" | CompressionFormat,
+            ...(nextOutputName === outputName ? {} : { outputName: getRequestedOutputName(nextOutputName) }),
           },
         });
       },
@@ -1289,6 +1316,8 @@ const useLocalApplyPatchFormSession = ({
       effectiveResolvedOutputName,
       hasPendingDownload,
       localOutputStoreController,
+      outputOptions,
+      outputName,
       setPendingDownloadReadyFileName,
       setOutputName,
       setOutputNameEdited,

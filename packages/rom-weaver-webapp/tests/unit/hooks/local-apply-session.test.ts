@@ -100,6 +100,24 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
     expect(lastCall?.output?.compression).toBe("7z");
   });
 
+  it("infers apply compression from a typed output extension", () => {
+    const { result, onSettingsChange } = renderSession();
+    act(() => result.current.localOutputController.setDisplayFileName("custom.zip"));
+    const lastCall = onSettingsChange.mock.calls.at(-1)?.[0];
+    expect(lastCall?.output?.compression).toBe("zip");
+    expect(lastCall?.output?.outputName).toBe("custom.zip");
+  });
+
+  it("changes a recognized output extension when compression changes", () => {
+    const { result, onSettingsChange } = renderSession();
+    act(() => result.current.localOutputController.setDisplayFileName("custom.zip"));
+    act(() => result.current.localOutputController.setOutputCompression("7z"));
+    const lastCall = onSettingsChange.mock.calls.at(-1)?.[0];
+    expect(lastCall?.output?.compression).toBe("7z");
+    expect(lastCall?.output?.outputName).toBe("custom.7z");
+    expect(result.current.localOutputController.getState().displayFileName).toBe("custom.7z");
+  });
+
   it("clears the top-level notice via the notice controller", () => {
     const { result } = renderSession();
     act(() => result.current.localNoticeController.dismiss?.());
