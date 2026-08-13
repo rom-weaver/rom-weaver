@@ -318,3 +318,7 @@ mod tests {
         assert!(filter.matches_payload_or_container_name("notes.txt"));
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/common_files.rs"]
+mod extra_tests;
