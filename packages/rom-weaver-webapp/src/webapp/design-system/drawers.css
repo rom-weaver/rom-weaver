@@ -288,8 +288,9 @@
 }
 
 .rw-app .identify-drawer-body {
-  display: grid;
-  gap: var(--sp-xs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
   padding: var(--sp-s) var(--sp-m);
 }
 .rw-app .identify-drawer-label {
@@ -304,18 +305,43 @@
   font-weight: 650;
   overflow-wrap: anywhere;
 }
-.rw-app .identify-drawer-alias {
-  padding: var(--sp-xs) var(--sp-s);
-  color: var(--ink-2);
-  overflow-wrap: anywhere;
-  background: var(--well);
-  border: 1px solid var(--seam-soft);
-  border-radius: var(--r-s);
+.rw-app .identify-drawer-group {
+  min-width: 0;
 }
-.rw-app .identify-drawer-meta {
-  margin-block-start: var(--sp-xs);
-  font-size: var(--badge-fs);
-  color: var(--ink-3);
+.rw-app .identify-drawer-aliases {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  column-gap: 0;
+}
+.rw-app .identify-drawer-aliases .identify-alias-row {
+  width: 100%;
+  margin-inline: 0;
+}
+.rw-app .identify-drawer-aliases .identify-alias-row .ck-v {
+  text-transform: none;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.rw-app .identify-drawer-evidence {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  column-gap: 0;
+}
+.rw-app .identify-drawer-evidence .ck {
+  width: 100%;
+  margin-inline: 0;
+}
+.rw-app .identify-drawer-evidence .ck-v {
+  text-transform: none;
+}
+.rw-app .identify-drawer-evidence .ck + .ck {
+  border-block-start-color: transparent;
+}
+@container (min-width: 540px) {
+  .rw-app .identify-drawer-aliases .identify-alias-row:nth-child(even),
+  .rw-app .identify-drawer-evidence .ck + .ck {
+    border-inline-start: 1px solid var(--ck-seam);
+  }
 }
 /* Secondary chips (a format-implied note, a hidden bundle) recede beside the
    values the user picked. Previously only `.step-meta` styled `.muted`, so the

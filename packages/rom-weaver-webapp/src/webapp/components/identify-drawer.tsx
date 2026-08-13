@@ -1,5 +1,6 @@
 import { ScanSearch } from "lucide-react";
 import { uniqueIdentifyTitles } from "../../presentation/identify-title.ts";
+import { ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import type { ParsedIdentifyLookupResult } from "../../types/identify.ts";
 import { Drawer, DrawerReadout } from "../../public/react/components/ds/drawer.tsx";
 
@@ -9,6 +10,10 @@ const IdentifyDrawer = ({ identification }: { identification: ParsedIdentifyLook
   const aliases = [...new Set(identification.matches.map((match) => match.name.trim()).filter(Boolean))].filter(
     (name) => !canonicalNames.includes(name),
   );
+  const platforms = [...new Set(identification.matches.map((match) => match.platform.trim()).filter(Boolean))];
+  const algorithms = [
+    ...new Set(identification.matches.map((match) => match.algorithm.trim().toUpperCase()).filter(Boolean)),
+  ];
   const matched = identification.status === "matched" && canonicalNames.length === 1;
 
   return (
@@ -28,21 +33,33 @@ const IdentifyDrawer = ({ identification }: { identification: ParsedIdentifyLook
           </div>
         ))}
         {aliases.length ? (
-          <>
-            <div className="identify-drawer-label">Aliases</div>
-            {aliases.map((alias) => (
-              <div className="identify-drawer-alias mono" key={alias}>
-                {alias}
-              </div>
-            ))}
-          </>
+          <div className="ck-group identify-drawer-group">
+            <div className="ck-group-head">Aliases</div>
+            <div className="ckrows identify-drawer-aliases">
+              {aliases.map((alias) => (
+                <ChecksumRow
+                  ariaLabel={`Copy alias ${alias}`}
+                  className="identify-alias-row"
+                  copyValue={alias}
+                  key={alias}
+                  label="Alias"
+                  value={alias}
+                />
+              ))}
+            </div>
+          </div>
         ) : null}
-        {identification.matches.some((match) => match.platform || match.algorithm) ? (
-          <div className="identify-drawer-meta">
-            {identification.matches
-              .map((match) => [match.platform, match.algorithm.toUpperCase()].filter(Boolean).join(" · "))
-              .filter(Boolean)
-              .join(" · ")}
+        {platforms.length || algorithms.length ? (
+          <div className="ck-group identify-drawer-group">
+            <div className="ck-group-head">Matched by</div>
+            <div className="ckrows identify-drawer-evidence">
+              {platforms.length ? (
+                <ChecksumRow copyValue={platforms.join(" · ")} label="Platform" value={platforms.join(" · ")} />
+              ) : null}
+              {algorithms.length ? (
+                <ChecksumRow copyValue={algorithms.join(" · ")} label="Method" value={algorithms.join(" · ")} />
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
