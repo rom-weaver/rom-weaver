@@ -39,7 +39,7 @@ const IdentifyDrawer = ({ identification }: { identification: ParsedIdentifyLook
               {aliases.map((alias) => (
                 <ChecksumRow
                   ariaLabel={`Copy alias ${alias}`}
-                  className="identify-alias-row"
+                  className="identify-alias-row ck-half"
                   copyValue={alias}
                   key={alias}
                   label="Alias"
@@ -54,10 +54,20 @@ const IdentifyDrawer = ({ identification }: { identification: ParsedIdentifyLook
             <div className="ck-group-head">Matched by</div>
             <div className="ckrows identify-drawer-evidence">
               {platforms.length ? (
-                <ChecksumRow copyValue={platforms.join(" · ")} label="Platform" value={platforms.join(" · ")} />
+                <ChecksumRow
+                  className="ck-half"
+                  copyValue={platforms.join(" · ")}
+                  label="Platform"
+                  value={platforms.join(" · ")}
+                />
               ) : null}
               {algorithms.length ? (
-                <ChecksumRow copyValue={algorithms.join(" · ")} label="Method" value={algorithms.join(" · ")} />
+                <ChecksumRow
+                  className="ck-half"
+                  copyValue={algorithms.join(" · ")}
+                  label="Method"
+                  value={algorithms.join(" · ")}
+                />
               ) : null}
             </div>
           </div>

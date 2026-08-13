@@ -288,8 +288,7 @@
 }
 
 .rw-app .identify-drawer-body {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: var(--sp-s);
   padding: var(--sp-s) var(--sp-m);
 }
@@ -308,40 +307,13 @@
 .rw-app .identify-drawer-group {
   min-width: 0;
 }
-.rw-app .identify-drawer-aliases {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
-  column-gap: 0;
-}
-.rw-app .identify-drawer-aliases .identify-alias-row {
-  width: 100%;
-  margin-inline: 0;
-}
-.rw-app .identify-drawer-aliases .identify-alias-row .ck-v {
-  text-transform: none;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-.rw-app .identify-drawer-evidence {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  column-gap: 0;
-}
-.rw-app .identify-drawer-evidence .ck {
-  width: 100%;
-  margin-inline: 0;
-}
+.rw-app .identify-drawer-aliases .ck-v,
 .rw-app .identify-drawer-evidence .ck-v {
   text-transform: none;
 }
-.rw-app .identify-drawer-evidence .ck + .ck {
-  border-block-start-color: transparent;
-}
-@container (min-width: 540px) {
-  .rw-app .identify-drawer-aliases .identify-alias-row:nth-child(even),
-  .rw-app .identify-drawer-evidence .ck + .ck {
-    border-inline-start: 1px solid var(--ck-seam);
-  }
+.rw-app .identify-drawer-aliases .ck-v {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 /* Secondary chips (a format-implied note, a hidden bundle) recede beside the
    values the user picked. Previously only `.step-meta` styled `.muted`, so the
