@@ -10,6 +10,11 @@ import {
 // A two-entry zip (`game.bin`, `bonus.sfc`) - two distinct top-level payloads, so an interactive
 // extract with no `--select` is ambiguous and the wasm app prompts for one ROM to keep.
 const MULTI_ROM_ZIP_URL = new URL("../fixtures/archives/multi-rom.zip", import.meta.url);
+const NOT_FOUND_ERROR_REGEX = /not\s+found|object\s+can\s+not\s+be\s+found/i;
+
+const isNotFoundError = (error) =>
+  (typeof error === "object" && error !== null && error.name === "NotFoundError") ||
+  (error instanceof Error && NOT_FOUND_ERROR_REGEX.test(error.message));
 
 async function loadMultiRomZipBytes() {
   const response = await fetch(MULTI_ROM_ZIP_URL.href);
@@ -20,8 +25,9 @@ async function loadMultiRomZipBytes() {
 async function guestFileSizeOrNull(opfsHandle, guestPath) {
   try {
     return await getGuestFileSize(opfsHandle, guestPath);
-  } catch {
-    return null;
+  } catch (error) {
+    if (isNotFoundError(error)) return null;
+    throw error;
   }
 }
 
@@ -82,6 +88,10 @@ describe("rom-weaver-wasm interactive payload selection", () => {
 
     expect(result.ok).toBe(false);
     expect(result.exitCode).not.toBe(0);
+    const terminal = result.events.at(-1);
+    expect(terminal.status).toBe("failed");
+    expect(terminal.error_kind).toBe("validation");
+    expect(terminal.label).toContain("interactive selection was cancelled");
     expect(gameSize).toBeNull();
     expect(bonusSize).toBeNull();
   });

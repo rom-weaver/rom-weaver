@@ -9,6 +9,12 @@ import { describe, expect, it } from "vitest";
 import { buildStoredZip } from "./stored-zip-fixture.mjs";
 import { assertRunJsonSucceeded, joinGuestPath, withTempFixture, writeGuestFile } from "./test-helpers.mjs";
 
+const NOT_FOUND_ERROR_REGEX = /not\s+found|object\s+can\s+not\s+be\s+found/i;
+
+const isNotFoundError = (error) =>
+  (typeof error === "object" && error !== null && error.name === "NotFoundError") ||
+  (error instanceof Error && NOT_FOUND_ERROR_REGEX.test(error.message));
+
 const parseHandleStats = (traceLines) => {
   const line = traceLines.findLast((entry) => entry.includes("[perf] opfs proxy handles"));
   if (!line) throw new Error(`no proxy handle gauge in trace (${traceLines.length} lines)`);
@@ -30,10 +36,15 @@ const parseThreadWorkerStats = (traceLines) => {
   return { threadWorkersCreated: Number(matched[1]), threadWorkersTotal: Number(matched[2]) };
 };
 
-const listDirectoryEntries = async (rootHandle, relativePath) => {
+const listDirectoryEntries = async (rootHandle, relativePath, { ignoreMissing = false } = {}) => {
   let directory = rootHandle;
   for (const part of relativePath.split("/").filter(Boolean)) {
-    directory = await directory.getDirectoryHandle(part, { create: false });
+    try {
+      directory = await directory.getDirectoryHandle(part, { create: false });
+    } catch (error) {
+      if (ignoreMissing && isNotFoundError(error)) return [];
+      throw error;
+    }
   }
   const names = [];
   for await (const [name] of directory.entries()) names.push(name);
@@ -56,7 +67,7 @@ async function measureManyEntryExtract({ entryCount, entrySize, extraArgs = [] }
       const durationMs = performance.now() - startedAtMs;
       assertRunJsonSucceeded(result);
       const names = await listDirectoryEntries(opfsHandle, "out");
-      const scratchNames = await listDirectoryEntries(opfsHandle, "rom-weaver-out").catch(() => []);
+      const scratchNames = await listDirectoryEntries(opfsHandle, "rom-weaver-out", { ignoreMissing: true });
       measurement = {
         ...parseHandleStats(traceLines),
         ...parseThreadWorkerStats(traceLines),
