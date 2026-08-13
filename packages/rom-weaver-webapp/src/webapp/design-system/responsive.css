@@ -171,21 +171,17 @@
      phones so the ROM toggle does not compete with the archive selector for
      the same narrow row. */
   .rw-app .bundle-job-fields {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-s);
+    grid-template-columns: 1fr;
   }
   .rw-app .bundle-rom-option {
-    padding-block-start: var(--sp-s);
     border-block-start: 1px solid var(--seam-soft);
   }
   .rw-app .bundle-rom-option .checkrow {
-    min-height: 32px;
     margin-block: 0;
   }
   .rw-app .bundle-job .bundle-share {
     width: 100%;
     min-height: 40px;
-    padding-block: 7px;
   }
   .rw-app .updates {
     gap: var(--sp-s);
