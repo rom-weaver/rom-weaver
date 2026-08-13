@@ -1431,7 +1431,7 @@ const ApplyOutputAction = ({
         core={core}
         fileName={romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || undefined}
         onSelectView={onSelectView}
-        output={emulatorOutput}
+        output={outputState.pendingDownloadFileName ? emulatorOutput : null}
         platform={romInputs[0]?.info.romType?.platform}
         shown={postApplyTestOption.visible}
       />

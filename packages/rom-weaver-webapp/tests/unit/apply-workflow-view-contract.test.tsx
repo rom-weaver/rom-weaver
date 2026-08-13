@@ -588,6 +588,17 @@ describe("apply workflow view - completed output actions", () => {
     expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });
 
+  it("retires the Test action when Apply retires the completed output", () => {
+    const { container } = renderView({
+      emulatorOutput: { fileName: "game.nes", getBlob: async () => new Blob(["rom"]), id: "output-1" },
+      outputOverrides: { disabled: false, pendingDownloadFileName: null },
+      settings: { postApplyDownloadBehavior: "show", postApplyTestBehavior: "show" },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+    expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+  });
+
   it("labels the button by where it goes, not by playing", () => {
     const { container } = completedOutputView("show", "show");
     const label = container.querySelector("#rom-weaver-button-test-emulator .play-label");
