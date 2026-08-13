@@ -30,6 +30,7 @@ type OutputCompressPanel = {
 type OutputCardProps = {
   fileName: string;
   onFileNameChange: (value: string) => void;
+  onFileNameBlur?: () => void;
   extensionWarning?: string | null;
   fileNamePlaceholder?: string;
   fileNameLabel?: string;
@@ -68,6 +69,7 @@ const OutputField = ({
 const OutputCard = ({
   fileName,
   onFileNameChange,
+  onFileNameBlur,
   extensionWarning,
   fileNamePlaceholder,
   fileNameLabel = "Output filename",
@@ -126,6 +128,7 @@ const OutputCard = ({
             disabled={disabled}
             id={fileNameId}
             onChange={(event) => onFileNameChange(event.currentTarget.value)}
+            onBlur={onFileNameBlur}
             onKeyDown={(event) => {
               // The output name is a textarea only so it can grow - a filename
               // must never contain a newline.

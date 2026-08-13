@@ -196,6 +196,7 @@ interface OutputViewStateInput {
   effectiveResolvedOutputName: string;
   hasPendingDownload: boolean;
   outputName: string;
+  outputNameEditing: boolean;
   outputNameEdited: boolean;
   outputOptions: OutputOption[];
   pendingDownloadFileName: string | null;
@@ -219,6 +220,7 @@ const buildOutputViewState = ({
   effectiveResolvedOutputName,
   hasPendingDownload,
   outputName,
+  outputNameEditing,
   outputNameEdited,
   outputOptions,
   pendingDownloadFileName,
@@ -245,8 +247,9 @@ const buildOutputViewState = ({
   compressionFormat: displayedCompression,
   compressTiming: compressTimingText,
   disabled: disabled || busy,
-  displayFileName:
-    outputNameEdited && getFileNameExtension(outputName)
+  displayFileName: outputNameEditing
+    ? outputName
+    : outputNameEdited && getFileNameExtension(outputName)
       ? outputName
       : getOutputFileNameForFormat(
           outputNameEdited ? outputName : effectiveResolvedOutputName,

@@ -53,7 +53,8 @@ type PatcherStackController = StoreController<PatchStackState> & {
 
 type PatcherOutputController = StoreController<PatcherOutputState> & {
   cancelPrimaryAction?: () => void;
-  setDisplayFileName: (value: string) => void;
+  setDisplayFileName: (value: string, options?: { userInitiated?: boolean }) => void;
+  commitDisplayFileName?: () => void;
   setOutputCompression: (value: string) => void;
   /** ROM copier-header handling on the patched output (auto|keep|strip). */
   setOutputHeader?: (value: "auto" | "keep" | "strip") => void;

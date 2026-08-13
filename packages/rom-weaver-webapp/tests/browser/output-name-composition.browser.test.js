@@ -202,9 +202,9 @@ test("apply output options name disc containers", () => {
     ]),
   ).toEqual([
     { label: "Raw ROM", value: "none" },
-    { label: "CHD disc image", value: "chd" },
-    { label: "RVZ disc image", value: "rvz" },
-    { label: "Z3DS image", value: "z3ds" },
+    { label: "Smallest CHD", value: "chd" },
+    { label: "Smallest RVZ", value: "rvz" },
+    { label: "Smallest Z3DS", value: "z3ds" },
   ]);
 });
 

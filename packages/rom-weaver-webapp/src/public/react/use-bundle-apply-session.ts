@@ -245,7 +245,9 @@ const useBundleApplySession = ({
           // another - yield a task between calls so each reads the committed result of the previous.
           const defaults = session.outputDefaults;
           if (defaults.name) {
-            controllersRef.current.output?.setDisplayFileName(stripOutputNameExtension(defaults.name));
+            controllersRef.current.output?.setDisplayFileName(stripOutputNameExtension(defaults.name), {
+              userInitiated: false,
+            });
             await nextTask();
           }
           if (!isCurrent()) return;

@@ -135,6 +135,9 @@ const useLocalApplyPatchFormSession = ({
     setRomInputs,
   } = session;
   const [outputCompressionEdited, setOutputCompressionEdited] = useState(false);
+  const [outputNameEditing, setOutputNameEditing] = useState(false);
+  const outputNameEditingRef = useRef(false);
+  outputNameEditingRef.current = outputNameEditing;
   const [failurePlacement, setFailurePlacement] = useState<"input" | "output" | "patch" | null>(null);
   const {
     busy,
@@ -435,8 +438,12 @@ const useLocalApplyPatchFormSession = ({
   );
 
   useEffect(() => {
+    if (outputNameEditingRef.current) return;
     const configuredOutputName = activeSettings.output?.outputName || "";
-    setOutputName(configuredOutputName);
+    const displayOutputName = getOutputFileNameForFormat(configuredOutputName, displayedCompression, outputOptions, {
+      rawExtensions: ROM_FILE_EXTENSIONS,
+    });
+    setOutputName(displayOutputName);
     setOutputNameEdited(!!configuredOutputName.trim());
     if (pendingDownloadResultRef.current && hasPendingDownload) {
       setPendingDownloadReadyFileName(
@@ -451,6 +458,8 @@ const useLocalApplyPatchFormSession = ({
     activeSettings.output?.outputName,
     automaticResolvedOutputName,
     hasPendingDownload,
+    displayedCompression,
+    outputOptions,
     setPendingDownloadReadyFileName,
     setOutputName,
     setOutputNameEdited,
@@ -542,6 +551,7 @@ const useLocalApplyPatchFormSession = ({
         effectiveResolvedOutputName,
         hasPendingDownload,
         outputName,
+        outputNameEditing,
         outputNameEdited,
         outputOptions,
         pendingDownloadFileName,
@@ -562,6 +572,7 @@ const useLocalApplyPatchFormSession = ({
       displayedCompression,
       effectiveResolvedOutputName,
       hasPendingDownload,
+      outputNameEditing,
       pendingDownloadFileName,
       outputOptions,
       outputName,
@@ -1238,7 +1249,8 @@ const useLocalApplyPatchFormSession = ({
     () => ({
       ...applyDownloadOrchestration,
       getState: localOutputStoreController.getState,
-      setDisplayFileName: (value: string) => {
+      commitDisplayFileName: () => setOutputNameEditing(false),
+      setDisplayFileName: (value: string, options: { userInitiated?: boolean } = {}) => {
         const nextOutputName = getRequestedOutputName(value);
         const inferredCompression = getOutputFormatForFileName(value, outputOptions, {
           rawExtensions: ROM_FILE_EXTENSIONS,
@@ -1246,6 +1258,7 @@ const useLocalApplyPatchFormSession = ({
         clearDismissibleErrors();
         invalidateCompletedOutputState();
         setOutputName(value);
+        setOutputNameEditing(options.userInitiated !== false);
         setOutputNameEdited(!!nextOutputName);
         if (inferredCompression) setOutputCompressionEdited(true);
         commitSettings({
@@ -1262,6 +1275,7 @@ const useLocalApplyPatchFormSession = ({
           rawExtensions: ROM_FILE_EXTENSIONS,
         });
         setOutputCompressionEdited(true);
+        setOutputNameEditing(false);
         if (nextOutputName !== outputName) {
           setOutputName(nextOutputName);
           setOutputNameEdited(!!getRequestedOutputName(nextOutputName));

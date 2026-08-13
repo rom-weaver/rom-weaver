@@ -153,6 +153,8 @@ const stripFileExtension = (fileName: string): string => {
   return dotIndex > 0 ? trimmed.slice(0, dotIndex) : trimmed;
 };
 
+const hasFileNameExtension = (fileName: string): boolean => /\.[^./\\\s]+$/.test(fileName.trim());
+
 /** Turn a bundle name into a safe bundle file base name. */
 const slugFileName = (value: string): string =>
   value
@@ -407,6 +409,8 @@ const useBundleExport = ({
       const wantsBundle = format !== BUNDLE_ONLY_FORMAT;
       const bundleBaseName = stripFileExtension(exportName);
       const bundleFileName = wantsBundle ? `${slugFileName(bundleBaseName) || "rw-bundle"}.${format}` : undefined;
+      const outputName =
+        exportName && wantsBundle && !hasFileNameExtension(exportName) ? `${exportName}.${format}` : exportName;
       const packagedRom = await preparePackagedRom({
         browserRuntime,
         bundleRom,
@@ -423,7 +427,7 @@ const useBundleExport = ({
       const { result, bundleOutput, archiveOutput } = await exportCreate({
         ...(bundleFileName ? { bundleFileName } : {}),
         ...(packagedRom ? { bundleRom: packagedRom } : {}),
-        ...(exportName.trim() ? { outputName: exportName.trim() } : {}),
+        ...(outputName.trim() ? { outputName: outputName.trim() } : {}),
         ...(bundleRom && wantsBundle ? {} : { romName: romName.trim() }),
         ...(Object.keys(romChecksums).length ? { romChecksums: formatChecks(romChecksums) } : {}),
         ...(typeof romSize === "number" ? { romSize } : {}),

@@ -77,8 +77,23 @@ test("engine recommendation is honored or suppressed per the default-compression
   // Special-allowing modes honor the rvz verdict over the 7z/zip default archive.
   expect(run("7z/special")).toBe("rvz");
   expect(run("auto")).toBe("rvz");
-  // "* only" modes force the default archive and suppress the verdict.
-  expect(run("7z only")).toBe("7z");
+  // A special disc only permits its matching container or raw output.
+  expect(run("7z only")).toBe("none");
+});
+
+test("special disc inputs only offer raw output and their matching container", () => {
+  const options = ["none", "zip", "7z", "chd", "rvz", "z3ds"];
+  const cases = [
+    [{ fileName: "game.gcm" }, "rvz"],
+    [{ fileName: "disc.cue" }, "chd"],
+    [{ fileName: "game.cci" }, "z3ds"],
+  ];
+  for (const [source, matchingFormat] of cases) {
+    expect(options.filter((option) => OutputCompressionManager.supportsOutputCompression(source, option))).toEqual([
+      "none",
+      matchingFormat,
+    ]);
+  }
 });
 
 test("automatic output format uses unambiguous special compression input extensions", () => {

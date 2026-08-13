@@ -167,11 +167,9 @@ const createOutputOptions = (
   }));
 
 const APPLY_OUTPUT_FORMAT_NAMES: Record<string, string> = {
-  "7z": "7z",
-  chd: "CHD disc image",
-  rvz: "RVZ disc image",
-  zip: "ZIP",
-  z3ds: "Z3DS image",
+  chd: "CHD",
+  rvz: "RVZ",
+  z3ds: "Z3DS",
 };
 
 const getOutputOptionExtension = (option: OutputOption, source?: GeneratedOutputSource) => {
@@ -184,7 +182,7 @@ const getApplyOutputLabel = (option: OutputOption) => {
   if (option.value === "none") return "Raw ROM";
   if (option.value === "7z") return "Smaller 7z";
   const formatName = APPLY_OUTPUT_FORMAT_NAMES[option.value] || option.label.replace(/^\./, "").toUpperCase();
-  return ["chd", "rvz", "z3ds"].includes(option.value) ? formatName : `Small ${formatName}`;
+  return ["chd", "rvz", "z3ds"].includes(option.value) ? `Smallest ${formatName}` : `Small ${formatName}`;
 };
 
 const createApplyOutputOptions = (

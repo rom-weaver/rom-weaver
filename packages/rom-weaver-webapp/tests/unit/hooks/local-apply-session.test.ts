@@ -75,11 +75,13 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
     expect(result.current.localStackController.getState().items).toHaveLength(2);
   });
 
-  it("keeps a user-edited output name when a patch is disabled", () => {
+  it("keeps a user-edited output name when a patch is disabled", async () => {
     const inputs = [source("rom.bin")];
     const patches = [source("a.ips"), source("b.ips")];
     const { result, rerender } = renderSession({ inputs, patches });
     act(() => result.current.localOutputController.setDisplayFileName("custom"));
+    await waitFor(() => expect(result.current.localOutputController.getState().displayFileName).toBe("custom"));
+    act(() => result.current.localOutputController.commitDisplayFileName?.());
     rerender({
       applyPatches: vi.fn(async () => applyResult()),
       applyReady: true,
@@ -108,9 +110,10 @@ describe("useLocalApplyPatchFormSession derived controllers", () => {
     expect(lastCall?.output?.outputName).toBe("custom.zip");
   });
 
-  it("changes a recognized output extension when compression changes", () => {
+  it("changes a recognized output extension when compression changes", async () => {
     const { result, onSettingsChange } = renderSession();
     act(() => result.current.localOutputController.setDisplayFileName("custom.zip"));
+    await waitFor(() => expect(result.current.localOutputController.getState().displayFileName).toBe("custom.zip"));
     act(() => result.current.localOutputController.setOutputCompression("7z"));
     const lastCall = onSettingsChange.mock.calls.at(-1)?.[0];
     expect(lastCall?.output?.compression).toBe("7z");

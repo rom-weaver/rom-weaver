@@ -212,6 +212,7 @@ describe("buildOutputViewState", () => {
       effectiveResolvedOutputName: "out.zip",
       hasPendingDownload: false,
       outputName: "",
+      outputNameEditing: false,
       outputNameEdited: false,
       outputOptions: [],
       pendingDownloadFileName: null,
@@ -236,6 +237,12 @@ describe("buildOutputViewState", () => {
   it("shows the edited output name over the resolved one", () => {
     expect(baseOutput().displayFileName).toBe("out.zip");
     expect(baseOutput({ outputName: "custom.zip", outputNameEdited: true }).displayFileName).toBe("custom.zip");
+  });
+
+  it("keeps the filename draft unchanged while it is being edited", () => {
+    expect(baseOutput({ outputName: "custom", outputNameEditing: true, outputNameEdited: true }).displayFileName).toBe(
+      "custom",
+    );
   });
 
   it("disables the apply button when nothing is actionable", () => {

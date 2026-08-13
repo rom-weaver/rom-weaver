@@ -59,6 +59,7 @@ const inertOutputController: PatcherOutputController = {
   cancelPrimaryAction: () => undefined,
   runPrimaryAction: () => undefined,
   setDisplayFileName: () => undefined,
+  commitDisplayFileName: () => undefined,
   setOutputCompression: () => undefined,
   setOutputCompressOption: () => undefined,
   setOutputHeader: () => undefined,

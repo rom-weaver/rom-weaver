@@ -2137,6 +2137,7 @@ function ApplyWorkflowFormView({
             }
             num="0x04"
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
+            onFileNameBlur={() => controllers.output.commitDisplayFileName?.()}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
             title="Apply"
             woven={applyDone || running}
