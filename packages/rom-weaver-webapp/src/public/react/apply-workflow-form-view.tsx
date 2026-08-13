@@ -1551,11 +1551,8 @@ const BundleSecondaryJob = ({
   return (
     <section aria-labelledby="rom-weaver-bundle-job-title" className="bundle-job" id="rom-weaver-bundle-job">
       <div className="bundle-job-heading">
-        <Share2 aria-hidden="true" className="bundle-job-icon" />
-        <div>
-          <h3 id="rom-weaver-bundle-job-title">{localizer.message("ui.bundleExport.shareTitle")}</h3>
-          <p>{localizer.message("ui.bundleExport.shareDescription")}</p>
-        </div>
+        <h3 id="rom-weaver-bundle-job-title">{localizer.message("ui.bundleExport.shareTitle")}</h3>
+        <p>{localizer.message("ui.bundleExport.shareDescription")}</p>
       </div>
       <div className="bundle-job-content">
         <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />

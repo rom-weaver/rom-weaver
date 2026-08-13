@@ -13,7 +13,6 @@ import { createVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { ApplyWorkflowBundleSources } from "../../types/apply-workflow.ts";
 import type { BundleHeaderMode, ParsedBundleCreateResult } from "../../types/bundle.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
-import { ROM_WEAVER_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
@@ -281,10 +280,9 @@ const preparePackagedRom = async ({
   if (!targetFormat) {
     return { fileName: rom.fileName, source: rom.source };
   }
-  const targetCompressedExtensions: readonly string[] =
-    ROM_WEAVER_CONTAINER_FORMATS.find((entry) => entry.name === targetFormat)?.extensions || [];
+  const targetCompressedExtension = getCompressionOutputExtension(targetFormat, { inputFileName: rom.fileName });
   const isSuitableCompressedName = (fileName: string) =>
-    !!fileName && targetCompressedExtensions.includes(`.${getFileNameExtension(fileName)}`);
+    !!fileName && getFileNameExtension(fileName) === targetCompressedExtension;
   if (isSuitableCompressedName(originalName)) {
     return { fileName: originalName, source: rom.originalSource };
   }

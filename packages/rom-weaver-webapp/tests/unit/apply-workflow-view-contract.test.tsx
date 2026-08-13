@@ -660,7 +660,7 @@ describe("apply workflow view - bundle controls", () => {
   });
 
   it("keeps the sharing action full width at every panel size", () => {
-    const shareRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-job \.bundle-share\s*\{([^}]*)\}/)?.[1];
+    const shareRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-share\s*\{([^}]*)\}/)?.[1];
 
     expect(shareRule).toContain("width: 100%");
     expect(shareRule).toContain("min-height: 40px");

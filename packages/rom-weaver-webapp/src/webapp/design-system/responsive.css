@@ -172,12 +172,8 @@
     gap: var(--sp-m);
   }
   .rw-app .bundle-job-heading {
-    align-self: auto;
     padding-inline-end: 0;
     border-inline-end: 0;
-  }
-  .rw-app .bundle-job-content {
-    gap: var(--sp-m);
   }
   /* Keep the bundle choices in one compact row on phones. */
   .rw-app .bundle-job-fields {
