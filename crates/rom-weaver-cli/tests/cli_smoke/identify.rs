@@ -15,7 +15,7 @@ fn hash_member(algorithm: u8, hash: &[u8]) -> Vec<u8> {
     bytes
 }
 
-fn identify_pack_with_crc(crc32: [u8; 4], name: &str) -> Vec<u8> {
+fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name: &str) -> Vec<u8> {
     let mut pairs = Vec::new();
     pairs.extend_from_slice(b"RWHP");
     pairs.extend_from_slice(&1u16.to_le_bytes());
@@ -25,26 +25,8 @@ fn identify_pack_with_crc(crc32: [u8; 4], name: &str) -> Vec<u8> {
 
     let members = [
         ("crc32.bin", hash_member(0, &crc32)),
-        (
-            "md5.bin",
-            hash_member(
-                1,
-                &[
-                    0x5d, 0x41, 0x40, 0x2a, 0xbc, 0x4b, 0x2a, 0x76, 0xb9, 0x71, 0x9d, 0x91, 0x10,
-                    0x17, 0xc5, 0x92,
-                ],
-            ),
-        ),
-        (
-            "sha1.bin",
-            hash_member(
-                2,
-                &[
-                    0xaa, 0xf4, 0xc6, 0x1d, 0xdc, 0xc5, 0xe8, 0xa2, 0xda, 0xbe, 0xde, 0x0f, 0x3b,
-                    0x48, 0x2c, 0xd9, 0xae, 0xa9, 0x43, 0x4d,
-                ],
-            ),
-        ),
+        ("md5.bin", hash_member(1, &md5)),
+        ("sha1.bin", hash_member(2, &sha1)),
         ("name-platforms.bin", pairs),
         ("names.json", serde_json::to_vec(&[name]).expect("names")),
         (
@@ -65,6 +47,33 @@ fn identify_pack_with_crc(crc32: [u8; 4], name: &str) -> Vec<u8> {
         bytes.extend_from_slice(&member);
     }
     bytes
+}
+
+pub(crate) fn identify_pack_with_crc(crc32: [u8; 4], name: &str) -> Vec<u8> {
+    identify_pack_with_hashes(
+        crc32,
+        [
+            0x5d, 0x41, 0x40, 0x2a, 0xbc, 0x4b, 0x2a, 0x76, 0xb9, 0x71, 0x9d, 0x91, 0x10, 0x17,
+            0xc5, 0x92,
+        ],
+        [
+            0xaa, 0xf4, 0xc6, 0x1d, 0xdc, 0xc5, 0xe8, 0xa2, 0xda, 0xbe, 0xde, 0x0f, 0x3b, 0x48,
+            0x2c, 0xd9, 0xae, 0xa9, 0x43, 0x4d,
+        ],
+        name,
+    )
+}
+
+pub(crate) fn identify_pack_with_md5(md5: [u8; 16], name: &str) -> Vec<u8> {
+    identify_pack_with_hashes(
+        [0x36, 0x10, 0xa6, 0x86],
+        md5,
+        [
+            0xaa, 0xf4, 0xc6, 0x1d, 0xdc, 0xc5, 0xe8, 0xa2, 0xda, 0xbe, 0xde, 0x0f, 0x3b, 0x48,
+            0x2c, 0xd9, 0xae, 0xa9, 0x43, 0x4d,
+        ],
+        name,
+    )
 }
 
 fn identify_pack() -> Vec<u8> {

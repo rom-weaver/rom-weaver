@@ -1,8 +1,10 @@
 # ROM identify data
 
-The `identify` command uses compact RWFP1 title packs. The native CLI embeds the shipped packs.
+The `identify` and `ingest` commands use compact RWFP1 title packs. The native CLI embeds the shipped packs.
 
-The browser downloads the applicable pack after a user selects a ROM. It then caches the pack for later offline use.
+The browser downloads applicable packs when it ingests a ROM or patch. It then caches the packs for later offline use.
+
+Ingest resolves ROM assets from their computed checksum variants. It also resolves a patch's expected source from embedded or file-name checksums. It does not hash the ROM or patch twice.
 
 <!-- START doctoc -->
 ## Table of contents

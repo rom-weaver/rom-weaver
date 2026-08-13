@@ -707,6 +707,19 @@ pub struct IngestCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            short = 'd',
+            long = "database",
+            value_name = "PACK",
+            action = ArgAction::Append,
+            help = "RWFP1 identify pack to use for ROM titles (repeatable; native defaults to built-in OpenGood data)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub database: Vec<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             short = 's',
             long = "select",
             help = "Pick which ROM to use when the archive holds more than one, by exact name, prefix, or glob (repeatable)"

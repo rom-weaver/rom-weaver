@@ -1332,7 +1332,9 @@ mod checksum_command;
 
 #[path = "identify_command.rs"]
 mod identify_command;
-pub use identify_command::{IdentifyResult, IdentifyStatus, IdentifyTitleMatch};
+pub use identify_command::{
+    IdentifyLookupResult, IdentifyResult, IdentifyStatus, IdentifyTitleMatch,
+};
 
 #[path = "identify_builtin.rs"]
 mod identify_builtin;

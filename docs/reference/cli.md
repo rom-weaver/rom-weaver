@@ -120,6 +120,8 @@ Native builds include CC0 OpenGood data for 17 cartridge systems. `--database PA
 
 The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON reports put the typed result in `details.identify`.
 
+The internal `ingest` command also identifies each ROM asset. It identifies a patch's expected source when the patch supplies a source checksum. Its JSON result puts these compact matches in `details.ingest`.
+
 ## Checksum
 
 `checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
