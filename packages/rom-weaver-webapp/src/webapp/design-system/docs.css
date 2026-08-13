@@ -370,12 +370,6 @@ html:has(.docs-workbench) {
   opacity: 0;
   transition: opacity 0.15s var(--ease);
 }
-/* Touch has no hover to reveal the glyph, so it stays faintly visible. */
-@media (hover: none) {
-  .rw-app .docs-section-link-icon {
-    opacity: 0.45;
-  }
-}
 @media (hover: hover) {
   .rw-app .docs-article a.docs-section-link:hover .docs-section-title {
     text-decoration-line: underline;
