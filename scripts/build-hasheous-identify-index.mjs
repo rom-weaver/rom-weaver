@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import { once } from "node:events";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { StringDecoder } from "node:string_decoder";
 import zlib from "node:zlib";
 
@@ -23,7 +23,7 @@ const HASH_MAGIC = Buffer.from("RWH1", "binary");
 const PAIR_MAGIC = Buffer.from("RWHP", "binary");
 const CONFLICT_VALUE_FLAG = 0x80000000;
 const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v2";
-const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
+export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
 
 // OpenGood (https://github.com/SnowflakePowered/opengood) publishes the
 // GoodTools cartridge sets as CC0 Logiqx XML DATs. We prefer it for the
@@ -33,9 +33,14 @@ const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
 // Disc systems and modern handhelds are not in OpenGood, so those fall back to
 // the Hasheous dump (No-Intro/Redump-derived). Each supported platform draws
 // from exactly ONE source, so per-system packs never mix sources / hashes.
-const OPENGOOD_REVISION = "5cbd95ef3f5904b9e067042ae8dd08a35c39c89a";
-const OPENGOOD_RAW_BASE = `https://raw.githubusercontent.com/SnowflakePowered/opengood/${OPENGOOD_REVISION}/dats/`;
-const OPENGOOD_PLATFORMS = Object.freeze({
+export const OPENGOOD_REPOSITORY = "https://github.com/SnowflakePowered/opengood";
+export const OPENGOOD_REVISION = "5cbd95ef3f5904b9e067042ae8dd08a35c39c89a";
+const OPENGOOD_RAW_REPOSITORY = OPENGOOD_REPOSITORY.replace(
+  "https://github.com/",
+  "https://raw.githubusercontent.com/",
+);
+const OPENGOOD_RAW_BASE = `${OPENGOOD_RAW_REPOSITORY}/${OPENGOOD_REVISION}/dats/`;
+export const OPENGOOD_PLATFORMS = Object.freeze({
   "Atari 2600": ["Open2600.dat"],
   "Atari 5200": ["Open5200.dat"],
   "Atari 7800": ["Open7800.dat"],
@@ -59,7 +64,7 @@ function platformSource(platform) {
   return OPENGOOD_PLATFORMS[platform] ? "opengood" : "hasheous";
 }
 
-function slugifyPlatform(platform) {
+export function slugifyPlatform(platform) {
   return platform
     .toLowerCase()
     .replace(/[^a-z0-9]+/gu, "-")
@@ -524,7 +529,7 @@ async function parseOpenGoodDat(text, platform, state) {
 }
 
 async function downloadOpenGoodDat(datFile, cacheDir) {
-  const dir = path.join(cacheDir, "opengood");
+  const dir = path.join(cacheDir, "opengood", OPENGOOD_REVISION);
   await mkdir(dir, { recursive: true });
   const destination = path.join(dir, datFile);
   const existing = await fileStat(destination);
@@ -1163,8 +1168,8 @@ async function writeSystemPack(platform, rows, options) {
   return system;
 }
 
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
+export async function main(argv = process.argv.slice(2)) {
+  const options = parseArgs(argv);
   if (options.printPlatforms) {
     for (const platform of SUPPORTED_PLATFORMS) console.log(`${platformSource(platform)}\t${platform}`);
     return;
@@ -1227,7 +1232,7 @@ async function main() {
     hashStrategy: "crc-primary-md5-sha1-fallback-per-system",
     sources: {
       opengood: {
-        url: "https://github.com/SnowflakePowered/opengood",
+        url: OPENGOOD_REPOSITORY,
         license: "CC0-1.0",
         revision: OPENGOOD_REVISION,
       },
@@ -1267,7 +1272,9 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(`error: ${error.stack || error.message || error}`);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(`error: ${error.stack || error.message || error}`);
+    process.exit(1);
+  });
+}

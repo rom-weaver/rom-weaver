@@ -105,6 +105,7 @@ def ensure_fixture(path: Path, min_bytes: int) -> None:
 def build_if_needed(bin_path: Path) -> None:
     if bin_path.exists():
         return
+    subprocess.run(["node", "scripts/ensure-identify-data.mjs"], check=True, cwd=REPO_ROOT)
     subprocess.run(
         ["cargo", "build", "-p", "rom-weaver-cli"],
         check=True,

@@ -9,27 +9,37 @@ Ingest resolves ROM assets from their computed checksum variants. It also resolv
 <!-- START doctoc -->
 ## Table of contents
 
-- [Shipped data](#shipped-data)
+- [Build-time data](#build-time-data)
 - [Local Hasheous data](#local-hasheous-data)
 - [Pack integrity](#pack-integrity)
 
 <!-- END doctoc -->
 
-## Shipped data
+## Build-time data
 
-The repository ships data from [OpenGood](https://github.com/SnowflakePowered/opengood). OpenGood publishes its data under CC0-1.0.
+The repository does not commit identify packs. Build tasks fetch data from [OpenGood](https://github.com/SnowflakePowered/opengood) and create the packs locally.
 
-The build script pins the OpenGood revision. This makes the generated packs deterministic.
+OpenGood publishes its data under CC0-1.0. The source revision is pinned in `scripts/build-hasheous-identify-index.mjs`.
 
-Rebuild all shipped packs:
+The current source is the upstream repository because `rom-weaver/open-good` does not exist. The source URL and revision are kept together so a maintained fork can replace it later.
+
+Run the build step directly:
 
 ```bash
-script=scripts/build-hasheous-identify-index.mjs
-out=crates/rom-weaver-cli/data/identify/v1
-node "$script" --opengood-only --out "$out"
+mise run identify-data
 ```
 
-Run the command a second time. Confirm that `git diff` shows no pack changes.
+The standard Rust and WASM tasks, webapp build, and CLI crate build script run this step automatically. The generated files live under `crates/rom-weaver-cli/data/identify/v1`, which Git ignores.
+
+Rebuild the packs after changing the source revision:
+
+```bash
+node scripts/ensure-identify-data.mjs --force
+```
+
+The generated index records the source revision. The browser build compresses the raw packs into its self-hosted Brotli sidecars.
+
+The CLI crate includes the generated files in its Cargo package archive. Run `mise run identify-data` before `cargo package` or `cargo publish`.
 
 ## Local Hasheous data
 

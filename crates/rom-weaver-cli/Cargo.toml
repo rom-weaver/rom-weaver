@@ -11,6 +11,8 @@ readme = "README.md"
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
+include = ["**"]
+build = "build.rs"
 
 [lib]
 name = "rom_weaver_app"

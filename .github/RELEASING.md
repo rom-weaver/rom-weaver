@@ -49,6 +49,7 @@ crates.io requires a crate to be published once before its trusted publisher can
 
 ```bash
 cargo login
+mise run identify-data
 cargo publish --locked --package <crate>
 ```
 

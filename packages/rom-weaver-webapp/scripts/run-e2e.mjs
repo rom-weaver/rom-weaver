@@ -47,7 +47,10 @@ const main = async () => {
   const profile = PROFILES[process.argv[2]];
   if (!profile) throw new Error(`unknown E2E profile: ${process.argv[2] ?? "(missing)"}`);
 
-  if (process.env.ROM_WEAVER_E2E_SKIP_WASM_BUILD !== "1") {
+  if (process.env.ROM_WEAVER_E2E_SKIP_WASM_BUILD === "1") {
+    const identify = await run("ROM identify data", "node", ["scripts/ensure-identify-data.mjs"], REPO_ROOT);
+    if (identify.code !== 0) process.exit(identify.code);
+  } else {
     const build = await run(profile.buildName, "mise", ["run", "build-wasm"], REPO_ROOT);
     if (build.code !== 0) process.exit(build.code);
   }

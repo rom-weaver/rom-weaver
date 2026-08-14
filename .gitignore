@@ -16,6 +16,10 @@
 /docs/man/
 /docs/completions/
 
+# Generated ROM identify data (fetched from the pinned OpenGood revision)
+/crates/rom-weaver-cli/data/identify/v1/*.pack
+/crates/rom-weaver-cli/data/identify/v1/index.json
+
 # Generated wasm artifacts
 /dist/wasm/
 /packages/rom-weaver-cli-platforms/*/bin/

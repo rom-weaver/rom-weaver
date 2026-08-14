@@ -368,8 +368,16 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config
+
+      - name: Prepare ROM identify data
+        run: node scripts/ensure-identify-data.mjs
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
@@ -439,6 +447,14 @@ jobs:
           ref: ${{ needs.release.outputs.sha }}
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Prepare ROM identify data
+        run: node scripts/ensure-identify-data.mjs
 
       - name: Dry-run publish workspace crates
         # Package each crate exactly as cargo publish would, without uploading.

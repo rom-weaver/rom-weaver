@@ -16,6 +16,14 @@
 # exist for the build that asks for it.
 ARG BINARY=source
 
+FROM node:24-bookworm AS identify-data
+WORKDIR /src
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY scripts /src/scripts
+RUN node scripts/ensure-identify-data.mjs
+
 FROM rust:1.97.1-bookworm AS builder
 ARG TARGETARCH
 WORKDIR /src
@@ -25,6 +33,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
+COPY --from=identify-data /src/crates/rom-weaver-cli/data/identify/v1 /src/crates/rom-weaver-cli/data/identify/v1
 
 # The vendored LZMA SDK's x86-64 decode loop is MASM assembly, and no Debian
 # package assembles it. Building JWasm here is what makes the amd64 image's 7z
