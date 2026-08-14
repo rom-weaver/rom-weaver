@@ -67,7 +67,7 @@ const identifyRom = async (source: Blob, fileName: string, options: BrowserIdent
     identify: true,
   });
   try {
-    const asset = result.assets[0];
+    const asset = result.assets.find((candidate) => candidate.identification?.matches?.length) || result.assets[0];
     const identification = asset?.identification;
     return {
       checksumVariants: asset?.checksumVariants || [],

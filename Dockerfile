@@ -34,6 +34,7 @@ RUN apt-get update \
 
 COPY . .
 COPY --from=identify-data /src/crates/rom-weaver-cli/data/identify/v1 /src/crates/rom-weaver-cli/data/identify/v1
+ENV ROM_WEAVER_IDENTIFY_DATA_READY=1
 
 # The vendored LZMA SDK's x86-64 decode loop is MASM assembly, and no Debian
 # package assembles it. Building JWasm here is what makes the amd64 image's 7z
