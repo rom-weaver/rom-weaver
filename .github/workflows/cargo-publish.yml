@@ -36,6 +36,14 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Prepare ROM identify data
+        run: node scripts/ensure-identify-data.mjs
+
       - id: crates-io-auth
         uses: rust-lang/crates-io-auth-action@v1
 
@@ -90,7 +98,7 @@ jobs:
             publish_args+=(--package "${package%%$'\t'*}")
           done
 
-          if cargo publish "${publish_args[@]}" --locked; then
+          if cargo publish "${publish_args[@]}" --locked --allow-dirty; then
             exit 0
           fi
 

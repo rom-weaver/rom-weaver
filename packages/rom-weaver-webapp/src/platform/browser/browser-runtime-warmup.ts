@@ -59,6 +59,7 @@ const warmupBrowserRuntimeExtraction = async (): Promise<void> => {
     const { outputs, patchOutputs } = await ingest.run({
       checksumAlgorithms: [...WARMUP_CHECKSUM_ALGORITHMS],
       fileName: file.name,
+      identify: false,
       source: { fileName: file.name, source: file },
     });
     await cleanupWarmupOutputs([...outputs, ...patchOutputs]);

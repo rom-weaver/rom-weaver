@@ -112,12 +112,17 @@ CMAKE_C_COMPILER_LAUNCHER = "{{ exec(command='command -v sccache || true') | tri
 
 # --- Tasks ----------------------------------------------------------------
 
+[tasks.identify-data]
+description = "Fetch pinned OpenGood data and build ignored identify packs"
+run = "node {{ config_root }}/scripts/ensure-identify-data.mjs"
+
 [tasks.wasm-check]
 description = "Type-check the threaded WASM target (containers lib)"
 run = "cargo check -p rom-weaver-containers --target wasm32-wasip1-threads --lib"
 
 [tasks.build-wasm]
 description = "Build the threaded WASM app module (fast local dev build, no wasm-opt/brotli)"
+depends = ["identify-data"]
 # Release C builds add -O3 -flto on top of the lean check-time CFLAGS above.
 # These mirror build-wasm-prod's flags; scripts/wasm/build-app.mjs holds the
 # shared build body so only this CFLAGS block differs between the two tasks.
@@ -129,6 +134,7 @@ run = "node {{ config_root }}/scripts/wasm/build-app.mjs dev"
 
 [tasks.build-wasm-prod]
 description = "Build the threaded WASM app module with wasm-opt and brotli (CI/release)"
+depends = ["identify-data"]
 # Release C builds add -O3 -flto on top of the lean check-time CFLAGS above.
 # Same flags as build-wasm; the prod-only wasm-opt + brotli tail lives in
 # scripts/wasm/build-app.mjs, selected by the `prod` argument.
@@ -140,6 +146,7 @@ run = "node {{ config_root }}/scripts/wasm/build-app.mjs prod"
 
 [tasks.build-wasm-twiggy]
 description = "Build an unoptimized, symbol-rich WASM module for twiggy analysis"
+depends = ["identify-data"]
 env.CARGO_PROFILE_WASM_RELEASE_STRIP = "none"
 env.CARGO_PROFILE_WASM_RELEASE_DEBUG = "true"
 run = "node {{ config_root }}/scripts/wasm/build-twiggy.mjs"
@@ -154,18 +161,22 @@ run = "cargo fmt --package rom-weaver-checksum --package rom-weaver-cli --packag
 
 [tasks.clippy]
 description = "Lint the workspace with clippy (warnings are errors)"
+depends = ["identify-data"]
 run = "cargo clippy --workspace --all-targets --all-features --no-deps -- -D warnings"
 
 [tasks.typegen]
 description = "Regenerate TypeScript bindings from Rust"
+depends = ["identify-data"]
 run = "cargo run -p rom-weaver-cli --features typescript-types --example rom-weaver-typegen -- --write"
 
 [tasks.typegen-check]
 description = "Verify TypeScript bindings are up to date"
+depends = ["identify-data"]
 run = "cargo run -p rom-weaver-cli --features typescript-types --example rom-weaver-typegen -- --check"
 
 [tasks.manpages]
 description = "Regenerate CLI man pages from Clap definitions"
+depends = ["identify-data"]
 run = "cargo run -p rom-weaver-cli --example generate_manpages -- --write"
 
 [tasks.licenses]
@@ -209,6 +220,7 @@ run = """cargo-machete --skip-target-dir \
 
 [tasks.semver-checks]
 description = "Check published crates for accidental breaking API changes"
+depends = ["identify-data"]
 # No-op until the first crates.io publish - cargo-semver-checks diffs against
 # the released baseline, so unpublished crates have nothing to compare to. The
 # release workflow runs this per-crate and skips ones with no baseline; run it
@@ -217,6 +229,7 @@ run = "cargo semver-checks check-release --workspace"
 
 [tasks.test-rust]
 description = "Run the Rust workspace test suite"
+depends = ["identify-data"]
 # nextest schedules the run phase (per-test processes, better parallelism);
 # it does not execute doctests, so those keep a plain `cargo test --doc` pass
 # - dropping them would silently shrink the suite. The two `cargo test`
@@ -235,6 +248,7 @@ run = [
 
 [tasks.coverage-rust]
 description = "Run the Rust workspace tests under llvm-cov and emit HTML + lcov coverage"
+depends = ["identify-data"]
 # Requires cargo-llvm-cov + the llvm-tools-preview component. llvm-cov recompiles
 # the workspace with instrumentation into its own target subdir, so this does not
 # reuse the normal `cargo test` artifacts - run it on demand, not in the gate.

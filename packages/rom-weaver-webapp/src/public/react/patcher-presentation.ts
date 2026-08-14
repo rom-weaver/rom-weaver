@@ -84,6 +84,8 @@ type PatchStackItemState = {
   };
   /** Source-checksum preflight verdict ("valid"/"invalid"/"pending"/"unknown"); drives ROM verification color. */
   sourceChecksumState: string;
+  /** Titles identified from this patch's source requirements. */
+  sourceTitles?: string[];
   validationLabel: string;
   validationValues: string[];
   validationMessage: string;

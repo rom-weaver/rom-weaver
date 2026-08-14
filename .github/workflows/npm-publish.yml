@@ -187,11 +187,18 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config zip
 
       - name: Generate CLI documentation
-        run: cargo run --locked -p rom-weaver-cli --example generate_manpages -- --write
+        run: |
+          node scripts/ensure-identify-data.mjs
+          cargo run --locked -p rom-weaver-cli --example generate_manpages -- --write
 
       - name: Package CLI documentation
         run: |

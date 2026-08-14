@@ -1,4 +1,6 @@
+import { spawnSync } from "node:child_process";
 import process from "node:process";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
@@ -10,6 +12,15 @@ const forceDeterministicNavigator = () => {
     configurable: true,
     value: 0,
   });
+};
+
+const ensureIdentifyData = () => {
+  const script = fileURLToPath(new URL("../../../scripts/ensure-identify-data.mjs", import.meta.url));
+  const result = spawnSync(process.execPath, [script], {
+    cwd: path.dirname(path.dirname(script)),
+    stdio: "inherit",
+  });
+  if (result.status !== 0) throw new Error("failed to prepare ROM identify data");
 };
 
 // Render the shell through an already-running Vite server's SSR loader. The dev
@@ -27,6 +38,7 @@ const renderLandingShellWithServer = async (server, view = "patcher", notFound =
 // seconds, so every shell a build needs is rendered inside a single call rather
 // than one server per shell.
 const withPrerenderServer = async (render) => {
+  ensureIdentifyData();
   const server = await createServer({
     appType: "custom",
     configFile: fileURLToPath(new URL("../vite.config.mjs", import.meta.url)),

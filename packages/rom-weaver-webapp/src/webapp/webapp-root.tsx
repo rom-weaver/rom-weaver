@@ -40,6 +40,7 @@ import {
   CreatePatchRoute,
   DocsPageRoute,
   EmulatorTestRoute,
+  IdentifyRouteForm,
   preloadWorkflowRoute,
   ToolsRouteForm,
   TrimPatchRoute,
@@ -76,6 +77,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
+  else if (view === "identify") route = WORKFLOW_SEO_ROUTES.identify;
   else if (view === "patcher") route = WORKFLOW_SEO_ROUTES.patcher;
   else if (view === "test") route = WORKFLOW_SEO_ROUTES.test;
   if (!route) {
@@ -686,6 +688,7 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
+                {workflowPanel("identify", <IdentifyRouteForm pageDrop={activePageDrop} />)}
                 {workflowPanel("test", <EmulatorTestRoute active={state.currentView === "test"} />)}
                 {workflowPanel(
                   "trim",

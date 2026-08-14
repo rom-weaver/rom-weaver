@@ -291,7 +291,7 @@ msgstr "Códecs DVD"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Recortar y Herramientas)"
+msgstr "Activar herramientas beta (Recortar, Herramientas e Identificar)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -402,6 +402,11 @@ msgstr "Nivel de registro"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabLogs"
 msgstr "Registros"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis"
+msgstr "Relaciona una ROM con el nombre exacto de su volcado,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -867,6 +872,11 @@ msgstr "Qué significan los estados sin conexión"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Novedades"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis2"
+msgstr "con una base de datos que permanece local —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

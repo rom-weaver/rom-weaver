@@ -10,6 +10,9 @@ const headersFile = `/*
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
+/assets/identify-index.json
+  Cache-Control: no-cache
+
 /cache-service-worker.js
   Cache-Control: no-cache
 `;
@@ -36,6 +39,13 @@ describe("pages _headers matching", () => {
 
   it("lets a later exact rule win over an earlier wildcard", () => {
     expect(matchPagesHeaders(rules, "/cache-service-worker.js")["Cache-Control"]).toBe("no-cache");
+  });
+
+  it("revalidates the identify index and keeps content-addressed packs immutable", () => {
+    expect(matchPagesHeaders(rules, "/assets/identify-index.json")["Cache-Control"]).toBe("no-cache");
+    expect(matchPagesHeaders(rules, "/assets/identify-sega-32x.pack")["Cache-Control"]).toBe(
+      "public, max-age=31536000, immutable",
+    );
   });
 
   it("keeps a splat from leaking across a path it does not cover", () => {

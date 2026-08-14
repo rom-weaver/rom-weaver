@@ -49,6 +49,7 @@ const PRECACHE_NAME = cacheNames.precache;
 const RUNTIME_CACHE_NAME = cacheNames.runtime;
 const EMULATORJS_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
+const IDENTIFY_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-identify-`;
 const SW_LOG_PREFIX = "[rom-weaver-sw]";
 // In-memory COEP mode. Volatile: resets to the credentialless default whenever the worker thread is
 // terminated and respawned (notably on mobile Safari). The durable copy below survives that so a page
@@ -279,7 +280,7 @@ logServiceWorker("script initialized", {
 });
 
 addPlugins([crossOriginIsolationPrecachePlugin]);
-precacheAndRoute(self.__WB_MANIFEST);
+precacheAndRoute(self.__WB_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
 self.addEventListener("install", () => {
@@ -304,6 +305,7 @@ self.addEventListener("activate", (event) => {
       .then((cacheNames) =>
         cacheNames.filter((cacheName) => {
           if (cacheName.startsWith(EMULATORJS_CACHE_PREFIX)) return cacheName !== EMULATORJS_CACHE_NAME;
+          if (cacheName.startsWith(IDENTIFY_CACHE_PREFIX)) return true;
           return cacheName.startsWith(`precache-${PRECACHE_ID}-`) && !cacheName.endsWith(`-${PRECACHE_VERSION}`);
         }),
       )

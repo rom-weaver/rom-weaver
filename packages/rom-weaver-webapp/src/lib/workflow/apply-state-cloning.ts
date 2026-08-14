@@ -18,6 +18,7 @@ import { cloneCandidate, cloneValue, cloneWarning } from "./controller-utils.ts"
 import {
   cloneChecksumRomProbe,
   cloneChecksumVariants,
+  cloneIdentification,
   getAssetDecompressionTimeMs,
   getAssetParentCompressions,
   getAssetSourceSize,
@@ -26,7 +27,13 @@ import {
 
 const clonePatchRequirements = (
   requirements: InternalPatchRequirements | undefined,
-): InternalPatchRequirements | undefined => (requirements ? { ...requirements } : undefined);
+): InternalPatchRequirements | undefined =>
+  requirements
+    ? {
+        ...requirements,
+        sourceTitles: requirements.sourceTitles ? [...requirements.sourceTitles] : undefined,
+      }
+    : undefined;
 
 const clonePatchChecksumPreflight = (
   preflight: InternalPatchChecksumPreflight | undefined,
@@ -64,11 +71,13 @@ const cloneInputState = (
           return romCandidates.length === 1 ? romCandidates[0]?.fileName || state.fileName : state.fileName;
         })(),
         id: state.id,
+        identification: cloneIdentification(state.identification),
         parentCompressions: parentCompressions.map((entry) => ({ ...entry })),
         resolvedInputs: resolvedInputs?.map((entry) => ({
           ...entry,
           checksums: entry.checksums ? cloneValue(entry.checksums) : undefined,
           checksumVariants: cloneChecksumVariants(entry.checksumVariants),
+          identification: cloneIdentification(entry.identification),
           parentCompressions: entry.parentCompressions.map((parent) => ({
             ...parent,
           })),
@@ -142,6 +151,7 @@ const cloneResolvedInputState = (
       : undefined;
   })(),
   id: state.id,
+  identification: cloneIdentification(state.identification),
   order: state.order,
   parentCompressions: parentCompressions.map((entry) => ({ ...entry })),
   romProbe: cloneChecksumRomProbe(state.romProbe),
@@ -172,6 +182,7 @@ const cloneResolvedInputAssetState = (
     gdiText: asset.file.metadata?.gdiText,
     groupId: asset.groupId,
     id: asset.id,
+    identification: cloneIdentification(asset.identification),
     kind: asset.kind,
     order,
     parentCompressions: getAssetParentCompressions(asset, parentCompressions),

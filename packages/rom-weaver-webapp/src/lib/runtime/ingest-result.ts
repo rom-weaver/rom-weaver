@@ -5,8 +5,15 @@
 // camelCase shape the webapp consumes directly (and drops `null`/absent optionals). It is the single
 // boundary between the Rust contract and the input/patch state the apply workflow builds.
 import type { ChecksumMap } from "../../types/checksum.ts";
+import type { ParsedIdentifyLookupResult, ParsedIdentifyTitleMatch } from "../../types/identify.ts";
 import type { ParsedIngestResult, ParsedIngestRomAsset, ParsedPatchDescriptor } from "../../types/ingest.ts";
-import type { IngestResult, IngestRomAsset, PatchDescriptor } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
+import type {
+  IdentifyLookupResult,
+  IdentifyTitleMatch,
+  IngestResult,
+  IngestRomAsset,
+  PatchDescriptor,
+} from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import { parseChecksumVariants, type WireRecord } from "./run-result-parsing.ts";
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
@@ -32,6 +39,35 @@ const toChecksumMap = (value: unknown): ChecksumMap => {
     if (typeof raw === "string" && raw) map[algorithm.toLowerCase()] = raw;
   }
   return map as ChecksumMap;
+};
+
+const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefined => {
+  const match = asRecord(value) as WireRecord<IdentifyTitleMatch> | undefined;
+  if (!match) return undefined;
+  const name = toStringValue(match.name);
+  const platform = toStringValue(match.platform);
+  if (!(name && platform)) return undefined;
+  return {
+    algorithm: toStringValue(match.algorithm) || "",
+    database: toStringValue(match.database) || "",
+    name,
+    platform,
+    variant: toStringValue(match.variant) || "raw",
+  };
+};
+
+const parseIdentifyLookup = (value: unknown): ParsedIdentifyLookupResult | undefined => {
+  const lookup = asRecord(value) as WireRecord<IdentifyLookupResult> | undefined;
+  if (!lookup) return undefined;
+  const status = lookup.status;
+  if (!(status === "matched" || status === "ambiguous" || status === "unknown")) return undefined;
+  const matches = Array.isArray(lookup.matches)
+    ? lookup.matches.map(parseIdentifyMatch).filter((match): match is ParsedIdentifyTitleMatch => match !== undefined)
+    : [];
+  if (status === "matched" && matches.length !== 1) return undefined;
+  if (status === "ambiguous" && matches.length < 2) return undefined;
+  if (status === "unknown" && matches.length) return undefined;
+  return { matches, status };
 };
 
 const parseRomAsset = (value: unknown): ParsedIngestRomAsset | undefined => {
@@ -67,6 +103,8 @@ const parseRomAsset = (value: unknown): ParsedIngestRomAsset | undefined => {
   if (extractTimeMs !== undefined) asset.extractTimeMs = extractTimeMs;
   const checksumMs = toNumberValue(record.checksum_ms);
   if (checksumMs !== undefined) asset.checksumMs = checksumMs;
+  const identification = parseIdentifyLookup(record.identification);
+  if (identification) asset.identification = identification;
   return asset;
 };
 
@@ -102,6 +140,12 @@ export const parsePatchDescriptor = (value: unknown): ParsedPatchDescriptor | un
   if (filenameSize !== undefined) descriptor.filenameSize = filenameSize;
   const sidecarOrder = toNumberValue(record.sidecar_order);
   if (sidecarOrder !== undefined) descriptor.sidecarOrder = sidecarOrder;
+  const sourceIdentification = parseIdentifyLookup(record.source_identification);
+  if (sourceIdentification) descriptor.sourceIdentification = sourceIdentification;
+  const sourceChecksumVariants = Array.isArray(record.source_checksum_variants)
+    ? record.source_checksum_variants.map(toChecksumMap).filter((checksums) => Object.keys(checksums).length > 0)
+    : [];
+  if (sourceChecksumVariants.length) descriptor.sourceChecksumVariants = sourceChecksumVariants;
   return descriptor;
 };
 

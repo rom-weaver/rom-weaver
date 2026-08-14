@@ -291,7 +291,7 @@ msgstr "DVD-Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Beta-Tools aktivieren (Trimmen und Tools)"
+msgstr "Beta-Tools aktivieren (Trimmen, Tools und Identifizieren)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -402,6 +402,11 @@ msgstr "Protokollstufe"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabLogs"
 msgstr "Protokoll"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis"
+msgstr "Ordne eine ROM ihrem genauen Dump-Namen zu,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -867,6 +872,11 @@ msgstr "Was die Offline-Zustände bedeuten"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Neuigkeiten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis2"
+msgstr "mit einer Datenbank, die lokal bleibt —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

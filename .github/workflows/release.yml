@@ -368,8 +368,16 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config
+
+      - name: Prepare ROM identify data
+        run: node scripts/ensure-identify-data.mjs
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
@@ -440,6 +448,14 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Prepare ROM identify data
+        run: node scripts/ensure-identify-data.mjs
+
       - name: Dry-run publish workspace crates
         # Package each crate exactly as cargo publish would, without uploading.
         # This intentionally does not authenticate with crates.io: release.yml
@@ -449,7 +465,7 @@ jobs:
         # cargo's per-package verification here because it resolves same-version
         # workspace dependencies from crates.io, which may still contain the
         # previous release graph.
-        run: cargo publish --workspace --locked --dry-run --no-verify
+        run: cargo publish --workspace --locked --dry-run --no-verify --allow-dirty
 
   # Package the static site beside the registry publishes rather than making all
   # of them wait for another production WASM build. The release PR head's CI

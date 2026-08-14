@@ -10,6 +10,9 @@ mod probe_extract;
 #[path = "cli_smoke/checksum.rs"]
 mod checksum;
 
+#[path = "cli_smoke/identify.rs"]
+mod identify;
+
 #[path = "cli_smoke/ingest.rs"]
 mod ingest;
 

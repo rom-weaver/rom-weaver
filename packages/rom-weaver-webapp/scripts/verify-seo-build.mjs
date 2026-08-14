@@ -14,6 +14,9 @@ import {
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const distDir = path.join(packageDir, "dist");
+const identifyDataIndex = JSON.parse(
+  fs.readFileSync(path.resolve(packageDir, "../../crates/rom-weaver-cli/data/identify/v1/index.json"), "utf8"),
+);
 const channel = process.env.ROM_WEAVER_CHANNEL || "prod";
 const production = channel === "prod";
 const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
@@ -45,13 +48,14 @@ const countVisibleWords = (source) =>
 const applyHtml = read("index.html");
 const notFoundHtml = read("404.html");
 const createHtml = read("create.html");
+const identifyHtml = read("identify.html");
 const testHtml = read("test.html");
 const headers = read("_headers");
 const redirects = read("_redirects");
 const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
 
-for (const route of ["apply", "create", "test", "trim", "tools"]) {
+for (const route of ["apply", "create", "identify", "test", "trim", "tools"]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
 assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
@@ -59,6 +63,11 @@ assertIncludes(
   headers,
   "/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable",
   "fingerprinted asset cache headers",
+);
+assertIncludes(
+  headers,
+  "/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache",
+  "identify index cache headers",
 );
 assertIncludes(
   headers,
@@ -93,6 +102,7 @@ assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
 for (const url of [
   "https://rom-weaver.com/apply",
   "https://rom-weaver.com/create",
+  "https://rom-weaver.com/identify",
   "https://rom-weaver.com/docs",
   "https://rom-weaver.com/docs/apply-rom-patches",
   "https://rom-weaver.com/docs/cli",
@@ -137,11 +147,23 @@ assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply descri
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
+assertIncludes(
+  identifyHtml,
+  `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.identify.slug}"`,
+  "identify canonical",
+);
+assertIncludes(identifyHtml, WORKFLOW_SEO_ROUTES.identify.description, "identify description");
+assertIncludes(
+  read("identify/index.html"),
+  WORKFLOW_SEO_ROUTES.identify.description,
+  "static-host identify description",
+);
 assertIncludes(testHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.test.slug}"`, "test canonical");
 assertIncludes(testHtml, WORKFLOW_SEO_ROUTES.test.description, "test description");
 assertIncludes(read("test/index.html"), WORKFLOW_SEO_ROUTES.test.description, "static-host test description");
 assertIncludes(applyHtml, 'aria-selected="true" class="mode" data-mode="patcher"', "apply prerendered workflow");
 assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator"', "create prerendered workflow");
+assertIncludes(identifyHtml, 'id="panel-identify" role="tabpanel"', "identify prerendered workflow");
 assertHasClass(applyHtml, "build-tag", "preloaded build tag");
 assertHasClass(applyHtml, "masthead-threads-count", "preloaded thread count");
 assertHasClass(applyHtml, "sub-status", "preloaded runtime status control");
@@ -152,9 +174,11 @@ for (const route of [
   "index.html",
   "apply.html",
   "create.html",
+  "identify.html",
   "404.html",
   "apply/index.html",
   "create/index.html",
+  "identify/index.html",
   "test/index.html",
   "trim/index.html",
   "tools/index.html",
@@ -297,6 +321,7 @@ if (production) {
   assertIncludes(robots, "Allow: /", "production robots.txt");
   assertIncludes(robots, "Sitemap: https://rom-weaver.com/sitemap.xml", "production robots.txt");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create", "sitemap");
+  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/identify", "sitemap");
   for (const route of DOC_ROUTES) {
     assertIncludes(read("sitemap.xml"), `https://rom-weaver.com/${route.slug}`, `${route.slug} sitemap entry`);
   }
@@ -320,7 +345,17 @@ if (production) {
 // generated manifest is on disk.
 const precacheManifest = read("cache-service-worker.js");
 assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
-for (const slug of [...DOC_ROUTES.map((route) => route.slug), "apply", "create", "tools", "trim"]) {
+assertIncludes(precacheManifest, '"assets/identify-index.json"', "identify index precache entry");
+assertIncludes(precacheManifest, '"assets/identify-atari-2600.pack"', "identify pack precache entry");
+for (const system of identifyDataIndex.systems) {
+  assertIncludes(
+    precacheManifest,
+    `"revision":"${system.sha256}","url":"assets/identify-${system.file}"`,
+    `${system.file} identify pack revision`,
+  );
+}
+assertIncludes(read("_routes.json"), '"/assets/identify-atari-2600.pack"', "identify pack Brotli route");
+for (const slug of [...DOC_ROUTES.map((route) => route.slug), "apply", "create", "identify", "tools", "trim"]) {
   assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);
 }
 

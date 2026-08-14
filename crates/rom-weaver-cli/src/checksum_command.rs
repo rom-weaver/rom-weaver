@@ -29,7 +29,20 @@ impl CliApp {
     /// Compute the checksum report (every path returns the report instead of finishing,
     /// so [`run_checksum`](Self::run_checksum) can apply the `--probe` fail-on-unidentified
     /// gate before the single terminal `finish`).
-    fn run_checksum_inner(&self, args: ChecksumCommand) -> OperationReport {
+    pub(super) fn run_checksum_inner(&self, args: ChecksumCommand) -> OperationReport {
+        self.run_checksum_inner_with_streaming(args, true)
+    }
+
+    pub(super) fn run_checksum_inner_for_identify(&self, args: ChecksumCommand) -> OperationReport {
+        // Identify MUST materialize compressed inputs because the streaming report has no ROM variants.
+        self.run_checksum_inner_with_streaming(args, false)
+    }
+
+    fn run_checksum_inner_with_streaming(
+        &self,
+        args: ChecksumCommand,
+        allow_streaming_fast_paths: bool,
+    ) -> OperationReport {
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
         trace!(
@@ -132,27 +145,30 @@ impl CliApp {
             }
         };
 
-        match self.try_run_checksum_tar_stream_auto_extract(
-            &source,
-            &checksum_options,
-            &context,
-            thread_execution.clone(),
-        ) {
-            Ok(Some(report)) => return report,
-            Ok(None) => {}
-            Err(error) => {
-                return OperationReport::failed(
-                    OperationFamily::Checksum,
-                    Some(self.checksum.name().to_string()),
-                    "checksum",
-                    error.to_string(),
-                    thread_execution.clone(),
-                );
+        if allow_streaming_fast_paths {
+            match self.try_run_checksum_tar_stream_auto_extract(
+                &source,
+                &checksum_options,
+                &context,
+                thread_execution.clone(),
+            ) {
+                Ok(Some(report)) => return report,
+                Ok(None) => {}
+                Err(error) => {
+                    return OperationReport::failed(
+                        OperationFamily::Checksum,
+                        Some(self.checksum.name().to_string()),
+                        "checksum",
+                        error.to_string(),
+                        thread_execution.clone(),
+                    );
+                }
             }
         }
 
-        if let Some(stream_format) =
-            self.select_streamed_checksum_auto_extract_format(&source, &checksum_options)
+        if allow_streaming_fast_paths
+            && let Some(stream_format) =
+                self.select_streamed_checksum_auto_extract_format(&source, &checksum_options)
         {
             return self
                 .run_checksum_stream_auto_extract(

@@ -1097,6 +1097,7 @@ const invokeRomWeaverPpfUndoWorker = async (input: {
 const invokeRomWeaverIngestWorker = async (
   input: {
     checksumAlgorithms?: string[];
+    databasePaths?: string[];
     interactiveSelectionEnabled?: boolean;
     invalidateMountCacheBeforeRun?: boolean;
     knownInputPaths?: string[];
@@ -1121,10 +1122,12 @@ const invokeRomWeaverIngestWorker = async (
   if (!outDirPath) throw new Error("Ingest output directory is required");
   const select = toTrimmedList(input.select);
   const checksum = toTrimmedList(input.checksumAlgorithms).map((value) => value.toLowerCase());
+  const database = toTrimmedList(input.databasePaths);
   const threadArg = toThreadBudget(input.threads);
   const command = createRomWeaverCommand("ingest", {
     output: outDirPath,
     input: sourcePath,
+    ...(database.length ? { database } : {}),
     ...(select.length ? { select } : {}),
     ...(input.noIgnore ? { no_ignore: true } : {}),
     ...(input.noNestedExtract ? { no_nested_extract: true } : {}),
@@ -1135,6 +1138,7 @@ const invokeRomWeaverIngestWorker = async (
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson ingest dispatch", {
     checksum,
     command,
+    databaseCount: database.length,
     outDirPath,
     selectCount: select.length,
     sourcePath,

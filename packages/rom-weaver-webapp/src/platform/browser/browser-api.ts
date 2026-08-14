@@ -39,20 +39,47 @@ type BrowserPpfUndoInput = {
 };
 
 type BrowserIngestRomOptions = {
+  checksumAlgorithms?: string[];
+  identify?: boolean;
   onProgress?: Parameters<NonNullable<NonNullable<typeof browserRuntime.ingest>["run"]>>[0]["onProgress"];
   signal?: AbortSignal;
 };
+
+type BrowserIdentifyRomOptions = BrowserIngestRomOptions;
 
 const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestRomOptions = {}) => {
   const ingest = browserRuntime.ingest;
   if (!ingest?.run) throw new Error("The rom-weaver checksum runtime is unavailable.");
   return ingest.run({
-    checksumAlgorithms: ["sha1"],
+    checksumAlgorithms: options.checksumAlgorithms || ["sha1"],
     fileName,
+    identify: options.identify,
     onProgress: options.onProgress,
     signal: options.signal,
     source,
   });
+};
+
+const identifyRom = async (source: Blob, fileName: string, options: BrowserIdentifyRomOptions = {}) => {
+  const { outputs, patchOutputs, result } = await ingestRom(source, fileName, {
+    ...options,
+    checksumAlgorithms: ["crc32", "md5", "sha1"],
+    identify: true,
+  });
+  try {
+    const asset = result.assets.find((candidate) => candidate.identification?.matches?.length) || result.assets[0];
+    const identification = asset?.identification;
+    return {
+      checksumVariants: asset?.checksumVariants || [],
+      checksums: asset?.checksums || {},
+      ...(asset?.platform ? { detectedPlatform: asset.platform } : {}),
+      input: asset?.path || fileName,
+      matches: identification?.matches || [],
+      status: identification?.status || "unknown",
+    };
+  } finally {
+    await Promise.all([...outputs, ...patchOutputs].map((output) => output.dispose().catch(() => undefined)));
+  }
 };
 
 const getIngestOutputBlob = async (
@@ -187,6 +214,7 @@ export {
   CreateWorkflow,
   getCreatePatchFormatCandidates,
   getIngestOutputBlob,
+  identifyRom,
   ingestRom,
   preloadBrowserRuntime,
   TrimWorkflow,

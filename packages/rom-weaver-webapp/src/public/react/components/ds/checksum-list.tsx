@@ -30,12 +30,16 @@ const pairMarkerClass = (label: ReactNode): string | false => {
 /** A single label/value checksum row. Click (or Enter/Space) copies `copyValue`.
  * `mark` renders a per-row verified/mismatch verdict (expected-vs-computed rows). */
 const ChecksumRow = ({
+  ariaLabel,
+  className,
   label,
   value,
   copyValue,
   bad,
   mark,
 }: {
+  ariaLabel?: string;
+  className?: string;
   label: ReactNode;
   value: ReactNode;
   copyValue?: string;
@@ -48,8 +52,8 @@ const ChecksumRow = ({
 
   return (
     <button
-      aria-label={`Copy ${typeof label === "string" ? label : "value"}`}
-      className={join("ck mono", (bad || mark === "bad") && "bad", pairMarkerClass(label))}
+      aria-label={ariaLabel ?? `Copy ${typeof label === "string" ? label : "value"}`}
+      className={join("ck mono", className, (bad || mark === "bad") && "bad", pairMarkerClass(label))}
       onClick={copy}
       type="button"
     >

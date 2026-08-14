@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
@@ -13,7 +13,9 @@ function matches(root, prefix, pattern, excluded = () => false) {
   const result = [];
   for (const file of files(root, prefix)) {
     if (excluded(file)) continue;
-    readFileSync(join(root, file), "utf8").split(/\r?\n/).forEach((line, index) => {
+    const path = join(root, file);
+    if (!existsSync(path)) continue;
+    readFileSync(path, "utf8").split(/\r?\n/).forEach((line, index) => {
       if (pattern.test(line)) result.push(`${file}:${index + 1}:${line}`);
     });
   }

@@ -17,6 +17,7 @@ describe("rom-weaver command boundary helpers", () => {
       "probe",
       "extract",
       "checksum",
+      "identify",
       "ingest",
       "compress",
       "trim",
@@ -26,6 +27,29 @@ describe("rom-weaver command boundary helpers", () => {
       "plan-extract-batch",
     ]);
     expect(KNOWN_PATCH_COMMAND_TYPES).toEqual(["apply", "validate", "create"]);
+  });
+
+  it("collects the ROM and identify database paths", () => {
+    const request = normalizeRomWeaverRunRequest(
+      createRomWeaverCommand("identify", {
+        database: ["/work/nes.pack", "/work/snes.pack"],
+        input: "/work/game.nes",
+      }),
+    );
+
+    expect(collectRomWeaverRunInputPaths(request)).toEqual(["/work/game.nes", "/work/nes.pack", "/work/snes.pack"]);
+  });
+
+  it("collects ingest database paths", () => {
+    const request = normalizeRomWeaverRunRequest(
+      createRomWeaverCommand("ingest", {
+        database: ["/work/gba.pack"],
+        input: "/work/game.gba",
+        output: "/work/output",
+      }),
+    );
+
+    expect(collectRomWeaverRunInputPaths(request)).toEqual(["/work/game.gba", "/work/gba.pack"]);
   });
 
   it("builds nested patch commands and preserves patch labels", () => {

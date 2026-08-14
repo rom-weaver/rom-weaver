@@ -582,12 +582,15 @@ jobs:
       - name: Unused Rust dependencies
         run: mise run machete
 
+      - name: Prepare ROM identify data for package validation
+        run: mise run identify-data
+
       - name: Verify publishable Rust packages
         # Package each crate exactly as cargo publish would, without uploading.
         # Workspace tests already compile the local dependency graph. Skip cargo's
         # per-package verification here because it resolves same-version workspace
         # dependencies from crates.io, which may still contain the pre-change graph.
-        run: cargo publish --workspace --locked --dry-run --no-verify
+        run: cargo publish --workspace --locked --dry-run --no-verify --allow-dirty
 
   # Build the native targets the release publishes before a change reaches
   # release day. The target list and the build itself are shared with the
@@ -834,6 +837,14 @@ jobs:
       - uses: taiki-e/install-action@v2.85.9
         with:
           tool: cargo-nextest@0.9.140
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Prepare ROM identify data
+        run: node scripts/ensure-identify-data.mjs
 
       # The runner image ships cmake and MSVC + LLVM, which is everything the
       # vendored libarchive build needs - the npm platform publish builds this

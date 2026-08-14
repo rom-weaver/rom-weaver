@@ -54,7 +54,7 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "how-to/cli-trim.md", label: "Trim a ROM (CLI)", slug: "docs/cli-trim" }),
   Object.freeze({
     file: "how-to/identify-and-hash-files.md",
-    label: "Identify and hash files (CLI)",
+    label: "Identify and hash ROMs (CLI)",
     slug: "docs/identify-and-hash-files",
   }),
   Object.freeze({

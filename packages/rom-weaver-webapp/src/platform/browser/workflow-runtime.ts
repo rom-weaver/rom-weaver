@@ -1,4 +1,5 @@
 import { getPathBaseName } from "../../lib/path-utils.ts";
+import { emitTraceLog } from "../../lib/logging.ts";
 import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import { assertBrowserBinarySource } from "../../lib/runtime/source-normalization.ts";
@@ -139,6 +140,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     source,
     fileName,
     checksumAlgorithms,
+    identify,
     select,
     interactiveSelectionEnabled,
     splitBin,
@@ -147,32 +149,58 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     onProgress,
     signal,
   }) => {
-    const staged = await workerIo.stageSource({
-      fallbackFileName: fileName || "input.bin",
-      pathPrefix: "ingest-input",
-      scope: "archive",
-      source,
-      trace: { logLevel, onLog },
-    });
+    let identifyPacks: Awaited<ReturnType<(typeof import("./identify-packs.ts"))["loadIdentifyPacks"]>> = [];
+    if (identify !== false) {
+      try {
+        const { loadIdentifyPacks } = await import("./identify-packs.ts");
+        identifyPacks = await loadIdentifyPacks(fileName || "input.bin");
+      } catch (error) {
+        emitTraceLog(
+          { logLevel, namespace: "runtime:browser-workflow", onLog },
+          "ROM identify packs unavailable; continuing without title lookup",
+          { error: error instanceof Error ? error.message : String(error), fileName },
+        );
+      }
+    }
+    const staged = await workerIo.stageSources([
+      {
+        fallbackFileName: fileName || "input.bin",
+        pathPrefix: "ingest-input",
+        scope: "archive",
+        source,
+        trace: { logLevel, onLog },
+      },
+      ...identifyPacks.map((pack, index) => ({
+        fallbackFileName: pack.fileName,
+        pathPrefix: `identify-pack-${index + 1}`,
+        pathPrefixInPath: true as const,
+        scope: "checksum" as const,
+        source: pack.blob,
+        trace: { logLevel, onLog },
+      })),
+    ]);
+    const [stagedSource, ...stagedPacks] = staged;
+    if (!stagedSource) throw new Error("The ingest source could not be staged");
     const outputScope = createRomWeaverOutputScope();
     try {
       const result = await invokeRomWeaverIngestWorker(
         {
           ...(checksumAlgorithms?.length ? { checksumAlgorithms } : {}),
+          ...(stagedPacks.length ? { databasePaths: stagedPacks.map((entry) => entry.filePath) } : {}),
           ...(select?.length ? { select } : {}),
           ...(typeof interactiveSelectionEnabled === "boolean" ? { interactiveSelectionEnabled } : {}),
           ...(typeof splitBin === "boolean" ? { splitBin } : {}),
-          knownInputPaths: [staged.filePath],
+          knownInputPaths: staged.map((entry) => entry.filePath),
           logLevel,
           outDirPath: outputScope.rootPath,
           signal,
-          sourcePath: staged.filePath,
+          sourcePath: stagedSource.filePath,
         },
         onProgress,
         onLog,
       );
       const extractedAssets = result.assets.filter((asset) => !asset.copiedInPlace);
-      const extractedPatches = result.patches.filter((patch) => patch.leafPath !== staged.filePath);
+      const extractedPatches = result.patches.filter((patch) => patch.leafPath !== stagedSource.filePath);
       const outputCleanups = await outputScope.createOutputCleanups(
         [...extractedAssets.map((asset) => asset.path), ...extractedPatches.map((patch) => patch.leafPath)],
         (filePath) => browserVfs.remove(filePath),
@@ -227,7 +255,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
       await outputScope.cleanup().catch(() => undefined);
       throw error;
     } finally {
-      await staged.cleanup().catch(() => undefined);
+      await Promise.all(staged.map((entry) => entry.cleanup().catch(() => undefined)));
     }
   },
 });

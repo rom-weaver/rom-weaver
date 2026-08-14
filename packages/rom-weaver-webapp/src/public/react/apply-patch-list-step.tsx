@@ -57,6 +57,7 @@ const PATCH_INPUT_VERIFICATION_LABELS: Record<string, string> = {
   "in sha-1": "SHA-1",
   "in sha1": "SHA-1",
   "in size": "BYTES",
+  "in rom": "ROM",
 };
 
 const PATCH_OUTPUT_VERIFICATION_LABELS: Record<string, string> = {

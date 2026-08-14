@@ -6,6 +6,8 @@ target
 **/dist
 **/.vitest-attachments
 **/__screenshots__
+crates/rom-weaver-cli/data/identify/v1/*.pack
+crates/rom-weaver-cli/data/identify/v1/index.json
 prototype
 third_party
 *.log

@@ -435,6 +435,8 @@ type WorkflowRuntimeIngest = {
     source: unknown;
     fileName?: string;
     checksumAlgorithms?: string[];
+    /** Load local identify packs and attach best-effort title lookups. Defaults to true. */
+    identify?: boolean;
     // Pin which archive payload(s) to extract (the resolved "keep one ROM" entry). Empty/omitted lets
     // ingest auto-pick a single logical payload or prompt the host when ambiguous.
     select?: string[];

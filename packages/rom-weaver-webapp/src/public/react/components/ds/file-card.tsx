@@ -7,7 +7,7 @@ import { join } from "./cx.ts";
  * the name and optional metadata on the left and the action buttons (drag
  * handle / remove) on the right; the collapsible drawers (extraction tree,
  * checksums, options) follow as children. Verdict borders (ok / warn / bad)
- * belong to patches; ROM cards keep the plain seam border.
+ * belong to patch checks and ROM identification; Files cards stay plain.
  */
 
 type FileState = "ok" | "bad" | "warn";

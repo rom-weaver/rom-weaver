@@ -99,6 +99,7 @@ Background that makes the rest make sense.
 - [Contribution guide](../CONTRIBUTING.md): reporting bugs, proposing changes, validation, and contribution licensing.
 - [Development guide](development/development.md): prerequisites, setup, native and WASM builds, the dev server, tests, generated files, and worktrees.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
+- [ROM identify data](development/identify-data.md): rebuild the shipped OpenGood data or create local Hasheous packs.
 - [References](development/references.md): format specifications and upstream reference implementations.
 
 …and more in the repository: commit conventions, CI, performance, browser concurrency, mobile Safari verification, vendored code, screenshots, the release guide, the CLA, the code of conduct, and the security policy all live under [`docs/development/`](https://github.com/rom-weaver/rom-weaver/tree/main/docs/development).

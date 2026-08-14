@@ -106,6 +106,7 @@ const getPendingChangeState = ({
   romFilePresent,
 }: PendingChangeInputState): PendingChangeState => ({
   creator: creatorHasPendingChanges(creatorState),
+  identify: false,
   patcher: patcherHasPendingChanges({
     outputState,
     patcherFormEdited,

@@ -49,7 +49,8 @@ crates.io requires a crate to be published once before its trusted publisher can
 
 ```bash
 cargo login
-cargo publish --locked --package <crate>
+mise run identify-data
+cargo publish --locked --allow-dirty --package <crate>
 ```
 
 Do not change the release pull request after this bootstrap publish. Configure the trusted publisher above, then merge. The automated Cargo job sees that the version already exists and skips it; later releases use short-lived OIDC credentials and do not need a stored Cargo token.

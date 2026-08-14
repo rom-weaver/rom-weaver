@@ -165,6 +165,7 @@ const buildStackViewState = ({
       showHeaderOption: patchInfo?.showHeaderOption === true,
       showN64ByteOrderOption: patchInfo?.showN64ByteOrderOption === true,
       sourceChecksumState: patchInfo?.sourceChecksumState || "",
+      sourceTitles: patchInfo?.sourceTitles,
       targetDisabled: disabled || busy || patchStaging || targetOptions.length < 2,
       targetOptions,
       targetValue:

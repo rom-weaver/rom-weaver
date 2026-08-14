@@ -1,4 +1,5 @@
 import type { ChecksumRomProbe, ChecksumVariant, RomTypeTag } from "./checksum.ts";
+import type { ParsedIdentifyResolution } from "./identify.ts";
 import type { SelectionCandidate } from "./selection.ts";
 import type { SourceRef } from "./source.ts";
 import type { WorkflowWarning } from "./workflow-controller.ts";
@@ -46,6 +47,7 @@ type ApplyWorkflowResolvedInput = {
   checksumTimeMs?: number;
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
+  identification?: ParsedIdentifyResolution;
   parentCompressions: ApplyWorkflowParentCompression[];
   selected: boolean;
   selectedCandidateId?: string;
@@ -71,6 +73,7 @@ type ApplyWorkflowInputState = {
   checksumTimeMs?: number;
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
+  identification?: ParsedIdentifyResolution;
   resolvedInputs?: ApplyWorkflowResolvedInput[];
   selectedCandidateId?: string;
   size?: number;
@@ -105,6 +108,7 @@ type ApplyWorkflowPatchState = {
     patchCrc32?: string;
     recordCount?: number;
     sourceCrc32?: string;
+    sourceTitles?: string[];
     sourceSize?: number;
     targetCrc32?: string;
     targetSize?: number;

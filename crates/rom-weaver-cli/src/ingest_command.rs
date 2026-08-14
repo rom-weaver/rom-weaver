@@ -1,3 +1,4 @@
+use super::identify_command::IdentifyDatabaseSet;
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::*;
 
@@ -55,6 +56,10 @@ pub struct IngestRomAsset {
     pub kind: Option<String>,
     /// The `raw` variant's checksums keyed by algorithm.
     pub checksums: BTreeMap<String, String>,
+    /// Optional exact title lookup from the configured local identify packs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub identification: Option<IdentifyLookupResult>,
     /// Every applicable checksum variant (raw, remove-header, fix-header, byte-order), as the
     /// `checksum` command's `checksum_variants` rows.
     pub checksum_variants: Vec<Value>,
@@ -157,6 +162,15 @@ pub struct PatchDescriptor {
     pub record_count: Option<u64>,
     /// Expected input checksums parsed from the file name, keyed by algorithm.
     pub filename_checksums: BTreeMap<String, String>,
+    /// Optional title lookup from the patch's expected source checksums.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub source_identification: Option<IdentifyLookupResult>,
+    /// Whole-file checksum maps from the patch's normalized source endpoints. These exclude
+    /// sizes, header CRCs, and per-block checksums, and preserve every endpoint variant.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub source_checksum_variants: Vec<BTreeMap<String, String>>,
     /// Expected exact input size parsed from the file name. Emitted as a JSON
     /// `number` on the wasm wire, so override the default ts-rs `bigint` mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -223,6 +237,7 @@ impl CliApp {
         let IngestCommand {
             input: source,
             output: out_dir,
+            database,
             select,
             sidecar_names,
             sidecar_only,
@@ -232,6 +247,21 @@ impl CliApp {
             checksum,
             threads,
         } = args;
+        let identify_database = match IdentifyDatabaseSet::load(&database) {
+            Ok(identify_database) => identify_database,
+            Err(error) => {
+                return self.finish(
+                    "ingest",
+                    OperationReport::failed(
+                        OperationFamily::Command,
+                        Some("ingest".to_string()),
+                        "identify",
+                        error.to_string(),
+                        None,
+                    ),
+                );
+            }
+        };
         let algorithms: Vec<String> = if checksum.is_empty() {
             INGEST_DEFAULT_CHECKSUM_ALGORITHMS
                 .iter()
@@ -302,7 +332,21 @@ impl CliApp {
             algorithms: &algorithms,
             context: &context,
         }) {
-            Ok(outcome) => self.ingest_success_report(&source, outcome, thread_execution.clone()),
+            Ok(outcome) => match self.ingest_success_report(
+                &source,
+                outcome,
+                thread_execution.clone(),
+                identify_database.as_ref(),
+            ) {
+                Ok(report) => report,
+                Err(error) => OperationReport::failed(
+                    OperationFamily::Command,
+                    Some("ingest".to_string()),
+                    "identify",
+                    error.to_string(),
+                    thread_execution,
+                ),
+            },
             Err(error) => OperationReport::failed(
                 OperationFamily::Command,
                 Some("ingest".to_string()),
@@ -566,6 +610,7 @@ impl CliApp {
             kind: Self::infer_emitted_file_kind(&canonical).map(str::to_string),
             checksums: BTreeMap::new(),
             checksum_variants: Vec::new(),
+            identification: None,
             platform: identity.platform.map(str::to_string),
             disc_format: identity
                 .disc_format
@@ -640,6 +685,7 @@ impl CliApp {
                 kind: map.get("kind").and_then(Value::as_str).map(str::to_string),
                 checksums: BTreeMap::new(),
                 checksum_variants: Vec::new(),
+                identification: None,
                 platform: map
                     .get("platform")
                     .and_then(Value::as_str)
@@ -1014,6 +1060,8 @@ impl CliApp {
             minimum_source_size: None,
             record_count: None,
             filename_checksums: requirements.checksums,
+            source_identification: None,
+            source_checksum_variants: Vec::new(),
             filename_size: requirements.size,
             sidecar_order,
             is_valid_patch: false,
@@ -1050,6 +1098,8 @@ impl CliApp {
             .and_then(|map| map.get("patch"))
             .and_then(Value::as_object)
         {
+            descriptor.source_checksum_variants =
+                Self::source_checksum_variants(patch.get("endpoints"));
             if let Some(format) = patch.get("format").and_then(Value::as_str) {
                 descriptor.format = format.to_string();
             } else if let Some(format) = report.format.clone() {
@@ -1071,6 +1121,35 @@ impl CliApp {
 
     fn json_u32(value: &Value) -> Option<u32> {
         value.as_u64().and_then(|number| u32::try_from(number).ok())
+    }
+
+    fn source_checksum_variants(value: Option<&Value>) -> Vec<BTreeMap<String, String>> {
+        let Some(endpoints) = value.and_then(Value::as_array) else {
+            return Vec::new();
+        };
+        let mut variants = Vec::new();
+        for endpoint in endpoints {
+            let Some(checksums) = endpoint
+                .get("input")
+                .and_then(Value::as_object)
+                .and_then(|input| input.get("checksums"))
+                .and_then(Value::as_object)
+            else {
+                continue;
+            };
+            let checksums = checksums
+                .iter()
+                .filter_map(|(algorithm, value)| {
+                    value
+                        .as_str()
+                        .map(|value| (algorithm.to_ascii_lowercase(), value.to_ascii_lowercase()))
+                })
+                .collect::<BTreeMap<_, _>>();
+            if !checksums.is_empty() && !variants.contains(&checksums) {
+                variants.push(checksums);
+            }
+        }
+        variants
     }
 
     fn is_disc_sheet_file_name(file_name: &str) -> bool {
@@ -1177,7 +1256,8 @@ impl CliApp {
         source: &Path,
         outcome: IngestOutcome,
         thread_execution: Option<ThreadExecution>,
-    ) -> OperationReport {
+        identify_database: Option<&IdentifyDatabaseSet>,
+    ) -> Result<OperationReport> {
         let source_file_name = source
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
@@ -1196,7 +1276,7 @@ impl CliApp {
         // the already-detected platform/disc_format via the shared Rust recommender. Only
         // chd/rvz/z3ds are surfaced; the 7z fallback stays `None` so the host falls back to
         // its own extension heuristics.
-        let assets = outcome
+        let mut assets = outcome
             .assets
             .into_iter()
             .map(|mut asset| {
@@ -1211,13 +1291,31 @@ impl CliApp {
                 }
                 asset
             })
-            .collect();
+            .collect::<Vec<_>>();
+        if let Some(identify_database) = identify_database {
+            for asset in &mut assets {
+                if !asset.checksum_variants.is_empty() {
+                    asset.identification =
+                        Some(identify_database.resolve_variants(&asset.checksum_variants)?);
+                }
+            }
+        }
+        let mut patches = outcome.patches;
+        if let Some(identify_database) = identify_database {
+            for patch in &mut patches {
+                patch.source_identification = identify_database.resolve_source(
+                    patch.source_crc32,
+                    &patch.source_checksum_variants,
+                    &patch.filename_checksums,
+                )?;
+            }
+        }
         let result = IngestResult {
             kind: outcome.kind,
             source_file_name,
             is_rom: outcome.is_rom,
             assets,
-            patches: outcome.patches,
+            patches,
         };
         let mut report = OperationReport::succeeded(
             OperationFamily::Command,
@@ -1230,15 +1328,15 @@ impl CliApp {
         match serde_json::to_value(&result) {
             Ok(value) => report.details = Some(json!({ "ingest": value })),
             Err(error) => {
-                return OperationReport::failed(
+                return Ok(OperationReport::failed(
                     OperationFamily::Command,
                     Some("ingest".to_string()),
                     "ingest",
                     format!("failed to serialize ingest result: {error}"),
                     report.thread_execution.clone(),
-                );
+                ));
             }
         }
-        report
+        Ok(report)
     }
 }
