@@ -98,7 +98,7 @@ jobs:
             publish_args+=(--package "${package%%$'\t'*}")
           done
 
-          if cargo publish "${publish_args[@]}" --locked; then
+          if cargo publish "${publish_args[@]}" --locked --allow-dirty; then
             exit 0
           fi
 

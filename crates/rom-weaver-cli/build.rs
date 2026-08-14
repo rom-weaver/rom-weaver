@@ -37,7 +37,11 @@ fn main() {
         println!("cargo:rerun-if-changed={}", data_dir.join(pack).display());
     }
 
-    if ensure_script.is_file() {
+    let data_ready = data_dir.join("index.json").is_file()
+        && IDENTIFY_PACKS
+            .iter()
+            .all(|pack| data_dir.join(pack).is_file());
+    if !data_ready && ensure_script.is_file() {
         let status = Command::new("node")
             .arg(&ensure_script)
             .status()

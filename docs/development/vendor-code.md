@@ -183,7 +183,7 @@ When a published nod version contains the needed API and feature support, replac
 2. Add the released `nod` version to `[workspace.dependencies]` and make it a dependency of `rom-weaver-containers`.
 3. Replace `pub mod nod;` with a re-export of the dependency so the public `rom_weaver_containers::nod` path remains stable.
 4. Remove `crates/rom-weaver-containers/src/nod/` and its copied license files, then remove any dependencies used only by the inlined implementation.
-5. Run `cargo test --workspace` and `cargo publish --workspace --locked --dry-run --no-verify` before deleting this section.
+5. Run `cargo test --workspace` and `cargo publish --workspace --locked --dry-run --no-verify --allow-dirty` before deleting this section.
 
 The inlined module drops nod's Python bindings and OpenSSL backend because rom-weaver only uses the Rust disc reader/writer API. Keeping the source inside the containers crate avoids creating a `rom-weaver-nod` package for upstream code.
 
@@ -263,7 +263,7 @@ cargo check -p rom-weaver-cli
 cargo test --workspace
 mise run deny                                          # advisories, licenses, sources
 mise run machete                                       # unused dependencies
-cargo publish --workspace --locked --dry-run --no-verify
+cargo publish --workspace --locked --dry-run --no-verify --allow-dirty
 ```
 
 The publish dry-run checks every package and its file list without uploading. Workspace tests compile the local dependency graph. `--no-verify` keeps Cargo from replacing same-version workspace dependencies with older copies from the registry while checking each tarball.

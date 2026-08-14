@@ -39,7 +39,7 @@ node scripts/ensure-identify-data.mjs --force
 
 The generated index records the source revision. The browser build compresses the raw packs into its self-hosted Brotli sidecars.
 
-The CLI crate includes the generated files in its Cargo package archive. Run `mise run identify-data` before `cargo package` or `cargo publish`.
+The CLI crate includes the generated files in its Cargo package archive. Run `mise run identify-data` before `cargo package --allow-dirty` or `cargo publish --allow-dirty`.
 
 ## Local Hasheous data
 

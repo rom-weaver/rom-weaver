@@ -590,7 +590,7 @@ jobs:
         # Workspace tests already compile the local dependency graph. Skip cargo's
         # per-package verification here because it resolves same-version workspace
         # dependencies from crates.io, which may still contain the pre-change graph.
-        run: cargo publish --workspace --locked --dry-run --no-verify
+        run: cargo publish --workspace --locked --dry-run --no-verify --allow-dirty
 
   # Build the native targets the release publishes before a change reaches
   # release day. The target list and the build itself are shared with the

@@ -465,7 +465,7 @@ jobs:
         # cargo's per-package verification here because it resolves same-version
         # workspace dependencies from crates.io, which may still contain the
         # previous release graph.
-        run: cargo publish --workspace --locked --dry-run --no-verify
+        run: cargo publish --workspace --locked --dry-run --no-verify --allow-dirty
 
   # Package the static site beside the registry publishes rather than making all
   # of them wait for another production WASM build. The release PR head's CI
