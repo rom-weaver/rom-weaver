@@ -61,8 +61,8 @@
   },
   {
     "package": "win32-arm64-msvc",
-    "runner": "windows-11-arm",
-    "native_runner": "windows-11-arm",
+    "runner": "windows-11-vs2026-arm",
+    "native_runner": "windows-11-vs2026-arm",
     "target": "aarch64-pc-windows-msvc",
     "build": "build",
     "binary": "rom-weaver.exe",
