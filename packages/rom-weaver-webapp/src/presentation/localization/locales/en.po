@@ -335,6 +335,11 @@ msgstr "Fix ROM header"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.includeRom"
+msgstr "Include ROM in bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.envPwa"
 msgstr "Installed app (PWA)"
 
@@ -472,6 +477,16 @@ msgstr "Offline ready"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.disabled"
 msgstr "Offline support off"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.romDistributionWarning"
+msgstr "Only include a ROM if you have the right to distribute it. Sharing copyrighted ROMs may be illegal."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.optional"
+msgstr "optional"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -662,6 +677,16 @@ msgstr "Settings"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.dialogLabel"
 msgstr "Settings and status"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.share"
+msgstr "Share bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.shareTitle"
+msgstr "Share this patch recipe (for patch creators)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

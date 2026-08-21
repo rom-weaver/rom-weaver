@@ -52,7 +52,7 @@ describe("getDefaultSettings", () => {
     expect(settings.chdCreateCdCodecs).toBe("cdlz,cdzl,cdfl");
     expect(settings.fixChecksum).toBe(false);
     expect(settings.byteUnits).toBe("decimal");
-    expect(settings.bundlePackage).toBe("");
+    expect(settings.bundlePackage).toBe("zip:patches");
     expect(settings.postApplyDownloadBehavior).toBe("auto-show");
     expect(settings.postApplyTestBehavior).toBe("show");
     expect(settings.requireInputChecksumMatch).toBe(true);

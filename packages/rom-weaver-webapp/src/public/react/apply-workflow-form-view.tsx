@@ -1,4 +1,4 @@
-import { Archive, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
+import { Archive, Disc3, Download, Gamepad2, ListChecks, Share2, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import {
@@ -335,10 +335,9 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
     actions: [
       ["options", "Options"],
-      ["package", "Bundle"],
       ["apply", "Apply & download"],
     ],
-    body: "Choose the output name, format, compression, header, and bundle settings. Then press APPLY & DOWNLOAD to apply the enabled patches.",
+    body: "Choose the output name, format, compression, and header. Then press APPLY & DOWNLOAD to apply both patches.",
     cta: ".btn.run",
     openDrawers: true,
     placement: "top",
@@ -370,23 +369,20 @@ const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     title: "Describe the patch recipe",
   },
   {
-    actions: [
-      ["options", "Options"],
-      ["package", "Bundle + patches (.zip)"],
-    ],
-    body: "Output Options now has Bundle + patches (.zip) selected. This shares the patches and recipe without putting a copyrighted ROM in the download.",
+    actions: [["package", "Bundle + patches (.zip)"]],
+    body: "The bundle download is separate from Apply. Bundle + patches (.zip) shares the recipe and patch files without putting a copyrighted ROM in the download.",
     openDrawers: true,
     placement: "top",
-    target: "#rom-weaver-row-output-file-name",
+    target: "#rom-weaver-bundle-job",
     title: "Choose a safe bundle",
   },
   {
-    actions: [["package", "Create ZIP Bundle"]],
-    body: "Press Create ZIP Bundle to finish the tutorial. After rom-weaver checks the recipe, the same control becomes Download ZIP Bundle.",
+    actions: [["package", "Share bundle"]],
+    body: "Exporting a recipe does not apply patches. Press Share bundle to check and download the setup; the same control then becomes Download ZIP Bundle.",
     cta: "#rom-weaver-button-export-bundle",
     openDrawers: true,
     placement: "top",
-    target: "#rom-weaver-row-output-file-name",
+    target: "#rom-weaver-bundle-job",
     title: "Build and download",
   },
 ];
@@ -482,9 +478,7 @@ const BundleRomExpectationCard = ({ expectation }: { expectation: BundleRomExpec
 
 /** Bundle-related notices and export reveal state, threaded from the form. */
 type BundleToolsState = {
-  /** True when a bundle package is selected (drives the export/create action). */
-  exportVisible: boolean;
-  /** Persist the bundle package choice ("" hides it), synced to user settings. */
+  /** Persist the bundle package choice, synced to user settings. */
   setBundlePackage: (value: string) => void;
   /** The run has optional entries (or patches toggled off): output checks only
    * describe the full chain. */
@@ -503,11 +497,9 @@ type BundleExportState = {
   format: string;
   progress: ProgressViewModel | null;
   ready: boolean;
-  romName: string;
   runExport: () => Promise<void>;
   setBundleRom: (value: boolean) => void;
   setFormat: (value: string) => void;
-  setRomName: (value: string) => void;
 };
 
 const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
@@ -1309,13 +1301,13 @@ const BundleExportAction = ({
   }
   return (
     <button
-      className="btn ghost slim bundle-dl"
+      className="btn primary slim bundle-share"
       disabled={disabled}
       id="rom-weaver-button-export-bundle"
       onClick={() => void bundleExport.runExport()}
       type="button"
     >
-      {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Package aria-hidden="true" />}
+      {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Share2 aria-hidden="true" />}
       {bundleActionLabel}
     </button>
   );
@@ -1364,8 +1356,6 @@ const ChecksumOverrideRow = ({
 
 const ApplyOutputAction = ({
   applyTotalTime,
-  bundleActionLabel,
-  bundleExport,
   bundleTools,
   bundleVerificationError,
   controllers,
@@ -1383,8 +1373,6 @@ const ApplyOutputAction = ({
   uiState,
 }: {
   applyTotalTime: PatcherOutputState["totalTiming"];
-  bundleActionLabel: string;
-  bundleExport?: BundleExportState;
   bundleTools?: BundleToolsState;
   bundleVerificationError: string | null;
   controllers: { output: PatcherOutputController };
@@ -1428,7 +1416,13 @@ const ApplyOutputAction = ({
         totalTime={applyTotalTime || undefined}
       />
       <EmulatorJsAction
-        core={core}
+        core={getEmulatorJsCore(
+          romInputs[0]?.info.romType?.platform,
+          romInputs[0]?.info.fileName ||
+            romInputs[0]?.info.archiveName ||
+            outputState.pendingDownloadFileName ||
+            undefined,
+        )}
         fileName={romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || undefined}
         onSelectView={onSelectView}
         output={outputState.pendingDownloadFileName ? emulatorOutput : null}
@@ -1442,14 +1436,6 @@ const ApplyOutputAction = ({
           <span>{bundleTools.outputVerification.message}</span>
         </p>
       ) : null}
-      {bundleExport && bundleTools?.exportVisible ? (
-        <BundleExportAction
-          bundleActionLabel={bundleActionLabel}
-          bundleExport={bundleExport}
-          disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
-        />
-      ) : null}
-      {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
     </>
   );
 };
@@ -1476,90 +1462,107 @@ const getBundleActionLabel = (
   localizer: ReturnType<typeof useUiLocalizer>,
   downloadable: boolean,
 ) => {
-  if (!downloadable) {
-    if (!bundleExport) return "";
-    const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
-    const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
-    const createKey = bundleExport.bundleRom ? "ui.bundleExport.createRom" : "ui.bundleExport.create";
-    return localizer.message(createKey, { format: formatName });
-  }
+  if (!downloadable) return bundleExport ? localizer.message("ui.bundleExport.share") : "";
   if (!bundleExport?.downloadable) return "";
-  const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
+  const formatValue = bundleExport.format || "zip";
   const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
   const downloadKey = bundleExport.bundleRom ? "ui.bundleExport.downloadRom" : "ui.bundleExport.download";
   return localizer.message(downloadKey, { format: formatName });
 };
 
-const getBundleFormatValue = (
-  bundleExport: BundleExportState | undefined,
-  bundleTools: BundleToolsState | undefined,
-) => {
-  const format = bundleTools?.exportVisible ? bundleExport?.format : "";
-  if (!format || format === "bundle") return "";
-  return `${format}:${bundleExport?.bundleRom ? "rom" : "patches"}`;
-};
-
 const BundleOutputFields = ({
   bundleExport,
   bundleTools,
-  outputHeaderField,
 }: {
   bundleExport?: BundleExportState;
   bundleTools?: BundleToolsState;
-  outputHeaderField: ReactNode;
 }) => {
+  const localizer = useUiLocalizer();
   const exportTypeInfo = {
     items: [
       "A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM; it is not a pre-patched ROM.",
       "The required rom-weaver-bundle.json index contains the schema version, optional ROM description/checks, ordered patch entries, and optional output defaults/checks. Patch entries carry their sources, selections, header rules, and expected ROM-state checks.",
-      "The archive holds that index plus the patch files. The “+ ROM” variants also include the original ROM, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
+      "The archive holds that index plus the patch files. Including the original ROM is optional, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
       "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player applies it.",
     ],
-    summary:
-      "Exports this session as a distributable rom-weaver bundle: a portable patch recipe defined by rom-weaver-bundle.json.",
-    title: "Bundle",
+    summary: "Exports this session as a portable rom-weaver bundle defined by rom-weaver-bundle.json.",
+    title: "Archive",
   };
-  const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
-  if (!bundleExport) return outputHeaderField;
+  if (!bundleExport) return null;
+  const archiveType = bundleExport.format === "7z" ? "7z" : "zip";
+  const setBundleContents = (includeRom: boolean, format = archiveType) => {
+    bundleTools?.setBundlePackage(`${format}:${includeRom ? "rom" : "patches"}`);
+  };
   return (
-    <>
-      {outputHeaderField}
+    <div className="bundle-job-fields">
       <OutputField
         className="export-type-field"
-        label="Bundle"
-        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
+        label="Archive type"
+        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Archive type" />}
       >
         <select
-          aria-label="Bundle"
+          aria-label="Archive type"
           className="select"
           disabled={bundleExport.busy}
           id="rom-weaver-bundle-export-format"
-          onChange={(event) => bundleTools?.setBundlePackage(event.currentTarget.value)}
-          value={bundleFormatValue}
+          onChange={(event) => setBundleContents(bundleExport.bundleRom, event.currentTarget.value)}
+          value={archiveType}
         >
-          <option value="">Hide bundle creation</option>
-          <option value="zip:patches">Bundle + patches (.zip)</option>
-          <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
-          <option value="7z:patches">Bundle + patches (.7z)</option>
-          <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
+          <option value="zip">ZIP (.zip)</option>
+          <option value="7z">7z (.7z)</option>
         </select>
       </OutputField>
-      {bundleTools?.exportVisible && !bundleExport.bundleRom ? (
-        <OutputField label="Expected ROM name">
+      <div className="bundle-rom-option">
+        <label className="checkrow" htmlFor="rom-weaver-bundle-export-bundle-rom">
           <input
-            aria-label="Expected ROM name"
-            autoComplete="off"
-            className="input"
+            checked={bundleExport.bundleRom}
             disabled={bundleExport.busy}
-            id="rom-weaver-bundle-rom-name"
-            onChange={(event) => bundleExport.setRomName(event.currentTarget.value)}
-            spellCheck={false}
-            type="text"
-            value={bundleExport.romName}
+            id="rom-weaver-bundle-export-bundle-rom"
+            onChange={(event) => setBundleContents(event.currentTarget.checked)}
+            type="checkbox"
           />
-        </OutputField>
+          <span>{localizer.message("ui.bundleExport.includeRom")}</span>
+        </label>
+      </div>
+      {bundleExport.bundleRom ? (
+        <div className="bundle-rom-warning">
+          <Notice level="warn">{localizer.message("ui.bundleExport.romDistributionWarning")}</Notice>
+        </div>
       ) : null}
-    </>
+    </div>
+  );
+};
+
+/**
+ * Bundle export is a separate job from Apply. It follows the primary action so
+ * a normal Apply run stays focused on producing the patched ROM, while a saved
+ * bundle preference or the guided Bundle tour can reveal it before that run.
+ */
+const BundleSecondaryJob = ({
+  bundleActionLabel,
+  bundleExport,
+  bundleTools,
+  disabled,
+}: {
+  bundleActionLabel: string;
+  bundleExport: BundleExportState;
+  bundleTools: BundleToolsState;
+  disabled: boolean;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <div id="rom-weaver-bundle-job">
+      <Drawer
+        bodyClassName="bundle-job-content"
+        className="bundle-job"
+        label={localizer.message("ui.bundleExport.shareTitle")}
+        readouts={<DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>}
+      >
+        <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
+        {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+        <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+      </Drawer>
+    </div>
   );
 };
 
@@ -1716,7 +1719,7 @@ function ApplyWorkflowFormView({
     notice?: NoticeController;
   };
   emulatorOutput?: BrowserApplyResult["output"] | null;
-  /** Bundle export controls live directly in the Output options drawer. */
+  /** Bundle export controls live in the separate sharing job after Apply. */
   bundleExport?: BundleExportState;
   /** Bundle notices + the export reveal state. */
   bundleTools?: BundleToolsState;
@@ -1842,25 +1845,19 @@ function ApplyWorkflowFormView({
       visible={header.visible}
     />
   );
-  // "Create <format> [ROM] Bundle" until an export exists, then "Download ...".
+  // "Share bundle" until an export exists, then "Download ...".
   const bundleCreateLabel = getBundleActionLabel(bundleExport, localizer, false);
   const bundleActionLabel = bundleExport?.downloadable
     ? getBundleActionLabel(bundleExport, localizer, true)
     : bundleCreateLabel;
-  // The bundle package select mirrors the persisted "Bundle" user setting - ""
-  // is the hide sentinel (matches the stored value), a format arms the action.
-  const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
-  const bundleOutputFields = (
-    <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} outputHeaderField={outputHeaderField} />
-  );
   const outputExtraFields = (
     <>
+      {outputHeaderField}
       <PostApplyBehaviorFields
         disabled={outputState.disabled}
         downloadSetting={settings.postApplyDownloadBehavior}
         testSetting={settings.postApplyTestBehavior}
       />
-      {bundleOutputFields}
     </>
   );
 
@@ -1915,8 +1912,6 @@ function ApplyWorkflowFormView({
   const renderOutputAction = (
     <ApplyOutputAction
       applyTotalTime={applyTotalTime}
-      bundleActionLabel={bundleActionLabel}
-      bundleExport={bundleExport}
       bundleTools={bundleTools}
       bundleVerificationError={bundleVerificationError}
       controllers={{ output: controllers.output }}
@@ -1934,6 +1929,17 @@ function ApplyWorkflowFormView({
       uiState={uiState}
     />
   );
+  // Keep the sharing job after Apply's primary action and result recovery. It
+  // remains available once the bench has content for direct bundle authoring.
+  const bundleSecondaryJob =
+    bundleExport && bundleTools && (romInputs.length > 0 || patches.length > 0 || applyDone) ? (
+      <BundleSecondaryJob
+        bundleActionLabel={bundleActionLabel}
+        bundleExport={bundleExport}
+        bundleTools={bundleTools}
+        disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+      />
+    ) : null;
 
   if (startup.status === "error") {
     return (
@@ -2094,11 +2100,7 @@ function ApplyWorkflowFormView({
               note: outputState.compress?.note,
               onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
               onFormatChange: (value) => controllers.output.setOutputCompression(value),
-              readouts: bundleExport ? (
-                <DrawerReadout label="Bundle" muted={!bundleFormatValue}>
-                  {bundleFormatValue || "hidden"}
-                </DrawerReadout>
-              ) : null,
+              readouts: null,
               timing: outputState.compressTiming || undefined,
             })}
             disabled={outputState.disabled}
@@ -2131,6 +2133,7 @@ function ApplyWorkflowFormView({
             num="0x04"
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
+            secondary={bundleSecondaryJob}
             title="Apply"
             woven={applyDone || running}
           />

@@ -238,6 +238,34 @@
 .rw-app .export-type-field .select {
   text-overflow: ellipsis;
 }
+.rw-app .bundle-job {
+  margin-block-start: var(--sp-l);
+}
+.rw-app .bundle-job-content {
+  display: grid;
+  gap: var(--sp-m);
+}
+.rw-app .bundle-job-fields {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.85fr) minmax(210px, 1.15fr);
+  gap: var(--sp-l);
+}
+.rw-app .bundle-rom-option {
+  align-self: end;
+}
+.rw-app .bundle-rom-option .checkrow {
+  margin-block: 0;
+}
+.rw-app .bundle-rom-warning {
+  grid-column: 1 / -1;
+}
+.rw-app .bundle-share,
+.rw-app .bundle-job-content > .runprog {
+  width: 100%;
+}
+.rw-app .bundle-share {
+  min-height: 40px;
+}
 .rw-app .patch-description-field textarea.input {
   height: auto;
   min-height: 36px;

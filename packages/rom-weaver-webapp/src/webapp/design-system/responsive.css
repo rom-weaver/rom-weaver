@@ -167,6 +167,10 @@
   .rw-app .bundle-rom-expectation {
     margin-block-start: 9px;
   }
+  /* Keep the bundle choices in one compact row on phones. */
+  .rw-app .bundle-job-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .rw-app .updates {
     gap: var(--sp-s);
   }
