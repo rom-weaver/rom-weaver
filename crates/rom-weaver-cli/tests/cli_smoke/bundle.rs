@@ -910,6 +910,8 @@ fn bundle_create_computes_checks_and_aligns_metadata() {
         0,
     );
     let parsed = &events.last().expect("terminal")["details"]["bundle"]["bundle"];
+    assert_eq!(parsed["version"], 2);
+    assert_eq!(parsed["patchBasis"], "base");
     assert!(parsed.get("name").is_none(), "bundles carry no name");
     assert_eq!(parsed["rom"]["path"], "game.bin");
     assert_eq!(
@@ -942,6 +944,71 @@ fn bundle_create_computes_checks_and_aligns_metadata() {
     assert!(second["name"].is_null());
     assert_eq!(parsed["output"]["name"], "patched.bin");
     assert!(parsed["output"].get("compress").is_none());
+}
+
+#[test]
+fn bundle_create_upgrades_v1_with_auto_basis_and_omits_redundant_entry_basis() {
+    let temp = setup_temp_dir();
+    let rom = write_bundle_rom(&temp, "game.bin");
+    let patch = write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let spec = temp.child("v1.json");
+    let output = temp.child("rom-weaver-bundle.json");
+    fs::write(
+        spec.path(),
+        format!(
+            r#"{{
+              "$schema": "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json",
+              "version": 1,
+              "rom": {{ "path": "{}" }},
+              "patches": [{{ "path": "{}", "basis": "base" }}]
+            }}"#,
+            rom.file_name().expect("rom name").to_string_lossy(),
+            patch.file_name().expect("patch name").to_string_lossy(),
+        ),
+    )
+    .expect("v1 spec");
+
+    let events = run_json_events(
+        &[
+            "bundle",
+            "create",
+            "--from",
+            spec.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let bundle = &events.last().expect("terminal")["details"]["bundle_create"]["bundle"];
+    assert_eq!(bundle["version"], 2);
+    assert_eq!(bundle["patchBasis"], "auto");
+    assert_eq!(
+        bundle["$schema"],
+        "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v2.schema.json"
+    );
+    assert_eq!(bundle["patches"][0]["basis"], "base");
+
+    let base_output = temp.child("base.json");
+    let events = run_json_events(
+        &[
+            "bundle",
+            "create",
+            "--input",
+            rom.to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--patch-basis",
+            "base",
+            "--output",
+            base_output.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let bundle = &events.last().expect("terminal")["details"]["bundle_create"]["bundle"];
+    assert_eq!(bundle["patchBasis"], "base");
+    assert!(bundle["patches"][0].get("basis").is_none());
 }
 
 #[test]
@@ -1743,9 +1810,7 @@ fn bundle_declared_base_conflict_is_rejected_and_cli_auto_clears_the_declaration
             "patch-apply",
             "--input",
             bundle.path().to_str().expect("path"),
-            "--patch-basis",
-            "auto",
-            "--patch-basis",
+            "--default-patch-basis",
             "auto",
             "--output",
             output.path().to_str().expect("path"),
@@ -1756,6 +1821,182 @@ fn bundle_declared_base_conflict_is_rejected_and_cli_auto_clears_the_declaration
     );
     assert_eq!(automatic.last().expect("terminal")["status"], "succeeded");
     assert_eq!(fs::read(output.path()).expect("output"), target_bytes);
+}
+
+#[test]
+fn bundle_v2_patch_basis_precedence_is_patch_cli_shared_entry_then_bundle() {
+    let temp = setup_temp_dir();
+    let rom = write_bundle_rom(&temp, "game.bin");
+    let mid = temp.child("mid.bin");
+    let mut mid_bytes = BUNDLE_ROM_BYTES.to_vec();
+    mid_bytes[4] = 0xAA;
+    fs::write(mid.path(), &mid_bytes).expect("mid fixture");
+    let target = temp.child("target.bin");
+    let mut target_bytes = mid_bytes.clone();
+    target_bytes[12] = 0xBB;
+    fs::write(target.path(), &target_bytes).expect("target fixture");
+    let first_patch = temp.child("first.bps");
+    let second_patch = temp.child("second.bps");
+    create_patch_file(rom.as_path(), mid.path(), "bps", first_patch.path());
+    create_patch_file(mid.path(), target.path(), "bps", second_patch.path());
+    let bundle = temp.child("rom-weaver-bundle.json");
+    fs::write(
+        bundle.path(),
+        r#"{
+            "version": 2,
+            "patchBasis": "base",
+            "rom": { "path": "game.bin" },
+            "patches": [
+                { "path": "first.bps" },
+                { "path": "second.bps", "basis": "previous" }
+            ]
+        }"#,
+    )
+    .expect("bundle fixture");
+
+    let entry_override = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            bundle.path().to_str().expect("path"),
+            "--output",
+            temp.child("entry.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        entry_override.last().expect("terminal")["status"],
+        "succeeded"
+    );
+
+    let shared_override = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            bundle.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "base",
+            "--output",
+            temp.child("shared.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    );
+    assert!(
+        shared_override.last().expect("terminal")["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch.base.input_mismatch")
+    );
+
+    let patch_override = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            bundle.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "base",
+            "--patch-basis",
+            "base",
+            "--patch-basis",
+            "auto",
+            "--output",
+            temp.child("patch.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        patch_override.last().expect("terminal")["status"],
+        "succeeded"
+    );
+    assert_eq!(
+        fs::read(temp.child("patch.bin").path()).expect("output"),
+        target_bytes
+    );
+}
+
+#[test]
+fn patch_apply_emit_bundle_preserves_per_patch_basis_overrides() {
+    let temp = setup_temp_dir();
+    let rom = write_bundle_rom(&temp, "game.bin");
+    let mid = temp.child("mid.bin");
+    let mut mid_bytes = BUNDLE_ROM_BYTES.to_vec();
+    mid_bytes[4] = 0xAA;
+    fs::write(mid.path(), &mid_bytes).expect("mid fixture");
+    let target = temp.child("target.bin");
+    let mut target_bytes = mid_bytes.clone();
+    target_bytes[12] = 0xBB;
+    fs::write(target.path(), &target_bytes).expect("target fixture");
+    let first_patch = temp.child("first.bps");
+    let second_patch = temp.child("second.bps");
+    create_patch_file(rom.as_path(), mid.path(), "bps", first_patch.path());
+    create_patch_file(mid.path(), target.path(), "bps", second_patch.path());
+    let source_bundle = temp.child("source-bundle.json");
+    fs::write(
+        source_bundle.path(),
+        r#"{
+            "version": 2,
+            "patchBasis": "base",
+            "rom": { "path": "game.bin" },
+            "patches": [
+                { "path": "first.bps" },
+                { "path": "second.bps", "basis": "previous" }
+            ]
+        }"#,
+    )
+    .expect("bundle fixture");
+
+    let emitted = temp.child("emitted-bundle.json");
+    let output = temp.child("output.bin");
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            source_bundle.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--emit-bundle",
+            emitted.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let terminal = events
+        .iter()
+        .find(|event| event["command"] == "patch-apply" && event["status"] != "running")
+        .expect("patch-apply terminal");
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), target_bytes);
+
+    let emitted_json: Value = serde_json::from_slice(&fs::read(emitted.path()).expect("bundle"))
+        .expect("valid emitted bundle");
+    assert_eq!(emitted_json["patchBasis"], "base");
+    assert_eq!(emitted_json["patches"][1]["basis"], "previous");
+
+    let replay_output = temp.child("replay.bin");
+    let replay = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            emitted.path().to_str().expect("path"),
+            "--output",
+            replay_output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(replay.last().expect("terminal")["status"], "succeeded");
+    assert_eq!(
+        fs::read(replay_output.path()).expect("replay"),
+        target_bytes
+    );
 }
 
 #[test]
@@ -1844,6 +2085,8 @@ fn bundle_create_dedups_endpoint_checks_and_apply_validates_output() {
             &format!("crc32={mid_crc}"),
             "--patch-expect-out",
             &format!("crc32={final_crc}"),
+            "--default-patch-basis",
+            "previous",
             "--expect-out",
             &format!("crc32={final_crc}"),
             "--output",

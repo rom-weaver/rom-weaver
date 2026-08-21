@@ -335,6 +335,33 @@ describe("apply workflow view - staged bench", () => {
     await vi.waitFor(() => expect(document.activeElement).toBe(button));
   });
 
+  it("keeps mixed patch versions when only the shared author changes", () => {
+    const onBundleMetaBulkChange = vi.fn();
+    const { getByLabelText, getByRole } = renderView({
+      bundleMetaById: new Map([
+        ["patch-a", { author: "First author", version: "1.0" }],
+        ["patch-b", { author: "Second author", version: "2.0" }],
+      ]),
+      onBundleMetaBulkChange,
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a", "patch-b"],
+        onToggle: () => undefined,
+      },
+      patches: [patchItem("first.ips"), patchItem("second.ips")],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
+    });
+
+    fireEvent.click(getByRole("button", { name: "Bulk edit" }));
+    expect((getByLabelText("Version") as HTMLInputElement).placeholder).toBe("Multiple values");
+    fireEvent.change(getByLabelText("Author"), { target: { value: "Shared author" } });
+    fireEvent.submit(getByLabelText("Author").closest("form") as HTMLFormElement);
+
+    expect(onBundleMetaBulkChange).toHaveBeenCalledWith(["patch-a", "patch-b"], {
+      author: "Shared author",
+    });
+  });
+
   it("shows the emulator action only when the input resolves to a supported core", () => {
     const output = {
       fileName: "game.nes",
@@ -738,6 +765,34 @@ describe("apply workflow view - bundle controls", () => {
     expect(shareButton?.parentElement?.classList).toContain("bundle-job-content");
     expect(container.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
     expect(container.querySelector(".bundle-rom-warning .notice")?.textContent).toContain("right to distribute it");
+  });
+
+  it("defaults each patch input to automatic and locks it during bundle export", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const onPatchInputBasisChange = vi.fn();
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={{ ...bundleExport(), busy: true }}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({
+              items: [patchItem("first.ips"), patchItem("second.ips")],
+            }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+          onPatchInputBasisChange={onPatchInputBasisChange}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const selects = Array.from(container.querySelectorAll<HTMLSelectElement>('select[id^="rom-weaver-patch-basis-"]'));
+    expect(selects).toHaveLength(2);
+    expect(selects.every((select) => select.value === "auto")).toBe(true);
+    expect(selects.every((select) => select.disabled)).toBe(true);
+    fireEvent.change(selects[1] as HTMLSelectElement, { target: { value: "base" } });
+    expect(onPatchInputBasisChange).not.toHaveBeenCalled();
   });
 
   it("keeps the busy sharing action in the same full-row wrapper", () => {

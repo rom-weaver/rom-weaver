@@ -1,6 +1,10 @@
 import { expect, test } from "vitest";
 import { createRomWeaverOutputScope, runWithRomWeaverOutputScope } from "../../src/lib/runtime/run-output-paths.ts";
-import { normalizeChdCodecArgs, resolvePatchApplyThreadArg } from "../../src/lib/runtime/wasm-command-runtime.ts";
+import {
+  normalizeChdCodecArgs,
+  normalizePatchApplyDefaultBasis,
+  resolvePatchApplyThreadArg,
+} from "../../src/lib/runtime/wasm-command-runtime.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
 import { createPublicSourceValidator } from "../../src/platform/shared/public-source-validation.ts";
@@ -19,6 +23,11 @@ test("normalizeChdCodecArgs preserves matching codec levels", () => {
     codecs: ["cdlz:9", "cdzl:9"],
     stripped: false,
   });
+});
+
+test("patch apply accepts either generated or web shared-basis option names", () => {
+  expect(normalizePatchApplyDefaultBasis({ default_patch_basis: "previous" })).toBe("previous");
+  expect(normalizePatchApplyDefaultBasis({ defaultPatchBasis: "auto" })).toBe("auto");
 });
 
 test("resolvePatchApplyThreadArg forces single-thread for xdelta patches", () => {

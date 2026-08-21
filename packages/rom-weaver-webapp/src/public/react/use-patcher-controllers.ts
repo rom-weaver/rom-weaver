@@ -170,6 +170,7 @@ interface PatchStackControllerContext {
   actions: {
     createStageSnapshot: () => ApplyWorkflowStageSnapshot;
     getPatchKey: (source: BinarySource, sources?: BinarySource[]) => string;
+    invalidatePatchDependentOutput: (reason: string, details?: Record<string, unknown>) => boolean;
     onError?: (error: Error) => void;
     setPatchInfoByKey: SessionState["setPatchInfoByKey"];
     setPatchOption?: LocalApplyPatchFormSessionOptions["setPatchOption"];
@@ -249,6 +250,7 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
         const { actions } = contextRef.current;
         if (!actions.setPatchOption) return;
         try {
+          actions.invalidatePatchDependentOutput("patch option changed", { index });
           const snapshot = actions.createStageSnapshot();
           const infos = await actions.setPatchOption(snapshot, index, option);
           applyPatchInfoUpdates(actions.setPatchInfoByKey, actions.getPatchKey, snapshot, infos);
@@ -263,6 +265,7 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
         const { actions } = contextRef.current;
         if (!actions.setPatchTarget) return;
         try {
+          actions.invalidatePatchDependentOutput("patch target changed", { index });
           const snapshot = actions.createStageSnapshot();
           const infos = await actions.setPatchTarget(snapshot, index, targetInputId);
           applyPatchInfoUpdates(actions.setPatchInfoByKey, actions.getPatchKey, snapshot, infos);

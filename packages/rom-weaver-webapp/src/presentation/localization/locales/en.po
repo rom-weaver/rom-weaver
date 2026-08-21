@@ -30,6 +30,36 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.help"
+#~ msgstr "Choose the ROM state each enabled patch reads. Checksums still prove the ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.inherit"
+#~ msgstr "Use shared rule"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.override"
+#~ msgstr "Override input"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.overrideLabel"
+#~ msgstr "Override input for patch {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.mapLabel"
+#~ msgstr "Patch input thread map"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.legend"
+#~ msgstr "Patch inputs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 #~ msgid "settings.applyPlayButtonEnabled"
 #~ msgstr "Show the test button after applying"
 
@@ -136,12 +166,17 @@ msgstr "Auto"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.autoBase"
-msgstr "auto (base ROM)"
+msgstr "auto (Original ROM)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.autoPrevious"
-msgstr "auto (previous)"
+msgstr "auto (Previous patch output)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.auto"
+msgstr "Automatic"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -495,6 +530,11 @@ msgstr "Original"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.original"
+msgstr "Original ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.output"
 msgstr "Output"
 
@@ -562,6 +602,11 @@ msgstr "Preview build"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "previous output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.previous"
+msgstr "Previous patch output"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

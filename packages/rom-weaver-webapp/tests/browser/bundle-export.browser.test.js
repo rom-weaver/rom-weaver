@@ -156,7 +156,8 @@ test("export bundle bundles the session from main-page options with a checks-onl
   // than intercepting the browser download.
   const result = await waitForState(() => exported, 60000);
   expect(result).not.toBeNull();
-  expect(result.bundle.version).toBe(1);
+  expect(result.bundle.version).toBe(2);
+  expect(result.bundle.patchBasis).toBe("auto");
   // Bundles carry no display name; the export name feeds output naming only.
   expect(result.bundle.name).toBeUndefined();
   expect(result.bundle.output?.name).toBe("Exported Hack");
@@ -194,9 +195,27 @@ test("export bundle bundles the session from main-page options with a checks-onl
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;
   }, 30000);
   expect(downloadButton.textContent).toContain("Download");
-  downloadButton.click();
-  await expect.poll(() => saveAs.mock.calls.length).toBe(2);
-  await expect.poll(() => downloadButton.disabled).toBe(false);
+  const firstResult = exported;
+  setFormControlValue(await waitForState(() => document.getElementById("rom-weaver-patch-basis-0")), "base");
+  const shareButton = await waitForState(() => {
+    const button = document.getElementById("rom-weaver-button-export-bundle");
+    return button instanceof HTMLButtonElement && !button.disabled && button.textContent?.includes("Share")
+      ? button
+      : null;
+  });
+  shareButton.click();
+  const updatedResult = await waitForState(() => (exported === firstResult ? null : exported), 60000);
+  expect(updatedResult.bundle.patches[0]?.basis).toBe("base");
+
+  const updatedDownloadButton = await waitForState(() => {
+    const button = document.getElementById("rom-weaver-button-export-bundle");
+    return button instanceof HTMLButtonElement && !button.disabled && button.textContent?.includes("Download")
+      ? button
+      : null;
+  });
+  updatedDownloadButton.click();
+  await expect.poll(() => saveAs.mock.calls.length).toBe(3);
+  await expect.poll(() => updatedDownloadButton.disabled).toBe(false);
   saveAs.mockRestore();
 });
 

@@ -1,18 +1,22 @@
 use super::*;
 
 /// Version of the public `rom-weaver-bundle.json` bundle schema this build
-/// writes and reads.
-pub const BUNDLE_VERSION: u32 = 1;
+/// writes.
+pub const BUNDLE_VERSION: u32 = 2;
 
 /// The JSON Schema for `rom-weaver-bundle.json`, embedded from the copy shipped
 /// with this crate. A workspace test below keeps it byte-for-byte aligned with
 /// the canonical docs copy.
 /// Editors can bind it via a `$schema` key (accepted on read) or the published
 /// URL in its `$id`.
-pub const BUNDLE_JSON_SCHEMA: &str = include_str!("../rom-weaver-bundle-v1.schema.json");
+pub const BUNDLE_JSON_SCHEMA: &str = include_str!("../rom-weaver-bundle-v2.schema.json");
+#[cfg(test)]
+pub const BUNDLE_JSON_SCHEMA_V1: &str = include_str!("../rom-weaver-bundle-v1.schema.json");
 
 /// Published, resolvable location of [`BUNDLE_JSON_SCHEMA`] (matches its `$id`).
-pub const BUNDLE_JSON_SCHEMA_URL: &str = "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json";
+pub const BUNDLE_JSON_SCHEMA_URL: &str = "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v2.schema.json";
+#[cfg(not(target_arch = "wasm32"))]
+pub const BUNDLE_JSON_SCHEMA_V1_URL: &str = "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json";
 
 /// A distributable ordered patch workflow with optional ROM, selection seed,
 /// endpoint checks, sources, and output defaults. Sources are URLs or
@@ -31,6 +35,11 @@ pub struct RomWeaverBundle {
     #[cfg_attr(feature = "typescript-types", ts(optional, rename = "$schema"))]
     pub schema: Option<String>,
     pub version: u32,
+    /// Shared input-basis declaration for the chain. Version 2 requires this
+    /// value; version 1 omits it and retains automatic inference.
+    #[serde(rename = "patchBasis", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub patch_basis: Option<PatchBasisMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom: Option<BundleRom>,
@@ -185,13 +194,19 @@ mod schema_tests {
     // The packaged crate cannot contain the repository's docs directory, so
     // compare against it only when running from the workspace checkout.
     #[test]
-    fn embedded_schema_matches_canonical_docs_copy() {
-        let docs_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../docs/rom-weaver-bundle-v1.schema.json");
-        if docs_path.exists() {
-            let canonical =
-                std::fs::read_to_string(docs_path).expect("read canonical docs bundle schema");
-            assert_eq!(canonical, BUNDLE_JSON_SCHEMA);
+    fn embedded_schemas_match_canonical_docs_copies() {
+        for (name, embedded) in [
+            ("rom-weaver-bundle-v1.schema.json", BUNDLE_JSON_SCHEMA_V1),
+            ("rom-weaver-bundle-v2.schema.json", BUNDLE_JSON_SCHEMA),
+        ] {
+            let docs_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../docs")
+                .join(name);
+            if docs_path.exists() {
+                let canonical =
+                    std::fs::read_to_string(docs_path).expect("read canonical docs bundle schema");
+                assert_eq!(canonical, embedded);
+            }
         }
     }
 
@@ -212,7 +227,14 @@ mod schema_tests {
             .get("properties")
             .and_then(serde_json::Value::as_object)
             .expect("schema declares top-level properties");
-        for key in ["$schema", "version", "rom", "patches", "output"] {
+        for key in [
+            "$schema",
+            "version",
+            "patchBasis",
+            "rom",
+            "patches",
+            "output",
+        ] {
             assert!(
                 properties.contains_key(key),
                 "schema is missing top-level property `{key}`"
@@ -233,7 +255,7 @@ mod schema_tests {
     #[test]
     fn parse_accepts_and_preserves_schema_key() {
         let json = format!(
-            r#"{{ "$schema": "{BUNDLE_JSON_SCHEMA_URL}", "version": {BUNDLE_VERSION}, "patches": [ {{ "path": "a.ips" }} ] }}"#
+            r#"{{ "$schema": "{BUNDLE_JSON_SCHEMA_URL}", "version": {BUNDLE_VERSION}, "patchBasis": "base", "patches": [ {{ "path": "a.ips" }} ] }}"#
         );
         let bundle = crate::bundle_parse::parse_bundle_bytes(json.as_bytes())
             .expect("a bundle carrying $schema parses");

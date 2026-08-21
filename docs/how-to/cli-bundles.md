@@ -12,10 +12,10 @@ A `rom-weaver-bundle.json` bundle turns a tested patch job into a repeatable rec
 <!-- END doctoc -->
 
 
-[What a bundle is](../explanation/bundles.md) covers the idea; for an end-to-end release workflow in either the Apply webapp or terminal, start with [Create and share a patch bundle](create-bundles.md). The machine-readable schema is [`rom-weaver-bundle-v1.schema.json`](../rom-weaver-bundle-v1.schema.json); its `$id` resolves to the public GitHub copy at `https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json`. Print the current schema to stdout with `bundle schema`, then redirect it to a file or point an editor at it:
+[What a bundle is](../explanation/bundles.md) covers the idea; for an end-to-end release workflow in either the Apply webapp or terminal, start with [Create and share a patch bundle](create-bundles.md). The machine-readable schema is [`rom-weaver-bundle-v2.schema.json`](../rom-weaver-bundle-v2.schema.json); its `$id` resolves to the public GitHub copy at `https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v2.schema.json`. Print the current schema to stdout with `bundle schema`, then redirect it to a file or point an editor at it:
 
 ```bash
-rom-weaver bundle schema > rom-weaver-bundle-v1.schema.json
+rom-weaver bundle schema > rom-weaver-bundle-v2.schema.json
 ```
 
 ## Create a bundle from local files
@@ -32,6 +32,8 @@ rom-weaver bundle create \
 
 `-i`/`--input` names the ROM. `--rom-name` records the expected logical file name (and supplies display/output naming); applying a separately supplied ROM with a different basename warns but continues. Use `--rom-url` when the ROM ships from somewhere else and the bundle should only point at it.
 
+New bundles use `--default-patch-basis base`. This means each patch was made from the original ROM. Use `previous` when each later patch was made from the previous result. Use `auto` to infer the relationship from checksums.
+
 Every `--patch-*` flag describes the `--patch` before it: `--patch-id`, `--patch-version`, `--patch-author`, `--patch-name`, `--patch-description`, `--patch-optional`, `--patch-label`, `--patch-source-url`, `--patch-header`, and `--patch-basis`. Give each patch an ID that stays the same across releases and the webapp keeps its settings when you publish a replacement; bump `--patch-version` at the same time.
 
 Checksums use the same tokens as `patch apply`. `--expect-out ALGO=HEX` pins the final result, `--patch-expect-in` and `--patch-expect-out` pin what a single patch should see and produce, and `--assume-in` takes the ROM's checksum on trust rather than reading the file.
@@ -44,8 +46,9 @@ Rather than pass every flag, hand-author a `rom-weaver-bundle.json` spec with lo
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json",
-  "version": 1,
+  "$schema": "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v2.schema.json",
+  "version": 2,
+  "patchBasis": "base",
   "rom": { "path": "original.sfc" },
   "patches": [
     { "path": "translation.bps", "name": "English translation" },
@@ -59,7 +62,9 @@ Rather than pass every flag, hand-author a `rom-weaver-bundle.json` spec with lo
 rom-weaver bundle create --from spec.json --output rom-weaver-bundle.json
 ```
 
-`--from -` reads the spec from stdin, in which case paths resolve against the current directory; otherwise they resolve against the spec file. Any flag you also pass overrides what the spec says, and a `$schema` already in the spec is kept. `--from` only accepts entries with a local `path`; url-only and checks-only entries are rejected with an explanation.
+`--from -` reads the spec from stdin, in which case paths resolve against the current directory; otherwise they resolve against the spec file. Any flag you also pass overrides what the spec says. A custom `$schema` value stays unchanged. The official v1 schema URL changes to the v2 URL during an upgrade. `--from` only accepts entries with a local `path`; url-only and checks-only entries are rejected with an explanation.
+
+Version 1 specs are upgraded with `patchBasis: "auto"`. This keeps their checksum inference behavior. Version 2 requires an explicit shared rule.
 
 ## Parse and run a bundle
 

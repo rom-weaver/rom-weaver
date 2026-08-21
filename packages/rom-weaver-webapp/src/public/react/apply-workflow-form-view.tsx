@@ -60,6 +60,7 @@ import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-r
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { PatchInputBasis } from "./patch-input-basis.ts";
 import {
   setPostApplyDownloadBehaviorOverride,
   setPostApplyTestBehaviorOverride,
@@ -1709,6 +1710,8 @@ function ApplyWorkflowFormView({
   onSelectView,
   onUnifiedDrop,
   patchEnablement,
+  patchInputBasis,
+  onPatchInputBasisChange,
   pendingDrops = [],
   startup = { message: "", status: "ready" },
 }: {
@@ -1737,6 +1740,8 @@ function ApplyWorkflowFormView({
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[]) => void;
   patchEnablement?: PatchEnablement;
+  patchInputBasis?: PatchInputBasis;
+  onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
   pendingDrops?: PendingDrop[];
   startup?: StartupState;
 }) {
@@ -2075,6 +2080,9 @@ function ApplyWorkflowFormView({
             overrideAvailable={uiState.checksumOverride.visible}
             patches={patches}
             patchStack={controllers.patchStack}
+            patchInputBasis={patchInputBasis}
+            patchInputBasisDisabled={bundleExport?.busy}
+            onPatchInputBasisChange={onPatchInputBasisChange}
             romActualsById={romActualsById}
             notice={
               <SectionNotice

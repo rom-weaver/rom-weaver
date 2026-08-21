@@ -1611,6 +1611,8 @@ fn patch_apply_emit_bundle_records_inferred_container_output() {
             patch.path().to_str().expect("path"),
             "--format",
             "zip",
+            "--default-patch-basis",
+            "previous",
             "--emit-bundle",
             bundle.path().to_str().expect("path"),
             "--json",
@@ -1626,6 +1628,7 @@ fn patch_apply_emit_bundle_records_inferred_container_output() {
 
     let emitted: Value = serde_json::from_slice(&fs::read(bundle.path()).expect("bundle bytes"))
         .expect("valid emitted bundle");
+    assert_eq!(emitted["patchBasis"], "previous");
     assert_eq!(emitted["output"]["name"], "old-patched.zip");
 }
 
@@ -4034,6 +4037,8 @@ fn patch_apply_auto_strips_mid_chain_on_embedded_checksum() {
             temp.child("first.bps").path().to_str().expect("path"),
             "--patch",
             temp.child("second.bps").path().to_str().expect("path"),
+            "--default-patch-basis",
+            "auto",
             "--output",
             temp.child("output.nes").path().to_str().expect("path"),
             "--no-compress",
@@ -4092,6 +4097,8 @@ fn patch_apply_auto_restores_header_mid_chain_on_embedded_checksum() {
             temp.child("first.bps").path().to_str().expect("path"),
             "--patch",
             temp.child("second.bps").path().to_str().expect("path"),
+            "--default-patch-basis",
+            "auto",
             "--output",
             temp.child("output.nes").path().to_str().expect("path"),
             "--no-compress",
@@ -6636,6 +6643,8 @@ fn patch_validate_plan_resolves_same_base_patches() {
             patch_a.path().to_str().expect("path"),
             "--patch",
             patch_b.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "auto",
             "--plan",
             "--json",
         ],
@@ -6679,11 +6688,8 @@ fn patch_validate_plan_verifies_checksumless_alternatives_against_base() {
     fs::write(input.path(), b"ORIGINAL-ROM\n").expect("fixture");
 
     // Two IPS patches, each an alternative edit of the SAME base byte. IPS carries no source
-    // checksum, so the planner has zero evidence either is chained and can only *default* the
-    // second to "previous" basis. Both nonetheless apply cleanly to the ROM, so both must verify
-    // green against the base regardless of order - the second must never read "chain_deferred"
-    // (an empty "verified during the weave" promise for a checksumless format) purely for being
-    // listed second.
+    // checksum. The shared base default makes both patches verify against the
+    // original ROM regardless of their order.
     fs::write(temp.child("mod-a.bin").path(), b"ORIGINXL-ROM\n").expect("fixture");
     fs::write(temp.child("mod-b.bin").path(), b"ORIGINYL-ROM\n").expect("fixture");
     let patch_a = temp.child("alt-a.ips");
@@ -6718,6 +6724,7 @@ fn patch_validate_plan_verifies_checksumless_alternatives_against_base() {
         assert_eq!(per_patch.len(), 2);
         for entry in per_patch {
             assert_eq!(entry["basis"], "base");
+            assert_eq!(entry["basis_source"], "declared");
             assert_eq!(entry["input_verdict"], "passed");
             assert_eq!(entry["matched"]["kind"], "none");
         }
@@ -6754,6 +6761,8 @@ fn patch_validate_plan_defers_mid_chain_patch() {
             patch_a.path().to_str().expect("path"),
             "--patch",
             patch_b.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "auto",
             "--plan",
             "--json",
         ],
@@ -6823,6 +6832,8 @@ fn patch_validate_plan_suggests_reorder_for_out_of_order_chain() {
             patch_3.path().to_str().expect("path"),
             "--patch",
             patch_2.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "auto",
             "--plan",
             "--json",
         ],
@@ -6900,7 +6911,7 @@ fn run_same_base_chain_contract(format: &str, extension: &str, expected_format: 
         assert_eq!(entry["matched"]["kind"], "base");
         assert_eq!(entry["matched"]["variant"], "raw");
     }
-    assert_eq!(planned[1]["basis_source"], "inferred_base");
+    assert_eq!(planned[1]["basis_source"], "declared");
 
     let strict_output = temp.child("output-strict.bin");
     let strict = run_single_json_event(
@@ -7468,7 +7479,7 @@ fn patch_apply_declared_rup_reverse_base_step_honors_planned_direction() {
 }
 
 #[test]
-fn patch_apply_rup_revert_step_defaults_to_previous() {
+fn patch_apply_rup_revert_step_uses_previous_rule() {
     let temp = setup_temp_dir();
     let base = temp.child("base.bin");
     let base_bytes = b"0123456789abcdefghij".to_vec();
@@ -7482,8 +7493,8 @@ fn patch_apply_rup_revert_step_defaults_to_previous() {
     create_bps_patch(base.path(), intermediate.path(), first_patch.path());
 
     // The base is this RUP's target, so endpoint discovery sees a reverse hit.
-    // Without an explicit Base declaration that is not evidence that the patch
-    // should consume the original base: this ordinary revert consumes Previous.
+    // The previous rule still makes this ordinary revert consume the first
+    // patch's output.
     let revert_patch = temp.child("revert.rup");
     create_rup_patch(intermediate.path(), base.path(), revert_patch.path());
 
@@ -7497,6 +7508,8 @@ fn patch_apply_rup_revert_step_defaults_to_previous() {
             first_patch.path().to_str().expect("path"),
             "--patch",
             revert_patch.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "previous",
             "--plan",
             "--json",
         ],
@@ -7504,7 +7517,7 @@ fn patch_apply_rup_revert_step_defaults_to_previous() {
     );
     let second = &plan["details"]["patch_validation"]["per_patch"][1];
     assert_eq!(second["basis"], "previous", "plan: {plan}");
-    assert_eq!(second["basis_source"], "default", "plan: {plan}");
+    assert_eq!(second["basis_source"], "declared", "plan: {plan}");
 
     let output = temp.child("output.bin");
     let applied = run_single_json_event(
@@ -7517,6 +7530,8 @@ fn patch_apply_rup_revert_step_defaults_to_previous() {
             first_patch.path().to_str().expect("path"),
             "--patch",
             revert_patch.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "previous",
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
@@ -7709,6 +7724,8 @@ fn patch_apply_first_typed_rup_uses_prepared_n64_order_hint() {
             typed_rup.path().to_str().expect("path"),
             "--patch",
             second_patch.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "auto",
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",

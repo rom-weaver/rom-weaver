@@ -452,8 +452,10 @@ const getPatchN64ByteOrders = (patchIndices: number[], patchOptions: PatchInput[
     return patchOption?.n64ByteOrder || patchOption?.resolvedN64ByteOrder || ("auto" as const);
   });
 
-const getPatchBases = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) =>
-  patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.basis || ("auto" as const));
+const getPatchBases = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) => {
+  const bases = patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.basis || ("auto" as const));
+  return bases.some((basis) => basis !== "auto") ? bases : undefined;
+};
 
 const canReuseWorkerOutputPath = (output: PublicOutputWithApplySummary) =>
   !!(
@@ -471,6 +473,7 @@ const applyPatchesToAsset = async ({
   asset,
   assetPatches,
   options,
+  defaultPatchBasis,
   patchOptions,
   patchFiles,
   patches,
@@ -480,12 +483,14 @@ const applyPatchesToAsset = async ({
   asset: InputAsset;
   assetPatches: ParsedPatchLike[];
   options: ApplyPatchOptions;
+  defaultPatchBasis?: PatchInput["defaultPatchBasis"];
   patchOptions: PatchInput["patchOptions"];
   patchFiles: PatchFileInstance[];
   patches: ParsedPatchLike[];
   workerOutputName?: string;
 }) => {
   const patchIndices = assetPatches.map((patch) => patches.indexOf(patch));
+  const patchBasis = getPatchBases(patchIndices, patchOptions);
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
   const patchLabel =
@@ -506,7 +511,8 @@ const applyPatchesToAsset = async ({
       headerModes: getPatchHeaderModes(patchIndices, patchOptions),
       n64ByteOrders: getPatchN64ByteOrders(patchIndices, patchOptions),
       outputHeader: options.output?.header || ("auto" as const),
-      patchBasis: getPatchBases(patchIndices, patchOptions),
+      ...(defaultPatchBasis ? { defaultPatchBasis } : {}),
+      ...(patchBasis ? { patchBasis } : {}),
     },
     patches: selectedPatches,
     signal: options.signal,
@@ -526,6 +532,7 @@ const applyPreparedPatches = async ({
   inputAssets,
   options,
   patchOptions,
+  defaultPatchBasis,
   patchFiles,
   patches,
   patchTargets,
@@ -536,6 +543,7 @@ const applyPreparedPatches = async ({
   inputAssets: InputAsset[];
   options: ApplyPatchOptions;
   patchOptions: PatchInput["patchOptions"];
+  defaultPatchBasis?: PatchInput["defaultPatchBasis"];
   patchFiles: PatchFileInstance[];
   patches: ParsedPatchLike[];
   patchTargets: Array<"auto" | string> | undefined;
@@ -589,6 +597,7 @@ const applyPreparedPatches = async ({
           assetPatches,
           options,
           patchOptions,
+          defaultPatchBasis,
           patchFiles,
           patches,
           workerOutputName,
@@ -697,6 +706,7 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
     inputAssets,
     options,
     patchOptions: input.patchOptions,
+    defaultPatchBasis: input.defaultPatchBasis,
     patchFiles,
     patches,
     patchTargets,

@@ -81,6 +81,7 @@ type StagedInputInfo = {
 };
 
 type ApplyWorkflowStageSnapshot = {
+  defaultPatchBasis?: "auto" | "base" | "previous";
   inputs: BinarySource[];
   patches: BinarySource[];
   options: ApplyPatchFormSettings & {
@@ -140,6 +141,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
   | "onApplyComplete"
   | "onError"
 > & {
+  defaultPatchBasis?: "auto" | "base" | "previous";
   applyPatches: (input: {
     inputs: BinarySource[];
     patches: BinarySource[];
@@ -152,6 +154,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
     }>;
+    defaultPatchBasis?: "auto" | "base" | "previous";
     options: ApplyPatchFormSettings & {
       output: NonNullable<ApplyPatchFormSettings["output"]> & {
         compression: "auto" | CompressionFormat;

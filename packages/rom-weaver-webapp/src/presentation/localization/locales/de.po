@@ -30,6 +30,36 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.help"
+#~ msgstr "Wähle den ROM-Zustand, den jeder aktive Patch liest. Prüfsummen beweisen weiter das ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.inherit"
+#~ msgstr "Gemeinsame Regel verwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.override"
+#~ msgstr "Eingabe überschreiben"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.overrideLabel"
+#~ msgstr "Eingabe für Patch {n} überschreiben"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.mapLabel"
+#~ msgstr "Thread-Karte für Patch-Eingaben"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchInputs.legend"
+#~ msgstr "Patch-Eingaben"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 #~ msgid "settings.applyPlayButtonEnabled"
 #~ msgstr "Test-Schaltfläche nach dem Anwenden anzeigen"
 
@@ -136,12 +166,17 @@ msgstr "Automatisch"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.autoBase"
-msgstr "auto (Basis-ROM)"
+msgstr "auto (Original-ROM)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.autoPrevious"
-msgstr "auto (vorheriger)"
+msgstr "auto (Ausgabe des vorherigen Patches)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.auto"
+msgstr "Automatisch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -495,6 +530,11 @@ msgstr "Original"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.original"
+msgstr "Original-ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.output"
 msgstr "Ausgabe"
 
@@ -562,6 +602,11 @@ msgstr "Vorschau-Build"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "vorherige Ausgabe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.previous"
+msgstr "Ausgabe des vorherigen Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

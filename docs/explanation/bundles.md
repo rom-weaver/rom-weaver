@@ -8,7 +8,7 @@ A rom-weaver bundle is a patch recipe you can hand to someone. This page explain
 - [The problem it solves](#the-problem-it-solves)
 - [What it contains](#what-it-contains)
 - [What it is not](#what-it-is-not)
-- [Why the order lives in the file](#why-the-order-lives-in-the-file)
+- [Why the input rule lives in the file](#why-the-input-rule-lives-in-the-file)
 - [When to make one](#when-to-make-one)
 - [Links can carry them](#links-can-carry-them)
 - [Related](#related)
@@ -23,18 +23,19 @@ A bundle moves that knowledge out of the release notes and into a file the tool 
 
 ## What it contains
 
-The required `rom-weaver-bundle.json` index records:
+The required `rom-weaver-bundle.json` index records the workflow:
 
 - which clean ROM is expected;
 - the patch files and their order;
+- whether patches were made from the original ROM or the previous patch output;
 - which patches are required and which are optional;
-- patch names, authors, versions, and descriptions;
-- expected checksums before and after each step;
 - output filename and format defaults.
+
+Patch entries can also record author details and expected checksums for each step.
 
 The archive around that index can carry the patch files themselves. A user drops the one archive into Apply, supplies their matching ROM, reviews the optional choices, and runs it.
 
-The machine-readable definition is [`rom-weaver-bundle-v1.schema.json`](../rom-weaver-bundle-v1.schema.json).
+The current machine-readable definition is [`rom-weaver-bundle-v2.schema.json`](../rom-weaver-bundle-v2.schema.json). Version 1 remains available for older bundles.
 
 ## What it is not
 
@@ -44,9 +45,13 @@ There is a *Bundle + ROM + patches* package as well. It exists for homebrew, pub
 
 **A bundle is not release notes.** It tells rom-weaver what to do; it does not tell a person what your patch changes or why they would want it. Both still have to exist.
 
-## Why the order lives in the file
+## Why the input rule lives in the file
 
-Patch 2 reads patch 1's output, not the original ROM - see [How patching works](how-patching-works.md). The order is therefore part of the release, as load-bearing as the patch files themselves. Recording it in the bundle is what stops a user from reconstructing it by hand out of a numbered filename convention.
+Patch authors use two common relationships. Independent patches are each made from the original ROM. Dependent patches are made from the result above them.
+
+rom-weaver still applies every selected patch to one accumulated result. The input rule tells rom-weaver which state each patch expects and verifies.
+
+The bundle records one shared rule. A mixed recipe can override only the patches that differ. This avoids repeating the same target on every entry.
 
 The same logic covers the optional patches: "which combinations are supported" is knowledge only the author has, and a bundle can carry it as switches rather than as a paragraph.
 

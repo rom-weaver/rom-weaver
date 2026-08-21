@@ -148,6 +148,7 @@ function buildBundleApplySession(
     chainEndpointChecks: bundleChainEndpointChecks(result.bundle),
     entries: result.bundle.patches.map((patch, index) => toBundleSessionEntry(patch, patchFiles[index], index)),
     key: `local:${bundleFile.name}:${bundleFile.size}:${bundleFile.lastModified}`,
+    patchBasis: result.bundle.version >= 2 ? result.bundle.patchBasis || "auto" : "auto",
     ...(name ? { name } : {}),
     outputDefaults: {
       ...(output?.name ? { name: output.name } : {}),

@@ -21,6 +21,25 @@ const parsedResult = (overrides: Partial<ParsedBundleParseResult> = {}): ParsedB
 });
 
 describe("buildBundleApplySessionPlan", () => {
+  it("uses automatic inference for v1 and reads the v2 shared basis", () => {
+    const v1 = buildBundleApplySessionPlan(
+      parsedResult({
+        bundle: { patches: [{}], version: 1 },
+        patchSources: [{ source: { kind: "path", path: "one.ips" } }],
+      }),
+      BUNDLE_URL,
+    );
+    const v2 = buildBundleApplySessionPlan(
+      parsedResult({
+        bundle: { patchBasis: "previous", patches: [{}], version: 2 },
+        patchSources: [{ source: { kind: "path", path: "one.ips" } }],
+      }),
+      BUNDLE_URL,
+    );
+    expect(v1.patchBasis).toBe("auto");
+    expect(v2.patchBasis).toBe("previous");
+  });
+
   it("maps optional flags, metadata, and header modes onto index-aligned entries", () => {
     const plan = buildBundleApplySessionPlan(
       parsedResult({

@@ -577,6 +577,10 @@ mod tests {
             .find_subcommand_mut("apply")
             .expect("patch apply command");
         let help = apply.render_long_help().to_string();
+        assert!(
+            help.contains("Use --default-patch-basis to set one rule for every patch."),
+            "patch basis help must direct shared rules to the shared flag"
+        );
         const EXPECTED_SECTIONS: &[(&str, &[&str])] = &[
             ("Options:", &["-h, --help"]),
             (

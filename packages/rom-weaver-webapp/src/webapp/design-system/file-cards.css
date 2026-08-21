@@ -63,9 +63,14 @@
 .rw-app .card-meta {
   display: inline-flex;
   flex: none;
+  flex-wrap: wrap;
   gap: var(--sp-s);
   align-items: center;
+  max-width: 100%;
   margin-inline-start: 0;
+}
+.rw-app .patch-card-meta-controls {
+  display: contents;
 }
 .rw-app .card-actions {
   display: flex;

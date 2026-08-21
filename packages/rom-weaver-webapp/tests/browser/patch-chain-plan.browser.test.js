@@ -1,5 +1,6 @@
 import { createElement } from "react";
-import { expect, test } from "vitest";
+import { afterEach, expect, test } from "vitest";
+import { page } from "vitest/browser";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import {
   clickApplyButton,
@@ -14,6 +15,8 @@ import {
 } from "./patcher-test-shared.js";
 
 installPatcherTestHooks();
+
+afterEach(async () => page.viewport(1280, 900));
 
 // A true BPS chain built from the 13-byte game.bin: a = base -> inter,
 // b = inter -> final, c = final -> final2. d is a SIBLING of a: also
@@ -42,6 +45,12 @@ const dropFixtures = async (paths) => {
   }
 };
 
+const getPatchInputSelect = async (index) => {
+  const findSelect = () => document.getElementById(`rom-weaver-patch-basis-${index}`);
+  await expect.poll(findSelect).toBeInstanceOf(HTMLSelectElement);
+  return findSelect();
+};
+
 test("a true BPS chain defers the dependent patch instead of failing it", async () => {
   mount(createElement(ApplyPatchForm, {}));
   await dropFixtures([RAW_ROM, CHAIN_A, CHAIN_B]);
@@ -50,6 +59,11 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   // with its link named - never dry-run against the wrong bytes.
   await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("matches your ROM");
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("applies after patch 1");
+  const basisSelect = await getPatchInputSelect(1);
+  expect(basisSelect.options[0]?.textContent).toBe("auto (Previous patch output)");
+  await page.viewport(390, 844);
+  const cardMeta = basisSelect.closest(".card-meta");
+  expect(cardMeta?.scrollWidth).toBeLessThanOrEqual(cardMeta?.clientWidth ?? 0);
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
   expect(document.getElementById("rom-weaver-patch-order-note")).toBeNull();
 
@@ -94,16 +108,14 @@ test("checksumless patches with no evidence each verify against the ROM regardle
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
 }, 120000);
 
-test("the basis select names the inferred basis and a pin re-plans the chain", async () => {
+test("a patch input selector re-plans that patch", async () => {
   mount(createElement(ApplyPatchForm, {}));
   await dropFixtures([RAW_ROM, CHAIN_A, SAME_BASE_D]);
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("matches your ROM");
 
-  // The select's auto option names what inference resolved.
-  const basisSelect = document.getElementById("rom-weaver-patch-basis-1");
-  expect(basisSelect).toBeInstanceOf(HTMLSelectElement);
-  expect(basisSelect.value).toBe("");
-  expect(basisSelect.options[0]?.textContent).toBe("auto (base ROM)");
+  const basisSelect = await getPatchInputSelect(1);
+  expect(basisSelect.value).toBe("auto");
+  expect(basisSelect.options[0]?.textContent).toBe("auto (Original ROM)");
 
   // Pinning "previous output" overrides the inference: the re-plan stops
   // verifying this patch against the ROM and defers it to apply (where the
@@ -111,8 +123,8 @@ test("the basis select names the inferred basis and a pin re-plans the chain", a
   setFormControlValue(basisSelect, "previous");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("verified during apply");
 
-  // Back to auto: inference decides again and the chip recovers.
-  setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "");
+  // Return to automatic detection.
+  setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "auto");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("matches your ROM");
 }, 180000);
 
@@ -129,7 +141,7 @@ test("a Previous basis pin reaches Apply execution", async () => {
   // real apply command, which then checks it against patch 1's intermediate
   // and rejects that checksum. If execution drops the pin, inference chooses
   // base and the same run incorrectly succeeds.
-  setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "previous");
+  setFormControlValue(await getPatchInputSelect(1), "previous");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("verified during apply");
   await waitForApplyButtonEnabled();
   await clickApplyButton();
@@ -137,6 +149,19 @@ test("a Previous basis pin reaches Apply execution", async () => {
   const outcome = await waitForApplyOutcome();
   expect(outcome?.kind).toBe("error");
   expect(outcome && "errorText" in outcome ? outcome.errorText : "").toMatch(/checksum/i);
+}, 180000);
+
+test("changing a patch input retires a completed output", async () => {
+  mount(createElement(ApplyPatchForm, {}));
+  await dropFixtures([RAW_ROM, CHAIN_A, CHAIN_B]);
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  setFormControlValue(await getPatchInputSelect(1), "base");
+  await expect
+    .poll(() => document.getElementById("rom-weaver-button-apply")?.getAttribute("aria-label"), { timeout: 30000 })
+    .toBeNull();
 }, 180000);
 
 test("an out-of-order chain names its predecessor and Fix order repairs it", async () => {

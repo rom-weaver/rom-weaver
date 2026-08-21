@@ -3,6 +3,7 @@ import {
   Check,
   Crosshair,
   EllipsisVertical,
+  GitBranch,
   Pencil,
   Plus,
   RefreshCw,
@@ -44,6 +45,7 @@ import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { formatHeaderAutoLabel } from "./patcher-view-models.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { PatchInputBasis } from "./patch-input-basis.ts";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
 const TIMING_LABEL = (ms?: number) =>
@@ -336,6 +338,56 @@ const PatchHeaderModeSelect = ({
   );
 };
 
+const PatchInputBasisSelect = ({
+  basis,
+  disabled,
+  index,
+  item,
+  onChange,
+  patchStack,
+  previousBasisAvailable,
+}: {
+  basis: PatchInputBasis;
+  disabled?: boolean;
+  index: number;
+  item: PatchStackItemState;
+  onChange?: (basis: PatchInputBasis) => void;
+  patchStack: PatcherStackController;
+  previousBasisAvailable: boolean;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <span className="target-grp patch-basis-grp">
+      <GitBranch aria-hidden="true" />
+      <label className="sr-only" htmlFor={`rom-weaver-patch-basis-${index}`}>
+        Input for patch {index + 1}
+      </label>
+      <select
+        className="meta-target-select mono ptgt-sel"
+        disabled={disabled || item.optionsDisabled}
+        id={`rom-weaver-patch-basis-${index}`}
+        onChange={(event) => {
+          if (disabled || item.optionsDisabled) return;
+          const next = event.currentTarget.value as PatchInputBasis;
+          onChange?.(next);
+          patchStack.setPatchOption?.(index, {
+            basis: next === "base" || next === "previous" ? next : undefined,
+            revalidate: true,
+          });
+        }}
+        title="Automatic uses patch checks to select the original ROM or the previous patch output."
+        value={basis}
+      >
+        <option value="auto">{resolvedBasisLabel("auto", localizer, item.chainVerdict?.basis)}</option>
+        <option value="base">{localizer.message("ui.patchInputs.original")}</option>
+        <option disabled={!previousBasisAvailable} value="previous">
+          {localizer.message("ui.patchInputs.previous")}
+        </option>
+      </select>
+    </span>
+  );
+};
+
 const N64_ORDER_LABELS = {
   "big-endian": "big endian (.z64)",
   "byte-swapped": "byte-swapped (.v64)",
@@ -603,16 +655,20 @@ const chainChipText = (
   return null;
 };
 
-/** The auto option names what inference resolved so pinning is a conscious
- * override; with a pin active (or no plan yet) it stays a plain "auto". */
-const autoBasisLabel = (item: PatchStackItemState, localizer: Localizer, meta?: BundlePatchMeta): string => {
-  const verdict = item.chainVerdict;
-  if (meta?.basis || !verdict || verdict.basisSource === "declared") return localizer.message("ui.basis.auto");
-  return verdict.basis === "base" ? localizer.message("ui.basis.autoBase") : localizer.message("ui.basis.autoPrevious");
+const resolvedBasisLabel = (
+  basis: PatchInputBasis,
+  localizer: Localizer,
+  verdictBasis?: "base" | "previous",
+): string => {
+  if (basis === "auto") {
+    if (verdictBasis === "base") return localizer.message("ui.basis.autoBase");
+    if (verdictBasis === "previous") return localizer.message("ui.basis.autoPrevious");
+    return localizer.message("ui.patchInputs.auto");
+  }
+  return basis === "base" ? localizer.message("ui.patchInputs.original") : localizer.message("ui.patchInputs.previous");
 };
 
 const PatchChecksDrawer = ({
-  basisSelectVisible,
   chainChip,
   disabled,
   index,
@@ -625,9 +681,6 @@ const PatchChecksDrawer = ({
   patchStack,
   romActuals,
 }: {
-  /** Show the author's input-basis select in the Input group head (a stack of
-   * two or more enabled patches, or an existing pin to surface). */
-  basisSelectVisible?: boolean;
   /** Plain-language chain verdict rendered in the drawer header readout. */
   chainChip?: { text: string; warn?: boolean } | null;
   /** The patch is toggled out of the run: verification state is not part of the
@@ -653,7 +706,6 @@ const PatchChecksDrawer = ({
   romActuals?: RomCheckActuals;
 }) => {
   const setOption = patchStack.setPatchOption;
-  const localizer = useUiLocalizer();
   const [invalidChecks, setInvalidChecks] = useState<Record<string, boolean>>({});
   // Fields opened via "Add check" that have no committed value yet.
   const [draftFields, setDraftFields] = useState<Record<string, boolean>>({});
@@ -764,31 +816,6 @@ const PatchChecksDrawer = ({
         <div className="ck-group" key={side}>
           <div className="ck-group-head">
             <span>{side === "input" ? "Input" : "Output"}</span>
-            {side === "input" && onMetaChange && basisSelectVisible ? (
-              <>
-                <label className="sr-only" htmlFor={`rom-weaver-patch-basis-${index}`}>
-                  Which ROM the input checks describe
-                </label>
-                <select
-                  className="meta-target-select mono ck-basis-select"
-                  id={`rom-weaver-patch-basis-${index}`}
-                  onChange={(event) => {
-                    const next = event.currentTarget.value;
-                    const basis = next === "base" || next === "previous" ? next : undefined;
-                    // Auto clears the pin - checksum inference decides again. The basis
-                    // feeds the chain plan, so re-resolve the verdicts either way.
-                    onMetaChange({ basis });
-                    setOption?.(index, { basis, revalidate: true });
-                  }}
-                  title="Which ROM this patch's input checks describe: the base ROM (verified once up front) or the previous patch's output."
-                  value={meta?.basis || ""}
-                >
-                  <option value="">{autoBasisLabel(item, localizer, meta)}</option>
-                  <option value="base">{localizer.message("ui.basis.base")}</option>
-                  <option value="previous">{localizer.message("ui.basis.previous")}</option>
-                </select>
-              </>
-            ) : null}
           </div>
           {builtInRows.map((row) => (
             <ChecksumRow key={`${side}:${row.label}:${row.value}`} label={row.label} value={row.value} />
@@ -1042,27 +1069,30 @@ const PatchMetaDoneButton = ({ index, onToggle }: { index: number; onToggle: () 
  * so its actions keep stable, always-queryable ids. */
 const PatchActionsMenu = ({
   index,
+  onOpenChange,
   onEdit,
   onRemove,
   onReplace,
+  open,
 }: {
   index: number;
+  onOpenChange: (open: boolean) => void;
   /** Absent while the details form cannot be edited (no bundle meta channel). */
   onEdit?: () => void;
   onRemove: () => void;
   onReplace?: (file: File) => void;
+  open: boolean;
 }) => {
-  const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!open) return undefined;
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) onOpenChange(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
+  }, [onOpenChange, open]);
   return (
     <div className="patch-menu" ref={rootRef}>
       <button
@@ -1071,9 +1101,9 @@ const PatchActionsMenu = ({
         aria-label="Patch actions"
         className={open ? "rm patch-menu-btn is-open" : "rm patch-menu-btn"}
         id={`rom-weaver-patch-menu-${index}`}
-        onClick={() => setOpen(!open)}
+        onClick={() => onOpenChange(!open)}
         onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
+          if (event.key === "Escape") onOpenChange(false);
         }}
         title="Patch actions"
         type="button"
@@ -1085,7 +1115,7 @@ const PatchActionsMenu = ({
         className="patch-menu-list"
         hidden={!open}
         onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
+          if (event.key === "Escape") onOpenChange(false);
         }}
         role="menu"
       >
@@ -1094,7 +1124,7 @@ const PatchActionsMenu = ({
             className="patch-menu-item"
             id={`rom-weaver-patch-meta-edit-${index}`}
             onClick={() => {
-              setOpen(false);
+              onOpenChange(false);
               onEdit();
             }}
             role="menuitem"
@@ -1122,7 +1152,7 @@ const PatchActionsMenu = ({
           className="patch-menu-item is-danger"
           id={`rom-weaver-patch-menu-remove-${index}`}
           onClick={() => {
-            setOpen(false);
+            onOpenChange(false);
             onRemove();
           }}
           role="menuitem"
@@ -1141,7 +1171,7 @@ const PatchActionsMenu = ({
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
-            setOpen(false);
+            onOpenChange(false);
             if (file) onReplace(file);
           }}
           ref={fileRef}
@@ -1164,7 +1194,8 @@ const getPatchCardVerdict = (validationState: string | undefined, isDisabled: bo
 };
 
 const PatchCard = ({
-  basisSelectVisible,
+  basisChoice,
+  basisDisabled,
   bundleSessionMatches,
   canReorder,
   chainChip,
@@ -1175,19 +1206,21 @@ const PatchCard = ({
   isDisabled,
   item,
   meta,
+  onBasisChange,
   onMetaChange,
   onReorder,
   onTogglePatch,
   outputCheckHint,
   overrideAvailable,
   patchStack,
+  previousBasisAvailable,
   position,
   romActuals,
   rowProps,
   total,
 }: {
-  /** Show the input-basis select in the card's Checks drawer. */
-  basisSelectVisible?: boolean;
+  basisChoice: PatchInputBasis;
+  basisDisabled?: boolean;
   /** A loaded bundle's patch list matches this card list; metadata may still be landing. */
   bundleSessionMatches?: boolean;
   canReorder: boolean;
@@ -1200,12 +1233,14 @@ const PatchCard = ({
   isDisabled: boolean;
   item: PatchStackItemState;
   meta?: BundlePatchMeta;
+  onBasisChange?: (basis: PatchInputBasis) => void;
   onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
   onReorder: (from: number, to: number) => void;
   onTogglePatch?: (index: number) => void;
   outputCheckHint?: boolean;
   overrideAvailable?: boolean;
   patchStack: PatcherStackController;
+  previousBasisAvailable: boolean;
   position: number;
   /** This patch's target ROM computed checks, for verifying input checks. */
   romActuals?: RomCheckActuals;
@@ -1214,6 +1249,7 @@ const PatchCard = ({
 }) => {
   // Pencil edit state: the name and description editors open/close together.
   const [metaEditing, setMetaEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const editing = metaEditing && !!onMetaChange;
   const description = meta?.description || "";
   // Mirrors the ROM card: the resolved card structure (collapsed Extract +
@@ -1270,7 +1306,7 @@ const PatchCard = ({
         />
       }
       meta={
-        <>
+        <span className="patch-card-meta-controls" inert={menuOpen}>
           {onTogglePatch ? (
             <PatchEnableToggle disabled={isDisabled} fileName={item.fileName} onToggle={() => onTogglePatch(index)} />
           ) : null}
@@ -1290,8 +1326,17 @@ const PatchCard = ({
               {meta.author}
             </span>
           ) : null}
-          {/* The patch's single contextual control (target OR header OR byte
-              order - never more than one applies) closes the metadata line. */}
+          {staging ? null : (
+            <PatchInputBasisSelect
+              basis={basisChoice}
+              disabled={basisDisabled}
+              index={index}
+              item={item}
+              onChange={onBasisChange}
+              patchStack={patchStack}
+              previousBasisAvailable={previousBasisAvailable}
+            />
+          )}
           {staging ? null : <PatchTarget index={index} item={item} patchStack={patchStack} />}
           {staging || isDisabled ? null : <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} />}
           {staging || isDisabled ? null : <PatchN64ByteOrderSelect index={index} item={item} patchStack={patchStack} />}
@@ -1302,7 +1347,7 @@ const PatchCard = ({
               percent={percent}
             />
           ) : null}
-        </>
+        </span>
       }
       name={
         <ExtractName
@@ -1330,8 +1375,10 @@ const PatchCard = ({
           <PatchActionsMenu
             index={index}
             onEdit={onMetaChange ? () => setMetaEditing(true) : undefined}
+            onOpenChange={setMenuOpen}
             onRemove={() => patchStack.removeItem(index)}
             onReplace={(file) => patchStack.replaceItem(index, file)}
+            open={menuOpen}
           />
         )
       }
@@ -1361,7 +1408,6 @@ const PatchCard = ({
               card's resolved height so the patch stack below doesn't jump when
               requirements arrive. */}
           <PatchChecksDrawer
-            basisSelectVisible={basisSelectVisible}
             chainChip={chainChip}
             disabled={isDisabled}
             index={index}
@@ -1398,13 +1444,18 @@ const SharedPatchMetaEditor = ({
   onApply: (updates: Partial<BundlePatchMeta>) => void;
 }) => {
   const [author, setAuthor] = useState(commonPatchMetaValue(bundleMeta, "author") || "");
+  const [authorChanged, setAuthorChanged] = useState(false);
   const [version, setVersion] = useState(commonPatchMetaValue(bundleMeta, "version") || "");
+  const [versionChanged, setVersionChanged] = useState(false);
   const versionInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => versionInputRef.current?.focus(), []);
 
   const apply = () => {
-    onApply({ author: author.trim() || undefined, version: version.trim() || undefined });
+    const updates: Partial<BundlePatchMeta> = {};
+    if (authorChanged) updates.author = author.trim() || undefined;
+    if (versionChanged) updates.version = version.trim() || undefined;
+    onApply(updates);
   };
 
   return (
@@ -1431,7 +1482,10 @@ const SharedPatchMetaEditor = ({
         <input
           className="input popt-input"
           id="rom-weaver-shared-patch-version"
-          onChange={(event) => setVersion(event.currentTarget.value)}
+          onChange={(event) => {
+            setVersion(event.currentTarget.value);
+            setVersionChanged(true);
+          }}
           placeholder={commonPatchMetaValue(bundleMeta, "version") === undefined ? "Multiple values" : "Version"}
           ref={versionInputRef}
           type="text"
@@ -1443,7 +1497,10 @@ const SharedPatchMetaEditor = ({
         <input
           className="input popt-input"
           id="rom-weaver-shared-patch-author"
-          onChange={(event) => setAuthor(event.currentTarget.value)}
+          onChange={(event) => {
+            setAuthor(event.currentTarget.value);
+            setAuthorChanged(true);
+          }}
           placeholder={commonPatchMetaValue(bundleMeta, "author") === undefined ? "Multiple values" : "Author"}
           type="text"
           value={author}
@@ -1475,6 +1532,9 @@ const ApplyPatchListStep = ({
   overrideAvailable,
   patches,
   patchStack,
+  patchInputBasis = "auto",
+  patchInputBasisDisabled = false,
+  onPatchInputBasisChange,
   romActualsById,
   woven,
 }: {
@@ -1500,6 +1560,9 @@ const ApplyPatchListStep = ({
   romActualsById?: ReadonlyMap<string, RomCheckActuals>;
   patches: PatchStackItemState[];
   patchStack: PatcherStackController;
+  patchInputBasis?: PatchInputBasis;
+  patchInputBasisDisabled?: boolean;
+  onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
   woven?: boolean;
 }) => {
   const [bulkEditing, setBulkEditing] = useState(false);
@@ -1595,7 +1658,12 @@ const ApplyPatchListStep = ({
       >
         {patches.map((item, index) => (
           <PatchCard
-            basisSelectVisible={enabledIndexes.length >= 2 || !!bundleMeta?.[index]?.basis}
+            basisChoice={
+              index === chainInputIndex && (bundleMeta?.[index]?.basis || patchInputBasis) === "previous"
+                ? "base"
+                : bundleMeta?.[index]?.basis || patchInputBasis
+            }
+            basisDisabled={patchInputBasisDisabled}
             bundleSessionMatches={bundleSessionMatches}
             canReorder={canReorder}
             chainChip={chainChipText(item, enabledIndexes, localizer)}
@@ -1607,12 +1675,14 @@ const ApplyPatchListStep = ({
             item={item}
             key={item.key ?? `${index}:${item.fileName}`}
             meta={bundleMeta?.[index]}
+            onBasisChange={(basis) => onPatchInputBasisChange?.(index, basis)}
             onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
             onReorder={patchStack.reorder}
             onTogglePatch={onTogglePatch}
             outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}
             overrideAvailable={overrideAvailable}
             patchStack={patchStack}
+            previousBasisAvailable={index !== chainInputIndex}
             position={reorderList.displayIndex(index) + 1}
             romActuals={item.targetValue ? romActualsById?.get(item.targetValue) : undefined}
             rowProps={reorderList.rowProps(index)}

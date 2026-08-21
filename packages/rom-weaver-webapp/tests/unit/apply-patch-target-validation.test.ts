@@ -36,8 +36,13 @@ const createTarget = (): InputAsset =>
 
 const preflight: InternalPatchChecksumPreflight = { status: "unknown" } as InternalPatchChecksumPreflight;
 
-const createAdapters = (validatePatch: (...args: unknown[]) => Promise<unknown>, signal?: AbortSignal) =>
+const createAdapters = (
+  validatePatch: (...args: unknown[]) => Promise<unknown>,
+  signal?: AbortSignal,
+  defaultPatchBasis?: "auto" | "base" | "previous",
+) =>
   ({
+    defaultPatchBasis,
     emitProgress: () => undefined,
     runtime: { patch: { validatePatch } },
     settings: {},
@@ -46,6 +51,19 @@ const createAdapters = (validatePatch: (...args: unknown[]) => Promise<unknown>,
   }) as unknown as Parameters<typeof validateApplyPatchTarget>[3];
 
 describe("validateApplyPatchTarget transient-failure handling", () => {
+  it("forwards the shared patch input rule to plan validation", async () => {
+    const validatePatch = vi.fn().mockResolvedValue({ message: "passed" });
+    await validateApplyPatchTarget(
+      createStage(),
+      createTarget(),
+      preflight,
+      createAdapters(validatePatch, undefined, "auto"),
+    );
+    expect(validatePatch).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ defaultPatchBasis: "auto" }) }),
+    );
+  });
+
   it("records a non-terminal 'unknown' verdict when validation is cancelled", async () => {
     const stage = createStage();
     const validatePatch = vi.fn().mockRejectedValue(new RomWeaverError("CANCELLED", "Workflow was cancelled"));

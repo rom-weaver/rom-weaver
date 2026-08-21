@@ -116,6 +116,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private nextCandidateSequence = 0;
   private nextInputSequence = 0;
   private nextPatchSequence = 0;
+  private defaultPatchBasis: "auto" | "base" | "previous" = "auto";
   private outputState: ApplyOutputState;
   private inputSession?: InputSession<TSource>;
   private patches: Array<StagedSource<TSource>> = [];
@@ -700,6 +701,14 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         throw new RomWeaverError("INVALID_SETTINGS", `Unsupported output format: ${String(format)}`);
       setApplyOutputFormat(this.outputState, this.settings, format);
       this.recomputeOutputState();
+    });
+  }
+
+  async setDefaultPatchBasis(basis: "auto" | "base" | "previous"): Promise<void> {
+    return this.mutate("setDefaultPatchBasis", async () => {
+      if (this.defaultPatchBasis === basis) return;
+      this.defaultPatchBasis = basis;
+      this.trace("patch.basis.default", { basis });
     });
   }
 
@@ -1368,6 +1377,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       number,
       { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
     >;
+    defaultPatchBasis?: "auto" | "base" | "previous";
     disabledIndexes?: ReadonlySet<number>;
   }): Promise<void> {
     return this.mutate("validatePatches", async () => {
@@ -1412,6 +1422,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
             entry.chain?.inputChecks ?? "",
             entry.chain?.outputChecks ?? "",
           ]),
+          defaultPatchBasis: options?.defaultPatchBasis ?? "auto",
           targetId,
         });
         for (const entry of chain) entry.chainFingerprint = fingerprint;
@@ -1428,6 +1439,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         });
       }
       const adapters: PatchTargetValidationAdapters = {
+        defaultPatchBasis: options?.defaultPatchBasis ?? "auto",
         emitProgress: (event) => this.emitProgress(event),
         onChainPlan: (targetId, plan) => {
           this.latestChainPlans.set(targetId, plan);
@@ -1519,6 +1531,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   private createPatchInput(onProgress?: ApplyWorkflowOptions["onProgress"]): PatchInput {
     return {
+      defaultPatchBasis: this.defaultPatchBasis,
       inputs: this.getEffectiveInputSources() as never,
       options: this.createExecutionOptions(onProgress),
       parsedPatches: this.patches.map((patch) => patch.parsedPatch).filter(Boolean) as ParsedPatchLike[],

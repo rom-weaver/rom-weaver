@@ -4,6 +4,8 @@
 use flate2::{Compression as GzCompression, write::GzEncoder};
 
 use super::bundle_parse::{bundle_file_name_codec, parse_bundle_bytes};
+#[cfg(not(target_arch = "wasm32"))]
+use super::bundle_schema::BUNDLE_JSON_SCHEMA_V1_URL;
 use super::*;
 
 const BUNDLE_CREATE_DEFAULT_ALGORITHMS: [&str; 3] = ["crc32", "md5", "sha1"];
@@ -159,7 +161,10 @@ impl CliApp {
 
         // Preserve the authored $schema unless --schema-ref overrides it.
         if args.schema_ref.is_none() {
-            args.schema_ref = spec.schema.clone();
+            args.schema_ref = upgraded_schema_ref(spec.version, spec.schema.as_deref());
+        }
+        if args.default_patch_basis.is_none() {
+            args.default_patch_basis = Some(spec.patch_basis.unwrap_or(PatchBasisMode::Auto));
         }
 
         if let Some(rom) = &spec.rom {
@@ -256,6 +261,7 @@ impl CliApp {
         context: &OperationContext,
     ) -> Result<BundleCreateResult> {
         let specs = bundle_create_patch_specs(args)?;
+        let patch_basis = args.default_patch_basis.unwrap_or(PatchBasisMode::Base);
         if specs.is_empty() {
             return Err(RomWeaverError::Validation(
                 "bundle create requires at least one --patch".to_string(),
@@ -420,7 +426,9 @@ impl CliApp {
                 input_checks: entry_input_checks,
                 output_checks: entry_output_checks,
                 header: spec.header,
-                basis: spec.basis,
+                basis: spec
+                    .basis
+                    .filter(|basis| Some(*basis) != patch_basis.declared()),
             });
         }
 
@@ -453,6 +461,7 @@ impl CliApp {
             // stays byte-identical.
             schema: args.schema_ref.clone(),
             version: BUNDLE_VERSION,
+            patch_basis: Some(patch_basis),
             rom,
             patches,
             output,
@@ -679,6 +688,17 @@ fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCre
         .collect())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn upgraded_schema_ref(version: u32, schema: Option<&str>) -> Option<String> {
+    schema.map(|schema| {
+        if version == 1 && schema == BUNDLE_JSON_SCHEMA_V1_URL {
+            BUNDLE_JSON_SCHEMA_URL.to_string()
+        } else {
+            schema.to_string()
+        }
+    })
+}
+
 /// Parse check-flag tokens (`algo=hex`, comma-separable) into an emitted
 /// checks value.
 fn bundle_entry_checks(values: &[String], flag: &str) -> Result<Option<BundleChecks>> {
@@ -820,5 +840,26 @@ fn write_bundle_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
             fs::write(output, bytes)?;
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v1_official_schema_reference_upgrades_to_v2() {
+        assert_eq!(
+            upgraded_schema_ref(1, Some(BUNDLE_JSON_SCHEMA_V1_URL)).as_deref(),
+            Some(BUNDLE_JSON_SCHEMA_URL)
+        );
+        assert_eq!(
+            upgraded_schema_ref(1, Some("https://example.test/custom.json")).as_deref(),
+            Some("https://example.test/custom.json")
+        );
+        assert_eq!(
+            upgraded_schema_ref(2, Some(BUNDLE_JSON_SCHEMA_V1_URL)).as_deref(),
+            Some(BUNDLE_JSON_SCHEMA_V1_URL)
+        );
     }
 }

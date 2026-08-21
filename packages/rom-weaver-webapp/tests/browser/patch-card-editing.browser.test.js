@@ -93,12 +93,15 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; sha
   const patchMenuButton = document.getElementById("rom-weaver-patch-menu-0");
   patchMenuButton?.click();
   await expect.poll(() => document.querySelector("#rom-weaver-list-patch-stack .patch-menu-list")?.hidden).toBe(false);
+  const metaControls = document.querySelector("#rom-weaver-list-patch-stack .patch-card-meta-controls");
+  expect(metaControls?.inert).toBe(true);
   expect(getComputedStyle(patchMenuButton?.closest(".card") || document.body).contain).not.toContain("paint");
 
   // The pencil on the card opens the name/description editors in place; the
   // same control (now a check) closes them. No mode, no hash.
   document.getElementById("rom-weaver-patch-meta-edit-0")?.click();
   await expect.poll(() => document.getElementById("rom-weaver-patch-name-0")).not.toBeNull();
+  expect(metaControls?.inert).toBe(false);
   expect(document.getElementById("rom-weaver-patch-description-0")).not.toBeNull();
   expect(document.getElementById("rom-weaver-patch-version-0")).not.toBeNull();
   expect(document.getElementById("rom-weaver-patch-author-0")).not.toBeNull();

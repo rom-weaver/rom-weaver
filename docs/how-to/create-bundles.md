@@ -28,11 +28,17 @@ Choose ZIP unless your audience specifically wants 7z. Browsers and operating sy
 
 1. Open [Apply](https://rom-weaver.com/apply).
 2. Add the clean ROM and every patch.
-3. Put the patches in execution order. Drag a numbered handle, click it to choose a position, or focus it and use the arrow keys. Patch 2 receives patch 1's output, not the clean ROM.
+3. Put the patches in execution order. Drag a numbered handle, click it to choose a position, or focus it and use the arrow keys.
 4. Open each patch's three-dot **Patch actions** menu and choose **Edit details**. Add a readable name and, when useful, a description, version, and author. People see this information when they open the bundle.
 5. Open **Checks** on each patch. Use **Add check** to record a known CRC32, MD5, SHA-1, or byte count for the input or output. Input checks describe the bytes the patch expects. Output checks describe the bytes it creates. Do not guess a value just to fill the form.
-6. For a multi-patch recipe, review the input basis beside the checks. Choose **base ROM** when the patch was made for the clean ROM. Choose **previous output** when it was made for the result of the patch above it. Leave **auto** selected when rom-weaver already identifies the right basis.
-7. Decide which patches are required. Leave a required patch **On**. Turn a genuine add-on **Off** before creating the bundle to save it as optional and off by default. A person opening the bundle can turn it on.
+
+Set the input selector on each patch card:
+
+1. Keep **Automatic** when the patch checks must select its input.
+2. Choose **Original ROM** when the patch was made from the clean ROM.
+3. Choose **Previous patch output** when the patch was made from the result above it.
+
+Leave each required patch **On**. Turn a genuine add-on **Off** to make it optional and off by default.
 
 Checks from formats such as BPS may already appear and cannot be edited. Add only checks you know are correct, such as values from the patch author or from the Original and Modified files you tested.
 
@@ -45,23 +51,27 @@ In **0x04 Apply**:
 1. Set the output filename and format users should receive after patching.
 2. Open **Options**.
 3. Find **Bundle**. It starts at **Hide bundle creation**. Turn bundle output on by choosing **Bundle + patches (.zip)** for a normal public release.
-4. Confirm or edit **Expected ROM name**. A different supplied filename warns without blocking the weave; checksum and size requirements stay strict. Clear the field to omit the name check.
-5. Choose **Create ZIP Bundle**.
-6. Wait while rom-weaver calculates checksums and checks the recipe.
-7. When the button changes to **Download ZIP Bundle**, choose it and save the archive.
+4. Confirm or edit **Expected source ROM filename**. This name helps users find the ROM. Checksums prove that its contents match.
+5. Clear the filename to omit the name hint. A different name warns without blocking the weave.
+
+Create the download:
+
+1. Choose **Create ZIP Bundle**.
+2. Wait while rom-weaver calculates checksums and checks the recipe.
+3. When the button changes to **Download ZIP Bundle**, choose it and save the archive.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-light.avif" width="1170" height="1368">
-    <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-light.avif" width="2242" height="796">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-light.webp" width="1170" height="1368">
-    <img src="/docs/screenshots/bundle-output-desktop-light.webp" width="2242" height="796" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the light theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-light.avif" width="1170" height="2013">
+    <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-light.avif" width="2242" height="1399">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-light.webp" width="1170" height="2013">
+    <img src="/docs/screenshots/bundle-output-desktop-light.webp" width="2242" height="1399" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-dark.avif" width="1170" height="1368">
-    <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-dark.avif" width="2242" height="796">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-dark.webp" width="1170" height="1368">
-    <img src="/docs/screenshots/bundle-output-desktop-dark.webp" width="2242" height="796" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the dark theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-dark.avif" width="1170" height="2013">
+    <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-dark.avif" width="2242" height="1399">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-dark.webp" width="1170" height="2013">
+    <img src="/docs/screenshots/bundle-output-desktop-dark.webp" width="2242" height="1399" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the dark theme">
   </picture>
   <figcaption>The bundle setting lives inside Output Options. The focused capture keeps the selector and action readable.</figcaption>
 </figure>

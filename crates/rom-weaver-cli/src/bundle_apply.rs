@@ -16,6 +16,9 @@ use super::*;
 /// input-ROM requirements enforced after the CLI checksum flags parse, and
 /// the expected checksums of the final output for this selection.
 pub(super) struct BundleApplyResolution {
+    /// Effective shared rule for the resolved bundle. Version 1 forces auto;
+    /// version 2 supplies `patchBasis`; an explicit CLI shared rule wins.
+    pub patch_basis: PatchBasisMode,
     /// `(source label, requirements)`, merged in order after CLI flags.
     pub checks: Vec<(String, FilenameRequirements)>,
     /// Advisory file-name expectation for a ROM supplied separately from the
@@ -75,6 +78,13 @@ impl CliApp {
         };
         let source = self.load_bundle_apply_source(source, args, context)?;
         let bundle = parse_bundle_bytes(&source.loaded.bytes)?;
+        let patch_basis = args.default_patch_basis.unwrap_or_else(|| {
+            if bundle.version == 1 {
+                PatchBasisMode::Auto
+            } else {
+                bundle.patch_basis.unwrap_or(PatchBasisMode::Auto)
+            }
+        });
         let expected_rom_name = matches!(source.mode, BundleApplySourceKind::Explicit)
             .then(|| {
                 bundle
@@ -177,12 +187,26 @@ impl CliApp {
                 // Position k consumes exactly the authored chain prefix when
                 // every earlier bundle patch is selected too.
                 let is_chain_prefix = *index == position;
+                let entry_basis = entry.basis.map(|basis| match basis {
+                    PatchInputBasis::Base => PatchBasisMode::Base,
+                    PatchInputBasis::Previous => PatchBasisMode::Previous,
+                });
+                let bundle_basis = (bundle.version != 1)
+                    .then_some(bundle.patch_basis)
+                    .flatten();
+                let effective_basis = args
+                    .default_patch_basis
+                    .or(entry_basis)
+                    .or(bundle_basis)
+                    .unwrap_or(PatchBasisMode::Auto);
                 step_verifications.push(patch_plan::PatchStepVerification {
                     execution: None,
                     base_variant: None,
                     base_representation: None,
-                    basis: entry.basis,
-                    basis_source: entry.basis.map(|_| PatchBasisSource::Declared),
+                    basis: effective_basis.declared(),
+                    basis_source: effective_basis
+                        .declared()
+                        .map(|_| PatchBasisSource::Declared),
                     declared_input: entry
                         .input_checks
                         .as_ref()
@@ -197,7 +221,7 @@ impl CliApp {
                     patch = %resolved.display(),
                     optional = entry.optional,
                     header = ?entry.header,
-                    basis = ?entry.basis,
+                    basis = ?effective_basis,
                     is_chain_prefix,
                     "selected bundle patch"
                 );
@@ -283,6 +307,7 @@ impl CliApp {
         }
 
         Ok(Some(BundleApplyResolution {
+            patch_basis,
             checks,
             expected_rom_name,
             output_checks,

@@ -44,6 +44,8 @@ type BundleRomExpectation = {
 type BundleApplySessionPlan = {
   /** Identity key for run-once guards (the bundle URL; the boot flow may suffix an attempt). */
   key: string;
+  /** v1 bundles use inference. v2 carries an explicit shared rule. */
+  patchBasis: "auto" | "base" | "previous";
   name?: string;
   warnings: string[];
   romAcquisition?: BundleAcquisition;
@@ -161,6 +163,7 @@ const buildBundleApplySessionPlan = (parsed: ParsedBundleParseResult, bundleUrl:
     chainEndpointChecks: bundleChainEndpointChecks(parsed.bundle),
     entries,
     key: bundleUrl,
+    patchBasis: parsed.bundle.version >= 2 ? parsed.bundle.patchBasis || "auto" : "auto",
     ...(name ? { name } : {}),
     outputDefaults: toOutputDefaults(parsed),
     ...(parsed.romSource ? { romAcquisition: toAcquisition(parsed.romSource, bundleUrl, "rom") } : {}),

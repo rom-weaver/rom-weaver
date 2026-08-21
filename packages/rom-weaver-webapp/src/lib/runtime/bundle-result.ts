@@ -145,6 +145,9 @@ const parseBundle = (value: unknown): ParsedBundle | undefined => {
     patches: Array.isArray(record.patches) ? record.patches.map(parseBundlePatchEntry) : [],
     version,
   };
+  if (record.patchBasis === "auto" || record.patchBasis === "base" || record.patchBasis === "previous") {
+    bundle.patchBasis = record.patchBasis;
+  }
   const rom = parseBundleRom(record.rom);
   if (rom) bundle.rom = rom;
   const output = parseBundleOutput(record.output);
