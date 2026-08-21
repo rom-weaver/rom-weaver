@@ -113,6 +113,7 @@
   gap: var(--sp-m);
 }
 .rw-app .fname {
+  position: relative;
   display: flex;
   flex: 1 1 300px;
   align-items: stretch;
@@ -169,6 +170,12 @@
 }
 .rw-app .fname .select:focus-visible {
   box-shadow: none;
+}
+.rw-app .fname .ofmt-arrow {
+  position: absolute;
+  inset: 50% 10px auto auto;
+  pointer-events: none;
+  translate: 0 -50%;
 }
 .rw-app .outname-ext-warn {
   margin-block-end: var(--sp-xs);
