@@ -83,10 +83,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.bundleExport.romDistributionWarning",
     message: "Only include a ROM if you have the right to distribute it. Sharing copyrighted ROMs may be illegal.",
   }),
+  "ui.bundleExport.optional": msg({ id: "ui.bundleExport.optional", message: "optional" }),
   "ui.bundleExport.share": msg({ id: "ui.bundleExport.share", message: "Share bundle" }),
   "ui.bundleExport.shareTitle": msg({
     id: "ui.bundleExport.shareTitle",
-    message: "Download a bundle of this setup to share",
+    message: "Share this patch recipe (for patch creators)",
   }),
   "ui.chain.appliesAfter": msg({ id: "ui.chain.appliesAfter", message: "applies after patch {n}" }),
   "ui.chain.differentRom": msg({ id: "ui.chain.differentRom", message: "expected a different ROM" }),

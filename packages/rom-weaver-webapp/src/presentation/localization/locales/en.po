@@ -280,11 +280,6 @@ msgstr "Download {format} ROM Bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.shareTitle"
-msgstr "Download a bundle of this setup to share"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.settings.chdDvd"
 msgstr "DVD"
 
@@ -490,6 +485,11 @@ msgstr "Only include a ROM if you have the right to distribute it. Sharing copyr
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.optional"
+msgstr "optional"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
 
@@ -682,6 +682,11 @@ msgstr "Settings and status"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.share"
 msgstr "Share bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.shareTitle"
+msgstr "Share this patch recipe (for patch creators)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

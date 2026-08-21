@@ -1555,8 +1555,8 @@ const BundleSecondaryJob = ({
       <Drawer
         bodyClassName="bundle-job-content"
         className="bundle-job"
-        defaultOpen
         label={localizer.message("ui.bundleExport.shareTitle")}
+        readouts={<DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>}
       >
         <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
         {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}

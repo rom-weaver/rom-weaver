@@ -796,7 +796,11 @@ describe("apply workflow view - bundle controls", () => {
 
     const job = container.querySelector("#rom-weaver-bundle-job");
     const toggle = job?.querySelector(".cks-head");
-    expect(toggle?.textContent).toContain("Download a bundle of this setup to share");
+    expect(toggle?.textContent).toContain("Share this patch recipe (for patch creators)");
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle?.querySelector(".readouts")?.textContent).toBe("optional");
+    expect(job?.querySelector(".bundle-job")?.classList).not.toContain("is-open");
+    fireEvent.click(toggle as HTMLButtonElement);
     expect(toggle?.getAttribute("aria-expanded")).toBe("true");
     expect(job?.querySelector(".bundle-job")?.classList).toContain("is-open");
     expect(container.querySelector("#rom-weaver-button-apply")?.compareDocumentPosition(job || container)).toBe(
