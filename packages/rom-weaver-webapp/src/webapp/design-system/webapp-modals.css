@@ -238,16 +238,15 @@ html:has(.rw-modal) {
   position: relative;
   z-index: 90;
 }
-.rw-app .codec-combobox::after {
+.rw-app .codec-combobox > .dropdown-arrow {
   position: absolute;
   inset-inline-end: 10px;
   top: 50%;
   width: 12px;
   height: 12px;
+  color: var(--ink-4);
   pointer-events: none;
-  content: "";
-  background: no-repeat center / 12px 12px var(--chevron);
-  transform: translateY(-50%);
+  translate: 0 -50%;
 }
 .rw-app .codec-combobox .input {
   padding-inline-end: 30px;

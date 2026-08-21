@@ -2,6 +2,7 @@ import { Download, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
+import { DropdownSelect } from "../../public/react/components/ds/dropdown-select.tsx";
 import {
   createEmulatorSaveExport,
   deleteEmulatorSave,
@@ -156,7 +157,7 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
             <span>Choose the file type. Raw saves also need the ROM SHA-1.</span>
           </div>
           <label htmlFor="emulator-save-import-kind">File type</label>
-          <select
+          <DropdownSelect
             className="select"
             id="emulator-save-import-kind"
             onChange={(event) =>
@@ -169,7 +170,7 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
             <option value="combined">rom-weaver exported save</option>
             <option value="sram">SRAM</option>
             <option value="state">Save state</option>
-          </select>
+          </DropdownSelect>
           {pendingImport.kind === "combined" ? null : (
             <>
               <label htmlFor="emulator-save-import-sha1">ROM SHA-1</label>

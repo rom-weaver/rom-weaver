@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { isCompressionCodecFieldKey } from "../lib/compression/codec-fields.ts";
 import { CodecCombobox } from "../public/react/components/ds/codec-combobox.tsx";
 import { CompressInfoContent } from "../public/react/components/ds/compress-panel.tsx";
+import { DropdownSelect } from "../public/react/components/ds/dropdown-select.tsx";
 import { COMPRESSION_PROFILE_FIELD_INFO } from "../public/react/compress-options.ts";
 import { ACCENTS } from "./accent.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
@@ -228,7 +229,7 @@ const ThemeSetting = () => {
         <label htmlFor="settings-theme">{localizer.message("settings.theme")}</label>
       </span>
       <span className="sctl">
-        <select
+        <DropdownSelect
           className="select"
           id="settings-theme"
           onChange={(event) => setPreference(event.currentTarget.value as ThemePreference)}
@@ -239,7 +240,7 @@ const ThemeSetting = () => {
               {option.label}
             </option>
           ))}
-        </select>
+        </DropdownSelect>
       </span>
     </div>
   );
@@ -264,7 +265,7 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
     const placeholder = getFieldPlaceholder(fieldKey, draftSettings, uiState);
     const value = getFieldValue(fieldKey, draftSettings);
     return (
-      <select
+      <DropdownSelect
         className={value === "" && placeholder ? "select settings-placeholder-value" : "select"}
         disabled={disabled}
         id={field.id}
@@ -278,7 +279,7 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
             {getSelectOptionLabel(fieldKey, option)}
           </option>
         ))}
-      </select>
+      </DropdownSelect>
     );
   }
   const inputType = field.kind === "number" && fieldKey !== "threads" ? "number" : "text";

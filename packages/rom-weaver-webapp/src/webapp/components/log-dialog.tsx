@@ -16,6 +16,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useS
 import { copyToClipboard } from "../../lib/clipboard.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
+import { DropdownSelect } from "../../public/react/components/ds/dropdown-select.tsx";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { listBrowserOpfs } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
@@ -508,15 +509,20 @@ const LogLevelSelect = ({
   localizer: Localizer;
   onLevelChange: (level: string) => void;
 }) => (
-  <label className="loglevel">
+  <label className="loglevel" htmlFor="rom-weaver-log-level">
     <span className="sr-only">{localizer.message("settings.logLevel")}</span>
-    <select className="select mono" onChange={(event) => onLevelChange(event.currentTarget.value)} value={currentLevel}>
+    <DropdownSelect
+      className="select mono"
+      id="rom-weaver-log-level"
+      onChange={(event) => onLevelChange(event.currentTarget.value)}
+      value={currentLevel}
+    >
       {LOG_LEVELS.map((value) => (
         <option key={value} value={value}>
           {`level: ${value}`}
         </option>
       ))}
-    </select>
+    </DropdownSelect>
   </label>
 );
 

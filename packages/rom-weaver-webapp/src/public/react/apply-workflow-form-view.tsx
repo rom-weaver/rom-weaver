@@ -14,6 +14,7 @@ import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
+import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import {
   buildOutputCompressionPanel,
@@ -1191,7 +1192,7 @@ const OutputHeaderField = ({
   };
   return (
     <OutputField label="Output Header" labelInfo={<FieldInfoToggle info={info} label="Output Header" />}>
-      <select
+      <DropdownSelect
         aria-label="Output Header"
         className="select"
         disabled={disabled}
@@ -1202,7 +1203,7 @@ const OutputHeaderField = ({
         <option value="auto">auto ({retained ? "keep" : "strip"})</option>
         <option value="keep">keep</option>
         <option value="strip">strip</option>
-      </select>
+      </DropdownSelect>
     </OutputField>
   );
 };
@@ -1224,7 +1225,7 @@ const PostApplyActionField = ({
 }) => {
   return (
     <OutputField label={label}>
-      <select
+      <DropdownSelect
         aria-label={label}
         className="select"
         disabled={disabled}
@@ -1237,7 +1238,7 @@ const PostApplyActionField = ({
             {option.label}
           </option>
         ))}
-      </select>
+      </DropdownSelect>
     </OutputField>
   );
 };
@@ -1500,7 +1501,7 @@ const BundleOutputFields = ({
         label="Archive type"
         labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Archive type" />}
       >
-        <select
+        <DropdownSelect
           aria-label="Archive type"
           className="select"
           disabled={bundleExport.busy}
@@ -1510,7 +1511,7 @@ const BundleOutputFields = ({
         >
           <option value="zip">ZIP (.zip)</option>
           <option value="7z">7z (.7z)</option>
-        </select>
+        </DropdownSelect>
       </OutputField>
       <div className="bundle-rom-option">
         <label className="checkrow" htmlFor="rom-weaver-bundle-export-bundle-rom">
