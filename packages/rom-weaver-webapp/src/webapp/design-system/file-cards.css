@@ -501,23 +501,21 @@
   padding: 4px 0 2px;
 }
 .rw-app .tree-row {
-  --ck-columns: minmax(0, 1fr) auto auto;
-  --ck-row-margin: 0;
-  --ck-row-width: 100%;
+  --ck-c: minmax(0, 1fr) auto auto;
   position: relative;
   font-size: 0.78rem;
 }
 .rw-app .tree-row.d1 {
-  --ck-row-margin: 9px 0;
+  --rm: 9px 0;
 }
 .rw-app .tree-row.d2 {
-  --ck-row-margin: 18px 0;
+  --rm: 18px 0;
 }
 .rw-app .tree-row.d3 {
-  --ck-row-margin: 27px 0;
+  --rm: 27px 0;
 }
 .rw-app .tree-row.d4 {
-  --ck-row-margin: 36px 0;
+  --rm: 36px 0;
 }
 .rw-app .tree-elbow {
   position: absolute;
