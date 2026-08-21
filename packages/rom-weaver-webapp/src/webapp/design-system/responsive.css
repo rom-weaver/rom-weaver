@@ -107,12 +107,6 @@
     font-size: 0.82rem;
     line-height: 1.35;
   }
-  @supports (-webkit-touch-callout: none) {
-    /* Optically align iOS select and textarea text. */
-    .rw-app .fname .outname {
-      padding-block: 11px 7px;
-    }
-  }
   .rw-app .runprog {
     min-height: 60px;
     padding-block: 6px 4px;
