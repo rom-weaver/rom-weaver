@@ -229,7 +229,7 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
       expect(getComputedStyle(moreLabel).display).not.toBe("none");
       expect(moreLabel.textContent).toBe("More");
       expect(document.querySelector(".mode-more .tip")).toBeNull();
-      await page.locator(".masthead-settings").hover();
+      await page.getByRole("button", { name: "Settings" }).first().hover();
       await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
     }
     await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
