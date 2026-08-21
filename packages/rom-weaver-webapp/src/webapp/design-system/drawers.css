@@ -326,23 +326,20 @@
     transparent 3px 5px
   );
 }
-/* Output options show each value with its label in the header. The card width,
-   not the viewport, decides when the summary takes a second row. */
-.rw-app .outopts {
-  container: outopts / inline-size;
-}
+/* Output options show each value with its label in the header. */
 .rw-app .outopts > .cks-head {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 .rw-app .outopts > .cks-head .lab {
   white-space: nowrap;
 }
 .rw-app .outopts > .cks-head .readouts {
-  /* Keep the option summary beside its label on wide cards. */
-  flex: 0 1 auto;
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-  max-width: 72%;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  justify-content: flex-start;
+  max-width: 100%;
   padding-inline-start: 0;
 }
 .rw-app .outopts > .cks-head .readouts > .rb:not(:last-child) {
@@ -366,21 +363,6 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-@container outopts (max-width: 34rem) {
-  .rw-app .outopts > .cks-head {
-    flex-wrap: wrap;
-    row-gap: 4px;
-  }
-  .rw-app .outopts > .cks-head .readouts {
-    /* Start the wrapped row below the label, past the chevron. */
-    flex: 1 0 100%;
-    flex-wrap: wrap;
-    row-gap: 4px;
-    justify-content: flex-start;
-    max-width: 100%;
-    padding-inline-start: calc(0.82rem + var(--sp-xs));
-  }
 }
 .rw-app .cks > .cks-head .rb-mark.bad {
   color: var(--fault);
