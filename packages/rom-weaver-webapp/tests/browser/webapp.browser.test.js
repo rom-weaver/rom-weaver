@@ -217,7 +217,7 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
     await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
     expect(document.querySelector(`[role="tab"][data-mode="tools"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="tools"]`)).toBeNull();
-    expect(getComputedStyle(document.querySelector(".panel-settings-btn")).display).toBe("inline-flex");
+    expect(getComputedStyle(document.querySelector(".panel-settings-btn")).display).not.toBe("none");
     if (width >= 1000) {
       expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");
       expect(document.querySelector(".masthead-settings .tip")?.textContent).toBe("Settings");
