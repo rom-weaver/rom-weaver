@@ -355,13 +355,43 @@
   height: 32px;
 }
 .rw-app .patch-bulk-edit-button {
+  position: relative;
+  display: inline-flex;
   flex: none;
   gap: 6px;
+  align-items: center;
+  min-block-size: 24px;
+  padding: 0;
   margin-inline-end: 4px;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: color 0.18s;
 }
 .rw-app .patch-bulk-edit-button svg {
+  flex: none;
   width: 13px;
   height: 13px;
+}
+.rw-app .patch-bulk-edit-button::after {
+  position: absolute;
+  inset: -4px -8px;
+  content: "";
+}
+@media (hover: hover) {
+  .rw-app .patch-bulk-edit-button:hover {
+    color: var(--thread-ink);
+  }
+}
+.rw-app .patch-bulk-edit-button:active {
+  color: var(--thread-ink);
 }
 .rw-app .patch-shared-meta-editor {
   display: grid;
