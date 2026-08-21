@@ -131,13 +131,14 @@ const OutputCard = ({
             value={fileName}
           />
           <span className="sep" />
-          <span className="outformat">
+          <span className="ofmt">
             <select
               aria-label={formatLabel}
               className="select mono"
               disabled={disabled}
               id={formatId}
               onChange={(event) => onFormatChange(event.currentTarget.value)}
+              style={{ backgroundImage: "none" }}
               value={format}
             >
               {formatOptions.map((option) => (
@@ -146,7 +147,14 @@ const OutputCard = ({
                 </option>
               ))}
             </select>
-            <ChevronDown aria-hidden="true" className="outformat-chevron" />
+            <ChevronDown
+              aria-hidden="true"
+              className="ofmt-arrow"
+              color="var(--ink-4)"
+              opacity={disabled ? 0.5 : undefined}
+              size={12}
+              strokeWidth={2.4}
+            />
           </span>
         </div>
       </div>

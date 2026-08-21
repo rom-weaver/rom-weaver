@@ -113,6 +113,7 @@
   gap: var(--sp-m);
 }
 .rw-app .fname {
+  position: relative;
   display: flex;
   flex: 1 1 300px;
   align-items: stretch;
@@ -157,37 +158,27 @@
   width: 1px;
   background: var(--seam);
 }
-/* Keep the arrow independent from the stretched select background. */
-.rw-app .fname .outformat {
-  position: relative;
-  display: flex;
+.rw-app .fname .ofmt {
+  display: contents;
+}
+/* Let the format control follow a multiline name's height. */
+.rw-app .fname .select {
   flex: none;
   align-self: stretch;
-}
-.rw-app .fname .outformat .select {
-  flex: 1 1 auto;
   width: auto;
   height: auto;
   font-weight: 650;
   background-color: var(--plate-2);
-  background-image: none;
   border: 0;
 }
-.rw-app .fname .outformat .select:focus-visible {
+.rw-app .fname .select:focus-visible {
   box-shadow: none;
 }
-.rw-app .fname .outformat-chevron {
+.rw-app .fname .ofmt-arrow {
   position: absolute;
-  inset-inline-end: 10px;
-  top: 50%;
-  width: 12px;
-  height: 12px;
-  color: var(--ink-4);
+  inset: 50% 10px auto auto;
   pointer-events: none;
   translate: 0 -50%;
-}
-.rw-app .fname .outformat .select:disabled + .outformat-chevron {
-  opacity: 0.5;
 }
 .rw-app .outname-ext-warn {
   margin-block-end: var(--sp-xs);
