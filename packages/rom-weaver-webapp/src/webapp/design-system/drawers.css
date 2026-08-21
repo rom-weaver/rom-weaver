@@ -448,7 +448,7 @@
 .rw-app .ck {
   /* The label track floor aligns independently gridded rows. */
   display: grid;
-  grid-template-columns: minmax(var(--ck-label-w), max-content) minmax(0, 1fr) auto;
+  grid-template-columns: var(--ck-columns, minmax(var(--ck-label-w), max-content) minmax(0, 1fr) auto);
   gap: var(--sp-xs) var(--sp-s);
   align-items: center;
   min-height: 24px;
@@ -473,8 +473,8 @@
 }
 /* Extend ordinary rows through the drawer's 10px inset. */
 .rw-app .ck:not(.req) {
-  width: calc(100% + 20px);
-  margin-inline: -10px;
+  width: var(--ck-row-width, calc(100% + 20px));
+  margin-inline: var(--ck-row-margin, -10px);
 }
 /* Drop duplicate borders without overlapping adjacent touch targets. */
 .rw-app .ck:not(.req) + .ck:not(.req) {

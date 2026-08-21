@@ -148,7 +148,7 @@ const TreeRow = ({ level, depth }: { level: ExtractionLevel; depth: number }) =>
   return (
     <button
       aria-label={`Copy ${level.name}`}
-      className={join("tree-row", `d${depth}`)}
+      className={join("tree-row", "ck", `d${depth}`)}
       onClick={copy}
       title={`Copy ${level.name}`}
       type="button"
@@ -161,7 +161,7 @@ const TreeRow = ({ level, depth }: { level: ExtractionLevel; depth: number }) =>
         </span>
         <span className="tree-time">{level.timing || ""}</span>
       </span>
-      <span aria-hidden="true" className={join("copy", "tree-copy", copied && "copied")}>
+      <span aria-hidden="true" className={join("copy", copied && "copied")}>
         {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
       </span>
     </button>
