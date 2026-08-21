@@ -720,11 +720,11 @@
 }
 /* Checksum rows own the copy action. Their coarse-pointer decoration MUST NOT intercept adjacent rows. */
 @media (pointer: coarse) {
-  .rw-app :is(.ck, .tree-row) .copy,
+  .rw-app .ck .copy,
   .rw-app .cue-copy {
     position: relative;
   }
-  .rw-app :is(.ck, .tree-row) .copy::before,
+  .rw-app .ck .copy::before,
   .rw-app .cue-copy::before {
     position: absolute;
     top: 50%;
@@ -734,7 +734,7 @@
     content: "";
     transform: translate(-50%, -50%);
   }
-  .rw-app :is(.ck, .tree-row) .copy::before {
+  .rw-app .ck .copy::before {
     pointer-events: none;
   }
 }
