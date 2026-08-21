@@ -9,7 +9,6 @@ import {
   RAW_PATCH,
   RAW_ROM,
   selectFileInput,
-  setFormControlValue,
   waitForApplyButtonEnabled,
   waitForState,
 } from "./patcher-test-shared.js";
@@ -76,21 +75,19 @@ const buildWithoutRomBundle = async ({ romCrc32, outputCrc32, romName = "game.bi
 
 const getPatchToggles = () => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .patch-enable input"));
 
-test("pencil opens the inline meta editors; checks add/remove in the drawer; export reveals on demand", async () => {
+test("pencil opens the inline meta editors; checks add/remove in the drawer; sharing stays below Apply", async () => {
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
   await waitForApplyButtonEnabled();
 
-  // Plain weave view: no inline editors or export controls yet.
+  // Plain weave view: no inline editors yet; the sharing job is below Apply.
   expect(document.getElementById("rom-weaver-patch-name-0")).toBeNull();
   expect(document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
   expect(document.getElementById("rom-weaver-rom-bundle-crc32")).toBeNull();
-  // The bundle dropdown is always present in Output options but defaults to
-  // hidden ("") with no create action.
   const bundleFormat = document.getElementById("rom-weaver-bundle-export-format");
   expect(bundleFormat).not.toBeNull();
-  expect(bundleFormat.value).toBe("");
-  expect(document.getElementById("rom-weaver-button-export-bundle")).toBeNull();
+  expect(bundleFormat.value).toBe("zip");
+  expect(document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
 
   // Compact patch cards must let the open menu escape the card's paint boundary.
   const patchMenuButton = document.getElementById("rom-weaver-patch-menu-0");
@@ -124,9 +121,8 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; exp
   document.querySelector("#rom-weaver-list-patch-stack .ck-remove")?.click();
   await expect.poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
 
-  // Choosing a bundle package in Output options arms the export button.
-  setFormControlValue(document.getElementById("rom-weaver-bundle-export-format"), "zip:patches");
-  await expect.poll(() => document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
+  // The archive dropdown has no hide option, and the share action stays visible.
+  expect(Array.from(bundleFormat.options, (option) => option.value)).toEqual(["zip", "7z"]);
 });
 
 test("bundle-renamed patch keeps its source file in the Files drawer", async () => {

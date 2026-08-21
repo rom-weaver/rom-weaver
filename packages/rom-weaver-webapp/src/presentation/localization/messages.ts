@@ -51,10 +51,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
   "settings.compressionProfile": msg({ id: "settings.compressionProfile", message: "Level" }),
-  "settings.applyPlayButtonEnabled": msg({
-    id: "settings.applyPlayButtonEnabled",
-    message: "Show the test button after applying",
-  }),
   "settings.fixChecksum": msg({ id: "settings.fixChecksum", message: "Fix ROM header" }),
   "settings.language": msg({ id: "settings.language", message: "Language" }),
   "settings.levelOverride": msg({ id: "settings.levelOverride", message: "Level override" }),
@@ -85,6 +81,17 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.bundleExport.createRom": msg({ id: "ui.bundleExport.createRom", message: "Create {format} ROM Bundle" }),
   "ui.bundleExport.download": msg({ id: "ui.bundleExport.download", message: "Download {format} Bundle" }),
   "ui.bundleExport.downloadRom": msg({ id: "ui.bundleExport.downloadRom", message: "Download {format} ROM Bundle" }),
+  "ui.bundleExport.includeRom": msg({ id: "ui.bundleExport.includeRom", message: "Include ROM in bundle" }),
+  "ui.bundleExport.romDistributionWarning": msg({
+    id: "ui.bundleExport.romDistributionWarning",
+    message: "Only include a ROM if you have the right to distribute it. Sharing copyrighted ROMs may be illegal.",
+  }),
+  "ui.bundleExport.optional": msg({ id: "ui.bundleExport.optional", message: "optional" }),
+  "ui.bundleExport.share": msg({ id: "ui.bundleExport.share", message: "Share bundle" }),
+  "ui.bundleExport.shareTitle": msg({
+    id: "ui.bundleExport.shareTitle",
+    message: "Share this patch recipe (for patch creators)",
+  }),
   "ui.chain.appliesAfter": msg({ id: "ui.chain.appliesAfter", message: "applies after patch {n}" }),
   "ui.chain.differentRom": msg({ id: "ui.chain.differentRom", message: "expected a different ROM" }),
   "ui.chain.expectsFirst": msg({ id: "ui.chain.expectsFirst", message: "expects patch {n} first" }),

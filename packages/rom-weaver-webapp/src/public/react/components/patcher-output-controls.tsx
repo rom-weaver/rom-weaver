@@ -18,16 +18,20 @@ type OutputController = {
 function PatcherPrimaryAction({
   controller,
   disableRun,
+  showCompletedDownload = true,
   totalTime,
 }: {
   controller: OutputController;
   /** Extra gate (e.g. every staged patch toggled off). */
   disableRun?: boolean;
+  /** Keep the completed output's Download action visible. */
+  showCompletedDownload?: boolean;
   /** Total wall time for the finished run (download button right edge). */
   totalTime?: string;
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
   if (state.pendingDownloadFileName && !state.applyButton.progress && !state.applyButton.loading) {
+    if (!showCompletedDownload) return null;
     // The button shows the output FORMAT (the loom dl-kind), not the filename -
     // the name already fills the output field above; the full name stays on
     // the accessible label.

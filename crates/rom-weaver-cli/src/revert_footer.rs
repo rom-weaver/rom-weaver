@@ -231,3 +231,96 @@ impl CliApp {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    struct TestFile {
+        path: PathBuf,
+    }
+
+    impl TestFile {
+        fn new(bytes: &[u8]) -> Self {
+            static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+            let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+            let path =
+                std::env::temp_dir().join(format!("rw-revert-footer-{}-{id}", std::process::id()));
+            fs::write(&path, bytes).expect("create revert footer test file");
+            Self { path }
+        }
+    }
+
+    impl Drop for TestFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+
+    #[test]
+    fn read_revert_footer_validates_size_magic_crc_and_fields() {
+        let file = TestFile::new(&[0x11, 0x22, 0x33]);
+        assert!(
+            CliApp::read_revert_footer(&file.path)
+                .expect("read too-small footer")
+                .is_none()
+        );
+
+        CliApp::write_revert_footer(&file.path, 9, 0xA5).expect("write valid footer");
+        let footer = CliApp::read_revert_footer(&file.path)
+            .expect("read valid footer")
+            .expect("valid footer should be present");
+        assert_eq!(footer.original_size, 9);
+        assert_eq!(footer.pad_byte, 0xA5);
+
+        let mut bytes = fs::read(&file.path).expect("read valid footer bytes");
+        let footer_start = bytes.len() - REVERT_FOOTER_LEN as usize;
+        bytes[footer_start] ^= 0xFF;
+        fs::write(&file.path, &bytes).expect("write wrong-magic footer");
+        assert!(
+            CliApp::read_revert_footer(&file.path)
+                .expect("read wrong-magic footer")
+                .is_none()
+        );
+
+        CliApp::write_revert_footer(&file.path, 9, 0xA5).expect("rewrite valid footer");
+        let mut bytes = fs::read(&file.path).expect("read valid footer bytes");
+        let footer_start = bytes.len() - REVERT_FOOTER_LEN as usize;
+        bytes[footer_start + 4] ^= 0x01;
+        fs::write(&file.path, &bytes).expect("write CRC-mismatch footer");
+        assert!(
+            CliApp::read_revert_footer(&file.path)
+                .expect("read CRC-mismatch footer")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn scan_trimmed_size_handles_empty_and_all_padding_files() {
+        let empty = TestFile::new(&[]);
+        assert_eq!(
+            CliApp::scan_trimmed_size_from_trailing_padding(&empty.path, 0x00)
+                .expect("scan empty file"),
+            0
+        );
+
+        let all_padding = TestFile::new(&[0xFF; 4]);
+        assert_eq!(
+            CliApp::scan_trimmed_size_from_trailing_padding(&all_padding.path, 0xFF)
+                .expect("scan all-padding file"),
+            1
+        );
+    }
+
+    #[test]
+    fn power_of_two_target_rejects_zero_and_overflow() {
+        let zero = CliApp::power_of_two_target_size_for_revert(0)
+            .expect_err("empty files cannot be reverted");
+        assert!(zero.to_string().contains("empty file"));
+
+        let overflow = CliApp::power_of_two_target_size_for_revert(u64::MAX)
+            .expect_err("overflowing target sizes cannot be reverted");
+        assert!(overflow.to_string().contains("too large"));
+    }
+}

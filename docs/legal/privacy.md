@@ -29,7 +29,7 @@ The app keeps a few things locally so it works across reloads and can handle fil
 - **Local storage**: your preferences, such as theme and settings, plus update state and a short recent log.
 - **Session storage**: coordinates service-worker and security-mode reloads, update prompts, and the docs shelf state for the current tab.
 - **Cache storage**: the app's own files, so it loads fast and works offline.
-- **IndexedDB**: emulator save states and SRAM. The saved records use a derived game key, not the ROM name or play history.
+- **IndexedDB**: emulator save states and SRAM. Each record uses the ROM's SHA-1 as its key and stores the file name as a display name. It does not store play history.
 - **Origin Private File System**: temporary inputs, working files, and outputs that are too large for memory.
 
 All of it belongs to the rom-weaver site in your browser and is under your browser's control. The app sets no advertising or tracking cookies.

@@ -113,6 +113,7 @@
   gap: var(--sp-m);
 }
 .rw-app .fname {
+  position: relative;
   display: flex;
   flex: 1 1 300px;
   align-items: stretch;
@@ -169,6 +170,12 @@
 }
 .rw-app .fname .select:focus-visible {
   box-shadow: none;
+}
+.rw-app .fname .ofmt-arrow {
+  position: absolute;
+  inset: 50% 10px auto auto;
+  pointer-events: none;
+  translate: 0 -50%;
 }
 .rw-app .outname-ext-warn {
   margin-block-end: var(--sp-xs);
@@ -237,6 +244,34 @@
 }
 .rw-app .export-type-field .select {
   text-overflow: ellipsis;
+}
+.rw-app .bundle-job {
+  margin-block-start: var(--sp-l);
+}
+.rw-app .bundle-job-content {
+  display: grid;
+  gap: var(--sp-m);
+}
+.rw-app .bundle-job-fields {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.85fr) minmax(210px, 1.15fr);
+  gap: var(--sp-l);
+}
+.rw-app .bundle-rom-option {
+  align-self: end;
+}
+.rw-app .bundle-rom-option .checkrow {
+  margin-block: 0;
+}
+.rw-app .bundle-rom-warning {
+  grid-column: 1 / -1;
+}
+.rw-app .bundle-share,
+.rw-app .bundle-job-content > .runprog {
+  width: 100%;
+}
+.rw-app .bundle-share {
+  min-height: 40px;
 }
 .rw-app .patch-description-field textarea.input {
   height: auto;
@@ -355,13 +390,43 @@
   height: 32px;
 }
 .rw-app .patch-bulk-edit-button {
+  position: relative;
+  display: inline-flex;
   flex: none;
   gap: 6px;
+  align-items: center;
+  min-block-size: 24px;
+  padding: 0;
   margin-inline-end: 4px;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: color 0.18s;
 }
 .rw-app .patch-bulk-edit-button svg {
+  flex: none;
   width: 13px;
   height: 13px;
+}
+.rw-app .patch-bulk-edit-button::after {
+  position: absolute;
+  inset: -4px -8px;
+  content: "";
+}
+@media (hover: hover) {
+  .rw-app .patch-bulk-edit-button:hover {
+    color: var(--thread-ink);
+  }
+}
+.rw-app .patch-bulk-edit-button:active {
+  color: var(--thread-ink);
 }
 .rw-app .patch-shared-meta-editor {
   display: grid;

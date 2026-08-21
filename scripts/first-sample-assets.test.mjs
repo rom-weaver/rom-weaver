@@ -14,7 +14,7 @@ import {
 // digest as the proof their run worked. It is only a screenshot of whatever the
 // generator happens to emit, so without this test a change to the sample ROMs
 // silently publishes a wrong value on both pages.
-const DOCUMENTED_WEAVE_SHA256 = "e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e";
+const DOCUMENTED_WEAVE_SHA256 = "7ac8001dcbcbff45cd5cebb5b0655192021fbbdf27533aa961347194ab3e836e";
 const DOCS_PUBLISHING_THE_DIGEST = [
   "docs/tutorials/cli-first-weave.md",
   "docs/tutorials/first-patch.md",
@@ -58,25 +58,40 @@ test("generated first-create and first-weave archives contain a runnable NES pat
   assert.deepEqual([...createEntries.keys()], ["hello-world.nes", "modified-world.nes"]);
   assert.deepEqual(
     [...weaveEntries.keys()],
-    ["rom-weaver-bundle.json", "hello-world.nes", "hello-to-modified.ips", "world-to-rom.ips"],
+    ["rom-weaver-bundle.json", "hello-world.nes", "hello-to-rom.ips", "world-to-weaver.ips"],
   );
   assert.equal(createEntries.get("hello-world.nes")?.subarray(0, 4).toString("hex"), "4e45531a");
   assert.deepEqual(createEntries.get("hello-world.nes"), assets.originalRom);
   assert.deepEqual(createEntries.get("modified-world.nes"), assets.modifiedRom);
   assert.deepEqual(
-    applyIps(assets.originalRom, weaveEntries.get("hello-to-modified.ips")),
-    assets.modifiedRom,
+    applyIps(assets.originalRom, weaveEntries.get("hello-to-rom.ips")),
+    assets.firstPatchResult,
   );
-  assert.deepEqual(applyIps(assets.modifiedRom, weaveEntries.get("world-to-rom.ips")), assets.wovenRom);
+  assert.deepEqual(
+    applyIps(assets.originalRom, weaveEntries.get("world-to-weaver.ips")),
+    assets.secondPatchResult,
+  );
+  assert.deepEqual(
+    applyIps(assets.firstPatchResult, weaveEntries.get("world-to-weaver.ips")),
+    assets.wovenRom,
+  );
+  assert.deepEqual(
+    applyIps(assets.secondPatchResult, weaveEntries.get("hello-to-rom.ips")),
+    assets.wovenRom,
+  );
 
   const manifest = JSON.parse(weaveEntries.get("rom-weaver-bundle.json"));
   assert.equal(manifest.rom.path, "hello-world.nes");
   assert.deepEqual(
     manifest.patches.map((patch) => patch.path),
-    ["hello-to-modified.ips", "world-to-rom.ips"],
+    ["hello-to-rom.ips", "world-to-weaver.ips"],
   );
-  assert.deepEqual(manifest.patches[0].outputChecks, manifest.patches[1].inputChecks);
-  assert.equal(manifest.output.name, "modified-rom.nes");
+  assert.deepEqual(manifest.patches.map((patch) => patch.basis), ["base", "base"]);
+  assert.equal(manifest.patches[0].inputChecks, undefined);
+  assert.equal(manifest.patches[1].inputChecks, undefined);
+  assert.equal(manifest.patches[0].outputChecks, undefined);
+  assert.equal(manifest.patches[1].outputChecks, undefined);
+  assert.equal(manifest.output.name, "rom-weaver.nes");
 
   const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-first-samples-"));
   context.after(() => fs.rmSync(outputDirectory, { force: true, recursive: true }));
@@ -102,8 +117,8 @@ test("generated first-create and first-weave archives contain a runnable NES pat
 test("the sample digest the guides publish still matches the generated sample", () => {
   const assets = createFirstSampleAssets();
   // What `rom-weaver weave --input first-weave.zip --no-compress` writes: the
-  // bundle's two IPS patches applied in order, which the round-trip test above
-  // pins to `wovenRom`.
+  // The bundle's two base-authored IPS patches apply in either order, which
+  // the round-trip test above pins to `wovenRom`.
   const digest = createHash("sha256").update(assets.wovenRom).digest("hex");
 
   assert.equal(digest, DOCUMENTED_WEAVE_SHA256);

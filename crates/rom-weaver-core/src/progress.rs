@@ -280,3 +280,7 @@ impl ProgressSink for RecordingProgressSink {
         self.events_guard().push(event);
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/progress.rs"]
+mod tests;

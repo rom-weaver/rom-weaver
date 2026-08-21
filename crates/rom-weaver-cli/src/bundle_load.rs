@@ -263,3 +263,35 @@ fn read_bundle_bytes_capped(reader: &mut dyn Read, label: &str) -> Result<Vec<u8
     }
     Ok(bytes)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(index: usize, name: &str) -> RegularArchiveFileEntry {
+        RegularArchiveFileEntry {
+            index,
+            name: name.to_string(),
+            size: None,
+        }
+    }
+
+    #[test]
+    fn find_bundle_archive_entry_normalizes_and_falls_back_case_insensitively() {
+        let entries = vec![entry(3, "./roms\\Game.BIN"), entry(7, "readme.txt")];
+
+        assert_eq!(
+            CliApp::find_bundle_archive_entry(&entries, "roms/Game.BIN")
+                .expect("normalized archive path should match")
+                .index,
+            3
+        );
+        assert_eq!(
+            CliApp::find_bundle_archive_entry(&entries, "ROMS/game.bin")
+                .expect("archive path lookup should ignore case")
+                .index,
+            3
+        );
+        assert!(CliApp::find_bundle_archive_entry(&entries, "roms/missing.bin").is_none());
+    }
+}

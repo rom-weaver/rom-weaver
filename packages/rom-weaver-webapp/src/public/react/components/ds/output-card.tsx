@@ -1,4 +1,4 @@
-import { SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { ChevronDown, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
 import { join } from "./cx.ts";
@@ -137,6 +137,7 @@ const OutputCard = ({
             disabled={disabled}
             id={formatId}
             onChange={(event) => onFormatChange(event.currentTarget.value)}
+            style={{ backgroundImage: "none" }}
             value={format}
           >
             {formatOptions.map((option) => (
@@ -145,6 +146,14 @@ const OutputCard = ({
               </option>
             ))}
           </select>
+          <ChevronDown
+            aria-hidden="true"
+            className="ofmt-arrow"
+            color="var(--ink-4)"
+            opacity={disabled ? 0.5 : undefined}
+            size={12}
+            strokeWidth={2.4}
+          />
         </div>
       </div>
       {compress ? (

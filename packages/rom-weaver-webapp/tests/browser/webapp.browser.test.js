@@ -217,6 +217,7 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
     await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
     expect(document.querySelector(`[role="tab"][data-mode="tools"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="tools"]`)).toBeNull();
+    expect(getComputedStyle(document.querySelector(".panel-settings-btn")).display).not.toBe("none");
     if (width >= 1000) {
       expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");
       expect(document.querySelector(".masthead-settings .tip")?.textContent).toBe("Settings");
@@ -228,7 +229,7 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
       expect(getComputedStyle(moreLabel).display).not.toBe("none");
       expect(moreLabel.textContent).toBe("More");
       expect(document.querySelector(".mode-more .tip")).toBeNull();
-      await page.getByRole("button", { name: "Settings" }).hover();
+      await page.getByRole("button", { name: "Settings" }).first().hover();
       await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
     }
     await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();

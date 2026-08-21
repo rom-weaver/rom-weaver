@@ -326,44 +326,27 @@
     transparent 3px 5px
   );
 }
-/* Output options show complete values in the header. Labels stay in the
-   accessibility tree, while the strip scrolls only when a narrow card cannot
-   fit every value. */
+/* Output options show each value with its label in the header. */
 .rw-app .outopts > .cks-head {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 .rw-app .outopts > .cks-head .lab {
   white-space: nowrap;
 }
 .rw-app .outopts > .cks-head .readouts {
-  /* Keep the option summary beside its label at every card width. */
-  flex: 0 1 auto;
-  flex-wrap: nowrap;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  row-gap: 4px;
   justify-content: flex-start;
-  max-width: 72%;
+  max-width: 100%;
   padding-inline-start: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.rw-app .outopts > .cks-head .readouts::-webkit-scrollbar {
-  display: none;
-}
-.rw-app .outopts > .cks-head .rb .k {
-  /* Labels remain available to assistive technology but do not consume space. */
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  white-space: nowrap;
-  clip-path: inset(50%);
+.rw-app .outopts > .cks-head .readouts > .rb:not(:last-child) {
+  flex: 0 1 auto;
 }
 .rw-app .outopts > .cks-head .readouts > .rb {
-  flex: none;
-  max-width: none;
-  overflow: visible;
-  text-overflow: clip;
+  max-width: 100%;
 }
 /* Only label+value chips need inline-flex. Bare note and timing chips stay plain
    boxes, so their values remain visible as ordinary text. */
@@ -372,9 +355,14 @@
   gap: var(--sp-xs);
   align-items: baseline;
 }
+.rw-app .outopts > .cks-head .rb .k {
+  flex: none;
+  color: var(--ink-3);
+}
 .rw-app .outopts > .cks-head .rb .t {
-  overflow: visible;
-  text-overflow: clip;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .rw-app .cks > .cks-head .rb-mark.bad {
   color: var(--fault);

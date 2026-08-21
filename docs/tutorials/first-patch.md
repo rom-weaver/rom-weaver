@@ -36,7 +36,7 @@ rom-weaver loads a tiny homebrew NES ROM and two patches written for this guide.
 The guide points at four parts of the Apply page. Look at each one before you touch anything.
 
 1. The **ROM** card shows the starting file and its checksums.
-2. The **Patches** cards show the order. Patch 1 changes `HELLO` to `MODIFIED`. Patch 2 changes `WORLD` to `ROM`.
+2. The **Patches** cards show two independent changes. One changes `HELLO` to `ROM`. The other changes `WORLD` to `WEAVER`.
 3. **Add files** is where more ROMs, patches, archives, or bundles would go. You do not need it here.
 4. **Apply** controls the output.
 
@@ -52,17 +52,17 @@ Your browser downloads a new ROM. The sample ROM you started from is untouched.
     <figcaption>Before: the clean practice ROM.</figcaption>
   </figure>
   <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-modified-rom.webp" width="1024" height="768" alt="The homebrew sample ROM displaying MODIFIED ROM after both patches">
-    <figcaption>After: both patches applied in order.</figcaption>
+    <img src="/docs/screenshots/first-sample-rom-weaver.webp" width="1024" height="768" alt="The homebrew sample ROM displaying ROM WEAVER after both patches">
+    <figcaption>After: both patches applied.</figcaption>
   </figure>
 </figure>
 
 ## Step 4: check that you got the right bytes
 
-The finished sample displays `MODIFIED ROM`. Its SHA-256 is:
+The finished sample displays `ROM WEAVER`. Its SHA-256 is:
 
 ```text
-e0db7cbd02cccd5e83931e7974db94aaafe40327b2a33fdd4c83235c9880a90e
+7ac8001dcbcbff45cd5cebb5b0655192021fbbdf27533aa961347194ab3e836e
 ```
 
 If your download has that checksum, it is byte-for-byte identical to the file this guide expects. That is the strongest confirmation a patch tool can give you, and it is the same check you will use on real patches.
@@ -84,14 +84,14 @@ This tutorial is written against the guided sample, so the usual surprises have 
 
 - **The page was empty when it opened.** The guide runs from the `?guide=apply` part of the link. Open [guided Apply](https://rom-weaver.com/apply?guide=apply) again rather than the plain Apply page.
 - **The button was greyed out.** Every file has to finish reading and checksumming first. The notice nearest the disabled button always says what it is still waiting for.
-- **The patches were in the other order.** Drag the numbered handle on a patch card to move it. Patch 1 has to run first, because patch 2 was written against patch 1's result.
-- **Your checksum did not match.** Confirm you applied both patches, in order, and that you are hashing the downloaded file rather than the sample you started from.
+- **The patches were in the other order.** That is valid for this sample. Both patches target the original ROM, so either order produces the same result.
+- **Your checksum did not match.** Confirm you applied both patches and that you are hashing the downloaded file rather than the sample you started from.
 
 None of these can damage anything here. The files are homebrew, and your input files are never modified - rom-weaver always writes a new one.
 
 ## What you learned
 
-You applied an ordered pair of patches, downloaded the result, and verified it with a checksum. That is the whole shape of the Apply workflow. A real patch differs only in that you supply the game file.
+You applied two independent patches, downloaded the result, and verified it with a checksum. You can also disable either patch and apply only the change you need. A real patch differs only in that you supply the game file.
 
 ## Next
 

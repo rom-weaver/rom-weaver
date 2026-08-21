@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createEmulatorDocument } from "../../src/public/react/components/emulator-document.ts";
+import {
+  createEmulatorDocument,
+  createEmulatorGameIdentity,
+} from "../../src/public/react/components/emulator-document.ts";
 import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "../../src/public/react/components/emulatorjs.ts";
 
 describe("getEmulatorJsCore", () => {
@@ -77,6 +80,19 @@ describe("createEmulatorDocument", () => {
     expect(gameStart).toContain('request("request-load-sram");');
     expect(document).toContain(
       "if (emulator.gameManager.FS.analyzePath(path).exists) emulator.gameManager.FS.unlink(path);",
+    );
+  });
+});
+
+describe("emulator game identity", () => {
+  it("uses the ROM SHA-1 as the save key", () => {
+    const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
+    expect(createEmulatorGameIdentity({ checksum }).gameName).toBe(checksum);
+  });
+
+  it("rejects a non-SHA-1 identity", () => {
+    expect(() => createEmulatorGameIdentity({ checksum: "12345678" })).toThrow(
+      "The emulator game identity requires a SHA-1 checksum.",
     );
   });
 });

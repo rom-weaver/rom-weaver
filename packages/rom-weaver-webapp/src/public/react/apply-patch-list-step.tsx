@@ -1615,7 +1615,7 @@ const ApplyPatchListStep = ({
           <button
             aria-controls="rom-weaver-bulk-patch-meta"
             aria-expanded={bulkEditing}
-            className="btn ghost slim patch-bulk-edit-button"
+            className="patch-bulk-edit-button"
             onClick={() => setBulkEditing((editing) => !editing)}
             ref={bulkEditButtonRef}
             type="button"

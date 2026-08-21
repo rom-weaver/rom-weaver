@@ -1,6 +1,6 @@
 use std::{
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use rom_weaver_core::{
@@ -13,7 +13,7 @@ use rom_weaver_core::{
 use serde_json::json;
 
 use super::expect_tokens::checksum_hex_len;
-use super::selection_resolution::SelectionResolutionOptions;
+use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::{
     CliApp, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand, LogLevel,
     N64ByteOrder, N64ByteOrderTransform, RomWeaverBundle, log_filter_spec,
@@ -134,6 +134,87 @@ impl ContainerHandler for TestListHandler {
     }
 }
 
+struct SelectionFallbackHandler {
+    inner: TestListHandler,
+    first_error: &'static str,
+    extract_requests: Mutex<Vec<Vec<String>>>,
+}
+
+impl SelectionFallbackHandler {
+    fn new(first_error: &'static str) -> Self {
+        Self {
+            inner: TestListHandler {
+                entries: vec![
+                    ContainerListEntry {
+                        path: "first.nes".to_string(),
+                        size: Some(1),
+                    },
+                    ContainerListEntry {
+                        path: "second.nes".to_string(),
+                        size: Some(2),
+                    },
+                ],
+            },
+            first_error,
+            extract_requests: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl ContainerHandlerOperations for SelectionFallbackHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        self.inner.descriptor()
+    }
+
+    fn probe_details(
+        &self,
+        request: &ContainerProbeRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.inner.probe_details(request, context)
+    }
+
+    fn list_entries(
+        &self,
+        _request: &ContainerProbeRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        Ok(self
+            .inner
+            .entries
+            .iter()
+            .map(|entry| entry.path.clone())
+            .collect())
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let mut requests = self.extract_requests.lock().expect("lock extract requests");
+        requests.push(request.selections.clone());
+        if requests.len() == 1 {
+            return Err(RomWeaverError::Validation(self.first_error.to_string()));
+        }
+        self.inner.extract(request, context)
+    }
+
+    fn create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.inner.create(request, context)
+    }
+}
+
+impl ContainerHandler for SelectionFallbackHandler {
+    fn capabilities(&self) -> ContainerCapabilities {
+        self.inner.capabilities()
+    }
+}
+
 struct TestPrompter {
     selected: Vec<usize>,
 }
@@ -168,6 +249,86 @@ fn test_app_with_prompt(selected: Vec<usize>) -> CliApp {
         true,
         false,
     )
+}
+
+fn run_selection_fallback(
+    app: &CliApp,
+    handler: &SelectionFallbackHandler,
+    selections: &[String],
+) -> Result<OperationReport> {
+    let context = app.context(ThreadBudget::Fixed(1));
+    app.extract_with_selection_fallback(
+        handler,
+        Path::new("input.test"),
+        SelectionExtract {
+            out_dir: Path::new("output"),
+            selections,
+            kind_filter: ArchiveEntryKindFilter::new(false, false),
+            split_bin: false,
+            ignore_common_files: false,
+            overwrite: false,
+            source_label: "extract input",
+            allow_multi_select: false,
+        },
+        &context,
+    )
+}
+
+#[test]
+fn selection_fallback_retries_with_prompted_entry() {
+    let app = test_app_with_prompt(vec![1]);
+    let handler = SelectionFallbackHandler::new("requested selections were not found");
+    let initial = vec!["missing.nes".to_string()];
+
+    run_selection_fallback(&app, &handler, &initial).expect("selection fallback should retry");
+
+    let requests = handler
+        .extract_requests
+        .lock()
+        .expect("lock extract requests");
+    assert_eq!(*requests, vec![initial, vec!["second.nes".to_string()]]);
+}
+
+#[test]
+fn selection_fallback_reports_prompt_cancellation() {
+    let app = test_app_with_prompt(Vec::new());
+    let handler = SelectionFallbackHandler::new("requested selections were not found");
+    let initial = vec!["missing.nes".to_string()];
+
+    let error = run_selection_fallback(&app, &handler, &initial).expect_err("cancel should fail");
+    assert!(matches!(
+        error,
+        RomWeaverError::Validation(message) if message.contains("interactive selection was cancelled")
+    ));
+    assert_eq!(
+        *handler
+            .extract_requests
+            .lock()
+            .expect("lock extract requests"),
+        vec![initial]
+    );
+}
+
+#[test]
+fn selection_fallback_preserves_non_selection_errors() {
+    let app = test_app_with_prompt(vec![1]);
+    let handler = SelectionFallbackHandler::new("input read failed");
+    let initial = vec!["missing.nes".to_string()];
+
+    let error = run_selection_fallback(&app, &handler, &initial)
+        .expect_err("input error should pass through");
+    assert!(matches!(
+        error,
+        RomWeaverError::Validation(message) if message == "input read failed"
+    ));
+    assert_eq!(
+        handler
+            .extract_requests
+            .lock()
+            .expect("lock extract requests")
+            .len(),
+        1
+    );
 }
 
 #[test]

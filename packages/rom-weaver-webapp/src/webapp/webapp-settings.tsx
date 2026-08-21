@@ -50,20 +50,19 @@ type FieldRenderProps = SettingsFieldShared & {
 
 const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }> = [
   {
+    fields: ["language", "accent", "byteUnits", "logLevel", "onboardingEnabled", "betaToolsEnabled"],
+    title: "Webapp",
+  },
+  {
     fields: [
-      "accent",
-      "language",
-      "byteUnits",
-      "logLevel",
       "bundlePackage",
-      "betaToolsEnabled",
-      "applyPlayButtonEnabled",
-      "onboardingEnabled",
+      "postApplyDownloadBehavior",
+      "postApplyTestBehavior",
+      "emulatorSaveStorageEnabled",
       "fixChecksum",
       "requireInputChecksumMatch",
-      "postApplyRomBehavior",
     ],
-    title: "General",
+    title: "Behavior",
   },
   { fields: ["defaultCompression", "compressionProfile", "threads"], title: "Compression" },
   {
@@ -73,7 +72,7 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
   { fields: ["rvzBlockSize"], title: "RVZ" },
 ];
 
-// Per-format groups render in the same single-column stack (`.setcols`); the general
+// Per-format groups render in the same single-column stack (`.setcols`); the settings
 // groups above them stay full-width in the grouped settings layout.
 const FORMAT_GROUP_TITLES = new Set(["Codecs", "RVZ"]);
 
@@ -405,7 +404,7 @@ const SettingsGroup = ({
   return (
     <div className="setgroup">
       <div className="gtitle">{section.title}</div>
-      {section.title === "General" ? <ThemeSetting /> : null}
+      {section.title === "Webapp" ? <ThemeSetting /> : null}
       {rows.map((fieldKey) =>
         SETTINGS_FIELD_METADATA[fieldKey].kind === "range" ? (
           <SettingsRange fieldKey={fieldKey} key={fieldKey} {...shared} />

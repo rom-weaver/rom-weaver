@@ -1,7 +1,12 @@
-import { Archive, Disc3, Download, Gamepad2, ListChecks, Package, TriangleAlert } from "lucide-react";
+import { Archive, Disc3, Download, Gamepad2, ListChecks, Share2, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
-import { POST_APPLY_ROM_BEHAVIOR_OPTIONS } from "../../lib/apply/post-apply-behavior.ts";
+import {
+  postApplyDownloadBehaviorOption,
+  postApplyTestBehaviorOption,
+  POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS,
+  POST_APPLY_TEST_BEHAVIOR_OPTIONS,
+} from "../../lib/apply/post-apply-behavior.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import { type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
@@ -48,7 +53,7 @@ import type {
 } from "./patcher-form.ts";
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
-import { addEntry, getApplyEntry, setCurrentGame } from "./emulator-session-store.ts";
+import { addEntry, getApplyEntry, prepareEntry, setCurrentGame } from "./emulator-session-store.ts";
 import { prepareEmulatorAudioContext, requestEmulatorStartFromUserAction } from "./emulator-audio-context.ts";
 import { createEmulatorGameIdentity } from "./components/emulator-document.ts";
 import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-rom.ts";
@@ -57,13 +62,13 @@ import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
 import {
-  setApplyPlayButtonOverride,
-  setPostApplyRomBehaviorOverride,
-  useApplyPlayButtonValue,
-  usePostApplyRomBehaviorValue,
+  setPostApplyDownloadBehaviorOverride,
+  setPostApplyTestBehaviorOverride,
+  usePostApplyDownloadBehaviorValue,
+  usePostApplyTestBehaviorValue,
 } from "./use-apply-download-orchestration.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
-import type { PostApplyRomBehavior } from "../../types/settings.ts";
+import type { PostApplyActionBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
 /**
@@ -78,25 +83,30 @@ const EmulatorJsAction = ({
   onSelectView,
   output,
   platform,
+  shown,
 }: {
   core: string | undefined;
   fileName?: string;
   onSelectView?: (view: "test") => void;
   output?: BrowserApplyResult["output"] | null;
   platform?: string;
+  shown: boolean;
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const settings = useRomWeaverSettings();
-  const shown = useApplyPlayButtonValue(settings.applyPlayButtonEnabled);
   if (!(core && output && shown)) return null;
   const openInEmulator = async () => {
     setLoading(true);
     setError("");
     try {
-      const retained = getApplyEntry(fileName) || getApplyEntry();
+      let retained = getApplyEntry(fileName) || getApplyEntry();
       if (retained) {
-        const { gameName } = createEmulatorGameIdentity(retained);
+        if (!retained.checksum) {
+          await prepareEntry(retained.id);
+          retained = getApplyEntry(fileName) || getApplyEntry();
+        }
+        if (!retained?.checksum) throw new Error("The retained ROM has no SHA-1 checksum.");
+        const { gameName } = createEmulatorGameIdentity({ checksum: retained.checksum });
         prepareEmulatorAudioContext(gameName);
         setCurrentGame(retained.id);
         requestEmulatorStartFromUserAction(gameName);
@@ -109,6 +119,7 @@ const EmulatorJsAction = ({
       const loaded = await loadEmulatorRom(blob, output.fileName);
       const entry = {
         blob: loaded.blob,
+        checksum: loaded.checksum,
         core,
         fileName: renameRomToOutput(output.fileName, loaded.fileName),
         id: output.id,
@@ -307,7 +318,7 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
       ["checks", "Checks"],
       ["menu", "Menu: edit metadata · replace · remove"],
     ],
-    body: "Both IPS patches run in order: HELLO → MODIFIED, then WORLD → ROM. Use the numbered handles to change the order, the On/Off toggles to skip a patch, scissors for header handling, Checks for checksums, and the 3-dot menu to edit patch metadata, replace a file, or remove it.",
+    body: "Both IPS patches target the original ROM, so either order works. Turn either patch off to apply only one change. Use the numbered handles to change the order, scissors for header handling, Checks for checksums, and the 3-dot menu to edit patch metadata, replace a file, or remove it.",
     openDrawers: true,
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
@@ -325,10 +336,9 @@ const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   {
     actions: [
       ["options", "Options"],
-      ["package", "Bundle"],
       ["apply", "Apply & download"],
     ],
-    body: "Choose the output name, format, compression, header, and bundle settings. Then press APPLY & DOWNLOAD to apply both patches.",
+    body: "Choose the output name, format, compression, and header. Then press APPLY & DOWNLOAD to apply both patches.",
     cta: ".btn.run",
     openDrawers: true,
     placement: "top",
@@ -354,29 +364,26 @@ const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
       ["toggle", "Required or optional"],
       ["menu", "Patch details"],
     ],
-    body: "The bundle keeps these patches in this order. Use Patch details to edit each patch's label, version, author, and description, then choose whether a player must apply it or may skip it.",
+    body: "These patches target the original ROM, so players can change their order or skip either one. Use Patch details to edit each patch's label, version, author, and description.",
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
     title: "Describe the patch recipe",
   },
   {
-    actions: [
-      ["options", "Options"],
-      ["package", "Bundle + patches (.zip)"],
-    ],
-    body: "Output Options now has Bundle + patches (.zip) selected. This shares the patches and recipe without putting a copyrighted ROM in the download.",
+    actions: [["package", "Bundle + patches (.zip)"]],
+    body: "The bundle download is separate from Apply. Bundle + patches (.zip) shares the recipe and patch files without putting a copyrighted ROM in the download.",
     openDrawers: true,
     placement: "top",
-    target: "#rom-weaver-row-output-file-name",
+    target: "#rom-weaver-bundle-job",
     title: "Choose a safe bundle",
   },
   {
-    actions: [["package", "Create ZIP Bundle"]],
-    body: "Press Create ZIP Bundle to finish the tutorial. After rom-weaver checks the recipe, the same control becomes Download ZIP Bundle.",
+    actions: [["package", "Share bundle"]],
+    body: "Exporting a recipe does not apply patches. Press Share bundle to check and download the setup; the same control then becomes Download ZIP Bundle.",
     cta: "#rom-weaver-button-export-bundle",
     openDrawers: true,
     placement: "top",
-    target: "#rom-weaver-row-output-file-name",
+    target: "#rom-weaver-bundle-job",
     title: "Build and download",
   },
 ];
@@ -472,9 +479,7 @@ const BundleRomExpectationCard = ({ expectation }: { expectation: BundleRomExpec
 
 /** Bundle-related notices and export reveal state, threaded from the form. */
 type BundleToolsState = {
-  /** True when a bundle package is selected (drives the export/create action). */
-  exportVisible: boolean;
-  /** Persist the bundle package choice ("" hides it), synced to user settings. */
+  /** Persist the bundle package choice, synced to user settings. */
   setBundlePackage: (value: string) => void;
   /** The run has optional entries (or patches toggled off): output checks only
    * describe the full chain. */
@@ -493,11 +498,9 @@ type BundleExportState = {
   format: string;
   progress: ProgressViewModel | null;
   ready: boolean;
-  romName: string;
   runExport: () => Promise<void>;
   setBundleRom: (value: boolean) => void;
   setFormat: (value: string) => void;
-  setRomName: (value: string) => void;
 };
 
 const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
@@ -1205,26 +1208,32 @@ const OutputHeaderField = ({
   );
 };
 
-/**
- * "After applying" select for the Apply step's output options. The public form
- * has no write path into the host app's persisted settings, so a choice here
- * only overrides the behavior for this session (see
- * `use-apply-download-orchestration.ts`'s `postApplyRomBehaviorOverride`); the
- * select still defaults from the live `postApplyRomBehavior` setting.
- */
-const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean; settingValue: unknown }) => {
-  const value = usePostApplyRomBehaviorValue(settingValue);
+const PostApplyActionField = ({
+  disabled,
+  id,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  disabled: boolean;
+  id: string;
+  label: string;
+  onChange: (value: PostApplyActionBehavior) => void;
+  options: readonly { label: string; value: PostApplyActionBehavior }[];
+  value: PostApplyActionBehavior;
+}) => {
   return (
-    <OutputField label="After applying">
+    <OutputField label={label}>
       <select
-        aria-label="After applying"
+        aria-label={label}
         className="select"
         disabled={disabled}
-        id="rom-weaver-select-post-apply-behavior"
-        onChange={(event) => setPostApplyRomBehaviorOverride(event.currentTarget.value as PostApplyRomBehavior)}
+        id={id}
+        onChange={(event) => onChange(event.currentTarget.value as PostApplyActionBehavior)}
         value={value}
       >
-        {POST_APPLY_ROM_BEHAVIOR_OPTIONS.map((option) => (
+        {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
@@ -1234,25 +1243,37 @@ const PostApplyBehaviorField = ({ disabled, settingValue }: { disabled: boolean;
   );
 };
 
-/**
- * "Show the test button" checkbox for the Apply step's output options, the
- * session-only twin of the persisted `applyPlayButtonEnabled` setting (same
- * read-only-settings limit as the select above). The setting key keeps its
- * `play` spelling because it is persisted; only the wording changed.
- */
-const PlayButtonField = ({ disabled, settingValue }: { disabled: boolean; settingValue: unknown }) => {
-  const checked = useApplyPlayButtonValue(settingValue);
+/** These fields override the read-only host settings for the current Apply session. */
+const PostApplyBehaviorFields = ({
+  disabled,
+  downloadSetting,
+  testSetting,
+}: {
+  disabled: boolean;
+  downloadSetting: unknown;
+  testSetting: unknown;
+}) => {
+  const downloadValue = usePostApplyDownloadBehaviorValue(downloadSetting);
+  const testValue = usePostApplyTestBehaviorValue(testSetting);
   return (
-    <label className="checkrow">
-      <input
-        checked={checked}
+    <>
+      <PostApplyActionField
         disabled={disabled}
-        id="rom-weaver-checkbox-play-button"
-        onChange={(event) => setApplyPlayButtonOverride(event.currentTarget.checked)}
-        type="checkbox"
+        id="rom-weaver-select-post-apply-download"
+        label="Post Apply Download"
+        onChange={setPostApplyDownloadBehaviorOverride}
+        options={POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS}
+        value={downloadValue}
       />
-      <span>Show the test button</span>
-    </label>
+      <PostApplyActionField
+        disabled={disabled}
+        id="rom-weaver-select-post-apply-test"
+        label="Post Apply Test"
+        onChange={setPostApplyTestBehaviorOverride}
+        options={POST_APPLY_TEST_BEHAVIOR_OPTIONS}
+        value={testValue}
+      />
+    </>
   );
 };
 
@@ -1281,13 +1302,13 @@ const BundleExportAction = ({
   }
   return (
     <button
-      className="btn ghost slim bundle-dl"
+      className="btn primary slim bundle-share"
       disabled={disabled}
       id="rom-weaver-button-export-bundle"
       onClick={() => void bundleExport.runExport()}
       type="button"
     >
-      {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Package aria-hidden="true" />}
+      {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Share2 aria-hidden="true" />}
       {bundleActionLabel}
     </button>
   );
@@ -1336,8 +1357,6 @@ const ChecksumOverrideRow = ({
 
 const ApplyOutputAction = ({
   applyTotalTime,
-  bundleActionLabel,
-  bundleExport,
   bundleTools,
   bundleVerificationError,
   controllers,
@@ -1355,8 +1374,6 @@ const ApplyOutputAction = ({
   uiState,
 }: {
   applyTotalTime: PatcherOutputState["totalTiming"];
-  bundleActionLabel: string;
-  bundleExport?: BundleExportState;
   bundleTools?: BundleToolsState;
   bundleVerificationError: string | null;
   controllers: { output: PatcherOutputController };
@@ -1372,51 +1389,57 @@ const ApplyOutputAction = ({
   romInputs: RomInputRowState[];
   uiController: PatcherUiController;
   uiState: ReturnType<PatcherUiController["getState"]>;
-}) => (
-  <>
-    <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
-    <ChecksumOverrideRow state={uiState.checksumOverride} uiController={uiController} />
-    <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
-      <p aria-live="polite" className="patch-off-note">
-        <TriangleAlert aria-hidden="true" />
-        <span>{disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}</span>
-      </p>
-    </div>
-    <PatcherPrimaryAction
-      controller={controllers.output}
-      disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
-      totalTime={applyTotalTime || undefined}
-    />
-    <EmulatorJsAction
-      core={getEmulatorJsCore(
-        romInputs[0]?.info.romType?.platform,
-        romInputs[0]?.info.fileName ||
-          romInputs[0]?.info.archiveName ||
-          outputState.pendingDownloadFileName ||
-          undefined,
-      )}
-      fileName={romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || undefined}
-      onSelectView={onSelectView}
-      output={emulatorOutput}
-      platform={romInputs[0]?.info.romType?.platform}
-    />
-    {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
-    {bundleTools?.outputVerification ? (
-      <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
-        <TriangleAlert aria-hidden="true" />
-        <span>{bundleTools.outputVerification.message}</span>
-      </p>
-    ) : null}
-    {bundleExport && bundleTools?.exportVisible ? (
-      <BundleExportAction
-        bundleActionLabel={bundleActionLabel}
-        bundleExport={bundleExport}
-        disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+}) => {
+  const settings = useRomWeaverSettings();
+  const postApplyDownloadBehavior = usePostApplyDownloadBehaviorValue(settings.postApplyDownloadBehavior);
+  const postApplyTestBehavior = usePostApplyTestBehaviorValue(settings.postApplyTestBehavior);
+  const postApplyDownloadOption = postApplyDownloadBehaviorOption(postApplyDownloadBehavior);
+  const postApplyTestOption = postApplyTestBehaviorOption(postApplyTestBehavior);
+  const core = getEmulatorJsCore(
+    romInputs[0]?.info.romType?.platform,
+    romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || outputState.pendingDownloadFileName || undefined,
+  );
+  const showDownloadFallback = !core && (postApplyTestOption.visible || postApplyTestOption.automatic);
+  return (
+    <>
+      <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
+      <ChecksumOverrideRow state={uiState.checksumOverride} uiController={uiController} />
+      <div className={disabledPatchCount ? "reveal is-open" : "reveal"} hidden={!disabledPatchCount}>
+        <p aria-live="polite" className="patch-off-note">
+          <TriangleAlert aria-hidden="true" />
+          <span>{disabledPatchCount ? localizer.messageCount("ui.patch.offCount", disabledPatchCount) : ""}</span>
+        </p>
+      </div>
+      <PatcherPrimaryAction
+        controller={controllers.output}
+        disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
+        showCompletedDownload={postApplyDownloadOption.visible || showDownloadFallback}
+        totalTime={applyTotalTime || undefined}
       />
-    ) : null}
-    {bundleExport?.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
-  </>
-);
+      <EmulatorJsAction
+        core={getEmulatorJsCore(
+          romInputs[0]?.info.romType?.platform,
+          romInputs[0]?.info.fileName ||
+            romInputs[0]?.info.archiveName ||
+            outputState.pendingDownloadFileName ||
+            undefined,
+        )}
+        fileName={romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || undefined}
+        onSelectView={onSelectView}
+        output={outputState.pendingDownloadFileName ? emulatorOutput : null}
+        platform={romInputs[0]?.info.romType?.platform}
+        shown={postApplyTestOption.visible}
+      />
+      {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
+      {bundleTools?.outputVerification ? (
+        <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
+          <TriangleAlert aria-hidden="true" />
+          <span>{bundleTools.outputVerification.message}</span>
+        </p>
+      ) : null}
+    </>
+  );
+};
 
 const buildRomActualsById = (romInputs: RomInputRowState[]) => {
   const actualsById = new Map<string, RomCheckActuals>();
@@ -1440,91 +1463,107 @@ const getBundleActionLabel = (
   localizer: ReturnType<typeof useUiLocalizer>,
   downloadable: boolean,
 ) => {
-  if (!downloadable) {
-    if (!bundleExport) return "";
-    const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
-    const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
-    const createKey = bundleExport.bundleRom ? "ui.bundleExport.createRom" : "ui.bundleExport.create";
-    return localizer.message(createKey, { format: formatName });
-  }
+  if (!downloadable) return bundleExport ? localizer.message("ui.bundleExport.share") : "";
   if (!bundleExport?.downloadable) return "";
-  const formatValue = bundleExport.format && bundleExport.format !== "bundle" ? bundleExport.format : "zip";
+  const formatValue = bundleExport.format || "zip";
   const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
   const downloadKey = bundleExport.bundleRom ? "ui.bundleExport.downloadRom" : "ui.bundleExport.download";
   return localizer.message(downloadKey, { format: formatName });
 };
 
-const getBundleFormatValue = (
-  bundleExport: BundleExportState | undefined,
-  bundleTools: BundleToolsState | undefined,
-) => {
-  const format = bundleTools?.exportVisible ? bundleExport?.format : "";
-  if (!format || format === "bundle") return "";
-  return `${format}:${bundleExport?.bundleRom ? "rom" : "patches"}`;
-};
-
 const BundleOutputFields = ({
   bundleExport,
   bundleTools,
-  outputHeaderField,
 }: {
   bundleExport?: BundleExportState;
   bundleTools?: BundleToolsState;
-  outputHeaderField: ReactNode;
 }) => {
+  const localizer = useUiLocalizer();
   const exportTypeInfo = {
     items: [
       "A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM; it is not a pre-patched ROM.",
       "The required rom-weaver-bundle.json index contains the schema version, optional ROM description/checks, ordered patch entries, and optional output defaults/checks. Patch entries carry their sources, selections, header rules, and expected ROM-state checks.",
-      "The archive holds that index plus the patch files. The “+ ROM” variants also include the original ROM, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
+      "The archive holds that index plus the patch files. Including the original ROM is optional, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
       "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player applies it.",
     ],
-    summary:
-      "Exports this session as a distributable rom-weaver bundle: a portable patch recipe defined by rom-weaver-bundle.json.",
-    title: "Bundle",
+    summary: "Exports this session as a portable rom-weaver bundle defined by rom-weaver-bundle.json.",
+    title: "Archive",
   };
-  const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
-  if (!bundleExport) return outputHeaderField;
+  if (!bundleExport) return null;
+  const archiveType = bundleExport.format === "7z" ? "7z" : "zip";
+  const setBundleContents = (includeRom: boolean, format = archiveType) => {
+    bundleTools?.setBundlePackage(`${format}:${includeRom ? "rom" : "patches"}`);
+  };
   return (
-    <>
-      {outputHeaderField}
+    <div className="bundle-job-fields">
       <OutputField
         className="export-type-field"
-        label="Bundle"
-        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Bundle" />}
+        label="Archive type"
+        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Archive type" />}
       >
         <select
-          aria-label="Bundle"
+          aria-label="Archive type"
           className="select"
           disabled={bundleExport.busy}
           id="rom-weaver-bundle-export-format"
-          onChange={(event) => bundleTools?.setBundlePackage(event.currentTarget.value)}
-          value={bundleFormatValue}
+          onChange={(event) => setBundleContents(bundleExport.bundleRom, event.currentTarget.value)}
+          value={archiveType}
         >
-          <option value="">Hide bundle creation</option>
-          <option value="zip:patches">Bundle + patches (.zip)</option>
-          <option value="zip:rom">Bundle + ROM + patches (.zip)</option>
-          <option value="7z:patches">Bundle + patches (.7z)</option>
-          <option value="7z:rom">Bundle + ROM + patches (.7z)</option>
+          <option value="zip">ZIP (.zip)</option>
+          <option value="7z">7z (.7z)</option>
         </select>
       </OutputField>
-      {bundleTools?.exportVisible && !bundleExport.bundleRom ? (
-        <OutputField label="Expected source ROM filename">
+      <div className="bundle-rom-option">
+        <label className="checkrow" htmlFor="rom-weaver-bundle-export-bundle-rom">
           <input
-            aria-label="Expected source ROM filename"
-            autoComplete="off"
-            className="input"
+            checked={bundleExport.bundleRom}
             disabled={bundleExport.busy}
-            id="rom-weaver-bundle-rom-name"
-            onChange={(event) => bundleExport.setRomName(event.currentTarget.value)}
-            spellCheck={false}
-            type="text"
-            value={bundleExport.romName}
+            id="rom-weaver-bundle-export-bundle-rom"
+            onChange={(event) => setBundleContents(event.currentTarget.checked)}
+            type="checkbox"
           />
-          <small className="ofld-hint">The filename helps search. Checksums prove the ROM.</small>
-        </OutputField>
+          <span>{localizer.message("ui.bundleExport.includeRom")}</span>
+        </label>
+      </div>
+      {bundleExport.bundleRom ? (
+        <div className="bundle-rom-warning">
+          <Notice level="warn">{localizer.message("ui.bundleExport.romDistributionWarning")}</Notice>
+        </div>
       ) : null}
-    </>
+    </div>
+  );
+};
+
+/**
+ * Bundle export is a separate job from Apply. It follows the primary action so
+ * a normal Apply run stays focused on producing the patched ROM, while a saved
+ * bundle preference or the guided Bundle tour can reveal it before that run.
+ */
+const BundleSecondaryJob = ({
+  bundleActionLabel,
+  bundleExport,
+  bundleTools,
+  disabled,
+}: {
+  bundleActionLabel: string;
+  bundleExport: BundleExportState;
+  bundleTools: BundleToolsState;
+  disabled: boolean;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <div id="rom-weaver-bundle-job">
+      <Drawer
+        bodyClassName="bundle-job-content"
+        className="bundle-job"
+        label={localizer.message("ui.bundleExport.shareTitle")}
+        readouts={<DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>}
+      >
+        <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
+        {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+        <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+      </Drawer>
+    </div>
   );
 };
 
@@ -1683,7 +1722,7 @@ function ApplyWorkflowFormView({
     notice?: NoticeController;
   };
   emulatorOutput?: BrowserApplyResult["output"] | null;
-  /** Bundle export controls live directly in the Output options drawer. */
+  /** Bundle export controls live in the separate sharing job after Apply. */
   bundleExport?: BundleExportState;
   /** Bundle notices + the export reveal state. */
   bundleTools?: BundleToolsState;
@@ -1811,22 +1850,19 @@ function ApplyWorkflowFormView({
       visible={header.visible}
     />
   );
-  // "Create <format> [ROM] Bundle" until an export exists, then "Download ...".
+  // "Share bundle" until an export exists, then "Download ...".
   const bundleCreateLabel = getBundleActionLabel(bundleExport, localizer, false);
   const bundleActionLabel = bundleExport?.downloadable
     ? getBundleActionLabel(bundleExport, localizer, true)
     : bundleCreateLabel;
-  // The bundle package select mirrors the persisted "Bundle" user setting - ""
-  // is the hide sentinel (matches the stored value), a format arms the action.
-  const bundleFormatValue = getBundleFormatValue(bundleExport, bundleTools);
-  const bundleOutputFields = (
-    <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} outputHeaderField={outputHeaderField} />
-  );
   const outputExtraFields = (
     <>
-      {bundleOutputFields}
-      <PostApplyBehaviorField disabled={outputState.disabled} settingValue={settings.postApplyRomBehavior} />
-      <PlayButtonField disabled={outputState.disabled} settingValue={settings.applyPlayButtonEnabled} />
+      {outputHeaderField}
+      <PostApplyBehaviorFields
+        disabled={outputState.disabled}
+        downloadSetting={settings.postApplyDownloadBehavior}
+        testSetting={settings.postApplyTestBehavior}
+      />
     </>
   );
 
@@ -1881,8 +1917,6 @@ function ApplyWorkflowFormView({
   const renderOutputAction = (
     <ApplyOutputAction
       applyTotalTime={applyTotalTime}
-      bundleActionLabel={bundleActionLabel}
-      bundleExport={bundleExport}
       bundleTools={bundleTools}
       bundleVerificationError={bundleVerificationError}
       controllers={{ output: controllers.output }}
@@ -1900,6 +1934,17 @@ function ApplyWorkflowFormView({
       uiState={uiState}
     />
   );
+  // Keep the sharing job after Apply's primary action and result recovery. It
+  // remains available once the bench has content for direct bundle authoring.
+  const bundleSecondaryJob =
+    bundleExport && bundleTools && (romInputs.length > 0 || patches.length > 0 || applyDone) ? (
+      <BundleSecondaryJob
+        bundleActionLabel={bundleActionLabel}
+        bundleExport={bundleExport}
+        bundleTools={bundleTools}
+        disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+      />
+    ) : null;
 
   if (startup.status === "error") {
     return (
@@ -2063,11 +2108,7 @@ function ApplyWorkflowFormView({
               note: outputState.compress?.note,
               onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
               onFormatChange: (value) => controllers.output.setOutputCompression(value),
-              readouts: bundleExport ? (
-                <DrawerReadout label="Bundle" muted={!bundleFormatValue}>
-                  {bundleFormatValue || "hidden"}
-                </DrawerReadout>
-              ) : null,
+              readouts: null,
               timing: outputState.compressTiming || undefined,
             })}
             disabled={outputState.disabled}
@@ -2100,6 +2141,7 @@ function ApplyWorkflowFormView({
             num="0x04"
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
+            secondary={bundleSecondaryJob}
             title="Apply"
             woven={applyDone || running}
           />
