@@ -497,11 +497,12 @@
 .rw-app .tree {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--sp-2xs);
   padding: 4px 0 2px;
 }
 .rw-app .tree-row {
   --ck-c: minmax(0, 1fr) auto auto;
+  --ck-seam: transparent;
   position: relative;
   font-size: 0.78rem;
 }
