@@ -15,9 +15,9 @@ import {
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = path.resolve(PACKAGE_DIR, "../..");
-const OUTPUT_DIRS = process.env.ROM_WEAVER_SCREENSHOT_OUTPUT
-  ? [path.resolve(process.env.ROM_WEAVER_SCREENSHOT_OUTPUT)]
-  : [path.join(REPO_ROOT, "docs", "screenshots"), path.join(REPO_ROOT, "design")];
+const OUTPUT_DIR = path.resolve(
+  process.env.ROM_WEAVER_SCREENSHOT_OUTPUT || path.join(REPO_ROOT, "docs", "screenshots"),
+);
 const BASE_URL = process.env.ROM_WEAVER_SCREENSHOT_BASE_URL || "https://localhost:4173/";
 const CASE_FILTER = process.env.ROM_WEAVER_SCREENSHOT_CASE;
 const CAPTURE_CASES = CASE_FILTER
@@ -89,7 +89,7 @@ const captureRegion = async (page, selector) => {
 };
 
 const capture = async () => {
-  for (const outputDir of OUTPUT_DIRS) fs.mkdirSync(outputDir, { recursive: true });
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const browser = await chromium.launch();
   try {
     for (const viewport of DOCS_SCREENSHOT_VIEWPORTS) {
@@ -128,12 +128,11 @@ const capture = async () => {
               input: shot,
               maxBuffer: 64 * 1024 * 1024,
             });
-            for (const outputDir of OUTPUT_DIRS)
-              fs.writeFileSync(path.join(outputDir, `${outputName}.${extension}`), image);
+            fs.writeFileSync(path.join(OUTPUT_DIR, `${outputName}.${extension}`), image);
           }
           await context.close();
           console.log(
-            `Captured ${OUTPUT_DIRS.map((outputDir) => path.relative(PACKAGE_DIR, path.join(outputDir, outputName))).join(", ")}.{${CAPTURE_EXTENSION_LIST}}`,
+            `Captured ${path.relative(PACKAGE_DIR, path.join(OUTPUT_DIR, outputName))}.{${CAPTURE_EXTENSION_LIST}}`,
           );
         }
       }
