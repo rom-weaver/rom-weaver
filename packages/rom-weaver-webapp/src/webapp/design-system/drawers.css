@@ -445,7 +445,7 @@
   mask-image: var(--weave-mask);
   mask-size: 7px 7px;
 }
-.rw-app .ck {
+.rw-app :where(.ck, .readout-row) {
   /* The label track floor aligns independently gridded rows. */
   display: grid;
   grid-template-columns: var(--ck-columns, minmax(var(--ck-label-w), max-content) minmax(0, 1fr) auto);
@@ -465,35 +465,35 @@
 }
 /* Strip user-agent chrome from the button rows. Must sit with the width rules
    below - a later layer would win on order no matter how specific they are. */
-.rw-app button.ck {
+.rw-app button:where(.ck, .readout-row) {
   width: 100%;
   font: inherit;
   text-align: start;
   appearance: none;
 }
 /* Extend ordinary rows through the drawer's 10px inset. */
-.rw-app .ck:not(.req) {
+.rw-app :where(.ck, .readout-row):not(.req) {
   width: var(--ck-row-width, calc(100% + 20px));
   margin-inline: var(--ck-row-margin, -10px);
 }
 /* Drop duplicate borders without overlapping adjacent touch targets. */
-.rw-app .ck:not(.req) + .ck:not(.req) {
+.rw-app :where(.ck, .readout-row):not(.req) + :where(.ck, .readout-row):not(.req) {
   border-block-start-color: transparent;
 }
 /* Prevent selection from stealing copy taps on touch devices. */
 @media (pointer: coarse) {
-  .rw-app .ck {
+  .rw-app :where(.ck, .readout-row) {
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
   }
 }
 @media (hover: hover) {
-  .rw-app .ck:hover {
+  .rw-app :where(.ck, .readout-row):hover {
     background: color-mix(in oklab, var(--thread) 7%, var(--well));
   }
 }
-.rw-app .ck:active {
+.rw-app :where(.ck, .readout-row):active {
   background: color-mix(in oklab, var(--thread) 7%, var(--well));
 }
 .rw-app .ck.bad {
@@ -679,7 +679,7 @@
 :root[data-theme="light"] .ck .ck-k {
   color: var(--ink-2);
 }
-.rw-app .ck .copy {
+.rw-app :where(.ck, .readout-row) .copy {
   display: grid;
   place-items: center;
   width: 20px;
@@ -697,30 +697,34 @@
     opacity 0.15s;
 }
 @media (hover: hover) {
-  .rw-app .ck:hover .copy {
+  .rw-app :where(.ck, .readout-row):hover .copy {
     color: var(--thread-text);
     opacity: 1;
   }
 }
-.rw-app .ck .copy:active {
+.rw-app :where(.ck, .readout-row):active .copy {
+  color: var(--thread-text);
+  opacity: 1;
+}
+.rw-app :where(.ck, .readout-row) .copy:active {
   transform: scale(0.82);
 }
-.rw-app .ck .copy.copied {
+.rw-app :where(.ck, .readout-row) .copy.copied {
   color: var(--verified);
   opacity: 1;
   animation: pop 0.32s var(--ease);
 }
-.rw-app .ck .copy svg {
+.rw-app :where(.ck, .readout-row) .copy svg {
   width: 13px;
   height: 13px;
 }
 /* Checksum rows own the copy action. Their coarse-pointer decoration MUST NOT intercept adjacent rows. */
 @media (pointer: coarse) {
-  .rw-app .ck .copy,
+  .rw-app :where(.ck, .readout-row) .copy,
   .rw-app .cue-copy {
     position: relative;
   }
-  .rw-app .ck .copy::before,
+  .rw-app :where(.ck, .readout-row) .copy::before,
   .rw-app .cue-copy::before {
     position: absolute;
     top: 50%;
@@ -730,7 +734,7 @@
     content: "";
     transform: translate(-50%, -50%);
   }
-  .rw-app .ck .copy::before {
+  .rw-app :where(.ck, .readout-row) .copy::before {
     pointer-events: none;
   }
 }

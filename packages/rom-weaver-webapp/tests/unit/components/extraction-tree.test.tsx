@@ -21,6 +21,7 @@ describe("ExtractDrawer", () => {
 
     const row = container.querySelector("button.tree-row") as HTMLButtonElement;
     expect(row.getAttribute("aria-label")).toBe("Copy patches/v1.2/change.ips");
+    expect(row.classList.contains("ck")).toBe(false);
     fireEvent.click(row);
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("patches/v1.2/change.ips"));

@@ -148,7 +148,7 @@ const TreeRow = ({ level, depth }: { level: ExtractionLevel; depth: number }) =>
   return (
     <button
       aria-label={`Copy ${level.name}`}
-      className={join("tree-row", "ck", `d${depth}`)}
+      className={join("tree-row", "readout-row", `d${depth}`)}
       onClick={copy}
       title={`Copy ${level.name}`}
       type="button"

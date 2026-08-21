@@ -331,7 +331,7 @@
     flex: 1 1 auto;
     height: auto;
   }
-  .rw-app .ck {
+  .rw-app :where(.ck, .readout-row) {
     gap: var(--sp-2xs) var(--sp-s);
     min-height: 24px;
     padding-block: 1px;
