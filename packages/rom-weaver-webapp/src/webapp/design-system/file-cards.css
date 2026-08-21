@@ -497,19 +497,28 @@
 .rw-app .tree {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2xs);
+  gap: 0;
   padding: 4px 0 2px;
 }
 .rw-app .tree-row {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--sp-s);
-  align-items: baseline;
-  min-height: 25px;
-  padding: 3px 9px;
+  align-items: center;
+  min-height: 24px;
+  padding: 1px 9px;
   font-size: 0.78rem;
-  background: var(--well);
-  border-radius: var(--r-s);
+  text-align: start;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border-block: 1px solid var(--ck-seam);
+  border-inline: 0;
+  transition: background 0.15s;
+}
+.rw-app .tree-row + .tree-row {
+  border-block-start-color: transparent;
 }
 .rw-app .tree-row.d1 {
   margin-inline-start: 9px;
@@ -537,7 +546,6 @@
   color: var(--ink-3);
 }
 .rw-app .tree-name {
-  flex: 1 1 auto;
   min-width: 0;
   font-weight: 550;
   color: var(--ink);
@@ -546,7 +554,7 @@
 .rw-app .tree-meta {
   display: inline-flex;
   flex: none;
-  gap: var(--sp-m);
+  gap: var(--sp-s);
   align-items: baseline;
 }
 .rw-app .tree-size {
@@ -558,4 +566,62 @@
   min-width: 44px;
   color: var(--thread-text);
   text-align: end;
+}
+@media (hover: hover) {
+  .rw-app .tree-row:hover {
+    background: color-mix(in oklab, var(--thread) 7%, var(--well));
+  }
+}
+.rw-app .tree-row:active {
+  background: color-mix(in oklab, var(--thread) 7%, var(--well));
+}
+.rw-app .tree-copy {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--ink-4);
+  appearance: none;
+  border: 0;
+  border-radius: 5px;
+  opacity: 0.6;
+  transition:
+    transform 0.12s,
+    color 0.15s,
+    opacity 0.15s;
+}
+@media (hover: hover) {
+  .rw-app .tree-row:hover .tree-copy {
+    color: var(--thread-text);
+    opacity: 1;
+  }
+}
+.rw-app .tree-row:active .tree-copy {
+  transform: scale(0.82);
+}
+.rw-app .tree-copy.copied {
+  color: var(--verified);
+  opacity: 1;
+  animation: pop 0.32s var(--ease);
+}
+.rw-app .tree-copy svg {
+  width: 13px;
+  height: 13px;
+}
+/* The row owns the copy action. The coarse-pointer decoration MUST NOT intercept adjacent rows. */
+@media (pointer: coarse) {
+  .rw-app .tree-copy {
+    position: relative;
+  }
+  .rw-app .tree-copy::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    pointer-events: none;
+    content: "";
+    transform: translate(-50%, -50%);
+  }
 }

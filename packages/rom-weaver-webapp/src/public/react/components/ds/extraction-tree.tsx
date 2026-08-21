@@ -1,9 +1,10 @@
-import { Archive } from "lucide-react";
+import { Archive, Check, Copy } from "lucide-react";
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
 import { createTiming, formatTiming } from "../../../../storage/shared/timing.ts";
 import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 import { Drawer, DrawerReadout } from "./drawer.tsx";
+import { useClipboardCopy } from "./use-clipboard-copy.ts";
 
 /**
  * Nested-extraction view. The extracted file leads as the card's name line;
@@ -141,18 +142,31 @@ const buildExtractionLevels = (
   return addMissingLeafSize(levels, fileName, fileSize, formatBytes);
 };
 
-const TreeRow = ({ level, depth }: { level: ExtractionLevel; depth: number }) => (
-  <div className={join("tree-row", `d${depth}`)}>
-    {depth > 0 ? <span aria-hidden="true" className="tree-elbow" /> : null}
-    <span className="tree-name">{level.name}</span>
-    <span className="tree-meta">
-      <span className="tree-size" data-size-bytes={level.sizeBytes}>
-        {level.sizeLabel || ""}
+const TreeRow = ({ level, depth }: { level: ExtractionLevel; depth: number }) => {
+  const { copied, copy } = useClipboardCopy(level.name);
+
+  return (
+    <button
+      aria-label={`Copy ${level.name}`}
+      className={join("tree-row", `d${depth}`)}
+      onClick={copy}
+      title={`Copy ${level.name}`}
+      type="button"
+    >
+      {depth > 0 ? <span aria-hidden="true" className="tree-elbow" /> : null}
+      <span className="tree-name">{level.name}</span>
+      <span className="tree-meta">
+        <span className="tree-size" data-size-bytes={level.sizeBytes}>
+          {level.sizeLabel || ""}
+        </span>
+        <span className="tree-time">{level.timing || ""}</span>
       </span>
-      <span className="tree-time">{level.timing || ""}</span>
-    </span>
-  </div>
-);
+      <span aria-hidden="true" className={join("copy", "tree-copy", copied && "copied")}>
+        {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+      </span>
+    </button>
+  );
+};
 
 const isCueLevel = (level: ExtractionLevel) => /\.cue$/i.test(level.name);
 
