@@ -20,6 +20,13 @@ const baseProps = {
 };
 
 describe("OutputCard double-extension warning", () => {
+  it("keeps the format arrow inside the format control", () => {
+    const { container } = render(<OutputCard {...baseProps} fileName="game" />);
+    const format = container.querySelector(".outformat");
+    expect(format?.querySelector("select")).toBeTruthy();
+    expect(format?.querySelector(".outformat-chevron")).toBeTruthy();
+  });
+
   it("warns when the name ends in an output extension", () => {
     const { container } = render(<OutputCard {...baseProps} fileName="game.zip" />);
     const warn = container.querySelector(".outname-ext-warn");

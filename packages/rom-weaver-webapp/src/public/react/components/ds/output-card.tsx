@@ -1,4 +1,4 @@
-import { SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { ChevronDown, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
 import { join } from "./cx.ts";
@@ -131,20 +131,23 @@ const OutputCard = ({
             value={fileName}
           />
           <span className="sep" />
-          <select
-            aria-label={formatLabel}
-            className="select mono"
-            disabled={disabled}
-            id={formatId}
-            onChange={(event) => onFormatChange(event.currentTarget.value)}
-            value={format}
-          >
-            {formatOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <span className="outformat">
+            <select
+              aria-label={formatLabel}
+              className="select mono"
+              disabled={disabled}
+              id={formatId}
+              onChange={(event) => onFormatChange(event.currentTarget.value)}
+              value={format}
+            >
+              {formatOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown aria-hidden="true" className="outformat-chevron" />
+          </span>
         </div>
       </div>
       {compress ? (
