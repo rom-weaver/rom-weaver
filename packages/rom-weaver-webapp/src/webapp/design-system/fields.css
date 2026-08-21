@@ -158,9 +158,6 @@
   width: 1px;
   background: var(--seam);
 }
-.rw-app .fname .ofmt {
-  display: contents;
-}
 /* Let the format control follow a multiline name's height. */
 .rw-app .fname .select {
   flex: none;

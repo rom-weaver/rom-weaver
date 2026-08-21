@@ -131,31 +131,29 @@ const OutputCard = ({
             value={fileName}
           />
           <span className="sep" />
-          <span className="ofmt">
-            <select
-              aria-label={formatLabel}
-              className="select mono"
-              disabled={disabled}
-              id={formatId}
-              onChange={(event) => onFormatChange(event.currentTarget.value)}
-              style={{ backgroundImage: "none" }}
-              value={format}
-            >
-              {formatOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              aria-hidden="true"
-              className="ofmt-arrow"
-              color="var(--ink-4)"
-              opacity={disabled ? 0.5 : undefined}
-              size={12}
-              strokeWidth={2.4}
-            />
-          </span>
+          <select
+            aria-label={formatLabel}
+            className="select mono"
+            disabled={disabled}
+            id={formatId}
+            onChange={(event) => onFormatChange(event.currentTarget.value)}
+            style={{ backgroundImage: "none" }}
+            value={format}
+          >
+            {formatOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            aria-hidden="true"
+            className="ofmt-arrow"
+            color="var(--ink-4)"
+            opacity={disabled ? 0.5 : undefined}
+            size={12}
+            strokeWidth={2.4}
+          />
         </div>
       </div>
       {compress ? (
