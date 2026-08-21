@@ -234,11 +234,10 @@
 .rw-app .reset-btn:active {
   color: var(--fault);
 }
-/* Phone only: the desktop masthead already carries a settings control, and two
-   entries in one viewport would be the duplication this move set out to end. */
+/* Keep Settings beside the workflow reset action at every viewport width. */
 .rw-app .panel-settings-btn {
   position: relative;
-  display: none;
+  display: inline-flex;
   gap: 5px;
   align-items: center;
   min-block-size: 24px;
@@ -272,11 +271,6 @@
 }
 .rw-app .panel-settings-btn:active {
   color: var(--thread-ink);
-}
-@media (max-width: 999px) {
-  .rw-app .panel-settings-btn {
-    display: inline-flex;
-  }
 }
 /* Tools puts its command rail above the first step, so `0x01` starts one rail
    lower. The rail is a fixed box: 34px tab + 10px padding either side + 1px seam
