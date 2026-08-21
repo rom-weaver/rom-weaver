@@ -1921,6 +1921,85 @@ fn bundle_v2_patch_basis_precedence_is_patch_cli_shared_entry_then_bundle() {
 }
 
 #[test]
+fn patch_apply_emit_bundle_preserves_per_patch_basis_overrides() {
+    let temp = setup_temp_dir();
+    let rom = write_bundle_rom(&temp, "game.bin");
+    let mid = temp.child("mid.bin");
+    let mut mid_bytes = BUNDLE_ROM_BYTES.to_vec();
+    mid_bytes[4] = 0xAA;
+    fs::write(mid.path(), &mid_bytes).expect("mid fixture");
+    let target = temp.child("target.bin");
+    let mut target_bytes = mid_bytes.clone();
+    target_bytes[12] = 0xBB;
+    fs::write(target.path(), &target_bytes).expect("target fixture");
+    let first_patch = temp.child("first.bps");
+    let second_patch = temp.child("second.bps");
+    create_patch_file(rom.as_path(), mid.path(), "bps", first_patch.path());
+    create_patch_file(mid.path(), target.path(), "bps", second_patch.path());
+    let source_bundle = temp.child("source-bundle.json");
+    fs::write(
+        source_bundle.path(),
+        r#"{
+            "version": 2,
+            "patchBasis": "base",
+            "rom": { "path": "game.bin" },
+            "patches": [
+                { "path": "first.bps" },
+                { "path": "second.bps", "basis": "previous" }
+            ]
+        }"#,
+    )
+    .expect("bundle fixture");
+
+    let emitted = temp.child("emitted-bundle.json");
+    let output = temp.child("output.bin");
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            source_bundle.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--emit-bundle",
+            emitted.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    let terminal = events
+        .iter()
+        .find(|event| event["command"] == "patch-apply" && event["status"] != "running")
+        .expect("patch-apply terminal");
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), target_bytes);
+
+    let emitted_json: Value = serde_json::from_slice(&fs::read(emitted.path()).expect("bundle"))
+        .expect("valid emitted bundle");
+    assert_eq!(emitted_json["patchBasis"], "base");
+    assert_eq!(emitted_json["patches"][1]["basis"], "previous");
+
+    let replay_output = temp.child("replay.bin");
+    let replay = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            emitted.path().to_str().expect("path"),
+            "--output",
+            replay_output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(replay.last().expect("terminal")["status"], "succeeded");
+    assert_eq!(
+        fs::read(replay_output.path()).expect("replay"),
+        target_bytes
+    );
+}
+
+#[test]
 fn bundle_ignore_mode_does_not_use_stale_output_checks_to_select_rup_direction() {
     let temp = setup_temp_dir();
     write_bundle_rom(&temp, "game.bin");

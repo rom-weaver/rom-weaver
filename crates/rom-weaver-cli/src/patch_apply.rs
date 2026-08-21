@@ -208,7 +208,7 @@ impl CliApp {
             return outcome;
         }
         let emit_bundle = args.emit_bundle.clone();
-        let emit_inputs = emit_bundle.as_ref().map(|_| EmitBundleInputs {
+        let mut emit_inputs = emit_bundle.as_ref().map(|_| EmitBundleInputs {
             input: args.input.clone(),
             patches: args.patches.clone(),
             headers: args.patch_header.clone(),
@@ -233,6 +233,7 @@ impl CliApp {
                 original_input,
                 local_bundle,
                 &mut final_output,
+                emit_inputs.as_mut().map(|inputs| &mut inputs.bases),
             )
         };
         // --emit-bundle failures don't undo the already-written apply; warn
@@ -303,6 +304,32 @@ impl CliApp {
         Ok(())
     }
 
+    fn update_emit_bundle_bases(
+        emit_bases: Option<&mut Vec<PatchBasisMode>>,
+        resolved_patches: &[(PathBuf, PathBuf)],
+        step_verifications: &[patch_plan::PatchStepVerification],
+    ) {
+        let Some(emit_bases) = emit_bases else {
+            return;
+        };
+        if step_verifications.len() != resolved_patches.len() {
+            return;
+        }
+        let Some(bases) = step_verifications
+            .iter()
+            .map(|step| {
+                step.basis.map(|basis| match basis {
+                    patch_plan::PatchInputBasis::Base => PatchBasisMode::Base,
+                    patch_plan::PatchInputBasis::Previous => PatchBasisMode::Previous,
+                })
+            })
+            .collect::<Option<Vec<_>>>()
+        else {
+            return;
+        };
+        *emit_bases = bases;
+    }
+
     /// Preflight every path `patch apply` is about to touch: each patch must be
     /// readable and the destination writable, checked before the ROM is opened
     /// so an access problem costs nothing.
@@ -341,6 +368,7 @@ impl CliApp {
         original_input: PathBuf,
         local_bundle: Option<PathBuf>,
         final_output: &mut Option<PathBuf>,
+        emit_bases: Option<&mut Vec<PatchBasisMode>>,
     ) -> AppRunOutcome {
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -818,6 +846,7 @@ impl CliApp {
                         );
                     }
                 };
+                Self::update_emit_bundle_bases(emit_bases, &resolved_patches, &step_verifications);
 
                 let PatchApplyLoopOutcome {
                     mut report,
