@@ -497,14 +497,12 @@
 .rw-app .tree {
   display: flex;
   flex-direction: column;
-  padding: 4px 0 2px;
 }
 .rw-app .tree-row {
   position: relative;
   display: flex;
   gap: var(--sp-s);
   align-items: baseline;
-  min-height: 20px;
   padding: 1px 9px;
   font-size: 0.78rem;
   background: var(--well);
@@ -538,8 +536,6 @@
 .rw-app .tree-name {
   flex: 1 1 auto;
   min-width: 0;
-  font-weight: 550;
-  color: var(--ink);
   overflow-wrap: anywhere;
 }
 .rw-app .tree-meta {
