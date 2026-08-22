@@ -433,6 +433,14 @@
   mask-image: var(--weave-mask);
   mask-size: 7px 7px;
 }
+.rw-app .patch-checks-explanation {
+  grid-column: 1 / -1;
+  padding-inline: 9px;
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink-3);
+}
 .rw-app .ck {
   /* The label track floor aligns independently gridded rows. */
   display: grid;

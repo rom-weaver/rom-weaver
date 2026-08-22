@@ -360,9 +360,10 @@ const PatchInputBasisSelect = ({
     <span className="target-grp patch-basis-grp">
       <GitBranch aria-hidden="true" />
       <label className="sr-only" htmlFor={`rom-weaver-patch-basis-${index}`}>
-        Input for patch {index + 1}
+        Input checks for patch {index + 1}
       </label>
       <select
+        aria-describedby={`rom-weaver-patch-checks-help-${index}`}
         className="meta-target-select mono ptgt-sel"
         disabled={disabled || item.optionsDisabled}
         id={`rom-weaver-patch-basis-${index}`}
@@ -375,7 +376,7 @@ const PatchInputBasisSelect = ({
             revalidate: true,
           });
         }}
-        title="Automatic uses patch checks to select the original ROM or the previous patch output."
+        title="Choose the state that this patch's input checks must match. Automatic uses the checks to select the original ROM or the previous patch output."
         value={basis}
       >
         <option value="auto">{resolvedBasisLabel("auto", localizer, item.chainVerdict?.basis)}</option>
@@ -668,7 +669,21 @@ const resolvedBasisLabel = (
   return basis === "base" ? localizer.message("ui.patchInputs.original") : localizer.message("ui.patchInputs.previous");
 };
 
+const checkInputBasisLabel = (
+  basis: PatchInputBasis,
+  localizer: Localizer,
+  verdictBasis?: "base" | "previous",
+): string => {
+  if (basis === "auto") {
+    if (verdictBasis === "base") return localizer.message("ui.patchChecks.autoBase");
+    if (verdictBasis === "previous") return localizer.message("ui.patchChecks.autoPrevious");
+    return localizer.message("ui.patchChecks.automatic");
+  }
+  return basis === "base" ? localizer.message("ui.patchInputs.original") : localizer.message("ui.patchInputs.previous");
+};
+
 const PatchChecksDrawer = ({
+  basisChoice,
   chainChip,
   disabled,
   index,
@@ -681,6 +696,8 @@ const PatchChecksDrawer = ({
   patchStack,
   romActuals,
 }: {
+  /** The selected or resolved state that the input checks describe. */
+  basisChoice: PatchInputBasis;
   /** Plain-language chain verdict rendered in the drawer header readout. */
   chainChip?: { text: string; warn?: boolean } | null;
   /** The patch is toggled out of the run: verification state is not part of the
@@ -706,6 +723,7 @@ const PatchChecksDrawer = ({
   romActuals?: RomCheckActuals;
 }) => {
   const setOption = patchStack.setPatchOption;
+  const localizer = useUiLocalizer();
   const [invalidChecks, setInvalidChecks] = useState<Record<string, boolean>>({});
   // Fields opened via "Add check" that have no committed value yet.
   const [draftFields, setDraftFields] = useState<Record<string, boolean>>({});
@@ -812,10 +830,19 @@ const PatchChecksDrawer = ({
       timing={disabled ? undefined : CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
       verifying={verifying}
     >
+      <p className="patch-checks-explanation" id={`rom-weaver-patch-checks-help-${index}`}>
+        {localizer.message("ui.patchChecks.explanation")}
+      </p>
       {sides.map(({ addableFields, builtInRows, editableFields, markFor, side, userValue }) => (
         <div className="ck-group" key={side}>
           <div className="ck-group-head">
-            <span>{side === "input" ? "Input" : "Output"}</span>
+            <span>
+              {side === "input"
+                ? localizer.message("ui.patchChecks.input", {
+                    basis: checkInputBasisLabel(basisChoice, localizer, item.chainVerdict?.basis),
+                  })
+                : localizer.message("ui.patchChecks.output")}
+            </span>
           </div>
           {builtInRows.map((row) => (
             <ChecksumRow key={`${side}:${row.label}:${row.value}`} label={row.label} value={row.value} />
@@ -1408,6 +1435,7 @@ const PatchCard = ({
               card's resolved height so the patch stack below doesn't jump when
               requirements arrive. */}
           <PatchChecksDrawer
+            basisChoice={basisChoice}
             chainChip={chainChip}
             disabled={isDisabled}
             index={index}

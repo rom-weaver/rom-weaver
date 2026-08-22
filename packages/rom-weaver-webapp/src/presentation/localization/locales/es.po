@@ -180,6 +180,11 @@ msgstr "Automático"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.automatic"
+msgstr "Detección automática"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
 msgstr "ROM base"
 
@@ -375,6 +380,16 @@ msgstr "Incluir la ROM en el bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.input"
+msgstr "Comprobaciones de entrada — {basis}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.explanation"
+msgstr "Las comprobaciones de entrada verifican lo que lee este parche. Las comprobaciones de salida verifican lo que crea."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.envPwa"
 msgstr "Aplicación instalada (PWA)"
 
@@ -535,8 +550,18 @@ msgstr "ROM original"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.autoBase"
+msgstr "ROM original (automático)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.output"
 msgstr "Salida"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.output"
+msgstr "Comprobaciones de salida — Resultado de este parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -607,6 +632,11 @@ msgstr "salida anterior"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchInputs.previous"
 msgstr "Salida del parche anterior"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.autoPrevious"
+msgstr "Salida del parche anterior (automático)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

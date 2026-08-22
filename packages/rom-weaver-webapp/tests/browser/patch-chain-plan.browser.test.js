@@ -51,6 +51,11 @@ const getPatchInputSelect = async (index) => {
   return findSelect();
 };
 
+const patchCheckHeadings = (index) => {
+  const card = [...document.querySelectorAll("#rom-weaver-list-patch-stack .card.patch")][index];
+  return [...(card?.querySelectorAll(".ck-group-head") || [])].map((head) => head.textContent?.trim());
+};
+
 test("a true BPS chain defers the dependent patch instead of failing it", async () => {
   mount(createElement(ApplyPatchForm, {}));
   await dropFixtures([RAW_ROM, CHAIN_A, CHAIN_B]);
@@ -61,6 +66,18 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("applies after patch 1");
   const basisSelect = await getPatchInputSelect(1);
   expect(basisSelect.options[0]?.textContent).toBe("auto (Previous patch output)");
+  expect(basisSelect.getAttribute("aria-describedby")).toBe("rom-weaver-patch-checks-help-1");
+  expect(patchCheckHeadings(0)).toEqual([
+    "Input checks — Original ROM (automatic)",
+    "Output checks — This patch's result",
+  ]);
+  expect(patchCheckHeadings(1)).toEqual([
+    "Input checks — Previous patch output (automatic)",
+    "Output checks — This patch's result",
+  ]);
+  expect(document.querySelector(`#rom-weaver-patch-checks-help-1`)?.textContent).toContain(
+    "Input checks verify what this patch reads.",
+  );
   await page.viewport(390, 844);
   const cardMeta = basisSelect.closest(".card-meta");
   expect(cardMeta?.scrollWidth).toBeLessThanOrEqual(cardMeta?.clientWidth ?? 0);
@@ -122,10 +139,18 @@ test("a patch input selector re-plans that patch", async () => {
   // real intermediate decides).
   setFormControlValue(basisSelect, "previous");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("verified during apply");
+  expect(patchCheckHeadings(1)).toEqual([
+    "Input checks — Previous patch output",
+    "Output checks — This patch's result",
+  ]);
 
   // Return to automatic detection.
   setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "auto");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("matches your ROM");
+  expect(patchCheckHeadings(1)).toEqual([
+    "Input checks — Original ROM (automatic)",
+    "Output checks — This patch's result",
+  ]);
 }, 180000);
 
 test("a Previous basis pin reaches Apply execution", async () => {

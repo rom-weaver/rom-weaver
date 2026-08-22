@@ -77,6 +77,18 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patchInputs.auto": msg({ id: "ui.patchInputs.auto", message: "Automatic" }),
   "ui.patchInputs.original": msg({ id: "ui.patchInputs.original", message: "Original ROM" }),
   "ui.patchInputs.previous": msg({ id: "ui.patchInputs.previous", message: "Previous patch output" }),
+  "ui.patchChecks.input": msg({ id: "ui.patchChecks.input", message: "Input checks — {basis}" }),
+  "ui.patchChecks.output": msg({ id: "ui.patchChecks.output", message: "Output checks — This patch's result" }),
+  "ui.patchChecks.explanation": msg({
+    id: "ui.patchChecks.explanation",
+    message: "Input checks verify what this patch reads. Output checks verify what it creates.",
+  }),
+  "ui.patchChecks.automatic": msg({ id: "ui.patchChecks.automatic", message: "Automatic detection" }),
+  "ui.patchChecks.autoBase": msg({ id: "ui.patchChecks.autoBase", message: "Original ROM (automatic)" }),
+  "ui.patchChecks.autoPrevious": msg({
+    id: "ui.patchChecks.autoPrevious",
+    message: "Previous patch output (automatic)",
+  }),
   "ui.bundleExport.create": msg({ id: "ui.bundleExport.create", message: "Create {format} Bundle" }),
   "ui.bundleExport.createRom": msg({ id: "ui.bundleExport.createRom", message: "Create {format} ROM Bundle" }),
   "ui.bundleExport.download": msg({ id: "ui.bundleExport.download", message: "Download {format} Bundle" }),
