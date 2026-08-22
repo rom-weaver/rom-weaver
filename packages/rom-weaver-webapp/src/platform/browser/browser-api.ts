@@ -1,12 +1,4 @@
-import {
-  invokeRomWeaverPpfUndoWorker,
-  invokeRomWeaverSaveExportSchemaWorker,
-  invokeRomWeaverSaveGetWorker,
-  invokeRomWeaverSaveIdentifyWorker,
-  invokeRomWeaverSaveInspectWorker,
-  invokeRomWeaverSaveSetWorker,
-} from "../../lib/runtime/wasm-command-runtime.ts";
-import type { SaveEditorResult } from "../../lib/runtime/save-editor-result.ts";
+import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
 import { TrimWorkflowController } from "../../lib/workflow/trim-workflow-controller.ts";
@@ -16,7 +8,6 @@ import type { LogLevel } from "../../types/logging.ts";
 import type { BrowserSaveDestination } from "../../types/output.ts";
 import type { ApplySettings, CreateSettings, WorkerSettings } from "../../types/settings.ts";
 import type { BrowserSourceRef } from "../../types/source.ts";
-import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import type { WorkflowOptions } from "../../types/workflow-public.ts";
 import type { RuntimePatchCreateFormatCandidates } from "../../types/workflow-runtime-adapter.ts";
 import { getDefaultBrowserThreadCount } from "../shared/compression-options.ts";
@@ -207,121 +198,6 @@ const undoPpf = async ({ logLevel, outputName, patch, rom, signal }: BrowserPpfU
   }
 };
 
-type BrowserSaveInput = {
-  game?: string;
-  romSha1?: string;
-  signal?: AbortSignal;
-  source: BrowserSourceRef | Uint8Array;
-  fileName?: string;
-};
-type BrowserSaveSetInput = BrowserSaveInput & { assignments: string[]; outputName: string };
-const MAX_SAVE_INPUT_SIZE = 128 * 1024 * 1024;
-
-const saveSourceSize = (source: BrowserSourceRef | Uint8Array): number | undefined => {
-  if (source instanceof Uint8Array) return source.byteLength;
-  if (typeof Blob !== "undefined" && source instanceof Blob) return source.size;
-  if (typeof source === "object" && "size" in source && typeof source.size === "number") return source.size;
-  if (typeof source === "object" && "source" in source && source.source instanceof Blob) return source.source.size;
-  return undefined;
-};
-
-const stageSaveInput = (input: BrowserSaveInput) => {
-  const size = saveSourceSize(input.source);
-  if (size !== undefined && size > MAX_SAVE_INPUT_SIZE) {
-    throw new Error("The save file is larger than 128 MiB.");
-  }
-  return browserRuntime.workerIo.stageSource({
-    fallbackFileName: input.fileName || "save.sav",
-    pathPrefix: "save-editor-input",
-    scope: "checksum",
-    source: input.source,
-  });
-};
-
-const runBrowserSaveRead = async (
-  input: BrowserSaveInput,
-  run: (filePath: string) => Promise<{ parsed: SaveEditorResult }>,
-) => {
-  const staged = await stageSaveInput(input);
-  try {
-    return (await run(staged.filePath)).parsed;
-  } finally {
-    await staged.cleanup().catch(() => undefined);
-  }
-};
-
-const identifySave = (input: BrowserSaveInput) =>
-  runBrowserSaveRead(input, (inputPath) =>
-    invokeRomWeaverSaveIdentifyWorker({ inputPath, game: input.game, romSha1: input.romSha1, signal: input.signal }),
-  );
-const inspectSave = (input: BrowserSaveInput) =>
-  runBrowserSaveRead(input, (inputPath) =>
-    invokeRomWeaverSaveInspectWorker({ inputPath, game: input.game, romSha1: input.romSha1, signal: input.signal }),
-  );
-const getSaveField = (input: BrowserSaveInput & { field: string }) =>
-  runBrowserSaveRead(input, (inputPath) =>
-    invokeRomWeaverSaveGetWorker({
-      inputPath,
-      field: input.field,
-      game: input.game,
-      romSha1: input.romSha1,
-      signal: input.signal,
-    }),
-  );
-const exportSaveSchema = (input: BrowserSaveInput) =>
-  runBrowserSaveRead(input, (inputPath) =>
-    invokeRomWeaverSaveExportSchemaWorker({
-      game: input.game,
-      inputPath,
-      romSha1: input.romSha1,
-      signal: input.signal,
-    }),
-  );
-const setSaveFields = async (input: BrowserSaveSetInput) => {
-  const staged = await stageSaveInput(input);
-  try {
-    const result = await invokeRomWeaverSaveSetWorker({
-      assignments: input.assignments,
-      game: input.game,
-      inputPath: staged.filePath,
-      outputName: input.outputName,
-      romSha1: input.romSha1,
-      signal: input.signal,
-    });
-    const workerResult = result as SaveEditorResult & {
-      parsed: SaveEditorResult;
-      filePath?: string;
-      fileName?: string;
-      size?: number;
-      timing?: PublicOutput["timing"];
-    };
-    const output = await browserRuntime.workerIo.createWorkerOutput(
-      workerResult,
-      input.outputName,
-      "Save editor did not return an edited save",
-    );
-    return { ...workerResult.parsed, output };
-  } finally {
-    await staged.cleanup().catch(() => undefined);
-  }
-};
-const previewSaveFields = async (input: BrowserSaveSetInput) => {
-  const staged = await stageSaveInput(input);
-  try {
-    return await invokeRomWeaverSaveSetWorker({
-      assignments: input.assignments,
-      dryRun: true,
-      game: input.game,
-      inputPath: staged.filePath,
-      outputName: input.outputName,
-      romSha1: input.romSha1,
-      signal: input.signal,
-    });
-  } finally {
-    await staged.cleanup().catch(() => undefined);
-  }
-};
-
 // The public browser workflows ARE their UI-agnostic controllers - a thin subclass adds only the
 // browser binding (asset-base config + runtime pre-warm + browserRuntime/source-validation wiring).
 // All staging/run/progress/`subscribe`/`getSnapshot` methods are inherited directly from the
@@ -359,12 +235,6 @@ export {
   ApplyWorkflow,
   CreateWorkflow,
   getCreatePatchFormatCandidates,
-  exportSaveSchema,
-  getSaveField,
-  identifySave,
-  inspectSave,
-  setSaveFields,
-  previewSaveFields,
   getIngestOutputBlob,
   identifyRom,
   ingestRom,

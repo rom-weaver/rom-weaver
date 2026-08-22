@@ -13,8 +13,7 @@ const { identifySave, inspectSave, previewSaveFields, setSaveFields, listEmulato
     replaceEmulatorSaveSram: vi.fn(),
   }));
 
-vi.mock("../../../src/platform/browser/browser-api.ts", () => ({
-  exportSaveSchema: vi.fn(),
+vi.mock("../../../src/platform/browser/browser-save-api.ts", () => ({
   identifySave,
   inspectSave,
   previewSaveFields,

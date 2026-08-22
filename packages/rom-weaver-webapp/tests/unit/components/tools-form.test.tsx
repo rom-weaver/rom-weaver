@@ -4,8 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToolsForm } from "../../../src/webapp/components/tools-form.tsx";
 
 vi.mock("../../../src/platform/browser/browser-api.ts", () => ({
-  identifySave: vi.fn(async () => ({ recognition: { candidates: [], outcome: { unsupported: {} } }, saveSize: 4 })),
   undoPpf: vi.fn(),
+}));
+vi.mock("../../../src/platform/browser/browser-save-api.ts", () => ({
+  identifySave: vi.fn(async () => ({ recognition: { candidates: [], outcome: { unsupported: {} } }, saveSize: 4 })),
 }));
 vi.mock("../../../src/storage/browser/emulator-saves.ts", () => ({ listEmulatorSaves: vi.fn(async () => []) }));
 
