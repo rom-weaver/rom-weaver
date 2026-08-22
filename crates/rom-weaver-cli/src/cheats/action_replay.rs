@@ -15,6 +15,11 @@ pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result
         CheatSystem::Snes => decode_snes(normalized, raw),
         CheatSystem::Genesis => decode_genesis(normalized, raw),
         CheatSystem::GameBoy => decode_gameboy(normalized, raw),
+        CheatSystem::GameBoyAdvance | CheatSystem::PlayStation => Err(coded(
+            "cheat_bad_system",
+            "Pro Action Replay codes do not support this system",
+            raw,
+        )),
     }
 }
 
@@ -65,7 +70,7 @@ fn decode_nes(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::Nes,
         kind: CheatKind::ProActionReplay,
         address,
-        value: value as u16,
+        value: value as u32,
         compare,
         width: 1,
     })
@@ -87,7 +92,7 @@ fn decode_snes(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::Snes,
         kind: CheatKind::ProActionReplay,
         address,
-        value: value as u16,
+        value: value as u32,
         compare: None,
         width: 1,
     })
@@ -120,7 +125,7 @@ fn decode_genesis(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::Genesis,
         kind: CheatKind::ProActionReplay,
         address,
-        value,
+        value: value as u32,
         compare: None,
         width,
     })
@@ -145,7 +150,7 @@ fn decode_gameboy(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::GameBoy,
         kind: CheatKind::ProActionReplay,
         address,
-        value: value as u16,
+        value: value as u32,
         compare: None,
         width: 1,
     })

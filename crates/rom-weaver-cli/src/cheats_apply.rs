@@ -1,8 +1,7 @@
-//! Orchestration for baking cheat codes (Game Genie, Pro Action Replay /
-//! GameShark) into ROMs. The pure decode/resolve logic lives in
+//! Orchestration for baking cheat codes into ROMs. The pure decode/resolve logic lives in
 //! `cheats`; this module detects the system (reusing the
 //! `KnownRomHeader` detection), reads the ROM bytes, resolves the writes, and
-//! produces either a synthetic IPS patch (for `patch apply`) or a patched ROM
+//! produces either a synthetic IPS/IPS32 patch (for `patch apply`) or a patched ROM
 //! file (for `patch create`).
 
 use super::*;
@@ -32,6 +31,7 @@ fn cheat_system_from_header(header: KnownRomHeader) -> Option<CheatSystem> {
         KnownRomHeader::Nes => Some(CheatSystem::Nes),
         KnownRomHeader::MegaDrive => Some(CheatSystem::Genesis),
         KnownRomHeader::GameBoy => Some(CheatSystem::GameBoy),
+        KnownRomHeader::Gba => Some(CheatSystem::GameBoyAdvance),
         KnownRomHeader::SnesCopier
         | KnownRomHeader::SmcZero
         | KnownRomHeader::SmcGameDoctor1
@@ -40,24 +40,15 @@ fn cheat_system_from_header(header: KnownRomHeader) -> Option<CheatSystem> {
     }
 }
 
-/// Serialize resolved writes as an IPS patch over `rom`'s bytes. IPS offsets are
-/// 3 bytes, so the ROM must be under 16 MiB (true for every cheat-supported
-/// system). A record may not START on the reserved `EOF` offset (0x454F46); like
-/// canonical IPS writers, a write landing there is emitted one byte earlier with
-/// the unchanged preceding ROM byte re-included.
-fn serialize_cheat_ips(writes: &[CheatWrite], rom: &[u8]) -> Result<Vec<u8>> {
+/// Serialize resolved writes as an IPS patch over `rom`'s bytes. A record may
+/// not START on the reserved `EOF` offset (0x454F46); like canonical IPS
+/// writers, a write landing there is emitted one byte earlier with the
+/// unchanged preceding ROM byte re-included.
+fn serialize_cheat_ips(writes: &[CheatWrite], rom: &[u8], system: CheatSystem) -> Result<Vec<u8>> {
     const IPS_EOF_OFFSET: usize = 0x45_4F46; // "EOF"
     let mut out = b"PATCH".to_vec();
     for write in writes {
-        let mut data = match write.width {
-            1 => vec![write.value as u8],
-            2 => vec![(write.value >> 8) as u8, write.value as u8],
-            other => {
-                return Err(RomWeaverError::Validation(format!(
-                    "unsupported cheat write width {other}"
-                )));
-            }
-        };
+        let mut data = cheat_write_data(write, system)?;
         let mut offset = write.offset;
         if offset == IPS_EOF_OFFSET {
             // Shift the record one byte earlier and re-include the original byte
@@ -89,6 +80,68 @@ fn serialize_cheat_ips(writes: &[CheatWrite], rom: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+fn serialize_cheat_ips32(writes: &[CheatWrite], system: CheatSystem) -> Result<Vec<u8>> {
+    const IPS32_RESERVED_EOF_OFFSET: u32 = 0x4545_4F46; // "EEOF"
+    let mut out = b"IPS32".to_vec();
+    for write in writes {
+        let offset = u32::try_from(write.offset).map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "cheat write offset {:#X} exceeds the IPS32 addressing limit",
+                write.offset
+            ))
+        })?;
+        if offset == IPS32_RESERVED_EOF_OFFSET {
+            return Err(RomWeaverError::Validation(
+                "cheat write lands on the IPS32 reserved `EEOF` offset".to_string(),
+            ));
+        }
+        let data = cheat_write_data(write, system)?;
+        let length = u16::try_from(data.len()).map_err(|_| {
+            RomWeaverError::Validation("cheat write is too large for an IPS32 record".to_string())
+        })?;
+        out.extend_from_slice(&offset.to_be_bytes());
+        out.extend_from_slice(&length.to_be_bytes());
+        out.extend_from_slice(&data);
+    }
+    out.extend_from_slice(b"EEOF");
+    Ok(out)
+}
+
+fn cheat_write_data(write: &CheatWrite, system: CheatSystem) -> Result<Vec<u8>> {
+    let bytes = if matches!(system, CheatSystem::Genesis) {
+        write.value.to_be_bytes()
+    } else {
+        write.value.to_le_bytes()
+    };
+    match write.width {
+        1 => Ok(vec![write.value as u8]),
+        2 => {
+            let start = if matches!(system, CheatSystem::Genesis) {
+                2
+            } else {
+                0
+            };
+            Ok(bytes[start..start + 2].to_vec())
+        }
+        4 => Ok(bytes.to_vec()),
+        other => Err(RomWeaverError::Validation(format!(
+            "unsupported cheat write width {other}"
+        ))),
+    }
+}
+
+fn serialize_cheat_patch(
+    writes: &[CheatWrite],
+    rom: &[u8],
+    system: CheatSystem,
+) -> Result<Vec<u8>> {
+    if writes.iter().any(|write| write.offset > 0xFF_FFFF) {
+        serialize_cheat_ips32(writes, system)
+    } else {
+        serialize_cheat_ips(writes, rom, system)
+    }
+}
+
 impl CliApp {
     /// Resolve the cheat system from an explicit override or by detecting the
     /// ROM header.
@@ -100,9 +153,12 @@ impl CliApp {
         if let Some(id) = override_id.map(str::trim).filter(|id| !id.is_empty()) {
             return CheatSystem::parse(id).ok_or_else(|| {
                 RomWeaverError::Validation(format!(
-                    "unknown --code-system `{id}`; expected nes, snes, genesis, or gameboy"
+                    "unknown --code-system `{id}`; expected nes, snes, genesis, gameboy, gba, or psx"
                 ))
             });
+        }
+        if is_playstation_executable(source)? {
+            return Ok(CheatSystem::PlayStation);
         }
         match Self::detect_known_rom_header(source)? {
             Some(matched) => cheat_system_from_header(matched.header).ok_or_else(|| {
@@ -113,7 +169,7 @@ impl CliApp {
                 ))
             }),
             None => Err(RomWeaverError::Validation(format!(
-                "could not detect the ROM system for `{}`; pass --code-system nes|snes|genesis|gameboy",
+                "could not detect the ROM system for `{}`; pass --code-system nes|snes|genesis|gameboy|gba|psx",
                 source.display()
             ))),
         }
@@ -129,13 +185,13 @@ impl CliApp {
         let layout = RomLayout::detect(rom, system);
         let mut all = Vec::new();
         // A single `--code` value may carry several `+`/comma/space-joined codes.
-        for code in codes.iter().flat_map(|code| cheats::split_codes(code)) {
+        for code in codes_for_kind(codes, system, kind_id) {
             let decoded = if kind_id.eq_ignore_ascii_case("auto") {
                 cheats::decode_auto(code, system)?
             } else {
                 let kind = CheatKind::parse(kind_id).ok_or_else(|| {
                     RomWeaverError::Validation(format!(
-                        "unknown --code-kind `{kind_id}`; expected auto, game-genie, or gameshark"
+                        "unknown --code-kind `{kind_id}`; expected auto, game-genie, gameshark, or xploder"
                     ))
                 })?;
                 cheats::decode(code, system, kind)?
@@ -145,7 +201,7 @@ impl CliApp {
         Ok(all)
     }
 
-    /// Build a synthetic IPS patch file carrying the resolved cheat writes for
+    /// Build a synthetic IPS or IPS32 patch file carrying the resolved cheat writes for
     /// `source`, written under a temp path (registered for cleanup). The patch
     /// applies cleanly to `source`'s bytes via the normal IPS handler.
     pub(super) fn synthesize_cheat_ips(
@@ -166,13 +222,15 @@ impl CliApp {
             system = system.id(),
             rom_len = rom.len(),
             codes = codes.len(),
-            "resolving cheat codes into IPS patch"
+            "resolving cheat codes into patch"
         );
         let writes = Self::resolve_cheat_writes(&rom, system, codes, kind_id)?;
-        let ips = serialize_cheat_ips(&writes, &rom)?;
-        let patch_path = context
-            .temp_paths()
-            .next_path("patch-apply-cheat", Some("ips"));
+        let use_ips32 = writes.iter().any(|write| write.offset > 0xFF_FFFF);
+        let ips = serialize_cheat_patch(&writes, &rom, system)?;
+        let patch_path = context.temp_paths().next_path(
+            "patch-apply-cheat",
+            Some(if use_ips32 { "ips32" } else { "ips" }),
+        );
         if let Some(parent) = patch_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -182,7 +240,7 @@ impl CliApp {
             patch_path,
             CheatApplySummary {
                 system,
-                code_count: count_codes(codes),
+                code_count: count_codes(codes, system, kind_id),
                 write_count: writes.len(),
             },
         ))
@@ -208,25 +266,48 @@ impl CliApp {
             "baking cheat codes into ROM"
         );
         let writes = Self::resolve_cheat_writes(&rom, system, codes, kind_id)?;
-        cheats::apply_writes(&mut rom, &writes)?;
+        cheats::apply_writes(&mut rom, system, &writes)?;
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)?;
         }
         fs::write(dest, rom)?;
         Ok(CheatApplySummary {
             system,
-            code_count: count_codes(codes),
+            code_count: count_codes(codes, system, kind_id),
             write_count: writes.len(),
         })
     }
 }
 
 /// Count individual codes after splitting `+`/comma/space-joined `--code` values.
-fn count_codes(codes: &[String]) -> usize {
-    codes
-        .iter()
-        .flat_map(|code| cheats::split_codes(code))
-        .count()
+fn codes_for_kind(codes: &[String], system: CheatSystem, kind_id: &str) -> Vec<String> {
+    let use_xploder = CheatKind::parse(kind_id) == Some(CheatKind::Xploder)
+        || (kind_id.eq_ignore_ascii_case("auto")
+            && matches!(
+                system,
+                CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
+            ));
+    if use_xploder {
+        codes
+            .iter()
+            .flat_map(|code| cheats::split_xploder_codes(code))
+            .collect()
+    } else {
+        codes
+            .iter()
+            .flat_map(|code| cheats::split_codes(code).map(str::to_owned))
+            .collect()
+    }
+}
+
+fn count_codes(codes: &[String], system: CheatSystem, kind_id: &str) -> usize {
+    codes_for_kind(codes, system, kind_id).len()
+}
+
+fn is_playstation_executable(path: &Path) -> Result<bool> {
+    let mut file = File::open(path)?;
+    let mut signature = [0_u8; 8];
+    Ok(file.read_exact(&mut signature).is_ok() && signature == *b"PS-X EXE")
 }
 
 #[cfg(test)]
@@ -254,7 +335,7 @@ mod tests {
                 width: 2,
             },
         ];
-        let ips = serialize_cheat_ips(&writes, &[0u8; 0x40]).unwrap();
+        let ips = serialize_cheat_ips(&writes, &[0u8; 0x40], CheatSystem::Genesis).unwrap();
         let expected = [
             b'P', b'A', b'T', b'C', b'H', 0x00, 0x00, 0x10, 0x00, 0x01,
             0xAB, // width-1 at 0x10
@@ -275,7 +356,7 @@ mod tests {
             value: 0x42,
             width: 1,
         }];
-        let ips = serialize_cheat_ips(&writes, &rom).unwrap();
+        let ips = serialize_cheat_ips(&writes, &rom, CheatSystem::Genesis).unwrap();
         // Record: offset 0x454F45, len 2, data [0x99 (unchanged), 0x42].
         let expected = [
             b'P', b'A', b'T', b'C', b'H', 0x45, 0x4F, 0x45, 0x00, 0x02, 0x99, 0x42, b'E', b'O',
@@ -291,11 +372,49 @@ mod tests {
             value: 0x01,
             width: 1,
         }];
-        let err = serialize_cheat_ips(&writes, &[]).unwrap_err();
+        let err = serialize_cheat_ips(&writes, &[], CheatSystem::Genesis).unwrap_err();
         assert!(
             validation_message(&err).contains("16 MiB"),
             "unexpected message: {}",
             validation_message(&err)
+        );
+    }
+
+    #[test]
+    fn serialize_uses_little_endian_for_xploder_words() {
+        let writes = vec![CheatWrite {
+            offset: 0x10,
+            value: 0xABCD,
+            width: 2,
+        }];
+        let ips = serialize_cheat_ips(&writes, &[0u8; 0x20], CheatSystem::GameBoyAdvance).unwrap();
+        assert_eq!(&ips[10..12], &[0xCD, 0xAB]);
+    }
+
+    #[test]
+    fn serialize_uses_ips32_for_large_offsets() {
+        let writes = vec![CheatWrite {
+            offset: 0x100_0000,
+            value: 0xABCD,
+            width: 2,
+        }];
+        let ips = serialize_cheat_patch(&writes, &[], CheatSystem::GameBoyAdvance).unwrap();
+        assert_eq!(&ips[..5], b"IPS32");
+        assert_eq!(&ips[5..9], &0x100_0000u32.to_be_bytes());
+        assert_eq!(&ips[9..11], &2u16.to_be_bytes());
+        assert_eq!(&ips[11..13], &[0xCD, 0xAB]);
+        assert_eq!(&ips[13..], b"EEOF");
+    }
+
+    #[test]
+    fn split_codes_uses_xploder_aliases() {
+        assert_eq!(
+            codes_for_kind(
+                &["30010000 00FF + 88010002 1234".to_owned()],
+                CheatSystem::PlayStation,
+                "xplorer"
+            ),
+            vec!["3001000000FF", "880100021234"]
         );
     }
 }
