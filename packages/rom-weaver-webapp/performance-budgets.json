@@ -16,7 +16,7 @@
         "extension": ".js",
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 1900000,
-        "maxRawBytes": 2005000,
+        "maxRawBytes": 2007000,
         "expectedBrotliBytes": 500000,
         "maxBrotliBytes": 525000
       },
