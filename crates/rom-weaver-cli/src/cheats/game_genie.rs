@@ -16,7 +16,7 @@ pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result
         CheatSystem::Nes => decode_nes(normalized, raw),
         CheatSystem::Snes => decode_snes(normalized, raw),
         CheatSystem::Genesis => decode_genesis(normalized, raw),
-        CheatSystem::GameBoy => decode_gameboy(normalized, raw),
+        CheatSystem::GameBoy | CheatSystem::GameBoyColor => decode_gameboy(normalized, raw),
         CheatSystem::GameBoyAdvance | CheatSystem::PlayStation => Err(coded(
             "cheat_bad_system",
             "Game Genie codes do not support this system",

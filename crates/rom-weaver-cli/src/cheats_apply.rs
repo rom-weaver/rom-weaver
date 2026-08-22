@@ -6,13 +6,24 @@
 
 use super::*;
 
-use crate::cheats::{self, CheatKind, CheatSystem, CheatWrite, RomLayout};
+use crate::cheats::{
+    self, CheatKind, CheatRecord, CheatResolution, CheatSystem, CheatWrite, RomLayout,
+};
 
 /// Summary of a cheat-code resolution, used to enrich operation labels.
 pub(super) struct CheatApplySummary {
     pub system: CheatSystem,
     pub code_count: usize,
     pub write_count: usize,
+}
+
+pub(super) struct CheatIpsRequest<'a> {
+    pub source: &'a Path,
+    pub codes: &'a [String],
+    pub system_override: Option<&'a str>,
+    pub kind_id: &'a str,
+    pub context: &'a OperationContext,
+    pub temp_paths: &'a mut Vec<PathBuf>,
 }
 
 impl CheatApplySummary {
@@ -206,13 +217,16 @@ impl CliApp {
     /// applies cleanly to `source`'s bytes via the normal IPS handler.
     pub(super) fn synthesize_cheat_ips(
         &self,
-        source: &Path,
-        codes: &[String],
-        system_override: Option<&str>,
-        kind_id: &str,
-        context: &OperationContext,
-        temp_paths: &mut Vec<PathBuf>,
+        request: CheatIpsRequest<'_>,
     ) -> Result<(PathBuf, CheatApplySummary)> {
+        let CheatIpsRequest {
+            source,
+            codes,
+            system_override,
+            kind_id,
+            context,
+            temp_paths,
+        } = request;
         let system = self.cheat_system_for(source, system_override)?;
         // Read-on-main: a single full read of the source ROM (safe for wasm/OPFS;
         // no spawned threads open the file).
@@ -242,6 +256,84 @@ impl CliApp {
                 system,
                 code_count: count_codes(codes, system, kind_id),
                 write_count: writes.len(),
+            },
+        ))
+    }
+
+    pub(super) fn resolve_database_cheat_writes(
+        rom: &[u8],
+        records: &[CheatRecord],
+    ) -> Result<(Vec<CheatWrite>, CheatApplySummary)> {
+        let system = records.first().map(|record| record.system).ok_or_else(|| {
+            RomWeaverError::Validation("no cheat records were selected".to_string())
+        })?;
+        if records.iter().any(|record| record.system != system) {
+            return Err(RomWeaverError::ValidationCode(
+                ValidationCodeError::new("cheat_system_mismatch")
+                    .with_message("all selected cheat records must target the same system"),
+            ));
+        }
+        let mut writes = Vec::new();
+        let mut record_writes = Vec::new();
+        for record in records {
+            let classified = cheats::classify_record(rom, record);
+            match classified.resolution {
+                CheatResolution::RomBakeable { writes: resolved } => {
+                    record_writes.push((record.id.clone(), resolved.clone()));
+                    writes.extend(resolved);
+                }
+                CheatResolution::Runtime { .. } => {
+                    return Err(RomWeaverError::ValidationCode(
+                        ValidationCodeError::new("cheat_runtime_not_bakeable")
+                            .with_message("a runtime cheat cannot be baked into the ROM")
+                            .with_field("cheat_id", record.id.clone()),
+                    ));
+                }
+                CheatResolution::Mixed { .. } => {
+                    return Err(RomWeaverError::ValidationCode(
+                        ValidationCodeError::new("cheat_mixed_not_bakeable")
+                            .with_message(
+                                "a mixed cheat must remain intact in a runtime cheat file",
+                            )
+                            .with_field("cheat_id", record.id.clone()),
+                    ));
+                }
+                CheatResolution::RequiresParameter { .. } => {
+                    return Err(RomWeaverError::ValidationCode(
+                        ValidationCodeError::new("cheat_requires_parameter")
+                            .with_message("the cheat needs a parameter value before use")
+                            .with_field("cheat_id", record.id.clone()),
+                    ));
+                }
+                CheatResolution::Unsupported { reason } => {
+                    return Err(RomWeaverError::ValidationCode(
+                        ValidationCodeError::new("cheat_unsupported")
+                            .with_message("the selected cheat cannot be baked into the ROM")
+                            .with_field("reason", reason)
+                            .with_field("cheat_id", record.id.clone()),
+                    ));
+                }
+            }
+        }
+        let conflicts = cheats::detect_write_conflicts(&record_writes);
+        if let Some(conflict) = conflicts.first() {
+            return Err(RomWeaverError::ValidationCode(
+                ValidationCodeError::new("cheat_write_conflict")
+                    .with_message("selected ROM cheats write different values at the same offset")
+                    .with_field("first_cheat_id", conflict.first_id.clone())
+                    .with_field("second_cheat_id", conflict.second_id.clone())
+                    .with_field("offset", format!("{:#X}", conflict.offset))
+                    .with_field("first_value", format!("{:02X}", conflict.first_value))
+                    .with_field("second_value", format!("{:02X}", conflict.second_value)),
+            ));
+        }
+        let write_count = writes.len();
+        Ok((
+            writes,
+            CheatApplySummary {
+                system,
+                code_count: records.len(),
+                write_count,
             },
         ))
     }
