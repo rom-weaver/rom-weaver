@@ -2,6 +2,7 @@ import { type ComponentType, lazy } from "react";
 import { createLogger } from "../lib/logging.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
 import type { PpfUndoFormProps } from "./components/ppf-undo-form.tsx";
+import type { SaveEditorProps } from "./components/save-editor.tsx";
 import type { IdentifyFormProps } from "./components/identify-form.tsx";
 import type { HomePageProps } from "./components/home-page.tsx";
 import type { WhatsNewPageProps } from "./whats-new-page.tsx";
@@ -37,6 +38,7 @@ type WorkflowRouteProps = {
     active?: boolean;
   };
   "ppf-undo": PpfUndoFormProps;
+  "save-editor": SaveEditorProps;
   trim: TrimPatchFormProps;
   "whats-new": WhatsNewPageProps;
 };
@@ -113,6 +115,9 @@ const TestRoute = createWorkflowRoute("test", () =>
 const PpfUndoRoute = createWorkflowRoute("ppf-undo", () =>
   import("./components/ppf-undo-form.tsx").then((module) => ({ default: module.PpfUndoForm })),
 );
+const SaveEditorRoute = createWorkflowRoute("save-editor", () =>
+  import("./components/save-editor.tsx").then((module) => ({ default: module.SaveEditor })),
+);
 const TrimRoute = createWorkflowRoute("trim", () =>
   import("../public/react/trim-form.tsx").then((module) => ({ default: module.TrimPatchForm })),
 );
@@ -128,6 +133,7 @@ const WORKFLOW_ROUTES = {
   patcher: PatcherRoute,
   test: TestRoute,
   "ppf-undo": PpfUndoRoute,
+  "save-editor": SaveEditorRoute,
   trim: TrimRoute,
   "whats-new": WhatsNewRoute,
 } as const;
@@ -139,6 +145,7 @@ const EmulatorTestRoute = TestRoute.Component;
 const HomePageRoute = HomeRoute.Component;
 const IdentifyRouteForm = IdentifyRoute.Component;
 const PpfUndoRouteForm = PpfUndoRoute.Component;
+const SaveEditorRouteForm = SaveEditorRoute.Component;
 const TrimPatchRoute = TrimRoute.Component;
 const WhatsNewPageRoute = WhatsNewRoute.Component;
 
@@ -163,6 +170,7 @@ export {
   preloadDocsRouteHtml,
   preloadWorkflowRoute,
   PpfUndoRouteForm,
+  SaveEditorRouteForm,
   TrimPatchRoute,
   WhatsNewPageRoute,
 };

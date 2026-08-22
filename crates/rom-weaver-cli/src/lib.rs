@@ -20,6 +20,7 @@ mod interactive;
 pub(crate) mod manpages;
 #[cfg(not(target_arch = "wasm32"))]
 mod render;
+mod save_command;
 
 pub use cli::*;
 #[cfg(not(target_arch = "wasm32"))]
@@ -251,6 +252,11 @@ footer recording what was cut."
     Bundle(BundleCommands),
     #[cfg_attr(
         not(target_arch = "wasm32"),
+        command(subcommand, about = "Inspect and edit supported persistent game saves")
+    )]
+    Save(SaveCommands),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
         command(subcommand, about = "One-off recovery tools")
     )]
     Tools(ToolsCommands),
@@ -415,6 +421,42 @@ PPF3 format. Without it there is nothing to reverse from."
         )
     )]
     PpfUndo(PpfUndoCommand),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Subcommand))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case", tag = "type", content = "args")]
+#[cfg_attr(
+    feature = "typescript-types",
+    ts(rename_all = "kebab-case", tag = "type", content = "args")
+)]
+pub enum SaveCommands {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Identify a supported game save without changing it")
+    )]
+    Identify(SaveIdentifyCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Show the sections and fields in a supported game save")
+    )]
+    Inspect(SaveInspectCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Read one field from a supported game save")
+    )]
+    Get(SaveGetCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Write validated field changes to a new game save")
+    )]
+    Set(SaveSetCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Print the generic field schema for a supported game save")
+    )]
+    ExportSchema(SaveExportSchemaCommand),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1485,7 +1527,9 @@ pub use command_args::{
     IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
     IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
     PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
-    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SetupCommand, TrimCommand,
+    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SaveExportSchemaCommand,
+    SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand, SaveSetCommand, SetupCommand,
+    TrimCommand,
 };
 
 mod expect_tokens;

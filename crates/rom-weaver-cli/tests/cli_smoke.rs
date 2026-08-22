@@ -54,3 +54,6 @@ mod formats;
 
 #[path = "cli_smoke/dry_run.rs"]
 mod dry_run;
+
+#[path = "cli_smoke/save.rs"]
+mod save;
