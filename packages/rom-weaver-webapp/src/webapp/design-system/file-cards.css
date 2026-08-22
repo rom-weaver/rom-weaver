@@ -497,13 +497,15 @@
 .rw-app .tree {
   display: flex;
   flex-direction: column;
+  /* Fill the drawer's shared inset so the Files rows use the full body width. */
+  margin: -4px -10px -2px;
 }
 .rw-app .tree-row {
   position: relative;
   display: flex;
   gap: var(--sp-s);
   align-items: baseline;
-  padding: 1px 9px;
+  padding: 0 6px;
   font-size: 0.78rem;
   background: var(--well);
   border-radius: var(--r-s);
