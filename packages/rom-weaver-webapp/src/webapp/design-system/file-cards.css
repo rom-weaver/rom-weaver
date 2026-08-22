@@ -505,14 +505,16 @@
   margin: -4px -10px -2px;
 }
 .rw-app .tree-row {
+  --tree-x: calc(10px + var(--d, 0) * 10px);
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 0 var(--sp-m);
   align-items: baseline;
+
   min-height: 21px;
   padding-block: 1px;
-  padding-inline: calc(10px + var(--d, 0) * 10px) 10px;
+  padding-inline: var(--tree-x) 10px;
   font-size: 0.78rem;
 }
 /* The guide line runs down the parent's node column; the last child at a depth stops
@@ -520,7 +522,7 @@
 .rw-app .tree-row:not([data-depth="0"])::before {
   position: absolute;
   inset-block: 0;
-  inset-inline-start: calc(10px + (var(--d, 0) - 1) * 10px + 3px);
+  inset-inline-start: calc(var(--tree-x) - 7px);
   width: 1px;
   content: "";
   background: var(--seam-strong);
@@ -531,7 +533,7 @@
 .rw-app .tree-row:not([data-depth="0"])::after {
   position: absolute;
   inset-block-start: calc(50% - 1px);
-  inset-inline-start: calc(10px + (var(--d, 0) - 1) * 10px + 4px);
+  inset-inline-start: calc(var(--tree-x) - 6px);
   width: 7px;
   height: 1px;
   content: "";
