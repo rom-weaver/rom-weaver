@@ -501,22 +501,27 @@
   padding: 4px 0 2px;
 }
 .rw-app .tree-row {
-  --ck-c: minmax(0, 1fr) auto auto;
-  --ck-seam: transparent;
   position: relative;
+  display: flex;
+  gap: var(--sp-s);
+  align-items: baseline;
+  min-height: 25px;
+  padding: 3px 9px;
   font-size: 0.78rem;
+  background: var(--well);
+  border-radius: var(--r-s);
 }
 .rw-app .tree-row.d1 {
-  --rm: 9px 0;
+  margin-inline-start: 9px;
 }
 .rw-app .tree-row.d2 {
-  --rm: 18px 0;
+  margin-inline-start: 18px;
 }
 .rw-app .tree-row.d3 {
-  --rm: 27px 0;
+  margin-inline-start: 27px;
 }
 .rw-app .tree-row.d4 {
-  --rm: 36px 0;
+  margin-inline-start: 36px;
 }
 .rw-app .tree-elbow {
   position: absolute;
@@ -532,6 +537,7 @@
   color: var(--ink-3);
 }
 .rw-app .tree-name {
+  flex: 1 1 auto;
   min-width: 0;
   font-weight: 550;
   color: var(--ink);
@@ -540,7 +546,7 @@
 .rw-app .tree-meta {
   display: inline-flex;
   flex: none;
-  gap: var(--sp-s);
+  gap: var(--sp-m);
   align-items: baseline;
 }
 .rw-app .tree-size {

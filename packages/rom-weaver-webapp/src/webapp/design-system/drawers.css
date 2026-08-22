@@ -445,16 +445,16 @@
   mask-image: var(--weave-mask);
   mask-size: 7px 7px;
 }
-.rw-app :is(.ck, .tree-row) {
+.rw-app .ck {
   /* The label track floor aligns independently gridded rows. */
   display: grid;
-  grid-template-columns: var(--ck-c, minmax(var(--ck-label-w), max-content) minmax(0, 1fr) auto);
+  grid-template-columns: minmax(var(--ck-label-w), max-content) minmax(0, 1fr) auto;
   gap: var(--sp-xs) var(--sp-s);
   align-items: center;
   min-height: 24px;
   padding: 1px 9px;
   /* The label track floor aligns independently gridded rows. */
-  margin: var(--rm, 0);
+  margin: 0;
   cursor: pointer;
   background: transparent;
   border-block: 1px solid var(--ck-seam);
@@ -465,7 +465,7 @@
 }
 /* Strip user-agent chrome from the button rows. Must sit with the width rules
    below - a later layer would win on order no matter how specific they are. */
-.rw-app button:is(.ck, .tree-row) {
+.rw-app button.ck {
   width: 100%;
   font: inherit;
   text-align: start;
@@ -482,18 +482,18 @@
 }
 /* Prevent selection from stealing copy taps on touch devices. */
 @media (pointer: coarse) {
-  .rw-app :is(.ck, .tree-row) {
+  .rw-app .ck {
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
   }
 }
 @media (hover: hover) {
-  .rw-app :is(.ck, .tree-row):hover {
+  .rw-app .ck:hover {
     background: color-mix(in oklab, var(--thread) 7%, var(--well));
   }
 }
-.rw-app :is(.ck, .tree-row):active {
+.rw-app .ck:active {
   background: color-mix(in oklab, var(--thread) 7%, var(--well));
 }
 .rw-app .ck.bad {
@@ -679,7 +679,7 @@
 :root[data-theme="light"] .ck .ck-k {
   color: var(--ink-2);
 }
-.rw-app :is(.ck, .tree-row) .copy {
+.rw-app .ck .copy {
   display: grid;
   place-items: center;
   width: 20px;
@@ -697,24 +697,24 @@
     opacity 0.15s;
 }
 @media (hover: hover) {
-  .rw-app :is(.ck, .tree-row):hover .copy {
+  .rw-app .ck:hover .copy {
     color: var(--thread-text);
     opacity: 1;
   }
 }
-.rw-app :is(.ck, .tree-row):active .copy {
+.rw-app .ck:active .copy {
   color: var(--thread-text);
   opacity: 1;
 }
 .rw-app .ck .copy:active {
   transform: scale(0.82);
 }
-.rw-app :is(.ck, .tree-row) .copy.copied {
+.rw-app .ck .copy.copied {
   color: var(--verified);
   opacity: 1;
   animation: pop 0.32s var(--ease);
 }
-.rw-app :is(.ck, .tree-row) .copy svg {
+.rw-app .ck .copy svg {
   width: 13px;
   height: 13px;
 }
