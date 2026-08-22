@@ -138,7 +138,6 @@ const OutputCard = ({
             disabled={disabled}
             id={formatId}
             onChange={(event) => onFormatChange(event.currentTarget.value)}
-            style={{ backgroundImage: "none" }}
             value={format}
           >
             {formatOptions.map((option) => (

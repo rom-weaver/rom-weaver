@@ -18,7 +18,6 @@
   font-size: var(--dropdown-fs, 0.92rem);
   appearance: none;
   cursor: pointer;
-  background-image: none;
 }
 .rw-app .dropdown-select {
   position: relative;
@@ -27,20 +26,17 @@
   min-width: 0;
 }
 .rw-app .dropdown-select > .select {
-  flex: 1 1 auto;
+  flex: 1;
   min-width: 0;
 }
-.rw-app .target-grp > .dropdown-select {
+.rw-app :is(.target-grp > .dropdown-select, .ck-add .dropdown-select, .fname .dropdown-select) {
   width: auto;
 }
 .rw-app .dropdown-arrow {
-  width: 12px;
-  height: 12px;
   color: var(--ink-4);
   pointer-events: none;
 }
-.rw-app .dropdown-select > .dropdown-arrow,
-.rw-app .codec-combobox > .dropdown-arrow {
+.rw-app .dropdown-select > .dropdown-arrow {
   position: absolute;
   inset-inline-end: 10px;
   top: 50%;
@@ -195,7 +191,6 @@
 .rw-app .fname .dropdown-select {
   flex: none;
   align-self: stretch;
-  width: auto;
 }
 .rw-app .fname .select:focus-visible {
   box-shadow: none;
@@ -836,9 +831,6 @@
   cursor: pointer;
   background: none;
   border: 0;
-}
-.rw-app .ck-add .dropdown-select {
-  width: auto;
 }
 .rw-app .ck-add .dropdown-arrow {
   inset-inline-end: 0;
