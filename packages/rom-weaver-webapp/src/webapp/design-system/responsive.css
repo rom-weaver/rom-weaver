@@ -43,6 +43,9 @@
   .rw-app .mono {
     font-stretch: 74%;
   }
+  .rw-app .tree-row {
+    min-height: 20px;
+  }
   /* Keep condensed progress labels legible. */
   .rw-app .prog .lab {
     font-size: 0.85rem;

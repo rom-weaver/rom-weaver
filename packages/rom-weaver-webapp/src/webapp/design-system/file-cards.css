@@ -497,7 +497,7 @@
 .rw-app .tree {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2xs);
+  gap: 1px;
   padding: 4px 0 2px;
 }
 .rw-app .tree-row {
@@ -505,8 +505,8 @@
   display: flex;
   gap: var(--sp-s);
   align-items: baseline;
-  min-height: 25px;
-  padding: 3px 9px;
+  min-height: 22px;
+  padding: 1px 9px;
   font-size: 0.78rem;
   background: var(--well);
   border-radius: var(--r-s);
