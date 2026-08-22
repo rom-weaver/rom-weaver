@@ -358,10 +358,13 @@
   appearance: none;
   cursor: pointer;
   background: transparent;
-  background-image: var(--chevron);
-  background-repeat: no-repeat;
-  background-position: right center;
   border: 0;
+}
+.rw-app .ptgt-chev {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--ink-4);
 }
 .rw-app .meta-target-select:focus-visible {
   outline: 2px solid var(--thread);

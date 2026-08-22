@@ -1,6 +1,7 @@
-import { ChevronDown, Crosshair, X } from "lucide-react";
+import { Crosshair, X } from "lucide-react";
 import type { CSSProperties, ReactNode, Ref } from "react";
 import { join } from "./cx.ts";
+import { DropdownArrow } from "./dropdown-select.tsx";
 
 /**
  * Loom file card for every workflow's input rows. The header is two columns:
@@ -31,7 +32,7 @@ const FileTargetPill = ({ label, bad, onClick }: { label: ReactNode; bad?: boole
         type="button"
       >
         <span className="ptgt-name">{label}</span>
-        <ChevronDown aria-hidden="true" className="ptgt-chev" />
+        <DropdownArrow className="ptgt-chev" />
       </button>
     ) : (
       <span className="meta-target-static mono">{label}</span>

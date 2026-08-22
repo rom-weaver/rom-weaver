@@ -13,6 +13,7 @@ import {
   type CompressionCodecOption,
   validateCompressionCodecValue,
 } from "../../../../lib/compression/codec-fields.ts";
+import { DropdownArrow } from "./dropdown-select.tsx";
 
 type CodecComboboxProps = {
   ariaLabel?: string;
@@ -434,6 +435,7 @@ const CodecCombobox = ({
         title={invalid ? validation.message : undefined}
         value={value}
       />
+      <DropdownArrow disabled={disabled} />
       {portalTarget && dropdown ? createPortal(dropdown, portalTarget) : dropdown}
     </div>
   );
