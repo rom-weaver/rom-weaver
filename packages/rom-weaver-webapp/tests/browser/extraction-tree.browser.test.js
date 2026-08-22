@@ -145,12 +145,11 @@ test("files drawer lists sibling disc files below archive provenance", async () 
       Array.from(document.querySelectorAll(".extract-d .tree-name")).map((entry) => entry.textContent?.trim()),
     )
     .toEqual(["disc.7z", "game.cue", "game.bin", "game (Track 2).bin"]);
-  expect(Array.from(document.querySelectorAll(".extract-d .tree-row")).map((row) => row.className)).toEqual([
-    "tree-row d0",
-    "tree-row d1",
-    "tree-row d1",
-    "tree-row d1",
-  ]);
+  const rows = Array.from(document.querySelectorAll(".extract-d .tree-row"));
+  expect(rows.map((row) => row.getAttribute("data-depth"))).toEqual(["0", "1", "1", "1"]);
+  // The named file is the leaf; the guide line stops on the last entry at that depth.
+  expect(rows.map((row) => row.classList.contains("is-leaf"))).toEqual([false, false, true, false]);
+  expect(rows.map((row) => row.classList.contains("is-last"))).toEqual([true, false, false, true]);
 });
 
 test("files drawer totals multi-extract sizes when the output size is missing", async () => {
