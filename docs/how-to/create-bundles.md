@@ -32,9 +32,9 @@ Choose ZIP unless your audience specifically wants 7z. Browsers and operating sy
 4. Open each patch's three-dot **Patch actions** menu and choose **Edit details**. Add a readable name and, when useful, a description, version, and author. People see this information when they open the bundle.
 5. Open **Checks** on each patch. Use **Add check** to record a known CRC32, MD5, SHA-1, or byte count for the input or output. Input checks describe the bytes the patch expects. Output checks describe the bytes it creates. Do not guess a value just to fill the form.
 
-Set the input selector on each patch card:
+Set the input selector on each patch card. It chooses the state that the patch's **Input** checks describe:
 
-1. Keep **Automatic** when the patch checks must select its input.
+1. Keep **Automatic** to let the checks select their input state.
 2. Choose **Original ROM** when the patch was made from the clean ROM.
 3. Choose **Previous patch output** when the patch was made from the result above it.
 

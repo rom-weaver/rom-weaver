@@ -49,7 +49,7 @@ Start with the labels and warning colors, then open **Checks** if you need the n
 
 The ROM card shows the selected filename, size, detected system, and checksums. A message about the expected filename is advice. The name can differ while the bytes are still correct. A checksum or expected-size failure is strict and means the bytes do not match.
 
-Each patch card shows its format and position. Open **Checks** to see what that patch expects at this point in the chain. Open the three-dot **Patch actions** menu to edit details, replace the file, or remove it. Header controls appear only for formats and systems where they make sense.
+Each patch card shows its format and position. Open **Checks** to see the state that the patch's input checks describe and the result that its output checks describe. Open the three-dot **Patch actions** menu to edit details, replace the file, or remove it. Header controls appear only for formats and systems where they make sense.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
@@ -69,15 +69,15 @@ Each patch card shows its format and position. Open **Checks** to see what that 
 
 ## Put several patches in order
 
-Patches run from top to bottom and modify one result. Each patch card has an input selector.
+Patches run from top to bottom and modify one result. Each patch card has an input selector. This selector chooses the state that the patch's **Input** checks must match.
 
-Keep **Automatic** when the patch checks must select its input. Choose **Original ROM** when the patch was made from the clean ROM. Choose **Previous patch output** when the patch depends on the result above it.
+Keep **Automatic** to let the checks select their input state. Choose **Original ROM** when the patch was made from the clean ROM. Choose **Previous patch output** when the patch depends on the result above it.
 
 Drag a numbered handle to move a patch. With a keyboard, focus the handle and use its announced controls. The number changes when the card moves.
 
 The On or Off switch temporarily skips a patch. This is useful for optional add-ons, but only use combinations the author says are compatible. Turning off a required base patch can make everything below it fail.
 
-After changing an input, the order, or a switch, read each patch's **Checks** summary again.
+After changing an input, the order, or a switch, read each patch's **Checks** summary again. **Input checks** describe what the patch reads. **Output checks** describe what that patch creates.
 
 ## Choose the output and apply
 
