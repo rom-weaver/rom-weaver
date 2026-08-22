@@ -331,8 +331,6 @@
   }
   .rw-app .ck {
     gap: var(--sp-2xs) var(--sp-s);
-    min-height: 24px;
-    padding-block: 1px;
     padding-inline: 6px;
   }
   .rw-app .ck .ck-k {
@@ -340,10 +338,6 @@
   }
   .rw-app .ck .ck-v {
     line-height: 1.35;
-  }
-  .rw-app .ck .copy {
-    width: 20px;
-    height: 20px;
   }
   .rw-app .ck-group-head {
     padding-block: 2px;

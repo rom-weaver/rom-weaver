@@ -25,8 +25,8 @@
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 190000,
-        "maxRawBytes": 200000,
+        "expectedRawBytes": 200000,
+        "maxRawBytes": 210000,
         "expectedBrotliBytes": 31500,
         "maxBrotliBytes": 33000
       },

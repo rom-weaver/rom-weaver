@@ -496,69 +496,89 @@
   animation: pop 0.35s var(--ease);
 }
 
-/* Extraction tree */
+/* Extraction tree - one guide line per level with a node on each row. The recessed
+   surface belongs to the drawer, so rows carry no background of their own and there
+   are no stacked pill corners to notch where they meet. */
 .rw-app .tree {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2xs);
-  padding: 4px 0 2px;
+  /* Cancel the drawer's shared inset so the rows use the full body box: the inline
+     10px is `.cks-inner`'s padding, the 4px/2px block is `.taskbody`'s. */
+  padding-block: 1px 2px;
+  margin: -4px -10px -2px;
 }
 .rw-app .tree-row {
+  --tree-x: calc(10px + var(--d, 0) * 10px);
   position: relative;
-  display: flex;
-  gap: var(--sp-s);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0 var(--sp-m);
   align-items: baseline;
-  min-height: 25px;
-  padding: 3px 9px;
+
+  min-height: 21px;
+  padding-block: 1px;
+  padding-inline: var(--tree-x) 10px;
   font-size: 0.78rem;
-  background: var(--well);
-  border-radius: var(--r-s);
 }
-.rw-app .tree-row.d1 {
-  margin-inline-start: 9px;
-}
-.rw-app .tree-row.d2 {
-  margin-inline-start: 18px;
-}
-.rw-app .tree-row.d3 {
-  margin-inline-start: 27px;
-}
-.rw-app .tree-row.d4 {
-  margin-inline-start: 36px;
-}
-.rw-app .tree-elbow {
+/* The guide line runs down the parent's node column; the last child at a depth stops
+   it at its own node so the branch reads as closed. */
+.rw-app .tree-row:not([data-depth="0"])::before {
   position: absolute;
-  inset-inline-start: -7px;
-  top: -8px;
-  bottom: 50%;
-  width: 5px;
-  border-block-end: 2px solid var(--seam-strong);
-  border-inline-start: 2px solid var(--seam-strong);
-  border-end-start-radius: 5px;
+  inset-block: 0;
+  inset-inline-start: calc(var(--tree-x) - 7px);
+  width: 1px;
+  content: "";
+  background: var(--seam-strong);
 }
-.rw-app .tree-row.d0 .tree-name {
-  color: var(--ink-3);
+.rw-app .tree-row.is-last::before {
+  inset-block-end: 50%;
+}
+.rw-app .tree-row:not([data-depth="0"])::after {
+  position: absolute;
+  inset-block-start: calc(50% - 1px);
+  inset-inline-start: calc(var(--tree-x) - 6px);
+  width: 7px;
+  height: 1px;
+  content: "";
+  background: var(--seam-strong);
 }
 .rw-app .tree-name {
-  flex: 1 1 auto;
+  position: relative;
   min-width: 0;
-  font-weight: 550;
-  color: var(--ink);
-  overflow-wrap: anywhere;
+  padding-inline-start: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-2);
+  white-space: nowrap;
 }
-.rw-app .tree-meta {
-  display: inline-flex;
-  flex: none;
-  gap: var(--sp-m);
-  align-items: baseline;
+/* The node rides the name, so it holds the text baseline at any row height. */
+.rw-app .tree-name::before {
+  position: absolute;
+  inset-block-start: 0.45em;
+  inset-inline-start: 1px;
+  width: 5px;
+  height: 5px;
+  content: "";
+  background: var(--seam-strong);
+  border-radius: 50%;
+}
+.rw-app .tree-row.is-leaf .tree-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.rw-app .tree-row.is-leaf .tree-name::before {
+  background: var(--thread);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--thread) 22%, transparent);
 }
 .rw-app .tree-size {
-  min-width: 62px;
   color: var(--ink-3);
   text-align: end;
 }
+.rw-app .tree-row.is-leaf .tree-size {
+  color: var(--weft);
+}
 .rw-app .tree-time {
-  min-width: 44px;
+  min-width: 42px;
   color: var(--thread-text);
   text-align: end;
 }

@@ -439,8 +439,8 @@
   grid-template-columns: minmax(var(--ck-label-w), max-content) minmax(0, 1fr) auto;
   gap: var(--sp-xs) var(--sp-s);
   align-items: center;
-  min-height: 26px;
-  padding: 3px 9px;
+  min-height: 24px;
+  padding: 1px 9px;
   /* The label track floor aligns independently gridded rows. */
   margin: 0;
   cursor: pointer;
@@ -670,8 +670,8 @@
 .rw-app .ck .copy {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   color: var(--ink-4);
   appearance: none;
   cursor: pointer;
@@ -690,6 +690,10 @@
     opacity: 1;
   }
 }
+.rw-app .ck:active .copy {
+  color: var(--thread-text);
+  opacity: 1;
+}
 .rw-app .ck .copy:active {
   transform: scale(0.82);
 }
@@ -702,15 +706,15 @@
   width: 13px;
   height: 13px;
 }
-/* Enlarge touch targets without changing visual layout. Lives here rather than with
-   the other coarse-pointer targets so `.cue-sub-single > .cue-copy` below still
-   places the button - a later layer would outrank it whatever its specificity. */
+/* Enlarge the sheet copy button's touch target without changing visual layout. Lives here
+   rather than with the other coarse-pointer targets so `.cue-sub-single > .cue-copy` below
+   still places the button - a later rule would outrank it whatever its specificity.
+   Checksum rows are excluded: the whole `.ck` row is the button, so a 44px box on the
+   decorative glyph would only reach out and intercept the adjacent row. */
 @media (pointer: coarse) {
-  .rw-app .ck .copy,
   .rw-app .cue-copy {
     position: relative;
   }
-  .rw-app .ck .copy::before,
   .rw-app .cue-copy::before {
     position: absolute;
     top: 50%;
