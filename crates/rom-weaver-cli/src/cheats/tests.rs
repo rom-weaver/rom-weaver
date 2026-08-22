@@ -76,6 +76,104 @@ fn gameboy_gameshark_little_endian_address() {
     assert_eq!(decoded.address, 0x5634);
 }
 
+#[test]
+fn gba_xploder_ram_write_is_decoded_and_rejected_for_baking() {
+    let decoded = decode(
+        "32024542 00FF",
+        CheatSystem::GameBoyAdvance,
+        CheatKind::Xploder,
+    )
+    .unwrap();
+    assert_eq!(decoded.address, 0x0202_4542);
+    assert_eq!(decoded.value, 0xFF);
+    assert_eq!(decoded.width, 1);
+
+    let rom = vec![0u8; 0x100];
+    let layout = RomLayout::detect(&rom, CheatSystem::GameBoyAdvance);
+    let err = resolve_writes(&rom, &layout, &decoded).unwrap_err();
+    assert_eq!(err_code(&err), "cheat_ram_address");
+}
+
+#[test]
+fn gba_xploder_rom_patch_maps_halfword_offset() {
+    let code = "00000000 18000004 0000ABCD 00000000";
+    let decoded = decode(code, CheatSystem::GameBoyAdvance, CheatKind::Xploder).unwrap();
+    assert_eq!(decoded.address, 0x0800_0008);
+    assert_eq!(decoded.value, 0xABCD);
+    assert_eq!(decoded.width, 2);
+
+    let rom = vec![0u8; 0x20];
+    let layout = RomLayout::detect(&rom, CheatSystem::GameBoyAdvance);
+    assert_eq!(
+        resolve_writes(&rom, &layout, &decoded).unwrap(),
+        vec![CheatWrite {
+            offset: 8,
+            value: 0xABCD,
+            width: 2,
+        }]
+    );
+}
+
+#[test]
+fn playstation_xploder_writes_map_into_psx_exe_payload() {
+    let mut rom = vec![0u8; 0x800 + 16];
+    rom[..8].copy_from_slice(b"PS-X EXE");
+    rom[0x18..0x1C].copy_from_slice(&0x8001_0000u32.to_le_bytes());
+    rom[0x1C..0x20].copy_from_slice(&16u32.to_le_bytes());
+    let layout = RomLayout::detect(&rom, CheatSystem::PlayStation);
+
+    let byte = decode(
+        "30010000 00FF",
+        CheatSystem::PlayStation,
+        CheatKind::Xploder,
+    )
+    .unwrap();
+    assert_eq!(
+        resolve_writes(&rom, &layout, &byte).unwrap(),
+        vec![CheatWrite {
+            offset: 0x800,
+            value: 0xFF,
+            width: 1,
+        }]
+    );
+
+    let word = decode(
+        "88010002 1234",
+        CheatSystem::PlayStation,
+        CheatKind::Xploder,
+    )
+    .unwrap();
+    assert_eq!(
+        resolve_writes(&rom, &layout, &word).unwrap(),
+        vec![CheatWrite {
+            offset: 0x802,
+            value: 0x1234,
+            width: 2,
+        }]
+    );
+
+    let long = decode(
+        "00010004 1234",
+        CheatSystem::PlayStation,
+        CheatKind::Xploder,
+    )
+    .unwrap();
+    assert_eq!(long.width, 4);
+    assert_eq!(long.value, 0x1234);
+}
+
+#[test]
+fn xploder_split_keeps_words_and_gba_rom_patch_lines_together() {
+    assert_eq!(
+        split_xploder_codes("30010000 00FF + 88010002 1234"),
+        vec!["3001000000FF", "880100021234"]
+    );
+    assert_eq!(
+        split_xploder_codes("00000000 18000004 0000ABCD 00000000"),
+        vec!["00000000180000040000ABCD00000000"]
+    );
+}
+
 // --- kind inference --------------------------------------------------------
 
 #[test]
@@ -223,6 +321,7 @@ fn apply_writes_round_trip() {
     let mut rom = vec![0u8; 0x10];
     apply_writes(
         &mut rom,
+        CheatSystem::Genesis,
         &[
             CheatWrite {
                 offset: 0x02,
@@ -240,6 +339,29 @@ fn apply_writes_round_trip() {
     assert_eq!(rom[0x02], 0xAB);
     assert_eq!(rom[0x04], 0x12); // big-endian word
     assert_eq!(rom[0x05], 0x34);
+}
+
+#[test]
+fn apply_writes_uses_little_endian_for_xploder() {
+    let mut rom = vec![0u8; 8];
+    apply_writes(
+        &mut rom,
+        CheatSystem::GameBoyAdvance,
+        &[
+            CheatWrite {
+                offset: 0,
+                value: 0xABCD,
+                width: 2,
+            },
+            CheatWrite {
+                offset: 2,
+                value: 0x1234_5678,
+                width: 4,
+            },
+        ],
+    )
+    .unwrap();
+    assert_eq!(&rom[..6], &[0xCD, 0xAB, 0x78, 0x56, 0x34, 0x12]);
 }
 
 // --- layout edge cases -----------------------------------------------------

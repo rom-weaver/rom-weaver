@@ -1396,7 +1396,7 @@ output is written back in the order the input arrived in."
         arg(
             long = "code-system",
             help_heading = "Diagnostics/authoring",
-            help = "Console the --code values are for (nes, snes, genesis, gameboy), when the ROM header does not say"
+            help = "Console the --code values are for (nes, snes, genesis, gameboy, gba, psx), when the ROM header does not say"
         )
     )]
     #[serde(default)]
@@ -1408,7 +1408,7 @@ output is written back in the order the input arrived in."
             long = "code-kind",
             default_value = "auto",
             help_heading = "Diagnostics/authoring",
-            help = "Which cheat scheme the --code values use: auto, game-genie, or gameshark/par"
+            help = "Which cheat scheme the --code values use: auto, game-genie, gameshark/par, or xploder"
         )
     )]
     #[serde(default = "default_code_kind")]
@@ -1948,7 +1948,7 @@ apply and verifies the input, as long as the file name survives."
         not(target_arch = "wasm32"),
         arg(
             long = "code-system",
-            help = "Console the --code values are for (nes, snes, genesis, gameboy), when the ROM header does not say"
+            help = "Console the --code values are for (nes, snes, genesis, gameboy, gba, psx), when the ROM header does not say"
         )
     )]
     #[serde(default)]
@@ -1959,7 +1959,7 @@ apply and verifies the input, as long as the file name survives."
         arg(
             long = "code-kind",
             default_value = "auto",
-            help = "Which cheat scheme the --code values use: auto, game-genie, or gameshark/par"
+            help = "Which cheat scheme the --code values use: auto, game-genie, gameshark/par, or xploder"
         )
     )]
     #[serde(default = "default_code_kind")]

@@ -1,6 +1,6 @@
 # Bake cheat codes into a ROM
 
-Write Game Genie or GameShark/Pro Action Replay codes permanently into a ROM with `rom-weaver patch apply --code`, so the effect is there without a cheat device or an emulator cheat list.
+Write Game Genie, GameShark/Pro Action Replay, or raw Xploder codes permanently into a ROM with `rom-weaver patch apply --code`, so the effect is there without a cheat device or an emulator cheat list.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -47,7 +47,15 @@ rom-weaver patch apply \
   --output game-coded.bin
 ```
 
-`--code-system` accepts `nes`, `snes`, `genesis`, and `gameboy`. `--code-kind` accepts `auto` (the default), `game-genie`, and `gameshark`/`par`.
+`--code-system` accepts `nes`, `snes`, `genesis`, `gameboy`, `gba`, and `psx`. `--code-kind` accepts `auto` (the default), `game-genie`, `gameshark`/`par`, and `xploder`.
+
+Use `gba` with `--code-kind xploder` for raw Xploder Advance codes. The tool cannot bake GBA RAM writes into a ROM. GBA ROM-patch codes use four words, for example:
+
+```text
+00000000 18000004 0000ABCD 00000000
+```
+
+Use `psx` with `--code-kind xploder` for plain PlayStation constant writes. The input must be a PS-X EXE. The tool maps writes in the loaded executable to file offsets. Encrypted and conditional codes stay runtime-only.
 
 ## Combine codes with a patch
 
