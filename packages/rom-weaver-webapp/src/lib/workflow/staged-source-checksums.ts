@@ -184,7 +184,7 @@ const calculateStandardInputChecksumsForFile = async ({
     stage: "checksum",
     workflow,
   });
-  const { result } = await runtime.ingest.run({
+  const { identifyUnavailable, result } = await runtime.ingest.run({
     checksumAlgorithms: [...DEFAULT_CHECKSUMS],
     fileName: state.fileName,
     logLevel,
@@ -208,9 +208,18 @@ const calculateStandardInputChecksumsForFile = async ({
     const value = assetChecksums[algorithm];
     checksums[algorithm] = typeof value === "string" ? value.trim().toLowerCase() : "";
   }
+  // The lookup database is separate from the ROM: when it could not be loaded the
+  // checksums are still valid, so the workflow reports "unavailable" and carries on.
+  const identification = identifyUnavailable
+    ? ({
+        matches: [],
+        status: "unavailable",
+        unavailableReason: identifyUnavailable,
+      } satisfies ParsedIdentifyResolution)
+    : cloneIdentification(asset?.identification);
   return {
     checksums,
-    identification: cloneIdentification(asset?.identification),
+    identification,
     romProbe: undefined,
     romType: romTypeFromEmittedFile({
       discFormat: asset?.discFormat,

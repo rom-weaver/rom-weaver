@@ -5,6 +5,7 @@
 // camelCase shape the webapp consumes directly (and drops `null`/absent optionals). It is the single
 // boundary between the Rust contract and the input/patch state the apply workflow builds.
 import type { ChecksumMap } from "../../types/checksum.ts";
+import { isIdentifyLookupStatus } from "../../types/identify.ts";
 import type { ParsedIdentifyLookupResult, ParsedIdentifyTitleMatch } from "../../types/identify.ts";
 import type { ParsedIngestResult, ParsedIngestRomAsset, ParsedPatchDescriptor } from "../../types/ingest.ts";
 import type {
@@ -60,7 +61,7 @@ const parseIdentifyLookup = (value: unknown): ParsedIdentifyLookupResult | undef
   const lookup = asRecord(value) as WireRecord<IdentifyLookupResult> | undefined;
   if (!lookup) return undefined;
   const status = lookup.status;
-  if (!(status === "matched" || status === "ambiguous" || status === "unknown")) return undefined;
+  if (!isIdentifyLookupStatus(status)) return undefined;
   const matches = Array.isArray(lookup.matches)
     ? lookup.matches.map(parseIdentifyMatch).filter((match): match is ParsedIdentifyTitleMatch => match !== undefined)
     : [];

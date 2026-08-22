@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::shared::*;
 
 /// Build a real BPS patch (with embedded source/target CRC32 + size footer) by diffing two inputs.
@@ -118,6 +120,172 @@ fn ingest_identifies_asset_from_existing_checksum_variants() {
         "Ingest Identify Test [!]"
     );
     assert_eq!(identification["matches"][0]["variant"], "raw");
+}
+
+/// Build a tar.gz holding several NES ROMs at nested member paths and return
+/// their CRC32 bytes in the same order.
+fn nested_rom_archive(temp: &TempDir, payloads: &[(&str, &[u8])]) -> (PathBuf, Vec<[u8; 4]>) {
+    let mut sources = Vec::new();
+    let mut crc32s = Vec::new();
+    for (member_path, payload) in payloads {
+        let file_name = member_path.rsplit('/').next().expect("member file name");
+        let rom = temp.child(file_name);
+        fs::write(rom.path(), with_nes_header(payload)).expect("ROM fixture");
+        crc32s.push(
+            u32::from_str_radix(&checksum_value(rom.path(), "crc32"), 16)
+                .expect("CRC32")
+                .to_be_bytes(),
+        );
+        sources.push((rom.path().to_path_buf(), (*member_path).to_string()));
+    }
+    let archive = temp.child("collection.tar.gz");
+    let entries = sources
+        .iter()
+        .map(|(path, name)| (path.as_path(), name.as_str()))
+        .collect::<Vec<_>>();
+    write_tar_gz_fixture(&entries, archive.path());
+    (archive.path().to_path_buf(), crc32s)
+}
+
+fn archive_identification_by_file_name(
+    temp: &TempDir,
+    archive: &Path,
+    pack: &Path,
+) -> BTreeMap<String, Value> {
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        archive.to_str().expect("archive path"),
+        "--output",
+        temp.child("ingest-archive-identify-out")
+            .path()
+            .to_str()
+            .expect("output path"),
+        "--database",
+        pack.to_str().expect("pack path"),
+        "--json",
+    ]);
+    terminal["details"]["ingest"]["assets"]
+        .as_array()
+        .expect("assets array")
+        .iter()
+        .map(|asset| {
+            (
+                asset["file_name"].as_str().expect("file name").to_string(),
+                asset["identification"].clone(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn ingest_identifies_a_single_rom_archive_member() {
+    let temp = setup_temp_dir();
+    let (archive, crc32s) = nested_rom_archive(&temp, &[("Games/GBA/solo.nes", b"solo payload")]);
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_entries(&[(crc32s[0], "Solo Game (USA)")]),
+    )
+    .expect("identify pack");
+
+    let identifications = archive_identification_by_file_name(&temp, &archive, pack.path());
+
+    assert_eq!(identifications.len(), 1);
+    let solo = &identifications["solo.nes"];
+    assert_eq!(solo["status"], "matched");
+    assert_eq!(solo["matches"][0]["name"], "Solo Game (USA)");
+}
+
+#[test]
+fn ingest_identifies_every_rom_in_a_multi_rom_archive() {
+    let temp = setup_temp_dir();
+    let (archive, crc32s) = nested_rom_archive(
+        &temp,
+        &[
+            ("Games/NES/first.nes", b"first payload"),
+            ("Games/NES/deeper/second.nes", b"second payload"),
+        ],
+    );
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_entries(&[
+            (crc32s[0], "First Game (USA)"),
+            (crc32s[1], "Second Game (Europe)"),
+        ]),
+    )
+    .expect("identify pack");
+
+    let identifications = archive_identification_by_file_name(&temp, &archive, pack.path());
+
+    // Every member gets its own verdict; none is dropped in favour of a single winner.
+    assert_eq!(identifications.len(), 2);
+    assert_eq!(identifications["first.nes"]["status"], "matched");
+    assert_eq!(
+        identifications["first.nes"]["matches"][0]["name"],
+        "First Game (USA)"
+    );
+    assert_eq!(identifications["second.nes"]["status"], "matched");
+    assert_eq!(
+        identifications["second.nes"]["matches"][0]["name"],
+        "Second Game (Europe)"
+    );
+}
+
+#[test]
+fn ingest_identifies_only_the_matching_archive_member() {
+    let temp = setup_temp_dir();
+    let (archive, crc32s) = nested_rom_archive(
+        &temp,
+        &[
+            ("Games/NES/known.nes", b"known payload"),
+            ("Games/NES/unknown.nes", b"unknown payload"),
+        ],
+    );
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_entries(&[(crc32s[0], "Known Game (USA)")]),
+    )
+    .expect("identify pack");
+
+    let identifications = archive_identification_by_file_name(&temp, &archive, pack.path());
+
+    assert_eq!(identifications["known.nes"]["status"], "matched");
+    // The unmatched member reports `unknown`, not the matched member's title.
+    assert_eq!(identifications["unknown.nes"]["status"], "unknown");
+    assert_eq!(
+        identifications["unknown.nes"]["matches"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
+fn ingest_reports_unknown_for_an_archive_with_no_matching_member() {
+    let temp = setup_temp_dir();
+    let (archive, _) = nested_rom_archive(
+        &temp,
+        &[
+            ("Games/NES/one.nes", b"one payload"),
+            ("Games/NES/two.nes", b"two payload"),
+        ],
+    );
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_entries(&[([0xff, 0xff, 0xff, 0xff], "Absent Game")]),
+    )
+    .expect("identify pack");
+
+    let identifications = archive_identification_by_file_name(&temp, &archive, pack.path());
+
+    assert!(
+        identifications
+            .values()
+            .all(|identification| identification["status"] == "unknown"),
+        "a database that answered with no record MUST read as unknown: {identifications:?}"
+    );
 }
 
 #[test]

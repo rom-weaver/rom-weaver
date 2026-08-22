@@ -242,6 +242,11 @@ impl CliApp {
                 report =
                     Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
             }
+            // Same console/medium detection the container branch attaches, so a bare
+            // cartridge ROM reports its platform too. Hosts use it to pick which
+            // identify database to load before hashing, and a headered ROM whose
+            // extension says nothing (`.bin`, `.rom`) has no other cheap signal.
+            Self::attach_rom_identity_details(&mut report, &probe_source);
             return self.finish_probe(report, extracted_archives, cleanup_paths);
         }
 

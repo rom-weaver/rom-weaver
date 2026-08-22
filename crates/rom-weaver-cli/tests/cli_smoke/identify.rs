@@ -15,6 +15,80 @@ fn hash_member(algorithm: u8, hash: &[u8]) -> Vec<u8> {
     bytes
 }
 
+/// A hash table with no keys. Every pack must carry all three tables, so a
+/// crc32-only fixture still needs valid empty md5/sha1 members.
+fn empty_hash_member(algorithm: u8, hash_bytes: u8) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"RWH1");
+    bytes.extend_from_slice(&[algorithm, 0, hash_bytes, 0]);
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes
+}
+
+/// A CRC32 table holding one record per entry, sorted the way the reader's
+/// binary search expects.
+fn crc32_hash_member(entries: &[([u8; 4], &str)]) -> Vec<u8> {
+    let mut sorted: Vec<(usize, [u8; 4])> = entries
+        .iter()
+        .enumerate()
+        .map(|(index, (crc32, _))| (index, *crc32))
+        .collect();
+    sorted.sort_by_key(|(_, crc32)| *crc32);
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"RWH1");
+    bytes.extend_from_slice(&[0, 0, 4, 0]);
+    bytes.extend_from_slice(&(entries.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    for (pair_id, crc32) in &sorted {
+        bytes.extend_from_slice(crc32);
+        bytes.extend_from_slice(&(*pair_id as u32).to_le_bytes());
+    }
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes
+}
+
+/// A pack naming several ROMs by CRC32, for the archive tests where each member
+/// needs its own verdict.
+pub(crate) fn identify_pack_with_entries(entries: &[([u8; 4], &str)]) -> Vec<u8> {
+    let mut pairs = Vec::new();
+    pairs.extend_from_slice(b"RWHP");
+    pairs.extend_from_slice(&1u16.to_le_bytes());
+    pairs.extend_from_slice(&6u16.to_le_bytes());
+    for index in 0..entries.len() {
+        pairs.extend_from_slice(&(index as u32).to_le_bytes());
+        pairs.extend_from_slice(&0u16.to_le_bytes());
+    }
+    let names = entries.iter().map(|(_, name)| *name).collect::<Vec<_>>();
+    let members = [
+        ("crc32.bin", crc32_hash_member(entries)),
+        ("md5.bin", empty_hash_member(1, 16)),
+        ("sha1.bin", empty_hash_member(2, 20)),
+        ("name-platforms.bin", pairs),
+        ("names.json", serde_json::to_vec(&names).expect("names")),
+        (
+            "platforms.json",
+            serde_json::to_vec(&["Test System"]).expect("platforms"),
+        ),
+    ];
+
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(PACK_MAGIC);
+    bytes.extend_from_slice(&(members.len() as u32).to_le_bytes());
+    for (name, member) in &members {
+        bytes.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        bytes.extend_from_slice(&(member.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(name.as_bytes());
+    }
+    for (_, member) in members {
+        bytes.extend_from_slice(&member);
+    }
+    bytes
+}
+
 fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name: &str) -> Vec<u8> {
     let mut pairs = Vec::new();
     pairs.extend_from_slice(b"RWHP");

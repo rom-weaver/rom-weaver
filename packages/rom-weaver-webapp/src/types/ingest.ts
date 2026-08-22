@@ -15,6 +15,11 @@ export interface ParsedIngestRomAsset {
   checksums: ChecksumMap;
   checksumVariants: ChecksumVariant[];
   identification?: ParsedIdentifyLookupResult;
+  /**
+   * Archive-relative path of the member this leaf came from, folders included.
+   * Host-computed from the extraction scope, so it is absent for a bare ROM.
+   */
+  memberPath?: string;
   platform?: string;
   discFormat?: string;
   recommendedFormat?: string;

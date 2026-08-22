@@ -437,6 +437,12 @@ type WorkflowRuntimeIngest = {
     checksumAlgorithms?: string[];
     /** Load local identify packs and attach best-effort title lookups. Defaults to true. */
     identify?: boolean;
+    /**
+     * Extract and identify EVERY ROM member of a container rather than asking the
+     * host to pick one. The standalone Identify workflow sets this so a multi-ROM
+     * archive reports one result per member instead of cancelling on the prompt.
+     */
+    identifyAllRomEntries?: boolean;
     // Pin which archive payload(s) to extract (the resolved "keep one ROM" entry). Empty/omitted lets
     // ingest auto-pick a single logical payload or prompt the host when ambiguous.
     select?: string[];
@@ -452,7 +458,17 @@ type WorkflowRuntimeIngest = {
     // leaves into `outputs`, so the patch-staging path reuses the PublicOutput→PatchFileInstance
     // bridge. A bare patch yields no `patchOutput` (its leaf is the staged source, cleaned up here -
     // the caller keeps its own file and uses the descriptor's metadata).
-  }) => Promise<{ result: ParsedIngestResult; outputs: PublicOutput[]; patchOutputs: PublicOutput[] }>;
+  }) => Promise<{
+    /**
+     * Set when the identify packs could not be loaded or validated. The ingest
+     * itself still succeeded - callers MUST report this as "title lookup
+     * unavailable", never as a failed ROM or a genuine no-match.
+     */
+    identifyUnavailable?: string;
+    result: ParsedIngestResult;
+    outputs: PublicOutput[];
+    patchOutputs: PublicOutput[];
+  }>;
 };
 
 type WorkflowRuntimeBundle = {
