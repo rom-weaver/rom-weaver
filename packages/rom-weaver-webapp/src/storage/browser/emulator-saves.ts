@@ -353,6 +353,60 @@ const deleteEmulatorSave = async (gameId: string): Promise<void> => {
 const saveEmulatorState = (update: EmulatorSaveUpdate) => updatePart("state", update);
 const saveEmulatorSram = (update: EmulatorSaveUpdate) => updatePart("sram", update);
 
+const bytesEqual = (left: Uint8Array | undefined, right: Uint8Array): boolean =>
+  !!left && left.byteLength === right.byteLength && left.every((value, index) => value === right[index]);
+
+const replaceEmulatorSaveSram = async (
+  gameId: string,
+  data: Uint8Array,
+  expected?: Uint8Array,
+): Promise<EmulatorSaveRecord> => {
+  const database = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.get(gameId);
+    let next: EmulatorSaveRecord | undefined;
+    let failure: Error | undefined;
+    request.onerror = () => {
+      failure = requestError(request);
+      transaction.abort();
+    };
+    request.onsuccess = () => {
+      const previous = normalizeRecord(request.result);
+      if (!previous) {
+        failure = new Error("The selected emulator save no longer exists.");
+        transaction.abort();
+        return;
+      }
+      if (expected && !bytesEqual(previous.sram, expected)) {
+        failure = new Error("The stored SRAM changed. Open it again before you replace it.");
+        transaction.abort();
+        return;
+      }
+      next = {
+        ...previous,
+        sram: copyBytes(data),
+        updatedAt: Date.now(),
+      };
+      store.put(copyRecord(next), gameId);
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      if (next) resolve(copyRecord(next));
+      else reject(new Error("The emulator SRAM replacement did not create a record."));
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(failure || transaction.error || new Error("Emulator save transaction failed."));
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(failure || transaction.error || new Error("Emulator save transaction was aborted."));
+    };
+  });
+};
+
 const bytesToBase64 = (bytes: Uint8Array): string => {
   let binary = "";
   for (let offset = 0; offset < bytes.length; offset += 0x8000) {
@@ -579,6 +633,7 @@ export {
   importEmulatorSavePart,
   listEmulatorSaves,
   parseSerializedEmulatorSave,
+  replaceEmulatorSaveSram,
   serializeEmulatorSave,
   writeEmulatorSave,
 };
