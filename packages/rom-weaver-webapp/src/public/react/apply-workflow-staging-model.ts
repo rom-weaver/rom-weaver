@@ -307,6 +307,7 @@ const normalizeApplyResult = (result: BrowserApplyResult): ApplyWorkflowResult =
     vfs: {} as ApplyWorkflowResult["output"]["vfs"],
   })) as unknown as ApplyWorkflowResult["outputs"];
   return {
+    ...(result.cheats ? { cheats: result.cheats } : {}),
     inputs: result.inputs,
     output: outputs[0] as ApplyWorkflowResult["output"],
     outputs,

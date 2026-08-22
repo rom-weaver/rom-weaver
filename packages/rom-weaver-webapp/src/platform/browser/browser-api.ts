@@ -1,11 +1,12 @@
 import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
+import type { CheatDatabaseRecord, ClassifiedCheatRecord, RuntimeCheatRecord } from "../../lib/cheats/model.ts";
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
 import { TrimWorkflowController } from "../../lib/workflow/trim-workflow-controller.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type { BrowserSaveDestination } from "../../types/output.ts";
 import type { ApplySettings, CreateSettings, WorkerSettings } from "../../types/settings.ts";
-import type { BrowserSourceRef } from "../../types/source.ts";
+import type { BrowserSourceRef, SourceRef } from "../../types/source.ts";
 import type { WorkflowOptions } from "../../types/workflow-public.ts";
 import type { RuntimePatchCreateFormatCandidates } from "../../types/workflow-runtime-adapter.ts";
 import { getDefaultBrowserThreadCount } from "../shared/compression-options.ts";
@@ -36,6 +37,43 @@ type BrowserPpfUndoInput = {
   patch: BrowserSourceRef;
   rom: BrowserSourceRef;
   signal?: AbortSignal;
+};
+
+type BrowserCheatInput = {
+  records: Array<CheatDatabaseRecord | RuntimeCheatRecord>;
+  rom: SourceRef;
+  selectedIds?: string[];
+  outputName?: string;
+  signal?: AbortSignal;
+};
+
+const toRuntimeCheatRecord = (record: CheatDatabaseRecord | RuntimeCheatRecord): RuntimeCheatRecord => ({
+  id: record.id,
+  system: record.system,
+  gameId: record.gameId,
+  description: record.description,
+  rawCode: record.rawCode ?? null,
+  ...(record.codeKind ? { codeKind: record.codeKind } : {}),
+  rawFields: Array.isArray(record.rawFields)
+    ? Object.fromEntries(record.rawFields.map(({ name, value }) => [name, value]))
+    : record.rawFields,
+  sourceFile: record.sourceFile,
+  sourceIndex: record.sourceIndex,
+  sourceRevision: record.sourceRevision,
+});
+
+const runBrowserCheats = async ({ outputName, records, rom, selectedIds, signal }: BrowserCheatInput) => {
+  browserRuntime.binary.assertSource(rom, "Cheat classification");
+  const cheat = browserRuntime.cheat;
+  if (!cheat) throw new Error("The cheat worker is unavailable");
+  const result = await cheat.run({
+    ...(outputName ? { outputName } : {}),
+    records: records.map(toRuntimeCheatRecord),
+    ...(selectedIds?.length ? { selectedIds } : {}),
+    signal,
+    source: rom,
+  });
+  return { ...result, records: result.records as ClassifiedCheatRecord[] };
 };
 
 type BrowserIngestRomOptions = {
@@ -167,6 +205,7 @@ export type { CandidateSelectionRequest } from "../../types/selection.ts";
 export type { ApplySettings, CreateSettings } from "../../types/settings.ts";
 
 export type { BrowserCreatePatchFormatCandidatesInput, RuntimePatchCreateFormatCandidates };
+export type { BrowserCheatInput };
 
 class ApplyWorkflow extends ApplyWorkflowController<BrowserSourceRef, BrowserSaveDestination> {
   constructor(options: WorkflowOptions<ApplySettings> = {}) {
@@ -189,6 +228,7 @@ export {
   getIngestOutputBlob,
   ingestRom,
   preloadBrowserRuntime,
+  runBrowserCheats,
   TrimWorkflow,
   undoPpf,
 };
