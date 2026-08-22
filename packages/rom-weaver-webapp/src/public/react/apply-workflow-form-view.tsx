@@ -1795,6 +1795,7 @@ const buildRomRowDeps = (input: {
 };
 
 function ApplyWorkflowFormView({
+  cheats,
   controllers,
   emulatorOutput,
   bundleExpectedRomChecks,
@@ -1811,6 +1812,7 @@ function ApplyWorkflowFormView({
   pendingDrops = [],
   startup = { message: "", status: "ready" },
 }: {
+  cheats?: ReactNode;
   controllers: {
     output: PatcherOutputController;
     patchStack: PatcherStackController;
@@ -2159,6 +2161,8 @@ function ApplyWorkflowFormView({
             title="ROM"
             woven={wovenSteps}
           />
+
+          {cheats}
 
           <ApplyPatchListStep
             bundleMeta={bundleMeta}

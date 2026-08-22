@@ -6,6 +6,7 @@ import { assertBrowserBinarySource } from "../../lib/runtime/source-normalizatio
 import {
   invokeRomWeaverBundleCreateWorker,
   invokeRomWeaverBundleParseWorker,
+  invokeRomWeaverCheatWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverIngestWorker,
@@ -554,6 +555,37 @@ const createBrowserTrimRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["t
     workerOutputFailureMessage: "Trim worker did not return browser output",
   });
 
+const createBrowserCheatRuntime = (workerIo: RuntimeWorkerIo): NonNullable<WorkflowRuntime["cheat"]> => ({
+  run: async ({ outputName, records, selectedIds, signal, source }) => {
+    const staged = await workerIo.stageSource({
+      fallbackFileName: "cheat-target.bin",
+      pathPrefix: "cheat-target",
+      scope: "apply",
+      source,
+    });
+    try {
+      const result = await invokeRomWeaverCheatWorker({
+        inputPath: staged.filePath,
+        knownInputPaths: [staged.filePath],
+        ...(outputName ? { outputName } : {}),
+        records,
+        ...(selectedIds?.length ? { selectedIds } : {}),
+        signal,
+      });
+      const output = result.runtimeOutput
+        ? await workerIo.createWorkerOutput(
+            result.runtimeOutput,
+            outputName || "runtime-cheats.cht",
+            "The cheat worker did not return a RetroArch cheat file",
+          )
+        : undefined;
+      return { conflicts: result.conflicts, output, records: result.records };
+    } finally {
+      await staged.cleanup().catch(() => undefined);
+    }
+  },
+});
+
 const createBrowserRuntime = (): WorkflowRuntime => {
   configureBrowserSourcePrimitives();
   const workerIo = createBrowserRuntimeVfsIo({
@@ -565,6 +597,7 @@ const createBrowserRuntime = (): WorkflowRuntime => {
       assertSource: assertBrowserBinarySource,
     },
     bundle: createBrowserBundleRuntime(workerIo),
+    cheat: createBrowserCheatRuntime(workerIo),
     compression: createBrowserCompressionRuntime(workerIo),
     ingest: createBrowserIngestRuntime(workerIo),
     name: "browser",
