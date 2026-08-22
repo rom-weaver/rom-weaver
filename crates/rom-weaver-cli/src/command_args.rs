@@ -1414,6 +1414,12 @@ output is written back in the order the input arrived in."
     #[serde(default = "default_code_kind")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub code_kind: String,
+    /// Structured database records selected for ROM baking. This field exists
+    /// on the JSON/WASM boundary; the public CLI keeps `--code` unchanged.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub cheat_records: Vec<crate::cheats::CheatRecord>,
     // Native-only authoring conveniences (serde/ts skip keeps them off the
     // wasm wire + generated TS; the webapp has its own bundle export).
     #[cfg_attr(
@@ -2762,6 +2768,32 @@ impl BundleCreateCommand {
         );
         self.patch_specs = specs;
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "typescript-types", ts(rename_all = "camelCase"))]
+pub struct CheatCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(short = 'i', long = "input", value_name = "ROM")
+    )]
+    pub input: PathBuf,
+    /// Direct records for the JSON/WASM boundary. The native argv parser does
+    /// not expose this internal command.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    pub records: Vec<crate::cheats::CheatRecord>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub selected_ids: Vec<String>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(short, long))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub output: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

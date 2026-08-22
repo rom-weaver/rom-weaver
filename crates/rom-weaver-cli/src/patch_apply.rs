@@ -2,6 +2,7 @@ use super::*;
 
 use super::bundle_apply::BundleApplyResolution;
 use super::bundle_parse::bundle_validation;
+use super::cheats_apply::CheatIpsRequest;
 use super::patch_apply_disc::DiscContext;
 use super::patch_basis_decision::ChecksumBasisProof;
 use super::patch_commands::{
@@ -18,6 +19,84 @@ fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
             (Ok(left), Ok(right)) if left == right
         )
         || native_file_identity_matches(left, right)
+}
+
+#[cfg(test)]
+mod cheat_ordering_tests {
+    use std::sync::{Arc, Mutex};
+
+    use assert_fs::TempDir;
+    use rom_weaver_core::{ProgressEvent, ProgressSink};
+    use serde_json::json;
+
+    use super::*;
+
+    #[derive(Default)]
+    struct EventSink(Mutex<Vec<ProgressEvent>>);
+
+    impl ProgressSink for EventSink {
+        fn emit(&self, event: ProgressEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+
+    #[test]
+    fn database_cheat_compare_uses_the_post_patch_rom() {
+        let temp = TempDir::new().unwrap();
+        let input = temp.path().join("game.nes");
+        let patch = temp.path().join("change-compare.ips");
+        let output = temp.path().join("output.nes");
+        let mut rom = vec![0u8; 0x8000];
+        rom[0x4000] = 0xff;
+        fs::write(&input, rom).unwrap();
+        fs::write(
+            &patch,
+            [
+                b'P', b'A', b'T', b'C', b'H', 0x00, 0x40, 0x00, 0x00, 0x01, 0x00, b'E', b'O', b'F',
+            ],
+        )
+        .unwrap();
+
+        let args: PatchApplyCommand = serde_json::from_value(json!({
+            "input": input,
+            "patches": [patch],
+            "output": output,
+            "no_compress": true,
+            "cheat_records": [{
+                "id": "compare-cheat",
+                "system": "nes",
+                "gameId": "synthetic",
+                "description": "Compare cheat",
+                "rawCode": "C00012FF",
+                "codeKind": "pro-action-replay",
+                "rawFields": { "code": "C00012FF" },
+                "sourceFile": "fixture.cht",
+                "sourceIndex": 0,
+                "sourceRevision": "test"
+            }]
+        }))
+        .unwrap();
+        let sink = Arc::new(EventSink::default());
+        let app = CliApp::new(
+            sink.clone(),
+            Arc::new(rom_weaver_core::NoninteractivePrompter),
+            false,
+            false,
+            false,
+        );
+        let outcome = app.run(Commands::Patch(PatchCommands::Apply(Box::new(args))));
+        assert_eq!(outcome.status, OperationStatus::Failed);
+        let labels = sink
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|event| event.label.clone())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(labels.contains("compare-cheat"), "{labels}");
+        assert!(labels.contains("cheat_no_compare_match"), "{labels}");
+    }
 }
 
 fn path_is_occupied(path: &Path) -> Result<bool> {
@@ -171,6 +250,7 @@ impl CliApp {
             ignore_checksum_validation = args.ignore_checksum_validation,
             expect_out = args.expect_out.len(),
             code_count = args.codes.len(),
+            cheat_record_count = args.cheat_records.len(),
             code_system = ?args.code_system,
             code_kind = %args.code_kind,
             threads = %args.threads,
@@ -366,13 +446,17 @@ impl CliApp {
             codes,
             code_system,
             code_kind,
+            cheat_records,
             emit_bundle: _,
             tui: _,
             force,
             dry_run,
             threads,
         } = args;
-        let discover_implicit_patches = patches.is_empty() && codes.is_empty() && !no_extract;
+        let has_manual_cheats = !codes.is_empty();
+        let has_database_cheats = !cheat_records.is_empty();
+        let has_cheats = has_manual_cheats || has_database_cheats;
+        let discover_implicit_patches = patches.is_empty() && !has_cheats && !no_extract;
         let input_kind_filter =
             Self::archive_entry_kind_filter(rom_filter || discover_implicit_patches, false);
         let patch_kind_filter = Self::archive_entry_kind_filter(false, patch_filter);
@@ -398,10 +482,10 @@ impl CliApp {
         // pin offsets to the original bytes, so those runs degrade auto to keep.
         // Ignoring checksum enforcement does not discard representation evidence.
         let any_explicit_n64_transform = n64_byte_order.iter().any(|mode| mode.target().is_some());
-        let auto_evidence_available = !any_explicit_n64_transform && codes.is_empty();
+        let auto_evidence_available = !any_explicit_n64_transform && !has_manual_cheats;
         let any_explicit_strip = patch_header.contains(&PatchApplyHeaderMode::Strip);
         let output_header_mode = output_header.unwrap_or_default();
-        if !codes.is_empty() && (any_explicit_strip || any_explicit_n64_transform) {
+        if has_manual_cheats && (any_explicit_strip || any_explicit_n64_transform) {
             return self.finish(
                 "patch-apply",
                 fail(
@@ -492,7 +576,7 @@ impl CliApp {
         if patches.is_empty() {
             patches = discovered_sidecars.patches.clone();
         }
-        if patches.is_empty() && codes.is_empty() {
+        if patches.is_empty() && !has_cheats {
             return self.finish(
                 "patch-apply",
                 fail(
@@ -651,15 +735,15 @@ impl CliApp {
         // patches. Resolved against the resolved input ROM bytes (header strip /
         // N64 byte-order rewrite are rejected above so offsets stay valid).
         let mut cheat_summary = None;
-        if !codes.is_empty() {
-            match self.synthesize_cheat_ips(
-                &resolved_input,
-                &codes,
-                code_system.as_deref(),
-                &code_kind,
-                &context,
-                &mut temp_paths,
-            ) {
+        if has_manual_cheats {
+            match self.synthesize_cheat_ips(CheatIpsRequest {
+                source: &resolved_input,
+                codes: &codes,
+                system_override: code_system.as_deref(),
+                kind_id: &code_kind,
+                context: &context,
+                temp_paths: &mut temp_paths,
+            }) {
                 Ok((cheat_patch, summary)) => {
                     cheat_summary = Some(summary);
                     resolved_patches.insert(0, (cheat_patch.clone(), cheat_patch));
@@ -672,7 +756,7 @@ impl CliApp {
         }
 
         let mut terminal_output_for_apply = None;
-        let report = if resolved_patches.is_empty() {
+        let report = if resolved_patches.is_empty() && !has_database_cheats {
             OperationReport::failed(
                 OperationFamily::Patch,
                 None,
@@ -693,7 +777,7 @@ impl CliApp {
                     resolved_patches: &resolved_patches,
                     resolved_input: &resolved_input,
                     is_disc,
-                    has_codes: !codes.is_empty(),
+                    has_codes: has_manual_cheats,
                     patch_header: &patch_header,
                     auto_evidence_available,
                     n64_byte_order: &n64_byte_order,
@@ -715,7 +799,7 @@ impl CliApp {
                         is_disc,
                     );
 
-                let patch_count = resolved_patches.len();
+                let patch_count = resolved_patches.len() + usize::from(has_database_cheats);
                 // Single-patch runs know the final header state up front, so the
                 // extension swap lands before any writer chooses a path - no
                 // post-hoc rename, which the browser VFS cannot observe. Chains
@@ -779,7 +863,7 @@ impl CliApp {
                 // base-basis steps against the base once, before the chain runs.
                 let step_verifications = match self.plan_apply_step_verifications(
                     &resolved_patches,
-                    usize::from(!codes.is_empty()),
+                    usize::from(has_manual_cheats),
                     bundle_resolution
                         .as_ref()
                         .map(|resolution| resolution.step_verifications.clone())
@@ -821,6 +905,7 @@ impl CliApp {
                     probe_threads: &probe_threads,
                     context: &context,
                     temp_paths: &mut temp_paths,
+                    cheat_records: &cheat_records,
                 }) {
                     Ok(outcome) => outcome,
                     Err(report) => return *report,
@@ -2856,6 +2941,7 @@ struct RunPatchApplyLoopInputs<'a> {
     probe_threads: &'a Option<ThreadExecution>,
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
+    cheat_records: &'a [CheatRecord],
 }
 
 struct PreparePatchApplyInputInputs<'a> {
@@ -2922,8 +3008,9 @@ impl CliApp {
             probe_threads,
             context,
             temp_paths,
+            cheat_records,
         } = inputs;
-        let patch_count = resolved_patches.len();
+        let patch_count = resolved_patches.len() + usize::from(!cheat_records.is_empty());
         let mut current_input = apply_input;
         let mut applied_formats = Vec::with_capacity(patch_count);
         let mut report = OperationReport::failed(
@@ -3236,6 +3323,57 @@ impl CliApp {
             }
 
             current_input = apply_output;
+        }
+
+        if !cheat_records.is_empty() {
+            let mut rom = fs::read(&current_input).map_err(|error| {
+                Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some("cheat".to_string()),
+                    "apply",
+                    error.to_string(),
+                    context.single_thread_execution(),
+                ))
+            })?;
+            let (writes, summary) = Self::resolve_database_cheat_writes(&rom, cheat_records)
+                .map_err(|error| {
+                    Box::new(OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some("cheat".to_string()),
+                        "validate",
+                        error.to_string(),
+                        context.single_thread_execution(),
+                    ))
+                })?;
+            cheats::apply_writes(&mut rom, &writes).map_err(|error| {
+                Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some("cheat".to_string()),
+                    "apply",
+                    error.to_string(),
+                    context.single_thread_execution(),
+                ))
+            })?;
+            fs::write(staged_output, rom).map_err(|error| {
+                Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some("cheat".to_string()),
+                    "apply",
+                    error.to_string(),
+                    context.single_thread_execution(),
+                ))
+            })?;
+            if resolved_patches.is_empty() {
+                report = OperationReport::succeeded(
+                    OperationFamily::Patch,
+                    Some("cheat".to_string()),
+                    "apply",
+                    "applied database ROM cheats",
+                    Some(100.0),
+                    context.single_thread_execution(),
+                );
+            }
+            report.label = format!("{}; {}", report.label, summary.label());
         }
 
         Ok(PatchApplyLoopOutcome {
