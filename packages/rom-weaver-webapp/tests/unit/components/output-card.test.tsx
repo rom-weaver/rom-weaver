@@ -22,8 +22,8 @@ const baseProps = {
 describe("OutputCard double-extension warning", () => {
   it("keeps the format arrow inside the format control", () => {
     const { container } = render(<OutputCard {...baseProps} fileName="game" />);
-    expect(container.querySelector(".fname > select")).toBeTruthy();
-    expect(container.querySelector(".fname > .ofmt-arrow")).toBeTruthy();
+    expect(container.querySelector(".fname > .dropdown-select > select")).toBeTruthy();
+    expect(container.querySelector(".fname > .dropdown-select > .dropdown-arrow")).toBeTruthy();
   });
 
   it("warns when the name ends in an output extension", () => {
