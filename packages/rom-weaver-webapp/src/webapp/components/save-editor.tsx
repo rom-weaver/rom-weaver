@@ -1,6 +1,5 @@
 import { Download, RotateCcw, Save as SaveIcon, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { identifySave, inspectSave, previewSaveFields, setSaveFields } from "../../platform/browser/browser-api.ts";
 import {
   listEmulatorSaves,
   replaceEmulatorSaveSram,
@@ -44,6 +43,7 @@ const candidateFromRecognition = (recognition?: SaveRecognition): SaveCandidate 
 };
 
 const formatAssignment = (field: SaveField, value: string) => `${field.id}=${value}`;
+const loadSaveApi = () => import("../../platform/browser/browser-api.ts");
 
 const SaveFieldControl = ({
   field,
@@ -192,6 +192,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     setBusy(true);
     setError("");
     try {
+      const { inspectSave } = await loadSaveApi();
       const result = await inspectSave({ fileName: file.name, game, romSha1, signal, source: file });
       if (request !== requestRef.current) return;
       if (!result.document) throw new Error("Save inspection returned no document.");
@@ -216,6 +217,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     setBusy(true);
     setError("");
     try {
+      const { identifySave } = await loadSaveApi();
       const result = await identifySave({ fileName: file.name, romSha1, signal, source: file });
       if (request !== requestRef.current) return;
       setRecognition(result.recognition);
@@ -295,6 +297,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     const { request, signal } = startRequest();
     setBusy(true);
     try {
+      const { previewSaveFields } = await loadSaveApi();
       const result = await previewSaveFields({
         assignments,
         fileName: source.name,
@@ -317,6 +320,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     setBusy(true);
     setError("");
     try {
+      const { setSaveFields } = await loadSaveApi();
       const result = await setSaveFields({
         assignments,
         fileName: source.name,
