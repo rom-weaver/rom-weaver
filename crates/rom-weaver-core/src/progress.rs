@@ -21,6 +21,7 @@ pub enum OperationFamily {
     Command,
     Container,
     Patch,
+    Save,
     Checksum,
     Codec,
     Threading,
