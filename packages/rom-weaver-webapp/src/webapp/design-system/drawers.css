@@ -718,13 +718,15 @@
   width: 13px;
   height: 13px;
 }
-/* Checksum rows own the copy action. Their coarse-pointer decoration MUST NOT intercept adjacent rows. */
+/* Enlarge the sheet copy button's touch target without changing visual layout. Lives here
+   rather than with the other coarse-pointer targets so `.cue-sub-single > .cue-copy` below
+   still places the button - a later rule would outrank it whatever its specificity.
+   Checksum rows are excluded: the whole `.ck` row is the button, so a 44px box on the
+   decorative glyph would only reach out and intercept the adjacent row. */
 @media (pointer: coarse) {
-  .rw-app .ck .copy,
   .rw-app .cue-copy {
     position: relative;
   }
-  .rw-app .ck .copy::before,
   .rw-app .cue-copy::before {
     position: absolute;
     top: 50%;
@@ -733,9 +735,6 @@
     height: 44px;
     content: "";
     transform: translate(-50%, -50%);
-  }
-  .rw-app .ck .copy::before {
-    pointer-events: none;
   }
 }
 /* pending checksum value - invisible text the exact char length of the eventual
