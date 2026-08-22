@@ -44,6 +44,7 @@ Recipes for a real job you already have in front of you.
 - [Create and share a patch bundle](how-to/create-bundles.md)
 - [Test a ROM in the browser](how-to/test-roms-in-browser.md)
 - [Fix a checksum error](how-to/fix-checksum-errors.md)
+- [Edit a Generation III save](how-to/edit-gen3-saves.md): inspect and safely edit an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save in the browser or CLI.
 
 ### From the terminal
 
@@ -99,6 +100,7 @@ Background that makes the rest make sense.
 - [Contribution guide](../CONTRIBUTING.md): reporting bugs, proposing changes, validation, and contribution licensing.
 - [Development guide](development/development.md): prerequisites, setup, native and WASM builds, the dev server, tests, generated files, and worktrees.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
+- [Save Editor development](development/save-editor.md): Generation III handler architecture, integrity boundary, and the eight-step contributor flow.
 - [References](development/references.md): format specifications and upstream reference implementations.
 
 …and more in the repository: commit conventions, CI, performance, browser concurrency, mobile Safari verification, vendored code, screenshots, the release guide, the CLA, the code of conduct, and the security policy all live under [`docs/development/`](https://github.com/rom-weaver/rom-weaver/tree/main/docs/development).
