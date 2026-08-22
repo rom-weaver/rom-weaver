@@ -187,14 +187,14 @@ impl CliApp {
         // A single `--code` value may carry several `+`/comma/space-joined codes.
         for code in codes_for_kind(codes, system, kind_id) {
             let decoded = if kind_id.eq_ignore_ascii_case("auto") {
-                cheats::decode_auto(code, system)?
+                cheats::decode_auto(&code, system)?
             } else {
                 let kind = CheatKind::parse(kind_id).ok_or_else(|| {
                     RomWeaverError::Validation(format!(
                         "unknown --code-kind `{kind_id}`; expected auto, game-genie, gameshark, or xploder"
                     ))
                 })?;
-                cheats::decode(code, system, kind)?
+                cheats::decode(&code, system, kind)?
             };
             all.extend(cheats::resolve_writes(rom, &layout, &decoded)?);
         }
@@ -295,7 +295,7 @@ fn codes_for_kind(codes: &[String], system: CheatSystem, kind_id: &str) -> Vec<S
     } else {
         codes
             .iter()
-            .flat_map(|code| cheats::split_codes(code).map(str::to_owned))
+            .flat_map(|code| cheats::split_codes(code).into_iter().map(str::to_owned))
             .collect()
     }
 }
