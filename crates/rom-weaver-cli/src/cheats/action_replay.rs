@@ -70,7 +70,7 @@ fn decode_nes(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::Nes,
         kind: CheatKind::ProActionReplay,
         address,
-        value: value as u32,
+        value,
         compare,
         width: 1,
     })
@@ -92,7 +92,7 @@ fn decode_snes(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::Snes,
         kind: CheatKind::ProActionReplay,
         address,
-        value: value as u32,
+        value,
         compare: None,
         width: 1,
     })
@@ -150,7 +150,7 @@ fn decode_gameboy(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::GameBoy,
         kind: CheatKind::ProActionReplay,
         address,
-        value: value as u32,
+        value,
         compare: None,
         width: 1,
     })

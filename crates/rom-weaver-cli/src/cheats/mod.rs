@@ -112,7 +112,7 @@ pub fn split_codes(input: &str) -> Vec<&str> {
 /// A four-word GBA ROM-patch code stays together as one item.
 pub fn split_xploder_codes(input: &str) -> Vec<String> {
     let mut codes = Vec::new();
-    for segment in input.split(|c: char| c == '+' || c == ',' || c == ';') {
+    for segment in input.split(['+', ',', ';']) {
         let tokens: Vec<&str> = segment.split_whitespace().collect();
         let mut index = 0;
         while index < tokens.len() {
