@@ -503,7 +503,6 @@
 .rw-app .tree-row {
   position: relative;
   display: flex;
-  gap: var(--sp-s);
   align-items: baseline;
   padding: 0 6px;
   font-size: 0.78rem;
