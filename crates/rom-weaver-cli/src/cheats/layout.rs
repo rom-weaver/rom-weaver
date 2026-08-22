@@ -55,7 +55,7 @@ impl RomLayout {
         match system {
             CheatSystem::Nes => detect_nes(rom),
             CheatSystem::Snes => detect_snes(rom),
-            CheatSystem::Genesis | CheatSystem::GameBoy => Self {
+            CheatSystem::Genesis | CheatSystem::GameBoy | CheatSystem::GameBoyColor => Self {
                 system,
                 header_bytes: 0,
                 mapping: Mapping::Flat,
@@ -223,7 +223,7 @@ pub(crate) fn resolve_writes(
         CheatSystem::Nes => resolve_nes(rom, layout, decoded),
         CheatSystem::Snes => resolve_snes(rom, layout, decoded),
         CheatSystem::Genesis => resolve_genesis(rom, layout, decoded),
-        CheatSystem::GameBoy => resolve_gameboy(rom, decoded),
+        CheatSystem::GameBoy | CheatSystem::GameBoyColor => resolve_gameboy(rom, decoded),
         CheatSystem::GameBoyAdvance => resolve_gba(rom, decoded),
         CheatSystem::PlayStation => resolve_playstation(rom, layout, decoded),
     }
