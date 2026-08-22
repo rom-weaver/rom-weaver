@@ -140,13 +140,6 @@ disc_group_id?: string | null,
  */
 track_number?: number | null,
 /**
- * Per-track checksum rows (`{track_number, size_bytes, checksums}`) streamed
- * during a merged single-bin disc extract. They let the disc-group lookup
- * fingerprint each track even though only one merged file exists. Empty for
- * split extracts and non-disc assets.
- */
-track_checksums?: Array<JsonValue>,
-/**
  * Full `.cue` text for a cue-sheet asset.
  */
 cue_text?: string | null,
@@ -276,6 +269,26 @@ assets: Array<IngestRomAsset>,
  */
 patches: Array<PatchDescriptor>, };
 
+export type CheatSystem = "nes" | "snes" | "genesis" | "gameboy" | "gameboy-color";
+
+export type CheatKind = "game-genie" | "pro-action-replay";
+
+export type CheatTarget = "cartridge-rom" | "runtime-memory" | "unknown";
+
+export type CheatWrite = { offset: number, value: number, width: number, };
+
+export type CheatRecord = { id: string, system: CheatSystem, gameId: string, description: string, rawCode: string | null, codeKind?: CheatKind, rawFields: { [key in string]: string }, sourceFile: string, sourceIndex: number, sourceRevision: string, };
+
+export type RuntimeCheatPayload = { record: CheatRecord, };
+
+export type CheatResolution = { "type": "romBakeable", writes: Array<CheatWrite>, } | { "type": "runtime", payload: RuntimeCheatPayload, } | { "type": "mixed", writes: Array<CheatWrite>, payload: RuntimeCheatPayload, } | { "type": "requiresParameter", payload: RuntimeCheatPayload, } | { "type": "unsupported", reason: string, };
+
+export type ClassifiedCheatRecord = { record: CheatRecord, resolution: CheatResolution, detectedKind: CheatKind | null, };
+
+export type CheatWriteConflict = { firstId: string, secondId: string, offset: number, firstValue: number, secondValue: number, };
+
+export type CheatCommandResult = { records: Array<ClassifiedCheatRecord>, conflicts: Array<CheatWriteConflict>, runtimeOutput: string | null, };
+
 export type CompressionLevelProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
 
 export type N64ByteOrder = "big-endian" | "little-endian" | "byte-swapped";
@@ -329,87 +342,13 @@ export type ChecksumCommand = { input: string, algo?: Array<string>, select?: Ar
 
 export type IdentifyStatus = "matched" | "ambiguous" | "unknown";
 
-export type IdentifyTitleMatch = { name: string, platform: string, algorithm: string, variant: string, database: string, provenance?: Array<IdentifyProvenance>, legacy_variant?: boolean, dump_tags?: Array<string>,
-/**
- * Names other databases give this dump. The pack build keeps one record
- * per hash under one canonical name, so the other source's name reaches
- * the reader through this field.
- */
-alternate_names?: Array<string>,
-/**
- * What the database says this title's bytes are. A caller holding only a
- * partial check (a patch's source crc32, say) reads every other checksum
- * and the size from here.
- */
-expected_components?: Array<IdentifyComponent>, game_id?: string, region?: string, language?: string, disc_number?: number, revision?: string, parent?: string, };
-
-export type IdentifyProvenance = { source: string, source_name?: string, source_url?: string, source_commit?: string, license?: string, };
+export type IdentifyTitleMatch = { name: string, platform: string, algorithm: string, variant: string, database: string, };
 
 export type IdentifyLookupResult = { status: IdentifyStatus, matches: Array<IdentifyTitleMatch>, };
 
-export type MediaKind = "blob" | "cartridge" | "card" | "floppy" | "tape" | "optical_disc" | "multi_disc_set" | "arcade_set" | "package" | "multi_file_set";
+export type IdentifyResult = { status: IdentifyStatus, input: string, detected_platform?: string | null, checksums: { [key in string]: string }, checksum_variants: Array<JsonValue>, matches: Array<IdentifyTitleMatch>, };
 
-export type ComponentRole = "primary_payload" | "data_track" | "audio_track" | "partition" | "content_file" | "arcade_rom" | "disk_side" | "child_disc";
-
-export type DetectionConfidence = "certain" | "strong" | "weak";
-
-export type DetectionEvidence = { "kind": "header_magic" } | { "kind": "system_area_magic" } | { "kind": "iso9660_entry", "value": string } | { "kind": "executable_name", "value": string } | { "kind": "disc_serial", "value": string } | { "kind": "container_metadata" } | { "kind": "extension_hint" } | { "kind": "database_router" } | { "kind": "user_override" };
-
-export type PlatformCandidate = {
-/**
- * Canonical identify platform name.
- */
-platform: string, confidence: DetectionConfidence, evidence: DetectionEvidence, };
-
-export type IdentifyMedia = { kind: MediaKind, container?: string, sessions?: number, };
-
-export type IdentifyComponent = { role: ComponentRole, ordinal: number, size: bigint,
-/**
- * Only set on a database record's component; the input's own components
- * are always hashed whole.
- */
-hash_scope?: string, filename?: string, crc32?: string, md5?: string, sha1?: string, sha256?: string, };
-
-export type IdentifyDatabaseInfo = { source?: string, upstream_sources?: Array<string>, revision?: string, pack_format: string, canonicalization_profile?: string, };
-
-export type IdentifyEvidence = { required_components_matched: number, required_components_total: number, layout_matched: boolean,
-/**
- * Names of required pack components the input does not supply. Sorted.
- */
-missing_components?: Array<string>,
-/**
- * Names of input components the matched game does not explain. Sorted.
- */
-unexpected_components?: Array<string>, };
-
-export type IdentifyResult = { status: IdentifyStatus, input: string, detected_platform?: string | null, checksums: { [key in string]: string }, checksum_variants: Array<JsonValue>, matches: Array<IdentifyTitleMatch>,
-/**
- * Match quality of a set-aware artifact-pack match.
- */
-quality?: string, platform_candidates?: Array<PlatformCandidate>, media?: IdentifyMedia, components?: Array<IdentifyComponent>, database?: IdentifyDatabaseInfo, evidence?: IdentifyEvidence,
-/**
- * `database_required` or `unsupported_media_profile`; status stays
- * matched/ambiguous/unknown for compatibility.
- */
-condition?: string, hint?: string, };
-
-export type IdentifyDatabaseDirCommand = { database_dir?: string, };
-
-export type IdentifyDatabaseSystemCommand = { system: string, database_dir?: string, };
-
-export type IdentifyDatabaseGroupCommand = { group: string, from?: string, database_dir?: string, };
-
-export type IdentifyDatabaseImportCommand = { input: string, database_dir?: string, };
-
-export type IdentifyDatabaseInstallCommand = { system?: string, all?: boolean, from?: string, database_dir?: string, };
-
-export type IdentifyDatabaseUpdateCommand = { system?: string, from?: string, database_dir?: string, };
-
-export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabaseDirCommand } | { "type": "status", "args": IdentifyDatabaseDirCommand } | { "type": "path", "args": IdentifyDatabaseDirCommand } | { "type": "remove", "args": IdentifyDatabaseSystemCommand } | { "type": "import-redump", "args": IdentifyDatabaseImportCommand } | { "type": "install-all", "args": IdentifyDatabaseDirCommand } | { "type": "install-group", "args": IdentifyDatabaseGroupCommand } | { "type": "install", "args": IdentifyDatabaseInstallCommand } | { "type": "update", "args": IdentifyDatabaseUpdateCommand };
-
-export type IdentifySubcommands = { "type": "database", "args": IdentifyDatabaseCommands };
-
-export type IdentifyCommand = { input?: string, hash?: Array<string>, size?: bigint, database?: Array<string>, system?: string, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
+export type IdentifyCommand = { input: string, database?: Array<string>, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
 
 export type IngestCommand = { input: string, output: string, database?: Array<string>, select?: Array<string>,
 /**
@@ -417,6 +356,13 @@ export type IngestCommand = { input: string, output: string, database?: Array<st
  * browser's sibling-sidecar lookup on the ingest command surface while reusing Rust's matcher.
  */
 sidecar_names?: Array<string>, sidecar_only?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, split_bin?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
+
+export type CheatCommand = { input: string,
+/**
+ * Direct records for the JSON/WASM boundary. The native argv parser does
+ * not expose this internal command.
+ */
+records: Array<CheatRecord>, selectedIds?: Array<string>, output?: string, };
 
 export type CompressCommand = { input: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, force?: boolean, dry_run?: boolean, threads?: ThreadBudget, };
 
@@ -427,9 +373,14 @@ export type TrimCommand = { input: Array<string>, output?: string, extension?: s
  */
 rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, threads?: ThreadBudget, force?: boolean, };
 
-export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, patch_select?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, expect_out?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
+export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, expect_out?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string,
+/**
+ * Structured database records selected for ROM baking. This field exists
+ * on the JSON/WASM boundary; the public CLI keeps `--code` unchanged.
+ */
+cheat_records?: Array<CheatRecord>, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
 
-export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, patch_select?: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
+export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
 
 export type PatchCreateCommand = { original: string, modified?: string, format?: string, output?: string, plan?: boolean, ignore_checksum_validation?: boolean, checksum_name?: boolean, assume_in?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, solid_system?: string, solid_game?: string, solid_hack?: string, solid_version?: string, solid_author?: string, solid_contact?: string, solid_comment?: string, solid_extended?: boolean, xdelta_secondary?: string, force?: boolean, };
 
@@ -607,7 +558,7 @@ export type BundleCommands = { "type": "create", "args": BundleCreateCommand } |
 
 export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, memory_ceiling_bytes?: bigint | null, };
 
-export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "bundle", "args": BundleCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
+export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "cheat", "args": CheatCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "bundle", "args": BundleCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, log_level?: LogLevel, dep_trace?: boolean, interactive_selection_enabled?: boolean,
 /**
