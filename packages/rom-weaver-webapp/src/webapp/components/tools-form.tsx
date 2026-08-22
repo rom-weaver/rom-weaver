@@ -1,4 +1,4 @@
-import { Download, RotateCcw, ScanSearch, Wrench } from "lucide-react";
+import { Download, RotateCcw, Wrench } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
@@ -9,7 +9,6 @@ import { NeedsInput, StepSection } from "../../public/react/components/ds/layout
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
-import { IdentifyForm } from "./identify-form.tsx";
 
 const TOOLS_ACTIVITY_KEY = "tools";
 
@@ -63,10 +62,7 @@ type ToolsFormProps = {
   pageDrop?: PageFileDrop | null;
 };
 
-type ToolTab = "identify" | "ppf-undo";
-
 const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
-  const [activeTool, setActiveTool] = useState<ToolTab>("ppf-undo");
   const [rom, setRom] = useState<File | null>(null);
   const [patch, setPatch] = useState<File | null>(null);
   const [outputName, setOutputName] = useState("restored-rom.bin");
@@ -135,9 +131,8 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
   useEffect(() => {
     if (!(pageDrop && pageDrop.id !== handledDropRef.current)) return;
     handledDropRef.current = pageDrop.id;
-    if (activeTool !== "ppf-undo") return;
     stageFiles(pageDrop.files);
-  }, [activeTool, pageDrop, stageFiles]);
+  }, [pageDrop, stageFiles]);
 
   const run = async () => {
     if (!(rom && patch && outputName.trim()) || busy) return;
@@ -179,41 +174,18 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
         <div aria-orientation="horizontal" className="tools-subnav-rail" role="tablist">
           <button
             aria-controls="panel-tools-ppf-undo"
-            aria-selected={activeTool === "ppf-undo"}
+            aria-selected="true"
             className="tools-subnav-tab"
             id="tab-tools-ppf-undo"
-            onClick={() => setActiveTool("ppf-undo")}
             role="tab"
             type="button"
           >
             <RotateCcw aria-hidden="true" />
             <span>PPF undo</span>
           </button>
-          <button
-            aria-label="Identify"
-            aria-controls="panel-tools-identify"
-            aria-selected={activeTool === "identify"}
-            className="tools-subnav-tab"
-            data-beta-tool=""
-            id="tab-tools-identify"
-            onClick={() => setActiveTool("identify")}
-            role="tab"
-            type="button"
-          >
-            <ScanSearch aria-hidden="true" />
-            <span>Identify</span>
-            <span aria-hidden="true" className="rb mono muted">
-              Beta
-            </span>
-          </button>
         </div>
       </nav>
-      <div
-        aria-labelledby="tab-tools-ppf-undo"
-        hidden={activeTool !== "ppf-undo"}
-        id="panel-tools-ppf-undo"
-        role="tabpanel"
-      >
+      <div aria-labelledby="tab-tools-ppf-undo" id="panel-tools-ppf-undo" role="tabpanel">
         <UnifiedDropZone
           addLabel="Replace the patched ROM or PPF patch"
           big={workflowEmpty}
@@ -302,18 +274,6 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
             </Notice>
           ) : null}
         </StepSection>
-      </div>
-      <div
-        aria-labelledby="tab-tools-identify"
-        hidden={activeTool !== "identify"}
-        id="panel-tools-identify"
-        role="tabpanel"
-      >
-        <IdentifyForm
-          containerId="tools-identify-container"
-          inputId="tools-identify-input-picker"
-          pageDrop={activeTool === "identify" ? pageDrop : undefined}
-        />
       </div>
     </section>
   );

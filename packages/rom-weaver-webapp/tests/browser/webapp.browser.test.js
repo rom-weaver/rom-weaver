@@ -204,10 +204,42 @@ test("WebappRoot keeps Trim gated and Tools behind More", async () => {
     .toEqual(["Apply", "Create", "Docs", "Test"]);
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "Tools" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Identify" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
 });
 
-test("enabled Tools stays behind More on desktop and phone", async () => {
+const dropOnPage = async (fileName) => {
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([new Uint8Array([1, 2, 3, 4])], fileName));
+  document.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  document.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 120));
+};
+
+/* Regression: Identify used to exist twice - once at /identify and once inside
+   Tools - so one page drop reached two forms and both wrote the same
+   activity-store key. Tools no longer mounts an IdentifyForm at all. */
+test("only one Identify workflow ever consumes a page drop", async () => {
+  await page.viewport(1280, 900);
+  mountWebappRoot({ initialView: "identify", settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
+  await expect.poll(() => document.querySelectorAll("#identify-input-picker").length).toBe(1);
+
+  await dropOnPage("first.gba");
+  await expect.poll(() => document.querySelector("#identify-container")?.textContent).toContain("first.gba");
+
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Tools" }).click();
+  await expect.poll(() => document.querySelector("#panel-tools")?.hidden).toBe(false);
+  // The Identify panel stays mounted behind Tools, so the count also proves the
+  // hidden instance is the SAME one, not a second form.
+  expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
+
+  await dropOnPage("second.ppf");
+  await expect.poll(() => document.querySelector("#identify-container")?.textContent).not.toContain("second.ppf");
+  expect(document.querySelector("#identify-container")?.textContent).toContain("first.gba");
+});
+
+test("enabled Tools and Identify stay behind More on desktop and phone", async () => {
   for (const [width, height] of [
     [1280, 900],
     [390, 844],
@@ -217,14 +249,18 @@ test("enabled Tools stays behind More on desktop and phone", async () => {
     await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
     await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
+    // Identify is one click from More: it has its own route, so it never hid
+    // behind Tools.
+    await expect.element(page.getByRole("menuitem", { name: "Identify" })).toBeInTheDocument();
     await page.getByRole("menuitem", { name: "Tools" }).click();
-    await expect.element(page.getByRole("tab", { name: "Identify" })).toBeInTheDocument();
-    await page.getByRole("tab", { name: "Identify" }).click();
-    await expect.element(page.getByRole("tabpanel", { name: "Identify" })).toBeInTheDocument();
+    // Only ONE Identify form can exist. Tools links nowhere near it, so a page
+    // drop has exactly one consumer and the two cannot fight over the activity key.
     expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
-    expect(document.querySelectorAll("#tools-identify-input-picker")).toHaveLength(1);
+    expect(document.querySelector("#tools-identify-input-picker")).toBeNull();
     await page.getByRole("button", { name: "More" }).click();
     expect(document.querySelector(`[role="tab"][data-mode="tools"]`)).toBeNull();
+    expect(document.querySelector(`[role="tab"][data-mode="identify"]`)).toBeNull();
+    expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="tools"]`)).toBeNull();
     if (width >= 1000) {
       expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");
