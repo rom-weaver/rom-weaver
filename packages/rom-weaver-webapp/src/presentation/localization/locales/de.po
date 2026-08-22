@@ -170,6 +170,11 @@ msgstr "Browser-Tab"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis2"
+msgstr "per Prüfsumme, direkt in diesem Browser —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingDesc"
 msgstr "Die App wird für die Offline-Nutzung zwischengespeichert…"
 
@@ -291,7 +296,7 @@ msgstr "DVD-Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Beta-Tools aktivieren (Trimmen, Tools und Identifizieren)"
+msgstr "Beta-Tools aktivieren (Identifizieren, Trimmen und Tools)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -406,7 +411,7 @@ msgstr "Protokoll"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
-msgstr "Ordne eine ROM ihrem genauen Dump-Namen zu,"
+msgstr "Ordne eine ROM ihrem Spiel, ihrer Region, ihrer Revision und ihrem genauen Dump-Namen zu,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -872,11 +877,6 @@ msgstr "Was die Offline-Zustände bedeuten"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Neuigkeiten"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis2"
-msgstr "mit einer Datenbank, die lokal bleibt —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

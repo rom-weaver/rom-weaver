@@ -10,7 +10,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   identify: Object.freeze({
     description:
-      "Identify a ROM by its exact dump name with local title data. The ROM stays in your browser and is never uploaded.",
+      "Identify a ROM's game, region, revision, and known dump name by checksum — locally in your browser. Nothing is uploaded.",
     slug: "identify",
     title: `${SITE_NAME} — Identify ROMs online`,
   }),

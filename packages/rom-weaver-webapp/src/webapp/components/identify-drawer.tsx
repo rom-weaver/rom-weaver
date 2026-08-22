@@ -1,24 +1,46 @@
 import { ScanSearch } from "lucide-react";
-import { uniqueIdentifyTitles } from "../../presentation/identify-title.ts";
+import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
+import {
+  IDENTIFY_STATUS_MARK,
+  identifyMatchCountLabel,
+  identifyNameHeading,
+} from "../../presentation/identify-status.ts";
 import { ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
-import type { ParsedIdentifyLookupResult } from "../../types/identify.ts";
+import type { ParsedIdentifyLookupResult, ParsedIdentifyTitleMatch } from "../../types/identify.ts";
 import { Drawer, DrawerReadout } from "../../public/react/components/ds/drawer.tsx";
 
-const IdentifyDrawer = ({ identification }: { identification: ParsedIdentifyLookupResult }) => {
-  if (!identification.matches.length) return null;
-  const canonicalNames = uniqueIdentifyTitles(identification.matches.map((match) => match.name));
-  const aliases = [...new Set(identification.matches.map((match) => match.name.trim()).filter(Boolean))].filter(
-    (name) => !canonicalNames.includes(name),
-  );
-  const aliasRows = [
-    ...canonicalNames.map((name) => ({ label: "Standard", name })),
-    ...aliases.map((name) => ({ label: "Alias", name })),
-  ];
-  const platforms = [...new Set(identification.matches.map((match) => match.platform.trim()).filter(Boolean))];
-  const algorithms = [
-    ...new Set(identification.matches.map((match) => match.algorithm.trim().toUpperCase()).filter(Boolean)),
-  ];
-  const matched = identification.status === "matched" && canonicalNames.length === 1;
+const unique = (values: Iterable<string>) => [...new Set([...values].map((value) => value.trim()).filter(Boolean))];
+
+/**
+ * A record is only an "alias" when the raw dump name differs from the display
+ * name we derived from it. Listing the canonical names again under Aliases -
+ * which the first cut did - told the reader nothing.
+ */
+const collectAliases = (matches: readonly ParsedIdentifyTitleMatch[], canonical: readonly string[]) =>
+  unique(matches.map((match) => match.name)).filter((name) => !canonical.includes(name));
+
+const EvidenceRow = ({ label, values }: { label: string; values: readonly string[] }) =>
+  values.length ? (
+    <ChecksumRow className="ck-half" copyValue={values.join(" · ")} label={label} value={values.join(" · ")} />
+  ) : null;
+
+const IdentifyDrawer = ({
+  identification,
+  memberPath,
+}: {
+  identification: ParsedIdentifyLookupResult;
+  /** Archive-relative member path, when the identified ROM came out of a container. */
+  memberPath?: string;
+}) => {
+  const { matches, status } = identification;
+  if (!matches.length) return null;
+  const canonicalNames = unique(matches.map((match) => formatIdentifyTitle(match.name)));
+  const aliases = collectAliases(matches, canonicalNames);
+  const platforms = unique(matches.map((match) => match.platform));
+  const algorithms = unique(matches.map((match) => match.algorithm.toUpperCase()));
+  const variants = unique(matches.map((match) => match.variant));
+  const databases = unique(matches.map((match) => match.database));
+  const mark = IDENTIFY_STATUS_MARK[status];
 
   return (
     <Drawer
@@ -26,56 +48,50 @@ const IdentifyDrawer = ({ identification }: { identification: ParsedIdentifyLook
       label="Identify"
       labelIcon={<ScanSearch aria-hidden="true" />}
       readouts={
-        matched ? <DrawerReadout>Identified</DrawerReadout> : <DrawerReadout muted>Possible matches</DrawerReadout>
+        status === "matched" ? (
+          <DrawerReadout>{mark.label}</DrawerReadout>
+        ) : (
+          <DrawerReadout muted>{identifyMatchCountLabel(matches.length)}</DrawerReadout>
+        )
       }
     >
       <div className="identify-drawer-body">
-        <div className="identify-drawer-label">Standard name</div>
+        <div className="identify-drawer-label">{identifyNameHeading(canonicalNames.length)}</div>
         {canonicalNames.map((name) => (
           <div className="identify-drawer-title" key={name}>
             {name}
           </div>
         ))}
-        {aliasRows.length ? (
+        {aliases.length ? (
           <div className="ck-group identify-drawer-group">
-            <div className="ck-group-head">Aliases</div>
+            <div className="ck-group-head">{aliases.length === 1 ? "Alias" : "Aliases"}</div>
             <div className="ckrows identify-drawer-aliases">
-              {aliasRows.map(({ label, name }) => (
+              {aliases.map((name) => (
                 <ChecksumRow
-                  ariaLabel={`Copy ${label.toLowerCase()} name ${name}`}
+                  ariaLabel={`Copy alias name ${name}`}
                   className="identify-alias-row ck-half"
                   copyValue={name}
-                  key={`${label}:${name}`}
-                  label={label}
+                  key={name}
+                  label="Alias"
                   value={name}
                 />
               ))}
             </div>
           </div>
         ) : null}
-        {platforms.length || algorithms.length ? (
-          <div className="ck-group identify-drawer-group">
-            <div className="ck-group-head">Matched by</div>
-            <div className="ckrows identify-drawer-evidence">
-              {platforms.length ? (
-                <ChecksumRow
-                  className="ck-half"
-                  copyValue={platforms.join(" · ")}
-                  label="Platform"
-                  value={platforms.join(" · ")}
-                />
-              ) : null}
-              {algorithms.length ? (
-                <ChecksumRow
-                  className="ck-half"
-                  copyValue={algorithms.join(" · ")}
-                  label="Method"
-                  value={algorithms.join(" · ")}
-                />
-              ) : null}
-            </div>
+        <div className="ck-group identify-drawer-group">
+          <div className="ck-group-head">Evidence</div>
+          <div className="ckrows identify-drawer-evidence">
+            <EvidenceRow label="Matched by" values={algorithms} />
+            <EvidenceRow label="Variant" values={variants} />
+            <EvidenceRow label="Platform" values={platforms} />
+            <EvidenceRow label="Source" values={databases} />
+            {memberPath ? <EvidenceRow label="Archive member" values={[memberPath]} /> : null}
+            {status === "ambiguous" ? (
+              <EvidenceRow label="Candidates" values={[identifyMatchCountLabel(matches.length)]} />
+            ) : null}
           </div>
-        ) : null}
+        </div>
       </div>
     </Drawer>
   );

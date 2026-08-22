@@ -38,6 +38,7 @@ import { GUIDED_SAMPLE_HREFS } from "./guided-sample-start.ts";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
+import { IDENTIFY_STATUS_LABEL } from "../../presentation/identify-status.ts";
 import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
 import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
@@ -898,13 +899,23 @@ const buildExpectedChecks = (deps: RomRowDeps) => {
 };
 
 const renderRomCardMeta = (input: {
+  identificationStatus: RomInputRowState["info"]["identificationStatus"];
   percent: number | null;
   stageLabel: string;
   staging: boolean;
   statusId: string;
 }) => {
-  if (!input.staging) return undefined;
-  return <StageStatus id={input.statusId} label={input.stageLabel} percent={input.percent} />;
+  if (input.staging) return <StageStatus id={input.statusId} label={input.stageLabel} percent={input.percent} />;
+  /* The verdict border is never the only signal (WCAG 1.4.1), and a lookup
+     database that never loaded is not a ROM verdict at all - it reads as a quiet
+     note beside the file, never as a checksum or patching failure. */
+  if (input.identificationStatus === "unavailable") {
+    return <span className="rb mono muted">Title lookup unavailable</span>;
+  }
+  if (input.identificationStatus === "ambiguous") {
+    return <span className="rb mono muted">{IDENTIFY_STATUS_LABEL.ambiguous}</span>;
+  }
+  return undefined;
 };
 
 const resolveRomCardState = (
@@ -956,6 +967,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
       },
       displayName: !staging && identification?.status === "matched" ? identification.name : undefined,
       meta: renderRomCardMeta({
+        identificationStatus: romInput.info.identificationStatus,
         percent,
         stageLabel,
         staging,
@@ -1155,6 +1167,7 @@ const renderDiscGroup = (
         typeLabel: discRomTypeTag,
       },
       meta: renderRomCardMeta({
+        identificationStatus: undefined,
         percent: overallPercent,
         stageLabel: "Checksumming…",
         staging,

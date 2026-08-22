@@ -6,7 +6,7 @@
 
 - [Apply ROM patches](https://rom-weaver.com/apply): Apply patches with format detection, checksum validation, and ordered patch chains.
 - [Create ROM patches](https://rom-weaver.com/create): Create patches with format-aware settings and distributable bundles.
-- [Identify a ROM](https://rom-weaver.com/identify): Match a ROM to its exact dump name with local title data.
+- [Identify a ROM](https://rom-weaver.com/identify): Match a ROM's game, region, revision, and known dump name by checksum, locally in the browser.
 - [Documentation](https://rom-weaver.com/docs): Tutorials, how-to guides, reference tables, and explanation, for the browser app and the CLI.
 - [Your first patch](https://rom-weaver.com/docs/get-started): Tutorial that patches a homebrew ROM in the browser and verifies the result.
 - [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the browser's Apply workflow with loose patches, patch chains, archives, or bundles.
