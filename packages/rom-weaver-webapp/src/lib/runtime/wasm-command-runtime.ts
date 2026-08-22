@@ -1154,11 +1154,6 @@ const runSaveCommand = async (
 
 const invokeRomWeaverSaveIdentifyWorker = (input: RuntimeSaveCommandInput) => runSaveCommand("identify", {}, input);
 const invokeRomWeaverSaveInspectWorker = (input: RuntimeSaveCommandInput) => runSaveCommand("inspect", {}, input);
-const invokeRomWeaverSaveGetWorker = (input: RuntimeSaveCommandInput & { field: string }) =>
-  runSaveCommand("get", { field: input.field }, input);
-const invokeRomWeaverSaveExportSchemaWorker = (input: RuntimeSaveCommandInput = {}) =>
-  runSaveCommand("export-schema", {}, input);
-
 const invokeRomWeaverSaveSetWorker = async (input: RuntimeSaveSetInput) => {
   if (input.dryRun)
     return (await runSaveCommand("set", { assignments: input.assignments, dry_run: true }, input)).parsed;
@@ -1602,8 +1597,6 @@ export {
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
   invokeRomWeaverPpfUndoWorker,
-  invokeRomWeaverSaveExportSchemaWorker,
-  invokeRomWeaverSaveGetWorker,
   invokeRomWeaverSaveIdentifyWorker,
   invokeRomWeaverSaveInspectWorker,
   invokeRomWeaverSaveSetWorker,

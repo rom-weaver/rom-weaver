@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   setSaveFields: vi.fn(),
 }));
 
-vi.mock("../../src/platform/browser/browser-api.ts", () => mocks);
+vi.mock("../../src/platform/browser/browser-save-api.ts", () => mocks);
 vi.mock("../../src/storage/browser/emulator-saves.ts", () => ({
   listEmulatorSaves: mocks.listEmulatorSaves,
   replaceEmulatorSaveSram: mocks.replaceEmulatorSaveSram,

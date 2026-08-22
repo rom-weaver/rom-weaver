@@ -43,7 +43,7 @@ const candidateFromRecognition = (recognition?: SaveRecognition): SaveCandidate 
 };
 
 const formatAssignment = (field: SaveField, value: string) => `${field.id}=${value}`;
-const loadSaveApi = () => import("../../platform/browser/browser-api.ts");
+const loadSaveApi = () => import("../../platform/browser/browser-save-api.ts");
 
 const SaveFieldControl = ({
   field,
