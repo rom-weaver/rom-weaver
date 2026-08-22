@@ -40,6 +40,7 @@ Recipes for a real job you already have in front of you.
 ### In the browser
 
 - [Apply a ROM patch](how-to/apply-rom-patches.md)
+- [Use cheats in the browser](how-to/use-browser-cheats.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch bundle](how-to/create-bundles.md)
 - [Test a ROM in the browser](how-to/test-roms-in-browser.md)
@@ -70,6 +71,7 @@ Recipes for a real job you already have in front of you.
 Facts to look up. No advice, no steps.
 
 - [Supported formats](reference/formats.md): the full patch, container, codec, checksum, trim, and header support tables.
+- [Cheat database](reference/cheat-database.md): supported systems, delivery classes, matching, storage, and licensing.
 - [CLI reference](reference/cli.md): every command, global flag, patching flag, JSON output, exit code, and permission check.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one page per visible command from Clap.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v1.schema.json): the machine-readable bundle format.
@@ -80,6 +82,7 @@ Facts to look up. No advice, no steps.
 Background that makes the rest make sense.
 
 - [How ROM patching works](explanation/how-patching-works.md): why the exact starting file matters, what a checksum proves, why order matters, and what every term means.
+- [ROM cheats and runtime cheats](explanation/rom-and-runtime-cheats.md): why some cheats change files while others need an emulator cheat file.
 - [Why your files stay on your device](explanation/local-first.md): what local-first buys you and what it costs.
 - [Choosing a patch format](explanation/patch-formats.md): what actually separates BPS, IPS, xdelta, PPF, and the rest.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
