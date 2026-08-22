@@ -23,14 +23,9 @@ const rootDir = process.cwd();
 const SHARED_CHUNK_MIN_SIZE = 30_000;
 const repoRoot = path.resolve(rootDir, "../..");
 const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
-const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
 const identifyDataSources = Object.fromEntries(
   fs.readdirSync(identifyDataDir).map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
 );
-const identifyPrecacheEntries = identifyDataIndex.systems.map(({ file, sha256 }) => ({
-  revision: sha256,
-  url: `assets/identify-${file}`,
-}));
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
@@ -645,7 +640,11 @@ const writeCloudflareHeadersAsset = (channel) => {
 // savings bar and stay on the ordinary static path. Mutable root files (such
 // as index.html, the service worker, and changelog.json) stay off this path.
 const PAGES_BROTLI_MIN_SAVINGS = 0.02;
-// _routes.json rejects more than 100 combined include/exclude entries.
+// _routes.json rejects more than 100 combined include/exclude entries, so this
+// is the hard ceiling rather than an early warning. The 17 identify packs ate
+// the slack the old 90-entry warning left (90 of 100 in use as of this commit).
+// If the budget ever runs out, move the packs to a path of their own and cover
+// them with a single trailing-wildcard include instead of one entry per pack.
 const PAGES_ROUTES_MAX_INCLUDES = 100;
 
 const writeBrotliSidecars = () => {
@@ -1196,7 +1195,11 @@ export default defineConfig(({ command, mode }) => {
         },
         filename: "cache-service-worker.ts",
         injectManifest: {
-          additionalManifestEntries: identifyPrecacheEntries,
+          // Identify packs stay OUT of the precache: 6.7 MB raw (~1.6 MB brotli)
+          // for the full set would land on every install and every update, and a
+          // session usually needs one system. The service worker runtime-caches
+          // them on first use instead, so offline identification still works once
+          // a pack has been fetched. Only `identify-index.json` is precached.
           globIgnores: ["**/*.map", "assets/identify-*.pack"],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:
@@ -1216,7 +1219,7 @@ export default defineConfig(({ command, mode }) => {
             "apple-touch-icon.png",
             "hello-world.nes",
             "modified-world.nes",
-            "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm,pack}",
+            "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
             "icon-maskable-192.png",
             "icon-maskable-512.png",
           ],

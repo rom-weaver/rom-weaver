@@ -50,6 +50,7 @@ const RUNTIME_CACHE_NAME = cacheNames.runtime;
 const EMULATORJS_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
 const IDENTIFY_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-identify-`;
+const IDENTIFY_CACHE_NAME = `${IDENTIFY_CACHE_PREFIX}v1`;
 const SW_LOG_PREFIX = "[rom-weaver-sw]";
 // In-memory COEP mode. Volatile: resets to the credentialless default whenever the worker thread is
 // terminated and respawned (notably on mobile Safari). The durable copy below survives that so a page
@@ -270,6 +271,34 @@ const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
 
 registerRoute(({ request, url }) => isEmulatorJsAssetRequest(request, url), serveEmulatorJsAsset);
 
+/* Identify packs are runtime-cached, not precached: the full set is 6.7 MB raw
+   (~1.6 MB brotli) and most sessions need one system. Only the index is
+   precached, so a first identify costs one pack and every later one - including
+   offline - is served from this cache. Each pack URL carries its own `sha256`
+   query, so a rebuilt pack is a different key and the stale entry is dropped
+   by the activate sweep below. */
+const isIdentifyPackRequest = (url: URL) =>
+  url.origin === self.location.origin && /\/assets\/identify-.*\.pack$/u.test(url.pathname);
+
+const serveIdentifyPack = async ({ request }: { request: Request }) => {
+  const cache = await caches.open(IDENTIFY_CACHE_NAME);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (!response.ok) return response;
+  await cache.put(request, response.clone());
+  // A rebuilt pack arrives under a new `sha256` key; drop the superseded copy of
+  // the same file so the cache cannot grow one entry per release.
+  const url = new URL(request.url);
+  for (const key of await cache.keys()) {
+    const keyUrl = new URL(key.url);
+    if (keyUrl.pathname === url.pathname && keyUrl.search !== url.search) await cache.delete(key);
+  }
+  return response;
+};
+
+registerRoute(({ url }) => isIdentifyPackRequest(url), serveIdentifyPack);
+
 logServiceWorker("script initialized", {
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsVersion: __EMULATORJS_VERSION__,
@@ -305,7 +334,7 @@ self.addEventListener("activate", (event) => {
       .then((cacheNames) =>
         cacheNames.filter((cacheName) => {
           if (cacheName.startsWith(EMULATORJS_CACHE_PREFIX)) return cacheName !== EMULATORJS_CACHE_NAME;
-          if (cacheName.startsWith(IDENTIFY_CACHE_PREFIX)) return true;
+          if (cacheName.startsWith(IDENTIFY_CACHE_PREFIX)) return cacheName !== IDENTIFY_CACHE_NAME;
           return cacheName.startsWith(`precache-${PRECACHE_ID}-`) && !cacheName.endsWith(`-${PRECACHE_VERSION}`);
         }),
       )
