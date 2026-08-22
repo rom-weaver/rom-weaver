@@ -35,7 +35,7 @@ export const onRequestGet = async ({ request, env, next }) => {
   headers.set("Content-Type", contentType);
   headers.set("Content-Encoding", "br");
   headers.set("Vary", "Accept-Encoding");
-  // Function responses bypass the deployed _headers file, so the /assets/*
+  // Function responses bypass the deployed _headers file, so the static asset
   // cache rule and the cross-origin-isolation headers are restated. COEP is
   // load-bearing: dedicated-worker scripts on a cross-origin-isolated page
   // must themselves be served with require-corp or the worker fails to start.
