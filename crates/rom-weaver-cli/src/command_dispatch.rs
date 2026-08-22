@@ -41,6 +41,7 @@ impl CliApp {
                 BundleCommands::Parse(args) => self.run_bundle_parse(args),
                 BundleCommands::Schema => self.run_bundle_schema(),
             },
+            Commands::Save(command) => self.run_save(command),
             Commands::Tools(command) => self.run_tools(command),
             Commands::PlanExtractBatch(args) => self.run_plan_extract_batch(args),
         }
@@ -61,6 +62,11 @@ impl CliApp {
             Commands::Bundle(BundleCommands::Create(_)) => "bundle-create",
             Commands::Bundle(BundleCommands::Parse(_)) => "bundle-parse",
             Commands::Bundle(BundleCommands::Schema) => "bundle-schema",
+            Commands::Save(SaveCommands::Identify(_)) => "save-identify",
+            Commands::Save(SaveCommands::Inspect(_)) => "save-inspect",
+            Commands::Save(SaveCommands::Get(_)) => "save-get",
+            Commands::Save(SaveCommands::Set(_)) => "save-set",
+            Commands::Save(SaveCommands::ExportSchema(_)) => "save-export-schema",
             Commands::Tools(ToolsCommands::PpfUndo(_)) => "tools-ppf-undo",
             Commands::PlanExtractBatch(_) => "plan-extract-batch",
         }

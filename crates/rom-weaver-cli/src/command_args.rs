@@ -2884,3 +2884,110 @@ pub struct PpfUndoCommand {
     )]
     pub output: PathBuf,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct SaveIdentifyCommand {
+    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "SAVE"))]
+    pub input: PathBuf,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "GAME_ID"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub game: Option<String>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "SHA1"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub rom_sha1: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct SaveInspectCommand {
+    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "SAVE"))]
+    pub input: PathBuf,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "GAME_ID"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub game: Option<String>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "SHA1"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub rom_sha1: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct SaveGetCommand {
+    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "SAVE"))]
+    pub input: PathBuf,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "FIELD"))]
+    pub field: String,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "GAME_ID"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub game: Option<String>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "SHA1"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub rom_sha1: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct SaveSetCommand {
+    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "SAVE"))]
+    pub input: PathBuf,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "FIELD=VALUE", required = true, num_args = 1..)
+    )]
+    pub assignments: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short,
+            long,
+            value_name = "PATH",
+            help = "Where to write the edited save"
+        )
+    )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub output: Option<PathBuf>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "GAME_ID"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub game: Option<String>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "SHA1"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub rom_sha1: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'n',
+            long,
+            help = "Validate and preview every change without writing a file"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub dry_run: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(long, help = "Overwrite an explicit output path if it already exists")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub force: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct SaveExportSchemaCommand {
+    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "SAVE"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub input: Option<PathBuf>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "GAME_ID"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub game: Option<String>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "SHA1"))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub rom_sha1: Option<String>,
+}
