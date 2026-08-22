@@ -73,6 +73,7 @@ const identifyOptionalPackGroups = [
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
+const cheatDatabaseAssetDir = path.join(rootDir, "public", "cheats");
 const docsScreenshotSources = Object.fromEntries(
   DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(repoRoot, "docs", "screenshots", name)]),
 );
@@ -292,6 +293,30 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
     if (destination) {
       res.writeHead(301, { Location: `/${destination}${req.url.slice(requestPath.length)}` });
       res.end();
+      return;
+    }
+    if (requestPath.startsWith("/cheats/")) {
+      const relativePath = requestPath.slice("/cheats/".length);
+      const segments = relativePath.split("/");
+      if (!relativePath || segments.some((segment) => !segment || segment === "." || segment === "..")) {
+        next();
+        return;
+      }
+      const sourcePath = path.join(cheatDatabaseAssetDir, ...segments);
+      if (!isRegularFile(sourcePath)) {
+        next();
+        return;
+      }
+      fs.readFile(sourcePath, (err, source) => {
+        if (err) {
+          next(err);
+          return;
+        }
+        res.statusCode = 200;
+        setRootStaticAssetContentType(requestPath, res);
+        res.setHeader("Cache-Control", "no-cache");
+        res.end(source);
+      });
       return;
     }
     const generatedSampleAsset = getGeneratedSampleAsset(requestPath);
@@ -549,6 +574,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
     closeBundle() {
       const distDir = path.resolve(rootDir, outDir);
       copyEmulatorJsAssets(distDir);
+      fs.cpSync(cheatDatabaseAssetDir, path.join(distDir, "cheats"), { recursive: true });
       const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
       for (const assetPath of Object.keys(rootStaticAssetSources)) {
         const outputPath = path.join(distDir, assetPath);
@@ -784,9 +810,8 @@ const writePrecacheSizes =
 // Every webapp bundle carries quality-11 brotli sidecars for immutable assets
 // where q11 saves at least 2%. Cloudflare's Pages Function uses _routes.json
 // to serve those exact URLs; Docker and self-hosters can serve the same static
-// siblings directly. Already-compressed formats (woff2, png, zip) fail the
-// savings bar and stay on the ordinary static path. Mutable root files (such
-// as index.html, the service worker, and changelog.json) stay off this path.
+// siblings directly. Cheat shards use their imported sidecars too. Compressed
+// formats stay on the ordinary static path. Mutable root files stay off this path.
 const PAGES_BROTLI_MIN_SAVINGS = 0.02;
 // _routes.json rejects more than 100 combined include/exclude entries, so this
 // is the hard ceiling rather than an early warning. The 17 identify packs ate
@@ -826,8 +851,12 @@ const writeBrotliSidecars = () => {
           `${assetUrl} has a brotli sidecar but no entry in SIDECAR_CONTENT_TYPES (functions/assets/content-types.js); add its content type there`,
         );
       };
-      const sidecarUrls = [`/assets/${wasmNames[0]}`];
-      assertSidecarTypeIsKnown(sidecarUrls[0]);
+      const cheatSidecarUrls = fs
+        .readdirSync(path.join(distDir, "cheats"))
+        .filter((name) => name.endsWith(".json.br"))
+        .map((name) => `/cheats/${name.slice(0, -3)}`);
+      const sidecarUrls = [`/assets/${wasmNames[0]}`, ...cheatSidecarUrls];
+      for (const assetUrl of sidecarUrls) assertSidecarTypeIsKnown(assetUrl);
       if (fs.readdirSync(assetsDir).some((name) => name.startsWith("identify-") && name.endsWith(".pack.br"))) {
         sidecarUrls.push("/assets/identify-*");
       }
