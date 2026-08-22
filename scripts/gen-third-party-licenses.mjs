@@ -199,6 +199,24 @@ const IN_SOURCE_DEPENDENCIES = [
     ],
   },
 ];
+const CHEAT_DATABASE_MANIFEST = path.join(WEBAPP_ROOT, "public", "cheats", "manifest.json");
+
+function cheatDatabaseRows() {
+  const manifest = JSON.parse(fs.readFileSync(CHEAT_DATABASE_MANIFEST, "utf8"));
+  return [
+    {
+      kind: "data",
+      license: manifest.license,
+      licenseFiles: [
+        path.join(WEBAPP_ROOT, "public", "cheats", "LICENSE"),
+        path.join(WEBAPP_ROOT, "public", "cheats", "ATTRIBUTION.md"),
+      ],
+      name: manifest.source,
+      source: `${manifest.sourceUrl}/tree/${manifest.sourceRevision}`,
+      version: manifest.sourceRevision,
+    },
+  ];
+}
 
 /**
  * Run `cargo metadata` and parse the JSON document.
@@ -469,11 +487,12 @@ function main() {
   const cargo = cargoRows(metadata);
   const source = inSourceRows();
   const npm = target === "cli" ? [] : loadWebappRows();
+  const webappData = target === "cli" ? [] : cheatDatabaseRows();
   const cliRows = [...cargo, ...source];
   const rowsByScope = {
     cli: cliRows,
-    webapp: npm,
-    combined: [...cliRows, ...npm],
+    webapp: [...npm, ...webappData],
+    combined: [...cliRows, ...npm, ...webappData],
   };
   const scopes =
     target === "all"

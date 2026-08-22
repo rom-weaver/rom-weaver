@@ -157,6 +157,14 @@ unpacking, use `probe`."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
+            hide = true,
+            about = "Classify database cheats and export runtime entries"
+        )
+    )]
+    Cheat(CheatCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
             about = "Pack files into an archive, disc image, or ROM-specific compressed format",
             long_about = "\
 Pack files into an archive, disc image, or ROM-specific compressed format.
@@ -1357,8 +1365,16 @@ mod extract_batch_plan;
 #[path = "extract_batch.rs"]
 mod extract_batch;
 
+#[path = "cheat_command.rs"]
+mod cheat_command;
 mod cheats;
 mod cheats_apply;
+pub use cheat_command::CheatCommandResult;
+pub use cheats::{
+    CheatKind, CheatRecord, CheatResolution, CheatSystem, CheatTarget, CheatWrite,
+    CheatWriteConflict, ClassifiedCheatRecord, MAX_CHT_BYTES, MAX_CHT_RECORDS,
+    RetroArchParseOptions, RuntimeCheatPayload, export_retroarch_cht, parse_retroarch_cht,
+};
 pub mod dcp;
 pub mod gdrom;
 mod patch_apply;
@@ -1406,7 +1422,7 @@ pub use bundle_create::BundleCreateResult;
 
 mod command_args;
 pub use command_args::{
-    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, ChecksumCommand,
+    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, CheatCommand, ChecksumCommand,
     CompressCommand, ExtractCommand, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
     PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
     PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,

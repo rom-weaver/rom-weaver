@@ -1,0 +1,9 @@
+clrmamepro (
+  name "Nintendo - Nintendo Entertainment System"
+)
+
+game (
+  name "Test Game (USA)"
+  region "USA"
+  rom ( name "Test Game (USA).nes" size 24592 crc ABCDEF01 md5 0123456789ABCDEF0123456789ABCDEF sha1 0123456789ABCDEF0123456789ABCDEF01234567 )
+)

@@ -1,4 +1,5 @@
 import type { LargeFileVfs } from "../storage/vfs/types.ts";
+import type { ClassifiedCheatRecord, RuntimeCheatRecord } from "../lib/cheats/model.ts";
 import type {
   PatchApplyCommand,
   PatchBasisMode,
@@ -7,6 +8,7 @@ import type {
   PatchValidationPlan,
   ThreadBudget,
 } from "../wasm/index.ts";
+import type { CheatWriteConflict } from "../wasm/generated/rom-weaver-rust-types.d.ts";
 import type { BundleHeaderMode, ParsedBundleCreateResult, ParsedBundleParseResult } from "./bundle.ts";
 import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
 import type { ParsedIngestResult } from "./ingest.ts";
@@ -231,6 +233,7 @@ type RuntimeChecksumCacheInput = PatchValidateCommand["assume_in"] | Record<stri
 type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "output" | "patches" | "threads">> & {
   addHeader?: boolean;
   appendOutputSuffix?: boolean;
+  cheatRecords?: PatchApplyCommand["cheat_records"];
   fixChecksum?: PatchApplyCommand["repair_checksum"];
   /** One mode per patch in chain order; a shorter list carries the last mode forward. */
   headerModes?: PatchApplyCommand["patch_header"];
@@ -369,6 +372,20 @@ type WorkflowRuntimeCompression = {
 
 type WorkflowRuntimeBinary = {
   assertSource: (source: SourceRef, context: string) => void;
+};
+
+type WorkflowRuntimeCheat = {
+  run: (input: {
+    outputName?: string;
+    records: RuntimeCheatRecord[];
+    selectedIds?: string[];
+    signal?: AbortSignal;
+    source: SourceRef;
+  }) => Promise<{
+    conflicts: CheatWriteConflict[];
+    output?: PublicOutput;
+    records: ClassifiedCheatRecord[];
+  }>;
 };
 
 type WorkflowRuntimePatch = {
@@ -586,6 +603,7 @@ type WorkflowRuntime = {
   binary: WorkflowRuntimeBinary;
   ingest?: WorkflowRuntimeIngest;
   bundle?: WorkflowRuntimeBundle;
+  cheat?: WorkflowRuntimeCheat;
   /** Declare a simultaneous I/O drop (source sizes in bytes) so the scheduler plans the whole batch as
    * one unit even though each file is staged independently. Optional - runtimes without a batch planner
    * omit it and ops are admitted as they arrive. */

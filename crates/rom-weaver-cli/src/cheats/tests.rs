@@ -1,5 +1,6 @@
 use super::*;
 use rom_weaver_core::RomWeaverError;
+use std::collections::BTreeMap;
 
 fn err_code(err: &RomWeaverError) -> &str {
     match err {
@@ -240,6 +241,192 @@ fn apply_writes_round_trip() {
     assert_eq!(rom[0x02], 0xAB);
     assert_eq!(rom[0x04], 0x12); // big-endian word
     assert_eq!(rom[0x05], 0x34);
+}
+
+fn record(system: CheatSystem, raw_code: &str) -> CheatRecord {
+    CheatRecord {
+        id: format!("test-{raw_code}"),
+        system,
+        game_id: "synthetic".to_string(),
+        description: "Synthetic cheat".to_string(),
+        raw_code: Some(raw_code.to_string()),
+        code_kind: Some(CheatKind::ProActionReplay),
+        raw_fields: BTreeMap::from([("code".to_string(), raw_code.to_string())]),
+        source_file: "fixture.cht".to_string(),
+        source_index: 0,
+        source_revision: "test".to_string(),
+    }
+}
+
+#[test]
+fn classifies_runtime_addresses_for_each_family() {
+    let cases = [
+        (CheatSystem::Nes, "0010AB"),
+        (CheatSystem::Snes, "7E1234FF"),
+        (CheatSystem::Genesis, "E01234:ABCD"),
+        (CheatSystem::GameBoy, "01FF00C0"),
+        (CheatSystem::GameBoyColor, "01FF00C0"),
+    ];
+    for (system, code) in cases {
+        let classified = classify_record(&vec![0; 0x10_0000], &record(system, code));
+        assert!(
+            matches!(classified.resolution, CheatResolution::Runtime { .. }),
+            "{system:?} {code}: {:?}",
+            classified.resolution
+        );
+    }
+}
+
+#[test]
+fn classifies_all_rom_all_runtime_and_mixed_groups() {
+    let rom = vec![0; 0x10000];
+    let all_rom = classify_record(&rom, &record(CheatSystem::Nes, "8000AA+8001BB"));
+    assert!(matches!(
+        all_rom.resolution,
+        CheatResolution::RomBakeable { .. }
+    ));
+    let all_runtime = classify_record(&rom, &record(CheatSystem::Nes, "0010AA+0020BB"));
+    assert!(matches!(
+        all_runtime.resolution,
+        CheatResolution::Runtime { .. }
+    ));
+    let mixed = classify_record(&rom, &record(CheatSystem::Nes, "8000AA+0010BB"));
+    assert!(matches!(mixed.resolution, CheatResolution::Mixed { .. }));
+}
+
+#[test]
+fn parameterized_records_are_not_decoded() {
+    for placeholder in ["7E1234??", "80309437 XXXX", "0010XX", "0010?"] {
+        let classified =
+            classify_record(&vec![0; 0x10000], &record(CheatSystem::Snes, placeholder));
+        assert!(matches!(
+            classified.resolution,
+            CheatResolution::RequiresParameter { .. }
+        ));
+    }
+}
+
+#[test]
+fn parameter_detection_ignores_descriptions_and_checks_executable_fields() {
+    let rom = vec![0; 0x10000];
+    let mut concrete = record(CheatSystem::Nes, "8000AA");
+    concrete.description = "Use XX lives".to_string();
+    concrete
+        .raw_fields
+        .insert("desc".to_string(), "Use XX lives".to_string());
+    assert!(matches!(
+        classify_record(&rom, &concrete).resolution,
+        CheatResolution::RomBakeable { .. }
+    ));
+
+    let mut parameterized = record(CheatSystem::Snes, "7E1234FF");
+    parameterized
+        .raw_fields
+        .insert("value".to_string(), "XX".to_string());
+    assert!(matches!(
+        classify_record(&rom, &parameterized).resolution,
+        CheatResolution::RequiresParameter { .. }
+    ));
+}
+
+#[test]
+fn structured_and_conditional_records_remain_runtime_payloads() {
+    let mut structured = record(CheatSystem::Snes, "7E1234FF");
+    structured
+        .raw_fields
+        .insert("handler".to_string(), "1".to_string());
+    structured
+        .raw_fields
+        .insert("condition_value".to_string(), "12".to_string());
+    let classified = classify_record(&vec![0; 0x10000], &structured);
+    assert!(matches!(
+        classified.resolution,
+        CheatResolution::Runtime { .. }
+    ));
+}
+
+#[test]
+fn snes_ambiguous_code_needs_a_device_hint() {
+    let rom = vec![0; 0x40_0000];
+    let runtime = {
+        let mut entry = record(CheatSystem::Snes, "7E1234FF");
+        entry.code_kind = None;
+        entry
+    };
+    assert!(matches!(
+        classify_record(&rom, &runtime).resolution,
+        CheatResolution::Runtime { .. }
+    ));
+
+    let mut ambiguous = record(CheatSystem::Snes, "ABCDEFFF");
+    ambiguous.code_kind = None;
+    let classified = classify_record(&rom, &ambiguous);
+    assert!(matches!(
+        classified.resolution,
+        CheatResolution::Unsupported { .. }
+    ));
+
+    ambiguous.source_file = "Test (Action Replay).cht".to_string();
+    let hinted = classify_record(&rom, &ambiguous);
+    assert!(matches!(
+        hinted.resolution,
+        CheatResolution::RomBakeable { .. }
+    ));
+    assert_eq!(hinted.detected_kind, Some(CheatKind::ProActionReplay));
+}
+
+#[test]
+fn dashed_snes_code_is_detected_as_game_genie_without_a_hint() {
+    let mut entry = record(CheatSystem::Snes, "C24F-74D4");
+    entry.code_kind = None;
+
+    let classified = classify_record(&vec![0; 0x40_0000], &entry);
+
+    assert!(matches!(
+        classified.resolution,
+        CheatResolution::Runtime { .. }
+    ));
+    assert_eq!(classified.detected_kind, Some(CheatKind::GameGenie));
+}
+
+#[test]
+fn conflict_detection_reports_different_values_only() {
+    let entries = vec![
+        (
+            "first".to_string(),
+            vec![CheatWrite {
+                offset: 10,
+                value: 0x1234,
+                width: 2,
+            }],
+        ),
+        (
+            "same".to_string(),
+            vec![CheatWrite {
+                offset: 10,
+                value: 0x12,
+                width: 1,
+            }],
+        ),
+        (
+            "conflict".to_string(),
+            vec![CheatWrite {
+                offset: 11,
+                value: 0xff,
+                width: 1,
+            }],
+        ),
+    ];
+    assert_eq!(
+        detect_write_conflicts(&entries),
+        vec![CheatWriteConflict {
+            first_id: "first".to_string(),
+            second_id: "conflict".to_string(),
+            offset: 11,
+            first_value: 0x34,
+            second_value: 0xff,
+        }]
+    );
 }
 
 // --- layout edge cases -----------------------------------------------------

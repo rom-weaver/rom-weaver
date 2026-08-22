@@ -1,0 +1,56 @@
+{
+  "attributionPath": "/cheats/ATTRIBUTION.md",
+  "license": "CC-BY-SA-4.0",
+  "licensePath": "/cheats/LICENSE",
+  "schemaVersion": 1,
+  "source": "libretro/libretro-database",
+  "sourceRevision": "4968f556a0bf749378901086646b78bc78703b88",
+  "sourceUrl": "https://github.com/libretro/libretro-database",
+  "systems": {
+    "gameboy": {
+      "cheats": 17451,
+      "compressedBytes": 595863,
+      "compressedPath": "/cheats/gameboy.json.br?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "games": 1079,
+      "label": "Game Boy",
+      "path": "/cheats/gameboy.json?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "rawBytes": 10942791
+    },
+    "gameboy-color": {
+      "cheats": 13058,
+      "compressedBytes": 427359,
+      "compressedPath": "/cheats/gameboy-color.json.br?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "games": 808,
+      "label": "Game Boy Color",
+      "path": "/cheats/gameboy-color.json?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "rawBytes": 8249251
+    },
+    "genesis": {
+      "cheats": 38420,
+      "compressedBytes": 1384803,
+      "compressedPath": "/cheats/genesis.json.br?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "games": 1668,
+      "label": "Sega Genesis / Mega Drive",
+      "path": "/cheats/genesis.json?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "rawBytes": 24201528
+    },
+    "nes": {
+      "cheats": 43036,
+      "compressedBytes": 1608650,
+      "compressedPath": "/cheats/nes.json.br?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "games": 1905,
+      "label": "Nintendo Entertainment System",
+      "path": "/cheats/nes.json?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "rawBytes": 27381479
+    },
+    "snes": {
+      "cheats": 68716,
+      "compressedBytes": 2175157,
+      "compressedPath": "/cheats/snes.json.br?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "games": 2069,
+      "label": "Super Nintendo Entertainment System",
+      "path": "/cheats/snes.json?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "rawBytes": 43857989
+    }
+  }
+}
