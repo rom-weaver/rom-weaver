@@ -45,3 +45,6 @@ mod extract_batch_plan;
 
 #[path = "cli_smoke/formats.rs"]
 mod formats;
+
+#[path = "cli_smoke/save.rs"]
+mod save;

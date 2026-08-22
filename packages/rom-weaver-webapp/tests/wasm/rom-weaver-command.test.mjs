@@ -22,10 +22,34 @@ describe("rom-weaver command boundary helpers", () => {
       "trim",
       "patch",
       "bundle",
+      "save",
       "tools",
       "plan-extract-batch",
     ]);
     expect(KNOWN_PATCH_COMMAND_TYPES).toEqual(["apply", "validate", "create"]);
+  });
+
+  it("builds generated save command branches", () => {
+    const command = createRomWeaverCommand("save-set", {
+      assignments: ["trainer.money=999999"],
+      dry_run: true,
+      game: "pokemon-emerald",
+      input: "/work/game.sav",
+    });
+    expect(command).toEqual({
+      args: {
+        args: {
+          assignments: ["trainer.money=999999"],
+          dry_run: true,
+          game: "pokemon-emerald",
+          input: "/work/game.sav",
+        },
+        type: "set",
+      },
+      type: "save",
+    });
+    expect(getRomWeaverCommandLabel(command)).toBe("save-set");
+    expect(collectRomWeaverRunInputPaths(command)).toEqual(["/work/game.sav"]);
   });
 
   it("builds nested patch commands and preserves patch labels", () => {

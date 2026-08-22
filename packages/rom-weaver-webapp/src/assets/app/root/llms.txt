@@ -30,6 +30,8 @@
 - [Supported formats](https://rom-weaver.com/docs/supported-formats): The full patch, container, codec, checksum, trim, and header support tables.
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
 - [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
+- [Edit Generation III saves](https://rom-weaver.com/docs/edit-gen3-saves): Inspect and safely edit supported English retail Pokémon Ruby, Sapphire, Emerald, FireRed, and LeafGreen game saves in the browser or CLI.
+- [Save Editor development](https://rom-weaver.com/docs/save-editor-development): Generation III save handler architecture, integrity boundary, and contributor flow.
 
 ## Documentation
 
@@ -40,6 +42,8 @@
 - [Web app integration](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/webapp-integration.md): Preloaded URLs and same-origin OPFS integration.
 - [Self-hosting](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/self-hosting.md): Docker, static hosting, reverse proxies, subpaths, HTTPS, and browser isolation headers.
 - [Architecture](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/ARCHITECTURE.md): Crate graph, registries, browser workers, OPFS, and the Rust-TypeScript boundary.
+- [Edit Generation III saves](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/edit-gen3-saves.md): Supported English retail layouts, recognition outcomes, editable fields, and safe browser and CLI workflows.
+- [Save Editor development](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/save-editor.md): Handler architecture, integrity rules, and the eight-step contributor flow.
 - [Release guide](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/.github/RELEASING.md): Release automation, publishing channels, and retry procedures.
 
 ## Project
