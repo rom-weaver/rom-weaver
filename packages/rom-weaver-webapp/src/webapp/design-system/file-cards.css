@@ -542,7 +542,6 @@
   display: inline-flex;
   flex: none;
   gap: var(--sp-m);
-  align-items: baseline;
 }
 .rw-app .tree-size {
   min-width: 62px;
