@@ -30,6 +30,7 @@ const DOC_SOURCES = Object.freeze([
     label: "Apply patches (browser)",
     slug: "docs/apply-rom-patches",
   }),
+  Object.freeze({ file: "how-to/use-browser-cheats.md", label: "Use cheats (browser)", slug: "docs/use-cheats" }),
   Object.freeze({
     file: "how-to/create-rom-patches.md",
     label: "Create patches (browser)",
@@ -74,10 +75,16 @@ const DOC_SOURCES = Object.freeze([
     label: "Supported formats",
     slug: "docs/supported-formats",
   }),
+  Object.freeze({ file: "reference/cheat-database.md", label: "Cheat database", slug: "docs/cheat-database" }),
   Object.freeze({
     file: "explanation/how-patching-works.md",
     label: "How patching works",
     slug: "docs/how-patching-works",
+  }),
+  Object.freeze({
+    file: "explanation/rom-and-runtime-cheats.md",
+    label: "ROM and runtime cheats",
+    slug: "docs/rom-and-runtime-cheats",
   }),
   Object.freeze({ file: "explanation/local-first.md", label: "Why files stay local", slug: "docs/local-first" }),
   Object.freeze({ file: "explanation/patch-formats.md", label: "Patch formats", slug: "docs/patch-formats" }),
