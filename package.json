@@ -91,12 +91,12 @@
     "version": "node scripts/sync-version.mjs"
   },
   "devDependencies": {
-    "@commitlint/cli": "21.2.1",
-    "@commitlint/config-conventional": "21.2.0",
+    "@commitlint/cli": "21.2.2",
+    "@commitlint/config-conventional": "21.2.2",
     "cross-spawn": "7.0.6",
     "doctoc": "2.5.0",
     "lefthook": "2.1.10",
     "markdownlint-cli2": "0.23.2",
-    "oxlint": "1.78.0"
+    "oxlint": "1.79.0"
   }
 }
