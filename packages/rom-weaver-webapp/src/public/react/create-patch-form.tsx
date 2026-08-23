@@ -9,6 +9,8 @@ import type {
   getCreatePatchFormatCandidates,
 } from "../../platform/browser/browser-api.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
+import { identifySourceMismatch, identifySourceMismatchMessage } from "../../presentation/identify-agreement.ts";
+import { identifyOutputNameSuggestion } from "../../presentation/identify-title.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
@@ -1110,6 +1112,15 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
 
+  const sourceMismatch = identifySourceMismatch(originalState?.identification, modifiedState?.identification);
+  // The patch is named after the ROM it patches, so the original's title is the
+  // one worth offering - the modified ROM is a hack and rarely has a record.
+  const outputNameSuggestion = identifyOutputNameSuggestion(originalState?.identification, resolvedOutputName);
+  const applyOutputNameSuggestion = (name: string) => {
+    setOutputName(name);
+    updateSettings({ ...settings, output: { ...settings.output, outputName: name } });
+  };
+
   const createModel = (): CreatePatchFormViewModel => ({
     dialog: (
       <>
@@ -1179,6 +1190,11 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       onFiles: handleUnifiedDrop,
       supported: CREATE_SUPPORTED_FILES,
     },
+    mismatchNotice: sourceMismatch ? (
+      <Notice id="patch-builder-identify-mismatch" level="warn">
+        {identifySourceMismatchMessage(sourceMismatch)}
+      </Notice>
+    ) : null,
     modifiedStep: renderSourceStep({
       checksumProgress: getSourceChecksumProgress("modified"),
       file: modified,
@@ -1272,6 +1288,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         </InfoPopover>
       ),
       meta: createTimingText ? <span className="t">{createTimingText}</span> : undefined,
+      nameSuggestion: outputNameSuggestion
+        ? { name: outputNameSuggestion, onApply: () => applyOutputNameSuggestion(outputNameSuggestion) }
+        : null,
       notice:
         message && messagePlacement === "output" ? (
           <Notice

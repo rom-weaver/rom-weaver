@@ -23,6 +23,8 @@ type CreatePatchFormViewModel = {
   modifiedStep: ComponentProps<typeof WorkflowRomInputStep>;
   /** Original source step (0x02). */
   originalStep: ComponentProps<typeof WorkflowRomInputStep>;
+  /** Shown between the two source steps when both ROMs identify as different games. */
+  mismatchNotice: ReactNode;
   /** Output step (0x04): patch type, filename, compression, run action. */
   output: ComponentProps<typeof WorkflowOutputStep>;
   /** No source staged yet - show only the hero. */
@@ -34,6 +36,7 @@ type CreatePatchFormViewModel = {
 const CreatePatchFormView = ({
   dialog,
   dropZone,
+  mismatchNotice,
   modifiedStep,
   originalStep,
   output,
@@ -71,6 +74,7 @@ const CreatePatchFormView = ({
             </div>
           ) : null}
           <WorkflowRomInputStep {...modifiedStep} />
+          {mismatchNotice}
           <WorkflowOutputStep {...output} />
         </>
       )}
