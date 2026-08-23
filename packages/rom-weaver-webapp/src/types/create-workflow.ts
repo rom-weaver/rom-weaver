@@ -1,4 +1,5 @@
 import type { ChecksumVariant } from "./checksum.ts";
+import type { ParsedIdentifyResolution } from "./identify.ts";
 import type { SelectionCandidate } from "./selection.ts";
 import type { WorkflowWarning } from "./workflow-controller.ts";
 
@@ -27,6 +28,7 @@ type CreateWorkflowSourceState = {
   checksumVariants?: ChecksumVariant[];
   checksumTimeMs?: number;
   decompressionTimeMs?: number;
+  identification?: ParsedIdentifyResolution;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
 };
