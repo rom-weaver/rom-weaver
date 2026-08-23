@@ -1,4 +1,4 @@
-import { SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { ScanSearch, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
 import { join } from "./cx.ts";
@@ -42,6 +42,11 @@ type OutputCardProps = {
   compress?: OutputCompressPanel | null;
   disabled?: boolean;
   action?: ReactNode;
+  /**
+   * One-click alternative name offered under the field - today the ROM's
+   * identified title. Absent when nothing better than the current name is known.
+   */
+  nameSuggestion?: { name: string; onApply: () => void } | null;
 };
 
 /** One labeled control field inside the output options grid. */
@@ -79,6 +84,7 @@ const OutputCard = ({
   compress,
   disabled,
   action,
+  nameSuggestion,
 }: OutputCardProps) => {
   // The format selector appends the extension, so a name that already ends in
   // an output-looking extension would be saved doubled (`game.zip.zip`).
@@ -148,6 +154,20 @@ const OutputCard = ({
           </DropdownSelect>
         </div>
       </div>
+      {nameSuggestion ? (
+        <p className="outname-suggest">
+          <button
+            className="btn slim ghost outname-suggest-btn"
+            disabled={disabled}
+            onClick={nameSuggestion.onApply}
+            type="button"
+          >
+            <ScanSearch aria-hidden="true" />
+            <span>Use identified name</span>
+            <span className="mono outname-suggest-name">{nameSuggestion.name}</span>
+          </button>
+        </p>
+      ) : null}
       {compress ? (
         <Drawer
           bodyClassName="optsbody"

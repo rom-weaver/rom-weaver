@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { OutputCard } from "../../../src/public/react/components/ds/output-card.tsx";
 
@@ -41,5 +41,29 @@ describe("OutputCard double-extension warning", () => {
     expect(
       render(<OutputCard {...baseProps} fileName="game.sfc" />).container.querySelector(".outname-ext-warn"),
     ).toBeNull();
+  });
+});
+
+describe("OutputCard identified-name suggestion", () => {
+  it("writes the suggested name back through onFileNameChange", () => {
+    const applied: string[] = [];
+    const { container } = render(
+      <OutputCard
+        {...baseProps}
+        fileName="rom_final"
+        nameSuggestion={{ name: "Tetris (USA)", onApply: () => applied.push("Tetris (USA)") }}
+      />,
+    );
+    const button = container.querySelector<HTMLButtonElement>(".outname-suggest-btn");
+    if (!button) throw new Error("The suggestion button did not render.");
+    expect(button.textContent).toContain("Tetris (USA)");
+
+    fireEvent.click(button);
+    expect(applied).toEqual(["Tetris (USA)"]);
+  });
+
+  it("renders nothing when no suggestion is offered", () => {
+    const { container } = render(<OutputCard {...baseProps} fileName="rom_final" nameSuggestion={null} />);
+    expect(container.querySelector(".outname-suggest")).toBeNull();
   });
 });

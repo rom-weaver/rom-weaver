@@ -1,3 +1,5 @@
+import type { ParsedIdentifyResolution } from "../types/identify.ts";
+
 const ATOMIC_REGION_LABELS: Readonly<Record<string, string>> = {
   A: "Australia",
   B: "Brazil",
@@ -76,8 +78,39 @@ const formatIdentifyTitle = (name: string): string => {
   return formatted.replace(/\s{2,}/gu, " ").trim();
 };
 
+/**
+ * The identified title as a filename stem: control characters and the
+ * characters no filesystem accepts are removed, and the extension is left to
+ * the caller's format selector. Brackets stay - a GoodTools tag like `[T+Eng]`
+ * is part of the name a reader recognizes.
+ */
+const identifyOutputBaseName = (name: string): string =>
+  Array.from(formatIdentifyTitle(name))
+    .filter((character) => character.charCodeAt(0) >= 32)
+    .join("")
+    .replace(/[<>:"/\\|?*]+/gu, " ")
+    .replace(/\s{2,}/gu, " ")
+    .trim();
+
 const uniqueIdentifyTitles = (names: readonly string[]): string[] => [
   ...new Set(names.map(formatIdentifyTitle).filter(Boolean)),
 ];
 
-export { formatIdentifyTitle, uniqueIdentifyTitles };
+/**
+ * The output-name the identified ROM suggests, or nothing. A single confident
+ * match is the only case worth offering: an ambiguous result has no one answer,
+ * and re-offering the name already in the field is noise.
+ */
+const identifyOutputNameSuggestion = (
+  identification: ParsedIdentifyResolution | undefined,
+  currentName: string,
+): string | null => {
+  if (identification?.status !== "matched") return null;
+  const titles = uniqueIdentifyTitles(identification.matches.map((match) => match.name));
+  if (titles.length !== 1) return null;
+  const suggestion = identifyOutputBaseName(titles[0] || "");
+  if (!suggestion || suggestion === currentName.trim()) return null;
+  return suggestion;
+};
+
+export { formatIdentifyTitle, identifyOutputNameSuggestion, uniqueIdentifyTitles };

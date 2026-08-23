@@ -201,6 +201,18 @@
 .rw-app .outname-ext-warn code {
   font-family: var(--mono);
 }
+.rw-app .outname-suggest {
+  margin-block-start: var(--sp-xs);
+}
+.rw-app .outname-suggest-btn {
+  max-width: 100%;
+}
+.rw-app .outname-suggest-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--thread-text);
+  white-space: nowrap;
+}
 
 .rw-app .cks .opts-lab {
   display: inline-flex;
