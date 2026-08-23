@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { onRequestGet } from "../../functions/assets/[name].js";
+import { onRequestGet as onCheatRequestGet } from "../../functions/cheats/[name].js";
 
 const WASM_URL = "https://rom-weaver.com/assets/rom-weaver-app-BWS09Fxt.wasm";
 const NEXT_SENTINEL = new Response("static passthrough");
@@ -67,6 +68,16 @@ describe("pages brotli sidecar function", () => {
     expect(response.headers.get("Content-Encoding")).toBe("br");
     // COEP is load-bearing for worker scripts on a cross-origin-isolated page.
     expect(response.headers.get("Cross-Origin-Embedder-Policy")).toBe("require-corp");
+  });
+
+  it("serves cheat shards through the cheat route", async () => {
+    const url = "https://rom-weaver.com/cheats/snes.json?revision=test";
+    const { context, fetchLog } = makeContext({ url, sidecarResponse: brSidecar() });
+    const response = await onCheatRequestGet(context);
+
+    expect(fetchLog).toEqual([{ method: "GET", url: "https://rom-weaver.com/cheats/snes.json.br" }]);
+    expect(response.headers.get("Content-Type")).toBe("application/json; charset=utf-8");
+    expect(response.headers.get("Content-Encoding")).toBe("br");
   });
 
   it("falls through for an extension the build stages no sidecar for", async () => {
