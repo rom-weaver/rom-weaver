@@ -269,9 +269,9 @@ assets: Array<IngestRomAsset>,
  */
 patches: Array<PatchDescriptor>, };
 
-export type CheatSystem = "nes" | "snes" | "genesis" | "gameboy" | "gameboy-color";
+export type CheatSystem = "nes" | "snes" | "genesis" | "gameboy" | "gameboy-color" | "gameboyadvance" | "playstation";
 
-export type CheatKind = "game-genie" | "pro-action-replay";
+export type CheatKind = "game-genie" | "pro-action-replay" | "xploder";
 
 export type CheatTarget = "cartridge-rom" | "runtime-memory" | "unknown";
 
