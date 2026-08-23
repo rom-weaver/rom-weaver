@@ -18,9 +18,29 @@
   font-size: var(--dropdown-fs, 0.92rem);
   appearance: none;
   cursor: pointer;
-  background-image: var(--chevron);
-  background-repeat: no-repeat;
-  background-position: right 10px center;
+}
+.rw-app .dropdown-select {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+  min-width: 0;
+}
+.rw-app .dropdown-select > .select {
+  flex: 1;
+  min-width: 0;
+}
+.rw-app :is(.target-grp > .dropdown-select, .ck-add .dropdown-select, .fname .dropdown-select) {
+  width: auto;
+}
+.rw-app .dropdown-arrow {
+  color: var(--ink-4);
+  pointer-events: none;
+}
+.rw-app .dropdown-select > .dropdown-arrow {
+  position: absolute;
+  inset-inline-end: 10px;
+  top: 50%;
+  translate: 0 -50%;
 }
 .rw-app .input:focus-visible,
 .rw-app .select:focus-visible {
@@ -113,6 +133,7 @@
   gap: var(--sp-m);
 }
 .rw-app .fname {
+  position: relative;
   display: flex;
   flex: 1 1 300px;
   align-items: stretch;
@@ -166,6 +187,10 @@
   font-weight: 650;
   background-color: var(--plate-2);
   border: 0;
+}
+.rw-app .fname .dropdown-select {
+  flex: none;
+  align-self: stretch;
 }
 .rw-app .fname .select:focus-visible {
   box-shadow: none;
@@ -237,6 +262,34 @@
 }
 .rw-app .export-type-field .select {
   text-overflow: ellipsis;
+}
+.rw-app .bundle-job {
+  margin-block-start: var(--sp-l);
+}
+.rw-app .bundle-job-content {
+  display: grid;
+  gap: var(--sp-m);
+}
+.rw-app .bundle-job-fields {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.85fr) minmax(210px, 1.15fr);
+  gap: var(--sp-l);
+}
+.rw-app .bundle-rom-option {
+  align-self: end;
+}
+.rw-app .bundle-rom-option .checkrow {
+  margin-block: 0;
+}
+.rw-app .bundle-rom-warning {
+  grid-column: 1 / -1;
+}
+.rw-app .bundle-share,
+.rw-app .bundle-job-content > .runprog {
+  width: 100%;
+}
+.rw-app .bundle-share {
+  min-height: 40px;
 }
 .rw-app .patch-description-field textarea.input {
   height: auto;
@@ -355,13 +408,43 @@
   height: 32px;
 }
 .rw-app .patch-bulk-edit-button {
+  position: relative;
+  display: inline-flex;
   flex: none;
   gap: 6px;
+  align-items: center;
+  min-block-size: 24px;
+  padding: 0;
   margin-inline-end: 4px;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: color 0.18s;
 }
 .rw-app .patch-bulk-edit-button svg {
+  flex: none;
   width: 13px;
   height: 13px;
+}
+.rw-app .patch-bulk-edit-button::after {
+  position: absolute;
+  inset: -4px -8px;
+  content: "";
+}
+@media (hover: hover) {
+  .rw-app .patch-bulk-edit-button:hover {
+    color: var(--thread-ink);
+  }
+}
+.rw-app .patch-bulk-edit-button:active {
+  color: var(--thread-ink);
 }
 .rw-app .patch-shared-meta-editor {
   display: grid;
@@ -736,7 +819,7 @@
 .rw-app .ck-add-select {
   width: auto;
   min-width: 0;
-  padding: 0;
+  padding: 0 12px 0 0;
   margin: 0;
   font-family: var(--font);
   font-size: var(--dropdown-fs, 0.66rem);
@@ -748,6 +831,11 @@
   cursor: pointer;
   background: none;
   border: 0;
+}
+.rw-app .ck-add .dropdown-arrow {
+  inset-inline-end: 0;
+  width: 10px;
+  height: 10px;
 }
 .rw-app .ck-add:focus-within {
   color: var(--ink);

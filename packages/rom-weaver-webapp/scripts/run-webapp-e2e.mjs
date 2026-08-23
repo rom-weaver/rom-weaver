@@ -187,7 +187,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         // the original rejection.
         navigation.catch(() => undefined);
         if (testCase.replayClick) {
-          const settings = page.getByRole("button", { name: "Settings" });
+          const settings = page.locator(".panel.workflow:not([hidden]) .panel-settings-btn");
           const dock = page.locator(".dock");
           const workflow = page.locator("#panel-patcher .workflow-body");
           // WebKit can expose the masthead before it finishes parsing the
@@ -547,7 +547,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await page.setViewportSize(viewport);
       for (const theme of ["light", "dark"]) {
         await setTheme(theme);
-        await page.getByRole("button", { name: "Settings" }).click();
+        await page.locator(".panel.workflow:not([hidden]) .panel-settings-btn").click();
         await page.getByRole("dialog").waitFor({ state: "visible" });
         await scanLiveApp(page, `Settings (${viewport.label}, ${theme})`);
         const betaTools = page.locator("#settings-beta-tools-enabled");
@@ -581,7 +581,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await scanVariants("info popover");
     await infoButton.click();
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator(".panel.workflow:not([hidden]) .panel-settings-btn").click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
     const codecCombobox = page.locator(".codec-combobox input").first();
     await codecCombobox.click();
@@ -651,7 +651,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Bundle ${step}/4`);
       if (step === 4) {
-        const createBundleButton = page.getByRole("button", { name: "Create ZIP Bundle", exact: true });
+        const createBundleButton = page.getByRole("button", { name: "Share bundle", exact: true });
         await createBundleButton.waitFor({ state: "visible", timeout: 60_000 });
         await page.waitForFunction(
           () => {
@@ -838,7 +838,7 @@ const createWorkerReuseCorpus = () => {
 };
 
 const configureUncompressedOutput = async (page) => {
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.locator(".panel.workflow:not([hidden]) .panel-settings-btn").click();
   await page.locator("#settings-default-compression").selectOption("none");
   await page.getByRole("button", { name: "Save" }).click();
 };

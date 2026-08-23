@@ -32,6 +32,23 @@ const expectRunSucceeded = (result) => {
 
 const canUseSharedMemory = () => typeof SharedArrayBuffer === "function" && globalThis.crossOriginIsolated === true;
 
+const requireSharedMemory = () => {
+  expect(
+    canUseSharedMemory(),
+    "threaded runner integration tests require SharedArrayBuffer and crossOriginIsolated",
+  ).toBe(true);
+};
+
+const isRunnerLifecycleTrace = (line) =>
+  line.includes("[browser-runner] runJson dispatch") ||
+  line.includes("[runner-worker] runJson invoking runner") ||
+  line.includes("[runner-worker] runJson runner returned");
+
+const runnerLifecyclePhase = (line) => {
+  if (line.includes("[browser-runner] runJson dispatch")) return "dispatch";
+  return line.includes("runJson invoking runner") ? "invoke" : "return";
+};
+
 const stageBin = async (name, contents) => {
   const sourcePath = `${WORKER_OPFS_MOUNTPOINT}/${name}.bin`;
   await browserRuntime.vfs.truncate(sourcePath, 0);
@@ -44,7 +61,7 @@ afterEach(async () => {
 });
 
 test("reuses an in-flight warmup runner for the first operation", async () => {
-  if (!canUseSharedMemory()) return;
+  requireSharedMemory();
 
   const runnerDiagnostics = [];
   const diagnosticChannel = new BroadcastChannel("rom-weaver-runtime-diagnostics");
@@ -73,8 +90,9 @@ test("reuses an in-flight warmup runner for the first operation", async () => {
 
 test("runs two compress operations concurrently on separate pooled runners", async () => {
   // Concurrency requires the threaded runtime; the single-threaded fallback serializes regardless.
-  if (!canUseSharedMemory()) return;
-  await warmupRomWeaverRunner();
+  requireSharedMemory();
+  // Prewarm both pooled runners so lifecycle traces observe operation overlap, not runner startup.
+  await Promise.all([warmupRomWeaverRunner(), warmupRomWeaverRunner()]);
 
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const aIn = await stageBin(`concurrent-a-${runId}`, "rom-weaver concurrency fixture A\n".repeat(256));
@@ -82,16 +100,33 @@ test("runs two compress operations concurrently on separate pooled runners", asy
   const aOut = `${WORKER_OPFS_MOUNTPOINT}/concurrent-a-${runId}.zip`;
   const bOut = `${WORKER_OPFS_MOUNTPOINT}/concurrent-b-${runId}.zip`;
   const cleanup = [aIn, bIn, aOut, bOut];
+  const lifecycle = [];
+  const collectLifecycle = (operation) => (line) => {
+    if (isRunnerLifecycleTrace(line)) lifecycle.push({ operation, phase: runnerLifecyclePhase(line) });
+  };
 
   try {
     // Fire both without awaiting between them - each requests a single thread, so the scheduler admits
     // both at once (1 + 1 <= budget, two disjoint path sets, concurrency cap 2).
     const [aResult, bResult] = await Promise.all([
-      runRomWeaverJson({ args: { format: "zip", input: [aIn], output: aOut, threads: 1 }, type: "compress" }),
-      runRomWeaverJson({ args: { format: "zip", input: [bIn], output: bOut, threads: 1 }, type: "compress" }),
+      runRomWeaverJson(
+        { args: { format: "zip", input: [aIn], output: aOut, threads: 1 }, type: "compress" },
+        { onTraceNonJsonLine: collectLifecycle("a") },
+      ),
+      runRomWeaverJson(
+        { args: { format: "zip", input: [bIn], output: bOut, threads: 1 }, type: "compress" },
+        { onTraceNonJsonLine: collectLifecycle("b") },
+      ),
     ]);
     expectRunSucceeded(aResult);
     expectRunSucceeded(bResult);
+    const dispatches = lifecycle.filter(({ phase }) => phase === "dispatch");
+    const workerLifecycle = lifecycle.filter(({ phase }) => phase !== "dispatch");
+    expect(dispatches, `runner lifecycle: ${JSON.stringify(lifecycle)}`).toHaveLength(2);
+    expect(new Set(dispatches.map(({ operation }) => operation)).size).toBe(2);
+    expect(workerLifecycle, `runner lifecycle: ${JSON.stringify(lifecycle)}`).toHaveLength(4);
+    expect(workerLifecycle.map(({ phase }) => phase)).toEqual(["invoke", "invoke", "return", "return"]);
+    expect(new Set(workerLifecycle.slice(0, 2).map(({ operation }) => operation)).size).toBe(2);
     expect((await browserRuntime.vfs.stat(aOut))?.size || 0).toBeGreaterThan(0);
     expect((await browserRuntime.vfs.stat(bOut))?.size || 0).toBeGreaterThan(0);
 
@@ -108,7 +143,7 @@ test("runs two compress operations concurrently on separate pooled runners", asy
 });
 
 test("safely serializes two operations that read the same source path", async () => {
-  if (!canUseSharedMemory()) return;
+  requireSharedMemory();
   await warmupRomWeaverRunner();
 
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -116,16 +151,35 @@ test("safely serializes two operations that read the same source path", async ()
   const out1 = `${WORKER_OPFS_MOUNTPOINT}/shared-source-${runId}-1.zip`;
   const out2 = `${WORKER_OPFS_MOUNTPOINT}/shared-source-${runId}-2.zip`;
   const cleanup = [shared, out1, out2];
+  const lifecycle = [];
+  const collectLifecycle = (operation) => (line) => {
+    if (isRunnerLifecycleTrace(line)) lifecycle.push({ operation, phase: runnerLifecyclePhase(line) });
+  };
 
   try {
     // Both single-thread compresses read the same input. The scheduler's path-exclusivity guard runs
     // them one at a time so they never contend on the same OPFS sync access handle; both still succeed.
     const [r1, r2] = await Promise.all([
-      runRomWeaverJson({ args: { format: "zip", input: [shared], output: out1, threads: 1 }, type: "compress" }),
-      runRomWeaverJson({ args: { format: "zip", input: [shared], output: out2, threads: 1 }, type: "compress" }),
+      runRomWeaverJson(
+        { args: { format: "zip", input: [shared], output: out1, threads: 1 }, type: "compress" },
+        { onTraceNonJsonLine: collectLifecycle("first") },
+      ),
+      runRomWeaverJson(
+        { args: { format: "zip", input: [shared], output: out2, threads: 1 }, type: "compress" },
+        { onTraceNonJsonLine: collectLifecycle("second") },
+      ),
     ]);
     expectRunSucceeded(r1);
     expectRunSucceeded(r2);
+    const workerLifecycle = lifecycle.filter(({ phase }) => phase !== "dispatch");
+    expect(workerLifecycle, `runner lifecycle: ${JSON.stringify(lifecycle)}`).toHaveLength(4);
+    expect(workerLifecycle[0]?.phase).toBe("invoke");
+    expect(workerLifecycle[1]?.phase).toBe("return");
+    expect(workerLifecycle[1]?.operation).toBe(workerLifecycle[0]?.operation);
+    expect(workerLifecycle[2]?.phase).toBe("invoke");
+    expect(workerLifecycle[2]?.operation).not.toBe(workerLifecycle[0]?.operation);
+    expect(workerLifecycle[3]?.phase).toBe("return");
+    expect(workerLifecycle[3]?.operation).toBe(workerLifecycle[2]?.operation);
     expect((await browserRuntime.vfs.stat(out1))?.size || 0).toBeGreaterThan(0);
     expect((await browserRuntime.vfs.stat(out2))?.size || 0).toBeGreaterThan(0);
   } finally {

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
 import { join } from "./cx.ts";
 import { Drawer } from "./drawer.tsx";
+import { DropdownSelect } from "./dropdown-select.tsx";
 
 /**
  * Output section: the filename field grouped with a format selector, an
@@ -85,7 +86,7 @@ const OutputCard = ({
   const compressionFields =
     compress?.formatOptions?.length && compress.onFormatChange ? (
       <OutputField label={compress.formatLabel || "Type"} labelInfo={compress.formatInfo}>
-        <select
+        <DropdownSelect
           aria-label={compress.formatLabel || "Type"}
           className="select"
           disabled={disabled}
@@ -98,7 +99,7 @@ const OutputCard = ({
               {option.label}
             </option>
           ))}
-        </select>
+        </DropdownSelect>
       </OutputField>
     ) : null;
   return (
@@ -131,7 +132,7 @@ const OutputCard = ({
             value={fileName}
           />
           <span className="sep" />
-          <select
+          <DropdownSelect
             aria-label={formatLabel}
             className="select mono"
             disabled={disabled}
@@ -144,7 +145,7 @@ const OutputCard = ({
                 {option.label}
               </option>
             ))}
-          </select>
+          </DropdownSelect>
         </div>
       </div>
       {compress ? (

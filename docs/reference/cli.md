@@ -166,7 +166,7 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 ### Extras
 
-- `--code` bakes a Game Genie or GameShark/Pro Action Replay code into the ROM, as if it were a patch. Repeat it for each code. `--code-system nes|snes|genesis|gameboy` names the console when the ROM header does not, and `--code-kind auto|game-genie|gameshark` pins the scheme instead of inferring it from the code's shape. The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
+- `--code` bakes a Game Genie, GameShark/Pro Action Replay, or raw Xploder code into the ROM, as if it were a patch. Repeat it for each code. `--code-system nes|snes|genesis|gameboy|gba|psx` names the console when the ROM header does not. `--code-kind auto|game-genie|gameshark|xploder` pins the scheme instead of inferring it from the code's shape. Xploder supports raw GBA ROM-patch codes and plain PlayStation constant writes into PS-X EXE files. Runtime RAM, conditional, and encrypted codes are rejected. The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 - `--emit-bundle PATH` also writes a `rom-weaver-bundle.json` recording the run: the ROM's checksums, the patches in order, and the result. It runs the same code as `bundle create`, so the file is byte-identical to the equivalent `bundle create` call. It carries no per-patch names or authors; for those use `bundle create`, `bundle create --from`, or `--tui`.
 - `--tui` asks for each patch's name, version, author, and optional state plus an output name, then applies and writes the bundle. It needs a terminal, and for now it needs explicit `--patch` files; re-opening a bundle is not supported yet.
 

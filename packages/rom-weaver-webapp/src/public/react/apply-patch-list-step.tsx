@@ -33,6 +33,7 @@ import {
 } from "./components/ds/check-fields.ts";
 import { ChecksumList, ChecksumRow, FIT_VALUE_MIN_CHARS } from "./components/ds/checksum-list.tsx";
 import { join } from "./components/ds/cx.ts";
+import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { InfoPopover, StepSection } from "./components/ds/layout.tsx";
@@ -314,7 +315,7 @@ const PatchHeaderModeSelect = ({
       <label className="sr-only" htmlFor={`rom-weaver-patch-header-mode-${index}`}>
         ROM header handling before patching
       </label>
-      <select
+      <DropdownSelect
         className="meta-target-select mono ptgt-sel"
         disabled={item.optionsDisabled}
         id={`rom-weaver-patch-header-mode-${index}`}
@@ -332,7 +333,7 @@ const PatchHeaderModeSelect = ({
         <option value="auto">{autoLabel}</option>
         <option value="keep">keep {headerNoun}</option>
         <option value="strip">strip {headerNoun}</option>
-      </select>
+      </DropdownSelect>
     </span>
   );
 };
@@ -363,7 +364,7 @@ const PatchN64ByteOrderSelect = ({
       <label className="sr-only" htmlFor={`rom-weaver-patch-n64-byte-order-${index}`}>
         N64 byte order before patching
       </label>
-      <select
+      <DropdownSelect
         className="meta-target-select mono ptgt-sel"
         disabled={item.optionsDisabled}
         id={`rom-weaver-patch-n64-byte-order-${index}`}
@@ -385,7 +386,7 @@ const PatchN64ByteOrderSelect = ({
         <option value="big-endian">{N64_ORDER_LABELS["big-endian"]}</option>
         <option value="byte-swapped">{N64_ORDER_LABELS["byte-swapped"]}</option>
         <option value="little-endian">{N64_ORDER_LABELS["little-endian"]}</option>
-      </select>
+      </DropdownSelect>
     </span>
   );
 };
@@ -770,7 +771,7 @@ const PatchChecksDrawer = ({
                 <label className="sr-only" htmlFor={`rom-weaver-patch-basis-${index}`}>
                   Which ROM the input checks describe
                 </label>
-                <select
+                <DropdownSelect
                   className="meta-target-select mono ck-basis-select"
                   id={`rom-weaver-patch-basis-${index}`}
                   onChange={(event) => {
@@ -787,7 +788,7 @@ const PatchChecksDrawer = ({
                   <option value="">{autoBasisLabel(item, localizer, meta)}</option>
                   <option value="base">{localizer.message("ui.basis.base")}</option>
                   <option value="previous">{localizer.message("ui.basis.previous")}</option>
-                </select>
+                </DropdownSelect>
               </>
             ) : null}
           </div>
@@ -808,10 +809,10 @@ const PatchChecksDrawer = ({
             />
           ))}
           {onMetaChange && addableFields.length ? (
-            <label className="ck-add">
+            <label className="ck-add" htmlFor={`rom-weaver-patch-${side}-add-check-${index}`}>
               <Plus aria-hidden="true" />
               <span className="sr-only">Add {side} check</span>
-              <select
+              <DropdownSelect
                 className="ck-add-select"
                 id={`rom-weaver-patch-${side}-add-check-${index}`}
                 onChange={(event) => {
@@ -829,7 +830,7 @@ const PatchChecksDrawer = ({
                     {CHECK_LABELS[field]}
                   </option>
                 ))}
-              </select>
+              </DropdownSelect>
             </label>
           ) : null}
         </div>
@@ -975,7 +976,7 @@ const PatchTarget = ({
       <label className="sr-only" htmlFor={`rom-weaver-select-patch-target-${index}`}>
         Apply patch into
       </label>
-      <select
+      <DropdownSelect
         className="meta-target-select mono ptgt-sel"
         disabled={item.targetDisabled}
         id={`rom-weaver-select-patch-target-${index}`}
@@ -990,7 +991,7 @@ const PatchTarget = ({
             {option.label}
           </option>
         ))}
-      </select>
+      </DropdownSelect>
     </span>
   );
 };
@@ -1553,7 +1554,7 @@ const ApplyPatchListStep = ({
           <button
             aria-controls="rom-weaver-bulk-patch-meta"
             aria-expanded={bulkEditing}
-            className="btn ghost slim patch-bulk-edit-button"
+            className="patch-bulk-edit-button"
             onClick={() => setBulkEditing((editing) => !editing)}
             ref={bulkEditButtonRef}
             type="button"

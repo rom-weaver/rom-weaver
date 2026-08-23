@@ -1,4 +1,5 @@
 import { Archive } from "lucide-react";
+import type { CSSProperties } from "react";
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
 import { createTiming, formatTiming } from "../../../../storage/shared/timing.ts";
 import { useUiLocalizer } from "../../settings-context.tsx";
@@ -141,18 +142,49 @@ const buildExtractionLevels = (
   return addMissingLeafSize(levels, fileName, fileSize, formatBytes);
 };
 
-const TreeRow = ({ level, depth }: { level: ExtractionLevel; depth: number }) => (
-  <div className={join("tree-row", `d${depth}`)}>
-    {depth > 0 ? <span aria-hidden="true" className="tree-elbow" /> : null}
+/** Row depth travels twice: `data-depth` selects, `--d` does the indent arithmetic. */
+const TreeRow = ({
+  level,
+  depth,
+  leaf,
+  last,
+}: {
+  level: ExtractionLevel;
+  depth: number;
+  leaf: boolean;
+  last: boolean;
+}) => (
+  <div
+    className={join("tree-row", leaf && "is-leaf", last && "is-last")}
+    data-depth={depth}
+    style={{ "--d": depth } as CSSProperties}
+  >
     <span className="tree-name">{level.name}</span>
-    <span className="tree-meta">
-      <span className="tree-size" data-size-bytes={level.sizeBytes}>
-        {level.sizeLabel || ""}
-      </span>
-      <span className="tree-time">{level.timing || ""}</span>
+    <span className="tree-size" data-size-bytes={level.sizeBytes}>
+      {level.sizeLabel || ""}
     </span>
+    <span className="tree-time">{level.timing || ""}</span>
   </div>
 );
+
+/** The row for the file the card is about - the chain's last level, or the archive entry that
+ * matches it by basename. The tree lights this one so the accent lands on the extracted file
+ * rather than the container it arrived in. */
+const findLeafIndex = (levels: ExtractionLevel[], fileName: string) => {
+  const base = getBaseFileName(fileName);
+  let leaf = levels.length - 1;
+  levels.forEach((level, index) => {
+    if (getBaseFileName(level.name) === base) leaf = index;
+  });
+  return leaf;
+};
+
+/** True when no later row shares this row's depth, which is where the guide line stops. */
+const isLastAtDepth = (depths: number[], index: number) => {
+  const depth = depths[index] ?? 0;
+  const next = depths.slice(index + 1).find((value) => value <= depth);
+  return next === undefined || next < depth;
+};
 
 const isCueLevel = (level: ExtractionLevel) => /\.cue$/i.test(level.name);
 
@@ -198,6 +230,8 @@ const ExtractDrawer = ({
   const first = levels[0];
   const last = levels.at(-1);
   if (!last) return null;
+  const depths = levels.map((level, index) => level.depth ?? index);
+  const leafIndex = findLeafIndex(levels, fileName);
   const hasFileEntries = !!fileEntries?.length;
   const typeText = typeLabel?.trim();
   const outputSize = hasFileEntries
@@ -252,8 +286,10 @@ const ExtractDrawer = ({
       <div className="tree mono">
         {levels.map((level, index) => (
           <TreeRow
-            depth={level.depth ?? index}
+            depth={depths[index] ?? index}
             key={`${level.name}:${level.sizeBytes ?? ""}:${level.timing ?? ""}`}
+            last={isLastAtDepth(depths, index)}
+            leaf={index === leafIndex}
             level={level}
           />
         ))}

@@ -19,6 +19,9 @@ const NES_TRAINER_BYTES: usize = 512;
 const NES_BANK_BYTES: usize = 0x4000;
 const SNES_COPIER_HEADER_BYTES: usize = 512;
 const GB_BANK_BYTES: usize = 0x4000;
+const GBA_ROM_START: u32 = 0x0800_0000;
+const GBA_ROM_END: u32 = 0x0A00_0000;
+const PSX_EXE_HEADER_BYTES: usize = 0x800;
 
 /// How CPU/bus addresses map onto file offsets for a ROM.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,6 +34,11 @@ pub enum Mapping {
     },
     SnesLoRom,
     SnesHiRom,
+    GbaRom,
+    PlayStationExe {
+        load_address: u32,
+        data_bytes: usize,
+    },
 }
 
 /// Header presence + banking scheme for a ROM image.
@@ -52,7 +60,37 @@ impl RomLayout {
                 header_bytes: 0,
                 mapping: Mapping::Flat,
             },
+            CheatSystem::GameBoyAdvance => Self {
+                system,
+                header_bytes: 0,
+                mapping: Mapping::GbaRom,
+            },
+            CheatSystem::PlayStation => detect_playstation(rom),
         }
+    }
+}
+
+fn detect_playstation(rom: &[u8]) -> RomLayout {
+    if rom.len() >= PSX_EXE_HEADER_BYTES
+        && rom[..8] == *b"PS-X EXE"
+        && let (Some(load_address), Some(declared_bytes)) =
+            (read_u32_le(rom, 0x18), read_u32_le(rom, 0x1C))
+    {
+        let available = rom.len().saturating_sub(PSX_EXE_HEADER_BYTES);
+        let data_bytes = (declared_bytes as usize).min(available);
+        return RomLayout {
+            system: CheatSystem::PlayStation,
+            header_bytes: 0,
+            mapping: Mapping::PlayStationExe {
+                load_address,
+                data_bytes,
+            },
+        };
+    }
+    RomLayout {
+        system: CheatSystem::PlayStation,
+        header_bytes: 0,
+        mapping: Mapping::Flat,
     }
 }
 
@@ -144,6 +182,14 @@ fn read_u16_le(rom: &[u8], at: usize) -> Option<u16> {
     Some(lo | (hi << 8))
 }
 
+fn read_u32_le(rom: &[u8], at: usize) -> Option<u32> {
+    let b0 = *rom.get(at)? as u32;
+    let b1 = *rom.get(at + 1)? as u32;
+    let b2 = *rom.get(at + 2)? as u32;
+    let b3 = *rom.get(at + 3)? as u32;
+    Some(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24))
+}
+
 fn ram_error(offending: &str) -> rom_weaver_core::RomWeaverError {
     coded(
         "cheat_ram_address",
@@ -178,6 +224,8 @@ pub(crate) fn resolve_writes(
         CheatSystem::Snes => resolve_snes(rom, layout, decoded),
         CheatSystem::Genesis => resolve_genesis(rom, layout, decoded),
         CheatSystem::GameBoy => resolve_gameboy(rom, decoded),
+        CheatSystem::GameBoyAdvance => resolve_gba(rom, decoded),
+        CheatSystem::PlayStation => resolve_playstation(rom, layout, decoded),
     }
 }
 
@@ -334,6 +382,55 @@ fn resolve_gameboy(rom: &[u8], decoded: &DecodedCode) -> Result<Vec<CheatWrite>>
     // No compare: bank 1 maps to file $4000-$7FFF.
     let offset = cpu as usize;
     if offset >= rom.len() {
+        return Err(range_error(offset, rom.len()));
+    }
+    Ok(vec![CheatWrite {
+        offset,
+        value: decoded.value,
+        width: decoded.width,
+    }])
+}
+
+fn resolve_gba(rom: &[u8], decoded: &DecodedCode) -> Result<Vec<CheatWrite>> {
+    let cpu = decoded.address;
+    if !(GBA_ROM_START..GBA_ROM_END).contains(&cpu) {
+        return Err(ram_error(&format!("{cpu:#010X}")));
+    }
+    let offset = (cpu - GBA_ROM_START) as usize;
+    if offset.saturating_add(decoded.width as usize) > rom.len() {
+        return Err(range_error(offset, rom.len()));
+    }
+    Ok(vec![CheatWrite {
+        offset,
+        value: decoded.value,
+        width: decoded.width,
+    }])
+}
+
+fn resolve_playstation(
+    rom: &[u8],
+    layout: &RomLayout,
+    decoded: &DecodedCode,
+) -> Result<Vec<CheatWrite>> {
+    let Mapping::PlayStationExe {
+        load_address,
+        data_bytes,
+    } = layout.mapping
+    else {
+        return Err(coded(
+            "cheat_playstation_input",
+            "PlayStation Xploder codes need a PS-X EXE input",
+            &format!("{:#010X}", decoded.address),
+        ));
+    };
+    if decoded.address < load_address {
+        return Err(range_error(PSX_EXE_HEADER_BYTES, rom.len()));
+    }
+    let relative = (decoded.address - load_address) as usize;
+    let offset = PSX_EXE_HEADER_BYTES.saturating_add(relative);
+    if relative.saturating_add(decoded.width as usize) > data_bytes
+        || offset.saturating_add(decoded.width as usize) > rom.len()
+    {
         return Err(range_error(offset, rom.len()));
     }
     Ok(vec![CheatWrite {

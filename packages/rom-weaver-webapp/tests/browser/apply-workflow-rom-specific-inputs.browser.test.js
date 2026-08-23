@@ -207,6 +207,14 @@ test("patch archive staging extract dispatch omits checksum args in browser", as
         { timeout: 30000 },
       )
       .toBe(true);
+    const ingestDispatch = logs.find(
+      (entry) =>
+        String(entry?.message || "") === "runJson ingest dispatch" &&
+        String(entry?.details?.sourcePath || "").includes("one-patch.7z"),
+    );
+    expect(ingestDispatch).toBeDefined();
+    expect(ingestDispatch?.details?.checksum ?? []).toEqual([]);
+    expect(ingestDispatch?.details?.command?.args?.checksum ?? []).toEqual([]);
   } finally {
     await workflow.dispose();
   }

@@ -78,3 +78,7 @@ pub fn normalize_codec_label(raw: &str) -> String {
         RequestedCodec::Unspecified | RequestedCodec::Unknown(_) => trimmed.to_ascii_lowercase(),
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/codecs_definitions.rs"]
+mod tests;

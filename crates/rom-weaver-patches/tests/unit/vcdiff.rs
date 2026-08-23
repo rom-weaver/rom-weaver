@@ -907,10 +907,10 @@ fn create_xdelta_patch_mode_lzma_only_uses_lzma_secondary() {
 
     let patch = fs::read(&patch_path).expect("read patch");
     let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
-    assert!(matches!(
+    assert_eq!(
         parsed.secondary_compressor_id,
-        None | Some(XDELTA_LZMA_SECONDARY_ID)
-    ));
+        Some(XDELTA_LZMA_SECONDARY_ID)
+    );
 }
 
 #[test]
@@ -951,9 +951,7 @@ fn create_xdelta_patch_supports_explicit_djw_and_fgk_secondary_modes() {
 
         let patch = fs::read(&patch_path).expect("read patch");
         let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
-        if let Some(id) = parsed.secondary_compressor_id {
-            assert_eq!(id, expected_id);
-        }
+        assert_eq!(parsed.secondary_compressor_id, Some(expected_id));
 
         handler
             .apply(

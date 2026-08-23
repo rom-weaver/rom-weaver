@@ -24,7 +24,7 @@
 - [Verify a download](https://rom-weaver.com/docs/verify-downloads): Check that a release archive, npm package, or container image carries the release workflow's build provenance.
 - [Your first apply in the terminal](https://rom-weaver.com/docs/cli-get-started): Tutorial covering Apply, Create, and Bundle in the terminal with the same test assets.
 - [Identify and hash ROMs (CLI)](https://rom-weaver.com/docs/identify-and-hash-files): Match an exact dump name, inspect a file, or compute checksums.
-- [Bake cheat codes (CLI)](https://rom-weaver.com/docs/bake-cheat-codes): Write Game Genie or GameShark/Pro Action Replay codes permanently into a ROM.
+- [Bake cheat codes (CLI)](https://rom-weaver.com/docs/bake-cheat-codes): Write Game Genie, GameShark/Pro Action Replay, or supported Xploder codes permanently into a ROM.
 - [Trim a ROM (CLI)](https://rom-weaver.com/docs/cli-trim): Trim, preview, and revert ROM padding from the command line.
 - [Work with archives](https://rom-weaver.com/docs/work-with-archives): Extract, convert, and create ZIP and 7z archives from the command line.
 - [CLI reference](https://rom-weaver.com/docs/cli): Every command, global flag, patching flag, JSON output, exit codes, and man pages.

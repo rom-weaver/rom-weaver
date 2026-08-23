@@ -147,6 +147,11 @@ export const discoverTestFiles = (requestedFiles) => {
     .map((name) => path.join(TEST_DIR, name));
 };
 
+export const assertTestFilesSelected = (files, listOnly) => {
+  if (listOnly || files.length) return;
+  throw new Error("No browser test files selected. Check the requested files or shard range.");
+};
+
 const runFile = (file, vitestArgs) =>
   new Promise((resolve) => {
     const coverageName = path.basename(file, TEST_FILE_SUFFIX);
@@ -210,12 +215,9 @@ export const main = async () => {
   // Sharding applies to whatever set was selected, explicit list included, so
   // `--shard` composes with a hand-picked subset instead of overriding it.
   const files = selectShard(discoverTestFiles(requestedFiles), shard);
+  assertTestFilesSelected(files, listOnly);
   if (listOnly) {
     for (const file of files) process.stdout.write(`${path.basename(file)}\n`);
-    return;
-  }
-  if (!files.length) {
-    process.stdout.write("No browser test files found.\n");
     return;
   }
   if (process.env.ROM_WEAVER_COVERAGE === "1") {

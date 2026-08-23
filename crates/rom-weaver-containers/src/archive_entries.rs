@@ -135,3 +135,7 @@ fn collect_archive_inputs_from_path(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/archive_entries.rs"]
+mod tests;

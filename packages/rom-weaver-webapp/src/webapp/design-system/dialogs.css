@@ -302,6 +302,9 @@
   display: flex;
   flex: 0 0 auto;
 }
+.rw-app .dlg-subhead .loglevel .dropdown-select {
+  width: max-content;
+}
 .rw-app .dlg-subhead .loglevel .select {
   width: max-content;
   height: 30px;

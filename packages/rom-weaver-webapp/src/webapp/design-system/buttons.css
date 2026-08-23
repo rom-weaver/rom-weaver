@@ -64,20 +64,6 @@
   padding-inline: 12px;
   font-size: 0.76rem;
 }
-/* the bundle button is the bundle's shipping tag: label-stock paper held on
-   by a dashed thread stitch - quieter than the solid weft-orange run button
-   above it, but cut from the same cloth */
-.rw-app .btn.bundle-dl {
-  color: var(--thread-text);
-  background: color-mix(in oklab, var(--weft) 7%, transparent);
-  border: 1px dashed color-mix(in oklab, var(--thread) 50%, transparent);
-}
-@media (hover: hover) {
-  .rw-app .btn.bundle-dl:hover {
-    background: color-mix(in oklab, var(--weft) 13%, transparent);
-    border-color: color-mix(in oklab, var(--thread) 75%, transparent);
-  }
-}
 .rw-app .btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;

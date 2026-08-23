@@ -187,11 +187,7 @@ const ResetButton = ({ onReset }: { onReset: () => void }) => {
   );
 };
 
-/**
- * Phone-only settings entry. The dock is primary navigation and settings is not
- * a destination, so it rides the panel's own heading band instead - the desktop
- * masthead already carries the same control.
- */
+/** Settings entry for the workflow panel's `0x01` heading band. */
 const PanelSettingsButton = ({
   onOpenSettings,
   onPreloadSettings,

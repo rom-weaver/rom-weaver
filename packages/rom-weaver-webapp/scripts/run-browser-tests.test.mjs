@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { discoverTestFiles, parseShard, selectShard } from "./run-browser-tests.mjs";
+import { assertTestFilesSelected, discoverTestFiles, parseShard, selectShard } from "./run-browser-tests.mjs";
 
 // selectShard weighs by fs.statSync(file).size, so fixtures use real temp
 // files padded to a controlled byte size rather than an injectable weight.
@@ -77,6 +77,28 @@ test("selectShard: heavier files spread out rather than piling into one shard", 
 test("selectShard: returns all files unchanged when shard is null", () => {
   const files = ["/a/b.js", "/a/c.js"];
   assert.deepEqual(selectShard(files, null), files);
+});
+
+test("assertTestFilesSelected: rejects an empty non-list selection", () => {
+  assert.throws(
+    () => assertTestFilesSelected([], false),
+    /No browser test files selected\. Check the requested files or shard range\./u,
+  );
+});
+
+test("assertTestFilesSelected: permits an empty --list selection", () => {
+  assert.doesNotThrow(() => assertTestFilesSelected([], true));
+});
+
+test("assertTestFilesSelected: rejects a valid shard larger than the file count", (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-shard-"));
+  context.after(() => fs.rmSync(root, { force: true, recursive: true }));
+  const files = makeFixtureFiles(root, [100, 200]);
+  const emptyShard = selectShard(files, { index: 3, total: 3 });
+
+  assert.deepEqual(emptyShard, []);
+  assert.throws(() => assertTestFilesSelected(emptyShard, false), /No browser test files selected/u);
+  assert.doesNotThrow(() => assertTestFilesSelected(emptyShard, true));
 });
 
 test("parseShard: parses valid <index>/<total> specs", () => {

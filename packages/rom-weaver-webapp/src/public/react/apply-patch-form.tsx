@@ -256,9 +256,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     settings: props.settings,
   };
   const traceSettings = props.settings || props.defaultSettings || providerSettings;
-  const [defaultBundleFormat = "", defaultBundleContents = ""] = String(
+  const [storedBundleFormat = "", defaultBundleContents = ""] = String(
     traceSettings.output?.bundlePackage || traceSettings.bundlePackage || "",
   ).split(":");
+  const defaultBundleFormat = storedBundleFormat === "7z" ? "7z" : "zip";
   const emitApplyFormInputTrace = useCallback(
     (message: string, details?: Record<string, unknown>) => {
       emitTraceLog(
@@ -1487,18 +1488,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const resolvedOutputController = localOutputController;
   bundleControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
 
-  // "Export bundle…" (output card secondary action): snapshots the current
+  // "Share this setup" (secondary job after the output card): snapshots the current
   // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
   const stagedBundleSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources();
   const bundleExportReady =
     (!!stagedBundleSources?.rom && stagedBundleSources.patches.length > 0) ||
     (!!bundleSourcesRef.current?.rom && bundleSourcesRef.current.patches.length > 0);
-  const bundleExportRomName =
-    stagedBundleSources?.rom?.fileName ||
-    bundleSourcesRef.current?.rom?.fileName ||
-    (lastInputsRef.current.length === 1
-      ? getReactBinarySourceFileName(lastInputsRef.current[0] as BinarySource, "rom.bin")
-      : "");
   const bundleExport = useBundleExport({
     bundleMetaById,
     disabledPatchIds,
@@ -1527,20 +1522,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     getStackItems: () => resolvedStackController.getState().items,
     initialBundleRom: defaultBundleContents === "rom",
     initialFormat: defaultBundleFormat,
-    initialRomName: bundleExportRomName,
     ready: bundleExportReady,
     ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
   });
 
-  // The bundle package dropdown lives permanently in Output options and mirrors
-  // the persisted "Bundle" user setting: a format arms the create/download
-  // action, "" hides it. The selection drives visibility - no separate reveal.
-  const {
-    format: bundleExportFormat,
-    setBundleRom: setBundleExportRom,
-    setFormat: setBundleExportFormat,
-  } = bundleExport;
-  const bundleExportVisible = !!bundleExportFormat && bundleExportFormat !== "bundle";
+  // The bundle package controls live in the separate sharing job. The archive
+  // type and ROM-inclusion choice mirror the persisted bundle setting.
+  const { setBundleRom: setBundleExportRom, setFormat: setBundleExportFormat } = bundleExport;
   const { onBundlePackageChange } = props;
   const changeBundlePackage = useCallback(
     (value: string) => {
@@ -1614,7 +1602,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           : {})}
         {...(activeBundleSession?.romExpectation ? { bundleRomExpectation: activeBundleSession.romExpectation } : {})}
         bundleTools={{
-          exportVisible: bundleExportVisible,
           hasOptionalEntries:
             !!activeBundleSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
           outputVerification,

@@ -4,6 +4,7 @@ import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { type CompressField, type CompressFieldInfo, OUTPUT_FORMAT_INFO } from "../../compress-options.ts";
 import { CodecCombobox } from "./codec-combobox.tsx";
 import { DrawerReadout } from "./drawer.tsx";
+import { DropdownSelect } from "./dropdown-select.tsx";
 import { type FormatOption, type OutputCompressPanel, OutputField } from "./output-card.tsx";
 
 /**
@@ -83,7 +84,7 @@ const CompressPanelBody = ({
             label={field.label}
             labelInfo={<FieldInfoToggle info={field.info} label={field.label} />}
           >
-            <select
+            <DropdownSelect
               aria-label={field.label}
               className="select"
               disabled={disabled}
@@ -96,7 +97,7 @@ const CompressPanelBody = ({
                   {option.label}
                 </option>
               ))}
-            </select>
+            </DropdownSelect>
           </OutputField>
         ) : field.kind === "codec" ? (
           <OutputField
@@ -156,8 +157,8 @@ type OutputCompressionPanelConfig = {
   note?: string;
   onFieldChange?: (key: string, value: string, updates?: Record<string, string>) => void;
   onFormatChange?: (value: string) => void;
-  /** Extra drawer-header readout chips for non-compression options (e.g. the apply
-   * output's bundle package). */
+  /** Extra drawer-header readout chips for non-compression options (e.g. output
+   * verification status). */
   readouts?: ReactNode;
   timing?: ReactNode;
 };

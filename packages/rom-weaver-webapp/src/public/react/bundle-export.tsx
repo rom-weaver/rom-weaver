@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  getCompressionOutputExtension,
+  getRomSpecificCompressionFormatRegistration,
+} from "../../lib/compression/container-format-registry.ts";
+import { getFileNameExtension } from "../../lib/path-utils.ts";
+import {
   createProgressViewModel,
   createProgressViewModelFromEvent,
   type ProgressViewModel,
@@ -18,9 +23,6 @@ import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
  * prepared by the live session. That keeps export out of the ingest/extract/
  * apply pipeline and keeps large outputs path-backed until download.
  */
-
-/** "Bundle only" sentinel in the output-format select. */
-const BUNDLE_ONLY_FORMAT = "bundle";
 
 type BundleExportRow = {
   /** Leaf patch file name (what gets exported/bundled). */
@@ -142,7 +144,6 @@ type UseBundleExportOptions = {
   bundleMetaById: ReadonlyMap<string, BundlePatchMeta>;
   initialBundleRom?: boolean;
   initialFormat?: string;
-  initialRomName?: string;
   ready: boolean;
   onComplete?: (result: ParsedBundleCreateResult) => void;
 };
@@ -273,19 +274,23 @@ const preparePackagedRom = async ({
   if (!bundleRom) return undefined;
   if (!wantsBundle) return undefined;
   const originalName = getReactBinarySourceFileName(rom.originalSource as BinarySource, rom.fileName);
-  const existingFormat = originalName.split(".").pop()?.toLowerCase();
-  const recommendedRomFormat = rom.recommendedFormat?.toLowerCase();
-  if (["chd", "rvz", "z3ds"].includes(existingFormat || "")) {
-    return { fileName: originalName, source: rom.originalSource };
-  }
-  if (!["chd", "rvz", "z3ds"].includes(recommendedRomFormat || "")) {
+  const recommendedRomFormat = rom.recommendedFormat?.trim().toLowerCase();
+  const targetMetadata = getRomSpecificCompressionFormatRegistration(recommendedRomFormat);
+  const targetFormat = targetMetadata?.format;
+  if (!targetFormat) {
     return { fileName: rom.fileName, source: rom.source };
   }
-  const targetFormat = recommendedRomFormat as "chd" | "rvz" | "z3ds";
+  const targetCompressedExtension = getCompressionOutputExtension(targetFormat, { inputFileName: rom.fileName });
+  const isSuitableCompressedName = (fileName: string) =>
+    !!fileName && getFileNameExtension(fileName) === targetCompressedExtension;
+  if (isSuitableCompressedName(originalName)) {
+    return { fileName: originalName, source: rom.originalSource };
+  }
   const createCompression = browserRuntime.compression.create;
   if (!createCompression) throw new Error("ROM compression is not available in this runtime");
   stepProgress(`ROM compression · ${targetFormat.toUpperCase()}`);
-  const outputName = `${stripFileExtension(rom.fileName)}.${targetFormat}`;
+  const outputExtension = getCompressionOutputExtension(targetFormat, { inputFileName: rom.fileName });
+  const outputName = `${stripFileExtension(rom.fileName)}.${outputExtension}`;
   const compressed = await createCompression({
     fileName: rom.fileName,
     format: targetFormat,
@@ -310,16 +315,15 @@ const useBundleExport = ({
   disabledPatchIds,
   bundleMetaById,
   initialBundleRom = false,
-  initialFormat = "",
-  initialRomName = "",
+  initialFormat = "zip",
   ready,
   onComplete,
 }: UseBundleExportOptions) => {
+  const resolvedInitialFormat = initialFormat === "7z" ? "7z" : "zip";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [format, setFormat] = useState(initialFormat);
+  const [format, setFormat] = useState(resolvedInitialFormat);
   const [bundleRom, setBundleRom] = useState(initialBundleRom);
-  const [romName, setRomName] = useState(initialRomName);
   const [progress, setProgress] = useState<BundleExportProgress | null>(null);
   const [downloadableOutput, setDownloadableOutput] = useState<PublicOutput | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -329,10 +333,9 @@ const useBundleExport = ({
   const sourcesRef = useRef<BundleExportSources>({ patches: [], rom: null });
 
   useEffect(() => {
-    setFormat(initialFormat);
+    setFormat(resolvedInitialFormat);
     setBundleRom(initialBundleRom);
-    setRomName(initialRomName);
-  }, [initialBundleRom, initialFormat, initialRomName]);
+  }, [initialBundleRom, resolvedInitialFormat]);
 
   const downloadExport = useCallback(async () => {
     const output = downloadableOutputRef.current;
@@ -404,15 +407,14 @@ const useBundleExport = ({
     try {
       validateBundleRows(exportRows, items);
       stepProgress("Writing bundle");
-      const wantsBundle = format !== BUNDLE_ONLY_FORMAT;
-      const bundleFileName = wantsBundle ? `${slugFileName(exportName) || "rw-bundle"}.${format}` : undefined;
+      const bundleFileName = `${slugFileName(exportName) || "rw-bundle"}.${format}`;
       const packagedRom = await preparePackagedRom({
         browserRuntime,
         bundleRom,
         compressedRomOutputs,
         rom: exportRom,
         stepProgress,
-        wantsBundle,
+        wantsBundle: true,
       });
       // The exported rom.checks are the staged ROM's computed values; a
       // different expected base ROM is expressed as the first patch's input
@@ -423,13 +425,12 @@ const useBundleExport = ({
         ...(bundleFileName ? { bundleFileName } : {}),
         ...(packagedRom ? { bundleRom: packagedRom } : {}),
         ...(exportName.trim() ? { outputName: exportName.trim() } : {}),
-        ...(bundleRom && wantsBundle ? {} : { romName: romName.trim() }),
         ...(Object.keys(romChecksums).length ? { romChecksums: formatChecks(romChecksums) } : {}),
         ...(typeof romSize === "number" ? { romSize } : {}),
         ...(outputHeader === "keep" || outputHeader === "strip" ? { outputHeader } : {}),
         // The ROM is never distributed unless explicitly bundled: its bundle
         // entry keeps checks only and the applying user supplies the file.
-        ...(bundleRom && wantsBundle ? {} : { noBundleRom: true }),
+        ...(bundleRom ? {} : { noBundleRom: true }),
         onProgress: (event) => {
           setProgress(createProgressViewModelFromEvent(event, { hasProgress: true, stage: "bundle" }));
         },
@@ -438,7 +439,7 @@ const useBundleExport = ({
         signal: abortController.signal,
       });
       outputs.push(bundleOutput, ...(archiveOutput ? [archiveOutput] : []));
-      const downloadOutput = wantsBundle && archiveOutput ? archiveOutput : bundleOutput;
+      const downloadOutput = archiveOutput || bundleOutput;
       downloadableOutputRef.current = downloadOutput;
       setDownloadableOutput(downloadOutput);
       retainedOutputs.add(downloadOutput);
@@ -475,7 +476,6 @@ const useBundleExport = ({
     onComplete,
     downloadExport,
     getPatchIds,
-    romName,
   ]);
 
   const cancelExport = useCallback(() => abortControllerRef.current?.abort(), []);
@@ -493,7 +493,7 @@ const useBundleExport = ({
   const selectFormat = useCallback(
     (value: string) => {
       clearDownloadable();
-      setFormat(value);
+      setFormat(value === "7z" ? "7z" : "zip");
     },
     [clearDownloadable],
   );
@@ -504,14 +504,6 @@ const useBundleExport = ({
     },
     [clearDownloadable],
   );
-  const selectRomName = useCallback(
-    (value: string) => {
-      clearDownloadable();
-      setRomName(value);
-    },
-    [clearDownloadable],
-  );
-
   useEffect(
     () => () => {
       const output = downloadableOutputRef.current;
@@ -530,12 +522,10 @@ const useBundleExport = ({
     format,
     progress,
     ready,
-    romName,
     runExport,
     setBundleRom: selectBundleRom,
     setFormat: selectFormat,
-    setRomName: selectRomName,
   };
 };
 
-export { useBundleExport };
+export { preparePackagedRom, useBundleExport };
