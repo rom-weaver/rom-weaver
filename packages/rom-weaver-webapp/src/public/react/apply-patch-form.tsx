@@ -5,6 +5,7 @@ import {
   type CheatDatabaseSystem,
   type ClassifiedCheatRecord,
   type DatabaseCheatClassifier,
+  type LocalCheatFileImporter,
   type ManualCheatClassifier,
 } from "../../lib/cheats/index.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
@@ -143,6 +144,7 @@ const getCheatDatabaseSystem = (platform: string | undefined, fileName: string):
   if (value.includes("super nintendo") || value === "snes") return "snes";
   if (value.includes("nintendo entertainment system") || value === "nes") return "nes";
   if (value.includes("mega drive") || value.includes("genesis")) return "genesis";
+  if (value.includes("game boy advance") || /\.gba$/iu.test(fileName)) return "gameboyadvance";
   if (value.includes("game boy") || /\.gbc?$/iu.test(fileName)) {
     return /\.gbc$/iu.test(fileName) ? "gameboy-color" : "gameboy";
   }
@@ -1603,6 +1605,19 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [getCheatSource],
   );
+  const importLocalCheatFile = useCallback<LocalCheatFileImporter>(
+    async ({ content, fileName, system }) => {
+      const { runBrowserCheats } = await loadBrowserApi();
+      return (
+        await runBrowserCheats({
+          importedFile: { content, fileName, system },
+          records: [],
+          rom: getCheatSource(),
+        })
+      ).records;
+    },
+    [getCheatSource],
+  );
   const preflightSequence = useRef(0);
   const handleCheatSelection = useCallback(
     (records: ClassifiedCheatRecord[]) => {
@@ -1743,6 +1758,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
             classifyManualCode={classifyManualCode}
+            importLocalCheatFile={importLocalCheatFile}
             onSelectionChange={handleCheatSelection}
             outputSummary={completedCheats}
             rom={cheatRom}

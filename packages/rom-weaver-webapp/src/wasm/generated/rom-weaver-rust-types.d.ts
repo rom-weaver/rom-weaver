@@ -362,7 +362,11 @@ export type CheatCommand = { input: string,
  * Direct records for the JSON/WASM boundary. The native argv parser does
  * not expose this internal command.
  */
-records: Array<CheatRecord>, selectedIds?: Array<string>, output?: string, };
+records: Array<CheatRecord>,
+/**
+ * Raw RetroArch text for local import through the JSON/WASM boundary.
+ */
+chtSource?: string, chtFileName?: string, chtSystem?: CheatSystem, selectedIds?: Array<string>, output?: string, };
 
 export type CompressCommand = { input: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, force?: boolean, dry_run?: boolean, threads?: ThreadBudget, };
 
