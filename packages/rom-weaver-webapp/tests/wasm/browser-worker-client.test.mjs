@@ -347,6 +347,27 @@ describe("rom-weaver-wasm browser runner parity", () => {
     });
   });
 
+  it("parses a local RetroArch cheat file in the browser worker", async () => {
+    await withTempFixture(async ({ sourcePath, worker }) => {
+      const result = await runJsonFromWorker(worker)(
+        createRomWeaverCommand("cheat", {
+          chtFileName: "../private.cht",
+          chtSource: 'cheats = 7\ncheat3_desc = "Imported health"\ncheat3_code = "0010AB"\ncheat3_future = "keep"\n',
+          chtSystem: "nes",
+          input: sourcePath,
+          records: [],
+        }),
+      );
+
+      assertRunJsonSucceeded(result, { command: "cheat" });
+      const imported = result.events.at(-1)?.details?.cheats?.records?.[0];
+      expect(imported?.record?.description).toBe("Imported health");
+      expect(imported?.record?.sourceFile).toBe("private.cht");
+      expect(imported?.record?.rawFields?.future).toBe("keep");
+      expect(imported?.resolution?.type).toBe("runtime");
+    });
+  });
+
   it("runJson streams stdout events before the wasm process completes", async () => {
     const module = await WebAssembly.compile(STREAMING_WASI_MODULE_BYTES);
     await withTempFixture(

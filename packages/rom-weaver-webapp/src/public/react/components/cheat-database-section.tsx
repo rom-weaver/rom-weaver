@@ -1,5 +1,5 @@
-import { ChevronDown, Database, Plus, Search } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Database, FileUp, Plus, Search } from "lucide-react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   cheatDelivery,
   createCheatDatabaseClient,
@@ -21,6 +21,7 @@ import {
   type ManualCheatClassifier,
   type ManualCheatKindOverride,
   type ManualCheatResult,
+  type LocalCheatFileImporter,
 } from "../../../lib/cheats/index.ts";
 import "./cheat-database-section.css";
 
@@ -30,7 +31,10 @@ const SYSTEM_LABELS: Record<CheatDatabaseSystem, string> = {
   genesis: "Sega Genesis / Mega Drive",
   gameboy: "Game Boy",
   "gameboy-color": "Game Boy Color",
+  gameboyadvance: "Game Boy Advance",
 };
+
+const MAX_LOCAL_CHT_BYTES = 16 * 1024 * 1024;
 
 const FILTERS: Array<{ id: CheatFilter; label: string }> = [
   { id: "all", label: "All" },
@@ -268,6 +272,7 @@ const ManualCodeForm = ({ defaultSystem, classifier, onAdd }: ManualCodeFormProp
                 <option value="auto">Detect automatically</option>
                 <option value="game-genie">Game Genie</option>
                 <option value="pro-action-replay">Action Replay / GameShark</option>
+                <option value="xploder">Xploder</option>
               </select>
             </label>
           </div>
@@ -292,6 +297,68 @@ const ManualCodeForm = ({ defaultSystem, classifier, onAdd }: ManualCodeFormProp
   );
 };
 
+type LocalCheatFileFormProps = {
+  importer: LocalCheatFileImporter;
+  onImport: (records: ClassifiedCheatRecord[]) => void;
+  system: CheatDatabaseSystem;
+};
+
+const LocalCheatFileForm = ({ importer, onImport, system }: LocalCheatFileFormProps) => {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const sequence = useRef(0);
+
+  useEffect(
+    () => () => {
+      sequence.current += 1;
+    },
+    [],
+  );
+
+  const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || busy) return;
+    const request = ++sequence.current;
+    setError("");
+    setStatus("");
+    if (file.size > MAX_LOCAL_CHT_BYTES) {
+      setError("The cheat file is larger than the 16 MiB import limit.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const records = await importer({ content: await file.text(), fileName: file.name, system });
+      if (sequence.current !== request) return;
+      onImport(records);
+      setStatus(`Imported ${records.length} cheat${records.length === 1 ? "" : "s"} from ${file.name}.`);
+    } catch (reason) {
+      if (sequence.current === request) {
+        setError(reason instanceof Error ? reason.message : "The cheat file could not be imported.");
+      }
+    } finally {
+      if (sequence.current === request) setBusy(false);
+    }
+  };
+
+  return (
+    <div className="local-cheat-file">
+      <label>
+        <span>
+          <FileUp aria-hidden="true" />
+          Import RetroArch .cht
+        </span>
+        <input accept=".cht,text/plain" disabled={busy} onChange={importFile} type="file" />
+      </label>
+      <p>ROMWeaver reads and classifies this file locally. Imported entries stay intact.</p>
+      {busy ? <p aria-live="polite">Importing cheat file…</p> : null}
+      {error ? <p role="alert">{error}</p> : null}
+      {status ? <p role="status">{status}</p> : null}
+    </div>
+  );
+};
+
 export type CheatDatabaseSectionProps = {
   rom: CheatRomIdentity | null;
   manifest?: CheatDatabaseManifest;
@@ -299,6 +366,7 @@ export type CheatDatabaseSectionProps = {
   client?: CheatDatabaseClient;
   classifyManualCode: ManualCheatClassifier;
   classifyDatabaseCheats: DatabaseCheatClassifier;
+  importLocalCheatFile: LocalCheatFileImporter;
   onSelectionChange?: (records: ClassifiedCheatRecord[]) => void;
   outputSummary?: { rom: number; runtime: number; cheatFileName?: string };
   validationMessage?: string;
@@ -311,6 +379,7 @@ export const CheatDatabaseSection = ({
   client: suppliedClient,
   classifyManualCode,
   classifyDatabaseCheats,
+  importLocalCheatFile,
   onSelectionChange,
   outputSummary,
   validationMessage,
@@ -444,6 +513,16 @@ export const CheatDatabaseSection = ({
     publishSelection(nextSelected, [...classifiedRecords, ...nextRecords]);
   };
 
+  const addImportedRecords = (nextRecords: ClassifiedCheatRecord[]) => {
+    const sourceFiles = new Set(nextRecords.map(({ record }) => record.sourceFile));
+    const retainedRecords = manualRecords.filter(
+      ({ record }) => record.sourceRevision !== "local-import" || !sourceFiles.has(record.sourceFile),
+    );
+    const mergedRecords = [...retainedRecords, ...nextRecords];
+    setManualRecords(mergedRecords);
+    publishSelection(selectedIds, [...classifiedRecords, ...mergedRecords]);
+  };
+
   return (
     <section aria-labelledby="cheat-database-heading" className="cheat-database-section">
       <header>
@@ -487,7 +566,7 @@ export const CheatDatabaseSection = ({
         </label>
       ) : null}
 
-      {game ? (
+      {game || manualRecords.length ? (
         <>
           <div className="cheat-tools">
             <label className="cheat-search">
@@ -546,7 +625,15 @@ export const CheatDatabaseSection = ({
       ) : null}
 
       {system ? (
-        <ManualCodeForm classifier={classifyManualCode} defaultSystem={system} onAdd={addManualRecord} />
+        <>
+          <LocalCheatFileForm
+            importer={importLocalCheatFile}
+            key={`${identityKey ?? "unknown"}:${system}`}
+            onImport={addImportedRecords}
+            system={system}
+          />
+          <ManualCodeForm classifier={classifyManualCode} defaultSystem={system} onAdd={addManualRecord} />
+        </>
       ) : null}
 
       {outputSummary ? (

@@ -6,6 +6,7 @@ import type {
   CheatSystemShard,
   ClassifiedCheatRecord,
   DatabaseCheatClassifier,
+  LocalCheatFileImporter,
   ManualCheatClassifier,
   RuntimeCheatRecord,
 } from "../../../src/lib/cheats/index.ts";
@@ -88,10 +89,32 @@ const classifyManualCode: ManualCheatClassifier = async (request) => ({
   detectedType: "Action Replay",
 });
 
+const importLocalCheatFile: LocalCheatFileImporter = async ({ fileName }) => [
+  {
+    detectedKind: "pro-action-replay",
+    record: {
+      ...runtimeRecord("local-1", "Imported health", "7E0010FF"),
+      sourceFile: fileName,
+      sourceRevision: "local-import",
+    },
+    resolution: {
+      payload: {
+        record: {
+          ...runtimeRecord("local-1", "Imported health", "7E0010FF"),
+          sourceFile: fileName,
+          sourceRevision: "local-import",
+        },
+      },
+      type: "runtime",
+    },
+  },
+];
+
 const props = {
   rom: { key: "rom-a", system: "snes", title: "Super Mario World", checksums: { sha1: "aa11" } },
   shard,
   classifyDatabaseCheats,
+  importLocalCheatFile,
   classifyManualCode,
 } as const;
 
@@ -192,6 +215,60 @@ describe("CheatDatabaseSection", () => {
 
     fireEvent.change(view.getByLabelText("Cheat code"), { target: { value: "7E0011FF" } });
     expect(view.queryByRole("button", { name: "Add this cheat" })).toBeNull();
+  });
+
+  it("imports a local RetroArch file without selecting its entries", async () => {
+    const onSelectionChange = vi.fn();
+    const importer = vi.fn(importLocalCheatFile);
+    const view = render(
+      <CheatDatabaseSection {...props} importLocalCheatFile={importer} onSelectionChange={onSelectionChange} />,
+    );
+    const file = new File(['cheat0_desc = "Imported health"'], "private.cht", { type: "text/plain" });
+
+    fireEvent.change(view.getByLabelText("Import RetroArch .cht"), { target: { files: [file] } });
+
+    await view.findByText("Imported 1 cheat from private.cht.");
+    expect(importer).toHaveBeenCalledWith({
+      content: 'cheat0_desc = "Imported health"',
+      fileName: "private.cht",
+      system: "snes",
+    });
+    expect((view.getByRole("checkbox", { name: /Imported health/u }) as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(view.getByRole("checkbox", { name: /Imported health/u }));
+    expect(onSelectionChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ record: expect.objectContaining({ id: "local-1" }) }),
+    ]);
+  });
+
+  it("ignores a pending local import after the ROM changes", async () => {
+    const onSelectionChange = vi.fn();
+    let finishImport: ((records: ClassifiedCheatRecord[]) => void) | undefined;
+    const importer = vi.fn(
+      () =>
+        new Promise<ClassifiedCheatRecord[]>((resolve) => {
+          finishImport = resolve;
+        }),
+    );
+    const view = render(
+      <CheatDatabaseSection {...props} importLocalCheatFile={importer} onSelectionChange={onSelectionChange} />,
+    );
+    const file = new File(['cheat0_desc = "Imported health"'], "private.cht", { type: "text/plain" });
+    fireEvent.change(view.getByLabelText("Import RetroArch .cht"), { target: { files: [file] } });
+    await waitFor(() => expect(importer).toHaveBeenCalledOnce());
+
+    view.rerender(
+      <CheatDatabaseSection
+        {...props}
+        importLocalCheatFile={importer}
+        onSelectionChange={onSelectionChange}
+        rom={{ ...props.rom, key: "rom-b" }}
+      />,
+    );
+    const importedRecords = await importLocalCheatFile({ content: "", fileName: "private.cht", system: "snes" });
+    finishImport?.(importedRecords);
+
+    await waitFor(() => expect(view.queryByText("Imported health")).toBeNull());
+    expect(onSelectionChange).toHaveBeenLastCalledWith([]);
   });
 
   it("shows manual browsing as unverified and keeps controls within their container", async () => {

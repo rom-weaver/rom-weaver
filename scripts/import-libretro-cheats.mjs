@@ -50,6 +50,11 @@ export const SYSTEMS = Object.freeze({
     datNames: ["Nintendo - Game Boy.dat"],
     label: "Game Boy",
   },
+  gameboyadvance: {
+    directory: "Nintendo - Game Boy Advance",
+    datNames: ["Nintendo - Game Boy Advance.dat"],
+    label: "Game Boy Advance",
+  },
   "gameboy-color": {
     directory: "Nintendo - Game Boy Color",
     datNames: ["Nintendo - Game Boy Color.dat"],
@@ -286,11 +291,21 @@ const stripDeviceAnnotation = (name) => {
   }
 };
 
-const codeKindForTitle = (title) => {
+const codeKindForTitle = (title, system) => {
   const annotations = [...title.matchAll(/\(([^()]*)\)/gu)].map((match) =>
     match[1].trim().toLowerCase(),
   );
   if (annotations.includes("game genie")) return "game-genie";
+  if (
+    system === "gameboyadvance" &&
+    annotations.some((annotation) =>
+      ["action replay", "code breaker", "gameshark", "pro action replay", "xploder", "xplorer"].includes(
+        annotation,
+      ),
+    )
+  ) {
+    return "xploder";
+  }
   if (
     annotations.some((annotation) =>
       ["action replay", "gameshark", "pro action replay"].includes(annotation),
@@ -434,7 +449,7 @@ export function buildSystemShard({ sourceDir, sourceRevision, system }) {
   for (const file of listChtFiles(systemDirectory)) {
     const sourceFile = relativeSourcePath(sourceDir, file);
     const sourceTitle = stripExtension(path.basename(file));
-    const codeKind = codeKindForTitle(sourceTitle);
+    const codeKind = codeKindForTitle(sourceTitle, system);
     const normalizedTitle = normalizeReleaseName(sourceTitle);
     const releases = releaseIndex.get(normalizedTitle) ?? [];
     const canonicalTitle = releases[0]?.name ?? stripDeviceAnnotation(sourceTitle);

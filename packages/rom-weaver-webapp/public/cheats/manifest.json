@@ -25,6 +25,15 @@
       "path": "/cheats/gameboy-color.json?revision=4968f556a0bf749378901086646b78bc78703b88",
       "rawBytes": 8249251
     },
+    "gameboyadvance": {
+      "cheats": 6964,
+      "compressedBytes": 273417,
+      "compressedPath": "/cheats/gameboyadvance.json.br?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "games": 509,
+      "label": "Game Boy Advance",
+      "path": "/cheats/gameboyadvance.json?revision=4968f556a0bf749378901086646b78bc78703b88",
+      "rawBytes": 4812564
+    },
     "genesis": {
       "cheats": 38420,
       "compressedBytes": 1384803,
