@@ -825,12 +825,14 @@ const writeBrotliSidecars = () => {
           `${assetUrl} has a brotli sidecar but no entry in SIDECAR_CONTENT_TYPES (functions/assets/content-types.js); add its content type there`,
         );
       };
-      const cheatSidecarUrls = fs
+      const cheatSidecarAssetUrls = fs
         .readdirSync(path.join(distDir, "cheats"))
         .filter((name) => name.endsWith(".json.br"))
         .map((name) => `/cheats/${name.slice(0, -3)}`);
-      const sidecarUrls = [`/assets/${wasmNames[0]}`, ...cheatSidecarUrls];
-      for (const assetUrl of sidecarUrls) assertSidecarTypeIsKnown(assetUrl);
+      const sidecarUrls = [`/assets/${wasmNames[0]}`, ...(cheatSidecarAssetUrls.length > 0 ? ["/cheats/*"] : [])];
+      for (const assetUrl of [`/assets/${wasmNames[0]}`, ...cheatSidecarAssetUrls]) {
+        assertSidecarTypeIsKnown(assetUrl);
+      }
       if (fs.readdirSync(assetsDir).some((name) => name.startsWith("identify-") && name.endsWith(".pack.br"))) {
         sidecarUrls.push("/assets/identify-*");
       }
