@@ -4,6 +4,7 @@ import type {
   ApplyWorkflowPatchState,
 } from "../../types/apply-workflow.ts";
 import type { ChecksumRomProbe, ChecksumVariant, RomTypeTag } from "../../types/checksum.ts";
+import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { WorkflowWarning } from "../../types/workflow-controller.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import type { InputAsset } from "../input/input-assets.ts";
@@ -38,6 +39,7 @@ type InternalSourceState = {
   checksumVariants?: ChecksumVariant[];
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
+  identification?: ParsedIdentifyResolution;
   requirements?: InternalPatchRequirements;
   checksumPreflight?: InternalPatchChecksumPreflight;
   patchValidation?: InternalPatchValidation;

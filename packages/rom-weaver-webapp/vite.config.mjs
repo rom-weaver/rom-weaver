@@ -22,6 +22,10 @@ const rootDir = process.cwd();
 /** Shared chunks below this many raw bytes are folded back into their importer; see build.rollupOptions.output. */
 const SHARED_CHUNK_MIN_SIZE = 30_000;
 const repoRoot = path.resolve(rootDir, "../..");
+const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
+const identifyDataSources = Object.fromEntries(
+  fs.readdirSync(identifyDataDir).map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
+);
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
@@ -51,6 +55,7 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/social-preview.avif": path.join(rootDir, "design", "social-preview.avif"),
   "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
   "/social-preview.webp": path.join(rootDir, "design", "social-preview.webp"),
+  ...identifyDataSources,
   ...docsScreenshotSources,
 });
 const generatedSampleAssetPaths = new Set([
@@ -119,6 +124,7 @@ const setEmulatorJsContentType = (requestPath, res) => {
   else if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
   else if (requestPath.endsWith(".css")) res.setHeader("Content-Type", "text/css; charset=utf-8");
   else if (requestPath.endsWith(".zip")) res.setHeader("Content-Type", "application/zip");
+  else if (requestPath.endsWith(".pack")) res.setHeader("Content-Type", "application/octet-stream");
   else if (requestPath.endsWith(".wasm.data")) res.setHeader("Content-Type", "application/octet-stream");
 };
 
@@ -416,6 +422,7 @@ const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://rom-weaver.com/apply</loc></url>
   <url><loc>https://rom-weaver.com/create</loc></url>
+  <url><loc>https://rom-weaver.com/identify</loc></url>
   <url><loc>https://rom-weaver.com/test</loc></url>
 ${DOC_ROUTES.map(({ slug }) => `  <url><loc>https://rom-weaver.com/${slug}</loc></url>`).join("\n")}
 </urlset>
@@ -515,6 +522,19 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         WORKFLOW_SEO_ROUTES.creator,
       );
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
+      const identifyHtml = injectLdJson(
+        createWorkflowRouteHtml(
+          withRoutePreloadLinks(
+            indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("identify"))),
+            routePreloadLinks.get("identify"),
+          ),
+          WORKFLOW_SEO_ROUTES.identify,
+          channel,
+          channelLabel,
+        ),
+        WORKFLOW_SEO_ROUTES.identify,
+      );
+      fs.writeFileSync(path.join(distDir, "identify.html"), identifyHtml);
       const testHtml = injectLdJson(
         createWorkflowRouteHtml(
           withRoutePreloadLinks(
@@ -546,6 +566,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       for (const [slug, html] of [
         ["apply", applyHtml],
         ["create", createHtml],
+        ["identify", identifyHtml],
         ["test", testHtml],
         ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
         ["tools", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
@@ -602,7 +623,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {
@@ -612,18 +633,19 @@ const writeCloudflareHeadersAsset = (channel) => {
   };
 };
 
-// Every webapp bundle carries quality-11 brotli sidecars for hashed assets
+// Every webapp bundle carries quality-11 brotli sidecars for immutable assets
 // where q11 saves at least 2%. Cloudflare's Pages Function uses _routes.json
 // to serve those exact URLs; Docker and self-hosters can serve the same static
 // siblings directly. Already-compressed formats (woff2, png, zip) fail the
-// savings bar and stay on the ordinary static path. Only /assets/* is eligible:
-// mutable root files (index.html, the service worker, changelog.json) must keep
-// their no-cache semantics and never route through the function's immutable
-// response.
+// savings bar and stay on the ordinary static path. Mutable root files (such
+// as index.html, the service worker, and changelog.json) stay off this path.
 const PAGES_BROTLI_MIN_SAVINGS = 0.02;
-// _routes.json rejects more than 100 combined include/exclude entries; leave
-// headroom so an asset-count creep fails the build before Cloudflare does.
-const PAGES_ROUTES_MAX_INCLUDES = 90;
+// _routes.json rejects more than 100 combined include/exclude entries, so this
+// is the hard ceiling rather than an early warning. The 17 identify packs ate
+// the slack the old 90-entry warning left (90 of 100 in use as of this commit).
+// If the budget ever runs out, move the packs to a path of their own and cover
+// them with a single trailing-wildcard include instead of one entry per pack.
+const PAGES_ROUTES_MAX_INCLUDES = 100;
 
 const writeBrotliSidecars = () => {
   let outDir = "dist";
@@ -656,6 +678,9 @@ const writeBrotliSidecars = () => {
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
       assertSidecarTypeIsKnown(sidecarUrls[0]);
       for (const name of fs.readdirSync(assetsDir)) {
+        // The identify index is mutable so a deployment can advertise a new
+        // pack set without an immutable sidecar masking the update.
+        if (name === "identify-index.json") continue;
         // `.map` sidecars are devtools-only: nothing on a normal page load
         // requests them, so a q11 pass and a _routes.json include each would
         // buy nothing and eat the include budget.
@@ -751,9 +776,11 @@ const devPrerenderRoute = (url) => {
     view:
       slug === "create" || slug === "create.html"
         ? "creator"
-        : slug === "test" || slug === "test.html"
-          ? "test"
-          : "patcher",
+        : slug === "identify" || slug === "identify.html"
+          ? "identify"
+          : slug === "test" || slug === "test.html"
+            ? "test"
+            : "patcher",
   };
 };
 
@@ -809,6 +836,7 @@ const prerenderWebappShell = (prerenderedShells) => ({
           prerender.renderLandingShellWithServer(server, view, notFound, docsSlug);
         prerenderedShells.set("patcher", await render("patcher"));
         prerenderedShells.set("creator", await render("creator"));
+        prerenderedShells.set("identify", await render("identify"));
         prerenderedShells.set("test", await render("test"));
         prerenderedShells.set("notFound", await render("patcher", true));
         for (const route of DOC_ROUTES) {
@@ -838,6 +866,7 @@ const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
 const WORKFLOW_ROUTE_MODULES = {
   creator: "src/public/react/create-patch-form.tsx",
   docs: "src/webapp/docs-page.tsx",
+  identify: "src/webapp/components/identify-form.tsx",
   patcher: "src/public/react/apply-patch-form.tsx",
   test: "src/public/react/emulator-test-view.tsx",
   tools: "src/webapp/components/tools-form.tsx",
@@ -1166,7 +1195,12 @@ export default defineConfig(({ command, mode }) => {
         },
         filename: "cache-service-worker.ts",
         injectManifest: {
-          globIgnores: ["**/*.map"],
+          // Identify packs stay OUT of the precache: 6.7 MB raw (~1.6 MB brotli)
+          // for the full set would land on every install and every update, and a
+          // session usually needs one system. The service worker runtime-caches
+          // them on first use instead, so offline identification still works once
+          // a pack has been fetched. Only `identify-index.json` is precached.
+          globIgnores: ["**/*.map", "assets/identify-*.pack"],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:
             // offline, a route the user has not visited yet has nothing in the runtime
@@ -1185,9 +1219,9 @@ export default defineConfig(({ command, mode }) => {
             "apple-touch-icon.png",
             "hello-world.nes",
             "modified-world.nes",
+            "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
             "icon-maskable-192.png",
             "icon-maskable-512.png",
-            "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
           ],
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         },

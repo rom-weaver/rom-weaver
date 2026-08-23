@@ -114,6 +114,11 @@ const stopPreviewServer = (server) =>
   });
 
 const verifyProductionBuild = () => {
+  const identify = spawnSync(process.execPath, [path.join(REPO_ROOT, "scripts", "ensure-identify-data.mjs")], {
+    cwd: REPO_ROOT,
+    stdio: "inherit",
+  });
+  if (identify.status !== 0) throw new Error("failed to prepare ROM identify data");
   const verify = spawnSync(process.execPath, ["scripts/verify-seo-build.mjs"], {
     cwd: PACKAGE_ROOT,
     encoding: "utf8",

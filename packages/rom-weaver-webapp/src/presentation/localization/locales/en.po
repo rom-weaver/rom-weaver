@@ -170,6 +170,11 @@ msgstr "Browser tab"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis2"
+msgstr "with a database that stays local —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingDesc"
 msgstr "Caching the app so it can run offline…"
 
@@ -291,7 +296,7 @@ msgstr "DVD Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Enable beta tools (Trim and Tools)"
+msgstr "Enable beta tools (Trim, Tools, and Identify)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -407,6 +412,11 @@ msgstr "Log level"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabLogs"
 msgstr "Logs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis"
+msgstr "Match a ROM to its exact dump name,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

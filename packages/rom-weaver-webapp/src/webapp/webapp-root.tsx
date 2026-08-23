@@ -1,4 +1,4 @@
-import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, Scissors, Settings, Wrench } from "lucide-react";
+import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, ScanSearch, Scissors, Settings, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -40,6 +40,7 @@ import {
   CreatePatchRoute,
   DocsPageRoute,
   EmulatorTestRoute,
+  IdentifyRouteForm,
   preloadWorkflowRoute,
   ToolsRouteForm,
   TrimPatchRoute,
@@ -54,9 +55,10 @@ const WORKFLOW_TABS = [
   // moves into More on the phone dock.
   { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "test", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test" },
+  // Beta utility routes. The shell keeps these out of both primary navs and
+  // exposes them from More when the beta-tools setting is enabled.
+  { href: "identify", icon: <ScanSearch aria-hidden="true" />, id: "identify", label: "Identify" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
-  // Beta-only utility route. The shell keeps it out of both primary navs and
-  // exposes it from More when the beta-tools setting is enabled.
   { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
 ];
 
@@ -76,6 +78,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
+  else if (view === "identify") route = WORKFLOW_SEO_ROUTES.identify;
   else if (view === "patcher") route = WORKFLOW_SEO_ROUTES.patcher;
   else if (view === "test") route = WORKFLOW_SEO_ROUTES.test;
   if (!route) {
@@ -383,7 +386,12 @@ function WebappRoot({
     logger.trace("unified dialog closing after the settings draft settled");
     setLogOpen(false);
   }, [state.settingsDialogOpen]);
-  const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
+  /* Every workflow the user has visited stays mounted, so a single page drop
+     would otherwise reach all of them at once - two forms staging the same file
+     and overwriting each other's activity-store entry. The drop goes ONLY to the
+     view it was made on, and only while that view is still the current one. */
+  const pageDropFor = (view: WebappView) =>
+    pageDrop && pageDrop.view === view && state.currentView === view ? pageDrop.drop : null;
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
   }, []);
@@ -667,7 +675,7 @@ function WebappRoot({
                     onPatchesChange={actions.onPatcherPatchesChange}
                     onSelectView={() => actions.onSelectView("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
-                    pageDrop={activePageDrop}
+                    pageDrop={pageDropFor("patcher")}
                     startup={state.startup}
                   />,
                 )}
@@ -678,10 +686,11 @@ function WebappRoot({
                     onOriginalChange={actions.onCreatorOriginalChange}
                     onPatchTypeChange={actions.onCreatorPatchTypeChange}
                     onSettingsChange={actions.onCreatorSettingsChange}
-                    pageDrop={activePageDrop}
+                    pageDrop={pageDropFor("creator")}
                   />,
                 )}
                 {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
+                {workflowPanel("identify", <IdentifyRouteForm pageDrop={pageDropFor("identify")} />)}
                 {workflowPanel("test", <EmulatorTestRoute active={state.currentView === "test"} />)}
                 {workflowPanel(
                   "trim",
@@ -689,12 +698,12 @@ function WebappRoot({
                     onOutputFormatChange={actions.onTrimOutputFormatChange}
                     onSettingsChange={actions.onTrimSettingsChange}
                     onSourceChange={actions.onTrimSourceChange}
-                    pageDrop={activePageDrop}
+                    pageDrop={pageDropFor("trim")}
                   />,
                 )}
                 {workflowPanel(
                   "tools",
-                  <ToolsRouteForm onSessionChange={actions.onToolsSessionChange} pageDrop={activePageDrop} />,
+                  <ToolsRouteForm onSessionChange={actions.onToolsSessionChange} pageDrop={pageDropFor("tools")} />,
                 )}
                 {state.currentView === "docs" ? null : <DropVeil />}
               </>

@@ -9,6 +9,14 @@ const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const REPO_ROOT = path.resolve(PACKAGE_DIR, "..", "..");
 const CORPUS_DIR = path.join(REPO_ROOT, "target", "e2e-corpus");
 
+const identify = childProcess.spawnSync(
+  process.execPath,
+  [path.join(REPO_ROOT, "scripts", "ensure-identify-data.mjs")],
+  { cwd: REPO_ROOT, env: process.env, stdio: "inherit" },
+);
+if (identify.error) throw identify.error;
+if (identify.status !== 0) process.exit(identify.status || 1);
+
 const generate = childProcess.spawnSync(
   process.execPath,
   ["scripts/generate-e2e-corpus.mjs", ...process.argv.slice(2)],

@@ -8,6 +8,12 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     slug: "create",
     title: `${SITE_NAME} — Create ROM patches online`,
   }),
+  identify: Object.freeze({
+    description:
+      "Identify a ROM's game, region, revision, and known dump name by checksum — locally in your browser. Nothing is uploaded.",
+    slug: "identify",
+    title: `${SITE_NAME} — Identify ROMs online`,
+  }),
   patcher: Object.freeze({
     description:
       "Apply ROM patches privately in your browser with automatic format detection, checksum validation, and ordered patch chains. No uploads or account required.",

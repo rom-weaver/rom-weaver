@@ -14,7 +14,6 @@ import {
   ScrollText,
   Settings,
   SunMedium,
-  Wrench,
   X,
 } from "lucide-react";
 import type { IconNode } from "lucide-react";
@@ -54,7 +53,11 @@ const readPwaState = () => {
 };
 
 type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
-const isBetaWorkflowTab = (tab: WorkflowTab) => tab.id === "trim" || tab.id === "tools";
+/* Utility routes that stay out of both primary navs and are reached from More.
+   Adding one here is what makes it discoverable without crowding the rail. */
+const MORE_MENU_TAB_IDS: readonly string[] = ["identify", "tools"];
+const isMoreMenuTab = (tab: WorkflowTab) => MORE_MENU_TAB_IDS.includes(tab.id);
+const isBetaWorkflowTab = (tab: WorkflowTab) => tab.id === "trim" || isMoreMenuTab(tab);
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
 
@@ -173,7 +176,7 @@ const ModeRail = ({
   // A tablist needs exactly one tabIndex 0 to stay keyboard reachable, and the
   // current view is not always one of these tabs - the 404 shell renders the
   // rail with nothing selected. Roving focus falls back to the first tab.
-  const railTabs = tabs.filter((tab) => tab.id !== "tools");
+  const railTabs = tabs.filter((tab) => !isMoreMenuTab(tab));
   const interactiveTabs = betaToolsEnabled ? railTabs : railTabs.filter((tab) => !isBetaWorkflowTab(tab));
   const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
@@ -256,7 +259,7 @@ const PhoneDock = ({
   tabs: WorkflowTab[];
 }) => {
   const dockRef = useRef<HTMLDivElement | null>(null);
-  const dockTabs = tabs.filter((tab) => tab.id !== "tools");
+  const dockTabs = tabs.filter((tab) => !isMoreMenuTab(tab));
   const interactiveTabs = betaToolsEnabled ? dockTabs : dockTabs.filter((tab) => !isBetaWorkflowTab(tab));
   const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
   const focusedId = interactiveTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
@@ -452,10 +455,11 @@ type UtilityMenuProps = {
   onOpenStatus: () => void;
   onOpenSettings?: () => void;
   onOpenStorage?: () => void;
-  onOpenTools?: () => void;
+  /** Utility routes shown at the foot of the menu (Identify, Tools, …). */
+  moreTabs?: readonly WorkflowTab[];
+  onOpenWorkflowTab?: (id: string) => void;
   runtimeState: RuntimeState;
   toolsEnabled?: boolean;
-  toolsLabel?: string;
 };
 
 const UtilityMenu = ({
@@ -470,10 +474,10 @@ const UtilityMenu = ({
   onOpenSettings,
   onOpenStatus,
   onOpenStorage,
-  onOpenTools,
+  moreTabs,
+  onOpenWorkflowTab,
   runtimeState,
   toolsEnabled,
-  toolsLabel,
   menuClassName,
   open,
   triggerRef,
@@ -484,11 +488,14 @@ const UtilityMenu = ({
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const toolsButtonRef = useRef<HTMLButtonElement | null>(null);
-
+  /* Rendered hidden and revealed here: the beta-tools setting is client-only, so
+     the prerendered shell must not disagree with the first hydration pass. */
   useEffect(() => {
-    if (toolsButtonRef.current) toolsButtonRef.current.hidden = !(toolsEnabled && onOpenTools);
-  }, [onOpenTools, toolsEnabled]);
+    const enabled = !!(toolsEnabled && onOpenWorkflowTab);
+    for (const item of menuRef.current?.querySelectorAll<HTMLElement>("[data-more-workflow]") ?? []) {
+      item.hidden = !enabled;
+    }
+  }, [onOpenWorkflowTab, toolsEnabled]);
 
   /* Only a keyboard open lands on the first item. A pointer or touch open parks
      focus on the menu box instead: the browser paints a focus ring on whatever
@@ -589,18 +596,21 @@ const UtilityMenu = ({
         <Newspaper aria-hidden="true" />
         {localizer.message("ui.log.tabChangelog")}
       </button>
-      <button
-        hidden
-        onClick={() => {
-          if (onOpenTools) select(onOpenTools);
-        }}
-        ref={toolsButtonRef}
-        role="menuitem"
-        type="button"
-      >
-        <Wrench aria-hidden="true" />
-        {toolsLabel ?? "Tools"}
-      </button>
+      {(moreTabs ?? []).map((tab) => (
+        <button
+          data-more-workflow={tab.id}
+          hidden
+          key={tab.id}
+          onClick={() => {
+            if (onOpenWorkflowTab) select(() => onOpenWorkflowTab(tab.id));
+          }}
+          role="menuitem"
+          type="button"
+        >
+          {tab.icon}
+          {tab.label}
+        </button>
+      ))}
     </div>
   );
 };
@@ -923,7 +933,7 @@ const Masthead = ({
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const moreLabel = localizer.message("ui.tools.more");
-  const toolsLabel = tabs.find((tab) => tab.id === "tools")?.label ?? "Tools";
+  const moreTabs = tabs.filter(isMoreMenuTab);
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
@@ -1061,14 +1071,14 @@ const Masthead = ({
               onOpenLog={onOpenLog}
               onOpenStatus={onOpenStatus}
               onOpenStorage={onOpenStorage ?? onOpenLog}
-              onOpenTools={() => onSelectTab("tools")}
+              moreTabs={moreTabs}
+              onOpenWorkflowTab={onSelectTab}
               onPreloadLog={onPreloadLog}
               onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
               open={utilityOpen && utilityPlacement === "desktop"}
               renderMenu={utilityOpen && utilityPlacement === "desktop"}
               runtimeState={runtimeState}
               toolsEnabled={betaToolsEnabled}
-              toolsLabel={toolsLabel}
               triggerRef={desktopMoreRef}
             />
           }
@@ -1129,11 +1139,11 @@ const Masthead = ({
               onOpenSettings={onOpenSettings}
               onOpenStatus={onOpenStatus}
               onOpenStorage={onOpenStorage ?? onOpenLog}
-              onOpenTools={() => onSelectTab("tools")}
+              moreTabs={moreTabs}
+              onOpenWorkflowTab={onSelectTab}
               open
               runtimeState={runtimeState}
               toolsEnabled={betaToolsEnabled}
-              toolsLabel={toolsLabel}
               triggerRef={activeMoreRef}
             />
           ) : null}
@@ -1159,14 +1169,14 @@ const Masthead = ({
             onOpenLog={onOpenLog}
             onOpenStatus={onOpenStatus}
             onOpenStorage={onOpenStorage ?? onOpenLog}
-            onOpenTools={() => onSelectTab("tools")}
+            moreTabs={moreTabs}
+            onOpenWorkflowTab={onSelectTab}
             onPreloadLog={onPreloadLog}
             onToggle={(viaKeyboard) => toggleUtility("mobile", viaKeyboard)}
             open={utilityOpen && utilityPlacement === "mobile"}
             renderMenu={false}
             runtimeState={runtimeState}
             toolsEnabled={betaToolsEnabled}
-            toolsLabel={toolsLabel}
             triggerRef={mobileMoreRef}
           />
         }

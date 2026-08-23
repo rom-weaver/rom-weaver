@@ -170,6 +170,11 @@ msgstr "Pestaña del navegador"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis2"
+msgstr "por suma de verificación, aquí mismo en este navegador —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingDesc"
 msgstr "Guardando la aplicación en caché para que funcione sin conexión…"
 
@@ -291,7 +296,7 @@ msgstr "Códecs DVD"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Recortar y Herramientas)"
+msgstr "Activar herramientas beta (Identificar, Recortar y Herramientas)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -407,6 +412,11 @@ msgstr "Nivel de registro"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabLogs"
 msgstr "Registros"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis"
+msgstr "Relaciona una ROM con su juego, su región, su revisión y el nombre exacto de su volcado,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

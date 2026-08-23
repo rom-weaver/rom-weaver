@@ -718,6 +718,7 @@ def ensure_binary(bin_path: Path, skip_build: bool) -> None:
         return
     if skip_build:
         raise SystemExit(f"binary missing and --skip-build set: {bin_path}")
+    subprocess.run(["node", "scripts/ensure-identify-data.mjs"], check=True, cwd=REPO_ROOT)
     release = "release" in set(bin_path.parts)
     cmd = ["cargo", "build", "-p", "rom-weaver-cli"]
     if release:
@@ -730,6 +731,7 @@ def rebuild_bench_targets(skip_build: bool, needs_rom_weaver: bool, needs_wasm: 
         return
     if needs_rom_weaver:
         print("[bench] rebuild release binary", flush=True)
+        subprocess.run(["node", "scripts/ensure-identify-data.mjs"], check=True, cwd=REPO_ROOT)
         subprocess.run(["cargo", "build", "-p", "rom-weaver-cli", "--release"], check=True, cwd=REPO_ROOT)
     if needs_wasm:
         print("[bench] rebuild wasm artifacts", flush=True)

@@ -269,7 +269,7 @@ const runRomWeaverProbeWorker = async (
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<{ entries: CompressionProbeResult["entries"] }> => {
+): Promise<{ entries: CompressionProbeResult["entries"]; platform?: string }> => {
   const sourcePath = String(input.sourcePath || "").trim();
   if (!sourcePath) throw new Error("Container probe source path is required");
   const command = createRomWeaverCommand("probe", {
@@ -293,7 +293,10 @@ const runRomWeaverProbeWorker = async (
     }),
   );
   ensureRomWeaverSuccess(result, "Container probe failed");
-  return { entries: getContainerEntriesFromProbe(result) };
+  const terminal = getTerminalEvent(result);
+  const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
+  const platform = typeof details?.platform === "string" ? details.platform.trim() : "";
+  return { entries: getContainerEntriesFromProbe(result), ...(platform ? { platform } : {}) };
 };
 
 type LibretroSidecarMatch = { name: string; order: number };
@@ -1097,6 +1100,7 @@ const invokeRomWeaverPpfUndoWorker = async (input: {
 const invokeRomWeaverIngestWorker = async (
   input: {
     checksumAlgorithms?: string[];
+    databasePaths?: string[];
     interactiveSelectionEnabled?: boolean;
     invalidateMountCacheBeforeRun?: boolean;
     knownInputPaths?: string[];
@@ -1121,10 +1125,12 @@ const invokeRomWeaverIngestWorker = async (
   if (!outDirPath) throw new Error("Ingest output directory is required");
   const select = toTrimmedList(input.select);
   const checksum = toTrimmedList(input.checksumAlgorithms).map((value) => value.toLowerCase());
+  const database = toTrimmedList(input.databasePaths);
   const threadArg = toThreadBudget(input.threads);
   const command = createRomWeaverCommand("ingest", {
     output: outDirPath,
     input: sourcePath,
+    ...(database.length ? { database } : {}),
     ...(select.length ? { select } : {}),
     ...(input.noIgnore ? { no_ignore: true } : {}),
     ...(input.noNestedExtract ? { no_nested_extract: true } : {}),
@@ -1135,6 +1141,7 @@ const invokeRomWeaverIngestWorker = async (
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson ingest dispatch", {
     checksum,
     command,
+    databaseCount: database.length,
     outDirPath,
     selectCount: select.length,
     sourcePath,

@@ -145,6 +145,33 @@ fn probe_auto_extracts_single_payload() {
     assert!(label.contains("probe source resolved via 1 container extract step(s)"));
 }
 
+/// A cartridge ROM whose extension says nothing still reports its platform, so a
+/// host can pick one identify database instead of loading every pack.
+#[test]
+fn probe_reports_the_platform_of_a_headered_rom_with_a_generic_extension() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("mystery.bin").path(),
+        with_nes_header(b"payload"),
+    )
+    .expect("rom fixture");
+
+    let json = run_single_json_event(
+        &[
+            "probe",
+            "--input",
+            temp.child("mystery.bin").path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+
+    assert_eq!(json["format"], "rom-header");
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["platform"], "Nintendo Entertainment System");
+}
+
 #[test]
 fn probe_auto_extracts_nested_payload() {
     let temp = setup_temp_dir();

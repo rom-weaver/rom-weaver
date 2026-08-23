@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::shared::*;
 
 /// Build a real BPS patch (with embedded source/target CRC32 + size footer) by diffing two inputs.
@@ -33,6 +35,287 @@ fn create_bps_patch(
 
 fn ingest_terminal(args: &[&str]) -> Value {
     run_single_json_event(args, 0)
+}
+
+fn create_ingest_patch(
+    temp: &TempDir,
+    format: &str,
+    extension: &str,
+    source: &[u8],
+    target: &[u8],
+    file_name: &str,
+) -> PathBuf {
+    let source_path = temp.child("patch-source.bin");
+    let target_path = temp.child("patch-target.bin");
+    let patch_path = temp.child(file_name);
+    fs::write(source_path.path(), source).expect("patch source fixture");
+    fs::write(target_path.path(), target).expect("patch target fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            source_path.path().to_str().expect("source path"),
+            "--modified",
+            target_path.path().to_str().expect("target path"),
+            "--format",
+            format,
+            "--output",
+            patch_path.path().to_str().expect("patch path"),
+            "--json",
+        ],
+        0,
+    );
+    assert!(
+        patch_path
+            .path()
+            .extension()
+            .and_then(|value| value.to_str())
+            == Some(extension),
+        "created patch has the expected extension"
+    );
+    patch_path.path().to_path_buf()
+}
+
+fn parse_md5_hex(value: &str) -> [u8; 16] {
+    let bytes = value.as_bytes();
+    assert_eq!(bytes.len(), 32, "MD5 hex length");
+    let mut output = [0_u8; 16];
+    for (index, slot) in output.iter_mut().enumerate() {
+        *slot = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).expect("MD5 hex");
+    }
+    output
+}
+
+#[test]
+fn ingest_identifies_asset_from_existing_checksum_variants() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    fs::write(rom.path(), b"ingest identify fixture").expect("ROM fixture");
+    let crc32 = u32::from_str_radix(&checksum_value(rom.path(), "crc32"), 16)
+        .expect("CRC32")
+        .to_be_bytes();
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_crc(crc32, "Ingest Identify Test [!]"),
+    )
+    .expect("identify pack");
+    let out_dir = temp.child("ingest-identify-out");
+
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        rom.path().to_str().expect("ROM path"),
+        "--output",
+        out_dir.path().to_str().expect("output path"),
+        "--database",
+        pack.path().to_str().expect("pack path"),
+        "--json",
+    ]);
+    let identification = &terminal["details"]["ingest"]["assets"][0]["identification"];
+    assert_eq!(identification["status"], "matched");
+    assert_eq!(
+        identification["matches"][0]["name"],
+        "Ingest Identify Test [!]"
+    );
+    assert_eq!(identification["matches"][0]["variant"], "raw");
+}
+
+/// Build a tar.gz holding several NES ROMs at nested member paths and return
+/// their CRC32 bytes in the same order.
+fn nested_rom_archive(temp: &TempDir, payloads: &[(&str, &[u8])]) -> (PathBuf, Vec<[u8; 4]>) {
+    let mut sources = Vec::new();
+    let mut crc32s = Vec::new();
+    for (member_path, payload) in payloads {
+        let file_name = member_path.rsplit('/').next().expect("member file name");
+        let rom = temp.child(file_name);
+        fs::write(rom.path(), with_nes_header(payload)).expect("ROM fixture");
+        crc32s.push(
+            u32::from_str_radix(&checksum_value(rom.path(), "crc32"), 16)
+                .expect("CRC32")
+                .to_be_bytes(),
+        );
+        sources.push((rom.path().to_path_buf(), (*member_path).to_string()));
+    }
+    let archive = temp.child("collection.tar.gz");
+    let entries = sources
+        .iter()
+        .map(|(path, name)| (path.as_path(), name.as_str()))
+        .collect::<Vec<_>>();
+    write_tar_gz_fixture(&entries, archive.path());
+    (archive.path().to_path_buf(), crc32s)
+}
+
+fn archive_identification_by_file_name(
+    temp: &TempDir,
+    archive: &Path,
+    pack: &Path,
+) -> BTreeMap<String, Value> {
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        archive.to_str().expect("archive path"),
+        "--output",
+        temp.child("ingest-archive-identify-out")
+            .path()
+            .to_str()
+            .expect("output path"),
+        "--database",
+        pack.to_str().expect("pack path"),
+        "--json",
+    ]);
+    terminal["details"]["ingest"]["assets"]
+        .as_array()
+        .expect("assets array")
+        .iter()
+        .map(|asset| {
+            (
+                asset["file_name"].as_str().expect("file name").to_string(),
+                asset["identification"].clone(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn ingest_identifies_a_single_rom_archive_member() {
+    let temp = setup_temp_dir();
+    let (archive, crc32s) = nested_rom_archive(&temp, &[("Games/GBA/solo.nes", b"solo payload")]);
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_entries(&[(crc32s[0], "Solo Game (USA)")]),
+    )
+    .expect("identify pack");
+
+    let identifications = archive_identification_by_file_name(&temp, &archive, pack.path());
+
+    assert_eq!(identifications.len(), 1);
+    let solo = &identifications["solo.nes"];
+    assert_eq!(solo["status"], "matched");
+    assert_eq!(solo["matches"][0]["name"], "Solo Game (USA)");
+}
+
+#[test]
+fn ingest_identifies_every_rom_in_a_multi_rom_archive() {
+    let temp = setup_temp_dir();
+    let (archive, crc32s) = nested_rom_archive(
+        &temp,
+        &[
+            ("Games/NES/first.nes", b"first payload"),
+            ("Games/NES/deeper/second.nes", b"second payload"),
+        ],
+    );
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_entries(&[
+            (crc32s[0], "First Game (USA)"),
+            (crc32s[1], "Second Game (Europe)"),
+        ]),
+    )
+    .expect("identify pack");
+
+    let identifications = archive_identification_by_file_name(&temp, &archive, pack.path());
+
+    // Every member gets its own verdict; none is dropped in favour of a single winner.
+    assert_eq!(identifications.len(), 2);
+    assert_eq!(identifications["first.nes"]["status"], "matched");
+    assert_eq!(
+        identifications["first.nes"]["matches"][0]["name"],
+        "First Game (USA)"
+    );
+    assert_eq!(identifications["second.nes"]["status"], "matched");
+    assert_eq!(
+        identifications["second.nes"]["matches"][0]["name"],
+        "Second Game (Europe)"
+    );
+}
+
+#[test]
+fn ingest_identifies_only_the_matching_archive_member() {
+    let temp = setup_temp_dir();
+    let (archive, crc32s) = nested_rom_archive(
+        &temp,
+        &[
+            ("Games/NES/known.nes", b"known payload"),
+            ("Games/NES/unknown.nes", b"unknown payload"),
+        ],
+    );
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_entries(&[(crc32s[0], "Known Game (USA)")]),
+    )
+    .expect("identify pack");
+
+    let identifications = archive_identification_by_file_name(&temp, &archive, pack.path());
+
+    assert_eq!(identifications["known.nes"]["status"], "matched");
+    // The unmatched member reports `unknown`, not the matched member's title.
+    assert_eq!(identifications["unknown.nes"]["status"], "unknown");
+    assert_eq!(
+        identifications["unknown.nes"]["matches"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
+fn ingest_reports_unknown_for_an_archive_with_no_matching_member() {
+    let temp = setup_temp_dir();
+    let (archive, _) = nested_rom_archive(
+        &temp,
+        &[
+            ("Games/NES/one.nes", b"one payload"),
+            ("Games/NES/two.nes", b"two payload"),
+        ],
+    );
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_entries(&[([0xff, 0xff, 0xff, 0xff], "Absent Game")]),
+    )
+    .expect("identify pack");
+
+    let identifications = archive_identification_by_file_name(&temp, &archive, pack.path());
+
+    assert!(
+        identifications
+            .values()
+            .all(|identification| identification["status"] == "unknown"),
+        "a database that answered with no record MUST read as unknown: {identifications:?}"
+    );
+}
+
+#[test]
+fn ingest_rejects_an_invalid_identify_pack() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    fs::write(rom.path(), b"ingest identify fixture").expect("ROM fixture");
+    let pack = temp.child("broken.pack");
+    fs::write(pack.path(), b"not an RWFP1 pack").expect("invalid identify pack");
+
+    let output = command_stdout(
+        &[
+            "ingest",
+            "--input",
+            rom.path().to_str().expect("ROM path"),
+            "--output",
+            temp.child("ingest-invalid-pack-out")
+                .path()
+                .to_str()
+                .expect("output path"),
+            "--database",
+            pack.path().to_str().expect("pack path"),
+            "--json",
+        ],
+        1,
+    );
+    let terminal = parse_single_json_line(&output);
+    assert_eq!(terminal["command"], "ingest");
+    assert_eq!(terminal["status"], "failed");
+    assert_eq!(terminal["stage"], "identify");
 }
 
 /// Build a 2-track CD CHD (MODE1 data + AUDIO, uniform 2352-byte sectors) so it offers the
@@ -625,6 +908,149 @@ fn ingest_bps_patch_surfaces_embedded_metadata() {
     assert_eq!(
         descriptor["is_valid_patch"], true,
         "a real BPS patch parses, so it is marked valid"
+    );
+}
+
+#[test]
+fn ingest_identifies_bps_patch_source_from_source_crc32() {
+    let temp = setup_temp_dir();
+    let patch = create_bps_patch(
+        &temp,
+        b"identify this BPS source",
+        b"identify this BPS target",
+        "update.bps",
+    );
+    let source_crc32 = u32::from_str_radix(
+        &checksum_value(temp.child("bps-original.bin").path(), "crc32"),
+        16,
+    )
+    .expect("CRC32")
+    .to_be_bytes();
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_crc(source_crc32, "BPS Source Test [!]"),
+    )
+    .expect("identify pack");
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        patch.to_str().expect("patch path"),
+        "--output",
+        temp.child("ingest-patch-identify-out")
+            .path()
+            .to_str()
+            .expect("output path"),
+        "--database",
+        pack.path().to_str().expect("pack path"),
+        "--json",
+    ]);
+    let identification = &terminal["details"]["ingest"]["patches"][0]["source_identification"];
+    assert_eq!(identification["status"], "matched");
+    assert_eq!(identification["matches"][0]["name"], "BPS Source Test [!]");
+    assert_eq!(identification["matches"][0]["variant"], "source");
+}
+
+#[test]
+fn ingest_identifies_rup_source_from_endpoint_md5() {
+    let temp = setup_temp_dir();
+    let source = b"RUP source identity fixture";
+    let patch = create_ingest_patch(
+        &temp,
+        "rup",
+        "rup",
+        source,
+        b"RUP target identity fixture",
+        "update.rup",
+    );
+    let pack = temp.child("rup.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_md5(
+            parse_md5_hex(&checksum_value(
+                temp.child("patch-source.bin").path(),
+                "md5",
+            )),
+            "RUP Endpoint Test [!]",
+        ),
+    )
+    .expect("identify pack");
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        patch.to_str().expect("patch path"),
+        "--output",
+        temp.child("ingest-rup-identify-out")
+            .path()
+            .to_str()
+            .expect("output path"),
+        "--database",
+        pack.path().to_str().expect("pack path"),
+        "--json",
+    ]);
+    let descriptor = &terminal["details"]["ingest"]["patches"][0];
+    assert_eq!(
+        descriptor["source_checksum_variants"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        descriptor["source_checksum_variants"][0]["md5"],
+        checksum_value(temp.child("patch-source.bin").path(), "md5")
+    );
+    assert_eq!(descriptor["source_identification"]["status"], "matched");
+    assert_eq!(
+        descriptor["source_identification"]["matches"][0]["name"],
+        "RUP Endpoint Test [!]"
+    );
+}
+
+#[test]
+fn ingest_prefers_solid_endpoint_md5_over_conflicting_filename_md5() {
+    let temp = setup_temp_dir();
+    let source = b"SOLID source identity fixture";
+    let wrong_md5 = "00000000000000000000000000000000";
+    let patch = create_ingest_patch(
+        &temp,
+        "solid",
+        "solid",
+        source,
+        b"SOLID target identity fixture",
+        &format!("update [md5:{wrong_md5}].solid"),
+    );
+    let pack = temp.child("solid.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_md5(
+            parse_md5_hex(&checksum_value(
+                temp.child("patch-source.bin").path(),
+                "md5",
+            )),
+            "SOLID Endpoint Test [!]",
+        ),
+    )
+    .expect("identify pack");
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        patch.to_str().expect("patch path"),
+        "--output",
+        temp.child("ingest-solid-identify-out")
+            .path()
+            .to_str()
+            .expect("output path"),
+        "--database",
+        pack.path().to_str().expect("pack path"),
+        "--json",
+    ]);
+    let descriptor = &terminal["details"]["ingest"]["patches"][0];
+    assert_eq!(descriptor["filename_checksums"]["md5"], wrong_md5);
+    assert_eq!(descriptor["source_identification"]["status"], "matched");
+    assert_eq!(
+        descriptor["source_identification"]["matches"][0]["name"],
+        "SOLID Endpoint Test [!]"
     );
 }
 

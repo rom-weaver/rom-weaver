@@ -83,7 +83,9 @@ jobs:
 
       - name: Build rom-weaver CLI
         if: steps.cli-cache.outputs.cache-hit != 'true'
-        run: cargo build --release -p rom-weaver-cli
+        run: |
+          node scripts/ensure-identify-data.mjs
+          cargo build --release -p rom-weaver-cli
 
       - name: Verify rom-weaver CLI
         run: target/release/rom-weaver --version

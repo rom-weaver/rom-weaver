@@ -46,7 +46,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "error.WORKER_UNAVAILABLE",
     message: "Required worker support is unavailable.",
   }),
-  "settings.betaToolsEnabled": msg({ id: "settings.betaToolsEnabled", message: "Enable beta tools (Trim and Tools)" }),
+  "settings.betaToolsEnabled": msg({
+    id: "settings.betaToolsEnabled",
+    message: "Enable beta tools (Identify, Trim, and Tools)",
+  }),
   "settings.byteUnits": msg({ id: "settings.byteUnits", message: "File size units" }),
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
@@ -162,6 +165,14 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Play a patched ROM in an emulator, right in the browser,",
   }),
   "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "with saves that stay on this device —" }),
+  "ui.hero.identifyThesis": msg({
+    id: "ui.hero.identifyThesis",
+    message: "Match a ROM to its game, region, revision, and exact dump name,",
+  }),
+  "ui.hero.identifyThesis2": msg({
+    id: "ui.hero.identifyThesis2",
+    message: "by checksum, right in this browser —",
+  }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
     message: "Revert a patched ROM to its original dump,",

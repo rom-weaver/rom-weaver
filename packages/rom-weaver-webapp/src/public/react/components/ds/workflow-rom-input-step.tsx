@@ -8,6 +8,7 @@ import { RomInputPanels } from "./rom-input-panels.tsx";
 type WorkflowRomInputStepItem = {
   card?: Omit<ComponentProps<typeof FileCard>, "children" | "name"> & {
     children?: ReactNode;
+    displayName?: string;
     extract: ExtractPanelProps;
     panels?: ComponentProps<typeof RomInputPanels>;
   };
@@ -28,11 +29,14 @@ type WorkflowRomInputStepProps = Omit<ComponentProps<typeof StepSection>, "child
 const WorkflowRomInputStepRow = ({ item }: { item: WorkflowRomInputStepItem }) => {
   if (item.progress) return <FileProgress {...item.progress} />;
   if (!item.card) return null;
-  const { children, extract, panels, ...cardProps } = item.card;
+  const { children, displayName, extract, panels, ...cardProps } = item.card;
   // The name line leads the card header; below it the drawers follow the shared
   // card order - Extract first, then the info panels (Options → sheets → Checks).
   return (
-    <FileCard {...cardProps} name={<ExtractName fileName={extract.fileName} folderPath={extract.folderPath} />}>
+    <FileCard
+      {...cardProps}
+      name={<ExtractName displayName={displayName} fileName={extract.fileName} folderPath={extract.folderPath} />}
+    >
       <ExtractDrawer {...extract} />
       {children}
       {panels ? <RomInputPanels {...panels} /> : null}

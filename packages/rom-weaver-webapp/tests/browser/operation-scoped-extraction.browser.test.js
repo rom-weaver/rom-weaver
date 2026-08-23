@@ -151,3 +151,32 @@ test("Z3DS extraction owns and removes its operation scope", async () => {
     await output?.dispose().catch(() => undefined);
   }
 });
+
+/* Every extracted leaf carries the archive-relative path it came out of, so the
+   Identify UI can say WHICH member it identified instead of implying the
+   archive itself matched. */
+test("browser ingest reports the archive-relative member path for each extracted leaf", async () => {
+  await resetRomWeaverRunner();
+  await warmupRomWeaverRunner();
+  // No `select`: identifyAllRomEntries has to enumerate the members itself. An
+  // identify run has no answer for the interactive "which entry?" prompt, so a
+  // multi-ROM archive would otherwise cancel instead of reporting both members.
+  const run = await browserRuntime.ingest.run({
+    checksumAlgorithms: ["crc32"],
+    identifyAllRomEntries: true,
+    source: await loadMultiRomArchive(),
+  });
+  try {
+    const memberPaths = run.result.assets.map((asset) => asset.memberPath);
+    expect(memberPaths.toSorted((left, right) => left.localeCompare(right))).toEqual(
+      ENTRY_NAMES.toSorted((left, right) => left.localeCompare(right)),
+    );
+    expect(run.result.assets.every((asset) => asset.copiedInPlace === false)).toBe(true);
+    // The identify index is not served to browser tests, so this run also proves
+    // the ingest still succeeds and reports the database as unavailable.
+    expect(typeof run.identifyUnavailable).toBe("string");
+    expect(run.result.assets.every((asset) => asset.identification === undefined)).toBe(true);
+  } finally {
+    await disposeOutputs(run.outputs);
+  }
+});

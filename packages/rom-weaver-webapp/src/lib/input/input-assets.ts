@@ -1,4 +1,5 @@
 import type { ChecksumRomProbe, ChecksumVariant, RomTypeTag } from "../../types/checksum.ts";
+import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { SelectionGroupCandidate } from "../../types/selection.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 
@@ -37,6 +38,7 @@ type InputAsset = {
   checksumTimeMs?: number;
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
+  identification?: ParsedIdentifyResolution;
   preparation?: InputPreparationMetrics;
   file: PatchFileInstance;
   groupId?: string;
@@ -127,6 +129,7 @@ const makeTrackAsset = (
     fileName,
     groupId,
     id,
+    identification: (file as PatchFileInstance & { identification?: ParsedIdentifyResolution }).identification,
     kind: "track",
     patchable: reference.patchable !== false,
     size: file.fileSize,
@@ -140,6 +143,7 @@ const makeRomAsset = (id: string, file: PatchFileInstance): InputAsset => {
     file,
     fileName: file.fileName,
     id,
+    identification: (file as PatchFileInstance & { identification?: ParsedIdentifyResolution }).identification,
     kind: "rom",
     patchable: true,
     size: file.fileSize,

@@ -2,6 +2,8 @@ import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-run
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
 import { TrimWorkflowController } from "../../lib/workflow/trim-workflow-controller.ts";
+import { aggregateIdentifyStatus } from "../../types/identify.ts";
+import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type { BrowserSaveDestination } from "../../types/output.ts";
 import type { ApplySettings, CreateSettings, WorkerSettings } from "../../types/settings.ts";
@@ -39,20 +41,67 @@ type BrowserPpfUndoInput = {
 };
 
 type BrowserIngestRomOptions = {
+  checksumAlgorithms?: string[];
+  identify?: boolean;
+  identifyAllRomEntries?: boolean;
   onProgress?: Parameters<NonNullable<NonNullable<typeof browserRuntime.ingest>["run"]>>[0]["onProgress"];
   signal?: AbortSignal;
 };
+
+type BrowserIdentifyRomOptions = BrowserIngestRomOptions;
 
 const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestRomOptions = {}) => {
   const ingest = browserRuntime.ingest;
   if (!ingest?.run) throw new Error("The rom-weaver checksum runtime is unavailable.");
   return ingest.run({
-    checksumAlgorithms: ["sha1"],
+    checksumAlgorithms: options.checksumAlgorithms || ["sha1"],
     fileName,
+    identify: options.identify,
+    identifyAllRomEntries: options.identifyAllRomEntries,
     onProgress: options.onProgress,
     signal: options.signal,
     source,
   });
+};
+
+/**
+ * Identify every ROM candidate in one input. An archive contributes one result
+ * per selectable member rather than one arbitrary winner, and a database that
+ * never loaded reports `unavailable` instead of a false "no match".
+ */
+const identifyRom = async (
+  source: Blob,
+  fileName: string,
+  options: BrowserIdentifyRomOptions = {},
+): Promise<ParsedIdentifyResult> => {
+  const { identifyUnavailable, outputs, patchOutputs, result } = await ingestRom(source, fileName, {
+    ...options,
+    checksumAlgorithms: ["crc32", "md5", "sha1"],
+    identify: true,
+    identifyAllRomEntries: true,
+  });
+  try {
+    const candidates: ParsedIdentifyCandidate[] = result.assets.map((asset) => ({
+      checksumVariants: asset.checksumVariants || [],
+      checksums: asset.checksums || {},
+      ...(asset.platform ? { detectedPlatform: asset.platform } : {}),
+      matches: identifyUnavailable ? [] : asset.identification?.matches || [],
+      path: asset.memberPath || asset.fileName || fileName,
+      status: identifyUnavailable ? "unavailable" : asset.identification?.status || "unknown",
+    }));
+    // An archive that yielded extracted leaves names itself so the UI can show
+    // "Archive: x.zip / ROM: Games/y.gba" rather than implying the zip matched.
+    const archiveName = result.assets.some((asset) => !asset.copiedInPlace) ? fileName : undefined;
+    return {
+      ...(archiveName ? { archiveName } : {}),
+      candidates,
+      input: fileName,
+      status: identifyUnavailable ? "unavailable" : aggregateIdentifyStatus(candidates.map((entry) => entry.status)),
+      ...(identifyUnavailable ? { unavailableReason: identifyUnavailable } : {}),
+    };
+  } finally {
+    await Promise.all([...outputs, ...patchOutputs].map((output) => output.dispose().catch(() => undefined)));
+  }
 };
 
 const getIngestOutputBlob = async (
@@ -187,6 +236,7 @@ export {
   CreateWorkflow,
   getCreatePatchFormatCandidates,
   getIngestOutputBlob,
+  identifyRom,
   ingestRom,
   preloadBrowserRuntime,
   TrimWorkflow,

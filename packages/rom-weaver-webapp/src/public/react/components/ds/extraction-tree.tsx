@@ -199,9 +199,9 @@ const formatRatio = (first: ExtractionLevel, last: ExtractionLevel) => {
 /** The card name line. */
 const ExtractName = ({ displayName, fileName, folderPath }: ExtractNameProps) => (
   <div className="nmline" data-file-name={fileName}>
-    {/* assistive tech (and text-based assertions) get the full filename;
-        the visible face drops the extension - the format badge carries it */}
-    <span className="sr-only">{fileName}</span>
+    {/* Assistive technology gets the identified title and full filename; the visible face
+        drops the extension because the format badge carries it. */}
+    <span className="sr-only">{displayName?.trim() ? `${displayName.trim()} — ${fileName}` : fileName}</span>
     <span
       aria-hidden="true"
       className="nm"

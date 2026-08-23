@@ -4,6 +4,8 @@ import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composi
 import { getFileNameWithoutExtension } from "../../lib/path-utils.ts";
 import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
+import type { ParsedIdentifyResolution } from "../../types/identify.ts";
+import { formatIdentifyTitle, uniqueIdentifyTitles } from "../../presentation/identify-title.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import { createStageSettingsKey } from "./apply-session-settings.ts";
@@ -146,6 +148,13 @@ const formatPatchValidationValue = (label: string, value: number | string | unde
   return `${label}=${String(value).trim()}`;
 };
 
+const formatRomIdentification = (identification: ParsedIdentifyResolution | undefined): string => {
+  if (!identification?.matches.length) return "";
+  const names = uniqueIdentifyTitles(identification.matches.map((match) => match.name));
+  if (identification.status === "matched") return names[0] || "";
+  return `Possible titles: ${names.join("; ")}`;
+};
+
 const getPatchValidationStatus = (patch: ApplyWorkflowPatchState, requirementValues: string[]): string => {
   const deep = patch.patchValidation;
   if (deep) return deep.status;
@@ -168,25 +177,32 @@ const getPatchValidationMessage = (status: string, deep: ApplyWorkflowPatchState
 };
 
 const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
-  const requirementValues = [
+  const sourceTitleValues = (patch.requirements?.sourceTitles || []).map((title) =>
+    formatPatchValidationValue("in rom", formatIdentifyTitle(title)),
+  );
+  const enforceableRequirementValues = [
     formatPatchValidationValue("in size", patch.requirements?.sourceSize),
     formatPatchValidationValue("in min size", patch.requirements?.minimumSourceSize),
     formatPatchValidationValue("in crc32", patch.requirements?.sourceCrc32),
     formatPatchValidationValue("out size", patch.requirements?.targetSize),
     formatPatchValidationValue("out crc32", patch.requirements?.targetCrc32),
   ].filter(Boolean);
+  const requirementValues = [...sourceTitleValues, ...enforceableRequirementValues];
   const actualValue = "";
   // The deep preflight validation is deferred and runs silently after staging. Until its verdict
   // lands, a targeted patch (its cheap preflight computed) reads as "verifying"; a preflight checksum
   // mismatch fails immediately without waiting for preflight. Once the verdict lands it wins.
   const deep = patch.patchValidation;
-  const status = getPatchValidationStatus(patch, requirementValues);
+  const status = getPatchValidationStatus(patch, enforceableRequirementValues);
   const validationValues = requirementValues.length
     ? requirementValues
     : deep || patch.checksumPreflight
       ? ["preflight validation"]
       : [];
-  const message = getPatchValidationMessage(status, deep);
+  const message =
+    status === "unknown" && sourceTitleValues.length
+      ? "Expected ROM title identified"
+      : getPatchValidationMessage(status, deep);
   return {
     checksumMismatch: status === "invalid",
     checksumTiming: formatChecksumTiming(patch.checksumTimeMs),
@@ -248,6 +264,7 @@ const toPatchStageInfo = (
     showHeaderOption: !!patch.headerResolution,
     showN64ByteOrderOption: !!patch.n64Resolution,
     size: patch.size,
+    sourceTitles: patch.requirements?.sourceTitles,
     sourceChecksumState: patch.checksumPreflight?.status || "",
     sourceSize: patch.sourceSize,
     targetInputFileName: patch.targetInputFileName,
@@ -442,6 +459,7 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
     decompressionTimeMs: input.decompressionTimeMs,
     fileName: input.fileName,
     id: input.id,
+    identification: input.identification,
     order: 0,
     parentCompressions: input.parentCompressions,
     romProbe: input.romProbe,
@@ -488,11 +506,14 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
       gdiText: resolved.gdiText,
       groupId: resolved.groupId,
       id: resolved.id,
+      identification: resolved.identification || input.identification,
+      identificationStatus: (resolved.identification || input.identification)?.status,
       kind: resolved.kind,
       order: resolved.order ?? index,
       parentCompressions: resolved.parentCompressions,
       patchable: resolved.patchable ?? (resolved.kind !== "cue" && resolved.kind !== "gdi"),
       romProbe: resolved.romProbe || input.romProbe,
+      romInfo: formatRomIdentification(resolved.identification || input.identification),
       romType: resolved.romType || input.romType,
       size: resolved.size,
       sourceSize: resolved.sourceSize,

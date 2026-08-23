@@ -3,6 +3,7 @@
 // yields `number`; these `number`-based, camelCase types are what the apply workflow consumes. Kept
 // in `types/` (not `lib/`) so the runtime adapter type can reference them without an import cycle.
 import type { ChecksumMap, ChecksumVariant } from "./checksum.ts";
+import type { ParsedIdentifyLookupResult } from "./identify.ts";
 
 type IngestKind = "rom" | "patch";
 
@@ -13,6 +14,12 @@ export interface ParsedIngestRomAsset {
   kind?: string;
   checksums: ChecksumMap;
   checksumVariants: ChecksumVariant[];
+  identification?: ParsedIdentifyLookupResult;
+  /**
+   * Archive-relative path of the member this leaf came from, folders included.
+   * Host-computed from the extraction scope, so it is absent for a bare ROM.
+   */
+  memberPath?: string;
   platform?: string;
   discFormat?: string;
   recommendedFormat?: string;
@@ -43,6 +50,8 @@ export interface ParsedPatchDescriptor {
   minimumSourceSize?: number;
   recordCount?: number;
   filenameChecksums: ChecksumMap;
+  sourceIdentification?: ParsedIdentifyLookupResult;
+  sourceChecksumVariants?: ChecksumMap[];
   filenameSize?: number;
   sidecarOrder?: number;
   /** Whether Rust recognized + parsed the patch magic (the validity the host no longer re-derives). */

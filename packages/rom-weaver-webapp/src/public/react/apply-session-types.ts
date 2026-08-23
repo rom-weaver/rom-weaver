@@ -1,4 +1,5 @@
 import type { ChecksumVariant } from "../../types/checksum.ts";
+import type { ParsedIdentifyResolution, IdentifyStatus } from "../../types/identify.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { ApplyPatchFormProps, ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
@@ -27,9 +28,12 @@ type StagedInputInfo = {
   checksums?: Record<string, string>;
   checksumVariants?: ChecksumVariant[];
   checksumVariantPlan?: RomInputRowState["info"]["checksumVariantPlan"];
+  identificationStatus?: IdentifyStatus;
+  identification?: ParsedIdentifyResolution;
   checksumTiming?: string;
   romProbe?: RomInputRowState["info"]["romProbe"];
   romType?: RomInputRowState["info"]["romType"];
+  romInfo?: string;
   /** Rust's probe-manifest verdict (`is_rom`): false marks an archive that holds only patches, so the
    * unified drop can reclassify it from the ROM bucket to the patch bucket. Undefined for inputs that
    * never produce a probe manifest (bare ROMs). */
@@ -48,6 +52,7 @@ type StagedInputInfo = {
   validationMessage?: string;
   validationState?: string;
   validationValues?: string[];
+  sourceTitles?: string[];
   checksumPreflightMismatch?: boolean;
   /** This patch's slice of the chain verification plan (drives the chain chip). */
   chainVerdict?: {

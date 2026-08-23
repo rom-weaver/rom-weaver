@@ -459,6 +459,84 @@ describe("apply workflow view - staged bench", () => {
     expect(container.querySelectorAll("button.needs-input").length).toBe(0);
   });
 
+  it("uses a matched title on the ROM card and keeps it out of Checks", () => {
+    const rom = romRow("game.bin");
+    rom.info = {
+      ...rom.info,
+      identificationStatus: "matched",
+      romInfo: "Advance Wars (USA)",
+    };
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
+    const { container } = renderView({ ui });
+    const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
+
+    expect(romCard?.classList.contains("ok")).toBe(true);
+    expect(romCard?.querySelector(".card-name .nm")?.textContent).toBe("Advance Wars (USA)");
+    expect(romCard?.querySelector(".card-meta")).toBeNull();
+    expect(romCard?.querySelector(".card-name .sr-only")?.textContent).toBe("Advance Wars (USA) — game.bin");
+    expect(romCard?.querySelector(".identify-drawer .rb")?.textContent).toBe("Identified");
+    expect(romCard?.querySelector(".identify-drawer-title")?.textContent).toBe("Advance Wars (USA)");
+    expect(romCard?.querySelector(".cks:not(.identify-drawer)")?.textContent).not.toContain("Advance Wars (USA)");
+    expect(romCard?.querySelector(".extract-d .tree-name")?.textContent).toBe("game.bin");
+  });
+
+  it("uses a validated patch requirement to identify the ROM", () => {
+    const rom = romRow("game.bin");
+    const patch = patchItem("change.ips");
+    patch.sourceTitles = ["Advance Wars (USA)"];
+    patch.targetValue = rom.id;
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
+    const { container } = renderView({ patches: [patch], ui });
+    const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
+
+    expect(romCard?.classList.contains("ok")).toBe(true);
+    expect(romCard?.querySelector(".card-name .nm")?.textContent).toBe("Advance Wars (USA)");
+    expect(romCard?.querySelector(".card-meta")).toBeNull();
+    expect(romCard?.querySelector(".identify-drawer .rb")?.textContent).toBe("Identified");
+  });
+
+  it("reports an unloadable title database as a quiet note, not a ROM verdict", () => {
+    const rom = romRow("game.bin");
+    rom.info = {
+      ...rom.info,
+      identification: { matches: [], status: "unavailable", unavailableReason: "HTTP 503" },
+      identificationStatus: "unavailable",
+    };
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
+    const { container } = renderView({ ui });
+    const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
+
+    expect(romCard?.querySelector(".card-meta")?.textContent).toBe("Title lookup unavailable");
+    // Never a verdict border: the ROM itself was neither confirmed nor rejected.
+    expect(romCard?.classList.contains("ok")).toBe(false);
+    expect(romCard?.classList.contains("warn")).toBe(false);
+    expect(romCard?.classList.contains("bad")).toBe(false);
+    expect(romCard?.querySelector(".card-name .sr-only")?.textContent).toBe("game.bin");
+    expect(romCard?.querySelector(".identify-drawer")).toBeNull();
+  });
+
+  it("names an ambiguous identification in text, not only in the card border", () => {
+    const rom = romRow("game.bin");
+    rom.info = {
+      ...rom.info,
+      identification: {
+        matches: [
+          { algorithm: "crc32", database: "pack", name: "Twin (USA)", platform: "GBA", variant: "raw" },
+          { algorithm: "crc32", database: "pack", name: "Twin (Europe)", platform: "GBA", variant: "raw" },
+        ],
+        status: "ambiguous",
+      },
+      identificationStatus: "ambiguous",
+    };
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
+    const { container } = renderView({ ui });
+    const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
+
+    expect(romCard?.classList.contains("warn")).toBe(true);
+    expect(romCard?.querySelector(".card-meta")?.textContent).toBe("Possible matches found");
+    expect(romCard?.querySelector(".identify-drawer .rb")?.textContent).toBe("2 possible matches");
+  });
+
   it("does not show embedded sheet text as a separate file for a lone ROM", () => {
     const rom = romRow("game.bin");
     rom.cueText = 'FILE "game.bin" BINARY\n  TRACK 01 MODE1/2352';

@@ -13,7 +13,9 @@
 // the form RFC 9239 settles on - `application/javascript` is obsolete.
 export const SIDECAR_CONTENT_TYPES = {
   ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".pack": "application/octet-stream",
   ".svg": "image/svg+xml",
   ".wasm": "application/wasm",
 };

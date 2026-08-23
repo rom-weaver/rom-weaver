@@ -44,6 +44,7 @@ const loadEmulatorRom = async (blob: Blob, fileName: string, options: LoadEmulat
   const { getIngestOutputBlob, ingestRom } = await import("../../../platform/browser/browser-api.ts");
   let sequence = 0;
   const { outputs, result } = await ingestRom(blob, fileName, {
+    identify: false,
     onProgress: (progress) =>
       options.onProgress?.({
         id: "emulator-ingest",

@@ -170,6 +170,11 @@ msgstr "Browser-Tab"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis2"
+msgstr "per Prüfsumme, direkt in diesem Browser —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingDesc"
 msgstr "Die App wird für die Offline-Nutzung zwischengespeichert…"
 
@@ -291,7 +296,7 @@ msgstr "DVD-Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Beta-Tools aktivieren (Trimmen und Tools)"
+msgstr "Beta-Tools aktivieren (Identifizieren, Trimmen und Tools)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -407,6 +412,11 @@ msgstr "Protokollstufe"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabLogs"
 msgstr "Protokoll"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis"
+msgstr "Ordne eine ROM ihrem Spiel, ihrer Region, ihrer Revision und ihrem genauen Dump-Namen zu,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
