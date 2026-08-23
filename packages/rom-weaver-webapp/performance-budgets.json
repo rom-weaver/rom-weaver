@@ -15,10 +15,10 @@
         "directory": "assets",
         "extension": ".js",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2285000,
-        "maxRawBytes": 2350000,
-        "expectedBrotliBytes": 596000,
-        "maxBrotliBytes": 615000
+        "expectedRawBytes": 2175000,
+        "maxRawBytes": 2213000,
+        "expectedBrotliBytes": 574000,
+        "maxBrotliBytes": 582000
       },
       {
         "name": "CSS",
@@ -27,8 +27,8 @@
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 221000,
         "maxRawBytes": 226000,
-        "expectedBrotliBytes": 36500,
-        "maxBrotliBytes": 37400
+        "expectedBrotliBytes": 35300,
+        "maxBrotliBytes": 36000
       },
       {
         "name": "WASM",
