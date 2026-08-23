@@ -1473,9 +1473,9 @@ pub use command_args::{
     BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, ChecksumCommand,
     CompressCommand, ExtractCommand, IdentifyCommand, IngestCommand, PATCH_APPLY_ABOUT,
     PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand,
-    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,
+    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand,
     SaveExportSchemaCommand, SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand,
-    SaveSetCommand,
+    SaveSetCommand, TrimCommand,
 };
 
 mod expect_tokens;

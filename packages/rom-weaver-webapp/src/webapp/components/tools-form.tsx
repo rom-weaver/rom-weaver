@@ -1,5 +1,5 @@
 import { Download, RotateCcw, Wrench } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -7,11 +7,11 @@ import { FileCard } from "../../public/react/components/ds/file-card.tsx";
 import { useFlatTransitionFlag } from "../../public/react/components/ds/flat-transition.ts";
 import { NeedsInput, StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
-import { SaveEditor } from "./save-editor.tsx";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 
 const TOOLS_ACTIVITY_KEY = "tools";
+const SaveEditor = lazy(() => import("./save-editor.tsx").then((module) => ({ default: module.SaveEditor })));
 
 const restoredFileName = (name: string) => {
   const dot = name.lastIndexOf(".");
@@ -221,7 +221,12 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
         id="panel-tools-save-editor"
         role="tabpanel"
       >
-        <SaveEditor onSessionChange={setSaveSessionActive} pageDrop={activeTool === "save-editor" ? pageDrop : null} />
+        <Suspense fallback={<p role="status">Loading Save Editor…</p>}>
+          <SaveEditor
+            onSessionChange={setSaveSessionActive}
+            pageDrop={activeTool === "save-editor" ? pageDrop : null}
+          />
+        </Suspense>
       </div>
       <div
         aria-labelledby="tab-tools-ppf-undo"
