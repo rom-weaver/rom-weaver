@@ -29,6 +29,7 @@
 
   .rw-app .cheat-database-icon svg,
   .rw-app .cheat-search svg,
+  .rw-app .local-cheat-file svg,
   .rw-app .manual-cheat-toggle svg {
     width: 1.15rem;
     height: 1.15rem;
@@ -223,12 +224,33 @@
   }
 
   .rw-app .cheat-game-picker,
+  .rw-app .local-cheat-file,
+  .rw-app .local-cheat-file label,
   .rw-app .manual-cheat form,
   .rw-app .manual-cheat form > label,
   .rw-app .manual-cheat-options > label {
     display: grid;
     gap: 0.35rem;
     min-width: 0;
+  }
+
+  .rw-app .local-cheat-file {
+    gap: 0.4rem;
+    padding: 0.75rem;
+    border: 1px solid var(--line, currentColor);
+  }
+
+  .rw-app .local-cheat-file label > span {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+    font-weight: 650;
+  }
+
+  .rw-app .local-cheat-file input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.75rem;
   }
 
   .rw-app .cheat-game-picker select,

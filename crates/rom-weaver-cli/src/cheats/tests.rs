@@ -173,6 +173,52 @@ fn xploder_split_keeps_words_and_gba_rom_patch_lines_together() {
         split_xploder_codes("00000000 18000004 0000ABCD 00000000"),
         vec!["00000000180000040000ABCD00000000"]
     );
+    assert_eq!(
+        split_xploder_codes("00000000+18019F12+00002006+00000000"),
+        vec!["0000000018019F120000200600000000"]
+    );
+    assert_eq!(
+        split_xploder_codes("3200E924+0096+330034B8+0096"),
+        vec!["3200E9240096", "330034B80096"]
+    );
+}
+
+#[test]
+fn plus_separated_gba_rom_patch_is_bakeable() {
+    let mut entry = record(
+        CheatSystem::GameBoyAdvance,
+        "00000000+18000004+0000ABCD+00000000",
+    );
+    entry.code_kind = Some(CheatKind::Xploder);
+    assert!(matches!(
+        classify_record(&[0; 0x20], &entry).resolution,
+        CheatResolution::RomBakeable { .. }
+    ));
+}
+
+#[test]
+fn gba_native_runtime_semantics_stay_available_for_export() {
+    for code in ["000084F5 000A", "100193C0 0007", "D0000000 0000"] {
+        let mut entry = record(CheatSystem::GameBoyAdvance, code);
+        entry.code_kind = Some(CheatKind::Xploder);
+        let classified = classify_record(&vec![0; 0x100], &entry);
+        assert!(
+            matches!(classified.resolution, CheatResolution::Runtime { .. }),
+            "{code}: {:?}",
+            classified.resolution
+        );
+        assert_eq!(classified.detected_kind, Some(CheatKind::Xploder));
+    }
+}
+
+#[test]
+fn gba_malformed_native_code_stays_unsupported() {
+    let mut entry = record(CheatSystem::GameBoyAdvance, "not hex");
+    entry.code_kind = Some(CheatKind::Xploder);
+    assert!(matches!(
+        classify_record(&vec![0; 0x100], &entry).resolution,
+        CheatResolution::Unsupported { .. }
+    ));
 }
 
 // --- kind inference --------------------------------------------------------
