@@ -39,6 +39,7 @@ type SharedRomSourceState<TRole extends SharedRomSourceRole = SharedRomSourceRol
   checksums?: unknown;
   checksumVariants?: ChecksumVariant[];
   checksumTimeMs?: number;
+  identification?: unknown;
   romProbe?: unknown;
   romType?: unknown;
 };
