@@ -10,7 +10,7 @@ import type {
 } from "../../platform/browser/browser-api.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { identifySourceMismatch, identifySourceMismatchMessage } from "../../presentation/identify-agreement.ts";
-import { identifyOutputNameSuggestion } from "../../presentation/identify-title.ts";
+import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
@@ -487,7 +487,14 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const generatedOutputSource = displayedModifiedInfo?.fileName
     ? new File([], displayedModifiedInfo.fileName)
     : modified || (displayedOriginalInfo?.fileName ? new File([], displayedOriginalInfo.fileName) : original);
-  const generatedOutputName = configuredOutputName || getDefaultCreateOutputName(generatedOutputSource);
+  // The patch is named after the ROM it patches, so the original's title is the
+  // one that names it - the modified ROM is a hack and rarely has a record.
+  const identifiedOutputTitle = identifiedOutputBaseName(originalState?.identification);
+  const useIdentifiedOutputName = settings.output?.identifiedName !== false;
+  const generatedOutputName =
+    configuredOutputName ||
+    (useIdentifiedOutputName ? identifiedOutputTitle : null) ||
+    getDefaultCreateOutputName(generatedOutputSource);
   const resolvedOutputName = outputName.trim() || generatedOutputName;
   const executionOutputName = resolveCreateExecutionOutputName(resolvedOutputName, patchType);
   const createCompression = (() => {
@@ -1113,12 +1120,11 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
 
   const sourceMismatch = identifySourceMismatch(originalState?.identification, modifiedState?.identification);
-  // The patch is named after the ROM it patches, so the original's title is the
-  // one worth offering - the modified ROM is a hack and rarely has a record.
-  const outputNameSuggestion = identifyOutputNameSuggestion(originalState?.identification, resolvedOutputName);
-  const applyOutputNameSuggestion = (name: string) => {
-    setOutputName(name);
-    updateSettings({ ...settings, output: { ...settings.output, outputName: name } });
+  // Switching the naming source discards any hand-typed name: the toggle picks
+  // which automatic name is used, and a manual name would hide the result.
+  const setUseIdentifiedOutputName = (on: boolean) => {
+    setOutputName("");
+    updateSettings({ ...settings, output: { ...settings.output, identifiedName: on, outputName: undefined } });
   };
 
   const createModel = (): CreatePatchFormViewModel => ({
@@ -1288,8 +1294,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         </InfoPopover>
       ),
       meta: createTimingText ? <span className="t">{createTimingText}</span> : undefined,
-      nameSuggestion: outputNameSuggestion
-        ? { name: outputNameSuggestion, onApply: () => applyOutputNameSuggestion(outputNameSuggestion) }
+      nameSource: identifiedOutputTitle
+        ? { identifiedName: identifiedOutputTitle, on: useIdentifiedOutputName, onChange: setUseIdentifiedOutputName }
         : null,
       notice:
         message && messagePlacement === "output" ? (

@@ -44,26 +44,27 @@ describe("OutputCard double-extension warning", () => {
   });
 });
 
-describe("OutputCard identified-name suggestion", () => {
-  it("writes the suggested name back through onFileNameChange", () => {
-    const applied: string[] = [];
+describe("OutputCard identified-name toggle", () => {
+  it("reports the switch back through onChange", () => {
+    const changes: boolean[] = [];
     const { container } = render(
       <OutputCard
         {...baseProps}
-        fileName="rom_final"
-        nameSuggestion={{ name: "Tetris (USA)", onApply: () => applied.push("Tetris (USA)") }}
+        fileName="Tetris (USA)"
+        nameSource={{ identifiedName: "Tetris (USA)", on: true, onChange: (on) => changes.push(on) }}
       />,
     );
-    const button = container.querySelector<HTMLButtonElement>(".outname-suggest-btn");
-    if (!button) throw new Error("The suggestion button did not render.");
-    expect(button.textContent).toContain("Tetris (USA)");
+    const toggle = container.querySelector<HTMLInputElement>('.outname-source input[type="checkbox"]');
+    if (!toggle) throw new Error("The naming toggle did not render.");
+    expect(toggle.checked).toBe(true);
+    expect(container.querySelector(".outname-source")?.textContent).toContain("Tetris (USA)");
 
-    fireEvent.click(button);
-    expect(applied).toEqual(["Tetris (USA)"]);
+    fireEvent.click(toggle);
+    expect(changes).toEqual([false]);
   });
 
-  it("renders nothing when no suggestion is offered", () => {
-    const { container } = render(<OutputCard {...baseProps} fileName="rom_final" nameSuggestion={null} />);
-    expect(container.querySelector(".outname-suggest")).toBeNull();
+  it("renders nothing when the ROM has no identified title", () => {
+    const { container } = render(<OutputCard {...baseProps} fileName="rom_final" nameSource={null} />);
+    expect(container.querySelector(".outname-source")).toBeNull();
   });
 });

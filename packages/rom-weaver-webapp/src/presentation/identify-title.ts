@@ -97,20 +97,15 @@ const uniqueIdentifyTitles = (names: readonly string[]): string[] => [
 ];
 
 /**
- * The output-name the identified ROM suggests, or nothing. A single confident
- * match is the only case worth offering: an ambiguous result has no one answer,
- * and re-offering the name already in the field is noise.
+ * The base name automatic output names use when the ROM was identified, or
+ * nothing. Only a single confident match qualifies: an ambiguous result has no
+ * one answer, and `unknown`/`unavailable` carry no title at all.
  */
-const identifyOutputNameSuggestion = (
-  identification: ParsedIdentifyResolution | undefined,
-  currentName: string,
-): string | null => {
+const identifiedOutputBaseName = (identification: ParsedIdentifyResolution | undefined): string | null => {
   if (identification?.status !== "matched") return null;
   const titles = uniqueIdentifyTitles(identification.matches.map((match) => match.name));
   if (titles.length !== 1) return null;
-  const suggestion = identifyOutputBaseName(titles[0] || "");
-  if (!suggestion || suggestion === currentName.trim()) return null;
-  return suggestion;
+  return identifyOutputBaseName(titles[0] || "") || null;
 };
 
-export { formatIdentifyTitle, identifyOutputNameSuggestion, uniqueIdentifyTitles };
+export { formatIdentifyTitle, identifiedOutputBaseName, uniqueIdentifyTitles };

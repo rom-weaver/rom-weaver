@@ -17,6 +17,7 @@ import type {
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
+import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
@@ -259,8 +260,8 @@ const getTrimOutputExtension = (sourceFileName: string, outputFormat: string, se
 
 // The filename field holds the stem only - the format selector owns the
 // extension, which resolveTrimExecutionOutputName appends at run time.
-const getDefaultTrimOutputName = (sourceFileName: string) =>
-  appendTrimmedMarker(getFileNameStem(sourceFileName) || "trimmed");
+const getDefaultTrimOutputName = (sourceFileName: string, identifiedBase?: string | null) =>
+  appendTrimmedMarker(identifiedBase || getFileNameStem(sourceFileName) || "trimmed");
 
 const ensureTrimmedOutputName = (outputName: string, sourceFileName: string) => {
   const normalizedOutputName = outputName.trim();
@@ -623,7 +624,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   });
   const resolvedOutputFormat = configuredOutputFormat || automaticOutputFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
-  const generatedOutputName = configuredOutputName || (source ? getDefaultTrimOutputName(resolvedSourceFileName) : "");
+  const identifiedOutputTitle = identifiedOutputBaseName(sourceState?.identification);
+  const useIdentifiedOutputName = settings.output?.identifiedName !== false;
+  const generatedOutputName =
+    configuredOutputName ||
+    (source
+      ? getDefaultTrimOutputName(resolvedSourceFileName, useIdentifiedOutputName ? identifiedOutputTitle : null)
+      : "");
   const rawResolvedOutputName = outputName.trim() || generatedOutputName;
   const resolvedOutputName = ensureTrimmedOutputName(rawResolvedOutputName, resolvedSourceFileName);
   const executionOutputName = resolveTrimExecutionOutputName(
@@ -1148,6 +1155,21 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       />
     ),
     num: "0x03",
+    nameSource: identifiedOutputTitle
+      ? {
+          identifiedName: identifiedOutputTitle,
+          on: useIdentifiedOutputName,
+          // Switching the naming source discards any hand-typed name: the toggle
+          // picks which automatic name is used, and a manual name would hide it.
+          onChange: (on: boolean) => {
+            setOutputName("");
+            updateSettings({
+              ...settings,
+              output: { ...settings.output, identifiedName: on, outputName: undefined },
+            });
+          },
+        }
+      : null,
     onFileNameChange: (value) => {
       setOutputName(value);
       updateSettings({

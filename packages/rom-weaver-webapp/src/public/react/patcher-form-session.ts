@@ -5,6 +5,7 @@ import {
 } from "../../lib/compression/container-format-registry.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
+import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult } from "../../types/workflow-runtime-types.ts";
@@ -299,7 +300,17 @@ const useLocalApplyPatchFormSession = ({
   ]);
   const { getKey: getInputKey } = useStableSourceKeys(effectiveInputs, "input");
   const { getKey: getPatchKey } = useStableSourceKeys(activePatches, "patch");
-  const generatedOutputName = getGeneratedOutputName(effectiveInputs[0], outputPatches, activeSettings.output || {});
+  // Only a single-ROM apply has one title to name the output after; a multi-ROM
+  // run has no single answer.
+  const identifiedTitle =
+    getLogicalRomInputCount(romInputs) === 1 ? identifiedOutputBaseName(romInputs[0]?.info.identification) : null;
+  const identifiedOutputBase = activeSettings.output?.identifiedName === false ? null : identifiedTitle;
+  const generatedOutputName = getGeneratedOutputName(
+    effectiveInputs[0],
+    outputPatches,
+    activeSettings.output || {},
+    identifiedOutputBase,
+  );
   const requestedOutputName = outputNameEdited ? getRequestedOutputName(outputName) : undefined;
   const currentResolvedOutputName =
     outputPatches.length && resolvedOutputName && (!resolvedOutputNameKey || resolvedOutputNameKey === outputSourceKey)
@@ -540,6 +551,7 @@ const useLocalApplyPatchFormSession = ({
         displayedCompression,
         effectiveResolvedOutputName,
         hasPendingDownload,
+        identifiedTitle,
         outputName,
         outputNameEdited,
         outputOptions,
@@ -552,6 +564,7 @@ const useLocalApplyPatchFormSession = ({
     [
       applyQueued,
       activeSettings,
+      identifiedTitle,
       applyTimingText,
       busy,
       canQueueApply,
@@ -1259,6 +1272,20 @@ const useLocalApplyPatchFormSession = ({
         commitSettings({
           ...activeSettings,
           output: { ...activeSettings.output, outputName: nextOutputName },
+        });
+      },
+      /**
+       * Switching the naming source discards any hand-typed name: the point of
+       * the toggle is to pick which automatic name is used, and a manual name
+       * would hide the result of the switch.
+       */
+      setUseIdentifiedName: (on: boolean) => {
+        clearDismissibleErrors();
+        setOutputName("");
+        setOutputNameEdited(false);
+        commitSettings({
+          ...activeSettings,
+          output: { ...activeSettings.output, identifiedName: on, outputName: undefined },
         });
       },
       setOutputCompression: (value: string) => {

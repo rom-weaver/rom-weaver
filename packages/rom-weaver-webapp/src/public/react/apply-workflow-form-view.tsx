@@ -40,7 +40,7 @@ import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./co
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { IDENTIFY_STATUS_LABEL } from "../../presentation/identify-status.ts";
-import { formatIdentifyTitle, identifyOutputNameSuggestion } from "../../presentation/identify-title.ts";
+import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
 import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
@@ -2010,13 +2010,6 @@ function ApplyWorkflowFormView({
       Add patches in <b className="hexref mono">0x01</b> or click for any input
     </NeedsInput>
   );
-  // Only a single-ROM apply has one title to name the output after; a multi-ROM
-  // or multi-track run has no single answer.
-  const outputNameSuggestion =
-    romInputs.length === 1
-      ? identifyOutputNameSuggestion(romInputs[0]?.info.identification, outputState.displayFileName)
-      : null;
-
   const renderOutputAction = (
     <ApplyOutputAction
       applyTotalTime={applyTotalTime}
@@ -2231,11 +2224,12 @@ function ApplyWorkflowFormView({
               </InfoPopover>
             }
             meta={renderApplyTimingMeta(applyDone, outputState.applyTiming, outputState.compressTiming)}
-            nameSuggestion={
-              outputNameSuggestion
+            nameSource={
+              outputState.identifiedName
                 ? {
-                    name: outputNameSuggestion,
-                    onApply: () => controllers.output.setDisplayFileName(outputNameSuggestion),
+                    identifiedName: outputState.identifiedName.name,
+                    on: outputState.identifiedName.on,
+                    onChange: (on) => controllers.output.setUseIdentifiedName(on),
                   }
                 : null
             }

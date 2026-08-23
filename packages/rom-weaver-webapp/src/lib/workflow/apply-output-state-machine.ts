@@ -6,6 +6,7 @@ import {
   resolveAutomaticCompressionFormat,
 } from "../compression/container-format-registry.ts";
 import { appendFileNameExtension, getFileNameWithoutExtension, stripFileNameQuery } from "../input/path-utils.ts";
+import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { buildPatchedOutputBaseName } from "../output/output-name-composition.ts";
 import { getFileNameExtension } from "../path-utils.ts";
 import type { InputSession } from "./apply-workflow-state.ts";
@@ -116,7 +117,7 @@ const recomputeApplyOutputState = (
   },
 ): void => {
   if (!state.manualOutputFormat) state.outputFormat = resolveAutomaticFormat(inputSession, settings);
-  if (!state.manualOutputName) state.outputName = buildAutomaticOutputName(state, input, patchOutputNames);
+  if (!state.manualOutputName) state.outputName = buildAutomaticOutputName(state, input, patchOutputNames, settings);
 };
 
 // A multi-track disc's "primary" resolved file is a track (e.g. `track01.bin`), a poor output name.
@@ -134,13 +135,40 @@ const getDiscOutputFileName = (input: ApplyWorkflowInputState): string | undefin
   );
 };
 
+/**
+ * Disc tracks share a `groupId`, so a multi-track disc is ONE logical ROM while
+ * two loose ROMs are two. Mirrors `getLogicalRomInputCount`, which gates the
+ * form's naming toggle - the two MUST agree or the output gets a title the user
+ * has no control to switch off.
+ */
+const hasSingleLogicalRom = (input: ApplyWorkflowInputState): boolean => {
+  const resolved = input.resolvedInputs;
+  if (!resolved?.length) return true;
+  const groups = new Set<string>();
+  let ungrouped = 0;
+  for (const entry of resolved) {
+    if (entry.kind === "cue" || entry.kind === "gdi") continue;
+    const groupId = String(entry.groupId || "").trim();
+    if (groupId) groups.add(groupId);
+    else ungrouped += 1;
+  }
+  return groups.size + ungrouped <= 1;
+};
+
 const buildAutomaticOutputName = (
   state: ApplyOutputState,
   input: ApplyWorkflowInputState | null,
   patchOutputNames: string[],
+  settings: Partial<ApplySettings>,
 ): string => {
   if (!input?.fileName) return state.outputName;
-  const inputBase = getFileNameWithoutExtension(getDiscOutputFileName(input) || input.fileName) || "patched";
+  // The identified title replaces only the base; the patch labels still follow it.
+  const identifiedBase =
+    settings.output?.identifiedName === false || !hasSingleLogicalRom(input)
+      ? null
+      : identifiedOutputBaseName(input.identification);
+  const inputBase =
+    identifiedBase || getFileNameWithoutExtension(getDiscOutputFileName(input) || input.fileName) || "patched";
   const patchNames = patchOutputNames
     .map((fileName) => {
       const trimmedName = String(fileName || "").trim();

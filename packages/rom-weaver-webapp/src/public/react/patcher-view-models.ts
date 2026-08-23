@@ -195,6 +195,8 @@ interface OutputViewStateInput {
   displayedCompression: CompressionFormat;
   effectiveResolvedOutputName: string;
   hasPendingDownload: boolean;
+  /** The ROM's identified title, or null when it has no single confident match. */
+  identifiedTitle: string | null;
   outputName: string;
   outputNameEdited: boolean;
   outputOptions: OutputOption[];
@@ -218,6 +220,7 @@ const buildOutputViewState = ({
   displayedCompression,
   effectiveResolvedOutputName,
   hasPendingDownload,
+  identifiedTitle,
   outputName,
   outputNameEdited,
   outputOptions,
@@ -246,6 +249,9 @@ const buildOutputViewState = ({
   compressTiming: compressTimingText,
   disabled: disabled || busy,
   displayFileName: outputNameEdited ? outputName : effectiveResolvedOutputName,
+  identifiedName: identifiedTitle
+    ? { name: identifiedTitle, on: activeSettings.output?.identifiedName !== false }
+    : null,
   downloadSummary: hasPendingDownload
     ? {
         format: selectedOutputOptionLabel || displayedCompression?.toUpperCase() || undefined,

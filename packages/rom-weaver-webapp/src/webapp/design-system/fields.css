@@ -201,13 +201,16 @@
 .rw-app .outname-ext-warn code {
   font-family: var(--mono);
 }
-.rw-app .outname-suggest {
+.rw-app .outname-source {
   margin-block-start: var(--sp-xs);
 }
-.rw-app .outname-suggest-btn {
-  max-width: 100%;
+.rw-app .outname-source svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--thread-text);
 }
-.rw-app .outname-suggest-name {
+.rw-app .outname-source-name {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--thread-text);

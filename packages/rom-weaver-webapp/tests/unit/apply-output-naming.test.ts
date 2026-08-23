@@ -5,6 +5,8 @@ import {
 } from "../../src/lib/workflow/apply-output-state-machine.ts";
 import { resolvePatchOutputName } from "../../src/lib/workflow/apply-patch-output-naming.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowResolvedInput } from "../../src/types/apply-workflow.ts";
+import type { ParsedIdentifyResolution } from "../../src/types/identify.ts";
+import type { ApplySettings } from "../../src/types/settings.ts";
 
 // Pins the controller's automatic apply output-name derivation - the single source of truth the
 // apply form reads from `snapshot.output`. The disc cases guard the multi-track behaviour the form
@@ -27,11 +29,26 @@ const makeResolved = (overrides: Partial<ApplyWorkflowResolvedInput> = {}): Appl
   ...overrides,
 });
 
-const autoOutputName = (input: ApplyWorkflowInputState, patchOutputNames: string[] = []): string => {
-  const state = createApplyOutputState({});
-  recomputeApplyOutputState(state, {}, { input, inputSession: undefined, patchOutputNames });
+const autoOutputName = (
+  input: ApplyWorkflowInputState,
+  patchOutputNames: string[] = [],
+  settings: Partial<ApplySettings> = {},
+): string => {
+  const state = createApplyOutputState(settings);
+  recomputeApplyOutputState(state, settings, { input, inputSession: undefined, patchOutputNames });
   return state.outputName;
 };
+
+const identified = (status: ParsedIdentifyResolution["status"], ...names: string[]): ParsedIdentifyResolution => ({
+  matches: names.map((name) => ({
+    algorithm: "crc32",
+    database: "No-Intro",
+    name,
+    platform: "Nintendo Game Boy Advance",
+    variant: "raw",
+  })),
+  status,
+});
 
 describe("apply automatic output name", () => {
   it("uses the input stem for a plain ROM with no patches", () => {
@@ -84,5 +101,58 @@ describe("apply automatic output name", () => {
     state.outputName = "preserved";
     recomputeApplyOutputState(state, {}, { input: null, inputSession: undefined, patchOutputNames: [] });
     expect(state.outputName).toBe("preserved");
+  });
+});
+
+describe("apply automatic output name from the identified title", () => {
+  const input = makeInput({
+    fileName: "rom_final_v2.gba",
+    identification: identified("matched", "Pokemon - Emerald Version (UE) [!]"),
+  });
+
+  it("names the output after the title by default", () => {
+    expect(autoOutputName(input)).toBe("Pokemon - Emerald Version (USA, Europe)");
+  });
+
+  it("keeps the patch labels after the title", () => {
+    expect(autoOutputName(input, ["Randomizer v3"])).toBe("Pokemon - Emerald Version (USA, Europe) [Randomizer v3]");
+  });
+
+  it("falls back to the file stem when the setting is off", () => {
+    expect(autoOutputName(input, [], { output: { identifiedName: false } })).toBe("rom_final_v2");
+  });
+
+  it("leaves the file stem alone for two loose ROMs, which have no single title", () => {
+    expect(
+      autoOutputName(
+        makeInput({
+          fileName: "rom_final_v2.gba",
+          identification: identified("matched", "Pokemon - Emerald Version (UE) [!]"),
+          resolvedInputs: [makeResolved({ id: "a", kind: "rom" }), makeResolved({ id: "b", kind: "rom" })],
+        }),
+      ),
+    ).toBe("rom_final_v2");
+  });
+
+  it("names a multi-track disc after its title - the tracks are one logical ROM", () => {
+    expect(
+      autoOutputName(
+        makeInput({
+          fileName: "disc.cue",
+          identification: identified("matched", "Some Game (U) [!]"),
+          resolvedInputs: [
+            makeResolved({ groupId: "disc-1", id: "t1", kind: "track" }),
+            makeResolved({ groupId: "disc-1", id: "t2", kind: "track" }),
+            makeResolved({ id: "sheet", kind: "cue" }),
+          ],
+        }),
+      ),
+    ).toBe("Some Game (USA)");
+  });
+
+  it("falls back to the file stem without one confident title", () => {
+    expect(autoOutputName(makeInput({ fileName: "rom_final_v2.gba", identification: identified("unknown") }))).toBe(
+      "rom_final_v2",
+    );
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatIdentifyTitle,
-  identifyOutputNameSuggestion,
+  identifiedOutputBaseName,
   uniqueIdentifyTitles,
 } from "../../src/presentation/identify-title.ts";
 import type { ParsedIdentifyResolution } from "../../src/types/identify.ts";
@@ -46,28 +46,20 @@ const resolution = (status: ParsedIdentifyResolution["status"], ...names: string
   status,
 });
 
-describe("identifyOutputNameSuggestion", () => {
-  it("offers the formatted title of a single confident match", () => {
-    expect(identifyOutputNameSuggestion(resolution("matched", "Tetris (JUE) [!]"), "tetris_rom")).toBe(
-      "Tetris (Japan, USA, Europe)",
-    );
+describe("identifiedOutputBaseName", () => {
+  it("formats the title of a single confident match", () => {
+    expect(identifiedOutputBaseName(resolution("matched", "Tetris (JUE) [!]"))).toBe("Tetris (Japan, USA, Europe)");
   });
 
   it("removes the characters a filename cannot hold and keeps GoodTools tags", () => {
-    expect(identifyOutputNameSuggestion(resolution("matched", "Game: Part 1/2 [T+Eng]"), "rom")).toBe(
-      "Game Part 1 2 [T+Eng]",
-    );
+    expect(identifiedOutputBaseName(resolution("matched", "Game: Part 1/2 [T+Eng]"))).toBe("Game Part 1 2 [T+Eng]");
   });
 
-  it("offers nothing when the field already holds the suggestion", () => {
-    expect(identifyOutputNameSuggestion(resolution("matched", "Tetris (U) [!]"), " Tetris (USA) ")).toBeNull();
-  });
-
-  it("offers nothing without one confident answer", () => {
-    expect(identifyOutputNameSuggestion(resolution("ambiguous", "Tetris (USA)"), "rom")).toBeNull();
-    expect(identifyOutputNameSuggestion(resolution("unknown"), "rom")).toBeNull();
-    expect(identifyOutputNameSuggestion(resolution("unavailable"), "rom")).toBeNull();
-    expect(identifyOutputNameSuggestion(undefined, "rom")).toBeNull();
-    expect(identifyOutputNameSuggestion(resolution("matched", "Tetris (USA)", "Alleyway (USA)"), "rom")).toBeNull();
+  it("names nothing without one confident answer", () => {
+    expect(identifiedOutputBaseName(resolution("ambiguous", "Tetris (USA)"))).toBeNull();
+    expect(identifiedOutputBaseName(resolution("unknown"))).toBeNull();
+    expect(identifiedOutputBaseName(resolution("unavailable"))).toBeNull();
+    expect(identifiedOutputBaseName(undefined)).toBeNull();
+    expect(identifiedOutputBaseName(resolution("matched", "Tetris (USA)", "Alleyway (USA)"))).toBeNull();
   });
 });
