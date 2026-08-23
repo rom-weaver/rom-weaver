@@ -20,7 +20,7 @@ import type {
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
-import type { ClassifiedCheatRecord, RuntimeCheatRecord } from "../cheats/model.ts";
+import type { ClassifiedCheatRecord, LocalCheatFileImport, RuntimeCheatRecord } from "../cheats/model.ts";
 import type { CheatWriteConflict } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import type { CompressionLevelProfile, PatchBasisMode, PatchValidationPlan } from "../../wasm/index.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
@@ -937,6 +937,7 @@ const parseCheatCommandResult = (result: RomWeaverJsonResult): Omit<RomWeaverChe
 };
 
 const invokeRomWeaverCheatWorker = async (input: {
+  importedFile?: LocalCheatFileImport;
   inputPath: string;
   knownInputPaths?: string[];
   logLevel?: LogLevel | string;
@@ -947,9 +948,16 @@ const invokeRomWeaverCheatWorker = async (input: {
 }): Promise<RomWeaverCheatResult> => {
   const run = async (outputPath?: string) => {
     const command = createRomWeaverCommand("cheat", {
+      ...(input.importedFile
+        ? {
+            chtFileName: input.importedFile.fileName,
+            chtSource: input.importedFile.content,
+            chtSystem: input.importedFile.system,
+          }
+        : {}),
       input: input.inputPath,
       records: input.records,
-      ...(input.selectedIds?.length ? { selected_ids: input.selectedIds } : {}),
+      ...(input.selectedIds?.length ? { selectedIds: input.selectedIds } : {}),
       ...(outputPath ? { output: outputPath } : {}),
     });
     const result = await runRomWeaverJson(

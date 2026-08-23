@@ -26,6 +26,7 @@ Resolve a reported ROM-write conflict before Apply. ROMWeaver does not let the l
 ## Table of contents
 
 - [Load the cheat file in RetroArch](#load-the-cheat-file-in-retroarch)
+- [Import a local RetroArch cheat file](#import-a-local-retroarch-cheat-file)
 - [Add a code manually](#add-a-code-manually)
 - [Use the database offline](#use-the-database-offline)
 
@@ -43,6 +44,18 @@ Resolve a reported ROM-write conflict before Apply. ROMWeaver does not let the l
 Core support differs. ROMWeaver preserves native and structured fields, but it cannot test every core or emulator.
 
 See the [RetroArch cheat guide](https://docs.libretro.com/guides/cheat-codes/).
+
+## Import a local RetroArch cheat file
+
+1. Add the matching ROM to the Apply page.
+2. Select **Import RetroArch .cht** in the Cheats section.
+3. Choose a local `.cht` file for the detected system.
+4. Review each imported entry and its delivery badge.
+5. Select the entries that you want.
+
+ROMWeaver reads the file in the browser worker. It does not upload the file, ROM, checksum, filename, or selections.
+
+The import keeps native codes, structured memory fields, and unknown entry fields. It does not select imported entries automatically.
 
 ## Add a code manually
 

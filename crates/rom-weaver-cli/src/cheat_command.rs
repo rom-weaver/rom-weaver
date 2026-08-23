@@ -32,8 +32,47 @@ impl CliApp {
             Ok(rom) => rom,
             Err(error) => return self.finish("cheat", fail(error.to_string())),
         };
-        let classified = args
-            .records
+        let mut records = args.records.clone();
+        if let Some(source) = args.cht_source.as_deref() {
+            let Some(system) = args.cht_system else {
+                return self.finish(
+                    "cheat",
+                    fail("chtSystem is required when chtSource is provided".to_string()),
+                );
+            };
+            let source_file = args
+                .cht_file_name
+                .as_deref()
+                .and_then(|name| Path::new(name).file_name())
+                .and_then(|name| name.to_str())
+                .filter(|name| !name.is_empty())
+                .unwrap_or("imported.cht");
+            let imported = match crate::cheats::parse_retroarch_cht(
+                source,
+                crate::cheats::RetroArchParseOptions {
+                    system,
+                    game_id: "local-import",
+                    source_file,
+                    source_revision: "local-import",
+                },
+            ) {
+                Ok(records) if !records.is_empty() => records,
+                Ok(_) => {
+                    return self.finish(
+                        "cheat",
+                        fail("the RetroArch cheat file contains no cheat entries".to_string()),
+                    );
+                }
+                Err(error) => return self.finish("cheat", fail(error.to_string())),
+            };
+            records.extend(imported);
+        } else if args.cht_file_name.is_some() || args.cht_system.is_some() {
+            return self.finish(
+                "cheat",
+                fail("chtSource is required for RetroArch cheat import".to_string()),
+            );
+        }
+        let classified = records
             .iter()
             .map(|record| crate::cheats::classify_record(&rom, record))
             .collect::<Vec<_>>();

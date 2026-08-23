@@ -22,6 +22,7 @@
 | Sega Genesis / Mega Drive | Genesis | Yes | Yes |
 | Game Boy | Game Boy | Yes | Yes |
 | Game Boy Color | Compatible Game Boy codes | Yes | Yes |
+| Game Boy Advance | Xploder-compatible codes | Yes | Yes |
 
 ROMWeaver does not offer database systems outside this table.
 
@@ -73,6 +74,8 @@ The service worker caches a shard after its first successful load. The shard the
 ## Preserved source fields
 
 Each imported record keeps the original code, every `cheatN_*` value, unknown fields, source file, source index, and source revision.
+
+The browser also accepts local RetroArch `.cht` files up to 16 MiB. Rust parses and classifies these records in the worker.
 
 The exporter renumbers selected entries from zero. It sets each selected entry to enabled and preserves the other fields.
 

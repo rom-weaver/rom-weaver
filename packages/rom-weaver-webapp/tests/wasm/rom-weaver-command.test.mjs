@@ -55,12 +55,16 @@ describe("rom-weaver command boundary helpers", () => {
 
   it("builds cheat commands and collects only the local ROM path", () => {
     const command = createRomWeaverCommand("cheat", {
+      chtFileName: "private.cht",
+      chtSource: "cheats = 0\n",
+      chtSystem: "nes",
       input: "/work/game.nes",
       records: [],
       selectedIds: [],
     });
 
     expect(getRomWeaverCommandLabel(command)).toBe("cheat");
+    expect(command.args.chtFileName).toBe("private.cht");
     expect(collectRomWeaverRunInputPaths(command)).toEqual(["/work/game.nes"]);
     expect(readRomWeaverRequestedThreadCount(command)).toBeNull();
   });

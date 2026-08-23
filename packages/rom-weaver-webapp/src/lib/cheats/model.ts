@@ -1,8 +1,8 @@
-const CHEAT_DATABASE_SYSTEMS = ["nes", "snes", "genesis", "gameboy", "gameboy-color"] as const;
+const CHEAT_DATABASE_SYSTEMS = ["nes", "snes", "genesis", "gameboy", "gameboy-color", "gameboyadvance"] as const;
 
 export type CheatDatabaseSystem = (typeof CHEAT_DATABASE_SYSTEMS)[number];
 
-type CheatCodeKind = "game-genie" | "pro-action-replay";
+type CheatCodeKind = "game-genie" | "pro-action-replay" | "xploder";
 type RustCheatSystem = CheatDatabaseSystem;
 
 export type RuntimeCheatRecord = {
@@ -111,7 +111,7 @@ export type CheatGameMatch =
 
 export type CheatFilter = "all" | "rom" | "runtime" | "requires-parameter";
 
-export type ManualCheatKindOverride = "auto" | "game-genie" | "pro-action-replay";
+export type ManualCheatKindOverride = "auto" | CheatCodeKind;
 
 type ManualCheatRequest = {
   code: string;
@@ -132,6 +132,14 @@ export type DatabaseCheatClassifier = (
   records: CheatDatabaseRecord[],
   system: CheatDatabaseSystem,
 ) => Promise<ClassifiedCheatRecord[]>;
+
+export type LocalCheatFileImporter = (request: {
+  content: string;
+  fileName: string;
+  system: CheatDatabaseSystem;
+}) => Promise<ClassifiedCheatRecord[]>;
+
+export type LocalCheatFileImport = Parameters<LocalCheatFileImporter>[0];
 
 export const isCheatDatabaseSystem = (value: string | undefined): value is CheatDatabaseSystem =>
   CHEAT_DATABASE_SYSTEMS.some((system) => system === value);

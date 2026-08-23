@@ -2872,6 +2872,19 @@ pub struct CheatCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     pub records: Vec<crate::cheats::CheatRecord>,
+    /// Raw RetroArch text for local import through the JSON/WASM boundary.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub cht_source: Option<String>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub cht_file_name: Option<String>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub cht_system: Option<crate::cheats::CheatSystem>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]

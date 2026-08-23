@@ -1,5 +1,5 @@
 import type { LargeFileVfs } from "../storage/vfs/types.ts";
-import type { ClassifiedCheatRecord, RuntimeCheatRecord } from "../lib/cheats/model.ts";
+import type { ClassifiedCheatRecord, LocalCheatFileImport, RuntimeCheatRecord } from "../lib/cheats/model.ts";
 import type {
   PatchApplyCommand,
   PatchBasisMode,
@@ -376,6 +376,7 @@ type WorkflowRuntimeBinary = {
 
 type WorkflowRuntimeCheat = {
   run: (input: {
+    importedFile?: LocalCheatFileImport;
     outputName?: string;
     records: RuntimeCheatRecord[];
     selectedIds?: string[];

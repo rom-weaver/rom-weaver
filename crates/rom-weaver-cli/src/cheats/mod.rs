@@ -218,40 +218,41 @@ pub fn split_codes(input: &str) -> Vec<&str> {
 /// A four-word GBA ROM-patch code stays together as one item.
 pub fn split_xploder_codes(input: &str) -> Vec<String> {
     let mut codes = Vec::new();
-    for segment in input.split(['+', ',', ';']) {
-        let tokens: Vec<&str> = segment.split_whitespace().collect();
-        let mut index = 0;
-        while index < tokens.len() {
-            if index + 3 < tokens.len()
-                && tokens[index].len() == 8
-                && tokens[index + 1].len() == 8
-                && tokens[index + 2].len() == 8
-                && tokens[index + 3].len() == 8
-                && tokens[index].eq_ignore_ascii_case("00000000")
-                && is_gba_rom_patch_word(tokens[index + 1])
-                && tokens[index + 3].eq_ignore_ascii_case("00000000")
-            {
-                codes.push(format!(
-                    "{}{}{}{}",
-                    tokens[index],
-                    tokens[index + 1],
-                    tokens[index + 2],
-                    tokens[index + 3]
-                ));
-                index += 4;
-                continue;
-            }
-            if index + 1 < tokens.len()
-                && tokens[index].len() == 8
-                && (tokens[index + 1].len() == 4 || tokens[index + 1].len() == 8)
-            {
-                codes.push(format!("{}{}", tokens[index], tokens[index + 1]));
-                index += 2;
-                continue;
-            }
-            codes.push(tokens[index].to_owned());
-            index += 1;
+    let tokens = input
+        .split(|character: char| matches!(character, '+' | ',' | ';') || character.is_whitespace())
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>();
+    let mut index = 0;
+    while index < tokens.len() {
+        if index + 3 < tokens.len()
+            && tokens[index].len() == 8
+            && tokens[index + 1].len() == 8
+            && tokens[index + 2].len() == 8
+            && tokens[index + 3].len() == 8
+            && tokens[index].eq_ignore_ascii_case("00000000")
+            && is_gba_rom_patch_word(tokens[index + 1])
+            && tokens[index + 3].eq_ignore_ascii_case("00000000")
+        {
+            codes.push(format!(
+                "{}{}{}{}",
+                tokens[index],
+                tokens[index + 1],
+                tokens[index + 2],
+                tokens[index + 3]
+            ));
+            index += 4;
+            continue;
         }
+        if index + 1 < tokens.len()
+            && tokens[index].len() == 8
+            && (tokens[index + 1].len() == 4 || tokens[index + 1].len() == 8)
+        {
+            codes.push(format!("{}{}", tokens[index], tokens[index + 1]));
+            index += 2;
+            continue;
+        }
+        codes.push(tokens[index].to_owned());
+        index += 1;
     }
     codes
 }
@@ -441,7 +442,20 @@ fn record_kind_hint(record: &CheatRecord) -> Option<CheatKind> {
         .map(|(_, value)| value.as_str())
         .unwrap_or_default();
     let hint = format!("{field_hint} {}", record.source_file).to_ascii_lowercase();
-    if hint.contains("game genie") || hint.contains("game-genie") {
+    if matches!(
+        record.system,
+        CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
+    ) && (hint.contains("action replay")
+        || hint.contains("action-replay")
+        || hint.contains("gameshark")
+        || hint.contains("game shark")
+        || hint.contains("xploder")
+        || hint.contains("xplorer")
+        || hint.contains("codebreaker")
+        || hint.contains("code breaker"))
+    {
+        Some(CheatKind::Xploder)
+    } else if hint.contains("game genie") || hint.contains("game-genie") {
         Some(CheatKind::GameGenie)
     } else if hint.contains("action replay")
         || hint.contains("action-replay")
@@ -458,6 +472,21 @@ fn record_kind_hint(record: &CheatRecord) -> Option<CheatKind> {
     } else {
         None
     }
+}
+
+fn preserves_native_runtime_semantics(
+    error: &RomWeaverError,
+    system: CheatSystem,
+    kind: CheatKind,
+) -> bool {
+    matches!(
+        (system, kind, error),
+        (
+            CheatSystem::GameBoyAdvance | CheatSystem::PlayStation,
+            CheatKind::Xploder,
+            RomWeaverError::ValidationCode(code)
+        ) if matches!(code.code(), "cheat_unsupported_code" | "cheat_encrypted_code")
+    )
 }
 
 fn has_structured_runtime_semantics(record: &CheatRecord) -> bool {
@@ -650,6 +679,20 @@ pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecor
         let decoded = match decode_result {
             Ok(decoded) => decoded,
             Err(error) => {
+                let fallback_kind = hinted_kind.or_else(|| {
+                    matches!(
+                        record.system,
+                        CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
+                    )
+                    .then_some(CheatKind::Xploder)
+                });
+                if fallback_kind.is_some_and(|kind| {
+                    preserves_native_runtime_semantics(&error, record.system, kind)
+                }) {
+                    runtime_count += 1;
+                    detected_kind = fallback_kind;
+                    continue;
+                }
                 return ClassifiedCheatRecord {
                     record: record.clone(),
                     resolution: CheatResolution::Unsupported {

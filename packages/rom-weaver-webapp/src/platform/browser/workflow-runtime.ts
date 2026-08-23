@@ -556,7 +556,7 @@ const createBrowserTrimRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["t
   });
 
 const createBrowserCheatRuntime = (workerIo: RuntimeWorkerIo): NonNullable<WorkflowRuntime["cheat"]> => ({
-  run: async ({ outputName, records, selectedIds, signal, source }) => {
+  run: async ({ importedFile, outputName, records, selectedIds, signal, source }) => {
     const staged = await workerIo.stageSource({
       fallbackFileName: "cheat-target.bin",
       pathPrefix: "cheat-target",
@@ -567,6 +567,7 @@ const createBrowserCheatRuntime = (workerIo: RuntimeWorkerIo): NonNullable<Workf
       const result = await invokeRomWeaverCheatWorker({
         inputPath: staged.filePath,
         knownInputPaths: [staged.filePath],
+        ...(importedFile ? { importedFile } : {}),
         ...(outputName ? { outputName } : {}),
         records,
         ...(selectedIds?.length ? { selectedIds } : {}),

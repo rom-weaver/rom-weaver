@@ -18,9 +18,17 @@ import {
 const REVISION = "4968f556a0bf749378901086646b78bc78703b88";
 const FIXTURE_ROOT = path.join(import.meta.dirname, "fixtures", "libretro-cheats");
 
-test("the supported system map names the five decoder families", () => {
-  assert.deepEqual(Object.keys(SYSTEMS), ["nes", "snes", "genesis", "gameboy", "gameboy-color"]);
+test("the supported system map names the six decoder families", () => {
+  assert.deepEqual(Object.keys(SYSTEMS), [
+    "nes",
+    "snes",
+    "genesis",
+    "gameboy",
+    "gameboyadvance",
+    "gameboy-color",
+  ]);
   assert.equal(SYSTEMS.genesis.directory, "Sega - Mega Drive - Genesis");
+  assert.equal(SYSTEMS.gameboyadvance.directory, "Nintendo - Game Boy Advance");
   assert.equal(SYSTEMS["gameboy-color"].directory, "Nintendo - Game Boy Color");
 });
 
@@ -152,6 +160,25 @@ test("release normalization groups device files without merging regions", () => 
     normalizeReleaseName("Test Game (USA) (Game Genie) (diff2).cht"),
     normalizeReleaseName("Test Game (USA).nes"),
   );
+});
+
+test("GBA device annotations use the Xploder decoder family", () => {
+  const sourceDir = mkdtempSync(path.join(os.tmpdir(), "rom-weaver-gba-kind-"));
+  const cheatDir = path.join(sourceDir, "cht", SYSTEMS.gameboyadvance.directory);
+  mkdirSync(cheatDir, { recursive: true });
+  writeFileSync(path.join(sourceDir, "LICENSE"), "fixture license\n");
+  writeFileSync(
+    path.join(cheatDir, "Public Test (USA) (Action Replay).cht"),
+    'cheat0_desc = "Lives"\ncheat0_code = "32000000 0001"\n',
+  );
+
+  const shard = buildSystemShard({
+    sourceDir,
+    sourceRevision: REVISION,
+    system: "gameboyadvance",
+  });
+
+  assert.equal(shard.games[0].cheats[0].codeKind, "xploder");
 });
 
 test("the import is deterministic and records exact manifest sizes", () => {
