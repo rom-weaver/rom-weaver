@@ -162,3 +162,83 @@ describe("TrimWorkflowController mutation exclusivity", () => {
     expect(controller.getSnapshot().busy).toBe(false);
   });
 });
+
+type ExposedChecksumController = {
+  finalizeInputStableState: (stage: unknown) => Promise<void>;
+  inputStage?: unknown;
+};
+
+const identifiedAsset = (fileName: string) => ({
+  // `_file` is the blob-backed source the checksum pass reads (see getPatchFileBlob).
+  file: { _file: new Blob([new Uint8Array(16)]), fileName, fileSize: 16 },
+  fileName,
+  id: "asset-1",
+  patchable: true,
+  size: 16,
+});
+
+/**
+ * The trim workflow ran no checksum pass at all until the ROM identification
+ * work, so its input card could never show checksums or a title.
+ */
+describe("TrimWorkflowController checksum and identify pass", () => {
+  const ingestResult = {
+    identifyUnavailable: undefined,
+    result: {
+      assets: [
+        {
+          checksums: { crc32: "deadbeef", md5: "m", sha1: "s", sha256: "t" },
+          identification: {
+            matches: [
+              {
+                algorithm: "crc32",
+                database: "No-Intro",
+                name: "Tetris (U) [!]",
+                platform: "Nintendo Game Boy",
+                variant: "raw",
+              },
+            ],
+            status: "matched",
+          },
+        },
+      ],
+      isRom: true,
+    },
+  };
+
+  const runPass = async (settings: Record<string, unknown> = {}) => {
+    const runtime = { ingest: { run: vi.fn().mockResolvedValue(ingestResult) } };
+    const controller = new TrimWorkflowController<unknown, unknown>(runtime as never, {
+      settings: settings as never,
+    });
+    const stage = {
+      ...fakeStage({ fileName: "rom_final_v2.gb", status: "ready" }),
+      parentCompressions: [],
+      preparedInputAssets: [identifiedAsset("rom_final_v2.gb")],
+    };
+    const exposed = controller as never as ExposedChecksumController;
+    await exposed.finalizeInputStableState(stage);
+    exposed.inputStage = stage;
+    return { controller, runtime, stage };
+  };
+
+  it("hashes and identifies the staged ROM", async () => {
+    const { runtime, stage } = await runPass();
+    expect(runtime.ingest.run).toHaveBeenCalledTimes(1);
+    expect(stage.state.checksums?.crc32).toBe("deadbeef");
+    expect(stage.state.identification?.status).toBe("matched");
+  });
+
+  it("names the trimmed output after the identified title", async () => {
+    const { controller } = await runPass();
+    expect(controller.getSnapshot().input?.identification?.status).toBe("matched");
+    await controller.setOutputName("");
+    expect(controller.getSnapshot().outputName).toContain("Tetris (USA) (trimmed)");
+  });
+
+  it("falls back to the file stem when the setting is off", async () => {
+    const { controller } = await runPass({ output: { identifiedName: false } });
+    await controller.setOutputName("");
+    expect(controller.getSnapshot().outputName).toContain("rom_final_v2 (trimmed)");
+  });
+});
