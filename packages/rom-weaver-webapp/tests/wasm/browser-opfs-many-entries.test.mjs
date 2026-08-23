@@ -6,6 +6,7 @@
 // it stays bounded by concurrency instead of tracking the entry count.
 
 import { describe, expect, it } from "vitest";
+import { resolveBrowserThreadPoolSizeFromCount } from "../../src/wasm/browser-wasi-thread-sizing.ts";
 import { buildStoredZip } from "./stored-zip-fixture.mjs";
 import { assertRunJsonSucceeded, joinGuestPath, withTempFixture, writeGuestFile } from "./test-helpers.mjs";
 
@@ -86,9 +87,8 @@ async function measureManyEntryExtract({ entryCount, entrySize, extraArgs = [] }
 // IdleFilePool's capacity (8) parked plus its in-flight fds. Well under the proxy's 1024-handle table.
 const MAX_EXPECTED_PEAK_HANDLES = 64;
 
-// Worker creations are bounded by concurrency too: the runner's pool (<= 20 shells) plus, for each
-// pooled parent thread, its own small nested free-list. Never by the entry count.
-const MAX_EXPECTED_THREAD_WORKERS = 25;
+// Worker creations are bounded by the requested pool size, never by the entry count.
+const MAX_EXPECTED_THREAD_WORKERS = resolveBrowserThreadPoolSizeFromCount(navigator.hardwareConcurrency);
 
 describe("many-entry archive extract", () => {
   it("keeps peak OPFS handles bounded as entry count grows", async () => {
