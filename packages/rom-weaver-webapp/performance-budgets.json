@@ -14,11 +14,37 @@
         "name": "JavaScript",
         "directory": "assets",
         "extension": ".js",
+        "excludePatterns": [
+          "assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$",
+          "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
+        ],
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 2125000,
         "maxRawBytes": 2190000,
         "expectedBrotliBytes": 561000,
         "maxBrotliBytes": 570000
+      },
+      {
+        "name": "Documentation search JavaScript",
+        "directory": "assets",
+        "extension": ".js",
+        "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
+        "requireBrotliMinBytes": 1024,
+        "expectedRawBytes": 252000,
+        "maxRawBytes": 265000,
+        "expectedBrotliBytes": 69000,
+        "maxBrotliBytes": 73000
+      },
+      {
+        "name": "Save Editor JavaScript",
+        "directory": "assets",
+        "extension": ".js",
+        "includePatterns": ["assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"],
+        "requireBrotliMinBytes": 1024,
+        "expectedRawBytes": 35000,
+        "maxRawBytes": 42000,
+        "expectedBrotliBytes": 9500,
+        "maxBrotliBytes": 11500
       },
       {
         "name": "CSS",
@@ -35,10 +61,10 @@
         "directory": "assets",
         "extension": ".wasm",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 7140000,
-        "maxRawBytes": 7350000,
-        "expectedBrotliBytes": 1885000,
-        "maxBrotliBytes": 1960000
+        "expectedRawBytes": 7285000,
+        "maxRawBytes": 7502000,
+        "expectedBrotliBytes": 1912000,
+        "maxBrotliBytes": 1989000
       }
     ]
   },
