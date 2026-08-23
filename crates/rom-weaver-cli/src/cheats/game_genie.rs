@@ -17,6 +17,11 @@ pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result
         CheatSystem::Snes => decode_snes(normalized, raw),
         CheatSystem::Genesis => decode_genesis(normalized, raw),
         CheatSystem::GameBoy => decode_gameboy(normalized, raw),
+        CheatSystem::GameBoyAdvance | CheatSystem::PlayStation => Err(coded(
+            "cheat_bad_system",
+            "Game Genie codes do not support this system",
+            raw,
+        )),
     }
 }
 
@@ -81,7 +86,7 @@ fn decode_nes(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::Nes,
         kind: CheatKind::GameGenie,
         address,
-        value: value as u16,
+        value,
         compare,
         width: 1,
     })
@@ -129,7 +134,7 @@ fn decode_snes(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::Snes,
         kind: CheatKind::GameGenie,
         address,
-        value: value as u16,
+        value,
         compare: None,
         width: 1,
     })
@@ -182,7 +187,7 @@ fn decode_genesis(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::Genesis,
         kind: CheatKind::GameGenie,
         address,
-        value,
+        value: value as u32,
         compare: None,
         width: 2,
     })
@@ -233,7 +238,7 @@ fn decode_gameboy(code: &str, raw: &str) -> Result<DecodedCode> {
         system: CheatSystem::GameBoy,
         kind: CheatKind::GameGenie,
         address,
-        value: value as u16,
+        value,
         compare,
         width: 1,
     })

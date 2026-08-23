@@ -1,4 +1,4 @@
-//! Decode Game Genie and Pro Action Replay/GameShark codes into ROM byte writes.
+//! Decode cheat codes into ROM byte writes.
 //!
 //! [`decode`] produces an address/value pair; [`resolve_writes`] maps it through
 //! [`RomLayout`] to file offsets, accounting for headers, banking, compare bytes,
@@ -9,6 +9,7 @@ use rom_weaver_core::{Result, RomWeaverError, ValidationCodeError};
 mod action_replay;
 mod game_genie;
 mod layout;
+mod xploder;
 
 #[cfg(test)]
 use layout::Mapping;
@@ -22,6 +23,8 @@ pub enum CheatSystem {
     Snes,
     Genesis,
     GameBoy,
+    GameBoyAdvance,
+    PlayStation,
 }
 
 impl CheatSystem {
@@ -32,6 +35,8 @@ impl CheatSystem {
             Self::Snes => "snes",
             Self::Genesis => "genesis",
             Self::GameBoy => "gameboy",
+            Self::GameBoyAdvance => "gba",
+            Self::PlayStation => "psx",
         }
     }
 
@@ -42,6 +47,8 @@ impl CheatSystem {
             "snes" | "sfc" | "superfamicom" => Some(Self::Snes),
             "genesis" | "megadrive" | "mega-drive" | "md" | "smd" => Some(Self::Genesis),
             "gameboy" | "gb" | "gbc" => Some(Self::GameBoy),
+            "gba" | "game-boy-advance" | "gameboy-advance" => Some(Self::GameBoyAdvance),
+            "psx" | "ps1" | "playstation" | "playstation-1" => Some(Self::PlayStation),
             _ => None,
         }
     }
@@ -53,6 +60,7 @@ impl CheatSystem {
 pub enum CheatKind {
     GameGenie,
     ProActionReplay,
+    Xploder,
 }
 
 impl CheatKind {
@@ -60,30 +68,31 @@ impl CheatKind {
         match value.trim().to_ascii_lowercase().as_str() {
             "gg" | "game-genie" | "gamegenie" | "genie" => Some(Self::GameGenie),
             "par" | "ar" | "action-replay" | "gameshark" | "gs" => Some(Self::ProActionReplay),
+            "xploder" | "xplorer" | "codebreaker" | "code-breaker" => Some(Self::Xploder),
             _ => None,
         }
     }
 }
 
-/// A decoded cheat: a CPU/bus address, the replacement value (`width` bytes,
-/// big-endian for the 2-byte Genesis case), and an optional compare byte used
-/// to disambiguate the correct ROM bank when baking the code into a file.
+/// A decoded cheat: a CPU/bus address, the replacement value (`width` bytes),
+/// and an optional compare byte used to disambiguate the correct ROM bank when
+/// baking the code into a file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DecodedCode {
     pub system: CheatSystem,
     pub kind: CheatKind,
     pub address: u32,
-    pub value: u16,
+    pub value: u32,
     pub compare: Option<u8>,
     pub width: u8,
 }
 
 /// A concrete byte write into the ROM file: overwrite `width` bytes at `offset`
-/// with `value` (big-endian when `width == 2`).
+/// with `value`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CheatWrite {
     pub offset: usize,
-    pub value: u16,
+    pub value: u32,
     pub width: u8,
 }
 
@@ -97,6 +106,59 @@ pub fn split_codes(input: &str) -> Vec<&str> {
         .map(str::trim)
         .filter(|piece| !piece.is_empty())
         .collect()
+}
+
+/// Split Xploder lines while keeping the words that make one code together.
+/// A four-word GBA ROM-patch code stays together as one item.
+pub fn split_xploder_codes(input: &str) -> Vec<String> {
+    let mut codes = Vec::new();
+    for segment in input.split(['+', ',', ';']) {
+        let tokens: Vec<&str> = segment.split_whitespace().collect();
+        let mut index = 0;
+        while index < tokens.len() {
+            if index + 3 < tokens.len()
+                && tokens[index].len() == 8
+                && tokens[index + 1].len() == 8
+                && tokens[index + 2].len() == 8
+                && tokens[index + 3].len() == 8
+                && tokens[index].eq_ignore_ascii_case("00000000")
+                && is_gba_rom_patch_word(tokens[index + 1])
+                && tokens[index + 3].eq_ignore_ascii_case("00000000")
+            {
+                codes.push(format!(
+                    "{}{}{}{}",
+                    tokens[index],
+                    tokens[index + 1],
+                    tokens[index + 2],
+                    tokens[index + 3]
+                ));
+                index += 4;
+                continue;
+            }
+            if index + 1 < tokens.len()
+                && tokens[index].len() == 8
+                && (tokens[index + 1].len() == 4 || tokens[index + 1].len() == 8)
+            {
+                codes.push(format!("{}{}", tokens[index], tokens[index + 1]));
+                index += 2;
+                continue;
+            }
+            codes.push(tokens[index].to_owned());
+            index += 1;
+        }
+    }
+    codes
+}
+
+fn is_gba_rom_patch_word(token: &str) -> bool {
+    token.len() == 8
+        && matches!(
+            token.as_bytes(),
+            [b'1', b'8', ..]
+                | [b'1', b'a' | b'A', ..]
+                | [b'1', b'c' | b'C', ..]
+                | [b'1', b'e' | b'E', ..]
+        )
 }
 
 /// Strip intra-code separators and upper-case a single code for decoding. Note
@@ -126,12 +188,13 @@ pub fn decode(code: &str, system: CheatSystem, kind: CheatKind) -> Result<Decode
     let decoded = match kind {
         CheatKind::GameGenie => game_genie::decode(&normalized, system, code)?,
         CheatKind::ProActionReplay => action_replay::decode(&normalized, system, code)?,
+        CheatKind::Xploder => xploder::decode(&normalized, system, code)?,
     };
     tracing::debug!(
         target: "rom_weaver_cheats",
         raw = code,
         address = format_args!("{:06X}", decoded.address),
-        value = format_args!("{:04X}", decoded.value),
+        value = format_args!("{:08X}", decoded.value),
         compare = ?decoded.compare,
         width = decoded.width,
         "decoded cheat code"
@@ -181,6 +244,7 @@ fn infer_kind(normalized: &str, system: CheatSystem) -> CheatKind {
             }
         }
         CheatSystem::Snes => CheatKind::GameGenie,
+        CheatSystem::GameBoyAdvance | CheatSystem::PlayStation => CheatKind::Xploder,
     }
 }
 
@@ -195,7 +259,7 @@ pub fn resolve_writes(
 }
 
 /// Apply resolved writes into a mutable ROM buffer in place.
-pub fn apply_writes(rom: &mut [u8], writes: &[CheatWrite]) -> Result<()> {
+pub fn apply_writes(rom: &mut [u8], system: CheatSystem, writes: &[CheatWrite]) -> Result<()> {
     for write in writes {
         let end = write.offset.saturating_add(write.width as usize);
         if end > rom.len() {
@@ -207,10 +271,18 @@ pub fn apply_writes(rom: &mut [u8], writes: &[CheatWrite]) -> Result<()> {
         }
         match write.width {
             1 => rom[write.offset] = write.value as u8,
-            2 => {
-                // Genesis values are big-endian words.
-                rom[write.offset] = (write.value >> 8) as u8;
-                rom[write.offset + 1] = write.value as u8;
+            2 | 4 => {
+                let bytes = if matches!(system, CheatSystem::Genesis) {
+                    write.value.to_be_bytes()
+                } else {
+                    write.value.to_le_bytes()
+                };
+                let start = if write.width == 2 && matches!(system, CheatSystem::Genesis) {
+                    2
+                } else {
+                    0
+                };
+                rom[write.offset..end].copy_from_slice(&bytes[start..start + write.width as usize]);
             }
             other => {
                 return Err(coded(
@@ -223,7 +295,7 @@ pub fn apply_writes(rom: &mut [u8], writes: &[CheatWrite]) -> Result<()> {
         tracing::trace!(
             target: "rom_weaver_cheats",
             offset = format_args!("{:#X}", write.offset),
-            value = format_args!("{:04X}", write.value),
+            value = format_args!("{:08X}", write.value),
             width = write.width,
             "applied cheat write"
         );

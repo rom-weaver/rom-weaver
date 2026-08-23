@@ -5,6 +5,20 @@ fn nes_rom() -> Vec<u8> {
     with_nes_header(&vec![0u8; 0x8000])
 }
 
+fn gba_rom() -> Vec<u8> {
+    let mut rom = vec![0u8; 0x200];
+    rom[4..8].copy_from_slice(&[0x24, 0xFF, 0xAE, 0x51]);
+    rom
+}
+
+fn psx_exe() -> Vec<u8> {
+    let mut exe = vec![0u8; 0x800 + 16];
+    exe[..8].copy_from_slice(b"PS-X EXE");
+    exe[0x18..0x1C].copy_from_slice(&0x8001_0000u32.to_le_bytes());
+    exe[0x1C..0x20].copy_from_slice(&16u32.to_le_bytes());
+    exe
+}
+
 #[test]
 fn nes_game_genie_apply_bakes_byte() {
     let temp = setup_temp_dir();
@@ -215,4 +229,62 @@ fn game_boy_game_genie_apply_bakes_byte() {
     assert_eq!(apply["status"], "succeeded");
     let patched = fs::read(output.path()).expect("output");
     assert_eq!(patched[0x0100], 0xAB);
+}
+
+#[test]
+fn gba_xploder_rom_patch_bakes_halfword() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.gba");
+    let output = temp.child("patched.gba");
+    fs::write(input.path(), gba_rom()).expect("fixture");
+
+    let apply = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--code",
+            "00000000 18000004 0000ABCD 00000000",
+            "--code-kind",
+            "xploder",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(apply["status"], "succeeded");
+    let patched = fs::read(output.path()).expect("output");
+    assert_eq!(&patched[8..10], &[0xCD, 0xAB]);
+}
+
+#[test]
+fn playstation_xploder_write_bakes_into_psx_exe() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.exe");
+    let output = temp.child("patched.exe");
+    fs::write(input.path(), psx_exe()).expect("fixture");
+
+    let apply = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--code",
+            "30010000 00FF",
+            "--code-kind",
+            "xploder",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(apply["status"], "succeeded");
+    let patched = fs::read(output.path()).expect("output");
+    assert_eq!(patched[0x800], 0xFF);
 }
