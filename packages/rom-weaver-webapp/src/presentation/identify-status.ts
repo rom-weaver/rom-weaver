@@ -1,4 +1,4 @@
-import type { IdentifyStatus } from "../types/identify.ts";
+import type { IdentifyCondition, IdentifyQuality, IdentifyStatus } from "../types/identify.ts";
 
 /**
  * The four identification outcomes, in the words the workflow status, the
@@ -30,6 +30,41 @@ const IDENTIFY_STATUS_MARK: Readonly<Record<IdentifyStatus, IdentifyStatusMark>>
   unknown: { glyph: "–", label: "No title match" },
 };
 
+/**
+ * Match-quality badges for set-aware (RWFP2) results. `metadata_only` is the
+ * weakest claim - the database knew the title but could not verify the bytes -
+ * so its wording never says "verified".
+ */
+const IDENTIFY_QUALITY_LABEL: Readonly<Record<IdentifyQuality, string>> = {
+  exact: "Exact match",
+  metadata_only: "Metadata only",
+  partial: "Partial match",
+};
+
+const IDENTIFY_QUALITY_MARK: Readonly<Record<IdentifyQuality, IdentifyStatusMark>> = {
+  exact: { glyph: "✓", label: "Exact match", tone: "ok" },
+  metadata_only: { glyph: "≈", label: "Metadata only", tone: "warn" },
+  partial: { glyph: "◐", label: "Partial match", tone: "warn" },
+};
+
+/**
+ * Structured non-match causes. Both are actionable states, distinct from a
+ * plain "no match": the database is missing, or the media shape has no
+ * canonicalization profile yet.
+ */
+const IDENTIFY_CONDITION_LABEL: Readonly<Record<IdentifyCondition, string>> = {
+  database_required: "Database required",
+  unsupported_media_profile: "Media profile not supported",
+};
+
+/** Reader-facing source names for the machine source ids the packs carry. */
+const identifySourceLabel = (source: string): string =>
+  source === "opengood" ? "OpenGood" : source === "hasheous" ? "Hasheous" : source;
+
+/** "3 of 4 required components matched" - the denominator must stay visible. */
+const identifyComponentEvidenceLabel = (matched: number, total: number): string =>
+  `${matched} of ${total} required component${total === 1 ? "" : "s"} matched`;
+
 /** "1 possible match" / "3 possible matches" - the count must be visible, not implied. */
 const identifyMatchCountLabel = (count: number): string => `${count} possible ${count === 1 ? "match" : "matches"}`;
 
@@ -41,4 +76,14 @@ const identifyMatchCountLabel = (count: number): string => `${count} possible ${
  */
 const formatIdentifySource = (database: string): string => (database.endsWith(".pack") ? "OpenGood" : database);
 
-export { formatIdentifySource, IDENTIFY_STATUS_LABEL, IDENTIFY_STATUS_MARK, identifyMatchCountLabel };
+export {
+  formatIdentifySource,
+  IDENTIFY_CONDITION_LABEL,
+  IDENTIFY_QUALITY_LABEL,
+  IDENTIFY_QUALITY_MARK,
+  IDENTIFY_STATUS_LABEL,
+  IDENTIFY_STATUS_MARK,
+  identifyComponentEvidenceLabel,
+  identifyMatchCountLabel,
+  identifySourceLabel,
+};

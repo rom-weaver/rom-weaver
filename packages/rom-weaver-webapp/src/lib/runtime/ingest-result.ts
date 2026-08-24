@@ -5,8 +5,13 @@
 // camelCase shape the webapp consumes directly (and drops `null`/absent optionals). It is the single
 // boundary between the Rust contract and the input/patch state the apply workflow builds.
 import type { ChecksumMap } from "../../types/checksum.ts";
-import { isIdentifyLookupStatus } from "../../types/identify.ts";
-import type { ParsedIdentifyLookupResult, ParsedIdentifyTitleMatch } from "../../types/identify.ts";
+import { isIdentifyCondition, isIdentifyLookupStatus, isIdentifyQuality } from "../../types/identify.ts";
+import type {
+  ParsedIdentifyEvidence,
+  ParsedIdentifyLookupResult,
+  ParsedIdentifyPlatformCandidate,
+  ParsedIdentifyTitleMatch,
+} from "../../types/identify.ts";
 import type { ParsedIngestResult, ParsedIngestRomAsset, ParsedPatchDescriptor } from "../../types/ingest.ts";
 import type {
   IdentifyLookupResult,
@@ -57,6 +62,86 @@ const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefine
   };
 };
 
+/** One human-readable label per wire `DetectionEvidence` variant (externally tagged on `kind`). */
+const detectionEvidenceLabel = (value: unknown): string => {
+  const record = asRecord(value);
+  const kind = toStringValue(record?.kind);
+  if (!kind) return "";
+  const detail = toStringValue(record?.value);
+  return detail ? `${kind}: ${detail}` : kind;
+};
+
+const parsePlatformCandidate = (value: unknown): ParsedIdentifyPlatformCandidate | undefined => {
+  const record = asRecord(value);
+  const platform = toStringValue(record?.platform);
+  if (!platform) return undefined;
+  return {
+    confidence: toStringValue(record?.confidence) || "",
+    evidence: detectionEvidenceLabel(record?.evidence),
+    platform,
+  };
+};
+
+const toStringList = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const list = value.map(toStringValue).filter((item): item is string => item !== undefined);
+  return list.length ? list : undefined;
+};
+
+const parseIdentifyEvidence = (value: unknown): ParsedIdentifyEvidence | undefined => {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const evidence: ParsedIdentifyEvidence = {};
+  const matched = toNumberValue(record.required_components_matched);
+  if (matched !== undefined) evidence.requiredComponentsMatched = matched;
+  const total = toNumberValue(record.required_components_total);
+  if (total !== undefined) evidence.requiredComponentsTotal = total;
+  if (typeof record.layout_matched === "boolean") evidence.layoutMatched = record.layout_matched;
+  const missing = toStringList(record.missing);
+  if (missing) evidence.missing = missing;
+  const unexpected = toStringList(record.unexpected);
+  if (unexpected) evidence.unexpected = unexpected;
+  return Object.keys(evidence).length ? evidence : undefined;
+};
+
+/**
+ * Optional extended fields (quality, candidates, evidence, database,
+ * condition) parsed defensively: today the ingest wire carries only
+ * status+matches, and the identify command's own JSON carries the rest, so
+ * every field is treated as maybe-absent.
+ */
+const parseIdentifyLookupExtensions = (record: Record<string, unknown>): Partial<ParsedIdentifyLookupResult> => {
+  const extensions: Partial<ParsedIdentifyLookupResult> = {};
+  if (isIdentifyQuality(record.quality)) extensions.quality = record.quality;
+  if (isIdentifyCondition(record.condition)) {
+    extensions.condition = record.condition;
+    const hint = toStringValue(record.hint);
+    if (hint) extensions.hint = hint;
+  }
+  const platformCandidates = Array.isArray(record.platform_candidates)
+    ? record.platform_candidates
+        .map(parsePlatformCandidate)
+        .filter((candidate): candidate is ParsedIdentifyPlatformCandidate => candidate !== undefined)
+    : [];
+  if (platformCandidates.length) extensions.platformCandidates = platformCandidates;
+  const evidence = parseIdentifyEvidence(record.evidence);
+  if (evidence) extensions.evidence = evidence;
+  const database = asRecord(record.database);
+  if (database) {
+    const source = toStringValue(database.source);
+    const packFormat = toStringValue(database.pack_format);
+    const canonicalizationProfile = toStringValue(database.canonicalization_profile);
+    if (source || packFormat || canonicalizationProfile) {
+      extensions.database = {
+        ...(canonicalizationProfile ? { canonicalizationProfile } : {}),
+        ...(packFormat ? { packFormat } : {}),
+        ...(source ? { source } : {}),
+      };
+    }
+  }
+  return extensions;
+};
+
 const parseIdentifyLookup = (value: unknown): ParsedIdentifyLookupResult | undefined => {
   const lookup = asRecord(value) as WireRecord<IdentifyLookupResult> | undefined;
   if (!lookup) return undefined;
@@ -68,7 +153,7 @@ const parseIdentifyLookup = (value: unknown): ParsedIdentifyLookupResult | undef
   if (status === "matched" && matches.length !== 1) return undefined;
   if (status === "ambiguous" && matches.length < 2) return undefined;
   if (status === "unknown" && matches.length) return undefined;
-  return { matches, status };
+  return { matches, status, ...parseIdentifyLookupExtensions(lookup as Record<string, unknown>) };
 };
 
 const parseRomAsset = (value: unknown): ParsedIngestRomAsset | undefined => {

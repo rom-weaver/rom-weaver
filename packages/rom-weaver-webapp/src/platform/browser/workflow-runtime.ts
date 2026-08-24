@@ -164,12 +164,17 @@ const prepareIngestIdentify = async ({
   selectAllRomEntries?: boolean;
   signal?: AbortSignal;
   sourcePath: string;
-}): Promise<{ entryNames: string[]; packs: BrowserIdentifyPack[]; unavailable?: string }> => {
+}): Promise<{
+  databaseRequired?: { hint: string; platform: string };
+  entryNames: string[];
+  packs: BrowserIdentifyPack[];
+  unavailable?: string;
+}> => {
   const trace = { logLevel, namespace: "runtime:browser-workflow", onLog };
   let entryNames: string[] = [];
   try {
-    const { loadIdentifyPacks, selectIdentifySlugs } = await import("./identify-packs.ts");
-    let hints: Parameters<typeof loadIdentifyPacks>[0] = { fileName };
+    const { loadIdentifyPackSelection, selectIdentifySlugs } = await import("./identify-packs.ts");
+    let hints: Parameters<typeof loadIdentifyPackSelection>[0] = { fileName };
     if (selectAllRomEntries || !selectIdentifySlugs(hints).length) {
       onProgress?.({ message: "Inspecting the input…" });
       try {
@@ -193,7 +198,7 @@ const prepareIngestIdentify = async ({
       fileName,
       slugs: selectIdentifySlugs(hints),
     });
-    const packs = await loadIdentifyPacks(hints, (platforms) => {
+    const selection = await loadIdentifyPackSelection(hints, (platforms) => {
       onProgress?.({
         message:
           platforms.length === 1
@@ -201,7 +206,17 @@ const prepareIngestIdentify = async ({
             : `Loading identification data for ${platforms.length} systems…`,
       });
     });
-    return { entryNames, packs };
+    if (selection.databaseRequired) {
+      emitTraceLog(trace, "ROM identify database required for routed platform", {
+        fileName,
+        platform: selection.databaseRequired.platform,
+      });
+    }
+    return {
+      ...(selection.databaseRequired ? { databaseRequired: selection.databaseRequired } : {}),
+      entryNames,
+      packs: selection.packs,
+    };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     emitTraceLog(trace, "ROM identify data unavailable; continuing without title lookup", { error: reason, fileName });
@@ -341,6 +356,9 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
       );
       return {
         ...(identifyPacks.unavailable ? { identifyUnavailable: identifyPacks.unavailable } : {}),
+        ...("databaseRequired" in identifyPacks && identifyPacks.databaseRequired
+          ? { identifyDatabaseRequired: identifyPacks.databaseRequired }
+          : {}),
         outputs,
         patchOutputs,
         result,

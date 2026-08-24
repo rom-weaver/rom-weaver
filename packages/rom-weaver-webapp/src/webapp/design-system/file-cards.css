@@ -640,3 +640,59 @@
   gap: 2px;
   min-width: 0;
 }
+
+/* ---- Identify database manager ---- */
+.rw-app .identify-db-manager {
+  display: grid;
+  gap: var(--sp-s);
+}
+.rw-app .identify-db-list {
+  display: grid;
+  gap: var(--sp-s);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.rw-app .identify-db-row {
+  display: grid;
+  gap: var(--sp-xs);
+  min-width: 0;
+  padding: var(--sp-s);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+}
+.rw-app .identify-db-row-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs);
+  align-items: baseline;
+  min-width: 0;
+}
+.rw-app .identify-db-platform {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.rw-app .identify-db-row-actions,
+.rw-app .identify-db-consent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs);
+}
+.rw-app .identify-db-error {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.rw-app .identify-db-origin {
+  display: grid;
+  gap: var(--sp-xs);
+}
+.rw-app .identify-db-origin-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs);
+  align-items: center;
+}
+.rw-app .identify-db-origin-row input {
+  flex: 1 1 16rem;
+  min-width: 0;
+}

@@ -23,8 +23,33 @@ const rootDir = process.cwd();
 const SHARED_CHUNK_MIN_SIZE = 30_000;
 const repoRoot = path.resolve(rootDir, "../..");
 const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
+// Hasheous-derived packs (a local `--dump` build can leave them in the data
+// dir) MUST NOT ship with the webapp build - their redistribution rights are
+// not stated. They are downloaded at runtime, only with explicit user consent.
+const identifyHasheousFiles = (() => {
+  try {
+    const index = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
+    const files = new Set();
+    for (const system of index.systems ?? []) {
+      // Filter on source alone: an RWFP2 pack from a redistribution-clear
+      // source may ship, while every hasheous pack MUST stay out of the build.
+      if (system.source !== "hasheous") continue;
+      if (system.file) {
+        files.add(system.file);
+        files.add(`${system.file}.br`);
+      }
+      if (system.brotliFile) files.add(system.brotliFile);
+    }
+    return files;
+  } catch {
+    return new Set();
+  }
+})();
 const identifyDataSources = Object.fromEntries(
-  fs.readdirSync(identifyDataDir).map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
+  fs
+    .readdirSync(identifyDataDir)
+    .filter((name) => !identifyHasheousFiles.has(name))
+    .map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
 );
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
@@ -623,7 +648,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/assets/identify-catalog.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {
@@ -680,7 +705,7 @@ const writeBrotliSidecars = () => {
       for (const name of fs.readdirSync(assetsDir)) {
         // The identify index is mutable so a deployment can advertise a new
         // pack set without an immutable sidecar masking the update.
-        if (name === "identify-index.json") continue;
+        if (name === "identify-index.json" || name === "identify-catalog.json") continue;
         // `.map` sidecars are devtools-only: nothing on a normal page load
         // requests them, so a q11 pass and a _routes.json include each would
         // buy nothing and eat the include budget.

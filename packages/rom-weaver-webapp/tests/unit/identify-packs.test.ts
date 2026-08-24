@@ -79,8 +79,11 @@ describe("loadIdentifyPacks", () => {
 
     // 32X shares its cartridge shape with Mega Drive, so both packs load - and only those two.
     expect(packs.map((pack) => pack.slug).sort()).toEqual(["sega-32x", "sega-mega-drive-genesis"]);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    const packUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
+    // index.json + catalog.json + the two selected packs (catalog routing added
+    // the catalog fetch; the pack selection is unchanged).
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const packCall = fetchMock.mock.calls.find((call) => String(call[0]).includes(".pack"));
+    const packUrl = new URL(String(packCall?.[0]));
     expect(packUrl.searchParams.get("sha256")).toBe(SHA256_ABC);
   });
 

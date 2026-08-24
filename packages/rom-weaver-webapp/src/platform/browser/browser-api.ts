@@ -74,21 +74,42 @@ const identifyRom = async (
   fileName: string,
   options: BrowserIdentifyRomOptions = {},
 ): Promise<ParsedIdentifyResult> => {
-  const { identifyUnavailable, outputs, patchOutputs, result } = await ingestRom(source, fileName, {
-    ...options,
-    checksumAlgorithms: ["crc32", "md5", "sha1"],
-    identify: true,
-    identifyAllRomEntries: true,
-  });
+  const { identifyDatabaseRequired, identifyUnavailable, outputs, patchOutputs, result } = await ingestRom(
+    source,
+    fileName,
+    {
+      ...options,
+      checksumAlgorithms: ["crc32", "md5", "sha1"],
+      identify: true,
+      identifyAllRomEntries: true,
+    },
+  );
   try {
-    const candidates: ParsedIdentifyCandidate[] = result.assets.map((asset) => ({
-      checksumVariants: asset.checksumVariants || [],
-      checksums: asset.checksums || {},
-      ...(asset.platform ? { detectedPlatform: asset.platform } : {}),
-      matches: identifyUnavailable ? [] : asset.identification?.matches || [],
-      path: asset.memberPath || asset.fileName || fileName,
-      status: identifyUnavailable ? "unavailable" : asset.identification?.status || "unknown",
-    }));
+    // A routed-but-missing database is a structured condition on an otherwise
+    // ordinary "unknown" result - status stays unknown for compatibility.
+    const conditionFields = identifyDatabaseRequired
+      ? ({ condition: "database_required", hint: identifyDatabaseRequired.hint } as const)
+      : undefined;
+    const candidates: ParsedIdentifyCandidate[] = result.assets.map((asset) => {
+      const identification = identifyUnavailable ? undefined : asset.identification;
+      return {
+        checksumVariants: asset.checksumVariants || [],
+        checksums: asset.checksums || {},
+        ...(asset.platform ? { detectedPlatform: asset.platform } : {}),
+        matches: identification?.matches || [],
+        path: asset.memberPath || asset.fileName || fileName,
+        status: identifyUnavailable ? "unavailable" : identification?.status || "unknown",
+        ...(identification?.quality ? { quality: identification.quality } : {}),
+        ...(identification?.platformCandidates ? { platformCandidates: identification.platformCandidates } : {}),
+        ...(identification?.evidence ? { evidence: identification.evidence } : {}),
+        ...(identification?.database ? { database: identification.database } : {}),
+        ...(identification?.condition
+          ? { condition: identification.condition, ...(identification.hint ? { hint: identification.hint } : {}) }
+          : identification?.status !== "matched" && identification?.status !== "ambiguous" && conditionFields
+            ? conditionFields
+            : {}),
+      };
+    });
     // An archive that yielded extracted leaves names itself so the UI can show
     // "Archive: x.zip / ROM: Games/y.gba" rather than implying the zip matched.
     const archiveName = result.assets.some((asset) => !asset.copiedInPlace) ? fileName : undefined;
@@ -98,6 +119,9 @@ const identifyRom = async (
       input: fileName,
       status: identifyUnavailable ? "unavailable" : aggregateIdentifyStatus(candidates.map((entry) => entry.status)),
       ...(identifyUnavailable ? { unavailableReason: identifyUnavailable } : {}),
+      ...(conditionFields && candidates.some((entry) => entry.condition === "database_required")
+        ? conditionFields
+        : {}),
     };
   } finally {
     await Promise.all([...outputs, ...patchOutputs].map((output) => output.dispose().catch(() => undefined)));

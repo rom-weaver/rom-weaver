@@ -2,6 +2,8 @@ import { RotateCcw, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import {
+  IDENTIFY_CONDITION_LABEL,
+  IDENTIFY_QUALITY_MARK,
   IDENTIFY_STATUS_LABEL,
   IDENTIFY_STATUS_MARK,
   identifyMatchCountLabel,
@@ -16,6 +18,7 @@ import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-z
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
+import { IdentifyDatabaseManagerPanel } from "./identify-database-manager.tsx";
 import { IdentifyDrawer } from "./identify-drawer.tsx";
 
 const IDENTIFY_ACTIVITY_KEY = "identify";
@@ -49,11 +52,58 @@ const CandidateStatusChip = ({ status }: { status: ParsedIdentifyCandidate["stat
   );
 };
 
+/** Match-quality chip; renders only for the set-aware (RWFP2) results that carry one. */
+const CandidateQualityChip = ({ quality }: { quality: NonNullable<ParsedIdentifyCandidate["quality"]> }) => {
+  const mark = IDENTIFY_QUALITY_MARK[quality];
+  return (
+    <span className="rb mono identify-state identify-quality">
+      <span aria-hidden="true" className="identify-state-glyph">
+        {mark.glyph}
+      </span>
+      <span>{mark.label}</span>
+    </span>
+  );
+};
+
+/**
+ * A structured non-match condition is an actionable state, not a plain "no
+ * match": name the cause, show the hint, and hand the reader the manager.
+ */
+const CandidateConditionNotice = ({
+  condition,
+  hint,
+  onOpenDatabaseManager,
+}: {
+  condition: NonNullable<ParsedIdentifyCandidate["condition"]>;
+  hint?: string;
+  onOpenDatabaseManager?: () => void;
+}) => (
+  <Notice level="warn">
+    <b>{IDENTIFY_CONDITION_LABEL[condition]}.</b>{" "}
+    {hint ||
+      (condition === "database_required"
+        ? "The identification database for this platform is not downloaded."
+        : "This media layout has no supported identification profile yet.")}
+    {condition === "database_required" && onOpenDatabaseManager ? (
+      <button
+        aria-label="Open the identification database manager"
+        className="rb identify-open-manager"
+        onClick={onOpenDatabaseManager}
+        type="button"
+      >
+        Open the database manager
+      </button>
+    ) : null}
+  </Notice>
+);
+
 const CandidateCard = ({
   candidate,
+  onOpenDatabaseManager,
   showMemberPath,
 }: {
   candidate: ParsedIdentifyCandidate;
+  onOpenDatabaseManager?: () => void;
   showMemberPath: boolean;
 }) => {
   const names = [...new Set(candidate.matches.map((match) => formatIdentifyTitle(match.name)).filter(Boolean))];
@@ -64,7 +114,12 @@ const CandidateCard = ({
       description={
         showMemberPath ? <span className="pdesc mono identify-member">ROM: {candidate.path}</span> : undefined
       }
-      meta={<CandidateStatusChip status={candidate.status} />}
+      meta={
+        <>
+          {candidate.quality ? <CandidateQualityChip quality={candidate.quality} /> : null}
+          <CandidateStatusChip status={candidate.status} />
+        </>
+      }
       name={<span className="identify-result-title">{heading}</span>}
       state={mark.tone}
     >
@@ -86,14 +141,28 @@ const CandidateCard = ({
           ))}
         </ul>
       ) : null}
-      {candidate.status === "unknown" ? (
+      {candidate.condition ? (
+        <CandidateConditionNotice
+          condition={candidate.condition}
+          hint={candidate.hint}
+          onOpenDatabaseManager={onOpenDatabaseManager}
+        />
+      ) : null}
+      {candidate.status === "unknown" && !candidate.condition ? (
         <p className="pdesc identify-unknown-lead">
           No exact title match found. The ROM may be modified, an unlisted revision, or from a system that is not in the
           local identification data. Its checksums are below so you can look it up elsewhere.
         </p>
       ) : null}
       <IdentifyDrawer
-        identification={{ matches: candidate.matches, status: candidate.status }}
+        identification={{
+          matches: candidate.matches,
+          status: candidate.status,
+          ...(candidate.quality ? { quality: candidate.quality } : {}),
+          ...(candidate.platformCandidates ? { platformCandidates: candidate.platformCandidates } : {}),
+          ...(candidate.evidence ? { evidence: candidate.evidence } : {}),
+          ...(candidate.database ? { database: candidate.database } : {}),
+        }}
         memberPath={showMemberPath ? candidate.path : undefined}
       />
       {/* An unidentified ROM opens on its checksums: they are the only thing that
@@ -203,6 +272,10 @@ const IdentifyForm = ({
     }
   };
 
+  const openDatabaseManager = useCallback(() => {
+    document.getElementById("identify-database-manager")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   const unavailable = result?.status === "unavailable";
   const archiveName = result?.archiveName;
   const candidates = result?.candidates || [];
@@ -285,13 +358,21 @@ const IdentifyForm = ({
             ) : null}
             {candidates.length ? (
               candidates.map((candidate) => (
-                <CandidateCard candidate={candidate} key={candidate.path} showMemberPath={showMemberPaths} />
+                <CandidateCard
+                  candidate={candidate}
+                  key={candidate.path}
+                  onOpenDatabaseManager={openDatabaseManager}
+                  showMemberPath={showMemberPaths}
+                />
               ))
             ) : (
               <Notice level="warn">No ROM was found in this input, so nothing could be identified.</Notice>
             )}
           </div>
         ) : null}
+      </StepSection>
+      <StepSection num="0x04" title="Databases">
+        <IdentifyDatabaseManagerPanel />
       </StepSection>
     </section>
   );
