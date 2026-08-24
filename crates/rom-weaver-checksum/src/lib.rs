@@ -1,5 +1,8 @@
+pub mod artifact_match;
 mod engine;
+pub mod identify_catalog;
 pub mod identify_pack;
+pub mod identify_pack_v2;
 pub mod platform_detection;
 pub mod rom_headers;
 pub mod rom_identity;

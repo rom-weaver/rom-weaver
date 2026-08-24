@@ -7,6 +7,8 @@
 
 use std::io;
 
+use rom_weaver_core::{DetectionConfidence, DetectionEvidence, PlatformCandidate};
+
 use crate::rom_headers::KnownRomHeader;
 
 /// Canonical platform identifiers.
@@ -35,6 +37,10 @@ pub mod platform {
     pub const MASTER_SYSTEM: &str = "Sega Master System";
     pub const N64: &str = "Nintendo 64";
     pub const NEO_GEO_POCKET: &str = "Neo Geo Pocket";
+
+    pub const GAME_BOY_COLOR: &str = "Nintendo Game Boy Color";
+    pub const GAME_GEAR: &str = "Sega Game Gear";
+    pub const NEO_GEO_POCKET_COLOR: &str = "Neo Geo Pocket Color";
 }
 
 /// Map a detected cartridge header to its identify platform, where one exists.
@@ -65,6 +71,32 @@ pub const fn platform_for_rom_header(header: KnownRomHeader) -> Option<&'static 
     }
 }
 
+fn header_candidate(platform: &str) -> PlatformCandidate {
+    PlatformCandidate {
+        platform: platform.to_string(),
+        confidence: DetectionConfidence::Strong,
+        evidence: DetectionEvidence::HeaderMagic,
+    }
+}
+
+/// All plausible platforms for a detected cartridge header, most common first.
+///
+/// The ambiguous families (Game Boy vs Color, Master System vs Game Gear,
+/// Neo Geo Pocket vs Color) share one header layout, so both members are
+/// returned; the first entry matches [`platform_for_rom_header`].
+pub fn platform_candidates_for_rom_header(header: KnownRomHeader) -> Vec<PlatformCandidate> {
+    let platforms: &[&str] = match header {
+        KnownRomHeader::GameBoy => &[platform::GAME_BOY, platform::GAME_BOY_COLOR],
+        KnownRomHeader::SmsTmr => &[platform::MASTER_SYSTEM, platform::GAME_GEAR],
+        KnownRomHeader::NeoGeoPocket => &[platform::NEO_GEO_POCKET, platform::NEO_GEO_POCKET_COLOR],
+        other => match platform_for_rom_header(other) {
+            Some(platform) => return vec![header_candidate(platform)],
+            None => return Vec::new(),
+        },
+    };
+    platforms.iter().map(|p| header_candidate(p)).collect()
+}
+
 /// 2048-byte logical (Mode-1 / Mode-2 Form-1 user-data) sector size.
 const SECTOR_BYTES: usize = 2048;
 /// ISO 9660 Primary Volume Descriptor location.
@@ -90,7 +122,30 @@ pub fn detect_disc_platform(source: &dyn DiscSectorSource) -> Option<&'static st
     {
         return Some(platform);
     }
-    detect_iso9660_platform(source)
+    detect_iso9660_platform_entry(source).map(|(platform, _)| platform)
+}
+
+/// All plausible platforms for a disc image, most likely first. Disc
+/// signatures are unambiguous, so this is at most one candidate today; the
+/// list shape keeps parity with the cartridge path.
+pub fn detect_disc_platform_candidates(source: &dyn DiscSectorSource) -> Vec<PlatformCandidate> {
+    if let Ok(sector0) = source.read_sectors(0, 1)
+        && let Some(platform) = detect_from_sector0(&sector0)
+    {
+        return vec![PlatformCandidate {
+            platform: platform.to_string(),
+            confidence: DetectionConfidence::Strong,
+            evidence: DetectionEvidence::SystemAreaMagic,
+        }];
+    }
+    match detect_iso9660_platform_entry(source) {
+        Some((platform, entry)) => vec![PlatformCandidate {
+            platform: platform.to_string(),
+            confidence: DetectionConfidence::Strong,
+            evidence: DetectionEvidence::Iso9660Entry(entry),
+        }],
+        None => Vec::new(),
+    }
 }
 
 /// System-area (sector 0) magic checks: Sega CD/Saturn/Dreamcast ASCII headers
@@ -122,8 +177,9 @@ fn detect_from_sector0(sector0: &[u8]) -> Option<&'static str> {
 
 /// ISO 9660 path: read the PVD, walk the root directory, and disambiguate the
 /// Sony consoles (PSP via `UMD_DATA.BIN`/`PSP_GAME`; PS2 vs PS1 via the
-/// `BOOT2`/`BOOT` line in `SYSTEM.CNF`).
-fn detect_iso9660_platform(source: &dyn DiscSectorSource) -> Option<&'static str> {
+/// `BOOT2`/`BOOT` line in `SYSTEM.CNF`). Returns the platform and the root
+/// directory entry that decided it.
+fn detect_iso9660_platform_entry(source: &dyn DiscSectorSource) -> Option<(&'static str, String)> {
     let pvd = source.read_sectors(PVD_LBA, 1).ok()?;
     // Primary Volume Descriptor: type byte 1, standard identifier "CD001".
     if pvd.len() < 190 || pvd[0] != 1 || &pvd[1..6] != b"CD001" {
@@ -138,7 +194,7 @@ fn detect_iso9660_platform(source: &dyn DiscSectorSource) -> Option<&'static str
     for entry in &entries {
         let name = entry.upper_name();
         if name.starts_with("UMD_DATA.BIN") || name == "PSP_GAME" {
-            return Some(platform::PSP);
+            return Some((platform::PSP, name));
         }
         if name.starts_with("SYSTEM.CNF") {
             system_cnf = Some((entry.lba, entry.len));
@@ -151,10 +207,10 @@ fn detect_iso9660_platform(source: &dyn DiscSectorSource) -> Option<&'static str
     let text = &data[..(len as usize).min(data.len())];
     // Check BOOT2 before BOOT: the PS2 token contains the PS1 token.
     if contains(text, b"BOOT2") {
-        return Some(platform::PS2);
+        return Some((platform::PS2, "SYSTEM.CNF".to_string()));
     }
     if contains(text, b"BOOT") {
-        return Some(platform::PS1);
+        return Some((platform::PS1, "SYSTEM.CNF".to_string()));
     }
     None
 }
@@ -355,5 +411,65 @@ mod tests {
             Some(platform::SNES)
         );
         assert_eq!(platform_for_rom_header(KnownRomHeader::Msx), None);
+    }
+
+    #[test]
+    fn ambiguous_header_families_emit_both_candidates_most_common_first() {
+        let cases = [
+            (
+                KnownRomHeader::GameBoy,
+                [platform::GAME_BOY, platform::GAME_BOY_COLOR],
+            ),
+            (
+                KnownRomHeader::SmsTmr,
+                [platform::MASTER_SYSTEM, platform::GAME_GEAR],
+            ),
+            (
+                KnownRomHeader::NeoGeoPocket,
+                [platform::NEO_GEO_POCKET, platform::NEO_GEO_POCKET_COLOR],
+            ),
+        ];
+        for (header, expected) in cases {
+            let candidates = platform_candidates_for_rom_header(header);
+            let platforms: Vec<_> = candidates.iter().map(|c| c.platform.as_str()).collect();
+            assert_eq!(platforms, expected);
+            assert!(
+                candidates
+                    .iter()
+                    .all(|c| c.confidence == DetectionConfidence::Strong
+                        && c.evidence == DetectionEvidence::HeaderMagic)
+            );
+            // The old single-result answer stays the first candidate.
+            assert_eq!(platform_for_rom_header(header), Some(expected[0]));
+        }
+    }
+
+    #[test]
+    fn unambiguous_header_emits_one_candidate_and_msx_none() {
+        let candidates = platform_candidates_for_rom_header(KnownRomHeader::Nes);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].platform, platform::NES);
+        assert!(platform_candidates_for_rom_header(KnownRomHeader::Msx).is_empty());
+    }
+
+    #[test]
+    fn disc_candidates_carry_evidence() {
+        let mut saturn = MemoryDisc::with_sectors(1);
+        saturn.write(0, 0, b"SEGA SEGASATURN ");
+        let candidates = detect_disc_platform_candidates(&saturn);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].platform, platform::SATURN);
+        assert_eq!(candidates[0].evidence, DetectionEvidence::SystemAreaMagic);
+
+        let disc = iso_with_root(&[dir_record(b"PSP_GAME", 20, 64)]);
+        let candidates = detect_disc_platform_candidates(&disc);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].platform, platform::PSP);
+        assert_eq!(
+            candidates[0].evidence,
+            DetectionEvidence::Iso9660Entry("PSP_GAME".to_string())
+        );
+
+        assert!(detect_disc_platform_candidates(&MemoryDisc::with_sectors(32)).is_empty());
     }
 }

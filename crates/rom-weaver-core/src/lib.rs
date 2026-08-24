@@ -10,6 +10,7 @@ mod env;
 mod error;
 mod formatting;
 mod io;
+mod media_topology;
 mod patch_support;
 mod progress;
 mod prompt;
@@ -53,6 +54,10 @@ pub use io::{
     SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
     create_extract_output_file, ensure_output_available, file_starts_with,
     ordered_streaming_compress,
+};
+pub use media_topology::{
+    ComponentId, ComponentRole, DetectionConfidence, DetectionEvidence, MediaComponent, MediaKind,
+    MediaTopology, PlatformCandidate,
 };
 pub use patch_support::{checksum_validation_suffix, require_single_patch_file};
 pub use progress::{

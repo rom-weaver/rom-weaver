@@ -1730,6 +1730,7 @@ dependencies = [
  "proptest",
  "rayon",
  "rom-weaver-core",
+ "serde",
  "serde_json",
  "sha1",
  "sha2",
