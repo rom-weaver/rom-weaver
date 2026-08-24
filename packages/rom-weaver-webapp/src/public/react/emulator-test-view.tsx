@@ -31,7 +31,7 @@ import {
   prepareEmulatorAudioContext,
   registerEmulatorStartRequestHandler,
 } from "./emulator-audio-context.ts";
-import { GUIDED_SAMPLE_HREFS } from "./guided-sample-start.ts";
+import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings } from "./settings-context.tsx";
 
 const WEBGL2_ERROR = "EmulatorJS testing requires a browser with WebGL 2.";
@@ -490,7 +490,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
               downloadLabel="Download the sample ROM"
               downloadName={TEST_SAMPLE_ASSET}
               error={sampleError}
-              guideHref={GUIDED_SAMPLE_HREFS.test}
+              guideHref={resolveGuidedSampleHref(assetBaseUrl, "test")}
               label="Start guided Test"
               loading={sampleLoading}
               onStart={startTestSample}

@@ -23,7 +23,7 @@ import {
   type SampleTutorialStep,
   useGuidedSampleStart,
 } from "./components/ds/sample-tutorial.tsx";
-import { GUIDED_SAMPLE_HREFS } from "./guided-sample-start.ts";
+import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { CreatePatchFormView, type CreatePatchFormViewModel } from "./create-patch-form-view.tsx";
@@ -1155,7 +1155,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             downloadName={CREATE_SAMPLE_ARCHIVE}
             downloadLabel="Download the sample ROMs"
             error={sampleError}
-            guideHref={GUIDED_SAMPLE_HREFS.create}
+            guideHref={resolveGuidedSampleHref(resolvedAssetBaseUrl, "create")}
             label="Start guided Create"
             startAction="create"
             loading={sampleLoading}

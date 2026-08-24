@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test } from "vitest";
 import { resolveAssetUrl } from "../../src/public/react/asset-url.ts";
+import { readGuidedSampleFromSearch, resolveGuidedSampleHref } from "../../src/public/react/guided-sample-start.ts";
 import { readAppBaseUrl } from "../../src/webapp/webapp-controller.ts";
 
 const at = (path: string) => {
@@ -60,5 +61,27 @@ describe("resolveAssetUrl", () => {
     expect(resolveAssetUrl("https://weaver.example/", "https://cdn.example/first-weave.zip")).toBe(
       "https://cdn.example/first-weave.zip",
     );
+  });
+});
+
+describe("resolveGuidedSampleHref", () => {
+  test("keeps root-host guide links root-relative", () => {
+    expect(resolveGuidedSampleHref("https://weaver.example/", "apply")).toBe("/apply?guide=apply");
+  });
+
+  test("keeps guide links inside a sub-path deployment", () => {
+    expect(resolveGuidedSampleHref("https://weaver.example/roms/", "create")).toBe("/roms/create?guide=create");
+  });
+
+  test("keeps the authored link when the base is invalid", () => {
+    expect(resolveGuidedSampleHref("not a url", "test")).toBe("/test?guide=test");
+  });
+});
+
+describe("readGuidedSampleFromSearch", () => {
+  test("reads a supported guide and rejects unknown values", () => {
+    expect(readGuidedSampleFromSearch("?guide=bundle")).toBe("bundle");
+    expect(readGuidedSampleFromSearch("?guide=unknown")).toBeNull();
+    expect(readGuidedSampleFromSearch("?guide=toString")).toBeNull();
   });
 });

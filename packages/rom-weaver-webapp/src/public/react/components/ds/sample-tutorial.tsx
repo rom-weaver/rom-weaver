@@ -23,6 +23,7 @@ import {
   GUIDED_SAMPLE_VIEWS,
   GUIDED_SAMPLE_VIEW_EVENT,
   clearGuidedSampleQuery,
+  readGuidedSampleFromSearch,
   type GuidedSample,
   requestOnboardingDismiss,
 } from "../../guided-sample-start.ts";
@@ -68,7 +69,7 @@ const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismis
     };
     window.addEventListener(GUIDED_SAMPLE_START_EVENT, startRequestedGuide);
     window.addEventListener(GUIDED_SAMPLE_VIEW_EVENT, dismissHiddenGuide);
-    if (new URLSearchParams(window.location.search).get("guide") === guide) onStartRef.current();
+    if (readGuidedSampleFromSearch(window.location.search) === guide) onStartRef.current();
     return () => {
       window.removeEventListener(GUIDED_SAMPLE_START_EVENT, startRequestedGuide);
       window.removeEventListener(GUIDED_SAMPLE_VIEW_EVENT, dismissHiddenGuide);
