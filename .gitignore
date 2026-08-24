@@ -18,6 +18,7 @@
 
 # Generated ROM identify data (fetched from the pinned OpenGood revision)
 /crates/rom-weaver-cli/data/identify/v1/*.pack
+/crates/rom-weaver-cli/data/identify/v1/catalog.json
 /crates/rom-weaver-cli/data/identify/v1/index.json
 
 # Generated wasm artifacts
