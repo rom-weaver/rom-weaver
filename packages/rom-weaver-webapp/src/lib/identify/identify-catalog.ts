@@ -43,6 +43,9 @@ const parseCatalogPlatform = (value: unknown): IdentifyCatalogPlatform | undefin
   const canonicalPlatform = typeof record.canonicalPlatform === "string" ? record.canonicalPlatform : "";
   const packSlug = typeof record.packSlug === "string" ? record.packSlug : "";
   if (!(canonicalPlatform && packSlug && isCatalogSource(record.source))) return undefined;
+  // The slug becomes a fetch path (`<origin>/<slug>.pack`) and a store key, so
+  // it MUST NOT carry separators or dots. Mirrors the Rust catalog parser.
+  if (!/^[a-z0-9-]+$/u.test(packSlug)) return undefined;
   // Fail closed: a hasheous pack is fetched from a configurable origin, so an
   // entry without a verifiable sha256 MUST be rejected, never downloaded.
   if (record.source === "hasheous" && !/^[0-9a-f]{64}$/u.test(String(record.packSha256 ?? ""))) {

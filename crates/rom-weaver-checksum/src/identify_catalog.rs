@@ -99,6 +99,20 @@ impl IdentifyCatalog {
             }
         }
         for entry in &entries {
+            // The slug becomes a filesystem path (`<dir>/<slug>.pack`) that read
+            // and remove use, so it MUST NOT carry separators or dots.
+            if entry.pack_slug.is_empty()
+                || !entry
+                    .pack_slug
+                    .chars()
+                    .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+            {
+                return Err(RomWeaverError::Validation(format!(
+                    "invalid identify catalog: pack slug `{}` must be lowercase \
+                     letters, digits, and hyphens",
+                    entry.pack_slug
+                )));
+            }
             if slugs.insert(entry.pack_slug.as_str(), ()).is_some() {
                 return Err(RomWeaverError::Validation(format!(
                     "invalid identify catalog: duplicate pack slug `{}`",
@@ -288,6 +302,17 @@ mod tests {
         ]));
         let error = IdentifyCatalog::parse(&bytes).expect_err("duplicate slug must fail");
         assert!(error.to_string().contains("slug"));
+    }
+
+    #[test]
+    fn rejects_pack_slug_with_path_characters() {
+        for slug in ["../escape", "a/b", "a.b", "A-B", ""] {
+            let bytes = catalog_json(serde_json::json!([platform_json("A", &[], slug)]));
+            let error = IdentifyCatalog::parse(&bytes)
+                .map(|_| ())
+                .expect_err("slug with path characters must fail");
+            assert!(error.to_string().contains("slug"), "slug `{slug}`: {error}");
+        }
     }
 
     #[test]
