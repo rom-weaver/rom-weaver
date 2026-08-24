@@ -19,11 +19,17 @@ const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), "rom-weaver-hasheous-main-dump"
 const DEFAULT_OUT = path.join(ROOT_DIR, "target/identify");
 
 const PACK_MAGIC = Buffer.from("RWFP1\0\0\0", "binary");
+const PACK_MAGIC_V2 = Buffer.from("RWFP2\0\0\0", "binary");
 const HASH_MAGIC = Buffer.from("RWH1", "binary");
 const PAIR_MAGIC = Buffer.from("RWHP", "binary");
+const ROUTE_MAGIC = Buffer.from("RWR2", "binary");
+const REFS_MAGIC = Buffer.from("RWX2", "binary");
 const CONFLICT_VALUE_FLAG = 0x80000000;
 const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v2";
+const GAME_CACHE_FORMAT = "rom-weaver-identify-games-v1";
 export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
+export const INDEX_FORMAT_V2 = "rom-weaver-identify-system-pack-v2";
+export const CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
 
 // OpenGood (https://github.com/SnowflakePowered/opengood) publishes the
 // GoodTools cartridge sets as CC0 Logiqx XML DATs. We prefer it for the
@@ -60,10 +66,6 @@ export const OPENGOOD_PLATFORMS = Object.freeze({
   "TurboGrafx-16_PC Engine": ["OpenPCE.dat"],
 });
 
-function platformSource(platform) {
-  return OPENGOOD_PLATFORMS[platform] ? "opengood" : "hasheous";
-}
-
 export function slugifyPlatform(platform) {
   return platform
     .toLowerCase()
@@ -71,42 +73,92 @@ export function slugifyPlatform(platform) {
     .replace(/^-+|-+$/gu, "");
 }
 
-const SUPPORTED_PLATFORMS = Object.freeze([
-  "Atari 2600",
-  "Atari 5200",
-  "Atari 7800",
-  "Atari Lynx",
-  "Family Computer Disk System",
-  "Megadrive 32X",
-  "NEC PC-Engine CD & TurboGrafx-16 CD",
-  "Neo Geo Pocket",
-  "Neo Geo Pocket Color",
-  "Nintendo 3DS",
-  "Nintendo 64",
-  "Nintendo DS",
-  "Nintendo DSi",
-  "Nintendo Entertainment System",
-  "Nintendo Famicom Disk System",
-  "Nintendo Game Boy",
-  "Nintendo Game Boy Advance",
-  "Nintendo Game Boy Color",
-  "Nintendo GameCube",
-  "Nintendo New 3DS",
-  "Nintendo Super Nintendo Entertainment System",
-  "Nintendo Wii",
-  "Playstation minis",
-  "Sega 32X",
-  "Sega Dreamcast",
-  "Sega Game Gear",
-  "Sega Master System",
-  "Sega Mega CD _ Sega CD",
-  "Sega Mega Drive _ Genesis",
-  "Sega Saturn",
-  "Sony PlayStation",
-  "Sony PlayStation 2",
-  "Sony Playstation Portable",
-  "TurboGrafx-16_PC Engine",
-]);
+// Curated media-profile hints for known platform names. This map MUST NOT gate
+// which platforms build: Hasheous platforms are discovered dynamically from the
+// dump's top-level directories, and any unknown platform gets the default
+// profile below.
+export const DEFAULT_MEDIA_PROFILE = "nointro-single-image-v1";
+export const KNOWN_PLATFORM_PROFILES = Object.freeze({
+  "NEC PC-Engine CD & TurboGrafx-16 CD": "redump-cd-track-v1",
+  "Neo Geo CD": "redump-cd-track-v1",
+  "Nintendo 3DS": "3ds-decoded-card-v1",
+  "Nintendo GameCube": "gamecube-decoded-iso-v1",
+  "Nintendo New 3DS": "3ds-decoded-card-v1",
+  "Nintendo Wii": "wii-decoded-iso-v1",
+  "Playstation minis": "psp-decoded-iso-v1",
+  "Sega Dreamcast": "redump-gdrom-track-v1",
+  "Sega Mega CD _ Sega CD": "redump-cd-track-v1",
+  "Sega Saturn": "redump-cd-track-v1",
+  "Sony PlayStation": "redump-cd-track-v1",
+  "Sony PlayStation 2": "redump-cd-track-v1",
+  "Sony Playstation Portable": "psp-decoded-iso-v1",
+});
+
+// Curated alias table, keyed by canonical platform name. Alias matching is
+// case-insensitive after normalizing: lowercase, collapse [^a-z0-9]+ to one
+// space, trim. A platform's own normalized name always wins over another
+// platform's curated alias (e.g. a discovered "GBA" dump directory claims
+// "gba"); a collision between two platforms' own names is a build error.
+export const CURATED_ALIASES = Object.freeze({
+  "Family Computer Disk System": ["fds", "famicom disk system"],
+  "Neo Geo Pocket": ["ngp"],
+  "Neo Geo Pocket Color": ["ngpc"],
+  "Nintendo 3DS": ["3ds"],
+  "Nintendo DS": ["nds", "ds"],
+  "Nintendo Entertainment System": ["nes", "famicom", "family computer"],
+  "Nintendo Famicom Disk System": ["nintendo fds"],
+  "Nintendo Game Boy": ["game boy", "gb"],
+  "Nintendo Game Boy Advance": ["game boy advance", "gba"],
+  "Nintendo Game Boy Color": ["game boy color", "gbc"],
+  "Nintendo GameCube": ["gamecube", "gc", "ngc"],
+  "Nintendo Super Nintendo Entertainment System": ["snes", "super famicom", "super nintendo"],
+  "Nintendo Wii": ["wii"],
+  "Sega Game Gear": ["game gear", "gg"],
+  "Sega Master System": ["master system", "sms"],
+  "Sega Mega Drive _ Genesis": [
+    "genesis",
+    "mega drive",
+    "megadrive",
+    "sega genesis",
+    "sega mega drive",
+  ],
+  "Sony PlayStation": ["playstation", "psx", "ps1"],
+  "Sony PlayStation 2": ["ps2", "playstation 2"],
+  "Sony Playstation Portable": ["psp", "playstation portable"],
+  "TurboGrafx-16_PC Engine": ["turbografx", "turbografx 16", "pc engine"],
+});
+
+// Maps the dump's per-ROM `SignatureSource` to the catalog's upstreamSource
+// vocabulary. Anything unmapped stays "unknown" - the source MUST come from
+// the dump, never from a guess.
+const SIGNATURE_SOURCE_MAP = Object.freeze({
+  fbneo: "fbneo",
+  mamearcade: "mame",
+  mameredump: "redump",
+  nointro: "no-intro",
+  nointros: "no-intro",
+  redump: "redump",
+  tosec: "tosec",
+});
+
+export function normalizeAlias(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, " ")
+    .trim();
+}
+
+// Platform names come from the dump zip's top-level directory entries. A name
+// that could traverse or corrupt output paths MUST be rejected outright.
+function assertSafePlatformName(name) {
+  const hasControlChar = [...String(name || "")].some((char) => char.codePointAt(0) < 0x20);
+  if (!name || name.includes("/") || name.includes("..") || hasControlChar) {
+    throw new Error(`Unsafe platform directory name in dump: ${JSON.stringify(name)}`);
+  }
+  if (!slugifyPlatform(name)) {
+    throw new Error(`Platform directory name produces an empty slug: ${JSON.stringify(name)}`);
+  }
+}
 
 const ALGORITHMS = Object.freeze({
   crc32: { code: 0, hashBytes: 4 },
@@ -115,8 +167,9 @@ const ALGORITHMS = Object.freeze({
 });
 
 const usage = () => `Build per-system ROM-identify packs from OpenGood (CC0 cartridge DATs) and
-Hasheous (disc + modern handhelds). One RWFP1 pack is emitted per platform into
-the output directory, alongside an index.json manifest.
+Hasheous (every other platform in the dump). OpenGood platforms emit RWFP1
+packs; Hasheous platforms are discovered from the dump's top-level directories
+and emit RWFP2 packs. index.json and catalog.json are written next to the packs.
 
 Usage:
   node scripts/build-hasheous-identify-index.mjs
@@ -132,8 +185,9 @@ Options:
   --dump <path>            Use an existing MetadataMap.zip instead of downloading.
   --refresh-dump           Revalidate/redownload the cached dump instead of trusting it.
   --force-row-cache        Rebuild the per-system row cache even if it matches.
-  --keep-shared            Keep ROMs that are byte-identical across >1 game
-                          (shared CD audio tracks); default drops them.
+  --keep-shared            RWFP1 only: keep ROMs that are byte-identical across
+                          >1 game (shared CD audio tracks); default drops them.
+                          RWFP2 always keeps them, marked non-discriminating.
   --download-only          Download/resolve sources, then stop.
   --no-brotli              Do not emit <pack>.br files.
   --brotli-quality <n>     Brotli quality 0-11. Defaults to 11.
@@ -204,7 +258,10 @@ function parseArgs(argv) {
   ) {
     throw new Error("--brotli-quality must be an integer from 0 through 11");
   }
-  if (options.maxObjects !== undefined && (!Number.isInteger(options.maxObjects) || options.maxObjects < 1)) {
+  if (
+    options.maxObjects !== undefined &&
+    (!Number.isInteger(options.maxObjects) || options.maxObjects < 1)
+  ) {
     throw new Error("--max-objects must be a positive integer");
   }
   return options;
@@ -236,7 +293,8 @@ async function getMainDumpMetadata() {
   }
   await response.body?.cancel();
   const contentRange = response.headers.get("content-range");
-  const contentLengthRaw = contentRange?.match(/\/(\d+)$/u)?.[1] || response.headers.get("content-length");
+  const contentLengthRaw =
+    contentRange?.match(/\/(\d+)$/u)?.[1] || response.headers.get("content-length");
   const contentLength = contentLengthRaw ? Number.parseInt(contentLengthRaw, 10) : undefined;
   return {
     contentLength: Number.isFinite(contentLength) ? contentLength : undefined,
@@ -318,7 +376,9 @@ async function resolveDumpPath(options) {
 
   const metadata = await getMainDumpMetadata();
   if (existing?.isFile() && metadata.contentLength && existing.size === metadata.contentLength) {
-    console.error(`[hasheous] cached main dump is current: ${dumpPath} (${formatBytes(existing.size)})`);
+    console.error(
+      `[hasheous] cached main dump is current: ${dumpPath} (${formatBytes(existing.size)})`,
+    );
     return {
       dumpPath,
       source: {
@@ -340,6 +400,7 @@ async function resolveDumpPath(options) {
 
   const downloaded = await fileStat(tempPath);
   if (!downloaded?.isFile()) throw new Error(`Download did not create ${tempPath}`);
+  if (downloaded.size === 0) throw new Error(`Download produced an empty file: ${tempPath}`);
   if (metadata.contentLength && downloaded.size !== metadata.contentLength) {
     throw new Error(
       `Main dump size mismatch; expected ${metadata.contentLength}, got ${downloaded.size}. Remove ${tempPath} and retry.`,
@@ -374,7 +435,8 @@ async function runCommandText(command, args) {
     child.on("error", reject);
     child.on("close", resolve);
   });
-  if (exitCode !== 0) throw new Error(`${command} failed with exit code ${exitCode}: ${stderr.trim()}`);
+  if (exitCode !== 0)
+    throw new Error(`${command} failed with exit code ${exitCode}: ${stderr.trim()}`);
   return stdout;
 }
 
@@ -383,9 +445,19 @@ async function collectZipPlatforms(dumpPath) {
   const platforms = new Set();
   for (const entry of stdout.trimEnd().split("\n")) {
     const slash = entry.indexOf("/");
-    if (slash > 0) platforms.add(entry.slice(0, slash));
+    if (slash > 0) {
+      const name = entry.slice(0, slash);
+      assertSafePlatformName(name);
+      platforms.add(name);
+    }
   }
   return platforms;
+}
+
+async function sha256File(filePath) {
+  const hash = crypto.createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
 }
 
 function normalizeHex(value, expectedLength) {
@@ -420,11 +492,11 @@ async function parseJsonObjects(readable, onObject, shouldStop) {
       if (inString) {
         if (escaped) escaped = false;
         else if (char === "\\") escaped = true;
-        else if (char === "\"") inString = false;
+        else if (char === '"') inString = false;
         continue;
       }
 
-      if (char === "\"") inString = true;
+      if (char === '"') inString = true;
       else if (char === "{") depth += 1;
       else if (char === "}") {
         depth -= 1;
@@ -442,7 +514,8 @@ async function parseJsonObjects(readable, onObject, shouldStop) {
     if (shouldStop()) return;
   }
   await consume(decoder.end());
-  if (!shouldStop() && (started || depth !== 0)) throw new Error("Unterminated JSON object stream from unzip");
+  if (!shouldStop() && (started || depth !== 0))
+    throw new Error("Unterminated JSON object stream from unzip");
 }
 
 function base64Utf8(value) {
@@ -461,7 +534,9 @@ async function writeRow(state, rawCrc, rawMd5, rawSha1, platform, name) {
     state.rowsMissingAllHashes += 1;
     return;
   }
-  if (!state.stream.write(`${crc32}\t${md5}\t${sha1}\t${base64Utf8(platform)}\t${base64Utf8(name)}\n`)) {
+  if (
+    !state.stream.write(`${crc32}\t${md5}\t${sha1}\t${base64Utf8(platform)}\t${base64Utf8(name)}\n`)
+  ) {
     await once(state.stream, "drain");
   }
   state.rowsWithAnyHash += 1;
@@ -472,7 +547,10 @@ const XML_ENTITIES = Object.freeze({ amp: "&", apos: "'", gt: ">", lt: "<", quot
 function xmlUnescape(value) {
   return value.replace(/&(amp|apos|gt|lt|quot|#x?[0-9a-fA-F]+);/gu, (match, entity) => {
     if (entity[0] === "#") {
-      const code = entity[1] === "x" || entity[1] === "X" ? Number.parseInt(entity.slice(2), 16) : Number.parseInt(entity.slice(1), 10);
+      const code =
+        entity[1] === "x" || entity[1] === "X"
+          ? Number.parseInt(entity.slice(2), 16)
+          : Number.parseInt(entity.slice(1), 10);
       return Number.isFinite(code) ? String.fromCodePoint(code) : match;
     }
     return XML_ENTITIES[entity] ?? match;
@@ -547,6 +625,60 @@ async function downloadOpenGoodDat(datFile, cacheDir) {
   return destination;
 }
 
+function mapUpstreamSource(signatureSource) {
+  return SIGNATURE_SOURCE_MAP[String(signatureSource || "").toLowerCase()];
+}
+
+function findGameAttribute(game, attributeName) {
+  return game.Attributes.find((attribute) => attribute?.attributeName === attributeName);
+}
+
+// Convert one Hasheous dump game object (`Platform/<Name> (<Id>).json`) into a
+// grouped game record: one game with every ROM component, ordinal = order in
+// the dump. upstreamSource comes only from the dump's per-ROM SignatureSource;
+// components disagreeing after mapping leave the game "unknown".
+function hasheousGameRecord(game, platform) {
+  const gameName = String(game?.Name || "").trim();
+  if (!gameName || game?.ObjectType !== "Game" || !Array.isArray(game?.Attributes))
+    return undefined;
+  const romAttribute = findGameAttribute(game, "ROMs");
+  if (!Array.isArray(romAttribute?.Value) || romAttribute.Value.length === 0) return undefined;
+
+  const components = [];
+  const upstreamSources = new Set();
+  for (const rom of romAttribute.Value) {
+    const component = {
+      ordinal: components.length,
+      size: Number.isSafeInteger(rom?.Size) && rom.Size >= 0 ? rom.Size : 0,
+    };
+    const filename = String(rom?.Name || "").trim();
+    if (filename) component.filename = filename;
+    const crc32 = normalizeHex(rom?.Crc, 8);
+    const md5 = normalizeHex(rom?.Md5, 32);
+    const sha1 = normalizeHex(rom?.Sha1, 40);
+    const sha256 = normalizeHex(rom?.Sha256, 64);
+    if (crc32) component.crc32 = crc32;
+    if (md5) component.md5 = md5;
+    if (sha1) component.sha1 = sha1;
+    if (sha256) component.sha256 = sha256;
+    upstreamSources.add(mapUpstreamSource(rom?.SignatureSource) ?? "unknown");
+    components.push(component);
+  }
+
+  const record = {
+    name: gameName,
+    platform,
+    upstreamSource: upstreamSources.size === 1 ? [...upstreamSources][0] : "unknown",
+    components,
+  };
+  if (game.Id !== undefined && game.Id !== null && game.Id !== "") record.gameId = String(game.Id);
+  const region = String(findGameAttribute(game, "Country")?.Value || "").trim();
+  if (region) record.region = region;
+  const language = findGameAttribute(game, "Language")?.Value;
+  if (typeof language === "string" && language.trim()) record.language = language.trim();
+  return record;
+}
+
 async function processGameObject(game, platform, state) {
   state.jsonObjects += 1;
   if (state.maxObjects && state.jsonObjects > state.maxObjects) {
@@ -554,19 +686,18 @@ async function processGameObject(game, platform, state) {
     return;
   }
 
-  const gameName = String(game?.Name || "").trim();
-  if (!gameName || !Array.isArray(game?.Attributes)) return;
-  const romAttribute = game.Attributes.find((attribute) => attribute?.attributeName === "ROMs");
-  if (!Array.isArray(romAttribute?.Value)) return;
-
-  for (const rom of romAttribute.Value) {
-    await writeRow(state, rom?.Crc, rom?.Md5, rom?.Sha1, platform, gameName);
+  const record = hasheousGameRecord(game, platform);
+  if (!record) return;
+  state.games += 1;
+  state.components += record.components.length;
+  if (!state.stream.write(`${JSON.stringify(record)}\n`)) {
+    await once(state.stream, "drain");
   }
 
   if (state.jsonObjects % 25000 === 0) {
     console.error(
       `[identify] parsed ${state.jsonObjects.toLocaleString("en-US")} game object(s), ` +
-        `${state.rowsWithAnyHash.toLocaleString("en-US")} hash row(s)`,
+        `${state.games.toLocaleString("en-US")} game record(s)`,
     );
   }
 }
@@ -598,6 +729,15 @@ function platformRowPaths(cacheDir, slug) {
   };
 }
 
+function platformGamePaths(cacheDir, slug) {
+  const dir = path.join(cacheDir, "identify-games");
+  return {
+    dir,
+    gamesPath: path.join(dir, `${slug}.jsonl`),
+    manifestPath: path.join(dir, `${slug}.manifest.json`),
+  };
+}
+
 async function readJsonFile(filePath) {
   try {
     return JSON.parse(await readFile(filePath, "utf8"));
@@ -621,7 +761,7 @@ async function produceOpenGoodRows(platform, state, ctx) {
   }
 }
 
-async function produceHasheousRows(platform, state, ctx) {
+async function produceHasheousGames(platform, state, ctx) {
   const unzip = spawn("unzip", ["-p", ctx.dumpPath, `${platform}/*`], {
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -647,19 +787,19 @@ async function produceHasheousRows(platform, state, ctx) {
   if (state.stopParsing) unzip.kill("SIGTERM");
   const exitCode = await closed;
   if (!state.stopParsing && exitCode !== 0) {
-    throw new Error(`unzip failed for platform ${platform} with exit code ${exitCode}: ${stderr.trim()}`);
+    throw new Error(
+      `unzip failed for platform ${platform} with exit code ${exitCode}: ${stderr.trim()}`,
+    );
   }
 }
 
-// Build (or reuse a cached) normalized rows.tsv for a single platform, drawing
-// from its assigned source. Each platform is cached independently so re-runs
-// only rebuild what changed.
+// Build (or reuse a cached) normalized rows.tsv for a single OpenGood platform.
+// Each platform is cached independently so re-runs only rebuild what changed.
 async function buildPlatformRows(platform, ctx) {
-  const source = platformSource(platform);
+  const source = "opengood";
   const slug = slugifyPlatform(platform);
   const paths = platformRowPaths(ctx.cacheDir, slug);
-  const fingerprint =
-    source === "opengood" ? await openGoodFingerprint(platform, ctx) : await dumpFingerprint(ctx.dumpPath);
+  const fingerprint = await openGoodFingerprint(platform, ctx);
 
   const rowsStat = await fileStat(paths.rowsPath);
   const manifest = await readJsonFile(paths.manifestPath);
@@ -686,8 +826,7 @@ async function buildPlatformRows(platform, ctx) {
   };
 
   console.error(`[identify] ${platform}: extracting rows from ${source}`);
-  if (source === "opengood") await produceOpenGoodRows(platform, state, ctx);
-  else await produceHasheousRows(platform, state, ctx);
+  await produceOpenGoodRows(platform, state, ctx);
 
   await new Promise((resolve, reject) => {
     stream.on("error", reject);
@@ -716,6 +855,69 @@ async function buildPlatformRows(platform, ctx) {
       `${state.rowsWithAnyHash.toLocaleString("en-US")} hash row(s))`,
   );
   return { ...paths, manifest: nextManifest, slug, source };
+}
+
+// Build (or reuse a cached) grouped games.jsonl for a single Hasheous platform:
+// one JSON game record per line, components preserved with their dump order.
+async function buildPlatformGames(platform, ctx) {
+  const slug = slugifyPlatform(platform);
+  const paths = platformGamePaths(ctx.cacheDir, slug);
+  const fingerprint = await dumpFingerprint(ctx.dumpPath);
+
+  const gamesStat = await fileStat(paths.gamesPath);
+  const manifest = await readJsonFile(paths.manifestPath);
+  if (
+    gamesStat?.isFile() &&
+    !ctx.forceRowCache &&
+    manifest?.format === GAME_CACHE_FORMAT &&
+    manifest.maxObjects === (ctx.maxObjects ?? null) &&
+    JSON.stringify(manifest.fingerprint) === JSON.stringify(fingerprint)
+  ) {
+    console.error(`[identify] ${platform}: using cached games (${formatBytes(gamesStat.size)})`);
+    return { ...paths, manifest, slug, source: "hasheous" };
+  }
+
+  await mkdir(paths.dir, { recursive: true });
+  const tempGamesPath = `${paths.gamesPath}.part`;
+  const stream = createWriteStream(tempGamesPath);
+  const state = {
+    components: 0,
+    games: 0,
+    jsonObjects: 0,
+    maxObjects: ctx.maxObjects,
+    stopParsing: false,
+    stream,
+  };
+
+  console.error(`[identify] ${platform}: extracting grouped games from hasheous`);
+  await produceHasheousGames(platform, state, ctx);
+
+  await new Promise((resolve, reject) => {
+    stream.on("error", reject);
+    stream.end(resolve);
+  });
+  await rename(tempGamesPath, paths.gamesPath);
+
+  const nextManifest = {
+    format: GAME_CACHE_FORMAT,
+    generatedAt: ctx.generatedAt,
+    platform,
+    source: "hasheous",
+    fingerprint,
+    maxObjects: ctx.maxObjects ?? null,
+    stats: {
+      components: state.components,
+      gameObjects: state.jsonObjects,
+      games: state.games,
+    },
+  };
+  await writeFile(paths.manifestPath, `${JSON.stringify(nextManifest, null, 2)}\n`);
+  const written = await stat(paths.gamesPath);
+  console.error(
+    `[identify] ${platform}: wrote games (${formatBytes(written.size)}, ` +
+      `${state.games.toLocaleString("en-US")} game(s))`,
+  );
+  return { ...paths, manifest: nextManifest, slug, source: "hasheous" };
 }
 
 class IdTable {
@@ -952,12 +1154,14 @@ function writeHashMap(algorithm, values) {
     if (Array.isArray(value)) {
       const uniqueIds = [...new Set(value)].sort((a, b) => a - b);
       const conflictIndex = conflictOffsets.length - 1;
-      if (conflictIndex >= CONFLICT_VALUE_FLAG) throw new Error(`Too many conflicts in ${algorithm}`);
+      if (conflictIndex >= CONFLICT_VALUE_FLAG)
+        throw new Error(`Too many conflicts in ${algorithm}`);
       encodedValues.set(key, CONFLICT_VALUE_FLAG + conflictIndex);
       conflictValues.push(...uniqueIds);
       conflictOffsets.push(conflictValues.length);
     } else {
-      if (value >= CONFLICT_VALUE_FLAG) throw new Error(`Pair id exceeds binary format limit in ${algorithm}`);
+      if (value >= CONFLICT_VALUE_FLAG)
+        throw new Error(`Pair id exceeds binary format limit in ${algorithm}`);
       encodedValues.set(key, value);
     }
   }
@@ -965,7 +1169,10 @@ function writeHashMap(algorithm, values) {
   const recordWidth = info.hashBytes + 4;
   const headerBytes = 20;
   const buffer = Buffer.allocUnsafe(
-    headerBytes + keys.length * recordWidth + conflictOffsets.length * 4 + conflictValues.length * 4,
+    headerBytes +
+      keys.length * recordWidth +
+      conflictOffsets.length * 4 +
+      conflictValues.length * 4,
   );
   HASH_MAGIC.copy(buffer, 0);
   buffer.writeUInt8(info.code, 4);
@@ -1012,15 +1219,15 @@ function writeNamePlatformPairs(pairs) {
   return buffer;
 }
 
-function writePack(entries) {
+function writePack(entries, magic = PACK_MAGIC) {
   const headerBytes =
-    PACK_MAGIC.length +
+    magic.length +
     4 +
     entries.reduce((sum, entry) => sum + 2 + 8 + Buffer.byteLength(entry.name, "utf8"), 0);
   const payloadBytes = entries.reduce((sum, entry) => sum + entry.bytes.length, 0);
   const buffer = Buffer.allocUnsafe(headerBytes + payloadBytes);
-  PACK_MAGIC.copy(buffer, 0);
-  let cursor = PACK_MAGIC.length;
+  magic.copy(buffer, 0);
+  let cursor = magic.length;
   buffer.writeUInt32LE(entries.length, cursor);
   cursor += 4;
   for (const entry of entries) {
@@ -1052,31 +1259,47 @@ async function brotliCompress(buffer, quality) {
   });
 }
 
-function resolveSelectedPlatforms(options) {
+// Split the requested platform names into the OpenGood half (static list) and
+// the Hasheous half. Hasheous platforms are validated later against the dump's
+// discovered directory list, because that list is only known once the dump is
+// resolved.
+function resolveSelection(options) {
+  const openGoodAll = Object.keys(OPENGOOD_PLATFORMS);
   if (options.openGoodOnly) {
     if (options.only.length > 0) throw new Error("--opengood-only cannot be combined with --only");
-    return SUPPORTED_PLATFORMS.filter((platform) => platformSource(platform) === "opengood");
+    return { openGoodSelected: openGoodAll, hasheousRequested: [], hasheousAll: false };
   }
-  if (!options.only || options.only.length === 0) return [...SUPPORTED_PLATFORMS];
-  const known = new Set(SUPPORTED_PLATFORMS);
-  const unknown = options.only.filter((platform) => !known.has(platform));
-  if (unknown.length > 0) {
-    throw new Error(`Unknown platform(s): ${unknown.join(", ")}. Use --print-platforms to list valid names.`);
+  if (!options.only || options.only.length === 0) {
+    return { openGoodSelected: openGoodAll, hasheousRequested: [], hasheousAll: true };
   }
-  return SUPPORTED_PLATFORMS.filter((platform) => options.only.includes(platform));
+  const openGoodSet = new Set(openGoodAll);
+  return {
+    openGoodSelected: options.only.filter((platform) => openGoodSet.has(platform)),
+    hasheousRequested: options.only.filter((platform) => !openGoodSet.has(platform)),
+    hasheousAll: false,
+  };
 }
 
-async function filterHasheousPlatforms(dumpPath, hasheousPlatforms, options) {
+// Discover the Hasheous platform list from the dump's top-level directories.
+// OpenGood-covered platforms are excluded: OpenGood is the exclusive source for
+// them and an OpenGood platform never falls through to Hasheous.
+async function discoverHasheousPlatforms(dumpPath, selection, options) {
   requireExecutable("zipinfo");
   const zipPlatforms = await collectZipPlatforms(dumpPath);
-  const missing = hasheousPlatforms.filter((platform) => !zipPlatforms.has(platform));
+  for (const platform of Object.keys(OPENGOOD_PLATFORMS)) zipPlatforms.delete(platform);
+  if (selection.hasheousAll) return [...zipPlatforms].sort();
+  const missing = selection.hasheousRequested.filter((platform) => !zipPlatforms.has(platform));
   if (missing.length > 0 && !options.allowMissingPlatforms) {
-    throw new Error(`Hasheous platform(s) not found in dump: ${missing.join(", ")}`);
+    throw new Error(
+      `Hasheous platform(s) not found in dump: ${missing.join(", ")}. Use --print-platforms to list valid names.`,
+    );
   }
   if (missing.length > 0) {
-    console.error(`[identify] skipping ${missing.length} hasheous platform(s) missing from this dump/fixture`);
+    console.error(
+      `[identify] skipping ${missing.length} hasheous platform(s) missing from this dump/fixture`,
+    );
   }
-  return hasheousPlatforms.filter((platform) => zipPlatforms.has(platform));
+  return selection.hasheousRequested.filter((platform) => zipPlatforms.has(platform)).sort();
 }
 
 // Assemble one RWFP1 pack for a single platform from its built index parts.
@@ -1168,17 +1391,371 @@ async function writeSystemPack(platform, rows, options) {
   return system;
 }
 
+async function* readGames(gamesPath) {
+  const lines = readline.createInterface({
+    crlfDelay: Number.POSITIVE_INFINITY,
+    input: createReadStream(gamesPath),
+  });
+  for await (const line of lines) {
+    if (line) yield JSON.parse(line);
+  }
+}
+
+// Load every game for one platform and sort deterministically. The spec orders
+// games.json by (platform, name); gameId and input order break ties so a dump
+// with duplicate names still rebuilds byte-identically.
+// The Rust reader rejects a whole pack when any record exceeds its caps
+// (4096-byte strings, 10,000 components per game, 4,000,000 games), so the
+// writer MUST drop an oversized record instead of emitting an unreadable pack.
+const READER_MAX_STRING_BYTES = 4096;
+const READER_MAX_COMPONENTS_PER_GAME = 10000;
+const READER_MAX_GAMES = 4000000;
+
+function gameWithinPackCaps(game) {
+  const stringOk = (value) =>
+    value === undefined || Buffer.byteLength(String(value), "utf8") <= READER_MAX_STRING_BYTES;
+  return (
+    stringOk(game.name) &&
+    stringOk(game.platform) &&
+    stringOk(game.gameId) &&
+    stringOk(game.region) &&
+    stringOk(game.language) &&
+    game.components.length <= READER_MAX_COMPONENTS_PER_GAME &&
+    game.components.every((component) => stringOk(component.filename))
+  );
+}
+
+async function loadSortedGames(gamesPath) {
+  const games = [];
+  let skippedOverCaps = 0;
+  for await (const game of readGames(gamesPath)) {
+    if (!gameWithinPackCaps(game) || games.length >= READER_MAX_GAMES) {
+      skippedOverCaps += 1;
+      continue;
+    }
+    game.inputIndex = games.length;
+    games.push(game);
+  }
+  if (skippedOverCaps > 0) {
+    console.error(
+      `[identify] skipped ${skippedOverCaps} game record(s) that exceed the RWFP2 reader caps`,
+    );
+  }
+  // Codepoint comparison, never localeCompare: ICU collation varies by
+  // machine and would break the byte-identical rebuild promise.
+  const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  games.sort(
+    (a, b) =>
+      compare(a.platform, b.platform) ||
+      compare(a.name, b.name) ||
+      compare(String(a.gameId ?? ""), String(b.gameId ?? "")) ||
+      a.inputIndex - b.inputIndex,
+  );
+  return games;
+}
+
+// Mark components byte-identical across MORE THAN ONE game (same size plus the
+// same md5 or the same sha1) as non-discriminating. They stay in games.json but
+// are excluded from route.bin: a shared CD audio track can never pick one game.
+function markSharedComponents(games) {
+  const owners = new Map();
+  const keysOf = (component) => {
+    const keys = [];
+    if (component.md5) keys.push(`${component.size}|m|${component.md5}`);
+    if (component.sha1) keys.push(`${component.size}|s|${component.sha1}`);
+    return keys;
+  };
+  games.forEach((game, gameIndex) => {
+    for (const component of game.components) {
+      for (const key of keysOf(component)) {
+        const owner = owners.get(key);
+        if (owner === undefined) owners.set(key, gameIndex);
+        else if (owner !== gameIndex) owners.set(key, -1);
+      }
+    }
+  });
+  let sharedComponents = 0;
+  for (const game of games) {
+    for (const component of game.components) {
+      component.discriminating = !keysOf(component).some((key) => owners.get(key) === -1);
+      if (!component.discriminating) sharedComponents += 1;
+    }
+  }
+  return sharedComponents;
+}
+
+// Serialize games.json with a fixed key order and optional keys omitted, so
+// identical input always produces identical bytes.
+function gamesJsonBytes(games) {
+  const serialized = games.map((game) => {
+    const out = {
+      name: game.name,
+      platform: game.platform,
+      source: "hasheous",
+      upstreamSource: game.upstreamSource || "unknown",
+    };
+    if (game.gameId !== undefined) out.gameId = game.gameId;
+    if (game.region !== undefined) out.region = game.region;
+    if (game.language !== undefined) out.language = game.language;
+    out.components = game.components.map((component) => {
+      const entry = { role: "primary_payload", ordinal: component.ordinal };
+      if (component.filename !== undefined) entry.filename = component.filename;
+      entry.size = component.size;
+      if (component.crc32 !== undefined) entry.crc32 = component.crc32;
+      if (component.md5 !== undefined) entry.md5 = component.md5;
+      if (component.sha1 !== undefined) entry.sha1 = component.sha1;
+      if (component.sha256 !== undefined) entry.sha256 = component.sha256;
+      entry.required = true;
+      entry.discriminating = component.discriminating;
+      return entry;
+    });
+    return out;
+  });
+  return Buffer.from(JSON.stringify(serialized), "utf8");
+}
+
+// Build route.bin (RWR2) and refs.bin (RWX2). Only discriminating components
+// with a crc32 and size > 0 get routed; a ref id is the index of the
+// (game_index, component_index) record in refs.bin.
+function buildRouteAndRefs(games) {
+  const refs = [];
+  const byKey = new Map();
+  games.forEach((game, gameIndex) => {
+    if (gameIndex > 0xffffffff) throw new Error("Too many games for u32 game index");
+    game.components.forEach((component, componentIndex) => {
+      if (componentIndex > 0xffff) throw new Error("Too many components for u16 component index");
+      if (!component.discriminating || !component.crc32 || !(component.size > 0)) return;
+      const refId = refs.length;
+      refs.push({ gameIndex, componentIndex });
+      const key = `${component.crc32}|${component.size}`;
+      const existing = byKey.get(key);
+      if (existing === undefined) byKey.set(key, [refId]);
+      else existing.push(refId);
+    });
+  });
+
+  const keys = [...byKey.keys()].sort((a, b) => {
+    const [crcA, sizeA] = a.split("|");
+    const [crcB, sizeB] = b.split("|");
+    return crcA < crcB ? -1 : crcA > crcB ? 1 : Number(sizeA) - Number(sizeB);
+  });
+
+  const conflictOffsets = [0];
+  const conflictValues = [];
+  const values = [];
+  for (const key of keys) {
+    const refIds = byKey.get(key);
+    if (refIds.length === 1) {
+      if (refIds[0] >= CONFLICT_VALUE_FLAG) throw new Error("Ref id exceeds RWR2 format limit");
+      values.push(refIds[0]);
+    } else {
+      const conflictIndex = conflictOffsets.length - 1;
+      if (conflictIndex >= CONFLICT_VALUE_FLAG) throw new Error("Too many conflicts in route.bin");
+      values.push(CONFLICT_VALUE_FLAG + conflictIndex);
+      conflictValues.push(...refIds);
+      conflictOffsets.push(conflictValues.length);
+    }
+  }
+
+  const headerBytes = 20;
+  const recordWidth = 16;
+  const route = Buffer.allocUnsafe(
+    headerBytes +
+      keys.length * recordWidth +
+      conflictOffsets.length * 4 +
+      conflictValues.length * 4,
+  );
+  ROUTE_MAGIC.copy(route, 0);
+  route.writeUInt16LE(1, 4);
+  route.writeUInt16LE(0, 6);
+  route.writeUInt32LE(keys.length, 8);
+  route.writeUInt32LE(conflictOffsets.length - 1, 12);
+  route.writeUInt32LE(conflictValues.length, 16);
+  let cursor = headerBytes;
+  keys.forEach((key, index) => {
+    const [crc, size] = key.split("|");
+    Buffer.from(crc, "hex").copy(route, cursor);
+    cursor += 4;
+    route.writeBigUInt64LE(BigInt(size), cursor);
+    cursor += 8;
+    route.writeUInt32LE(values[index], cursor);
+    cursor += 4;
+  });
+  for (const offset of conflictOffsets) {
+    route.writeUInt32LE(offset, cursor);
+    cursor += 4;
+  }
+  for (const refId of conflictValues) {
+    route.writeUInt32LE(refId, cursor);
+    cursor += 4;
+  }
+
+  const refsBuffer = Buffer.allocUnsafe(8 + refs.length * 6);
+  REFS_MAGIC.copy(refsBuffer, 0);
+  refsBuffer.writeUInt16LE(1, 4);
+  refsBuffer.writeUInt16LE(6, 6);
+  cursor = 8;
+  for (const ref of refs) {
+    refsBuffer.writeUInt32LE(ref.gameIndex, cursor);
+    cursor += 4;
+    refsBuffer.writeUInt16LE(ref.componentIndex, cursor);
+    cursor += 2;
+  }
+  return { refsBuffer, refsCount: refs.length, route, routedKeys: keys.length };
+}
+
+export function mediaProfileFor(platform, source) {
+  if (source === "opengood") return "opengood-cartridge-v1";
+  return KNOWN_PLATFORM_PROFILES[platform] ?? DEFAULT_MEDIA_PROFILE;
+}
+
+// Assemble one RWFP2 pack for a single Hasheous platform. Same outer container
+// layout as RWFP1 with magic RWFP2, members in this exact directory order.
+export function buildSystemPackV2(platform, games, provenance) {
+  const sharedComponents = markSharedComponents(games);
+  const gamesBytes = gamesJsonBytes(games);
+  const { refsBuffer, refsCount, route, routedKeys } = buildRouteAndRefs(games);
+  const componentCount = games.reduce((sum, game) => sum + game.components.length, 0);
+  const manifest = {
+    format: INDEX_FORMAT_V2,
+    platform,
+    source: "hasheous",
+    canonicalizationProfile: mediaProfileFor(platform, "hasheous"),
+    canonicalizationVersion: 1,
+    provenance,
+    counts: {
+      games: games.length,
+      components: componentCount,
+      routedKeys,
+      refs: refsCount,
+      sharedComponents,
+    },
+  };
+  const pack = writePack(
+    [
+      { name: "games.json", bytes: gamesBytes },
+      { name: "route.bin", bytes: route },
+      { name: "refs.bin", bytes: refsBuffer },
+      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest), "utf8") },
+    ],
+    PACK_MAGIC_V2,
+  );
+  return { componentCount, pack, routedKeys, sharedComponents };
+}
+
+async function writeSystemPackV2(platform, gamesInfo, options, provenance) {
+  console.error(`[identify] ${platform}: building RWFP2 pack`);
+  const games = await loadSortedGames(gamesInfo.gamesPath);
+  const { componentCount, pack, routedKeys, sharedComponents } = buildSystemPackV2(
+    platform,
+    games,
+    provenance,
+  );
+  const fileName = `${gamesInfo.slug}.pack`;
+  const outPath = path.join(options.outPath, fileName);
+  await writeFile(outPath, pack);
+
+  const system = {
+    platform,
+    slug: gamesInfo.slug,
+    source: "hasheous",
+    packFormat: "RWFP2",
+    file: fileName,
+    rawBytes: pack.length,
+    sha256: crypto.createHash("sha256").update(pack).digest("hex"),
+    entries: {
+      games: games.length,
+      components: componentCount,
+      routedKeys,
+      sharedComponents,
+    },
+  };
+  if (options.brotli) {
+    const compressed = await brotliCompress(pack, options.brotliQuality);
+    await writeFile(`${outPath}.br`, compressed);
+    system.brotliFile = `${fileName}.br`;
+    system.brotliBytes = compressed.length;
+  }
+  console.error(
+    `[identify] ${platform}: wrote ${fileName} (${formatBytes(pack.length)}` +
+      `${system.brotliBytes ? `, br ${formatBytes(system.brotliBytes)}` : ""}` +
+      `, ${games.length.toLocaleString("en-US")} game(s), ${routedKeys.toLocaleString("en-US")} routed key(s))`,
+  );
+  return system;
+}
+
+// Build the catalog.json platform entries and enforce the alias rules: a
+// platform's own normalized name always claims its alias (a curated alias that
+// collides with another platform's own name is dropped); any remaining
+// duplicate alias, and any duplicate packSlug, is a build error.
+export function buildCatalogPlatforms(systems) {
+  const ownNames = new Map();
+  const slugOwners = new Map();
+  for (const system of systems) {
+    const slugOwner = slugOwners.get(system.slug);
+    if (slugOwner !== undefined && slugOwner !== system.platform) {
+      throw new Error(
+        `Duplicate packSlug "${system.slug}" between "${slugOwner}" and "${system.platform}"`,
+      );
+    }
+    slugOwners.set(system.slug, system.platform);
+    const own = normalizeAlias(system.platform);
+    const existingOwn = ownNames.get(own);
+    if (existingOwn !== undefined && existingOwn !== system.platform) {
+      throw new Error(
+        `Duplicate platform alias "${own}" between "${existingOwn}" and "${system.platform}"`,
+      );
+    }
+    ownNames.set(own, system.platform);
+  }
+
+  const aliasOwners = new Map(ownNames);
+  const platforms = systems.map((system) => {
+    const aliases = new Set([normalizeAlias(system.platform)]);
+    for (const alias of CURATED_ALIASES[system.platform] ?? []) {
+      const normalized = normalizeAlias(alias);
+      const ownOwner = ownNames.get(normalized);
+      // Another platform's own name wins over this curated alias.
+      if (ownOwner !== undefined && ownOwner !== system.platform) continue;
+      const owner = aliasOwners.get(normalized);
+      if (owner !== undefined && owner !== system.platform) {
+        throw new Error(
+          `Duplicate platform alias "${normalized}" between "${owner}" and "${system.platform}"`,
+        );
+      }
+      aliasOwners.set(normalized, system.platform);
+      aliases.add(normalized);
+    }
+    const entry = {
+      canonicalPlatform: system.platform,
+      aliases: [...aliases].sort(),
+      source: system.source,
+      mediaProfiles: [mediaProfileFor(system.platform, system.source)],
+      packSlug: system.slug,
+      packFormat: system.packFormat ?? "RWFP1",
+      canonicalizationVersion: 1,
+    };
+    if (system.sha256) entry.packSha256 = system.sha256;
+    return entry;
+  });
+  return platforms;
+}
+
 export async function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   if (options.printPlatforms) {
-    for (const platform of SUPPORTED_PLATFORMS) console.log(`${platformSource(platform)}\t${platform}`);
+    for (const platform of Object.keys(OPENGOOD_PLATFORMS).sort())
+      console.log(`opengood\t${platform}`);
+    console.log(
+      "hasheous\t(every other top-level directory discovered in the MetadataMap.zip dump)",
+    );
     return;
   }
 
   requireExecutable("curl");
-  const selected = resolveSelectedPlatforms(options);
-  const openGoodSelected = selected.filter((platform) => platformSource(platform) === "opengood");
-  let hasheousSelected = selected.filter((platform) => platformSource(platform) === "hasheous");
+  const selection = resolveSelection(options);
+  const openGoodSelected = [...selection.openGoodSelected].sort();
+  let hasheousSelected = [];
 
   // Pre-download (cache) every OpenGood DAT the selected platforms need.
   const neededDats = new Set();
@@ -1193,23 +1770,25 @@ export async function main(argv = process.argv.slice(2)) {
   // Resolve the Hasheous dump only when a selected platform actually needs it.
   let dumpPath;
   let dumpSource;
-  if (hasheousSelected.length > 0) {
+  if (selection.hasheousAll || selection.hasheousRequested.length > 0) {
     requireExecutable("unzip");
     ({ dumpPath, source: dumpSource } = await resolveDumpPath(options));
     if (options.downloadOnly) {
-      console.log(JSON.stringify({ dumpPath, source: dumpSource, openGood: [...neededDats] }, null, 2));
+      console.log(
+        JSON.stringify({ dumpPath, source: dumpSource, openGood: [...neededDats] }, null, 2),
+      );
       return;
     }
-    hasheousSelected = await filterHasheousPlatforms(dumpPath, hasheousSelected, options);
+    hasheousSelected = await discoverHasheousPlatforms(dumpPath, selection, options);
+    dumpSource = { ...dumpSource, sha256: await sha256File(dumpPath) };
   } else if (options.downloadOnly) {
     console.log(JSON.stringify({ openGood: [...neededDats] }, null, 2));
     return;
   }
 
-  const buildPlatforms = [...openGoodSelected, ...hasheousSelected].sort(
-    (a, b) => SUPPORTED_PLATFORMS.indexOf(a) - SUPPORTED_PLATFORMS.indexOf(b),
-  );
-  if (buildPlatforms.length === 0) throw new Error("No platforms selected to build");
+  if (openGoodSelected.length + hasheousSelected.length === 0) {
+    throw new Error("No platforms selected to build");
+  }
 
   const ctx = {
     cacheDir: options.cacheDir,
@@ -1220,16 +1799,54 @@ export async function main(argv = process.argv.slice(2)) {
     openGoodPaths,
   };
 
+  // Pack provenance is deterministic: repository/revision for OpenGood, the
+  // dump's identity hash for Hasheous. No timestamps go inside packs.
+  const hasheousDump = dumpSource
+    ? { fileName: dumpSource.fileName, sha256: dumpSource.sha256, sizeBytes: dumpSource.sizeBytes }
+    : undefined;
+  const hasheousProvenance = { url: "https://hasheous.org/", dump: hasheousDump };
+
   await mkdir(options.outPath, { recursive: true });
   const systems = [];
-  for (const platform of buildPlatforms) {
+  for (const platform of openGoodSelected) {
     const rows = await buildPlatformRows(platform, ctx);
-    systems.push(await writeSystemPack(platform, rows, options));
+    systems.push({ ...(await writeSystemPack(platform, rows, options)), packFormat: "RWFP1" });
   }
+  for (const platform of hasheousSelected) {
+    const games = await buildPlatformGames(platform, ctx);
+    systems.push(await writeSystemPackV2(platform, games, options, hasheousProvenance));
+  }
+
+  // catalog.json always lists every OpenGood platform (with aliases) plus each
+  // built Hasheous platform, so a reader can resolve any known alias even when
+  // only a subset of packs was built.
+  const builtBySlug = new Map(systems.map((system) => [system.slug, system]));
+  const catalogSystems = [];
+  for (const platform of Object.keys(OPENGOOD_PLATFORMS).sort()) {
+    const slug = slugifyPlatform(platform);
+    const built = builtBySlug.get(slug);
+    catalogSystems.push(built ?? { platform, slug, source: "opengood", packFormat: "RWFP1" });
+  }
+  for (const system of systems) {
+    if (system.source === "hasheous") catalogSystems.push(system);
+  }
+  const catalog = {
+    format: CATALOG_FORMAT,
+    generated: {
+      opengoodRevision: OPENGOOD_REVISION,
+      ...(hasheousDump ? { hasheousDump } : {}),
+    },
+    platforms: buildCatalogPlatforms(catalogSystems),
+  };
+  await writeFile(
+    path.join(options.outPath, "catalog.json"),
+    `${JSON.stringify(catalog, null, 2)}\n`,
+  );
 
   const index = {
     format: INDEX_FORMAT,
     hashStrategy: "crc-primary-md5-sha1-fallback-per-system",
+    catalog: "catalog.json",
     sources: {
       opengood: {
         url: OPENGOOD_REPOSITORY,
@@ -1250,7 +1867,7 @@ export async function main(argv = process.argv.slice(2)) {
     (acc, system) => {
       acc.raw += system.rawBytes;
       acc.brotli += system.brotliBytes || 0;
-      acc.crcKeys += system.entries.crcKeys;
+      acc.crcKeys += system.entries.crcKeys ?? system.entries.routedKeys ?? 0;
       return acc;
     },
     { brotli: 0, crcKeys: 0, raw: 0 },

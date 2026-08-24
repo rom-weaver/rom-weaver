@@ -1,0 +1,19 @@
+{
+  "Id": 102,
+  "ObjectType": "Game",
+  "Name": "Beta",
+  "SignatureDataObjects": [],
+  "Metadata": [],
+  "Attributes": [
+    {
+      "attributeType": "EmbeddedList",
+      "attributeName": "ROMs",
+      "attributeRelationType": "ROM",
+      "Value": [
+        { "Id": "5", "Name": "Beta (USA).bin", "Size": 2000, "Crc": "dddddddd", "Md5": "dddddddddddddddddddddddddddddddd", "Sha1": "", "Sha256": "", "SignatureSource": "Redump", "Attributes": {}, "Country": { "US": "United States" }, "Language": {} },
+        { "Id": "6", "Name": "Beta (USA) (Track 2).bin", "Size": 500, "Crc": "cccccccc", "Md5": "cccccccccccccccccccccccccccccccc", "Sha1": "", "Sha256": "", "SignatureSource": "Redump", "Attributes": {}, "Country": { "US": "United States" }, "Language": {} },
+        { "Id": "7", "Name": "Beta (USA) (Track 3).bin", "Size": 300, "Crc": "eeeeeeee", "Md5": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1", "Sha1": "", "Sha256": "", "SignatureSource": "Redump", "Attributes": {}, "Country": { "US": "United States" }, "Language": {} }
+      ]
+    }
+  ]
+}

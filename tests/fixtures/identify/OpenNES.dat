@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!DOCTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.logiqx.com/Dats/datafile.dtd">
+<datafile>
+	<header>
+		<name>OpenNES</name>
+		<description>Synthetic OpenNES fixture</description>
+	</header>
+	<game name="Alpha Quest (U) [!]">
+		<rom name="Alpha Quest (U) [!].nes" size="1024" crc="11111111" md5="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" sha1="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/>
+	</game>
+	<game name="Beta Blaster (U) (PRG1) [!]">
+		<rom name="Beta Blaster (U) (PRG1) [!].nes" size="2048" crc="22222222" md5="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" sha1="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/>
+	</game>
+</datafile>

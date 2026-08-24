@@ -1,0 +1,101 @@
+{
+  "Id": 101,
+  "ObjectType": "Game",
+  "Name": "Alpha",
+  "SignatureDataObjects": [],
+  "Metadata": [],
+  "Attributes": [
+    {
+      "attributeType": "ShortString",
+      "attributeName": "Country",
+      "attributeRelationType": "None",
+      "Value": "United States (US)"
+    },
+    {
+      "attributeType": "EmbeddedList",
+      "attributeName": "ROMs",
+      "attributeRelationType": "ROM",
+      "Value": [
+        {
+          "Id": "1",
+          "Name": "Alpha (USA).bin",
+          "Size": 1000,
+          "Crc": "aaaaaaaa",
+          "Md5": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+          "Sha1": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+          "Sha256": "",
+          "SignatureSource": "Redump",
+          "Attributes": {
+            "serial": "SLUS-00001"
+          },
+          "Country": {
+            "US": "United States"
+          },
+          "Language": {}
+        },
+        {
+          "Id": "2",
+          "Name": "Alpha (USA).cue",
+          "Size": 100,
+          "Crc": "bbbbbbbb",
+          "Md5": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+          "Sha1": "",
+          "Sha256": "",
+          "SignatureSource": "Redump",
+          "Attributes": {
+            "serial": "SLUS-00001"
+          },
+          "Country": {
+            "US": "United States"
+          },
+          "Language": {}
+        },
+        {
+          "Id": "3",
+          "Name": "Alpha (USA) (Track 2).bin",
+          "Size": 500,
+          "Crc": "cccccccc",
+          "Md5": "cccccccccccccccccccccccccccccccc",
+          "Sha1": "",
+          "Sha256": "",
+          "SignatureSource": "Redump",
+          "Attributes": {},
+          "Country": {
+            "US": "United States"
+          },
+          "Language": {}
+        },
+        {
+          "Id": "4",
+          "Name": "Alpha (USA).chd",
+          "Size": 0,
+          "Crc": "",
+          "Md5": "",
+          "Sha1": "1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c",
+          "Sha256": "",
+          "SignatureSource": "MAMERedump",
+          "Attributes": {},
+          "Country": {
+            "US": "United States"
+          },
+          "Language": {}
+        },
+        {
+          "Id": "5",
+          "Name": "Alpha (USA) (Track 3).bin",
+          "Size": 60,
+          "Crc": "cccccccc",
+          "Md5": "dddddddddddddddddddddddddddddddd",
+          "Sha1": "",
+          "Sha256": "",
+          "SignatureSource": "Redump",
+          "Attributes": {},
+          "Country": {
+            "US": "United States"
+          },
+          "Language": {}
+        }
+      ]
+    }
+  ]
+}

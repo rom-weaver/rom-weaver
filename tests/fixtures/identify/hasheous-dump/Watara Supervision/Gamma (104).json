@@ -1,0 +1,18 @@
+{
+  "Id": 104,
+  "ObjectType": "Game",
+  "Name": "Gamma",
+  "SignatureDataObjects": [],
+  "Metadata": [],
+  "Attributes": [
+    { "attributeType": "ShortString", "attributeName": "Country", "attributeRelationType": "None", "Value": "World" },
+    {
+      "attributeType": "EmbeddedList",
+      "attributeName": "ROMs",
+      "attributeRelationType": "ROM",
+      "Value": [
+        { "Id": "9", "Name": "Gamma (World).sv", "Size": 64, "Crc": "12345678", "Md5": "", "Sha1": "", "Sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "SignatureSource": "NoIntros", "Attributes": { "labels": "nointro" }, "Country": { "World": "World" }, "Language": {} }
+      ]
+    }
+  ]
+}

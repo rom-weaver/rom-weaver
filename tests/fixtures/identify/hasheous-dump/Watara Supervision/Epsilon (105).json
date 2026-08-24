@@ -1,0 +1,17 @@
+{
+  "Id": 105,
+  "ObjectType": "Game",
+  "Name": "Epsilon",
+  "SignatureDataObjects": [],
+  "Metadata": [],
+  "Attributes": [
+    {
+      "attributeType": "EmbeddedList",
+      "attributeName": "ROMs",
+      "attributeRelationType": "ROM",
+      "Value": [
+        { "Id": "10", "Name": "Epsilon (World).sv", "Size": 128, "Crc": "87654321", "Md5": "12121212121212121212121212121212", "Sha1": "", "Sha256": "", "SignatureSource": "ScreenScraper", "Attributes": {}, "Country": {}, "Language": {} }
+      ]
+    }
+  ]
+}
