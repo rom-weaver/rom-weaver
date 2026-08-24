@@ -43,6 +43,10 @@ const candidateFromRecognition = (recognition?: SaveRecognition): SaveCandidate 
 };
 
 const formatAssignment = (field: SaveField, value: string) => `${field.id}=${value}`;
+const editedSaveName = (name: string) => {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? `${name.slice(0, dot)}-edited${name.slice(dot)}` : `${name}-edited.sav`;
+};
 const loadSaveApi = () => import("../../platform/browser/browser-save-api.ts");
 
 const SaveFieldControl = ({
@@ -325,7 +329,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
         assignments,
         fileName: source.name,
         game: document?.identity.id,
-        outputName: `${source.name.replace(/\.[^.]+$/, "")}-edited.sav`,
+        outputName: editedSaveName(source.name),
         romSha1: sourceRomSha1,
         signal,
         source,

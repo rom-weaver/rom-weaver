@@ -75,6 +75,11 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({ file: "reference/cli.md", label: "CLI reference", slug: "docs/cli" }),
   Object.freeze({
+    file: "reference/save-editor.md",
+    label: "Save Editor support",
+    slug: "docs/save-editor-support",
+  }),
+  Object.freeze({
     file: "reference/formats.md",
     label: "Supported formats",
     slug: "docs/supported-formats",

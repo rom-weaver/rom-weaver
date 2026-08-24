@@ -1,5 +1,8 @@
 pub mod formats;
+mod pokemon_gen2;
 mod pokemon_gen3;
+mod pokemon_gen4;
+mod zelda_alttp;
 
 use std::collections::BTreeMap;
 
@@ -9,7 +12,10 @@ use ts_rs::TS;
 
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
+pub use pokemon_gen2::PokemonGen2Handler;
 pub use pokemon_gen3::PokemonGen3Handler;
+pub use pokemon_gen4::PokemonGen4Handler;
+pub use zelda_alttp::ZeldaAlttpHandler;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
@@ -283,7 +289,12 @@ pub struct SaveGameRegistry {
 impl Default for SaveGameRegistry {
     fn default() -> Self {
         Self {
-            handlers: vec![Box::new(PokemonGen3Handler)],
+            handlers: vec![
+                Box::new(PokemonGen2Handler),
+                Box::new(PokemonGen3Handler),
+                Box::new(PokemonGen4Handler),
+                Box::new(ZeldaAlttpHandler),
+            ],
         }
     }
 }

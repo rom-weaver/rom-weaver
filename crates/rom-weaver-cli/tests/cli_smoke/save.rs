@@ -53,6 +53,27 @@ fn write_fixture(temp: &TempDir) -> PathBuf {
     path.path().to_path_buf()
 }
 
+fn alttp_fixture() -> Vec<u8> {
+    const FILE_SIZE: usize = 0x500;
+    let mut bytes = vec![0; 0x2000];
+    for slot in 0..3usize {
+        let offset = slot * FILE_SIZE;
+        let file = &mut bytes[offset..offset + FILE_SIZE];
+        file[0x3E5..0x3E7].copy_from_slice(&0x55AAu16.to_le_bytes());
+        file[0x360..0x362].copy_from_slice(&123u16.to_le_bytes());
+        file[0x362..0x364].copy_from_slice(&123u16.to_le_bytes());
+        file[0x36C] = 24;
+        file[0x36D] = 24;
+        let sum = file[..0x4FE].chunks_exact(2).fold(0x5A5Au16, |sum, word| {
+            sum.wrapping_sub(u16::from_le_bytes([word[0], word[1]]))
+        });
+        file[0x4FE..0x500].copy_from_slice(&sum.to_le_bytes());
+        let backup = 0xF00 + offset;
+        bytes.copy_within(offset..offset + FILE_SIZE, backup);
+    }
+    bytes
+}
+
 #[test]
 fn save_identify_rejects_oversized_input_before_reading_it() {
     let temp = setup_temp_dir();
@@ -227,6 +248,65 @@ fn save_set_dry_run_and_write_are_atomic_and_reparseable() {
 }
 
 #[test]
+fn save_commands_route_an_alttp_sram_through_the_shared_handler() {
+    let temp = setup_temp_dir();
+    let save = temp.child("zelda.srm");
+    let output = temp.child("zelda-edited.srm");
+    let original = alttp_fixture();
+    fs::write(save.path(), &original).unwrap();
+
+    let identify = run_single_json_event(
+        &["save", "identify", save.path().to_str().unwrap(), "--json"],
+        0,
+    );
+    assert_eq!(
+        identify["details"]["save_editor"]["document"]["identity"]["id"],
+        "zelda-a-link-to-the-past"
+    );
+
+    let preview = run_single_json_event(
+        &[
+            "save",
+            "set",
+            save.path().to_str().unwrap(),
+            "slot_2.resources.rupees=999",
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        preview["details"]["save_editor"]["result"]["preview"]["output_valid"],
+        true
+    );
+
+    run_single_json_event(
+        &[
+            "save",
+            "set",
+            save.path().to_str().unwrap(),
+            "slot_2.resources.rupees=999",
+            "-o",
+            output.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let get = run_single_json_event(
+        &[
+            "save",
+            "get",
+            output.path().to_str().unwrap(),
+            "slot_2.resources.rupees",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(get["label"], "999");
+    assert_eq!(fs::read(save.path()).unwrap(), original);
+}
+
+#[test]
 fn save_set_rejects_bad_values_and_source_collisions() {
     let temp = setup_temp_dir();
     let save = write_fixture(&temp);
@@ -313,4 +393,22 @@ fn unsupported_save_stays_untouched() {
         "64 KiB persistent save"
     );
     assert_eq!(fs::read(save.path()).unwrap(), vec![0xA5; 65_536]);
+
+    let ds_save = temp.child("unknown-ds.sav");
+    fs::write(ds_save.path(), vec![0xA5; 524_288]).unwrap();
+    let json = run_single_json_event(
+        &[
+            "save",
+            "identify",
+            ds_save.path().to_str().unwrap(),
+            "--json",
+        ],
+        2,
+    );
+    assert_eq!(json["status"], "unsupported");
+    assert_eq!(
+        json["details"]["save_editor"]["potential_format"],
+        "Nintendo DS save 512 KiB"
+    );
+    assert_eq!(fs::read(ds_save.path()).unwrap(), vec![0xA5; 524_288]);
 }

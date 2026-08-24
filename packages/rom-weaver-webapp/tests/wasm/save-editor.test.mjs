@@ -59,6 +59,27 @@ const emeraldFixture = () => {
   return bytes;
 };
 
+const alttpFixture = () => {
+  const fileSize = 0x500;
+  const bytes = new Uint8Array(0x2000);
+  for (let slot = 0; slot < 3; slot += 1) {
+    const offset = slot * fileSize;
+    writeU16(bytes, offset + 0x3e5, 0x55aa);
+    writeU16(bytes, offset + 0x360, 123);
+    writeU16(bytes, offset + 0x362, 123);
+    bytes[offset + 0x36c] = 24;
+    bytes[offset + 0x36d] = 24;
+    let checksum = 0x5a5a;
+    for (let index = 0; index < 0x4fe; index += 2) {
+      const word = bytes[offset + index] | (bytes[offset + index + 1] << 8);
+      checksum = (checksum - word) & 0xffff;
+    }
+    writeU16(bytes, offset + 0x4fe, checksum);
+    bytes.copyWithin(0xf00 + offset, offset, offset + fileSize);
+  }
+  return bytes;
+};
+
 test("the real WASM command path identifies and edits an Emerald save", async () => {
   const original = emeraldFixture();
   await withTempFixture(
@@ -117,5 +138,47 @@ test("the real WASM command path identifies and edits an Emerald save", async ()
       expect(getEvent.label).toBe("999999");
     },
     { sourceContents: original, sourceFileName: "emerald.sav" },
+  );
+});
+
+test("the real WASM command path edits a Zelda SRAM file", async () => {
+  const original = alttpFixture();
+  await withTempFixture(
+    async ({ opfsHandle, sourcePath, worker }) => {
+      const identify = await worker.runJson({
+        args: { args: { input: sourcePath }, type: "identify" },
+        type: "save",
+      });
+      const identifyEvent = assertRunJsonSucceeded(identify, { command: "save-identify" });
+      expect(identifyEvent.details.save_editor.document.identity.id).toBe("zelda-a-link-to-the-past");
+
+      const outputPath = "/work/zelda-edited.srm";
+      const edit = await worker.runJson({
+        args: {
+          args: {
+            assignments: ["slot_2.resources.rupees=999"],
+            input: sourcePath,
+            output: outputPath,
+          },
+          type: "set",
+        },
+        type: "save",
+      });
+      assertRunJsonSucceeded(edit, { command: "save-set" });
+      const edited = await readGuestFile(opfsHandle, outputPath);
+      expect(edited.byteLength).toBe(original.byteLength);
+      expect(edited.slice(0, 0x500)).toEqual(original.slice(0, 0x500));
+
+      const get = await worker.runJson({
+        args: {
+          args: { field: "slot_2.resources.rupees", input: outputPath },
+          type: "get",
+        },
+        type: "save",
+      });
+      const getEvent = assertRunJsonSucceeded(get, { command: "save-get" });
+      expect(getEvent.label).toBe("999");
+    },
+    { sourceContents: original, sourceFileName: "zelda.srm" },
   );
 });
