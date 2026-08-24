@@ -620,19 +620,67 @@ pub struct IdentifyCommand {
             help = "ROM to identify. Use - to read from stdin"
         )
     )]
-    pub input: PathBuf,
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub input: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             short = 'd',
             long = "database",
             value_name = "PACK",
-            help = "RWFP1 identify pack to search instead of the built-in OpenGood data (repeatable)"
+            help = "RWFP1/RWFP2 identify pack to search instead of the built-in OpenGood data (repeatable)"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub database: Vec<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "system",
+            value_name = "SYSTEM",
+            help = "Search only this system's pack. Takes a canonical platform name or a common alias (e.g. `snes`, `psx`)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub system: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Assert that identify performs no network access (it never does natively; this flag records the guarantee)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub offline: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Directory of installed identify packs (*.pack plus optional catalog.json). Defaults to the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "exhaustive-database-search",
+            help = "Search every installed pack instead of only the packs the detected platform routes to"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub exhaustive_database_search: bool,
+    #[cfg_attr(not(target_arch = "wasm32"), command(subcommand))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub subcommand: Option<IdentifySubcommands>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(short = 's', long = "select", help = SELECT_HELP))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -2883,4 +2931,223 @@ pub struct PpfUndoCommand {
         )
     )]
     pub output: PathBuf,
+}
+
+/// `identify` subcommands. Today only `database`; a plain `identify --input`
+/// run has no subcommand.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Subcommand))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case", tag = "type", content = "args")]
+#[cfg_attr(
+    feature = "typescript-types",
+    ts(rename_all = "kebab-case", tag = "type", content = "args")
+)]
+pub enum IdentifySubcommands {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(subcommand, about = "Manage the installed identify database packs")
+    )]
+    Database(IdentifyDatabaseCommands),
+}
+
+/// `identify database` subcommands (native only; the browser build reports
+/// them as unsupported).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Subcommand))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case", tag = "type", content = "args")]
+#[cfg_attr(
+    feature = "typescript-types",
+    ts(rename_all = "kebab-case", tag = "type", content = "args")
+)]
+pub enum IdentifyDatabaseCommands {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
+            about = "List every catalog platform, its source, and whether its pack is installed"
+        )
+    )]
+    List(Box<IdentifyDatabaseDirCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "List the installed pack files: slug, format, size, and sha256")
+    )]
+    Status(Box<IdentifyDatabaseDirCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Print the identify database directory")
+    )]
+    Path(Box<IdentifyDatabaseDirCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Remove one system's installed pack")
+    )]
+    Remove(Box<IdentifyDatabaseSystemCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
+            name = "import-hasheous",
+            about = "Build identify packs from a local Hasheous MetadataMap.zip dump"
+        )
+    )]
+    ImportHasheous(Box<IdentifyDatabaseImportCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Install one system's pack (or --all) from a local Hasheous dump")
+    )]
+    Install(Box<IdentifyDatabaseInstallCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Update installed packs from a local Hasheous dump")
+    )]
+    Update(Box<IdentifyDatabaseUpdateCommand>),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyDatabaseDirCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Identify database directory. Defaults to the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyDatabaseSystemCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "SYSTEM", help = "Canonical platform name or alias")
+    )]
+    pub system: String,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Identify database directory. Defaults to the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyDatabaseImportCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            value_name = "ZIP",
+            help = "Local Hasheous MetadataMap.zip dump to import"
+        )
+    )]
+    pub input: PathBuf,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Identify database directory. Defaults to the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyDatabaseInstallCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "SYSTEM", help = "Canonical platform name or alias")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub system: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            conflicts_with = "system",
+            help = "Install every platform in the dump"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub all: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "from",
+            value_name = "ZIP",
+            help = "Local Hasheous MetadataMap.zip dump to build the pack from"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub from: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Identify database directory. Defaults to the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyDatabaseUpdateCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            value_name = "SYSTEM",
+            help = "Canonical platform name or alias; omit to update every installed pack"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub system: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "from",
+            value_name = "ZIP",
+            help = "Local Hasheous MetadataMap.zip dump to rebuild the pack(s) from"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub from: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Identify database directory. Defaults to the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
 }

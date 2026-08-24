@@ -122,6 +122,9 @@ impl CliApp {
         let mut details = json!({
             "checksums": primary_checksums,
             "checksum_variants": rows_json,
+            // The raw payload size in bytes; identify needs it to route RWFP2
+            // (crc32, size) keys.
+            "size": file_len,
         });
         if let Some(map) = details.as_object_mut() {
             rom_identity.write_into(map);

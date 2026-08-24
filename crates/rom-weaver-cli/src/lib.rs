@@ -142,11 +142,13 @@ match a file that is stored slightly differently."
         command(
             about = "Identify a ROM title from its checksums",
             long_about = "\
-Identify a ROM title from its checksums and a local RWFP1 database pack.
+Identify a ROM title from its checksums and local database packs (RWFP1 or
+RWFP2).
 
 Archives are opened automatically. The command checks the raw ROM and its
 common header and byte-order variants. Repeat --database to search more than
-one system pack. Nothing is uploaded."
+one system pack, or install packs with `identify database` and let the
+detected platform pick the pack. Nothing is uploaded."
         )
     )]
     Identify(IdentifyCommand),
@@ -1333,11 +1335,15 @@ mod checksum_command;
 #[path = "identify_command.rs"]
 mod identify_command;
 pub use identify_command::{
-    IdentifyLookupResult, IdentifyResult, IdentifyStatus, IdentifyTitleMatch,
+    IdentifyComponent, IdentifyDatabaseInfo, IdentifyEvidence, IdentifyLookupResult, IdentifyMedia,
+    IdentifyResult, IdentifyStatus, IdentifyTitleMatch,
 };
 
 #[path = "identify_builtin.rs"]
 mod identify_builtin;
+
+#[path = "identify_database.rs"]
+mod identify_database;
 
 #[path = "ingest_command.rs"]
 mod ingest_command;
@@ -1429,9 +1435,12 @@ pub use bundle_create::BundleCreateResult;
 mod command_args;
 pub use command_args::{
     BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, ChecksumCommand,
-    CompressCommand, ExtractCommand, IdentifyCommand, IngestCommand, PATCH_APPLY_ABOUT,
-    PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand,
-    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,
+    CompressCommand, ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands,
+    IdentifyDatabaseDirCommand, IdentifyDatabaseImportCommand, IdentifyDatabaseInstallCommand,
+    IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand, IdentifySubcommands,
+    IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT,
+    PatchApplyCommand, PatchCreateCommand, PatchValidateCommand, PlanExtractBatchCommand,
+    PpfUndoCommand, ProbeCommand, TrimCommand,
 };
 
 mod expect_tokens;
