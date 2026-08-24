@@ -1,4 +1,4 @@
-# Where identify's answers come from
+# Where identify data comes from
 
 `identify` matches a file's checksums against title databases. This page explains which database answers for which system, what each result status and quality means, and why some data ships with the tool while other data must stay on your machine. Nothing here is a procedure; the recipes are in [Identify and hash ROMs from the CLI](../how-to/identify-and-hash-files.md).
 

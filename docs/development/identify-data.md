@@ -75,7 +75,7 @@ Each pack URL carries its own `sha256` query, so a rebuilt pack is a new cache k
 - `OPENGOOD_PLATFORMS` names the 17 cartridge platforms OpenGood covers exclusively. These build RWFP1 packs and ship with the tool.
 - Every other platform comes from a [Hasheous](https://github.com/gaseous-project/hasheous) `MetadataMap.zip` dump and builds an RWFP2 pack. Hasheous platforms are discovered dynamically from the dump's top-level directories - no static allowlist gates them. `KNOWN_PLATFORM_PROFILES` and `CURATED_ALIASES` only add media-profile and alias hints for known names; an unknown platform still builds, with the default `nointro-single-image-v1` profile.
 
-The sources never mix inside one platform, and an OpenGood platform in the dump is excluded from Hasheous discovery. The reasoning lives in [Where identify's answers come from](../explanation/identify-sources.md).
+The sources never mix inside one platform, and an OpenGood platform in the dump is excluded from Hasheous discovery. The reasoning lives in [Where identify data comes from](../explanation/identify-sources.md).
 
 ## Catalog
 
@@ -101,7 +101,7 @@ Every output records where it came from. `catalog.json` pins the OpenGood revisi
 
 ## Local Hasheous data
 
-The Hasheous dump's aggregated DAT data does not state redistribution rights. Do not commit Hasheous-derived packs; keep them local. ([Where identify's answers come from](../explanation/identify-sources.md#licensing) explains the distinction from the Hasheous software's own AGPL licence.)
+The Hasheous dump's aggregated DAT data does not state redistribution rights. Do not commit Hasheous-derived packs; keep them local. ([Where identify data comes from](../explanation/identify-sources.md#licensing) explains the distinction from the Hasheous software's own AGPL licence.)
 
 Users install packs with `rom-weaver identify database import-hasheous <MetadataMap.zip>`; the recipes are in [Identify and hash ROMs from the CLI](../how-to/identify-and-hash-files.md). For development, build packs directly:
 

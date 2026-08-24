@@ -85,7 +85,7 @@ Background that makes the rest make sense.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
 - [What a bundle is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front ends, and how to pick.
-- [Where identify's answers come from](explanation/identify-sources.md): the OpenGood/Hasheous split, what each result quality proves, and why some packs stay local.
+- [Where identify data comes from](explanation/identify-sources.md): the OpenGood/Hasheous split, what each result quality proves, and why some packs stay local.
 - [Release provenance](explanation/release-provenance.md): what download verification proves and why the checks are shaped the way they are.
 - [Comparison with similar tools](explanation/comparisons.md): where rom-weaver overlaps with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, and which one fits your job.
 

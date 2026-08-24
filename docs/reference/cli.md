@@ -120,7 +120,7 @@ Not every command takes all four. `extract` has no `--no-extract`, since unpacki
 
 `identify` computes CRC32, MD5, and SHA-1. It searches the raw ROM and common checksum variants.
 
-Native builds include CC0 OpenGood data for 17 cartridge systems. Other systems come from locally installed Hasheous packs. [Where identify's answers come from](../explanation/identify-sources.md) explains the split.
+Native builds include CC0 OpenGood data for 17 cartridge systems. Other systems come from locally installed Hasheous packs. [Where identify data comes from](../explanation/identify-sources.md) explains the split.
 
 Native identify performs no network access.
 
