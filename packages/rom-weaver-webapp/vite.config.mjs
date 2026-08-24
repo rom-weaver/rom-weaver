@@ -26,6 +26,9 @@ const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", 
 // Hasheous-derived packs (a local `--dump` build can leave them in the data
 // dir) MUST NOT ship with the webapp build - their redistribution rights are
 // not stated. They are downloaded at runtime, only with explicit user consent.
+// ROM_WEAVER_IDENTIFY_INCLUDE_HASHEOUS=1 lifts the exclusion for LOCAL test
+// builds only; no CI or deploy workflow sets it, and none may.
+const includeHasheousPacks = process.env.ROM_WEAVER_IDENTIFY_INCLUDE_HASHEOUS === "1";
 const identifyHasheousFiles = (() => {
   try {
     const index = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
@@ -48,7 +51,7 @@ const identifyHasheousFiles = (() => {
 const identifyDataSources = Object.fromEntries(
   fs
     .readdirSync(identifyDataDir)
-    .filter((name) => !identifyHasheousFiles.has(name))
+    .filter((name) => includeHasheousPacks || !identifyHasheousFiles.has(name))
     .map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
 );
 
@@ -706,6 +709,10 @@ const writeBrotliSidecars = () => {
         // The identify index is mutable so a deployment can advertise a new
         // pack set without an immutable sidecar masking the update.
         if (name === "identify-index.json" || name === "identify-catalog.json") continue;
+        // A local-test build's Hasheous packs stay out of _routes.json: the
+        // Cloudflare include budget is 100 entries, and these builds never
+        // deploy to Pages anyway. Their prebuilt .br siblings still copy over.
+        if (includeHasheousPacks && identifyHasheousFiles.has(name.replace(/^identify-/u, ""))) continue;
         // `.map` sidecars are devtools-only: nothing on a normal page load
         // requests them, so a q11 pass and a _routes.json include each would
         // buy nothing and eat the include budget.

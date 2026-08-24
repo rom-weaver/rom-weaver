@@ -118,6 +118,15 @@ database=target/identify/sony-playstation.pack
 rom-weaver identify --input game.bin --database "$database"
 ```
 
+To test the browser's hosted-download path end to end, build the full set into the CLI data dir and set `ROM_WEAVER_IDENTIFY_INCLUDE_HASHEOUS=1` for the webapp build:
+
+```bash
+node scripts/build-hasheous-identify-index.mjs --out crates/rom-weaver-cli/data/identify/v1
+ROM_WEAVER_IDENTIFY_INCLUDE_HASHEOUS=1 npm --prefix packages/rom-weaver-webapp run build
+```
+
+The variable is for local test builds only; no CI or deploy workflow sets it. The Hasheous packs stay out of `_routes.json` either way, and `scripts/ensure-identify-data.mjs` keeps a data dir with valid locally built Hasheous packs instead of rebuilding it. Reset the dir to the shipped set with `node scripts/ensure-identify-data.mjs --force`.
+
 ## Pack integrity
 
 `index.json` records the byte length and SHA-256 checksum for each pack. The browser verifies both values before it stages a pack. A pack that fails either check, or an index that cannot be fetched or parsed, makes identification **unavailable** - a state the UI reports separately from a genuine "no title matched".

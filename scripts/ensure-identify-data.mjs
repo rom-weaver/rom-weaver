@@ -59,20 +59,33 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
     return false;
   }
   if (!hasCurrentCatalog(dataDir)) return false;
-  if (!Array.isArray(index.systems) || index.systems.length !== expectedPackNames.length) return false;
-  const actualPackNames = readdirSync(dataDir)
-    .filter((name) => name.endsWith(".pack"))
+  if (!Array.isArray(index.systems)) return false;
+
+  // The OpenGood set must be exactly the 17 expected packs. Extra packs are
+  // allowed only when a local dump build listed them as hasheous in the index:
+  // wiping the dir would destroy the user's locally built Hasheous data.
+  const opengoodPackNames = index.systems
+    .filter((system) => system.source === "opengood")
+    .map((system) => system.file)
     .sort();
-  if (actualPackNames.length !== expectedPackNames.length) return false;
-  if (actualPackNames.some((name, index) => name !== sortedExpectedPackNames[index])) return false;
-  return expectedPackNames.every((name) => {
-    const system = index.systems.find((candidate) => candidate.file === name);
-    if (!system || system.source !== "opengood") return false;
-    const packPath = join(dataDir, name);
+  if (opengoodPackNames.length !== sortedExpectedPackNames.length) return false;
+  if (opengoodPackNames.some((name, position) => name !== sortedExpectedPackNames[position])) return false;
+
+  const systemsByFile = new Map(index.systems.map((system) => [system.file, system]));
+  const actualPackNames = readdirSync(dataDir).filter((name) => name.endsWith(".pack"));
+  for (const name of actualPackNames) {
+    const system = systemsByFile.get(name);
+    if (!system) return false;
+    if (system.source !== "opengood" && system.source !== "hasheous") return false;
+  }
+
+  const verifyPack = (system) => {
+    const packPath = join(dataDir, system.file);
     if (!existsSync(packPath)) return false;
     const bytes = readFileSync(packPath);
     return bytes.length === system.rawBytes && sha256(bytes) === system.sha256;
-  });
+  };
+  return index.systems.every(verifyPack);
 };
 
 export const main = async (argv = process.argv.slice(2), dataDir = defaultDataDir) => {
