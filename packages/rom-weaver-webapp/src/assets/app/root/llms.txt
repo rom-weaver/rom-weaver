@@ -18,6 +18,7 @@
 - [Why files stay on your device](https://rom-weaver.com/docs/local-first): How local-first processing works in the browser and what it costs.
 - [What a bundle is](https://rom-weaver.com/docs/bundles): The portable patch recipe, what it contains, and when to make one.
 - [Browser and CLI](https://rom-weaver.com/docs/browser-and-cli): One engine, two front ends, and how to choose.
+- [Identify data sources](https://rom-weaver.com/docs/identify-sources): Where identify's title data comes from, what each match quality proves, and why Hasheous packs stay local.
 - [Comparison with similar tools](https://rom-weaver.com/docs/comparisons): How rom-weaver compares with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, format by format and feature by feature.
 - [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick format-specific compression such as CHD, RVZ, or Z3DS, plus ZIP and 7z, and learn when trimming beats compressing.
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.

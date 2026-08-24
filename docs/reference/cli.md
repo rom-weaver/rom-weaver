@@ -9,6 +9,10 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [Alternate names](#alternate-names)
 - [Reaching inside archives](#reaching-inside-archives)
 - [Identify](#identify)
+  - [Identify flags](#identify-flags)
+  - [Identify database directory](#identify-database-directory)
+  - [`identify database` subcommands](#identify-database-subcommands)
+  - [Identify result](#identify-result)
 - [Checksum](#checksum)
 - [Patching](#patching)
   - [Inputs](#inputs)
@@ -116,9 +120,50 @@ Not every command takes all four. `extract` has no `--no-extract`, since unpacki
 
 `identify` computes CRC32, MD5, and SHA-1. It searches the raw ROM and common checksum variants.
 
-Native builds include CC0 OpenGood data for 17 cartridge systems. `--database PACK` replaces that data with a local RWFP1 pack. The flag is repeatable.
+Native builds include CC0 OpenGood data for 17 cartridge systems. Other systems come from locally installed Hasheous packs. [Where identify's answers come from](../explanation/identify-sources.md) explains the split.
 
-The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON reports put the typed result in `details.identify`.
+Native identify performs no network access.
+
+### Identify flags
+
+- `--database PACK` searches a local RWFP1 or RWFP2 pack instead of the built-in data and the installed packs. Repeatable.
+- `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
+- `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`).
+- `--exhaustive-database-search` searches every installed pack instead of only the packs the detected platform routes to.
+- `--offline` asserts that identify performs no network access. Natively it never does; the flag records the guarantee in the log.
+
+### Identify database directory
+
+Installed packs live in one directory. The default is the per-user data directory: `$XDG_DATA_HOME/rom-weaver/identify` on Linux (`~/.local/share` fallback), `~/Library/Application Support/rom-weaver/identify` on macOS, `%APPDATA%\rom-weaver\identify` on Windows. `ROM_WEAVER_DATA_DIR` overrides the base; `--database-dir` overrides the full path.
+
+### `identify database` subcommands
+
+Native builds only; the browser build reports them as unsupported. Every subcommand accepts `--database-dir DIR`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| `list` | List every catalog platform, its source, and whether its pack is installed. |
+| `status` | List the installed pack files: slug, format, size, and sha256. |
+| `path` | Print the identify database directory. |
+| `remove <SYSTEM>` | Remove one system's installed pack. |
+| `import-hasheous <ZIP>` | Build packs for every non-OpenGood platform in a local Hasheous `MetadataMap.zip` dump, and merge `catalog.json`. |
+| `install <SYSTEM> --from <ZIP>` | Install one system's pack (or `--all`) from a local dump. |
+| `update [SYSTEM] --from <ZIP>` | Rebuild installed packs from a local dump; omit `SYSTEM` to update all. |
+
+`<SYSTEM>` is a canonical platform name or alias. `install` and `update` without `--from` fail: network download is not enabled, so the dump must be a local file. Platforms that OpenGood covers stay built-in; an import skips them.
+
+### Identify result
+
+The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON reports put the typed result in `details.identify`. Optional result fields, present when known:
+
+- `quality`: `exact`, `partial`, or `metadata_only`, for a set-aware (RWFP2) match.
+- `condition`: `database_required` (the detected platform's pack is not installed) or `unsupported_media_profile` (the pack expects per-track hashes but the input was hashed as one payload). Both come with a `hint` naming the fix. `status` stays `unknown`.
+- `platform_candidates`: detected platforms with `confidence` and `evidence`.
+- `media`, `components`: the input's media kind and hashed components.
+- `database`: the pack that answered - `source`, `pack_format` (`RWFP1`/`RWFP2`), and `canonicalization_profile`.
+- `evidence`: `required_components_matched`, `required_components_total`, and `layout_matched`.
+
+CUE/GDI/CHD inputs are identified per selected payload track, not yet as complete track sets. A single matched data track reports `quality: "partial"`, with `evidence` counting the required components that did not match.
 
 The internal `ingest` command also identifies each ROM asset. It identifies a patch's expected source when the patch supplies a source checksum. Its JSON result puts these compact matches in `details.ingest`.
 

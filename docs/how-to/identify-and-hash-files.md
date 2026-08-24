@@ -8,6 +8,8 @@ Use `probe` to inspect the file type. Use `checksum` to prove which bytes it hol
 ## Table of contents
 
 - [Identify a ROM title](#identify-a-rom-title)
+- [Identify a disc or other non-cartridge system](#identify-a-disc-or-other-non-cartridge-system)
+- [Force a system](#force-a-system)
 - [Inspect a file](#inspect-a-file)
 - [Hash a file](#hash-a-file)
 - [Hash the ROM inside an archive](#hash-the-rom-inside-an-archive)
@@ -34,13 +36,45 @@ rom-weaver identify --input games.zip
 
 Use `--select` when the archive holds more than one candidate.
 
-Use a locally built RWFP1 pack instead of the built-in data:
+Use a locally built pack instead of the built-in data:
 
 ```bash
 rom-weaver identify --input game.iso --database playstation.pack
 ```
 
-Repeat `--database` to search more packs.
+Repeat `--database` to search more packs. `--database` accepts RWFP1 and RWFP2 packs.
+
+## Identify a disc or other non-cartridge system
+
+The built-in data covers 17 cartridge systems. Other systems need an installed pack, built from a local [Hasheous](https://github.com/gaseous-project/hasheous) `MetadataMap.zip` dump. Import every platform in the dump at once:
+
+```bash
+rom-weaver identify database import-hasheous MetadataMap.zip
+```
+
+Or install one system:
+
+```bash
+rom-weaver identify database install "Sony PlayStation" --from MetadataMap.zip
+```
+
+Then identify as usual; the command finds the installed pack on its own:
+
+```bash
+rom-weaver identify --input game.bin
+```
+
+Check what is installed with `rom-weaver identify database list`. A result with `"condition": "database_required"` means the detected platform's pack is not installed; its `hint` names the install command. Keep imported packs local - see [Where identify's answers come from](../explanation/identify-sources.md#licensing).
+
+## Force a system
+
+Search one system's pack only, by canonical name or alias:
+
+```bash
+rom-weaver identify --input dump.bin --system psx
+```
+
+Use it when detection picks the wrong platform, or when a headerless dump detects nothing. `rom-weaver identify database list` prints the accepted names.
 
 ## Inspect a file
 

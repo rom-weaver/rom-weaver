@@ -1,6 +1,6 @@
 # ROM identify data
 
-The `identify` and `ingest` commands use compact RWFP1 title packs. The native CLI embeds the shipped packs.
+The `identify` and `ingest` commands use compact title packs: RWFP1 for the shipped OpenGood data, RWFP2 for set-aware Hasheous data. The native CLI embeds the shipped packs.
 
 The browser downloads only the packs a given input could match, and caches each one after its first use. The packs are self-hosted Brotli assets.
 
@@ -12,6 +12,12 @@ Ingest resolves ROM assets from their computed checksum variants. It also resolv
 - [Build-time data](#build-time-data)
 - [Browser pack selection](#browser-pack-selection)
 - [Browser caching](#browser-caching)
+- [Source policy](#source-policy)
+- [Catalog](#catalog)
+- [RWFP2 packs](#rwfp2-packs)
+- [Shared tracks](#shared-tracks)
+- [Determinism](#determinism)
+- [Provenance](#provenance)
 - [Local Hasheous data](#local-hasheous-data)
 - [Pack integrity](#pack-integrity)
 
@@ -62,13 +68,42 @@ The service worker therefore precaches only `assets/identify-index.json` and run
 
 Each pack URL carries its own `sha256` query, so a rebuilt pack is a new cache key. The runtime handler deletes the superseded entry for the same file after it stores the new one.
 
+## Source policy
+
+`scripts/build-hasheous-identify-index.mjs` builds from exactly two sources, one per platform:
+
+- `OPENGOOD_PLATFORMS` names the 17 cartridge platforms OpenGood covers exclusively. These build RWFP1 packs and ship with the tool.
+- Every other platform comes from a [Hasheous](https://github.com/gaseous-project/hasheous) `MetadataMap.zip` dump and builds an RWFP2 pack. Hasheous platforms are discovered dynamically from the dump's top-level directories - no static allowlist gates them. `KNOWN_PLATFORM_PROFILES` and `CURATED_ALIASES` only add media-profile and alias hints for known names; an unknown platform still builds, with the default `nointro-single-image-v1` profile.
+
+The sources never mix inside one platform, and an OpenGood platform in the dump is excluded from Hasheous discovery. The reasoning lives in [Where identify's answers come from](../explanation/identify-sources.md).
+
+## Catalog
+
+The builder writes `catalog.json` (format `rom-weaver-identify-catalog-v1`) next to the packs. Each platform entry records the canonical name, aliases, source, media profiles, pack slug, pack format, pack SHA-256, and canonicalization version. `generated` records the pinned OpenGood revision and the dump's file name, SHA-256, and size.
+
+Aliases match case-insensitively after normalizing: lowercase, collapse non-alphanumerics to one space, trim. A platform's own normalized name beats another platform's curated alias; a duplicate alias or pack slug across two platforms is a build error.
+
+## RWFP2 packs
+
+RWFP2 reuses RWFP1's outer container layout with magic `RWFP2\0\0\0`. Members, in directory order: `games.json` (game records with per-component hashes, sizes, roles, and track numbers), `route.bin` (a CRC32+size routing index over discriminating components), `refs.bin` (routed key to game/component references), and `manifest.json` (format, platform, source, canonicalization profile, provenance, and counts). Only components that are discriminating, have a CRC32, and have a nonzero size get routed. The Rust reader dispatches on magic, so RWFP1 parsing is untouched; both `--database` and installed packs accept either format.
+
+## Shared tracks
+
+Byte-identical components that appear under more than one game - overwhelmingly shared CD audio tracks such as silence and standard pre-gaps - are handled per format. RWFP1 drops them by default (`--keep-shared` keeps them). RWFP2 always keeps them in `games.json`, marked `discriminating: false`, and excludes them from `route.bin`: they can support a match but never pick a game alone.
+
+## Determinism
+
+The same inputs produce byte-identical packs. Games sort by (platform, name), components by ordinal, routing records by (CRC32 bytes, size), and discovered platforms alphabetically. Duplicate routing keys are a build error.
+
+## Provenance
+
+Every output records where it came from. `catalog.json` pins the OpenGood revision and the dump's SHA-256; each RWFP2 `manifest.json` carries the same provenance for its own platform; `index.json` records each pack's size and SHA-256. The CLI's `identify database import-hasheous` writes the same shape into the user's database directory and merges its `catalog.json` with the entries of platforms the import did not touch.
+
 ## Local Hasheous data
 
-[Hasheous](https://github.com/gaseous-project/hasheous) provides more systems. Its aggregated data does not state redistribution rights.
+The Hasheous dump's aggregated DAT data does not state redistribution rights. Do not commit Hasheous-derived packs; keep them local. ([Where identify's answers come from](../explanation/identify-sources.md#licensing) explains the distinction from the Hasheous software's own AGPL licence.)
 
-Do not commit Hasheous-derived packs. Keep these packs local.
-
-Build one local pack from an existing metadata dump:
+Users install packs with `rom-weaver identify database import-hasheous <MetadataMap.zip>`; the recipes are in [Identify and hash ROMs from the CLI](../how-to/identify-and-hash-files.md). For development, build packs directly:
 
 ```bash
 script=scripts/build-hasheous-identify-index.mjs
