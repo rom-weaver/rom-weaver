@@ -8,6 +8,7 @@ import { configureLogger, createLogger } from "../lib/logging.ts";
 import {
   GUIDED_SAMPLE_VIEWS,
   ONBOARDING_DISMISS_EVENT,
+  readGuidedSampleFromSearch,
   requestGuidedSampleStart,
 } from "../public/react/guided-sample-start.ts";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
@@ -556,9 +557,16 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     const syncRouteFromUrl = (scrollTo?: () => void) => {
       const view = readWorkflowViewFromPath();
       if (!view) return;
+      const guide = readGuidedSampleFromSearch(window.location.search);
       const applyRoute = () => {
         const selectedView = webappController.selectView(view, { historyMode: "none" });
-        if (selectedView !== view) webappController.selectView(selectedView, { historyMode: "replace" });
+        if (selectedView !== view) {
+          webappController.selectView(selectedView, { historyMode: "replace" });
+          return;
+        }
+        // Visited workflows stay mounted, so their guide hook cannot reread a new query.
+        // Dispatch the same event used by in-place guide starts.
+        if (guide) requestGuidedSampleStart(guide);
       };
       // Guide to guide is a page turn inside one route, not a mode switch. The
       // masthead, trail, and dock are identical either side of it while the

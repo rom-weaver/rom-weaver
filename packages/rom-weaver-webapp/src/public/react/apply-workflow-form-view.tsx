@@ -35,7 +35,7 @@ import {
   type SampleTutorialStep,
   useGuidedSampleStart,
 } from "./components/ds/sample-tutorial.tsx";
-import { GUIDED_SAMPLE_HREFS } from "./guided-sample-start.ts";
+import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
@@ -272,6 +272,7 @@ const ApplyDropAfter = ({
   sampleLoading: boolean;
   workflowEmpty: boolean;
 }) => {
+  const assetBaseUrl = useRomWeaverAssetBaseUrl();
   if (pendingDrops.length) {
     return (
       <div className="cards workflow-file-list" id="rom-weaver-pending-drops">
@@ -290,13 +291,13 @@ const ApplyDropAfter = ({
       downloadLabel="Download a test bundle"
       downloadName={FIRST_WEAVE_ASSET}
       error={sampleError}
-      guideHref={GUIDED_SAMPLE_HREFS.apply}
+      guideHref={resolveGuidedSampleHref(assetBaseUrl, "apply")}
       label="Start guided Apply"
       loading={sampleLoading}
       onStart={onLoadApplySample}
       onSecondaryStart={onLoadBundleSample}
       secondaryLabel="Create a sharable bundle"
-      secondaryHref={GUIDED_SAMPLE_HREFS.bundle}
+      secondaryHref={resolveGuidedSampleHref(assetBaseUrl, "bundle")}
     />
   );
 };

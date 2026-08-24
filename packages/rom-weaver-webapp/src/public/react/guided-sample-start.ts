@@ -14,6 +14,23 @@ const GUIDED_SAMPLE_HREFS = {
   test: "/test?guide=test",
 } as const;
 
+const readGuidedSampleFromSearch = (search: string): GuidedSample | null => {
+  const value = new URLSearchParams(search).get("guide");
+  return value && Object.prototype.hasOwnProperty.call(GUIDED_SAMPLE_VIEWS, value) ? (value as GuidedSample) : null;
+};
+
+const resolveGuidedSampleHref = (assetBaseUrl: string | undefined, guide: GuidedSample): string => {
+  const base = assetBaseUrl?.trim();
+  const authoredHref = GUIDED_SAMPLE_HREFS[guide];
+  if (!base) return authoredHref;
+  try {
+    const resolved = new URL(authoredHref.slice(1), base);
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return authoredHref;
+  }
+};
+
 const GUIDED_SAMPLE_START_EVENT = "rom-weaver:guided-sample-start";
 const GUIDED_SAMPLE_VIEW_EVENT = "rom-weaver:guided-sample-view";
 const ONBOARDING_DISMISS_EVENT = "rom-weaver:onboarding-dismiss";
@@ -43,10 +60,11 @@ const requestOnboardingDismiss = () => {
 
 export {
   GUIDED_SAMPLE_START_EVENT,
-  GUIDED_SAMPLE_HREFS,
   GUIDED_SAMPLE_VIEWS,
   GUIDED_SAMPLE_VIEW_EVENT,
   clearGuidedSampleQuery,
+  readGuidedSampleFromSearch,
+  resolveGuidedSampleHref,
   type GuidedSample,
   notifyGuidedSampleView,
   ONBOARDING_DISMISS_EVENT,
