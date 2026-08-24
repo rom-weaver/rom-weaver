@@ -29,10 +29,11 @@
 - [Work with archives](https://rom-weaver.com/docs/work-with-archives): Extract, convert, and create ZIP and 7z archives from the command line.
 - [CLI reference](https://rom-weaver.com/docs/cli): Every command, global flag, patching flag, JSON output, exit codes, and man pages.
 - [Supported formats](https://rom-weaver.com/docs/supported-formats): The full patch, container, codec, checksum, trim, and header support tables.
+- [Save Editor support](https://rom-weaver.com/docs/game-save-support): Supported games, editable fields, recognition rules, and integrity checks.
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
 - [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
 - [Edit Generation III saves](https://rom-weaver.com/docs/edit-gen3-saves): Inspect and safely edit supported English retail Pokémon Ruby, Sapphire, Emerald, FireRed, and LeafGreen game saves in the browser or CLI.
-- [Save Editor development](https://rom-weaver.com/docs/save-editor-development): Generation III save handler architecture, integrity boundary, and contributor flow.
+- [Save Editor development](https://rom-weaver.com/docs/game-save-development): Shared save handler architecture, integrity boundary, and contributor flow.
 
 ## Documentation
 
@@ -40,6 +41,7 @@
 - [Install the CLI](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/install-cli.md): Package managers, verified install scripts, npm, Docker, and source builds.
 - [CLI reference](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/cli.md): Commands, global flags, JSON output, exit codes, permissions, and completions.
 - [Supported formats](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/formats.md): Patch, container, codec, checksum, trim, and header support tables.
+- [Save Editor support](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/save-editor.md): Supported games, fields, recognition rules, and integrity checks.
 - [Web app integration](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/webapp-integration.md): Preloaded URLs and same-origin OPFS integration.
 - [Self-hosting](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/self-hosting.md): Docker, static hosting, reverse proxies, subpaths, HTTPS, and browser isolation headers.
 - [Architecture](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/ARCHITECTURE.md): Crate graph, registries, browser workers, OPFS, and the Rust-TypeScript boundary.

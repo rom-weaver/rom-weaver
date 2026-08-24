@@ -168,6 +168,14 @@ test("tracks edits, resets one or all fields, previews, and downloads", async ()
   await expect.poll(() => latestSaveAs.mock.calls.length).toBe(1);
 });
 
+test("keeps the game save extension for edited downloads", async () => {
+  await uploadSave("zelda.srm");
+  await page.getByLabelText("Money", { exact: true }).fill("7000");
+  await page.getByRole("button", { name: "Download edited copy" }).click();
+  await expect.poll(() => mocks.setSaveFields.mock.calls.length).toBe(1);
+  expect(mocks.setSaveFields).toHaveBeenCalledWith(expect.objectContaining({ outputName: "zelda-edited.srm" }));
+});
+
 test("shows unsupported and ambiguous recognition states", async () => {
   mocks.identifySave.mockResolvedValueOnce({
     recognition: { candidates: [], outcome: { unsupported: { reasons: [] } }, reasons: [] },

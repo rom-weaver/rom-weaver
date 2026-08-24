@@ -102,7 +102,7 @@ fn error_code(error: crate::RomWeaverError) -> &'static str {
 }
 
 #[test]
-fn registry_lists_all_gen3_games_with_format_metadata() {
+fn registry_lists_every_game_with_format_metadata() {
     let definitions = SaveGameRegistry::default().definitions();
     let ids = definitions
         .iter()
@@ -111,19 +111,38 @@ fn registry_lists_all_gen3_games_with_format_metadata() {
     assert_eq!(
         ids,
         [
+            "pokemon-gold",
+            "pokemon-silver",
+            "pokemon-crystal",
             "pokemon-ruby",
             "pokemon-sapphire",
             "pokemon-emerald",
             "pokemon-firered",
-            "pokemon-leafgreen"
+            "pokemon-leafgreen",
+            "pokemon-heartgold",
+            "pokemon-soulsilver",
+            "zelda-a-link-to-the-past",
         ]
     );
-    assert!(definitions.iter().all(|definition| {
+    assert!(definitions[3..8].iter().all(|definition| {
         definition.platform == "gba"
             && definition.save_format == "gba_flash_128k"
             && definition.save_format_name == "Flash 128 KiB"
             && definition.supported_save_sizes == [131_072]
     }));
+    assert!(definitions[..3].iter().all(|definition| {
+        definition.platform == "game-boy-color"
+            && definition.save_format == "game_boy_sram_32k"
+            && definition.supported_save_sizes == [32_768]
+    }));
+    assert!(definitions[8..10].iter().all(|definition| {
+        definition.platform == "nds"
+            && definition.save_format == "nintendo_ds_512k"
+            && definition.supported_save_sizes == [524_288]
+    }));
+    assert_eq!(definitions[10].platform, "snes");
+    assert_eq!(definitions[10].save_format, "snes_sram_8k");
+    assert_eq!(definitions[10].supported_save_sizes, [8_192]);
 }
 
 #[test]
@@ -138,12 +157,14 @@ fn registry_accepts_new_handlers_without_generic_dispatch_changes() {
 
 #[test]
 fn recognition_is_safe_for_wrong_sizes_and_shared_title_layouts() {
-    assert!(matches!(
-        SaveGameRegistry::default()
-            .detect(&input(vec![0; 4], None))
-            .outcome,
-        SaveRecognitionOutcome::Unsupported { .. }
-    ));
+    for size in [4, 8_192, 32_768, 524_288] {
+        assert!(matches!(
+            SaveGameRegistry::default()
+                .detect(&input(vec![0xA5; size], None))
+                .outcome,
+            SaveRecognitionOutcome::Unsupported { .. }
+        ));
+    }
     assert!(matches!(
         SaveGameRegistry::default()
             .detect(&input(fixture(Family::Rs, 7, 6), None))

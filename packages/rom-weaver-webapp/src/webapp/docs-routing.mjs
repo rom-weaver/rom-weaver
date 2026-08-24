@@ -75,6 +75,11 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({ file: "reference/cli.md", label: "CLI reference", slug: "docs/cli" }),
   Object.freeze({
+    file: "reference/save-editor.md",
+    label: "Save Editor support",
+    slug: "docs/game-save-support",
+  }),
+  Object.freeze({
     file: "reference/formats.md",
     label: "Supported formats",
     slug: "docs/supported-formats",
@@ -116,7 +121,7 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({
     file: "development/save-editor.md",
     label: "Save Editor development",
-    slug: "docs/save-editor-development",
+    slug: "docs/game-save-development",
   }),
   Object.freeze({ file: "development/references.md", label: "References", slug: "docs/references" }),
   Object.freeze({ file: "legal/about.md", label: "About", slug: "docs/about" }),

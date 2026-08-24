@@ -580,6 +580,7 @@ fn save_value_text(value: &SaveValue) -> String {
 fn potential_save_format(size: usize) -> Option<&'static str> {
     match size {
         131_072 => Some("Flash 128 KiB"),
+        524_288 => Some("Nintendo DS save 512 KiB"),
         65_536 => Some("64 KiB persistent save"),
         32_768 => Some("32 KiB persistent save"),
         8_192 => Some("8 KiB persistent save"),

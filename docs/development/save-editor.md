@@ -1,8 +1,8 @@
 # Save Editor development
 
-The Save Editor uses one Rust handler model for the native CLI and the browser WASM workflow. The first version supports only English retail Pokémon Ruby, Sapphire, Emerald, FireRed, and LeafGreen saves.
+The Save Editor uses one Rust handler model for the native CLI and the browser WASM workflow. The registry supports several game families.
 
-Read [Edit a Generation III save](../how-to/edit-gen3-saves.md) for user tasks, recognition outcomes, editable fields, and safety limits. This page owns the implementation design and contributor flow.
+Read [Save Editor support](../reference/save-editor.md) for the current games, fields, and safety limits. This page owns the implementation design and contributor flow.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -18,20 +18,23 @@ Read [Edit a Generation III save](../how-to/edit-gen3-saves.md) for user tasks, 
 
 ## Support boundary
 
-Keep the first handler set narrow:
+Keep each handler boundary narrow:
 
+- Gold, Silver, and Crystal use checked English 32 KiB SRAM layouts.
 - Ruby and Sapphire use the English retail Ruby/Sapphire layout.
 - Emerald uses the English retail Emerald layout.
 - FireRed and LeafGreen use the English retail FireRed/LeafGreen layout.
 - Regional layouts are unsupported until each layout has its own checked definition and fixtures.
 - Emerald can identify itself from its save checksum layout.
 - Ruby/Sapphire and FireRed/LeafGreen need a manual game choice without ROM identity.
+- HeartGold and SoulSilver use their checked 512 KiB layout and stored game version.
+- A Link to the Past uses checked 8 KiB SNES SRAM files and duplicate copies.
 
-Do not treat a matching 128 KiB size as game recognition. A save state is not a game save. The handler accepts game SRAM saves only.
+Do not treat a matching size as game recognition. A save state is not a game save. Handlers accept raw persistent game saves only.
 
-The first editable set is trainer name, trainer gender, money, and badge flags. Trainer IDs, play time, and the security key remain read-only. Inventory and Pokémon editing are out of scope for this version.
+Each handler exposes only fields with a checked write path. Inventory and Pokémon editing remain out of scope for Pokémon handlers.
 
-The handler treats one valid slot plus one empty slot as valid with a warning. It preserves the empty slot. It blocks edits when the second slot has damaged save data.
+The Generation III handler treats one valid slot plus one empty slot as valid with a warning. It preserves the empty slot.
 
 ## Handler architecture
 
@@ -42,8 +45,9 @@ Use these boundaries:
 - `crates/rom-weaver-core/src/save/mod.rs` defines the save document, game definitions, field schema, recognition outcomes, integrity state, and edits.
 - `crates/rom-weaver-core/src/save/formats/` defines physical save formats.
 - `crates/rom-weaver-core/src/save/pokemon_gen3.rs` owns the Generation III game structure.
+- The other files in `src/save/` own Generation II, HeartGold/SoulSilver, and A Link to the Past structures.
 - `SaveGameRegistry` maps a game choice to one game definition and exposes the shared handler operations.
-- `SaveGameHandler` parses the 32-sector image, validates both 14-section save slots, selects the active slot, reads fields, and applies validated edits.
+- `SaveGameHandler` validates its physical layout, selects active data, reads fields, and applies validated edits.
 - `crates/rom-weaver-cli/src/save_command.rs` maps `save identify`, `save inspect`, `save get`, `save set`, and `save export-schema` to core operations. It owns paths, output files, dry-run behavior, force checks, and CLI reports.
 - `crates/rom-weaver-cli/src/command_args.rs` and `src/lib.rs` own the public command and JSON request shapes. Keep those shapes shared by native and WASM builds.
 - The browser workflow should call the same WASM command path through the dedicated worker. Keep file reads and writes in the existing OPFS worker boundary. Do not add main-thread OPFS access.
@@ -55,9 +59,9 @@ Return structured recognition, integrity, field, and change data. Do not make th
 The handler must preserve the source file and write an edited copy. It must:
 
 1. Check the exact input size and supported game definition.
-2. Parse both physical save slots.
-3. Check all 14 section IDs, signatures, and checksums in each candidate slot.
-4. Select the newest complete valid slot by the game counter rule.
+2. Parse each physical save slot or duplicate copy.
+3. Check all markers, section IDs, signatures, and checksums for that handler.
+4. Select the active data with the game's counter or recovery rule.
 5. Refuse writes when no complete active slot is proven.
 6. Apply only fields in the editable schema.
 7. Recompute each changed section checksum and write a complete edited copy.
@@ -103,5 +107,6 @@ Run the documentation checks for Markdown and route coverage. Regenerate the tab
 ## Related
 
 - [Edit a Generation III save](../how-to/edit-gen3-saves.md): browser and CLI tasks, support limits, and user-visible safety behavior.
+- [Save Editor support](../reference/save-editor.md): supported games, fields, recognition, and integrity rules.
 - [Architecture](ARCHITECTURE.md): crate graph, registry traits, WASM workers, OPFS, and the Rust-TypeScript boundary.
 - [Development guide](development.md): setup, worktrees, tests, and full local checks.

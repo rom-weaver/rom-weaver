@@ -72,6 +72,7 @@ Facts to look up. No advice, no steps.
 
 - [Supported formats](reference/formats.md): the full patch, container, codec, checksum, trim, and header support tables.
 - [CLI reference](reference/cli.md): every command, global flag, patching flag, JSON output, exit code, and permission check.
+- [Save Editor support](reference/save-editor.md): supported games, editable fields, recognition rules, and integrity checks.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one page per visible command from Clap.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v1.schema.json): the machine-readable bundle format.
 - [Webapp masthead metadata](hosting/webapp-runtime-status.md): version, SHA, thread, PWA, and service-worker labels.
@@ -101,7 +102,7 @@ Background that makes the rest make sense.
 - [Development guide](development/development.md): prerequisites, setup, native and WASM builds, the dev server, tests, generated files, and worktrees.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
 - [ROM identify data](development/identify-data.md): rebuild the shipped OpenGood data or create local Hasheous packs.
-- [Save Editor development](development/save-editor.md): Generation III handler architecture, integrity boundary, and the eight-step contributor flow.
+- [Save Editor development](development/save-editor.md): shared handler architecture, integrity boundary, and the eight-step contributor flow.
 - [References](development/references.md): format specifications and upstream reference implementations.
 
 …and more in the repository: commit conventions, CI, performance, browser concurrency, mobile Safari verification, vendored code, screenshots, the release guide, the CLA, the code of conduct, and the security policy all live under [`docs/development/`](https://github.com/rom-weaver/rom-weaver/tree/main/docs/development).

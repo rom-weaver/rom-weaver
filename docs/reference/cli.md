@@ -142,6 +142,8 @@ Without `-o` or `--output`, `save set` writes a free sibling name such as `game-
 
 `--game GAME_ID` selects a compatible handler when recognition is ambiguous. `--rom-sha1 SHA1` supplies a known ROM identity to recognition. The SHA-1 value contains 40 hexadecimal characters.
 
+[Save Editor support](save-editor.md) lists the accepted game IDs, input layouts, and fields.
+
 ## Patching
 
 The flags shared by `patch apply` (also spelled `weave`) and `patch validate`. The task-shaped recipes live in [Apply patches from the CLI](../how-to/cli-apply.md).
