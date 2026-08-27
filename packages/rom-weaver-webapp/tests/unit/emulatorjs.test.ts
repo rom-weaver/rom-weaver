@@ -14,8 +14,8 @@ describe("getEmulatorJsCore", () => {
     expect(getEmulatorJsCore(undefined, "patched.sfc")).toBe("snes");
   });
 
-  it("does not advertise cores that are not self-hosted", () => {
-    expect(getEmulatorJsCore("Sony Playstation Portable", "game.iso")).toBeUndefined();
+  it("selects the self-hosted PSP core", () => {
+    expect(getEmulatorJsCore("Sony Playstation Portable", "game.iso")).toBe("psp");
   });
 
   it("does not override a detected unsupported platform with the file extension", () => {
@@ -31,6 +31,7 @@ describe("getEmulatorJsAspectRatio", () => {
   it("gives handhelds their own shape", () => {
     expect(getEmulatorJsAspectRatio("gba")).toBe("3 / 2");
     expect(getEmulatorJsAspectRatio("gb")).toBe("10 / 9");
+    expect(getEmulatorJsAspectRatio("psp")).toBe("30 / 17");
   });
 
   it("keeps the stacked DS screens portrait", () => {
@@ -43,7 +44,7 @@ describe("getEmulatorJsAspectRatio", () => {
   });
 
   it("covers every core the app can select", () => {
-    const cores = ["atari7800", "gb", "gba", "lynx", "n64", "nds", "nes", "psx"];
+    const cores = ["atari7800", "gb", "gba", "lynx", "n64", "nds", "nes", "psp", "psx"];
     for (const core of cores) expect(getEmulatorJsAspectRatio(core)).toMatch(/^\d+ \/ \d+$/);
   });
 });
