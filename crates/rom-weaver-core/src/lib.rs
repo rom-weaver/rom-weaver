@@ -83,7 +83,8 @@ pub use save::{
     SaveFieldValue, SaveGameCandidate, SaveGameDefinition, SaveGameHandler, SaveGameIdentity,
     SaveGameRegistry, SaveIntegrity, SaveIntegrityIssue, SaveIntegrityState, SaveRecognition,
     SaveRecognitionConfidence, SaveRecognitionOutcome, SaveRecognitionReason, SaveSection,
-    SaveValue, apply_save_edits, detect_save, parse_save, validate_save_edits,
+    SaveValue, apply_save_edits, detect_save, parse_save, unwrap_save_container,
+    validate_save_edits,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};
 pub use threads::{

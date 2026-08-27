@@ -1,6 +1,8 @@
+mod container;
 pub mod formats;
 mod pokemon_gen3;
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
@@ -9,6 +11,7 @@ use ts_rs::TS;
 
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
+pub use container::{SaveContainer, SaveContainerKind, unwrap_save_container};
 pub use pokemon_gen3::PokemonGen3Handler;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -306,6 +309,8 @@ impl SaveGameRegistry {
     }
 
     pub fn detect(&self, input: &SaveDetectionInput) -> SaveRecognition {
+        let (_, input) = normalize_container_input(input);
+        let input = input.as_ref();
         let mut candidates = Vec::new();
         let mut reasons = Vec::new();
         for handler in &self.handlers {
@@ -338,21 +343,27 @@ impl SaveGameRegistry {
         input: &SaveDetectionInput,
         game: &SaveGameIdentity,
     ) -> Result<SaveDocument> {
-        self.handlers
+        let (container, input) = normalize_container_input(input);
+        let mut document = self
+            .handlers
             .iter()
             .find_map(|handler| {
                 handler
                     .definitions()
                     .into_iter()
                     .any(|definition| definition.identity == *game)
-                    .then(|| handler.parse(input, game))
+                    .then(|| handler.parse(input.as_ref(), game))
             })
             .unwrap_or_else(|| {
                 Err(validation(
                     "save_game_unsupported",
                     "the selected save game is unsupported",
                 ))
-            })
+            })?;
+        if let Some(container) = container {
+            attach_container_warnings(&mut document.warnings, &container);
+        }
+        Ok(document)
     }
 
     pub fn apply(
@@ -362,22 +373,57 @@ impl SaveGameRegistry {
         edits: &[SaveEdit],
         dry_run: bool,
     ) -> Result<SaveEditResult> {
-        self.handlers
+        let (container, input) = normalize_container_input(input);
+        let mut result = self
+            .handlers
             .iter()
             .find_map(|handler| {
                 handler
                     .definitions()
                     .into_iter()
                     .any(|definition| definition.identity == *game)
-                    .then(|| handler.apply(input, game, edits, dry_run))
+                    .then(|| handler.apply(input.as_ref(), game, edits, dry_run))
             })
             .unwrap_or_else(|| {
                 Err(validation(
                     "save_game_unsupported",
                     "the selected save game is unsupported",
                 ))
-            })
+            })?;
+        if let Some(container) = container {
+            attach_container_warnings(&mut result.document.warnings, &container);
+            if let Some(bytes) = result.bytes.take() {
+                result.bytes = Some(container.wrap(&bytes)?);
+            }
+        }
+        Ok(result)
     }
+}
+
+/// Peel a recognized wrapper (GameShark SP `.sps`/`.gsv`) off the input so
+/// handlers always see raw save bytes. Output bytes are re-wrapped in `apply`.
+fn normalize_container_input(
+    input: &SaveDetectionInput,
+) -> (Option<SaveContainer>, Cow<'_, SaveDetectionInput>) {
+    match unwrap_save_container(&input.bytes) {
+        Some((container, bytes)) => (
+            Some(container),
+            Cow::Owned(SaveDetectionInput {
+                bytes,
+                selected_game: input.selected_game.clone(),
+                rom_sha1: input.rom_sha1.clone(),
+            }),
+        ),
+        None => (None, Cow::Borrowed(input)),
+    }
+}
+
+fn attach_container_warnings(warnings: &mut Vec<String>, container: &SaveContainer) {
+    warnings.push(format!(
+        "the save is inside a {} wrapper; the output keeps the wrapper",
+        container.kind().display_name()
+    ));
+    warnings.extend(container.warnings().iter().cloned());
 }
 
 pub fn detect_save(input: &SaveDetectionInput) -> SaveRecognition {
