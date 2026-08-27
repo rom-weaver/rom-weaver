@@ -111,7 +111,7 @@ test("a matched ROM shows its title, its evidence, and a colour-free identified 
 
   await openDrawers();
   const evidence = host.querySelector(".identify-drawer-evidence").textContent;
-  expect(evidence).toContain("Nintendo Game Boy Advance");
+  expect(evidence).toContain("GBA");
   expect(evidence).toContain("CRC32");
   expect(evidence).toContain("raw");
   expect(evidence).toContain("nintendo-game-boy-advance.pack");

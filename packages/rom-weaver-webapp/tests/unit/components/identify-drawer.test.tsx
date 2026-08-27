@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe("IdentifyDrawer", () => {
-  it("lists standard names once and keeps only genuine aliases", async () => {
+  it("lists every name as a copyable row, the standard name included", async () => {
     const { container } = render(
       <IdentifyDrawer
         identification={{
@@ -37,10 +37,10 @@ describe("IdentifyDrawer", () => {
     expect(container.querySelector(".identify-drawer-title")?.textContent).toBe(
       "Pokemon - Emerald Version (USA, Europe)",
     );
-    // …and only the two raw names that differ from it are aliases.
+    // …the Names group lists it as a copyable row next to the two raw aliases.
+    expect(container.querySelectorAll('button[aria-label^="Copy standard name "]')).toHaveLength(1);
     expect(container.querySelectorAll('button[aria-label^="Copy alias name "]')).toHaveLength(2);
-    expect(container.textContent).not.toContain("Copy standard name");
-    expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("Nintendo Game Boy Advance");
+    expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("GBA");
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("CRC32");
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("OpenGood");
 

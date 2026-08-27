@@ -41,6 +41,7 @@ import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { IDENTIFY_STATUS_LABEL } from "../../presentation/identify-status.ts";
 import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
+import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
 import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
@@ -406,37 +407,10 @@ const TIMING_LABEL = (ms?: number) =>
   typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : "";
 const CHECKSUM_TIMING_LABEL = (timing?: string, prefix = "Checksum") => (timing ? `${prefix} ${timing}` : undefined);
 
-/** Compact platform abbreviations for the ROM type tag (e.g. "Sony PlayStation" → "PSX"). */
-const PLATFORM_ABBREVIATIONS: Record<string, string> = {
-  "Atari 7800": "A7800",
-  "Atari Lynx": "LYNX",
-  "NEC PC-Engine CD & TurboGrafx-16 CD": "PCE-CD",
-  "Neo Geo Pocket": "NGP",
-  "Nintendo 3DS": "3DS",
-  "Nintendo 64": "N64",
-  "Nintendo DS": "NDS",
-  "Nintendo Entertainment System": "NES",
-  "Nintendo Famicom Disk System": "FDS",
-  "Nintendo Game Boy": "GB",
-  "Nintendo Game Boy Advance": "GBA",
-  "Nintendo GameCube": "GC",
-  "Nintendo Super Nintendo Entertainment System": "SNES",
-  "Nintendo Wii": "WII",
-  "Sega Dreamcast": "DC",
-  "Sega Master System": "SMS",
-  "Sega Mega CD _ Sega CD": "SCD",
-  "Sega Mega Drive _ Genesis": "GEN",
-  "Sega Saturn": "SAT",
-  "Sony PlayStation": "PSX",
-  "Sony PlayStation 2": "PS2",
-  "Sony Playstation Portable": "PSP",
-  "TurboGrafx-16_PC Engine": "PCE",
-};
-
 /** Render a backend ROM type tag as "PLATFORM · DISC" (e.g. "PSX · CD"); empty when unknown. */
 const formatRomTypeTag = (romType: { platform?: string; discFormat?: string } | undefined): string => {
   if (!romType) return "";
-  const platform = romType.platform ? (PLATFORM_ABBREVIATIONS[romType.platform] ?? romType.platform) : "";
+  const platform = romType.platform ? abbreviatePlatform(romType.platform) : "";
   return [platform, romType.discFormat].filter(Boolean).join(" · ");
 };
 

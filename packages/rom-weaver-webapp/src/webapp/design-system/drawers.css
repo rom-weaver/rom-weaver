@@ -310,8 +310,6 @@
 .rw-app .identify-drawer-aliases .ck-v,
 .rw-app .identify-drawer-evidence .ck-v {
   text-transform: none;
-}
-.rw-app .identify-drawer-aliases .ck-v {
   overflow-wrap: anywhere;
   white-space: normal;
 }
