@@ -233,6 +233,25 @@ describe("EmulatorTestView", () => {
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
   });
 
+  it("uses the detected platform to load a PSP disc image", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    loadRomMock.mockResolvedValue({
+      blob: new Blob(["disc"]),
+      checksum: "b".repeat(40),
+      fileName: "game.iso",
+      platform: "Sony Playstation Portable",
+    });
+
+    render(withSettings(<EmulatorTestView />));
+    fireEvent.change(screen.getByLabelText(/Drop a ROM or choose a file/), {
+      target: { files: [new File(["disc"], "game.iso")] },
+    });
+
+    await waitFor(() => expect(getEmulatorSessionState().entries[0]?.core).toBe("psp"));
+    expect(getEmulatorSessionState().entries[0]?.platform).toBe("Sony Playstation Portable");
+  });
+
   it("replaces the current game without a game list", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);

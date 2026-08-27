@@ -62,13 +62,14 @@ const loadEmulatorRom = async (blob: Blob, fileName: string, options: LoadEmulat
     if (bare) {
       const checksum = normalizedSha1(bare.checksums?.sha1);
       if (!checksum) throw new Error("rom-weaver did not return the ROM SHA-1 checksum.");
-      return { blob, checksum, fileName };
+      return { blob, checksum, fileName, ...(bare.platform ? { platform: bare.platform } : {}) };
     }
     const chosen = pickEmulatorRomOutput(outputs);
     const extracted = await getIngestOutputBlob(chosen);
     const checksum = normalizedSha1(chosen.checksums?.sha1);
     if (!checksum) throw new Error("rom-weaver did not return the extracted ROM SHA-1 checksum.");
-    return { blob: extracted, checksum, fileName: chosen.fileName };
+    const platform = chosen.romType?.platform;
+    return { blob: extracted, checksum, fileName: chosen.fileName, ...(platform ? { platform } : {}) };
   } finally {
     await Promise.all(outputs.map((output) => output.dispose().catch(() => undefined)));
   }
