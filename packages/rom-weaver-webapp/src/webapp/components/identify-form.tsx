@@ -97,12 +97,12 @@ const CandidateCard = ({
         </p>
       ) : null}
       <IdentifyDrawer
+        defaultOpen
         identification={{ matches: candidate.matches, status: candidate.status }}
         memberPath={showMemberPath ? candidate.path : undefined}
       />
-      {/* An unidentified ROM opens on its checksums: they are the only thing that
-          still helps the reader, so they must not need a second click. */}
-      <ChecksumList defaultOpen={candidate.status === "unknown"} label="Checksums">
+      {/* The evidence is the page's product, so both drawers open on arrival. */}
+      <ChecksumList defaultOpen label="Checksums">
         {Object.entries(candidate.checksums).map(([algorithm, checksum]) => (
           <ChecksumRow key={algorithm} label={algorithm.toUpperCase()} value={checksum} />
         ))}
@@ -138,6 +138,61 @@ const IdentifyForm = ({
     setStage("");
   }, []);
 
+  /** Run one identify operation, gated on the run token like every state write. */
+  const runOperation = useCallback(
+    async (
+      operation: (context: {
+        onProgress: (message: string) => void;
+        signal: AbortSignal;
+      }) => Promise<ParsedIdentifyResult>,
+    ) => {
+      runTokenRef.current += 1;
+      const token = runTokenRef.current;
+      const abort = new AbortController();
+      abortRef.current = abort;
+      setBusy(true);
+      setStage("");
+      setError("");
+      setResult(null);
+      try {
+        const identified = await operation({
+          onProgress: (message) => {
+            if (runTokenRef.current !== token) return;
+            if (message) setStage(message);
+          },
+          signal: abort.signal,
+        });
+        if (runTokenRef.current !== token) return;
+        setResult(identified);
+      } catch (cause) {
+        if (runTokenRef.current !== token || abort.signal.aborted) return;
+        setError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        if (runTokenRef.current === token) {
+          abortRef.current = null;
+          setBusy(false);
+          setStage("");
+        }
+      }
+    },
+    [],
+  );
+
+  const runFile = useCallback(
+    async (next: File) => {
+      await runOperation(async ({ onProgress, signal }) => {
+        const { identifyRom } = await import("../../platform/browser/browser-api.ts");
+        return identifyRom(next, next.name, {
+          onProgress: (progress) => onProgress(progress.message || progress.label || ""),
+          signal,
+        });
+      });
+    },
+    [runOperation],
+  );
+
+  /* Adding a ROM identifies it right away - no separate run click. The staged
+     file also overrides any checksum typed before the drop. */
   const selectFile = useCallback(
     (next: File) => {
       cancelRun();
@@ -146,8 +201,9 @@ const IdentifyForm = ({
       setHashError("");
       setResult(null);
       setError("");
+      void runFile(next);
     },
-    [cancelRun],
+    [cancelRun, runFile],
   );
 
   useEffect(() => {
@@ -178,54 +234,6 @@ const IdentifyForm = ({
     [],
   );
 
-  /** Run one identify operation, gated on the run token like every state write. */
-  const runOperation = async (
-    operation: (context: {
-      onProgress: (message: string) => void;
-      signal: AbortSignal;
-    }) => Promise<ParsedIdentifyResult>,
-  ) => {
-    runTokenRef.current += 1;
-    const token = runTokenRef.current;
-    const abort = new AbortController();
-    abortRef.current = abort;
-    setBusy(true);
-    setStage("");
-    setError("");
-    setResult(null);
-    try {
-      const identified = await operation({
-        onProgress: (message) => {
-          if (runTokenRef.current !== token) return;
-          if (message) setStage(message);
-        },
-        signal: abort.signal,
-      });
-      if (runTokenRef.current !== token) return;
-      setResult(identified);
-    } catch (cause) {
-      if (runTokenRef.current !== token || abort.signal.aborted) return;
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      if (runTokenRef.current === token) {
-        abortRef.current = null;
-        setBusy(false);
-        setStage("");
-      }
-    }
-  };
-
-  const run = async () => {
-    if (!(file && !busy)) return;
-    await runOperation(async ({ onProgress, signal }) => {
-      const { identifyRom } = await import("../../platform/browser/browser-api.ts");
-      return identifyRom(file, file.name, {
-        onProgress: (progress) => onProgress(progress.message || progress.label || ""),
-        signal,
-      });
-    });
-  };
-
   const runHash = async (value: string) => {
     if (busy) return;
     const normalized = value.trim().toLowerCase();
@@ -249,7 +257,8 @@ const IdentifyForm = ({
   /* Hash search and file identify are alternatives; the retry replays whichever
      one produced the current (unavailable) result. */
   const retry = () => {
-    if (file) void run();
+    if (busy) return;
+    if (file) void runFile(file);
     else if (hashText) void runHash(hashText);
   };
 
@@ -374,37 +383,36 @@ const IdentifyForm = ({
         supported={IDENTIFY_SUPPORTED_FILES}
       />
       {file ? (
-        <>
-          <WorkflowRomInputStep
-            items={[
-              {
-                card: {
-                  displayName: file.name,
-                  extract: { fileName: file.name, fileSize: file.size },
-                  meta: <span className="fsize mono">{formatByteSize(file.size)}</span>,
-                  onRemove: removeFile,
-                  removeLabel: busy ? "Cancel and remove ROM" : "Remove ROM",
-                },
-                id: "identify-rom",
+        <WorkflowRomInputStep
+          afterItems={
+            <>
+              {busy ? (
+                <p className="pdesc identify-progress" role="status">
+                  {stage || "Identifying ROM…"}
+                </p>
+              ) : null}
+              {errorBlock}
+              {unavailableBlock}
+              {resultsBlock}
+            </>
+          }
+          fault={!!error}
+          items={[
+            {
+              card: {
+                displayName: file.name,
+                extract: { fileName: file.name, fileSize: file.size },
+                meta: <span className="fsize mono">{formatByteSize(file.size)}</span>,
+                onRemove: removeFile,
+                removeLabel: busy ? "Cancel and remove ROM" : "Remove ROM",
               },
-            ]}
-            num="0x02"
-            title={localizer.message("ui.step.rom")}
-          />
-          <StepSection
-            fault={!!error}
-            num="0x03"
-            title={localizer.message("ui.step.identify")}
-            woven={!!result && !unavailable}
-          >
-            {errorBlock}
-            <RunButton disabled={busy} icon={<Search aria-hidden="true" />} onClick={() => void run()}>
-              {busy ? stage || "Identifying ROM…" : "Identify ROM"}
-            </RunButton>
-            {unavailableBlock}
-            {resultsBlock}
-          </StepSection>
-        </>
+              id: "identify-rom",
+            },
+          ]}
+          num="0x02"
+          title={localizer.message("ui.step.rom")}
+          woven={!!result && !unavailable}
+        />
       ) : hashMode ? (
         <StepSection
           fault={!!error}
@@ -417,12 +425,7 @@ const IdentifyForm = ({
           {resultsBlock}
         </StepSection>
       ) : (
-        <GhostSteps
-          steps={[
-            { num: "0x02", title: localizer.message("ui.step.rom") },
-            { num: "0x03", title: localizer.message("ui.step.identify") },
-          ]}
-        />
+        <GhostSteps steps={[{ num: "0x02", title: localizer.message("ui.step.rom") }]} />
       )}
     </section>
   );

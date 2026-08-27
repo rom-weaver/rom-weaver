@@ -67,8 +67,8 @@ const selectRom = async (fileName = "game.gba") => {
   await waitForText(fileName);
 };
 
+// Staging a ROM starts identification on its own; this only waits it out.
 const runIdentify = async () => {
-  buttonMatching(/^Identify ROM$/).click();
   await settle();
 };
 
@@ -220,7 +220,7 @@ test("a late result from a replaced file cannot repopulate the form", async () =
   await mountIdentifyForm();
   await selectRom("first.gba");
   await runIdentify();
-  await waitFor(() => buttonMatching(/Identifying/));
+  await waitForText("Identifying ROM");
 
   // Replace the file mid-run, then let the stale operation finish.
   await selectRom("second.gba");
@@ -233,7 +233,7 @@ test("a late result from a replaced file cannot repopulate the form", async () =
   await settle();
 
   expect(host.textContent).not.toContain("Stale Game (USA)");
-  expect(buttonMatching(/^Identify ROM$/)).toBeTruthy();
+  expect(host.textContent).toContain("second.gba");
 });
 
 for (const [width, height] of [
@@ -266,9 +266,6 @@ for (const [width, height] of [
     for (const value of host.querySelectorAll(".identify-member")) {
       expect(value.scrollWidth).toBeLessThanOrEqual(value.clientWidth + 1);
     }
-    const runButton = buttonMatching(/^Identify ROM$/);
-    expect(runButton.getBoundingClientRect().height).toBeGreaterThanOrEqual(36);
-    expect(runButton.disabled).toBe(false);
   });
 }
 
@@ -343,5 +340,5 @@ test("staging a file clears the checksum result", async () => {
   const hashInput = host.querySelector(".identify-hash-input");
   expect(hashInput).not.toBeNull();
   expect(hashInput.value).toBe("");
-  expect(buttonMatching(/^Identify ROM$/)).toBeTruthy();
+  expect(host.textContent).toContain("other.gba");
 });

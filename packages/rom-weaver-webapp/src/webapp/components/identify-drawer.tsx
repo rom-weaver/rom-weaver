@@ -34,9 +34,11 @@ const EvidenceRow = ({ label, values }: { label: string; values: readonly string
 };
 
 const IdentifyDrawer = ({
+  defaultOpen,
   identification,
   memberPath,
 }: {
+  defaultOpen?: boolean;
   identification: ParsedIdentifyLookupResult;
   /** Archive-relative member path, when the identified ROM came out of a container. */
   memberPath?: string;
@@ -54,6 +56,7 @@ const IdentifyDrawer = ({
   return (
     <Drawer
       className="identify-drawer"
+      defaultOpen={defaultOpen}
       label="Identify"
       labelIcon={<ScanSearch aria-hidden="true" />}
       readouts={
