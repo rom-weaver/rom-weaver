@@ -30,6 +30,7 @@ import {
 import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
 import type { runRomWeaverJson as runRomWeaverJsonType } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import { getPathBaseName } from "../path-utils.ts";
+import { parseSaveEditorResult, type SaveEditorResult } from "./save-editor-result.ts";
 import { parseBundleCreateResult, parseBundleParseResult } from "./bundle-result.ts";
 import {
   isChdCompressionFormat,
@@ -1094,6 +1095,75 @@ const invokeRomWeaverPpfUndoWorker = async (input: {
   );
 };
 
+type RuntimeSaveCommandInput = {
+  game?: string;
+  inputPath?: string;
+  logLevel?: LogLevel | string;
+  romSha1?: string;
+  signal?: AbortSignal;
+};
+
+type RuntimeSaveSetInput = RuntimeSaveCommandInput & {
+  assignments: string[];
+  dryRun?: boolean;
+  outputName: string;
+};
+
+const runSaveCommand = async (
+  type: "identify" | "inspect" | "get" | "set" | "export-schema",
+  args: Record<string, unknown>,
+  input: RuntimeSaveCommandInput,
+  outputPath?: string,
+): Promise<{ parsed: SaveEditorResult; result: RomWeaverJsonResult; outputPath?: string }> => {
+  const command = createRomWeaverCommand(`save-${type}`, {
+    ...args,
+    ...(input.inputPath ? { input: input.inputPath } : {}),
+    ...(input.game ? { game: input.game } : {}),
+    ...(input.romSha1 ? { rom_sha1: input.romSha1 } : {}),
+    ...(outputPath ? { output: outputPath } : {}),
+  } as never);
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      knownInputPaths: input.inputPath ? [input.inputPath] : undefined,
+      logLevel: input.logLevel,
+      signal: input.signal,
+      invalidateMountCacheBeforeRun: true,
+    }),
+  );
+  const terminal = getTerminalEvent(result);
+  if (!(type === "identify" && terminal?.status === "unsupported")) {
+    ensureRomWeaverSuccess(result, `Save ${type} failed`);
+  }
+  const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
+  return { parsed: parseSaveEditorResult(details), result, ...(outputPath ? { outputPath } : {}) };
+};
+
+const invokeRomWeaverSaveIdentifyWorker = (input: RuntimeSaveCommandInput) => runSaveCommand("identify", {}, input);
+const invokeRomWeaverSaveInspectWorker = (input: RuntimeSaveCommandInput) => runSaveCommand("inspect", {}, input);
+const invokeRomWeaverSaveSetWorker = async (input: RuntimeSaveSetInput) => {
+  if (input.dryRun)
+    return (await runSaveCommand("set", { assignments: input.assignments, dry_run: true }, input)).parsed;
+  const outputName = getPathBaseName(input.outputName, "edited-save.sav");
+  return runWithRomWeaverOutputScope(input.inputPath || "", outputName, [input.inputPath || ""], async (outputPath) => {
+    const execution = await runSaveCommand(
+      "set",
+      { assignments: input.assignments, dry_run: false, force: true },
+      input,
+      outputPath,
+    );
+    const emitted = getEmittedFileDetails(execution.result);
+    return {
+      ...execution.parsed,
+      parsed: execution.parsed,
+      fileName: emitted?.path ? getPathBaseName(emitted.path, outputName) : outputName,
+      filePath: emitted?.path || outputPath,
+      size: emitted?.sizeBytes,
+      timing: getRunResultTiming(execution.result),
+    };
+  });
+};
+
 // Classify a dropped source as ROM or patch, nested-extract + checksum ROMs (in place for bare
 // ROMs), and describe patches - the consolidated `ingest` command. One round-trip replaces the
 // webapp's separate classify → descend → checksum (ROM) and classify → describe (patch) calls.
@@ -1397,6 +1467,9 @@ export {
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
   invokeRomWeaverPpfUndoWorker,
+  invokeRomWeaverSaveIdentifyWorker,
+  invokeRomWeaverSaveInspectWorker,
+  invokeRomWeaverSaveSetWorker,
   invokeRomWeaverTrimWorker,
   normalizeChdCodecArgs,
   normalizeCodecEntries,

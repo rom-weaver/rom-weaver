@@ -1,5 +1,5 @@
 import { Download, RotateCcw, Wrench } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -11,6 +11,7 @@ import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 
 const TOOLS_ACTIVITY_KEY = "tools";
+const SaveEditor = lazy(() => import("./save-editor.tsx").then((module) => ({ default: module.SaveEditor })));
 
 const restoredFileName = (name: string) => {
   const dot = name.lastIndexOf(".");
@@ -69,6 +70,8 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
   const [output, setOutput] = useState<PublicOutput | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [activeTool, setActiveTool] = useState<"save-editor" | "ppf-undo">("save-editor");
+  const [saveSessionActive, setSaveSessionActive] = useState(false);
   const outputRef = useRef<PublicOutput | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const handledDropRef = useRef(0);
@@ -86,8 +89,8 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
     [],
   );
   useEffect(() => {
-    onSessionChange(!!(rom || patch || output));
-  }, [onSessionChange, output, patch, rom]);
+    onSessionChange(!!(rom || patch || output || saveSessionActive));
+  }, [onSessionChange, output, patch, rom, saveSessionActive]);
   useEffect(() => {
     if (busy) setWorkbenchActivity(TOOLS_ACTIVITY_KEY, { stage: "Restore original ROM", state: "running" });
     else if (error) setWorkbenchActivity(TOOLS_ACTIVITY_KEY, { state: "failed" });
@@ -129,10 +132,10 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
   );
 
   useEffect(() => {
-    if (!(pageDrop && pageDrop.id !== handledDropRef.current)) return;
+    if (!(activeTool === "ppf-undo" && pageDrop && pageDrop.id !== handledDropRef.current)) return;
     handledDropRef.current = pageDrop.id;
     stageFiles(pageDrop.files);
-  }, [pageDrop, stageFiles]);
+  }, [activeTool, pageDrop, stageFiles]);
 
   const run = async () => {
     if (!(rom && patch && outputName.trim()) || busy) return;
@@ -168,16 +171,43 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
     }
   };
 
+  const selectToolFromKeyboard = (event: KeyboardEvent) => {
+    if (!(["ArrowLeft", "ArrowRight", "Home", "End"] as string[]).includes(event.key)) return;
+    event.preventDefault();
+    let tool: "save-editor" | "ppf-undo" = activeTool === "save-editor" ? "ppf-undo" : "save-editor";
+    if (event.key === "Home") tool = "save-editor";
+    if (event.key === "End") tool = "ppf-undo";
+    setActiveTool(tool);
+    requestAnimationFrame(() => document.getElementById(`tab-tools-${tool}`)?.focus());
+  };
+
   return (
     <section className="panel" id="tools-container">
       <nav aria-label="Tool commands" className="tools-subnav">
         <div aria-orientation="horizontal" className="tools-subnav-rail" role="tablist">
           <button
+            aria-controls="panel-tools-save-editor"
+            aria-selected={activeTool === "save-editor"}
+            className="tools-subnav-tab"
+            id="tab-tools-save-editor"
+            onKeyDown={selectToolFromKeyboard}
+            role="tab"
+            onClick={() => setActiveTool("save-editor")}
+            tabIndex={activeTool === "save-editor" ? 0 : -1}
+            type="button"
+          >
+            <Wrench aria-hidden="true" />
+            <span>Save Editor</span>
+          </button>
+          <button
             aria-controls="panel-tools-ppf-undo"
-            aria-selected="true"
+            aria-selected={activeTool === "ppf-undo"}
             className="tools-subnav-tab"
             id="tab-tools-ppf-undo"
+            onKeyDown={selectToolFromKeyboard}
+            onClick={() => setActiveTool("ppf-undo")}
             role="tab"
+            tabIndex={activeTool === "ppf-undo" ? 0 : -1}
             type="button"
           >
             <RotateCcw aria-hidden="true" />
@@ -185,7 +215,25 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
           </button>
         </div>
       </nav>
-      <div aria-labelledby="tab-tools-ppf-undo" id="panel-tools-ppf-undo" role="tabpanel">
+      <div
+        aria-labelledby="tab-tools-save-editor"
+        hidden={activeTool !== "save-editor"}
+        id="panel-tools-save-editor"
+        role="tabpanel"
+      >
+        <Suspense fallback={<p role="status">Loading Save Editor…</p>}>
+          <SaveEditor
+            onSessionChange={setSaveSessionActive}
+            pageDrop={activeTool === "save-editor" ? pageDrop : null}
+          />
+        </Suspense>
+      </div>
+      <div
+        aria-labelledby="tab-tools-ppf-undo"
+        hidden={activeTool !== "ppf-undo"}
+        id="panel-tools-ppf-undo"
+        role="tabpanel"
+      >
         <UnifiedDropZone
           addLabel="Replace the patched ROM or PPF patch"
           big={workflowEmpty}

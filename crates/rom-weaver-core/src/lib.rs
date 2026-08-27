@@ -15,6 +15,7 @@ mod progress;
 mod prompt;
 mod registry;
 mod report_details;
+pub mod save;
 mod selection;
 mod threads;
 
@@ -75,6 +76,15 @@ pub use registry::{
 pub use report_details::{
     attach_emitted_file_paths, attach_extraction_details, build_emitted_file_detail,
     build_known_emitted_file_detail, insert_thread_execution_details, operation_report_details,
+};
+pub use save::{
+    PokemonGen3Handler, SaveChangePreview, SaveConfidence, SaveConstraint, SaveDetectionInput,
+    SaveDocument, SaveEdit, SaveEditResult, SaveField, SaveFieldChange, SaveFieldKind,
+    SaveFieldValue, SaveGameCandidate, SaveGameDefinition, SaveGameHandler, SaveGameIdentity,
+    SaveGameRegistry, SaveIntegrity, SaveIntegrityIssue, SaveIntegrityState, SaveRecognition,
+    SaveRecognitionConfidence, SaveRecognitionOutcome, SaveRecognitionReason, SaveSection,
+    SaveValue, apply_save_edits, detect_save, parse_save, unwrap_save_container,
+    validate_save_edits,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};
 pub use threads::{

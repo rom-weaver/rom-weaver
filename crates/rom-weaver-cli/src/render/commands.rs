@@ -19,6 +19,7 @@ const WRITE_SUMMARY_COMMANDS: &[&str] = &[
     "ingest",
     "bundle-create",
     "bundle-apply",
+    "save-set",
 ];
 
 pub fn success_is_write_summary(command: &str) -> bool {
@@ -43,9 +44,188 @@ pub fn render_success(surface: &Surface, event: &ProgressEvent) {
             }
         }
         "checksum" => render_checksum(surface, event),
+        "save-identify" => render_save_identify(surface, event),
+        "save-inspect" => render_save_inspect(surface, event),
+        "save-get" => label_line(surface, event),
+        "save-set" => render_save_result(surface, event),
+        "save-export-schema" => render_save_schema(surface, event),
         _ => render_details_or_label(surface, event),
     }
     render_elapsed(surface, event);
+}
+
+fn save_editor_details(event: &ProgressEvent) -> Option<&Value> {
+    event.details.as_ref()?.get("save_editor")
+}
+
+fn render_save_identify(surface: &Surface, event: &ProgressEvent) {
+    let Some(save) = save_editor_details(event) else {
+        return label_line(surface, event);
+    };
+    let document = save.get("document").filter(|value| value.is_object());
+    if let Some(document) = document {
+        let identity = document.get("identity").unwrap_or(&Value::Null);
+        let integrity = document.get("integrity").unwrap_or(&Value::Null);
+        let confidence = save
+            .get("recognition")
+            .and_then(|recognition| recognition.get("outcome"))
+            .and_then(|outcome| outcome.get("recognized"))
+            .and_then(|recognized| recognized.get("candidate"))
+            .map(|candidate| title_case(&string_field(candidate, "confidence")))
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("{value} confidence"))
+            .unwrap_or_default();
+        surface.key_values(&[
+            ("Game".to_string(), string_field(identity, "name")),
+            ("Platform".to_string(), string_field(document, "platform")),
+            (
+                "Save format".to_string(),
+                string_field(document, "save_format_name"),
+            ),
+            ("Parser".to_string(), string_field(document, "handler_id")),
+            ("Save size".to_string(), size_field(save, "save_size")),
+            ("Integrity".to_string(), string_field(integrity, "state")),
+            ("Recognition".to_string(), confidence),
+            (
+                "Active save slot".to_string(),
+                number_field(document, "active_slot"),
+            ),
+        ]);
+        return;
+    }
+    let recognition = save.get("recognition").unwrap_or(&Value::Null);
+    let outcome = recognition.get("outcome").unwrap_or(&Value::Null);
+    let recognition_label = if outcome.get("ambiguous").is_some() {
+        "Ambiguous"
+    } else {
+        "Unsupported"
+    };
+    surface.key_values(&[
+        ("Recognition".to_string(), recognition_label.to_string()),
+        ("Save size".to_string(), size_field(save, "save_size")),
+        (
+            "Potential format".to_string(),
+            string_field(save, "potential_format"),
+        ),
+    ]);
+}
+
+fn render_save_inspect(surface: &Surface, event: &ProgressEvent) {
+    let Some(document) = save_editor_details(event).and_then(|save| save.get("document")) else {
+        return label_line(surface, event);
+    };
+    let Some(fields) = document.get("fields").and_then(Value::as_array) else {
+        return render_object(surface, document);
+    };
+    let mut current_group = String::new();
+    for field in fields {
+        let id = field.get("id").and_then(Value::as_str).unwrap_or("");
+        let group = id.split_once('.').map(|(group, _)| group).unwrap_or("Save");
+        if group != current_group {
+            current_group = group.to_string();
+            surface.note(&title_case(group));
+        }
+        surface.key_values(&[(
+            string_field(field, "label"),
+            save_json_value(field.get("value").unwrap_or(&Value::Null)),
+        )]);
+    }
+}
+
+fn render_save_result(surface: &Surface, event: &ProgressEvent) {
+    let Some(save) = save_editor_details(event) else {
+        return label_line(surface, event);
+    };
+    if let Some(result) = save.get("result") {
+        if let Some(changes) = result
+            .get("preview")
+            .and_then(|preview| preview.get("changes"))
+            .and_then(Value::as_array)
+        {
+            for change in changes {
+                let field = change
+                    .get("field")
+                    .and_then(Value::as_str)
+                    .unwrap_or("field");
+                let old = change
+                    .get("old_value")
+                    .or_else(|| change.get("old"))
+                    .map(save_json_value)
+                    .unwrap_or_default();
+                let new = change
+                    .get("new_value")
+                    .or_else(|| change.get("value"))
+                    .map(save_json_value)
+                    .unwrap_or_default();
+                surface.key_values(&[(field.to_string(), format!("{old} -> {new}"))]);
+            }
+        }
+    } else if let Some(schema) = save.get("schema") {
+        render_object(surface, schema);
+    } else {
+        label_line(surface, event);
+    }
+}
+
+fn render_save_schema(surface: &Surface, event: &ProgressEvent) {
+    let Some(schema) = save_editor_details(event).and_then(|save| save.get("schema")) else {
+        return label_line(surface, event);
+    };
+    if let Some(game) = schema.get("game") {
+        surface.key_values(&[("Game".to_string(), string_field(game, "name"))]);
+    }
+    let Some(fields) = schema.get("fields").and_then(Value::as_array) else {
+        return;
+    };
+    surface.note("Fields");
+    let mut rows = vec![vec![
+        "ID".to_string(),
+        "Kind".to_string(),
+        "Editable".to_string(),
+    ]];
+    rows.extend(fields.iter().map(|field| {
+        vec![
+            string_field(field, "id"),
+            string_field(field, "kind"),
+            field
+                .get("editable")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+                .to_string(),
+        ]
+    }));
+    surface.rows(&rows);
+}
+
+fn save_json_value(value: &Value) -> String {
+    if let Some(object) = value.as_object()
+        && let Some(value) = object.values().next()
+    {
+        return match value {
+            Value::String(value) => value.clone(),
+            other => other.to_string(),
+        };
+    }
+    match value {
+        Value::String(value) => value.clone(),
+        other => other.to_string(),
+    }
+}
+
+fn number_field(value: &Value, key: &str) -> String {
+    value
+        .get(key)
+        .and_then(Value::as_u64)
+        .map(|value| value.to_string())
+        .unwrap_or_default()
+}
+
+fn title_case(value: &str) -> String {
+    let mut chars = value.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+        .unwrap_or_default()
 }
 
 fn label_line(surface: &Surface, event: &ProgressEvent) {

@@ -279,3 +279,148 @@
 .rw-app .panel.workflow:has(.tools-subnav) {
   --tools-rail-h: 55px;
 }
+
+.rw-app .save-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+  min-width: 0;
+}
+.rw-app .save-editor-pick {
+  width: 100%;
+}
+.rw-app .save-editor-hint,
+.rw-app .save-editor-source,
+.rw-app .save-editor-empty,
+.rw-app .save-editor-description {
+  margin: var(--sp-s) 0 0;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+.rw-app .save-editor-identity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs) var(--sp-s);
+  align-items: baseline;
+  min-width: 0;
+  margin-block-start: var(--sp-s);
+}
+.rw-app .save-editor-identity strong {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+.rw-app .save-editor-fields {
+  display: grid;
+  gap: var(--sp-m);
+  min-width: 0;
+}
+.rw-app .save-editor-field-group {
+  display: grid;
+  gap: var(--sp-s);
+  min-width: 0;
+  padding: var(--sp-s);
+  border: 1px solid var(--seam-soft);
+  border-radius: var(--r-s);
+}
+.rw-app .save-editor-field-group legend {
+  padding-inline: var(--sp-xs);
+  font-weight: 700;
+}
+.rw-app .save-editor-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 1fr) auto;
+  gap: var(--sp-s);
+  align-items: center;
+  min-width: 0;
+}
+.rw-app .save-editor-field label {
+  min-width: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.rw-app .save-editor-field .save-editor-description {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.rw-app .save-editor-control {
+  min-width: 0;
+}
+.rw-app .save-editor-checkbox {
+  justify-self: start;
+}
+.rw-app .save-editor-readonly {
+  min-width: 0;
+  padding: 8px 12px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+.rw-app .save-editor-field-error {
+  grid-column: 2 / -1;
+  font-size: 0.75rem;
+  color: var(--fault);
+  overflow-wrap: anywhere;
+}
+.rw-app .save-editor-pending {
+  min-width: 0;
+  padding: var(--sp-s);
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  border: 1px solid var(--seam-soft);
+  border-radius: var(--r-s);
+}
+.rw-app .save-editor-actions,
+.rw-app .save-editor-candidates,
+.rw-app .save-editor-emulator-list,
+.rw-app .save-editor-replace {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+  align-items: center;
+  min-width: 0;
+}
+.rw-app .save-editor-actions {
+  padding-block-start: var(--sp-s);
+  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .save-editor-preview {
+  padding: var(--sp-s);
+  color: var(--verified);
+  overflow-wrap: anywhere;
+  background: color-mix(in oklab, var(--verified) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--verified) 35%, var(--seam));
+  border-radius: var(--r-s);
+}
+.rw-app .save-editor-pending ul {
+  display: grid;
+  gap: var(--sp-xs);
+  padding: 0;
+  margin: var(--sp-xs) 0 0;
+  list-style: none;
+}
+.rw-app .save-editor-pending li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs) var(--sp-s);
+  justify-content: space-between;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rw-app .save-editor-reset {
+  align-self: flex-start;
+}
+@media (max-width: 720px) {
+  .rw-app .save-editor-field {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .rw-app .save-editor-field .save-editor-control,
+  .rw-app .save-editor-field .save-editor-readonly {
+    grid-column: 1 / -1;
+  }
+  .rw-app .save-editor-field-error {
+    grid-column: 1 / -1;
+  }
+}

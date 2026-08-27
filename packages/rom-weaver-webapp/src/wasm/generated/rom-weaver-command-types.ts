@@ -11,6 +11,7 @@ export const KNOWN_COMMAND_TYPES = [
   "trim",
   "patch",
   "bundle",
+  "save",
   "tools",
   "plan-extract-batch"
 ] as const;
