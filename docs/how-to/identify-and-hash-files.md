@@ -26,7 +26,7 @@ Use `probe` to inspect the file type. Use `checksum` to prove which bytes it hol
 rom-weaver identify --input game.nes
 ```
 
-The command checks the built-in OpenGood title data. It also checks common header, trim, and byte-order variants.
+The command checks the packaged OpenGood title data. It also checks common header, trim, and byte-order variants.
 
 Point it at an archive to identify the ROM inside:
 
@@ -46,7 +46,13 @@ Repeat `--database` to search more packs. `--database` accepts RWFP1 and RWFP2 p
 
 ## Identify a disc or other non-cartridge system
 
-The built-in data covers 17 cartridge systems. Install a Redump pack for an optical system:
+Native release packages include Redump data for 56 optical systems. After a Cargo or binary-only install, install the complete offline database:
+
+```bash
+rom-weaver identify database install-all
+```
+
+Install one Redump pack instead:
 
 ```bash
 rom-weaver identify database install "Sony PlayStation"

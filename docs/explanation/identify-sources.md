@@ -19,7 +19,7 @@
 
 Identify data comes from exactly two places, and every system belongs to exactly one of them:
 
-- [OpenGood](https://github.com/SnowflakePowered/opengood) covers 17 cartridge systems. It is CC0, so its packs ship inside the tool and work offline with no setup.
+- [OpenGood](https://github.com/SnowflakePowered/opengood) covers 17 cartridge systems. It is CC0, so its packs ship with native release packages and work offline.
 - [Redump](http://redump.org/) covers 56 optical-media systems. Its public DAT files become set-aware packs that the browser can download and cache.
 
 The sources never mix inside one system. An OpenGood system that returns no match stays unmatched; it never falls through to Redump. This keeps each answer traceable to one dataset. A "no match" means that the selected dataset does not know the file.

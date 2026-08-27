@@ -120,7 +120,7 @@ Not every command takes all four. `extract` has no `--no-extract`, since unpacki
 
 `identify` computes CRC32, MD5, and SHA-1. It searches the raw ROM and common checksum variants.
 
-Native builds include OpenGood data for 17 cartridge systems and Redump data for 56 optical systems. Builds without the default `bundled-identify-data` feature include no packs. [Where identify data comes from](../explanation/identify-sources.md) explains the split.
+Native release packages include OpenGood data for 17 cartridge systems and Redump data for 56 optical systems. The default `bundled-identify-data` feature enables lookup of packaged Zstandard packs. Builds without it ignore packaged packs. [Where identify data comes from](../explanation/identify-sources.md) explains the split.
 
 Native identify performs no network access.
 
@@ -146,6 +146,7 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 | `status` | List the installed pack files: slug, format, size, and sha256. |
 | `path` | Print the identify database directory. |
 | `remove <SYSTEM>` | Remove one system's installed pack. |
+| `install-all` | Download and atomically install the complete database for this rom-weaver version. |
 | `import-redump <ZIP>` | Build a pack from a local Redump DAT ZIP. |
 | `install <SYSTEM> [--from <ZIP>]` | Install one Redump system pack. Without `--from`, download the DAT from Redump. |
 | `update [SYSTEM] [--from <ZIP>]` | Update one or all installed Redump packs. Without `--from`, download current DAT files. |

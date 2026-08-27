@@ -1,8 +1,8 @@
 # ROM identify data
 
-The `identify` and `ingest` commands use compact title packs. RWFP1 stores OpenGood data. RWFP2 stores set-aware Redump data. The native CLI embeds all packs by default.
+The `identify` and `ingest` commands use compact title packs. RWFP1 stores OpenGood data. RWFP2 stores set-aware Redump data. Native release packages install all packs as external Zstandard files.
 
-The browser downloads only the packs a given input could match, and caches each one after its first use. The packs are self-hosted Brotli assets.
+The browser downloads only the packs a given input could match. It caches each pack after its first use. The packs are self-hosted Brotli assets.
 
 Ingest resolves ROM assets from their computed checksum variants. It also resolves a patch's expected source from embedded or file-name checksums. It does not hash the ROM or patch twice.
 
@@ -37,7 +37,7 @@ Run the build step directly:
 mise run identify-data
 ```
 
-The standard Rust and WASM tasks, webapp build, and CLI crate build script run this step automatically. The generated files live under `crates/rom-weaver-cli/data/identify/v1`, which Git ignores.
+The standard webapp and release tasks run this step automatically. The generated files live under `crates/rom-weaver-cli/data/identify/v1`, which Git ignores.
 
 Rebuild the packs after changing the source revision:
 
@@ -45,9 +45,9 @@ Rebuild the packs after changing the source revision:
 node scripts/ensure-identify-data.mjs --force
 ```
 
-The generated index records the source revision. The browser build compresses the raw packs into its self-hosted Brotli sidecars.
+The generated index records the source revision. The browser build ships only the self-hosted Brotli packs. It does not deploy the raw packs.
 
-The CLI crate includes the generated files in its Cargo package archive. Run `mise run identify-data` before `cargo package --allow-dirty` or `cargo publish --allow-dirty`.
+The CLI crate excludes generated data so its crates.io archive stays below the upload limit. `scripts/build-identify-release-data.mjs` creates `rom-weaver-identify-data.tar.zst` for release packages.
 
 ## Browser pack selection
 
@@ -58,11 +58,11 @@ The browser picks packs in two stages, so a drop never downloads the whole set w
 
 A detected platform widens to its siblings, because a header cannot separate Game Boy from Game Boy Color, Master System from Game Gear, or Neo Geo Pocket from its Color model. A wrong sibling costs one extra pack; a missing sibling would report a wrong "no match".
 
-The full set loads only when neither stage narrows the input. Correctness wins over transfer size: skipping a pack a ROM could match would report a wrong result.
+When neither stage narrows the input, the browser loads the 17 OpenGood packs. An unknown raw file has no optical-media profile for a Redump match.
 
 ## Browser caching
 
-The full pack set is 6.7 MB raw and about 1.6 MB after Brotli. Precaching all of it would put that on every service-worker install and every update, for a feature a session usually needs one system for.
+The full pack set is about 137 MB raw and 24 MB after Brotli. Precaching it would add that transfer to every service-worker install and update. A session usually needs one system.
 
 The service worker therefore precaches only `assets/identify-index.json` and runtime-caches each pack on first use, in a dedicated `identify` cache. Offline identification works for every system whose pack has been fetched once.
 
@@ -123,7 +123,7 @@ Build every distributable browser pack:
 node scripts/ensure-identify-data.mjs --redump-all --force
 ```
 
-The `bundled-identify-data` Cargo feature includes all OpenGood and Redump packs in native builds. It is enabled by default. The WASM build disables default features and requests packs from the webapp when it needs them.
+The default `bundled-identify-data` Cargo feature enables packaged-data lookup in native builds. Release packages install Zstandard packs under `share/rom-weaver/identify/v1`. The CLI decompresses only the packs it uses. `identify database install-all` installs the same checked archive into the user database for Cargo and other binary-only installs. The WASM build disables default features and requests Brotli packs from the webapp when it needs them.
 
 ## Pack integrity
 

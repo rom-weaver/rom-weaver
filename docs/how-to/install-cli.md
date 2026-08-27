@@ -80,12 +80,24 @@ Fetches the released binary instead of compiling from source, which `cargo insta
 cargo binstall rom-weaver-cli
 ```
 
+`cargo-binstall` installs only the executable. Install the complete offline identify database after it finishes:
+
+```bash
+rom-weaver identify database install-all
+```
+
 ### mise
 
 Manages the CLI per project in `mise.toml` and verifies the release's GitHub artifact attestations on install. [Install mise](https://mise.jdx.dev/installing-mise.html) first. The `minimum_release_age=0s` option lets new releases resolve immediately on release day; omit it if you prefer mise's default release-age delay.
 
 ```bash
 mise use 'github:rom-weaver/rom-weaver[minimum_release_age=0s]'
+```
+
+The generic GitHub backend installs only one release asset. Install the complete offline identify database after it finishes:
+
+```bash
+rom-weaver identify database install-all
 ```
 
 ## Source install
@@ -97,6 +109,12 @@ git clone https://github.com/rom-weaver/rom-weaver.git
 cd rom-weaver
 cargo install --path crates/rom-weaver-cli --locked
 rom-weaver --version
+```
+
+Install the complete offline identify database:
+
+```bash
+rom-weaver identify database install-all
 ```
 
 ## Run in Docker
