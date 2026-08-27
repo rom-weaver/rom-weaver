@@ -305,6 +305,11 @@ msgstr "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalidChars"
+msgstr "Checksums use only the hex characters 0-9 and a-f."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.environment"
 msgstr "Environment"
 
@@ -516,7 +521,7 @@ msgstr "optional"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashLabel"
-msgstr "Or identify by checksum"
+msgstr "Identify by checksum"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

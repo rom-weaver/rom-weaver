@@ -512,12 +512,6 @@ html:has(.rw-modal) {
 }
 /* Pair patch cards on wide screens while keeping workflow stages linear. */
 @media (min-width: 1100px) {
-  .rw-app #panel-trim,
-  .rw-app #panel-ppf-undo {
-    width: 100%;
-    max-width: 880px;
-    margin-inline: auto;
-  }
   .rw-app #rom-weaver-container > * {
     min-width: 0;
   }

@@ -305,6 +305,11 @@ msgstr "Introduce 8 (CRC32), 32 (MD5) o 40 (SHA-1) caracteres hexadecimales."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalidChars"
+msgstr "Las sumas de verificación solo usan los caracteres hexadecimales 0-9 y a-f."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.environment"
 msgstr "Entorno"
 
@@ -516,7 +521,7 @@ msgstr "opcional"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashLabel"
-msgstr "O identifica por suma de verificación"
+msgstr "Identifica por suma de verificación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

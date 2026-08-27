@@ -230,7 +230,8 @@ const IdentifyForm = ({
     if (busy) return;
     const normalized = value.trim().toLowerCase();
     if (!identifyHashAlgorithm(normalized)) {
-      setHashError(localizer.message("ui.identify.hashInvalid"));
+      const invalidChars = /[^0-9a-f]/.test(normalized);
+      setHashError(localizer.message(invalidChars ? "ui.identify.hashInvalidChars" : "ui.identify.hashInvalid"));
       return;
     }
     setHashError("");
@@ -355,6 +356,7 @@ const IdentifyForm = ({
 
   return (
     <section className="panel" id={containerId}>
+      {hashSearchBlock}
       <UnifiedDropZone
         addLabel="Replace the ROM"
         big={!file}
@@ -404,29 +406,23 @@ const IdentifyForm = ({
           </StepSection>
         </>
       ) : hashMode ? (
-        <>
-          {hashSearchBlock}
-          <StepSection
-            fault={!!error}
-            num="0x02"
-            title={localizer.message("ui.step.identify")}
-            woven={!!result && !unavailable}
-          >
-            {errorBlock}
-            {unavailableBlock}
-            {resultsBlock}
-          </StepSection>
-        </>
+        <StepSection
+          fault={!!error}
+          num="0x02"
+          title={localizer.message("ui.step.identify")}
+          woven={!!result && !unavailable}
+        >
+          {errorBlock}
+          {unavailableBlock}
+          {resultsBlock}
+        </StepSection>
       ) : (
-        <>
-          {hashSearchBlock}
-          <GhostSteps
-            steps={[
-              { num: "0x02", title: localizer.message("ui.step.rom") },
-              { num: "0x03", title: localizer.message("ui.step.identify") },
-            ]}
-          />
-        </>
+        <GhostSteps
+          steps={[
+            { num: "0x02", title: localizer.message("ui.step.rom") },
+            { num: "0x03", title: localizer.message("ui.step.identify") },
+          ]}
+        />
       )}
     </section>
   );

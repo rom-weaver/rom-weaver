@@ -283,7 +283,7 @@ test("an empty form shows the ghost steps next to the checksum search", async ()
   await mountIdentifyForm();
   expect(host.querySelector(".ghost-steps")).not.toBeNull();
   expect(host.querySelector(".identify-hash-input")).not.toBeNull();
-  expect(host.textContent).toContain("Or identify by checksum");
+  expect(host.textContent).toContain("Identify by checksum");
 });
 
 test("a pasted checksum identifies without a file", async () => {
@@ -316,6 +316,16 @@ test("an invalid checksum shows the inline error and never runs", async () => {
   expect(host.querySelector(".ghost-steps")).not.toBeNull();
 });
 
+test("a wrong-length checksum names the accepted lengths", async () => {
+  await mountIdentifyForm();
+  setHashInput("abc123");
+  buttonMatching(/Search by checksum/).click();
+  await waitForText("40 (SHA-1)");
+
+  expect(identifyHash).not.toHaveBeenCalled();
+  expect(host.querySelector(".identify-hash-error")).not.toBeNull();
+});
+
 test("staging a file clears the checksum result", async () => {
   identifyHash.mockResolvedValue({
     candidates: [candidate("3610a686", "matched", [gbaMatch("Metroid Fusion (USA)")])],
@@ -329,6 +339,9 @@ test("staging a file clears the checksum result", async () => {
 
   await selectRom("other.gba");
   expect(host.textContent).not.toContain("Metroid Fusion (USA)");
-  expect(host.querySelector(".identify-hash-input")).toBeNull();
+  // The checksum search stays on the page; the staged file only overrides its input.
+  const hashInput = host.querySelector(".identify-hash-input");
+  expect(hashInput).not.toBeNull();
+  expect(hashInput.value).toBe("");
   expect(buttonMatching(/^Identify ROM$/)).toBeTruthy();
 });

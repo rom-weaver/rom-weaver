@@ -5,6 +5,7 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../public/react/components/ds/file-card.tsx";
 import { useFlatTransitionFlag } from "../../public/react/components/ds/flat-transition.ts";
+import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { NeedsInput, StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
@@ -185,79 +186,91 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
           { extensions: ["ppf3"], label: "PPF3 patches" },
         ]}
       />
-      <StagedInputStep
-        file={rom}
-        label="patched ROM"
-        noun="a patched ROM"
-        num="0x02"
-        onAddInput={() => document.getElementById("ppf-undo-input-picker")?.click()}
-        onRemove={() => {
-          clearOutput();
-          setRom(null);
-        }}
-        title="Patched ROM"
-      />
-      <StagedInputStep
-        file={patch}
-        label="PPF3"
-        noun="a PPF patch"
-        num="0x03"
-        onAddInput={() => document.getElementById("ppf-undo-input-picker")?.click()}
-        onRemove={() => {
-          clearOutput();
-          setPatch(null);
-        }}
-        title="PPF patch"
-      />
-      <StepSection fault={!!error} num="0x04" title="Restore" woven={!!output}>
-        <div className="card outcard">
-          <div className="outbar">
-            <div className="fname fname-group">
-              <textarea
-                aria-label="Output filename"
-                className="input mono outname"
-                disabled={busy}
-                onChange={(event) => {
-                  clearOutput();
-                  setOutputName(event.currentTarget.value.replace(/[\r\n]/g, ""));
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") event.preventDefault();
-                }}
-                placeholder="Restored ROM filename"
-                rows={1}
-                spellCheck={false}
-                value={outputName}
-              />
+      {workflowEmpty ? (
+        <GhostSteps
+          steps={[
+            { num: "0x02", title: "Patched ROM" },
+            { num: "0x03", title: "PPF patch" },
+            { num: "0x04", title: "Restore" },
+          ]}
+        />
+      ) : (
+        <>
+          <StagedInputStep
+            file={rom}
+            label="patched ROM"
+            noun="a patched ROM"
+            num="0x02"
+            onAddInput={() => document.getElementById("ppf-undo-input-picker")?.click()}
+            onRemove={() => {
+              clearOutput();
+              setRom(null);
+            }}
+            title="Patched ROM"
+          />
+          <StagedInputStep
+            file={patch}
+            label="PPF3"
+            noun="a PPF patch"
+            num="0x03"
+            onAddInput={() => document.getElementById("ppf-undo-input-picker")?.click()}
+            onRemove={() => {
+              clearOutput();
+              setPatch(null);
+            }}
+            title="PPF patch"
+          />
+          <StepSection fault={!!error} num="0x04" title="Restore" woven={!!output}>
+            <div className="card outcard">
+              <div className="outbar">
+                <div className="fname fname-group">
+                  <textarea
+                    aria-label="Output filename"
+                    className="input mono outname"
+                    disabled={busy}
+                    onChange={(event) => {
+                      clearOutput();
+                      setOutputName(event.currentTarget.value.replace(/[\r\n]/g, ""));
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.preventDefault();
+                    }}
+                    placeholder="Restored ROM filename"
+                    rows={1}
+                    spellCheck={false}
+                    value={outputName}
+                  />
+                </div>
+              </div>
+              {busy ? (
+                <RunButton disabled icon={<RotateCcw aria-hidden="true" />}>
+                  Restoring ROM…
+                </RunButton>
+              ) : output ? (
+                <RunButton
+                  ariaLabel={`Download ${output.fileName}`}
+                  download={{ format: "ROM", name: output.fileName, size: formatByteSize(output.size) }}
+                  icon={<Download aria-hidden="true" />}
+                  onClick={() => void download()}
+                />
+              ) : (
+                <RunButton
+                  disabled={!(rom && patch && outputName.trim())}
+                  icon={<Wrench aria-hidden="true" />}
+                  onClick={() => void run()}
+                >
+                  Restore original ROM
+                </RunButton>
+              )}
             </div>
-          </div>
-          {busy ? (
-            <RunButton disabled icon={<RotateCcw aria-hidden="true" />}>
-              Restoring ROM…
-            </RunButton>
-          ) : output ? (
-            <RunButton
-              ariaLabel={`Download ${output.fileName}`}
-              download={{ format: "ROM", name: output.fileName, size: formatByteSize(output.size) }}
-              icon={<Download aria-hidden="true" />}
-              onClick={() => void download()}
-            />
-          ) : (
-            <RunButton
-              disabled={!(rom && patch && outputName.trim())}
-              icon={<Wrench aria-hidden="true" />}
-              onClick={() => void run()}
-            >
-              Restore original ROM
-            </RunButton>
-          )}
-        </div>
-        {error ? (
-          <Notice level="error" onDismiss={() => setError("")}>
-            {error}
-          </Notice>
-        ) : null}
-      </StepSection>
+            {error ? (
+              <Notice level="error" onDismiss={() => setError("")}>
+                {error}
+              </Notice>
+            ) : null}
+          </StepSection>
+        </>
+      )}
     </section>
   );
 };

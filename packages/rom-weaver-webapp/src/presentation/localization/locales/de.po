@@ -305,6 +305,11 @@ msgstr "Geben Sie 8 (CRC32), 32 (MD5) oder 40 (SHA-1) Hex-Zeichen ein."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalidChars"
+msgstr "Prüfsummen enthalten nur die Hex-Zeichen 0-9 und a-f."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.environment"
 msgstr "Umgebung"
 
@@ -516,7 +521,7 @@ msgstr "optional"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashLabel"
-msgstr "Oder per Prüfsumme identifizieren"
+msgstr "Per Prüfsumme identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
