@@ -31,6 +31,7 @@ esac
 asset="rom-weaver-$platform.tar.gz"
 legacy_asset="rom-weaver-$platform"
 docs_asset="rom-weaver-cli-assets.tar.gz"
+identify_asset="rom-weaver-identify-data.tar.zst"
 if [ "$version" = "latest" ]; then
   release_url="https://github.com/$repo/releases/latest/download"
 else
@@ -170,6 +171,40 @@ case "$asset" in
     ;;
 esac
 echo "Installed rom-weaver to $install_dir/rom-weaver"
+
+if curl --fail --location --proto '=https' --tlsv1.2 \
+  --output "$tmp_dir/$identify_asset" "$release_url/$identify_asset"; then
+  if command -v sha256sum >/dev/null 2>&1; then
+    identify_digest=$(sha256sum "$tmp_dir/$identify_asset" | cut -d ' ' -f 1)
+  else
+    identify_digest=$(shasum --algorithm 256 "$tmp_dir/$identify_asset" | cut -d ' ' -f 1)
+  fi
+  identify_verified=1
+  if [ "$skip_attestation" != 1 ]; then
+    status=$(curl --silent --location --proto '=https' --tlsv1.2 \
+      --output "$tmp_dir/identify-attestations.json" \
+      --write-out '%{http_code}' \
+      "https://api.github.com/repos/$repo/attestations/sha256:$identify_digest?predicate_type=https://slsa.dev/provenance/v1") || status=000
+    if [ "$status" = 200 ] && grep -q '"repository_id"' "$tmp_dir/identify-attestations.json"; then
+      echo "Verified build provenance for $identify_asset"
+    elif [ "$status" = 200 ] || [ "$status" = 404 ]; then
+      identify_verified=0
+      echo "rom-weaver: no build provenance from $repo for $identify_asset; installed the binary only" >&2
+    elif [ "$require_attestation" = 1 ]; then
+      identify_verified=0
+      echo "rom-weaver: could not check build provenance for $identify_asset; installed the binary only" >&2
+    else
+      echo "rom-weaver: could not check build provenance for $identify_asset; continuing unverified" >&2
+    fi
+  fi
+  if [ "$identify_verified" = 1 ] && tar --extract --file "$tmp_dir/$identify_asset" --directory "$install_dir"; then
+    echo "Installed ROM identify data to $install_dir/share/rom-weaver/identify/v1"
+  elif [ "$identify_verified" = 1 ]; then
+    echo "rom-weaver: tar cannot extract Zstandard archives; installed the binary only" >&2
+  fi
+else
+  echo "rom-weaver: ROM identify data unavailable; installed the binary only" >&2
+fi
 
 # Documentation is a separate, platform-independent release asset so the
 # executable remains usable by cargo-binstall, mise, and package managers that

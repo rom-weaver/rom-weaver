@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -30,6 +38,18 @@ const createBinaryArchive = (directory) => {
   writeFileSync(join(source, "rom-weaver"), "binary\n");
   const archive = join(directory, "binary-asset.tar.gz");
   execFileSync("tar", ["-czf", archive, "-C", source, "rom-weaver"]);
+  return archive;
+};
+
+const createIdentifyArchive = (directory) => {
+  const source = join(directory, "identify-source");
+  const data = join(source, "share", "rom-weaver", "identify", "v1");
+  mkdirSync(data, { recursive: true });
+  writeFileSync(join(data, "index.json"), "{}\n");
+  const tarPath = join(directory, "identify-data.tar");
+  const archive = join(directory, "identify-data.tar.zst");
+  execFileSync("tar", ["-cf", tarPath, "-C", source, "share"]);
+  execFileSync("zstd", ["-q", "-f", tarPath, "-o", archive]);
   return archive;
 };
 
@@ -66,6 +86,7 @@ JSON
     fi
     printf '%s' "\${ATTESTATION_STATUS:-200}"
     ;;
+  *identify-data.tar.zst) cp "$IDENTIFY_DATA_ARCHIVE" "$output" ;;
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
   *.tar.gz) cp "$BINARY_ASSET_ARCHIVE" "$output"; printf '200' ;;
   *) echo binary > "$output" ;;
@@ -92,11 +113,15 @@ const setUpDarwinInstall = (directory, options = {}) => {
   const { attestation = REAL_RESPONSE } = options;
   const bin = join(directory, "bin");
   mkdirSync(bin);
-  writeExecutable(join(bin, "uname"), '#!/bin/sh\ncase "$1" in\n  -s) echo Darwin ;;\n  -m) echo arm64 ;;\nesac\n');
+  writeExecutable(
+    join(bin, "uname"),
+    '#!/bin/sh\ncase "$1" in\n  -s) echo Darwin ;;\n  -m) echo arm64 ;;\nesac\n',
+  );
   writeExecutable(join(bin, "curl"), curlStub(attestation));
   writeExecutable(join(bin, "sha256sum"), SHA256SUM_STUB);
   createDocsArchive(directory);
   createBinaryArchive(directory);
+  createIdentifyArchive(directory);
   return bin;
 };
 
@@ -116,6 +141,7 @@ const runInstall = (directory, bin, environment = {}) => {
       ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
       CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
       BINARY_ASSET_ARCHIVE: join(directory, "binary-asset.tar.gz"),
+      IDENTIFY_DATA_ARCHIVE: join(directory, "identify-data.tar.zst"),
       ...rest,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -132,19 +158,30 @@ test("installs the binary for the host platform", () => {
     const output = runInstall(directory, bin, { SHELL: "/bin/zsh" });
 
     assert.equal(readFileSync(join(installDirectory, "rom-weaver"), "utf8"), "binary\n");
-    assert.equal(readFileSync(join(directory, ".local/share/man/man1/rom-weaver.1"), "utf8"), "man page\n");
+    assert.equal(
+      readFileSync(join(installDirectory, "share/rom-weaver/identify/v1/index.json"), "utf8"),
+      "{}\n",
+    );
+    assert.equal(
+      readFileSync(join(directory, ".local/share/man/man1/rom-weaver.1"), "utf8"),
+      "man page\n",
+    );
     assert.equal(
       readFileSync(join(directory, ".local/share/bash-completion/completions/rom-weaver"), "utf8"),
       "bash completion\n",
     );
     assert.equal(readFileSync(join(directory, ".zfunc/_rom-weaver"), "utf8"), "zsh completion\n");
-    assert.equal(readFileSync(join(directory, ".config/fish/completions/rom-weaver.fish"), "utf8"), "fish completion\n");
-    assert.equal(readFileSync(join(directory, ".config/elvish/lib/rom-weaver.elv"), "utf8"), "elvish completion\n");
+    assert.equal(
+      readFileSync(join(directory, ".config/fish/completions/rom-weaver.fish"), "utf8"),
+      "fish completion\n",
+    );
+    assert.equal(
+      readFileSync(join(directory, ".config/elvish/lib/rom-weaver.elv"), "utf8"),
+      "elvish completion\n",
+    );
     assert.ok(output.includes(`Installed rom-weaver to ${installDirectory}/rom-weaver`));
     assert.ok(
-      output.includes(
-        `echo 'export PATH="${installDirectory}:$PATH"' >> "${directory}/.zshrc"`,
-      ),
+      output.includes(`echo 'export PATH="${installDirectory}:$PATH"' >> "${directory}/.zshrc"`),
     );
     assert.ok(output.includes(`source "${directory}/.zshrc"`));
     assert.ok(output.includes("Then run: rom-weaver --help"));
@@ -154,6 +191,8 @@ test("installs the binary for the host platform", () => {
       // actually arrived, so it subsumes the checksum it used to download.
       // `predicate_type` is asserted here because dropping it silently weakens
       // the check: GitHub's automatic release attestation would answer instead.
+      `https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${DIGEST}?predicate_type=https://slsa.dev/provenance/v1`,
+      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-identify-data.tar.zst",
       `https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${DIGEST}?predicate_type=https://slsa.dev/provenance/v1`,
       "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-cli-assets.tar.gz",
     ]);
@@ -175,6 +214,7 @@ test("selects Linux musl assets by architecture", () => {
       mkdirSync(bin);
       createDocsArchive(directory);
       createBinaryArchive(directory);
+      createIdentifyArchive(directory);
       writeExecutable(
         join(bin, "uname"),
         `#!/bin/sh
@@ -199,6 +239,7 @@ echo "$url" >> "$CURL_LOG"
 case "$url" in
   *.sha256) echo "${"a".repeat(64)}  rom-weaver-${platform}" > "$output" ;;
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
+  *identify-data.tar.zst) cp "$IDENTIFY_DATA_ARCHIVE" "$output" ;;
   *.tar.gz) cp "$BINARY_ASSET_ARCHIVE" "$output"; printf '200' ;;
   *) echo binary > "$output" ;;
 esac
@@ -215,6 +256,7 @@ esac
           ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
           CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
           BINARY_ASSET_ARCHIVE: join(directory, "binary-asset.tar.gz"),
+          IDENTIFY_DATA_ARCHIVE: join(directory, "identify-data.tar.zst"),
           // This test is about asset selection; the provenance branches have
           // their own coverage and would only add noise to its output.
           ROM_WEAVER_SKIP_ATTESTATION: "1",
@@ -224,6 +266,13 @@ esac
       assert.equal(
         readFileSync(curlLog, "utf8").trim().split("\n")[0],
         `https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-${platform}.tar.gz`,
+      );
+      assert.equal(
+        readFileSync(
+          join(directory, "install", "share", "rom-weaver", "identify", "v1", "index.json"),
+          "utf8",
+        ),
+        "{}\n",
       );
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -259,14 +308,20 @@ const expectRefusal = (directory, run) => {
   assert.ok(output !== undefined, "expected install.sh to exit non-zero");
   assert.match(output, /refusing to install/);
   assert.match(output, /ROM_WEAVER_SKIP_ATTESTATION=1/);
-  assert.ok(!existsSync(join(directory, "install", "rom-weaver")), "refused install must leave no binary");
+  assert.ok(
+    !existsSync(join(directory, "install", "rom-weaver")),
+    "refused install must leave no binary",
+  );
   return output;
 };
 
 // The mirror image: the check could not run, so it warns and installs anyway.
 const expectWarning = (directory, output) => {
   assert.match(output, /this download is unverified/);
-  assert.ok(existsSync(join(directory, "install", "rom-weaver")), "a warning must not block the install");
+  assert.ok(
+    existsSync(join(directory, "install", "rom-weaver")),
+    "a warning must not block the install",
+  );
 };
 
 test("accepts a response carrying an attestation for these bytes", () => {
@@ -289,7 +344,9 @@ test("refuses a response carrying no attestation for these bytes", () => {
 
 test("refuses a 404 from the attestations API", () => {
   withInstall({ attestation: EMPTY_RESPONSE }, (directory, bin) => {
-    const output = expectRefusal(directory, () => runInstall(directory, bin, { ATTESTATION_STATUS: "404" }));
+    const output = expectRefusal(directory, () =>
+      runInstall(directory, bin, { ATTESTATION_STATUS: "404" }),
+    );
     assert.match(output, /no build provenance from/);
   });
 });
@@ -298,7 +355,11 @@ test("refuses a 404 from the attestations API", () => {
 // install: the unauthenticated API allows 60 requests an hour per address, so
 // this is reachable by ordinary use rather than only by attack.
 test("warns but installs when the API cannot answer", () => {
-  for (const environment of [{ ATTESTATION_STATUS: "403" }, { ATTESTATION_STATUS: "503" }, { ATTESTATION_CURL_FAILS: "1" }]) {
+  for (const environment of [
+    { ATTESTATION_STATUS: "403" },
+    { ATTESTATION_STATUS: "503" },
+    { ATTESTATION_CURL_FAILS: "1" },
+  ]) {
     withInstall({}, (directory, bin) => {
       const output = runInstall(directory, bin, environment);
       assert.match(output, /could not reach the attestations API/);
@@ -311,7 +372,10 @@ test("warns but installs when the API cannot answer", () => {
 test("refuses an unanswerable check under ROM_WEAVER_REQUIRE_ATTESTATION", () => {
   withInstall({}, (directory, bin) => {
     expectRefusal(directory, () =>
-      runInstall(directory, bin, { ATTESTATION_STATUS: "403", ROM_WEAVER_REQUIRE_ATTESTATION: "1" }),
+      runInstall(directory, bin, {
+        ATTESTATION_STATUS: "403",
+        ROM_WEAVER_REQUIRE_ATTESTATION: "1",
+      }),
     );
   });
 });
@@ -320,7 +384,10 @@ test("refuses an unanswerable check under ROM_WEAVER_REQUIRE_ATTESTATION", () =>
 // that would otherwise be fatal, or the advice printed is wrong.
 test("ROM_WEAVER_SKIP_ATTESTATION installs past a refusal without asking the API", () => {
   withInstall({ attestation: '{\n  "attestations": []\n}' }, (directory, bin) => {
-    const output = runInstall(directory, bin, { ROM_WEAVER_SKIP_ATTESTATION: "1", ATTESTATION_STATUS: "404" });
+    const output = runInstall(directory, bin, {
+      ROM_WEAVER_SKIP_ATTESTATION: "1",
+      ATTESTATION_STATUS: "404",
+    });
     assert.match(output, /skipping the build provenance check/);
     assert.ok(existsSync(join(directory, "install", "rom-weaver")));
     assert.ok(!readFileSync(join(directory, "curl.log"), "utf8").includes("attestations"));
@@ -333,9 +400,15 @@ test("ROM_WEAVER_SKIP_ATTESTATION installs past a refusal without asking the API
 test("needs no jq and no base64 decoder", () => {
   withInstall({}, (directory, bin) => {
     for (const tool of ["jq", "base64", "openssl"]) {
-      writeExecutable(join(bin, tool), `#!/bin/sh\necho '${tool} must not be called' >&2\nexit 127\n`);
+      writeExecutable(
+        join(bin, tool),
+        `#!/bin/sh\necho '${tool} must not be called' >&2\nexit 127\n`,
+      );
     }
-    assert.match(runInstall(directory, bin), /Verified build provenance for rom-weaver-darwin-arm64\.tar\.gz/);
+    assert.match(
+      runInstall(directory, bin),
+      /Verified build provenance for rom-weaver-darwin-arm64\.tar\.gz/,
+    );
   });
 });
 
@@ -360,6 +433,7 @@ done
 echo "$url" >> "$CURL_LOG"
 case "$url" in
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
+  *identify-data.tar.zst) exit 22 ;;
   *.tar.gz) printf '404' ;;
   *) echo binary > "$output" ;;
 esac
@@ -379,6 +453,8 @@ esac
       "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-darwin-arm64",
     );
     assert.ok(output.includes("Installed rom-weaver to"));
+    assert.match(output, /ROM identify data unavailable/);
+    assert.ok(!existsSync(join(directory, "install", "share")));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -416,7 +492,10 @@ printf '500'
     assert.ok(output !== undefined, "expected install.sh to exit non-zero");
     assert.match(output, /HTTP 500/);
     const log = readFileSync(join(directory, "curl.log"), "utf8");
-    assert.ok(!log.includes("download/rom-weaver-darwin-arm64\n"), "must not retry the legacy asset");
+    assert.ok(
+      !log.includes("download/rom-weaver-darwin-arm64\n"),
+      "must not retry the legacy asset",
+    );
     assert.ok(!existsSync(join(directory, "install", "rom-weaver")));
   } finally {
     rmSync(directory, { recursive: true, force: true });

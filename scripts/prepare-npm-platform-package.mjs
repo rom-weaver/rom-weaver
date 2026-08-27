@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +21,11 @@ const binaryTarget = resolve(packageRoot, binary);
 mkdirSync(dirname(binaryTarget), { recursive: true });
 copyFileSync(binaryPath, binaryTarget);
 copyFileSync(resolve(repoRoot, "LICENSE"), resolve(packageRoot, "LICENSE"));
+const shareTarget = resolve(packageRoot, "share");
+rmSync(shareTarget, { recursive: true, force: true });
+cpSync(resolve(repoRoot, "target", "identify-release", "share"), shareTarget, {
+  recursive: true,
+});
 execFileSync(
   process.execPath,
   [resolve(repoRoot, "scripts/gen-third-party-licenses.mjs"), packageRoot, "--target", "cli"],

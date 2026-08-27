@@ -91,7 +91,10 @@ export const hasCurrentData = (dataDir = defaultDataDir, options = {}) => {
     const packPath = join(dataDir, system.file);
     if (!existsSync(packPath)) return false;
     const bytes = readFileSync(packPath);
-    return bytes.length === system.rawBytes && sha256(bytes) === system.sha256;
+    if (bytes.length !== system.rawBytes || sha256(bytes) !== system.sha256) return false;
+    if (!system.brotliFile || !Number.isSafeInteger(system.brotliBytes)) return false;
+    const brotliPath = join(dataDir, system.brotliFile);
+    return existsSync(brotliPath) && readFileSync(brotliPath).length === system.brotliBytes;
   };
   return index.systems.every(verifyPack);
 };
@@ -107,7 +110,6 @@ export const main = async (argv = process.argv.slice(2), dataDir = defaultDataDi
   log("info", `building OpenGood ${OPENGOOD_REVISION} identify data`);
   await buildIdentifyData([
     redumpAll ? "--redump-all" : "--opengood-only",
-    "--no-brotli",
     "--out",
     dataDir,
   ]);

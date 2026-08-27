@@ -24,6 +24,7 @@ $platformArchitecture = switch ($architecture) {
 $asset = "rom-weaver-win32-$platformArchitecture-msvc.tar.gz"
 $legacyAsset = "rom-weaver-win32-$platformArchitecture-msvc.exe"
 $docsAsset = 'rom-weaver-cli-assets.zip'
+$identifyAsset = 'rom-weaver-identify-data.tar.zst'
 $releaseUrl = if ($version -eq 'latest') {
   "https://github.com/$repo/releases/latest/download"
 } else {
@@ -157,6 +158,41 @@ try {
     Move-Item -Path $downloadPath -Destination $target -Force
   }
   Write-Host "Installed rom-weaver to $target"
+  $identifyPath = Join-Path $tempDir $identifyAsset
+  try {
+    Invoke-WebRequest -Uri "$releaseUrl/$identifyAsset" -OutFile $identifyPath -UseBasicParsing
+    $installIdentify = $true
+    if (-not $skipAttestation) {
+      $identifyDigest = (Get-FileHash -Path $identifyPath -Algorithm SHA256).Hash.ToLower()
+      try {
+        $identifyResponse = Invoke-RestMethod -UseBasicParsing `
+          -Uri "https://api.github.com/repos/$repo/attestations/sha256:$($identifyDigest)?predicate_type=https://slsa.dev/provenance/v1"
+        $identifyAttestations = if ($null -ne $identifyResponse -and $identifyResponse.PSObject.Properties['attestations']) {
+          @($identifyResponse.attestations)
+        } else { @() }
+        if ($identifyAttestations.Count -eq 0) {
+          Write-Warning "no build provenance from $repo for $identifyAsset; installed the binary only"
+          $installIdentify = $false
+        } else {
+          Write-Host "Verified build provenance for $identifyAsset"
+        }
+      } catch {
+        if ((Get-StatusCode $_.Exception) -eq 404 -or $requireAttestation) {
+          Write-Warning "could not verify $identifyAsset; installed the binary only"
+          $installIdentify = $false
+        } else {
+          Write-Warning "could not check build provenance for $identifyAsset; continuing unverified"
+        }
+      }
+    }
+    if ($installIdentify) {
+      & tar --extract --file $identifyPath --directory $installDir
+      if ($LASTEXITCODE -ne 0) { throw "tar cannot extract $identifyAsset" }
+      Write-Host "Installed ROM identify data to $(Join-Path $installDir 'share/rom-weaver/identify/v1')"
+    }
+  } catch {
+    Write-Warning "ROM identify data unavailable: $($_.Exception.Message); installed the binary only"
+  }
   if ($docsPath) {
     $docsDir = Join-Path $tempDir 'docs'
     Expand-Archive -LiteralPath $docsPath -DestinationPath $docsDir -Force

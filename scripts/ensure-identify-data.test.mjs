@@ -27,7 +27,7 @@ async function buildCurrentDataDir(extraArgs = ["--opengood-only"]) {
   const cacheDir = join(work, "cache");
   const dataDir = join(work, "data");
   seedOpenGoodCache(cacheDir);
-  await buildIdentifyData(["--no-brotli", "--cache-dir", cacheDir, "--out", dataDir, ...extraArgs]);
+  await buildIdentifyData(["--cache-dir", cacheDir, "--out", dataDir, ...extraArgs]);
   return { dataDir, work };
 }
 

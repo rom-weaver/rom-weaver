@@ -2,29 +2,23 @@
   "name": "@rom-weaver/win32-ia32-msvc",
   "version": "0.13.0",
   "description": "Windows ia32 binary for rom-weaver",
+  "keywords": [
+    "chd",
+    "patch",
+    "rom",
+    "rvz",
+    "z3ds"
+  ],
+  "license": "AGPL-3.0-or-later",
   "author": "Brandon Casey",
   "repository": {
     "type": "git",
     "url": "https://github.com/rom-weaver/rom-weaver.git",
     "directory": "packages/rom-weaver-cli-platforms/win32-ia32-msvc"
   },
-  "license": "AGPL-3.0-or-later",
   "funding": [
     "https://github.com/sponsors/brandonocasey",
     "https://ko-fi.com/brandonocasey"
-  ],
-  "keywords": [
-    "rvz",
-    "chd",
-    "z3ds",
-    "rom",
-    "patch"
-  ],
-  "os": [
-    "win32"
-  ],
-  "cpu": [
-    "ia32"
   ],
   "bin": {
     "rom-weaver": "bin/rom-weaver.exe"
@@ -32,8 +26,15 @@
   "files": [
     "bin/rom-weaver.exe",
     "LICENSE",
+    "share/rom-weaver/identify/v1/**",
     "CLI_NOTICE",
     "third_party/licenses/**"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "ia32"
   ],
   "publishConfig": {
     "access": "public",

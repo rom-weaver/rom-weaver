@@ -108,6 +108,15 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.prebuilt_path }}
 
+      - name: Download identify data
+        id: identify-data
+        if: matrix.name == 'CLI'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: identify-release-data
+          path: target
+
       # The fallback is correct but slow, and it is otherwise invisible - a
       # release that quietly went back to compiling everything should say so.
       - name: Resolve build source
@@ -170,7 +179,9 @@ jobs:
         with:
           image: ${{ matrix.image }}
           file: ${{ matrix.file }}
-          build-args: ${{ matrix.build_arg }}=${{ steps.source.outputs.value }}
+          build-args: |
+            ${{ matrix.build_arg }}=${{ steps.source.outputs.value }}
+            IDENTIFY_DATA=${{ steps.identify-data.outcome == 'success' && 'prebuilt' || 'source' }}
           labels: ${{ steps.metadata.outputs.labels }}
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
