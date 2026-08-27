@@ -65,6 +65,10 @@ runs:
         ROM_WEAVER_CHANNEL_LABEL: ${{ inputs.label }}
       run: npm --prefix packages/rom-weaver-webapp run build
 
+    - name: Prepare Cloudflare Pages assets
+      shell: bash
+      run: node scripts/ci/prepare-pages-assets.mjs
+
     # Idempotent, so the first run on a channel bootstraps its own project and
     # no local wrangler auth is ever needed. The deploy wrapper also waits for
     # a matching new deployment to finish and reuses preview deployments when

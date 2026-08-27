@@ -1,0 +1,313 @@
+@layer style, foundation, drawers, controls, readouts, docs, overrides;
+
+@layer controls {
+  .rw-app .cheat-database-section {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .rw-app .cheat-database-section > header {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .rw-app .cheat-database-section h2,
+  .rw-app .cheat-database-section p {
+    margin: 0;
+  }
+
+  .rw-app .cheat-database-icon {
+    display: inline-flex;
+    flex: 0 0 2.75rem;
+    align-items: center;
+    justify-content: center;
+    height: 2.75rem;
+  }
+
+  .rw-app .cheat-database-icon svg,
+  .rw-app .cheat-search svg,
+  .rw-app .local-cheat-file svg,
+  .rw-app .manual-cheat-toggle svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .rw-app .cheat-match,
+  .rw-app .cheat-notices,
+  .rw-app .manual-cheat-result {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+    padding: 0.8rem;
+    border: 1px solid var(--line, currentColor);
+  }
+
+  .rw-app .cheat-tools {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .rw-app .cheat-search {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .rw-app .cheat-search svg {
+    z-index: 1;
+    margin-inline: 0.75rem -2rem;
+    pointer-events: none;
+  }
+
+  .rw-app .cheat-search input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.75rem;
+    padding-inline-start: 2.5rem;
+  }
+
+  .rw-app .cheat-tools fieldset {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    border: 0;
+  }
+
+  .rw-app .cheat-tools fieldset label {
+    position: relative;
+    min-height: 2.75rem;
+    cursor: pointer;
+  }
+
+  .rw-app .cheat-tools fieldset input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+  }
+
+  .rw-app .cheat-tools fieldset span {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--line, currentColor);
+  }
+
+  .rw-app .cheat-tools fieldset input:checked + span {
+    border-color: var(--accent, currentColor);
+    box-shadow: inset 0 0 0 1px var(--accent, currentColor);
+  }
+
+  .rw-app .cheat-tools fieldset input:focus-visible + span {
+    outline: 2px solid var(--accent, currentColor);
+    outline-offset: 2px;
+  }
+
+  .rw-app .cheat-list {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  .rw-app .cheat-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-width: 0;
+    border: 1px solid var(--line, currentColor);
+  }
+
+  .rw-app .cheat-choice {
+    display: flex;
+    gap: 0.7rem;
+    align-items: flex-start;
+    min-width: 0;
+    min-height: 3.5rem;
+    padding: 0.75rem;
+    cursor: pointer;
+  }
+
+  .rw-app .cheat-choice > input {
+    flex: 0 0 auto;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-block-start: 0.1rem;
+  }
+
+  .rw-app .cheat-choice:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: 0.68;
+  }
+
+  .rw-app .cheat-summary {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .rw-app .cheat-description {
+    font-weight: 650;
+  }
+
+  .rw-app .cheat-delivery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+  }
+
+  .rw-app .cheat-badge {
+    padding: 0.15rem 0.45rem;
+    font-size: 0.78rem;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+  }
+
+  .rw-app .cheat-detail-toggle,
+  .rw-app .manual-cheat-toggle {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+  }
+
+  .rw-app .cheat-detail-toggle {
+    align-self: stretch;
+    padding: 0.6rem;
+    border: 0;
+    border-inline-start: 1px solid var(--line, currentColor);
+  }
+
+  .rw-app .cheat-detail-toggle svg {
+    width: 1rem;
+    height: 1rem;
+    transition: transform 150ms ease;
+  }
+
+  .rw-app .cheat-detail-toggle[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+  }
+
+  .rw-app .cheat-details {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 0.6rem;
+    min-width: 0;
+    padding: 0.75rem;
+    margin: 0;
+    border-block-start: 1px solid var(--line, currentColor);
+  }
+
+  .rw-app .cheat-details > div {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.3fr) minmax(0, 1fr);
+    gap: 0.15rem;
+  }
+
+  .rw-app .cheat-details dt {
+    font-weight: 650;
+  }
+
+  .rw-app .cheat-details dd {
+    min-width: 0;
+    margin: 0;
+  }
+
+  .rw-app .cheat-game-picker,
+  .rw-app .local-cheat-file,
+  .rw-app .local-cheat-file label,
+  .rw-app .manual-cheat form,
+  .rw-app .manual-cheat form > label,
+  .rw-app .manual-cheat-options > label {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .rw-app .local-cheat-file {
+    gap: 0.4rem;
+    padding: 0.75rem;
+    border: 1px solid var(--line, currentColor);
+  }
+
+  .rw-app .local-cheat-file label > span {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+    font-weight: 650;
+  }
+
+  .rw-app .local-cheat-file input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.75rem;
+  }
+
+  .rw-app .cheat-game-picker select,
+  .rw-app .manual-cheat input,
+  .rw-app .manual-cheat textarea,
+  .rw-app .manual-cheat select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 2.75rem;
+  }
+
+  .rw-app .manual-cheat form {
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--line, currentColor);
+  }
+
+  .rw-app .manual-cheat-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .rw-app .cheat-notices {
+    font-size: 0.88rem;
+  }
+
+  .rw-app .cheat-tools fieldset span:active,
+  .rw-app .cheat-detail-toggle:active,
+  .rw-app .manual-cheat-toggle:active {
+    filter: brightness(0.9);
+  }
+
+  @media (hover: hover) {
+    .rw-app .cheat-tools fieldset span:hover,
+    .rw-app .cheat-detail-toggle:hover,
+    .rw-app .manual-cheat-toggle:hover {
+      filter: brightness(1.08);
+    }
+  }
+
+  @media (max-width: 40rem) {
+    .rw-app .cheat-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .rw-app .cheat-detail-toggle {
+      justify-content: flex-start;
+      padding-inline: 0.75rem;
+      border-block-start: 1px solid var(--line, currentColor);
+      border-inline-start: 0;
+    }
+
+    .rw-app .cheat-details > div,
+    .rw-app .manual-cheat-options {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

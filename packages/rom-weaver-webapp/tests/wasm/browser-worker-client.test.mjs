@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserWasiThreadWorkerPool } from "../../src/wasm/browser-wasi-thread-pool.ts";
 import { createRomWeaverBrowserOpfs } from "../../src/wasm/rom-weaver-browser-opfs-api.ts";
+import { createRomWeaverCommand } from "../../src/wasm/rom-weaver-command.ts";
 import {
   BrowserRomWeaverWorkerClient,
   createBrowserWorkerClient,
@@ -311,6 +312,59 @@ describe("rom-weaver-wasm browser runner parity", () => {
       expect(terminal.status).toBe("succeeded");
       expect(terminal.command).toBe("checksum");
       expect(terminal.elapsed_ms).toEqual(expect.any(Number));
+    });
+  });
+
+  it("classifies and exports a runtime cheat through the browser worker", async () => {
+    await withTempFixture(async ({ dir, sourcePath, worker, opfsHandle }) => {
+      const outputPath = joinGuestPath(dir, "selected.cht");
+      const record = {
+        codeKind: "pro-action-replay",
+        description: "Infinite test value",
+        gameId: "public-domain-fixture",
+        id: "runtime-test",
+        rawCode: "0010AB",
+        rawFields: { code: "0010AB", desc: "Infinite test value", enable: "false" },
+        sourceFile: "fixture.cht",
+        sourceIndex: 0,
+        sourceRevision: "test",
+        system: "nes",
+      };
+      const result = await runJsonFromWorker(worker)(
+        createRomWeaverCommand("cheat", {
+          input: sourcePath,
+          output: outputPath,
+          records: [record],
+          selectedIds: [record.id],
+        }),
+      );
+
+      assertRunJsonSucceeded(result, { command: "cheat" });
+      expect(result.events.at(-1)?.details?.cheats?.records?.[0]?.resolution?.type).toBe("runtime");
+      const exported = new TextDecoder().decode(await readGuestFile(opfsHandle, outputPath));
+      expect(exported).toContain('cheat0_code = "0010AB"');
+      expect(exported).toContain("cheat0_enable = true");
+    });
+  });
+
+  it("parses a local RetroArch cheat file in the browser worker", async () => {
+    await withTempFixture(async ({ sourcePath, worker }) => {
+      const result = await runJsonFromWorker(worker)(
+        createRomWeaverCommand("cheat", {
+          chtFileName: "../private.cht",
+          chtSource: 'cheats = 7\ncheat3_desc = "Imported health"\ncheat3_code = "0010AB"\ncheat3_future = "keep"\n',
+          chtSystem: "nes",
+          input: sourcePath,
+          records: [],
+        }),
+      );
+
+      assertRunJsonSucceeded(result, { command: "cheat" });
+      const imported = result.events.at(-1)?.details?.cheats?.records?.[0];
+      expect(imported?.record?.description).toBe("Imported health");
+      expect(imported?.record?.sourceFile).toBe("private.cht");
+      expect(imported?.record?.rawFields?.future).toBe("keep");
+      expect(imported?.resolution?.type).toBe("runtime");
     });
   });
 
