@@ -314,3 +314,87 @@ fn unsupported_save_stays_untouched() {
     );
     assert_eq!(fs::read(save.path()).unwrap(), vec![0xA5; 65_536]);
 }
+
+fn shark_port_wrap(save: &[u8]) -> Vec<u8> {
+    fn shark_port_checksum(payload: &[u8]) -> u32 {
+        let mut crc: u32 = 0;
+        for &byte in payload {
+            let value = byte as i8 as i32 as u32;
+            crc = crc.wrapping_add(value.wrapping_shl(crc % 0x18));
+        }
+        crc
+    }
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&13u32.to_le_bytes());
+    bytes.extend_from_slice(b"SharkPortSave");
+    bytes.extend_from_slice(&0x000f_0000u32.to_le_bytes());
+    for text in ["POKEMON EMER", "2026-08-27", "notes"] {
+        bytes.extend_from_slice(&(text.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(text.as_bytes());
+    }
+    let mut payload = vec![0u8; 0x1c];
+    payload[..12].copy_from_slice(b"POKEMON EMER");
+    payload[0x14] = 1;
+    payload.extend_from_slice(save);
+    bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    let crc = shark_port_checksum(&payload);
+    bytes.extend_from_slice(&payload);
+    bytes.extend_from_slice(&crc.to_le_bytes());
+    bytes
+}
+
+#[test]
+fn save_set_round_trips_a_shark_port_wrapper() {
+    let temp = setup_temp_dir();
+    let path = temp.child("emerald.sps");
+    let wrapped = shark_port_wrap(&emerald_fixture());
+    fs::write(path.path(), &wrapped).expect("sps fixture");
+
+    let identify =
+        run_single_json_event(&["save", "identify", path.to_str().unwrap(), "--json"], 0);
+    let details = &identify["details"]["save_editor"];
+    assert_eq!(details["save_size"], 131_072);
+    assert_eq!(details["potential_format"], "Flash 128 KiB");
+    assert_eq!(details["document"]["identity"]["id"], "pokemon-emerald");
+    assert!(
+        details["document"]["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|warning| warning.as_str().unwrap().contains("SharkPortSave"))
+    );
+
+    let output = temp.child("edited.sps");
+    let set = run_single_json_event(
+        &[
+            "save",
+            "set",
+            path.to_str().unwrap(),
+            "trainer.money=777",
+            "--output",
+            output.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(set["status"], "succeeded");
+    let edited = fs::read(output.path()).expect("edited sps");
+    assert_eq!(edited.len(), wrapped.len());
+    let payload_start = wrapped.len() - 4 - 0x20_000 - 0x1c;
+    // The wrapper header (magic, strings, game info) survives verbatim.
+    assert_eq!(
+        edited[..payload_start + 0x1c],
+        wrapped[..payload_start + 0x1c]
+    );
+    let get = run_single_json_event(
+        &[
+            "save",
+            "get",
+            output.to_str().unwrap(),
+            "trainer.money",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(get["label"], "777");
+}

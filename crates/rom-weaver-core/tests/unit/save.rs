@@ -566,3 +566,180 @@ fn field_schema_json_has_stable_generic_fields_without_offsets() {
     assert_eq!(money["constraints"]["max"], 999_999);
     assert!(money.get("offset").is_none());
 }
+
+fn shark_port_fixture(save: &[u8]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&13u32.to_le_bytes());
+    bytes.extend_from_slice(b"SharkPortSave");
+    bytes.extend_from_slice(&0x000f_0000u32.to_le_bytes());
+    for text in ["POKEMON EMER", "2026-08-27", "notes"] {
+        bytes.extend_from_slice(&(text.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(text.as_bytes());
+    }
+    let mut payload = vec![0u8; 0x1c];
+    payload[..12].copy_from_slice(b"POKEMON EMER");
+    payload[0x14] = 1;
+    payload.extend_from_slice(save);
+    bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    let crc = crate::save::container::shark_port_checksum(&payload);
+    bytes.extend_from_slice(&payload);
+    bytes.extend_from_slice(&crc.to_le_bytes());
+    bytes
+}
+
+fn gsv_fixture(save: &[u8]) -> Vec<u8> {
+    assert_eq!(save.len(), 0x20_000);
+    let mut bytes = vec![0u8; 0x430];
+    bytes[0x0c..0x18].copy_from_slice(b"POKEMON EMER");
+    bytes[0x42c..0x430].copy_from_slice(b"xV4\x12");
+    bytes.extend_from_slice(save);
+    bytes
+}
+
+#[test]
+fn shark_port_checksum_sign_extends_high_bytes_like_vba() {
+    // 0x80 sign-extends to 0xffffff80 before the first shift (crc % 24 == 0).
+    assert_eq!(
+        crate::save::container::shark_port_checksum(&[0x80]),
+        0xffff_ff80
+    );
+    assert_eq!(
+        crate::save::container::shark_port_checksum(&[0x01, 0x02]),
+        {
+            let crc = 1u32;
+            crc.wrapping_add(2u32.wrapping_shl(crc % 0x18))
+        }
+    );
+}
+
+#[test]
+fn shark_port_save_is_recognized_and_parsed_with_a_wrapper_warning() {
+    let wrapped = shark_port_fixture(&fixture(Family::Emerald, 5, 4));
+    let registry = SaveGameRegistry::default();
+    let recognition = registry.detect(&input(wrapped.clone(), None));
+    assert!(matches!(
+        recognition.outcome,
+        SaveRecognitionOutcome::Recognized { .. }
+    ));
+    let document = registry
+        .parse(
+            &input(wrapped, Some("pokemon-emerald")),
+            &game(Family::Emerald, "pokemon-emerald"),
+        )
+        .unwrap();
+    assert_eq!(document.save_size, 0x20_000);
+    assert!(
+        document
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("SharkPortSave"))
+    );
+}
+
+#[test]
+fn shark_port_edit_round_trips_and_updates_only_the_save_and_checksum() {
+    let raw = fixture(Family::Emerald, 5, 4);
+    let wrapped = shark_port_fixture(&raw);
+    let registry = SaveGameRegistry::default();
+    let identity = game(Family::Emerald, "pokemon-emerald");
+    let result = registry
+        .apply(
+            &input(wrapped.clone(), Some("pokemon-emerald")),
+            &identity,
+            &[SaveEdit {
+                field: "trainer.money".into(),
+                value: SaveValue::U32(777),
+            }],
+            false,
+        )
+        .unwrap();
+    let output = result.bytes.unwrap();
+    assert_eq!(output.len(), wrapped.len());
+    // Every byte before the payload (magic, version, strings, game info)
+    // survives verbatim.
+    let payload_start = wrapped.len() - 4 - 0x20_000 - 0x1c;
+    assert_eq!(
+        output[..payload_start + 0x1c],
+        wrapped[..payload_start + 0x1c]
+    );
+    assert_ne!(
+        output[payload_start + 0x1c..],
+        wrapped[payload_start + 0x1c..]
+    );
+    let stored = u32::from_le_bytes(output[output.len() - 4..].try_into().unwrap());
+    let computed =
+        crate::save::container::shark_port_checksum(&output[payload_start..output.len() - 4]);
+    assert_eq!(stored, computed);
+    // The edited wrapper reparses through the same path.
+    let document = registry
+        .parse(&input(output, Some("pokemon-emerald")), &identity)
+        .unwrap();
+    assert_eq!(value(&document, "trainer.money"), SaveValue::U32(777));
+    assert_eq!(document.integrity.state, SaveIntegrityState::Valid);
+}
+
+#[test]
+fn shark_port_checksum_mismatch_warns_but_still_parses() {
+    let mut wrapped = shark_port_fixture(&fixture(Family::Emerald, 5, 4));
+    let end = wrapped.len();
+    wrapped[end - 1] ^= 0xff;
+    let document = SaveGameRegistry::default()
+        .parse(
+            &input(wrapped, Some("pokemon-emerald")),
+            &game(Family::Emerald, "pokemon-emerald"),
+        )
+        .unwrap();
+    assert!(
+        document
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("checksum does not match"))
+    );
+}
+
+#[test]
+fn truncated_shark_port_wrapper_stays_unsupported() {
+    let mut wrapped = shark_port_fixture(&fixture(Family::Emerald, 5, 4));
+    wrapped.truncate(0x40);
+    let recognition = SaveGameRegistry::default().detect(&input(wrapped, None));
+    assert!(matches!(
+        recognition.outcome,
+        SaveRecognitionOutcome::Unsupported { .. }
+    ));
+}
+
+#[test]
+fn gsv_snapshot_is_recognized_and_round_trips_its_header() {
+    let raw = fixture(Family::Emerald, 5, 4);
+    let wrapped = gsv_fixture(&raw);
+    let registry = SaveGameRegistry::default();
+    let recognition = registry.detect(&input(wrapped.clone(), None));
+    assert!(matches!(
+        recognition.outcome,
+        SaveRecognitionOutcome::Recognized { .. }
+    ));
+    let identity = game(Family::Emerald, "pokemon-emerald");
+    let result = registry
+        .apply(
+            &input(wrapped.clone(), Some("pokemon-emerald")),
+            &identity,
+            &[SaveEdit {
+                field: "trainer.money".into(),
+                value: SaveValue::U32(4242),
+            }],
+            false,
+        )
+        .unwrap();
+    let output = result.bytes.unwrap();
+    assert_eq!(output[..0x430], wrapped[..0x430]);
+    let document = registry
+        .parse(&input(output, Some("pokemon-emerald")), &identity)
+        .unwrap();
+    assert_eq!(value(&document, "trainer.money"), SaveValue::U32(4242));
+    assert!(
+        document
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("GameShark SP snapshot"))
+    );
+}

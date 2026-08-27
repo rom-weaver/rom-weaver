@@ -29,10 +29,14 @@ impl CliApp {
         let recognition = detect_save(&input);
         let document = recognized_identity(&recognition)
             .and_then(|identity| parse_save(&input, identity).ok());
+        // Report the raw save size, not the outer file size, when the save is
+        // inside a wrapper such as a GameShark SP export.
+        let save_size = rom_weaver_core::unwrap_save_container(&input.bytes)
+            .map_or(input.bytes.len(), |(_, inner)| inner.len());
         let details = json!({
             SAVE_DETAILS_KEY: {
-                "save_size": input.bytes.len(),
-                "potential_format": potential_save_format(input.bytes.len()),
+                "save_size": save_size,
+                "potential_format": potential_save_format(save_size),
                 "recognition": recognition,
                 "document": document,
             }
@@ -51,10 +55,7 @@ impl CliApp {
             ),
             SaveRecognitionOutcome::Unsupported { .. } => (
                 OperationStatus::Unsupported,
-                format!(
-                    "Recognition: Unsupported\nSave size: {} bytes",
-                    input.bytes.len()
-                ),
+                format!("Recognition: Unsupported\nSave size: {save_size} bytes"),
             ),
         };
         self.finish(
