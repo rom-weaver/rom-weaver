@@ -82,6 +82,25 @@ it("uses ingest to checksum a bare playable ROM in place", async () => {
   });
 });
 
+it("keeps the detected platform for a bare disc image", async () => {
+  workflowMocks.ingestRom.mockResolvedValueOnce({
+    outputs: [],
+    result: {
+      assets: [
+        {
+          checksums: { sha1: "b".repeat(40) },
+          copiedInPlace: true,
+          platform: "Sony Playstation Portable",
+        },
+      ],
+    },
+  });
+
+  await expect(loadEmulatorRom(new Blob(["game"]), "game.iso")).resolves.toMatchObject({
+    platform: "Sony Playstation Portable",
+  });
+});
+
 describe("pickEmulatorRomOutput", () => {
   it("throws when the archive produced no files", () => {
     expect(() => pickEmulatorRomOutput([])).toThrow("did not produce any files");

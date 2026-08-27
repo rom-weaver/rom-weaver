@@ -308,7 +308,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           signal: abortController.signal,
         });
         if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return false;
-        const core = getEmulatorJsCore(undefined, loaded.fileName);
+        const core = getEmulatorJsCore(loaded.platform, loaded.fileName);
         if (!core) {
           setError({
             detail: "No emulator core is available for this file. Choose a supported ROM.",
@@ -322,6 +322,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           core,
           fileName: loaded.fileName,
           id: createLocalEntryId(loaded.fileName),
+          platform: loaded.platform,
           sizeBytes: loaded.blob.size,
           source: "local" as const,
         };
