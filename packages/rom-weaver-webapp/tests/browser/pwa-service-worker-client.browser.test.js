@@ -36,11 +36,10 @@ const createController = () => {
 };
 
 const createHarness = ({
-  appVersion = "app-under-test",
   controller = null,
   crossOriginIsolated = false,
   sessionStorageSeed = {},
-  shouldAutoApplyUpdate,
+  shouldAutoApplyUpdate = vi.fn(() => true),
 } = {}) => {
   const sessionStorage = createSessionStorage(sessionStorageSeed);
   const location = {
@@ -83,7 +82,6 @@ const createHarness = ({
     return updateServiceWorker;
   };
   const client = createPwaServiceWorkerClient({
-    appVersion,
     cachePrefix: "precache-rom-weaver-",
     cacheVersionTimeoutMs: 50,
     document: {
@@ -96,6 +94,7 @@ const createHarness = ({
     onStateChange: () => undefined,
     registerServiceWorker,
     sessionStorage,
+    // Keep the old hook in this fixture so an accidental auto-apply path cannot pass the test.
     shouldAutoApplyUpdate,
     updateIntervalMs: 5000,
     window: browserWindow,
@@ -108,6 +107,7 @@ const createHarness = ({
     registration,
     serviceWorker,
     sessionStorage,
+    shouldAutoApplyUpdate,
     triggerNeedRefresh: () => registerOptions?.onNeedRefresh?.(),
     updateServiceWorker,
   };
@@ -155,12 +155,11 @@ test("does not reload to gain control when server headers already isolated the p
   expect(harness.sessionStorage.getItem(COI_RELOADED_BY_SELF_KEY)).toBe(null);
 });
 
-test("auto-applies an update silently without reloading when no work is in progress", async () => {
+test("defers every update to the visible prompt", async () => {
   const controller = createController();
   const harness = createHarness({
     controller,
     crossOriginIsolated: true,
-    shouldAutoApplyUpdate: () => true,
   });
 
   harness.client.initialize();
@@ -168,32 +167,10 @@ test("auto-applies an update silently without reloading when no work is in progr
   harness.triggerNeedRefresh();
   await flushAsync();
 
-  // Running version (app-under-test) is ahead of the outgoing controller (reports "test"), so the page
-  // already runs the incoming version: activate via skipWaiting, no reload.
-  expect(harness.updateServiceWorker).toHaveBeenCalledTimes(1);
+  expect(harness.updateServiceWorker).not.toHaveBeenCalled();
   expect(harness.location.reload).not.toHaveBeenCalled();
-  expect(harness.client.getState().updateReady).toBe(false);
-});
-
-test("auto-applies with a reload when the page is still running the outgoing controller's code", async () => {
-  const controller = createController();
-  const harness = createHarness({
-    appVersion: "test",
-    controller,
-    crossOriginIsolated: true,
-    shouldAutoApplyUpdate: () => true,
-  });
-
-  harness.client.initialize();
-  await flushAsync();
-  harness.triggerNeedRefresh();
-  await flushAsync();
-
-  // Running version matches the outgoing controller (both "test"), so the loaded code is stale and a
-  // reload is needed to pick up the incoming worker's assets.
-  expect(harness.updateServiceWorker).toHaveBeenCalledTimes(1);
-  expect(harness.location.reload).toHaveBeenCalledTimes(1);
-  expect(harness.client.getState().updateReady).toBe(false);
+  expect(harness.shouldAutoApplyUpdate).not.toHaveBeenCalled();
+  expect(harness.client.getState().updateReady).toBe(true);
 });
 
 test("reloads when the user applies a deferred update from the prompt", async () => {
@@ -201,7 +178,6 @@ test("reloads when the user applies a deferred update from the prompt", async ()
   const harness = createHarness({
     controller,
     crossOriginIsolated: true,
-    shouldAutoApplyUpdate: () => false,
   });
 
   harness.client.initialize();
@@ -212,41 +188,6 @@ test("reloads when the user applies a deferred update from the prompt", async ()
 
   expect(harness.location.reload).toHaveBeenCalledTimes(1);
   expect(harness.client.getState().updateReady).toBe(false);
-});
-
-test("stops auto-applying once the per-session reload budget is spent", async () => {
-  const controller = createController();
-  const harness = createHarness({
-    controller,
-    crossOriginIsolated: true,
-    sessionStorageSeed: { "rom-weaver-sw-auto-apply-reloads": "3" },
-    shouldAutoApplyUpdate: () => true,
-  });
-
-  harness.client.initialize();
-  await flushAsync();
-  harness.triggerNeedRefresh();
-
-  // Budget already spent: even with no work in progress, fall back to the manual prompt instead of
-  // auto-reloading again (guards against a deploy that serves a byte-varying worker on every check).
-  expect(harness.updateServiceWorker).not.toHaveBeenCalled();
-  expect(harness.client.getState().updateReady).toBe(true);
-});
-
-test("defers an update to a prompt when work is in progress", async () => {
-  const controller = createController();
-  const harness = createHarness({
-    controller,
-    crossOriginIsolated: true,
-    shouldAutoApplyUpdate: () => false,
-  });
-
-  harness.client.initialize();
-  await flushAsync();
-  harness.triggerNeedRefresh();
-
-  expect(harness.updateServiceWorker).not.toHaveBeenCalled();
-  expect(harness.client.getState().updateReady).toBe(true);
 });
 
 test("degrades to require-corp and reloads when controlled but still not isolated", async () => {
