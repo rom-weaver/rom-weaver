@@ -33,14 +33,12 @@ describe("IdentifyDrawer", () => {
       />,
     );
 
-    // All three records normalize to one display name, so there is one standard name…
-    expect(container.querySelector(".identify-drawer-label")?.textContent).toBe("Standard name");
-    expect(container.querySelectorAll(".identify-drawer-title")).toHaveLength(1);
-    expect(container.querySelector(".identify-drawer-title")?.textContent).toBe(
-      "Pokemon - Emerald Version (USA, Europe)",
-    );
-    // …the Names group lists it as a copyable row next to the two raw aliases.
-    expect(container.querySelectorAll('button[aria-label^="Copy standard name "]')).toHaveLength(1);
+    // All three records normalize to one display name, so the Names group
+    // lists one standard row next to the two raw aliases - no headline block.
+    expect(container.querySelector(".identify-drawer-label")).toBeNull();
+    const standardRows = container.querySelectorAll('button[aria-label^="Copy standard name "]');
+    expect(standardRows).toHaveLength(1);
+    expect(standardRows[0]?.textContent).toContain("Pokemon - Emerald Version (USA, Europe)");
     expect(container.querySelectorAll('button[aria-label^="Copy alias name "]')).toHaveLength(2);
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("GBA");
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("CRC32");
@@ -52,7 +50,7 @@ describe("IdentifyDrawer", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("Pokemon - Emerald Version (UE) [!]"));
   });
 
-  it("pluralizes the standard-name heading and states the candidate count", () => {
+  it("lists every candidate name and states the candidate count", () => {
     const { container } = render(
       <IdentifyDrawer
         identification={{
@@ -63,8 +61,7 @@ describe("IdentifyDrawer", () => {
       />,
     );
 
-    expect(container.querySelector(".identify-drawer-label")?.textContent).toBe("Standard names");
-    expect(container.querySelectorAll(".identify-drawer-title")).toHaveLength(2);
+    expect(container.querySelectorAll('button[aria-label^="Copy standard name "]')).toHaveLength(2);
     expect(container.textContent).toContain("2 possible matches");
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("Games/twin.gba");
   });

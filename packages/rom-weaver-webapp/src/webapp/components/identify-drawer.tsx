@@ -1,11 +1,7 @@
 import { ScanSearch } from "lucide-react";
 import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
-import {
-  IDENTIFY_STATUS_MARK,
-  identifyMatchCountLabel,
-  identifyNameHeading,
-} from "../../presentation/identify-status.ts";
+import { IDENTIFY_STATUS_MARK, identifyMatchCountLabel } from "../../presentation/identify-status.ts";
 import { ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import type { ParsedIdentifyLookupResult, ParsedIdentifyTitleMatch } from "../../types/identify.ts";
 import { Drawer, DrawerReadout } from "../../public/react/components/ds/drawer.tsx";
@@ -65,12 +61,6 @@ const IdentifyDrawer = ({
       }
     >
       <div className="identify-drawer-body">
-        <div className="identify-drawer-label">{identifyNameHeading(canonicalNames.length)}</div>
-        {canonicalNames.map((name) => (
-          <div className="identify-drawer-title" key={name}>
-            {name}
-          </div>
-        ))}
         <div className="ck-group identify-drawer-group">
           <div className="ck-group-head">Names</div>
           <div className="ckrows identify-drawer-aliases">

@@ -475,7 +475,9 @@ describe("apply workflow view - staged bench", () => {
     expect(romCard?.querySelector(".card-meta")).toBeNull();
     expect(romCard?.querySelector(".card-name .sr-only")?.textContent).toBe("Advance Wars (USA) — game.bin");
     expect(romCard?.querySelector(".identify-drawer .rb")?.textContent).toBe("Identified");
-    expect(romCard?.querySelector(".identify-drawer-title")?.textContent).toBe("Advance Wars (USA)");
+    expect(romCard?.querySelector('.identify-drawer [aria-label^="Copy standard name "]')?.textContent).toContain(
+      "Advance Wars (USA)",
+    );
     expect(romCard?.querySelector(".cks:not(.identify-drawer)")?.textContent).not.toContain("Advance Wars (USA)");
     expect(romCard?.querySelector(".extract-d .tree-name")?.textContent).toBe("game.bin");
   });

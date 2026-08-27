@@ -33,6 +33,4 @@ const IDENTIFY_STATUS_MARK: Readonly<Record<IdentifyStatus, IdentifyStatusMark>>
 /** "1 possible match" / "3 possible matches" - the count must be visible, not implied. */
 const identifyMatchCountLabel = (count: number): string => `${count} possible ${count === 1 ? "match" : "matches"}`;
 
-const identifyNameHeading = (count: number): string => (count === 1 ? "Standard name" : "Standard names");
-
-export { IDENTIFY_STATUS_LABEL, IDENTIFY_STATUS_MARK, identifyMatchCountLabel, identifyNameHeading };
+export { IDENTIFY_STATUS_LABEL, IDENTIFY_STATUS_MARK, identifyMatchCountLabel };

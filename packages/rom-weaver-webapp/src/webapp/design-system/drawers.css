@@ -292,18 +292,6 @@
   gap: var(--sp-s);
   padding: var(--sp-s) var(--sp-m);
 }
-.rw-app .identify-drawer-label {
-  margin-block-start: var(--sp-xs);
-  font-size: var(--badge-fs);
-  font-weight: 650;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.rw-app .identify-drawer-title {
-  font-weight: 650;
-  overflow-wrap: anywhere;
-}
 .rw-app .identify-drawer-group {
   min-width: 0;
 }
