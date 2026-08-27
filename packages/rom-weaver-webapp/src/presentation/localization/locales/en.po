@@ -296,7 +296,17 @@ msgstr "DVD Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Enable beta tools (Trim, Tools, and Identify)"
+msgstr "Enable beta tools (Identify, Trim, and PPF undo)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalid"
+msgstr "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalidChars"
+msgstr "Checksums use only the hex characters 0-9 and a-f."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -337,6 +347,11 @@ msgstr "Fix order"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Fix ROM header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.identify"
+msgstr "Identify"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -455,6 +470,11 @@ msgstr "No compatible patch was found."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashHint"
+msgstr "No file needed - paste a CRC32, MD5, or SHA-1 checksum in hex."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "No lines match “{q}”"
 
@@ -497,6 +517,11 @@ msgstr "Only include a ROM if you have the right to distribute it. Sharing copyr
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashLabel"
+msgstr "Identify by checksum"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -672,6 +697,16 @@ msgstr "RVZ codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.save"
 msgstr "Save"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashSearch"
+msgstr "Search by checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashSearching"
+msgstr "Searching…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -532,39 +532,6 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   }
 }
 
-.rw-app .tools-subnav {
-  padding: 10px var(--pad);
-  background: var(--plate-2);
-  border-block-end: 1px solid var(--seam-soft);
-}
-.rw-app .tools-subnav-rail {
-  display: flex;
-  gap: var(--sp-s);
-}
-.rw-app .tools-subnav-tab {
-  display: inline-flex;
-  gap: var(--sp-s);
-  align-items: center;
-  min-height: 34px;
-  padding: 6px 13px;
-  font-size: 0.78rem;
-  font-weight: 650;
-  color: var(--thread-text);
-  appearance: none;
-  cursor: pointer;
-  background: color-mix(in oklab, var(--thread) 14%, var(--well));
-  border: 1px solid var(--thread);
-  border-radius: var(--r-s);
-}
-/* No hover pair to mirror: the tab is lit at rest, so press deepens the tint. */
-.rw-app .tools-subnav-tab:active {
-  background: color-mix(in oklab, var(--thread) 22%, var(--well));
-}
-.rw-app .tools-subnav-tab svg {
-  width: 15px;
-  height: 15px;
-}
-
 /* ── top-right actions ── */
 .rw-app .masthead-tools {
   position: relative;

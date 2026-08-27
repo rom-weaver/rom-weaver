@@ -234,10 +234,14 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           releaseScripts();
         }
         await navigation;
+        // More-menu views (trim, ppf-undo) have no rail tab, so no tab is
+        // selected once they hydrate; their visible panel names the view.
         await page.waitForFunction((expectedView) => {
           const root = document.getElementById("webapp-root");
+          if (root?.hasAttribute("aria-busy")) return false;
           const active = document.querySelector('[role="tab"][aria-selected="true"]');
-          return !root?.hasAttribute("aria-busy") && active?.getAttribute("data-mode") === expectedView;
+          if (active) return active.getAttribute("data-mode") === expectedView;
+          return !!document.querySelector(`#panel-${expectedView}:not([hidden])`);
         }, testCase.finalView);
         if (testCase.replayClick) await page.getByRole("dialog").waitFor({ state: "visible" });
         await page.evaluate(
@@ -252,7 +256,10 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
           return {
             finalTheme: document.documentElement.dataset.theme || "",
-            finalView: document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") || "",
+            finalView:
+              document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") ||
+              document.querySelector('[id^="panel-"]:not([hidden])')?.id.replace(/^panel-/, "") ||
+              "",
             initialTheme: audit.initialTheme,
             initialView: audit.initialView,
             runtimeRetained: document.querySelector(".sub-status") === audit.runtime,
@@ -554,7 +561,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         if (!(await betaTools.isChecked())) await betaTools.check();
         await page.getByRole("button", { exact: true, name: "Save" }).click();
       }
-      for (const tab of ["patcher", "creator", "trim"]) {
+      for (const tab of ["patcher", "creator"]) {
         await page.locator(`[role="tab"][data-mode="${tab}"]:visible`).first().click();
         await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
         for (const theme of ["light", "dark"]) {
@@ -562,12 +569,18 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           await scanLiveApp(page, `${tab} (${viewport.label}, ${theme})`);
         }
       }
-      await page.getByRole("button", { name: "More", exact: true }).click();
-      await page.getByRole("menuitem", { name: "Tools", exact: true }).click();
-      await page.locator("#panel-tools:not([hidden])").waitFor({ state: "visible" });
-      for (const theme of ["light", "dark"]) {
-        await setTheme(theme);
-        await scanLiveApp(page, `tools (${viewport.label}, ${theme})`);
+      // Trim and PPF undo live in the More menu, not the mode rail.
+      for (const [label, panelId] of [
+        ["Trim", "panel-trim"],
+        ["PPF undo", "panel-ppf-undo"],
+      ]) {
+        await page.getByRole("button", { name: "More", exact: true }).click();
+        await page.getByRole("menuitem", { name: label, exact: true }).click();
+        await page.locator(`#${panelId}:not([hidden])`).waitFor({ state: "visible" });
+        for (const theme of ["light", "dark"]) {
+          await setTheme(theme);
+          await scanLiveApp(page, `${label} (${viewport.label}, ${theme})`);
+        }
       }
     }
 

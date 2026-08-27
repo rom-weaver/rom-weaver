@@ -11,7 +11,7 @@ const tabs = [
   { href: "apply", icon: createElement("svg", { "aria-hidden": true }), id: "patcher", label: "Apply" },
   { href: "create", icon: createElement("svg", { "aria-hidden": true }), id: "creator", label: "Create" },
   { href: "trim", icon: createElement("svg", { "aria-hidden": true }), id: "trim", label: "Trim" },
-  { href: "tools", icon: createElement("svg", { "aria-hidden": true }), id: "tools", label: "Tools" },
+  { href: "ppf-undo", icon: createElement("svg", { "aria-hidden": true }), id: "ppf-undo", label: "PPF undo" },
 ];
 
 const shell = (threads, serviceWorkerStatus, betaToolsEnabled = false) =>
@@ -89,8 +89,9 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
     });
   });
 
-  // trim, once in the mode rail and once in the phone dock; Tools lives in More
-  expect(host.querySelectorAll("[data-beta-tool]").length).toBe(2);
+  // Every beta workflow (Identify, Trim, PPF undo) lives in More now, so no
+  // rail or dock tab carries the beta marker.
+  expect(host.querySelectorAll("[data-beta-tool]").length).toBe(0);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });

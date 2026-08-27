@@ -18,26 +18,34 @@ import {
   type CreatorSessionState,
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
-  createEmptyToolsSessionState,
+  createEmptyPpfUndoSessionState,
   createEmptyTrimSessionState,
   createEmptyValidationState,
   type PatcherSessionState,
   type StartupState,
-  type ToolsSessionState,
+  type PpfUndoSessionState,
   type TrimSessionState,
   type ValidationState,
   type WebappView,
 } from "./webapp-state-types.ts";
 
 const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
-const VALID_WORKFLOW_VIEWS: readonly WebappView[] = ["patcher", "creator", "docs", "identify", "trim", "tools", "test"];
+const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
+  "patcher",
+  "creator",
+  "docs",
+  "identify",
+  "trim",
+  "ppf-undo",
+  "test",
+];
 
 const normalizeWorkflowView = (value: unknown): WebappView | null => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   return VALID_WORKFLOW_VIEWS.includes(normalized as WebappView) ? (normalized as WebappView) : null;
 };
 
-const isBetaWorkflowView = (view: WebappView): boolean => view === "identify" || view === "trim" || view === "tools";
+const isBetaWorkflowView = (view: WebappView): boolean => view === "identify" || view === "trim" || view === "ppf-undo";
 
 const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
@@ -47,8 +55,8 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   docs: "docs",
   identify: "identify",
   patcher: "apply",
+  "ppf-undo": "ppf-undo",
   test: "test",
-  tools: "tools",
   trim: "trim",
 };
 const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
@@ -60,11 +68,12 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "docs.html": "docs",
   identify: "identify",
   "identify.html": "identify",
+  "ppf-undo": "ppf-undo",
   test: "test",
   "test.html": "test",
-  tools: "tools",
   trim: "trim",
   // Keep old links usable when a host has not applied the server redirect.
+  tools: "ppf-undo",
   weave: "patcher",
   "weave.html": "patcher",
 };
@@ -124,7 +133,7 @@ type WebappState = {
   creatorSession: CreatorSessionState;
   currentView: WebappView;
   patcherSession: PatcherSessionState;
-  toolsSession: ToolsSessionState;
+  ppfUndoSession: PpfUndoSessionState;
   trimSession: TrimSessionState;
   settingsDialogOpen: boolean;
   settings: SettingsState;
@@ -216,7 +225,7 @@ const createWebappRootController = (options: ControllerOptions) => {
       message: "",
       status: "loading",
     },
-    toolsSession: createEmptyToolsSessionState(),
+    ppfUndoSession: createEmptyPpfUndoSessionState(),
     trimSession: createEmptyTrimSessionState(),
     validation: emptyValidation(),
   }));
@@ -362,7 +371,7 @@ const createWebappRootController = (options: ControllerOptions) => {
         patcherSession: createEmptyPatcherSessionState(),
         settingsDialogOpen: false,
         startup: { message: "", status: "ready" },
-        toolsSession: createEmptyToolsSessionState(),
+        ppfUndoSession: createEmptyPpfUndoSessionState(),
         trimSession: createEmptyTrimSessionState(),
         validation: emptyValidation(),
       });
@@ -497,10 +506,10 @@ const createWebappRootController = (options: ControllerOptions) => {
         },
       });
     },
-    setToolsSessionState(active: unknown) {
+    setPpfUndoSessionState(active: unknown) {
       const nextActive = !!active;
-      if (store.getState().toolsSession.active === nextActive) return;
-      setState({ toolsSession: { active: nextActive } });
+      if (store.getState().ppfUndoSession.active === nextActive) return;
+      setState({ ppfUndoSession: { active: nextActive } });
     },
     setTrimOutputFormat(format: unknown) {
       updateTrimSession({ outputFormat: typeof format === "string" ? format : "" });

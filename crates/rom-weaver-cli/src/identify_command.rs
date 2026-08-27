@@ -221,8 +221,25 @@ fn identify_lookup_result(mut matches: Vec<IdentifyTitleMatch>) -> IdentifyLooku
 
 impl CliApp {
     pub(super) fn run_identify(&self, mut args: IdentifyCommand) -> AppRunOutcome {
-        let _stdin_guard = match crate::stdin_input::spool_stdin_if_dash(&mut args.input) {
-            Ok(guard) => guard,
+        if args.input.is_some() == args.hash.is_some() {
+            return self.finish(
+                "identify",
+                OperationReport::failed(
+                    OperationFamily::Command,
+                    Some("identify".to_string()),
+                    "identify",
+                    "provide exactly one of --input or --hash",
+                    None,
+                ),
+            );
+        }
+        let _stdin_guard = match args
+            .input
+            .as_mut()
+            .map(crate::stdin_input::spool_stdin_if_dash)
+            .transpose()
+        {
+            Ok(guard) => guard.flatten(),
             Err(error) => {
                 return self.finish(
                     "identify",
@@ -237,7 +254,8 @@ impl CliApp {
             }
         };
         trace!(
-            source = %args.input.display(),
+            source = ?args.input,
+            hash = ?args.hash,
             databases = args.database.len(),
             selections = args.select.len(),
             no_extract = args.no_extract,
@@ -248,6 +266,7 @@ impl CliApp {
         );
         let IdentifyCommand {
             input,
+            hash,
             database,
             select,
             filter,
@@ -283,6 +302,10 @@ impl CliApp {
                 );
             }
         };
+        if let Some(hash) = hash {
+            return self.run_identify_hash(&hash, &databases);
+        }
+        let input = input.expect("validated: input is Some when hash is None");
         let mut checksum_report = self.run_checksum_inner_for_identify(ChecksumCommand {
             input: input.clone(),
             algo: vec!["crc32".to_string(), "md5".to_string(), "sha1".to_string()],
@@ -354,6 +377,78 @@ impl CliApp {
             label,
             Some(100.0),
             checksum_report.thread_execution,
+        );
+        report.details = Some(json!({ "identify": result }));
+        self.finish("identify", report)
+    }
+
+    /// Look a user-supplied checksum up in the identify packs, with no file I/O.
+    fn run_identify_hash(&self, hash: &str, databases: &IdentifyDatabaseSet) -> AppRunOutcome {
+        let hash = hash.trim().to_ascii_lowercase();
+        let algo = match hash.len() {
+            _ if !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) => None,
+            8 => Some("crc32"),
+            32 => Some("md5"),
+            40 => Some("sha1"),
+            _ => None,
+        };
+        let Some(algo) = algo else {
+            return self.finish(
+                "identify",
+                OperationReport::failed(
+                    OperationFamily::Command,
+                    Some("identify".to_string()),
+                    "identify",
+                    "--hash must be hex: 8 chars for crc32, 32 for md5, or 40 for sha1",
+                    None,
+                ),
+            );
+        };
+        trace!(
+            algorithm = algo,
+            hash = %hash,
+            "resolving manual identify hash lookup"
+        );
+        let checksum_variants = vec![json!({
+            "id": "manual",
+            "label": "Manual",
+            "checksums": { algo: hash },
+        })];
+        let lookup = match databases.resolve_variants(&checksum_variants) {
+            Ok(lookup) => lookup,
+            Err(error) => {
+                return self.finish(
+                    "identify",
+                    OperationReport::failed(
+                        OperationFamily::Command,
+                        Some("identify".to_string()),
+                        "identify",
+                        error.to_string(),
+                        None,
+                    ),
+                );
+            }
+        };
+        let label = match lookup.status {
+            IdentifyStatus::Matched => format!("identified {}", lookup.matches[0].name),
+            IdentifyStatus::Ambiguous => format!("found {} possible titles", lookup.matches.len()),
+            IdentifyStatus::Unknown => "no title matched the supplied database".to_string(),
+        };
+        let result = IdentifyResult {
+            status: lookup.status,
+            input: hash.clone(),
+            detected_platform: None,
+            checksums: BTreeMap::from([(algo.to_string(), hash)]),
+            checksum_variants,
+            matches: lookup.matches,
+        };
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Command,
+            Some("identify".to_string()),
+            "identify",
+            label,
+            Some(100.0),
+            None,
         );
         report.details = Some(json!({ "identify": result }));
         self.finish("identify", report)

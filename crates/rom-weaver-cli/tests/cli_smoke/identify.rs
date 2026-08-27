@@ -237,6 +237,89 @@ fn identify_reads_a_rom_from_stdin() {
 }
 
 #[test]
+fn identify_matches_a_manual_hash() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--hash",
+            "3610A686",
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let identify = &json["details"]["identify"];
+
+    assert_eq!(json["command"], "identify");
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(identify["status"], "matched");
+    assert_eq!(identify["input"], "3610a686");
+    assert_eq!(identify["checksums"]["crc32"], "3610a686");
+    assert_eq!(identify["matches"][0]["name"], "Hello World (Test) [!]");
+    assert_eq!(identify["matches"][0]["algorithm"], "crc32");
+    assert_eq!(identify["matches"][0]["variant"], "manual");
+}
+
+#[test]
+fn identify_reports_an_unknown_manual_hash() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--hash",
+            "deadbeef",
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["identify"]["status"], "unknown");
+    assert_eq!(
+        json["details"]["identify"]["matches"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
+fn identify_rejects_an_invalid_hash_length() {
+    let output = command_stdout(&["identify", "--hash", "12345", "--json"], 1);
+    let json = parse_single_json_line(&output);
+
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("8 chars for crc32, 32 for md5, or 40 for sha1")
+    );
+}
+
+#[test]
+fn identify_requires_an_input_or_a_hash() {
+    let output = command_stdout(&["identify", "--json"], 1);
+    let json = parse_single_json_line(&output);
+
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("exactly one of --input or --hash")
+    );
+}
+
+#[test]
 fn identify_matches_a_headerless_variant_inside_gzip() {
     let temp = setup_temp_dir();
     let payload = (0..4096)

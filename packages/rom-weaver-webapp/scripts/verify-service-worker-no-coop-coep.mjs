@@ -19,12 +19,15 @@ const OFFLINE_PAGES = [
   { expectedView: "creator", label: "create slashless", path: "create.html" },
   { expectedView: "creator", label: "create directory", path: "create/" },
   { expectedView: "creator", label: "create directory document", path: "create/index.html" },
-  { expectedView: "trim", label: "trim directory", path: "trim/" },
-  { expectedView: "trim", label: "trim directory document", path: "trim/index.html" },
-  // Tools has no rail/dock tab since it moved into the More menu (#427), so its
+  // Trim moved into the More menu, so it has no rail/dock tab either.
+  { expectedView: "trim", label: "trim directory", path: "trim/", tabless: true },
+  { expectedView: "trim", label: "trim directory document", path: "trim/index.html", tabless: true },
+  // PPF undo has no rail/dock tab since it lives in the More menu (#427), so its
   // readiness is asserted through the visible tabpanel instead of a selected tab.
-  { expectedView: "tools", label: "tools directory", path: "tools/", tabless: true },
-  { expectedView: "tools", label: "tools directory document", path: "tools/index.html", tabless: true },
+  { expectedView: "ppf-undo", label: "ppf-undo directory", path: "ppf-undo/", tabless: true },
+  { expectedView: "ppf-undo", label: "ppf-undo directory document", path: "ppf-undo/index.html", tabless: true },
+  // The retired /tools/ slug still serves the PPF undo page.
+  { expectedView: "ppf-undo", label: "tools legacy directory", path: "tools/", tabless: true },
   { expectedView: "test", label: "test directory", path: "test/" },
   { expectedView: "test", label: "test directory document", path: "test/index.html" },
   { expectedNotFound: true, label: "not found", path: "404.html" },

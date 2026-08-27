@@ -23,7 +23,7 @@ test("declines the site root, which is precached under its own name", () => {
 });
 
 test("emits keys the precache manifest can match, without a leading slash", () => {
-  for (const candidate of routeDocumentCandidates("/tools")) {
+  for (const candidate of routeDocumentCandidates("/ppf-undo")) {
     expect(candidate.startsWith("/")).toBe(false);
   }
 });

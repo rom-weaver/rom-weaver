@@ -104,6 +104,73 @@ const identifyRom = async (
   }
 };
 
+type BrowserIdentifyHashOptions = {
+  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void;
+  signal?: AbortSignal;
+};
+
+/**
+ * Identify by a bare crc32/md5/sha1 checksum through the `identify --hash`
+ * command. A checksum narrows to no platform, so the FULL pack set is loaded;
+ * an unloadable database reports `unavailable`, never a false "no match".
+ */
+const identifyHash = async (hash: string, options: BrowserIdentifyHashOptions = {}): Promise<ParsedIdentifyResult> => {
+  const normalized = hash.trim().toLowerCase();
+  const workerIo = browserRuntime.workerIo;
+  if (!workerIo) throw new Error("The rom-weaver identify runtime is unavailable.");
+  const { IdentifyDataUnavailableError, loadIdentifyPacks } = await import("./identify-packs.ts");
+  let packs: Awaited<ReturnType<typeof loadIdentifyPacks>>;
+  try {
+    packs = await loadIdentifyPacks({}, (platforms) => {
+      options.onProgress?.({ message: `Loading identification data for ${platforms.length} systems…` });
+    });
+  } catch (error) {
+    if (!(error instanceof IdentifyDataUnavailableError)) throw error;
+    return {
+      candidates: [{ checksumVariants: [], checksums: {}, matches: [], path: normalized, status: "unavailable" }],
+      input: normalized,
+      status: "unavailable",
+      unavailableReason: error.message,
+    };
+  }
+  const { invokeRomWeaverIdentifyHashWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
+  const staged = await workerIo.stageSources(
+    packs.map((pack, index) => ({
+      fallbackFileName: pack.fileName,
+      pathPrefix: `identify-pack-${index + 1}`,
+      pathPrefixInPath: true as const,
+      scope: "checksum" as const,
+      source: pack.blob,
+    })),
+  );
+  try {
+    const result = await invokeRomWeaverIdentifyHashWorker(
+      {
+        databasePaths: staged.map((entry) => entry.filePath),
+        hash: normalized,
+        knownInputPaths: staged.map((entry) => entry.filePath),
+        signal: options.signal,
+      },
+      options.onProgress,
+    );
+    return {
+      candidates: [
+        {
+          checksumVariants: result.checksumVariants,
+          checksums: result.checksums,
+          matches: result.matches,
+          path: result.input || normalized,
+          status: result.status,
+        },
+      ],
+      input: result.input || normalized,
+      status: result.status,
+    };
+  } finally {
+    await Promise.all(staged.map((entry) => entry.cleanup().catch(() => undefined)));
+  }
+};
+
 const getIngestOutputBlob = async (
   output: Parameters<NonNullable<typeof browserRuntime.publicOutput>["getBlob"]>[0],
 ) => {
@@ -236,6 +303,7 @@ export {
   CreateWorkflow,
   getCreatePatchFormatCandidates,
   getIngestOutputBlob,
+  identifyHash,
   identifyRom,
   ingestRom,
   preloadBrowserRuntime,

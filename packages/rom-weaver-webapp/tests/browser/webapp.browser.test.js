@@ -90,7 +90,7 @@ const createNoopActions = () => ({
   onRestoreDefaults: () => undefined,
   onSaveClose: () => undefined,
   onSelectView: () => undefined,
-  onToolsSessionChange: () => undefined,
+  onPpfUndoSessionChange: () => undefined,
 });
 
 const createServiceWorkerCacheState = () => ({
@@ -165,7 +165,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByRole("tab", { name: /apply/i })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: /create/i })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
-  await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
 
   await romInput.upload(await loadFixtureFile(ONE_ROM_ZIP, "application/zip"));
@@ -191,7 +191,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
-test("WebappRoot keeps Trim gated and Tools behind More", async () => {
+test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
   mountWebappRoot();
   // Docs is reference rather than a workflow, but it rides in the rail so the
   // readers it is written for do not have to go hunting for it.
@@ -203,7 +203,7 @@ test("WebappRoot keeps Trim gated and Tools behind More", async () => {
     )
     .toEqual(["Apply", "Create", "Docs", "Test"]);
   await page.getByRole("button", { name: "More" }).click();
-  await expect.element(page.getByRole("menuitem", { name: "Tools" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("menuitem", { name: "Identify" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
 });
@@ -217,8 +217,8 @@ const dropOnPage = async (fileName) => {
 };
 
 /* Regression: Identify used to exist twice - once at /identify and once inside
-   Tools - so one page drop reached two forms and both wrote the same
-   activity-store key. Tools no longer mounts an IdentifyForm at all. */
+   the old Tools page - so one page drop reached two forms and both wrote the
+   same activity-store key. PPF undo mounts no IdentifyForm at all. */
 test("only one Identify workflow ever consumes a page drop", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ initialView: "identify", settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
@@ -228,9 +228,9 @@ test("only one Identify workflow ever consumes a page drop", async () => {
   await expect.poll(() => document.querySelector("#identify-container")?.textContent).toContain("first.gba");
 
   await page.getByRole("button", { name: "More" }).click();
-  await page.getByRole("menuitem", { name: "Tools" }).click();
-  await expect.poll(() => document.querySelector("#panel-tools")?.hidden).toBe(false);
-  // The Identify panel stays mounted behind Tools, so the count also proves the
+  await page.getByRole("menuitem", { name: "PPF undo" }).click();
+  await expect.poll(() => document.querySelector("#panel-ppf-undo")?.hidden).toBe(false);
+  // The Identify panel stays mounted behind PPF undo, so the count also proves the
   // hidden instance is the SAME one, not a second form.
   expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
 
@@ -239,7 +239,7 @@ test("only one Identify workflow ever consumes a page drop", async () => {
   expect(document.querySelector("#identify-container")?.textContent).toContain("first.gba");
 });
 
-test("enabled Tools and Identify stay behind More on desktop and phone", async () => {
+test("enabled PPF undo and Identify stay behind More on desktop and phone", async () => {
   for (const [width, height] of [
     [1280, 900],
     [390, 844],
@@ -248,20 +248,20 @@ test("enabled Tools and Identify stay behind More on desktop and phone", async (
     mountWebappRoot({ initialView: "identify", settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
     await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
-    await expect.element(page.getByRole("menuitem", { name: "Tools" })).toBeInTheDocument();
+    await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).toBeInTheDocument();
     // Identify is one click from More: it has its own route, so it never hid
-    // behind Tools.
+    // behind the old Tools page.
     await expect.element(page.getByRole("menuitem", { name: "Identify" })).toBeInTheDocument();
-    await page.getByRole("menuitem", { name: "Tools" }).click();
-    // Only ONE Identify form can exist. Tools links nowhere near it, so a page
+    await page.getByRole("menuitem", { name: "PPF undo" }).click();
+    // Only ONE Identify form can exist. PPF undo links nowhere near it, so a page
     // drop has exactly one consumer and the two cannot fight over the activity key.
     expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
-    expect(document.querySelector("#tools-identify-input-picker")).toBeNull();
+    expect(document.querySelector("#ppf-undo-identify-input-picker")).toBeNull();
     await page.getByRole("button", { name: "More" }).click();
-    expect(document.querySelector(`[role="tab"][data-mode="tools"]`)).toBeNull();
+    expect(document.querySelector(`[role="tab"][data-mode="ppf-undo"]`)).toBeNull();
     expect(document.querySelector(`[role="tab"][data-mode="identify"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
-    expect(document.querySelector(`.dock-tab[data-mode="tools"]`)).toBeNull();
+    expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-settings-btn")).display).not.toBe("none");
     if (width >= 1000) {
       expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");

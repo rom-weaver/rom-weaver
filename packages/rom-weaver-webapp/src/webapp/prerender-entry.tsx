@@ -47,7 +47,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onSaveClose: noop,
   onSelectView: noop,
   onStartGuide: noop,
-  onToolsSessionChange: noop,
+  onPpfUndoSessionChange: noop,
   onTrimOutputFormatChange: noop,
   onTrimSettingsChange: noop,
   onTrimSourceChange: noop,

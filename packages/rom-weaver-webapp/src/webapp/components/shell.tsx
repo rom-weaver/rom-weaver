@@ -55,9 +55,9 @@ const readPwaState = () => {
 type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
 /* Utility routes that stay out of both primary navs and are reached from More.
    Adding one here is what makes it discoverable without crowding the rail. */
-const MORE_MENU_TAB_IDS: readonly string[] = ["identify", "tools"];
+const MORE_MENU_TAB_IDS: readonly string[] = ["identify", "trim", "ppf-undo"];
 const isMoreMenuTab = (tab: WorkflowTab) => MORE_MENU_TAB_IDS.includes(tab.id);
-const isBetaWorkflowTab = (tab: WorkflowTab) => tab.id === "trim" || isMoreMenuTab(tab);
+const isBetaWorkflowTab = (tab: WorkflowTab) => isMoreMenuTab(tab);
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
 
