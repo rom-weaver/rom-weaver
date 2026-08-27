@@ -1,6 +1,6 @@
 //! The installed identify database: the per-user pack directory, the platform
 //! catalog over it, lazy pack loading, and the `identify database`
-//! subcommands (list/status/path/remove/import-hasheous/install/update).
+//! subcommands (list/status/path/remove/import-redump/install/update).
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -24,13 +24,76 @@ const MANIFEST_FORMAT_V2: &str = "rom-weaver-identify-system-pack-v2";
 /// Route values >= this flag are conflict-table indices (same scheme as RWFP1).
 #[cfg(not(target_arch = "wasm32"))]
 const CONFLICT_VALUE_FLAG: u32 = 0x8000_0000;
-/// One zip entry of a Hasheous dump: (archive index, entry name, size).
+/// One XML entry in a Redump DAT ZIP: (archive index, entry name, size).
 #[cfg(not(target_arch = "wasm32"))]
 type DumpEntry = (usize, String, u64);
 
 /// One dump JSON object larger than this is rejected as hostile.
 #[cfg(not(target_arch = "wasm32"))]
 const MAX_DUMP_ENTRY_BYTES: u64 = 256 * 1024 * 1024;
+
+#[cfg(not(target_arch = "wasm32"))]
+const REDUMP_SYSTEMS: &[(&str, &str)] = &[
+    ("Acorn Archimedes", "arch"),
+    ("Apple Macintosh", "mac"),
+    ("Atari Jaguar CD Interactive Multimedia System", "ajcd"),
+    ("Bandai Pippin", "pippin"),
+    ("Bandai Playdia Quick Interactive System", "qis"),
+    ("Commodore Amiga CD", "acd"),
+    ("Commodore Amiga CD32", "cd32"),
+    ("Commodore Amiga CDTV", "cdtv"),
+    ("Fujitsu FM Towns series", "fmt"),
+    ("funworld Photo Play", "fpp"),
+    ("IBM PC compatible", "pc"),
+    ("Incredible Technologies Eagle", "ite"),
+    ("Konami e-Amusement", "kea"),
+    ("Konami FireBeat", "kfb"),
+    ("Konami System 573", "ks573"),
+    ("Konami System GV", "ksgv"),
+    ("Mattel Fisher-Price iXL", "ixl"),
+    ("Mattel HyperScan", "hs"),
+    ("Memorex Visual Information System", "vis"),
+    ("Microsoft Xbox", "xbox"),
+    ("Microsoft Xbox 360", "xbox360"),
+    ("Namco - Sega - Nintendo Triforce", "trf"),
+    ("Namco System 246", "ns246"),
+    ("NEC PC Engine CD & TurboGrafx CD", "pce"),
+    ("NEC PC-88 series", "pc-88"),
+    ("NEC PC-98 series", "pc-98"),
+    ("NEC PC-FX & PC-FXGA", "pc-fx"),
+    ("Neo Geo CD", "ngcd"),
+    ("Nintendo GameCube", "gc"),
+    ("Nintendo Wii", "wii"),
+    ("Palm OS", "palm"),
+    ("Panasonic 3DO Interactive Multiplayer", "3do"),
+    ("Philips CD-i", "cdi"),
+    ("Photo CD", "photo-cd"),
+    ("PlayStation GameShark Updates", "psxgs"),
+    ("Pocket PC", "ppc"),
+    ("Sega Chihiro", "chihiro"),
+    ("Sega Dreamcast", "dc"),
+    ("Sega Lindbergh", "lindbergh"),
+    ("Sega Mega CD & Sega CD", "mcd"),
+    ("Sega Naomi", "naomi"),
+    ("Sega Naomi 2", "naomi2"),
+    ("Sega Prologue 21 Multimedia Karaoke System", "sp21"),
+    ("Sega RingEdge", "sre"),
+    ("Sega RingEdge 2", "sre2"),
+    ("Sega Saturn", "ss"),
+    ("Sharp X68000", "x68k"),
+    ("Sony PlayStation", "psx"),
+    ("Sony PlayStation 2", "ps2"),
+    ("Sony PlayStation 3", "ps3"),
+    ("Sony PlayStation Portable", "psp"),
+    ("TAB-Austria Quizard", "quizard"),
+    ("Tomy Kiss-Site", "ksite"),
+    ("VM Labs NUON", "nuon"),
+    ("VTech V.Flash & V.Smile Pro", "vflash"),
+    (
+        "ZAPiT Games Game Wave Family Entertainment System",
+        "gamewave",
+    ),
+];
 
 /// A parsed identify pack of either generation, tagged with its display name.
 pub(super) struct LoadedPack {
@@ -64,7 +127,7 @@ pub(super) fn default_database_dir() -> Result<PathBuf> {
     Ok(base.join("rom-weaver").join("identify"))
 }
 
-/// Mirror of `slugifyPlatform` in `scripts/build-hasheous-identify-index.mjs`.
+/// Convert a platform name to its stable pack file slug.
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn slugify_platform(platform: &str) -> String {
     let mut out = String::with_capacity(platform.len());
@@ -83,8 +146,7 @@ pub(super) fn slugify_platform(platform: &str) -> String {
     out
 }
 
-/// Mirror of `KNOWN_PLATFORM_PROFILES`/`DEFAULT_MEDIA_PROFILE` in the builder
-/// script: profile hints for known Hasheous platform names.
+/// Select the canonical byte profile for known platform names.
 #[cfg(not(target_arch = "wasm32"))]
 fn media_profile_for(platform: &str) -> &'static str {
     match platform {
@@ -99,6 +161,7 @@ fn media_profile_for(platform: &str) -> &'static str {
         "Nintendo Wii" => "wii-decoded-iso-v1",
         "Playstation minis" | "Sony Playstation Portable" => "psp-decoded-iso-v1",
         "Sega Dreamcast" => "redump-gdrom-track-v1",
+        _ if redump_endpoint(platform).is_some() => "redump-cd-track-v1",
         _ => "nointro-single-image-v1",
     }
 }
@@ -464,116 +527,138 @@ fn mark_shared_components(games: &mut [PackGame]) -> usize {
 }
 
 // ---------------------------------------------------------------------------
-// Hasheous dump parsing
+// Redump DAT parsing
 // ---------------------------------------------------------------------------
 
 #[cfg(not(target_arch = "wasm32"))]
-fn json_string(value: Option<&Value>) -> Option<String> {
-    let text = value?.as_str()?.trim();
-    if text.is_empty() {
-        None
-    } else {
-        Some(text.to_string())
-    }
+#[derive(Debug, serde::Deserialize)]
+struct RedumpDatafile {
+    header: RedumpHeader,
+    #[serde(default, rename = "game", alias = "machine")]
+    games: Vec<RedumpGame>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn normalize_hex(value: Option<&Value>, expected_len: usize) -> Option<String> {
-    let text = value?.as_str()?.trim().to_ascii_lowercase();
-    if text.len() == expected_len && text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        Some(text)
-    } else {
-        None
-    }
+#[derive(Debug, serde::Deserialize)]
+struct RedumpHeader {
+    name: String,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn map_upstream_source(value: Option<&Value>) -> Option<UpstreamSource> {
-    match value?.as_str()?.to_ascii_lowercase().as_str() {
-        "fbneo" => Some(UpstreamSource::Fbneo),
-        "mamearcade" => Some(UpstreamSource::Mame),
-        "mameredump" | "redump" => Some(UpstreamSource::Redump),
-        "nointro" | "nointros" => Some(UpstreamSource::NoIntro),
-        "tosec" => Some(UpstreamSource::Tosec),
-        _ => None,
-    }
+#[derive(Debug, serde::Deserialize)]
+struct RedumpGame {
+    #[serde(rename = "@name")]
+    name: String,
+    #[serde(default, rename = "rom")]
+    roms: Vec<RedumpRom>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn find_game_attribute<'a>(attributes: &'a [Value], name: &str) -> Option<&'a Value> {
-    attributes
-        .iter()
-        .find(|attribute| attribute.get("attributeName").and_then(Value::as_str) == Some(name))
+#[derive(Debug, serde::Deserialize)]
+struct RedumpRom {
+    #[serde(rename = "@name")]
+    name: Option<String>,
+    #[serde(rename = "@size")]
+    size: u64,
+    #[serde(rename = "@crc")]
+    crc32: Option<String>,
+    #[serde(rename = "@md5")]
+    md5: Option<String>,
+    #[serde(rename = "@sha1")]
+    sha1: Option<String>,
 }
 
-/// Convert one Hasheous dump game object into a grouped `PackGame`, or `None`
-/// when the object is not a game with ROMs (mirrors `hasheousGameRecord`).
 #[cfg(not(target_arch = "wasm32"))]
-fn hasheous_game_record(game: &Value, platform: &str) -> Option<PackGame> {
-    let name = json_string(game.get("Name"))?;
-    if game.get("ObjectType").and_then(Value::as_str) != Some("Game") {
+fn normalize_hash(value: Option<String>, expected_len: usize) -> Option<String> {
+    let value = value?.trim().to_ascii_lowercase();
+    (value.len() == expected_len && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .then_some(value)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn redump_game_record(game: RedumpGame, platform: &str) -> Option<PackGame> {
+    if game.name.trim().is_empty() || game.roms.is_empty() {
         return None;
     }
-    let attributes = game.get("Attributes")?.as_array()?;
-    let roms = find_game_attribute(attributes, "ROMs")?
-        .get("Value")?
-        .as_array()?;
-    if roms.is_empty() {
-        return None;
-    }
-
-    let mut components = Vec::with_capacity(roms.len());
-    let mut upstream_sources: Vec<UpstreamSource> = Vec::new();
-    for rom in roms {
-        let size = rom.get("Size").and_then(Value::as_u64).unwrap_or(0);
-        let component = PackComponent {
+    let components = game
+        .roms
+        .into_iter()
+        .enumerate()
+        .map(|(ordinal, rom)| PackComponent {
             role: PackComponentRole::PrimaryPayload,
-            ordinal: components.len() as u32,
-            filename: json_string(rom.get("Name")),
-            size,
-            crc32: normalize_hex(rom.get("Crc"), 8),
-            md5: normalize_hex(rom.get("Md5"), 32),
-            sha1: normalize_hex(rom.get("Sha1"), 40),
-            sha256: normalize_hex(rom.get("Sha256"), 64),
+            ordinal: ordinal as u32,
+            filename: rom.name.filter(|name| !name.trim().is_empty()),
+            size: rom.size,
+            crc32: normalize_hash(rom.crc32, 8),
+            md5: normalize_hash(rom.md5, 32),
+            sha1: normalize_hash(rom.sha1, 40),
+            sha256: None,
             required: true,
             discriminating: true,
-            track: None,
+            track: Some((ordinal + 1) as u32),
             session: None,
-        };
-        let source =
-            map_upstream_source(rom.get("SignatureSource")).unwrap_or(UpstreamSource::Unknown);
-        if !upstream_sources.contains(&source) {
-            upstream_sources.push(source);
-        }
-        components.push(component);
-    }
-    let upstream_source = if upstream_sources.len() == 1 {
-        upstream_sources[0]
-    } else {
-        UpstreamSource::Unknown
-    };
-    let game_id = match game.get("Id") {
-        Some(Value::String(id)) if !id.is_empty() => Some(id.clone()),
-        Some(Value::Number(id)) => Some(id.to_string()),
-        _ => None,
-    };
+        })
+        .collect();
     Some(PackGame {
-        name,
+        name: game.name,
         platform: platform.to_string(),
-        source: IdentifySource::Hasheous,
-        upstream_source,
-        game_id,
-        region: json_string(
-            find_game_attribute(attributes, "Country").and_then(|a| a.get("Value")),
-        ),
-        language: json_string(
-            find_game_attribute(attributes, "Language").and_then(|a| a.get("Value")),
-        ),
+        source: IdentifySource::Redump,
+        upstream_source: UpstreamSource::Redump,
+        game_id: None,
+        region: None,
+        language: None,
         disc_number: None,
         revision: None,
         parent: None,
         components,
     })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn canonical_redump_platform(name: &str) -> Option<&'static str> {
+    let normalized = normalize_platform_name(name);
+    REDUMP_SYSTEMS
+        .iter()
+        .find(|(canonical, _)| normalize_platform_name(canonical) == normalized)
+        .map(|(canonical, _)| *canonical)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn redump_endpoint(platform: &str) -> Option<&'static str> {
+    REDUMP_SYSTEMS
+        .iter()
+        .find(|(canonical, _)| *canonical == platform)
+        .map(|(_, endpoint)| *endpoint)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn download_redump_dat(platform: &str, database_dir: &Path) -> Result<PathBuf> {
+    use std::io::Read;
+    let endpoint = redump_endpoint(platform).ok_or_else(|| {
+        RomWeaverError::Validation(format!("Redump has no DAT download for `{platform}`"))
+    })?;
+    fs::create_dir_all(database_dir)?;
+    let url = format!("http://redump.org/datfile/{endpoint}/");
+    trace!(platform, url, "downloading Redump DAT");
+    let mut response = ureq::get(&url).call().map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "Redump DAT download failed for `{platform}`: {error}"
+        ))
+    })?;
+    let mut reader = response
+        .body_mut()
+        .with_config()
+        .limit(MAX_DUMP_ENTRY_BYTES * 2)
+        .reader();
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes).map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "Redump DAT download failed for `{platform}`: {error}"
+        ))
+    })?;
+    let path = database_dir.join(format!(".{endpoint}-redump-dat.zip"));
+    write_atomic(&path, &bytes)?;
+    Ok(path)
 }
 
 /// The RWFP2 reader rejects a whole pack when any record exceeds its caps, so
@@ -658,7 +743,7 @@ fn build_pack_v2(
     let manifest = serde_json::to_vec(&json!({
         "format": MANIFEST_FORMAT_V2,
         "platform": platform,
-        "source": "hasheous",
+        "source": "redump",
         "canonicalizationProfile": media_profile_for(platform),
         "canonicalizationVersion": 1,
         "provenance": provenance,
@@ -696,18 +781,16 @@ fn build_pack_v2(
     ))
 }
 
-/// Import Hasheous platforms from a local MetadataMap.zip: one RWFP2 pack per
-/// non-OpenGood top-level platform directory, plus a merged catalog.json.
-/// `only` limits the import to those canonical platform names.
+/// Import each Redump XML DAT in a ZIP as one RWFP2 system pack.
 #[cfg(not(target_arch = "wasm32"))]
-fn import_hasheous_dump(
+fn import_redump_dat(
     dump: &Path,
     database_dir: &Path,
-    only: Option<&[String]>,
+    only_platform: Option<&str>,
 ) -> Result<(Vec<ImportedSystem>, Vec<String>, usize)> {
     if !dump.is_file() {
         return Err(RomWeaverError::Validation(format!(
-            "Hasheous dump `{}` is not a file",
+            "Redump DAT ZIP `{}` is not a file",
             dump.display()
         )));
     }
@@ -718,13 +801,11 @@ fn import_hasheous_dump(
         ))
     })?;
     let entries = list_regular_archive_file_entries(dump, "zip")?;
-    // Group JSON entries by top-level platform directory, keeping zip order.
-    let mut platforms: Vec<(String, Vec<DumpEntry>)> = Vec::new();
+    let mut dat_entries: Vec<DumpEntry> = Vec::new();
     for entry in &entries {
-        let Some((platform, rest)) = entry.name.split_once('/') else {
-            continue;
-        };
-        if platform.is_empty() || rest.is_empty() || !rest.ends_with(".json") {
+        if !entry.name.to_ascii_lowercase().ends_with(".dat")
+            && !entry.name.to_ascii_lowercase().ends_with(".xml")
+        {
             continue;
         }
         let size = entry.size.unwrap_or(0);
@@ -734,133 +815,64 @@ fn import_hasheous_dump(
                 entry.name
             )));
         }
-        match platforms.iter_mut().find(|(name, _)| name == platform) {
-            Some((_, list)) => list.push((entry.index, entry.name.clone(), size)),
-            None => platforms.push((
-                platform.to_string(),
-                vec![(entry.index, entry.name.clone(), size)],
-            )),
-        }
+        dat_entries.push((entry.index, entry.name.clone(), size));
     }
-    platforms.sort_by(|a, b| a.0.cmp(&b.0));
-
-    let opengood: HashSet<String> = IdentifyCatalog::builtin()
-        .entries()
-        .iter()
-        .map(|entry| entry.canonical_platform.clone())
-        .collect();
+    if dat_entries.is_empty() {
+        return Err(RomWeaverError::Validation(
+            "Redump DAT ZIP contains no .dat or .xml file".to_string(),
+        ));
+    }
     let dump_name = dump
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_else(|| dump.to_string_lossy().into_owned());
     let dump_len = fs::metadata(dump).map(|meta| meta.len()).unwrap_or(0);
     let provenance = json!({
-        "hasheousDump": { "fileName": dump_name, "sizeBytes": dump_len },
+        "redumpDat": { "fileName": dump_name, "sizeBytes": dump_len },
     });
 
     let mut imported = Vec::new();
-    let mut skipped_opengood = Vec::new();
     let mut skipped_over_caps = 0usize;
-    let mut selected: Vec<&(String, Vec<DumpEntry>)> = Vec::new();
-    for entry in &platforms {
-        let platform = &entry.0;
-        if opengood.contains(platform) {
-            debug!(
-                platform,
-                "skipping OpenGood-covered platform; it stays built-in"
-            );
-            skipped_opengood.push(platform.clone());
+    for (index, name, _) in dat_entries {
+        let datafile: RedumpDatafile =
+            with_regular_archive_file_entry_reader(dump, "zip", index, &name, |reader| {
+                let capped = std::io::Read::take(reader, MAX_DUMP_ENTRY_BYTES + 1);
+                quick_xml::de::from_reader(std::io::BufReader::new(capped)).map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "Redump DAT entry `{name}` is not valid XML: {error}"
+                    ))
+                })
+            })?;
+        let platform = canonical_redump_platform(&datafile.header.name)
+            .unwrap_or(datafile.header.name.trim())
+            .to_string();
+        if only_platform.is_some_and(|only| only != platform) {
             continue;
         }
-        if let Some(only) = only
-            && !only.iter().any(|name| name == platform)
-        {
-            continue;
-        }
-        selected.push(entry);
-    }
-    // Slugs MUST be validated before any pack is written: an empty or colliding
-    // slug would otherwise overwrite another platform's pack mid-import.
-    let mut slugs: HashMap<String, &str> = HashMap::new();
-    for (platform, _) in selected.iter().copied() {
-        let slug = slugify_platform(platform);
-        if slug.is_empty() {
-            return Err(RomWeaverError::Validation(format!(
-                "dump platform `{platform}` produces an empty pack slug"
-            )));
-        }
-        if let Some(existing) = slugs.insert(slug.clone(), platform) {
-            return Err(RomWeaverError::Validation(format!(
-                "dump platforms `{existing}` and `{platform}` collide on pack slug `{slug}`"
-            )));
-        }
-    }
-    for (platform, files) in selected {
-        trace!(
-            platform,
-            entries = files.len(),
-            "importing Hasheous platform"
-        );
-        // One platform at a time: only this platform's game records are in
-        // memory while its pack is built.
         let mut games = Vec::new();
-        for (index, name, _) in files {
-            // The declared entry size is attacker-controlled zip metadata, so the
-            // decompressed stream itself MUST be capped, not just the header value.
-            let value: Value = with_regular_archive_file_entry_reader(
-                dump,
-                "zip",
-                *index,
-                name,
-                |reader| {
-                    let mut capped = std::io::Read::take(reader, MAX_DUMP_ENTRY_BYTES + 1);
-                    let value: Value = serde_json::from_reader(&mut capped).map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "dump entry `{name}` is not valid JSON: {error}"
-                        ))
-                    })?;
-                    if capped.limit() == 0 {
-                        return Err(RomWeaverError::Validation(format!(
-                            "dump entry `{name}` decompresses past the {MAX_DUMP_ENTRY_BYTES}-byte cap"
-                        )));
-                    }
-                    Ok(value)
-                },
-            )?;
-            if let Some(game) = hasheous_game_record(&value, platform) {
-                if !game_within_pack_caps(&game) {
-                    warn!(
-                        platform,
-                        game = %game.name.chars().take(80).collect::<String>(),
-                        "skipping game record that exceeds RWFP2 pack caps"
-                    );
-                    skipped_over_caps += 1;
-                    continue;
-                }
-                if games.len() >= 4_000_000 {
-                    warn!(
-                        platform,
-                        "platform exceeds the 4,000,000-game pack cap; skipping the rest"
-                    );
-                    skipped_over_caps += 1;
-                    continue;
-                }
-                games.push(game);
+        for game in datafile.games {
+            let Some(game) = redump_game_record(game, &platform) else {
+                continue;
+            };
+            if !game_within_pack_caps(&game) {
+                skipped_over_caps += 1;
+                continue;
             }
+            games.push(game);
         }
         if games.is_empty() {
-            debug!(platform, "no game records; skipping platform");
+            debug!(platform, "Redump DAT has no game records; skipping it");
             continue;
         }
         let (pack, game_count, component_count, routed_keys, shared_components) =
-            build_pack_v2(platform, games, &provenance)?;
-        let slug = slugify_platform(platform);
+            build_pack_v2(&platform, games, &provenance)?;
+        let slug = slugify_platform(&platform);
         let file = format!("{slug}.pack");
         let path = database_dir.join(&file);
         write_atomic(&path, &pack)?;
         let sha256 = sha256_hex(&pack);
         imported.push(ImportedSystem {
-            platform: platform.clone(),
+            platform,
             slug,
             file,
             sha256,
@@ -870,19 +882,14 @@ fn import_hasheous_dump(
             shared_components,
         });
     }
-    if let Some(only) = only {
-        for requested in only {
-            if !imported.iter().any(|system| &system.platform == requested) {
-                return Err(RomWeaverError::Validation(format!(
-                    "platform `{requested}` was not found in the dump (or is OpenGood-covered and stays built-in)"
-                )));
-            }
-        }
-    }
     if !imported.is_empty() {
         write_merged_catalog(database_dir, &imported, &provenance)?;
+    } else if let Some(platform) = only_platform {
+        return Err(RomWeaverError::Validation(format!(
+            "Redump DAT ZIP does not contain the `{platform}` system"
+        )));
     }
-    Ok((imported, skipped_opengood, skipped_over_caps))
+    Ok((imported, Vec::new(), skipped_over_caps))
 }
 
 /// Merge the imported platforms into the database dir's catalog.json,
@@ -922,7 +929,7 @@ fn write_merged_catalog(
         entries.push(IdentifyPlatformCatalogEntry {
             canonical_platform: system.platform.clone(),
             aliases,
-            source: IdentifySource::Hasheous,
+            source: IdentifySource::Redump,
             media_profiles: vec![media_profile_for(&system.platform).to_string()],
             pack_slug: system.slug.clone(),
             pack_format: "RWFP2".to_string(),
@@ -1124,10 +1131,10 @@ impl CliApp {
                 }));
                 Ok(report)
             }
-            IdentifyDatabaseCommands::ImportHasheous(args) => {
+            IdentifyDatabaseCommands::ImportRedump(args) => {
                 let provider = IdentifyPackProvider::new(args.database_dir)?;
                 let (imported, skipped, over_caps) =
-                    import_hasheous_dump(&args.input, provider.database_dir(), None)?;
+                    import_redump_dat(&args.input, provider.database_dir(), None)?;
                 Ok(import_report(
                     provider.database_dir(),
                     &imported,
@@ -1137,12 +1144,22 @@ impl CliApp {
             }
             IdentifyDatabaseCommands::Install(args) => {
                 let provider = IdentifyPackProvider::new(args.database_dir)?;
-                let Some(from) = args.from else {
-                    return Err(network_install_unavailable_error());
-                };
-                if args.all {
-                    let (imported, skipped, over_caps) =
-                        import_hasheous_dump(&from, provider.database_dir(), None)?;
+                if let Some(from) = args.from {
+                    let only_platform = if args.all {
+                        None
+                    } else if let Some(system) = args.system.as_deref() {
+                        Some(resolve_install_platform(&provider, system)?)
+                    } else {
+                        return Err(RomWeaverError::Validation(
+                            "pass a system name or --all to `identify database install`"
+                                .to_string(),
+                        ));
+                    };
+                    let (imported, skipped, over_caps) = import_redump_dat(
+                        &from,
+                        provider.database_dir(),
+                        only_platform.as_deref(),
+                    )?;
                     return Ok(import_report(
                         provider.database_dir(),
                         &imported,
@@ -1150,14 +1167,20 @@ impl CliApp {
                         over_caps,
                     ));
                 }
-                let Some(system) = args.system else {
+                let platforms: Vec<String> = if args.all {
+                    REDUMP_SYSTEMS
+                        .iter()
+                        .map(|(name, _)| (*name).to_string())
+                        .collect()
+                } else if let Some(system) = args.system {
+                    vec![resolve_install_platform(&provider, &system)?]
+                } else {
                     return Err(RomWeaverError::Validation(
                         "pass a system name or --all to `identify database install`".to_string(),
                     ));
                 };
-                let platform = resolve_install_platform(&provider, &system)?;
                 let (imported, skipped, over_caps) =
-                    import_hasheous_dump(&from, provider.database_dir(), Some(&[platform]))?;
+                    download_and_import_redump(&platforms, provider.database_dir())?;
                 Ok(import_report(
                     provider.database_dir(),
                     &imported,
@@ -1167,15 +1190,43 @@ impl CliApp {
             }
             IdentifyDatabaseCommands::Update(args) => {
                 let provider = IdentifyPackProvider::new(args.database_dir)?;
-                let Some(from) = args.from else {
-                    return Err(network_install_unavailable_error());
+                if let Some(from) = args.from {
+                    let only_platform = args
+                        .system
+                        .as_deref()
+                        .map(|system| resolve_install_platform(&provider, system))
+                        .transpose()?;
+                    let (imported, skipped, over_caps) = import_redump_dat(
+                        &from,
+                        provider.database_dir(),
+                        only_platform.as_deref(),
+                    )?;
+                    return Ok(import_report(
+                        provider.database_dir(),
+                        &imported,
+                        &skipped,
+                        over_caps,
+                    ));
+                }
+                let platforms = match args.system {
+                    Some(system) => vec![resolve_install_platform(&provider, &system)?],
+                    None => provider
+                        .catalog_entries()
+                        .into_iter()
+                        .filter(|entry| {
+                            entry.source == IdentifySource::Redump
+                                && provider.pack_installed(&entry.pack_slug)
+                        })
+                        .map(|entry| entry.canonical_platform)
+                        .collect(),
                 };
-                let only = match args.system {
-                    Some(system) => Some(vec![resolve_install_platform(&provider, &system)?]),
-                    None => None,
-                };
+                if platforms.is_empty() {
+                    return Err(RomWeaverError::Validation(
+                        "no installed Redump packs to update".to_string(),
+                    ));
+                }
                 let (imported, skipped, over_caps) =
-                    import_hasheous_dump(&from, provider.database_dir(), only.as_deref())?;
+                    download_and_import_redump(&platforms, provider.database_dir())?;
                 Ok(import_report(
                     provider.database_dir(),
                     &imported,
@@ -1187,30 +1238,46 @@ impl CliApp {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-fn network_install_unavailable_error() -> RomWeaverError {
-    RomWeaverError::Validation(
-        "network download is not yet enabled; pass --from <MetadataMap.zip> with a locally \
-         downloaded Hasheous dump, or run `identify database import-hasheous <MetadataMap.zip>`"
-            .to_string(),
-    )
-}
-
-/// Resolve an install/update target to its canonical Hasheous platform name.
-/// A name the catalog does not know passes through verbatim so a fresh dump
-/// directory can be installed before any catalog exists for it.
+/// Resolve an install or update target to a downloadable Redump platform.
 #[cfg(not(target_arch = "wasm32"))]
 fn resolve_install_platform(provider: &IdentifyPackProvider, system: &str) -> Result<String> {
     if let Some(entry) = provider.resolve_entry(system) {
         if entry.source == IdentifySource::OpenGood {
             return Err(RomWeaverError::Validation(format!(
-                "`{}` is an OpenGood platform; its pack is built in and never installed from Hasheous",
+                "`{}` is an OpenGood platform; its pack is built in and never installed from Redump",
                 entry.canonical_platform
             )));
         }
         return Ok(entry.canonical_platform);
     }
-    Ok(system.to_string())
+    Err(RomWeaverError::Validation(format!(
+        "unknown Redump system `{system}`; run `rom-weaver identify database list`"
+    )))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn download_and_import_redump(
+    platforms: &[String],
+    database_dir: &Path,
+) -> Result<(Vec<ImportedSystem>, Vec<String>, usize)> {
+    let mut imported = Vec::new();
+    let mut skipped = Vec::new();
+    let mut over_caps = 0;
+    for platform in platforms {
+        let path = download_redump_dat(platform, database_dir)?;
+        let result = import_redump_dat(&path, database_dir, Some(platform));
+        let _ = fs::remove_file(&path);
+        let (mut next, mut next_skipped, next_over_caps) = result?;
+        if !next.iter().any(|system| system.platform == *platform) {
+            return Err(RomWeaverError::Validation(format!(
+                "Redump DAT for `{platform}` reported a different system"
+            )));
+        }
+        imported.append(&mut next);
+        skipped.append(&mut next_skipped);
+        over_caps += next_over_caps;
+    }
+    Ok((imported, skipped, over_caps))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1292,7 +1359,7 @@ mod tests {
         let game = |name: &str, md5: &str| PackGame {
             name: name.to_string(),
             platform: "P".to_string(),
-            source: IdentifySource::Hasheous,
+            source: IdentifySource::Redump,
             upstream_source: UpstreamSource::Unknown,
             game_id: None,
             region: None,
@@ -1313,5 +1380,15 @@ mod tests {
         assert!(!games[0].components[0].discriminating);
         assert!(!games[1].components[0].discriminating);
         assert!(games[2].components[0].discriminating);
+    }
+
+    #[test]
+    fn every_redump_endpoint_has_a_builtin_catalog_entry() {
+        for (platform, _) in REDUMP_SYSTEMS {
+            let entry = IdentifyCatalog::builtin()
+                .resolve_platform(platform)
+                .expect("Redump platform in built-in catalog");
+            assert_eq!(entry.source, IdentifySource::Redump);
+        }
     }
 }

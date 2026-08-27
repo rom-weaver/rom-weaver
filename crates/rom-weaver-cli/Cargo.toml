@@ -19,6 +19,8 @@ name = "rom_weaver_app"
 path = "src/lib.rs"
 
 [features]
+default = ["bundled-identify-data"]
+bundled-identify-data = []
 typescript-types = ["dep:ts-rs", "rom-weaver-core/typescript-types"]
 wasm-app = []
 
@@ -54,6 +56,7 @@ tracing-subscriber.workspace = true
 # Native-only manifest URL downloads; the wasm build never sees this (the
 # browser prefetches with JS fetch instead).
 ureq = { version = "3", default-features = false, features = ["rustls"] }
+quick-xml = { version = "0.41", features = ["serialize"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["fmt", "std"] }

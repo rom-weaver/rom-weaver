@@ -2987,19 +2987,19 @@ pub enum IdentifyDatabaseCommands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            name = "import-hasheous",
-            about = "Build identify packs from a local Hasheous MetadataMap.zip dump"
+            name = "import-redump",
+            about = "Build identify packs from local Redump DAT ZIP files"
         )
     )]
-    ImportHasheous(Box<IdentifyDatabaseImportCommand>),
+    ImportRedump(Box<IdentifyDatabaseImportCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(about = "Install one system's pack (or --all) from a local Hasheous dump")
+        command(about = "Download and install one Redump system pack (or --all)")
     )]
     Install(Box<IdentifyDatabaseInstallCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(about = "Update installed packs from a local Hasheous dump")
+        command(about = "Download and update installed Redump system packs")
     )]
     Update(Box<IdentifyDatabaseUpdateCommand>),
 }
@@ -3049,10 +3049,7 @@ pub struct IdentifyDatabaseSystemCommand {
 pub struct IdentifyDatabaseImportCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(
-            value_name = "ZIP",
-            help = "Local Hasheous MetadataMap.zip dump to import"
-        )
+        arg(value_name = "ZIP", help = "Local Redump DAT ZIP file to import")
     )]
     pub input: PathBuf,
     #[cfg_attr(
@@ -3095,7 +3092,7 @@ pub struct IdentifyDatabaseInstallCommand {
         arg(
             long = "from",
             value_name = "ZIP",
-            help = "Local Hasheous MetadataMap.zip dump to build the pack from"
+            help = "Local Redump DAT ZIP file; omit to download from Redump"
         )
     )]
     #[serde(default)]
@@ -3133,7 +3130,7 @@ pub struct IdentifyDatabaseUpdateCommand {
         arg(
             long = "from",
             value_name = "ZIP",
-            help = "Local Hasheous MetadataMap.zip dump to rebuild the pack(s) from"
+            help = "Local Redump DAT ZIP file; omit to download from Redump"
         )
     )]
     #[serde(default)]

@@ -11,8 +11,9 @@ import {
   OPENGOOD_PLATFORMS,
   OPENGOOD_REPOSITORY,
   OPENGOOD_REVISION,
+  REDUMP_PLATFORMS,
   slugifyPlatform,
-} from "./build-hasheous-identify-index.mjs";
+} from "./build-identify-index.mjs";
 
 const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const rootDir = resolve(scriptDir, "..");
@@ -41,7 +42,7 @@ const hasCurrentCatalog = (dataDir) => {
   return Object.keys(OPENGOOD_PLATFORMS).every((platform) => slugs.has(slugifyPlatform(platform)));
 };
 
-export const hasCurrentData = (dataDir = defaultDataDir) => {
+export const hasCurrentData = (dataDir = defaultDataDir, options = {}) => {
   const indexPath = join(dataDir, "index.json");
   if (!existsSync(indexPath)) return false;
   let index;
@@ -61,9 +62,7 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
   if (!hasCurrentCatalog(dataDir)) return false;
   if (!Array.isArray(index.systems)) return false;
 
-  // The OpenGood set must be exactly the 17 expected packs. Extra packs are
-  // allowed only when a local dump build listed them as hasheous in the index:
-  // wiping the dir would destroy the user's locally built Hasheous data.
+  // The OpenGood set must be exactly the 17 expected packs.
   const opengoodPackNames = index.systems
     .filter((system) => system.source === "opengood")
     .map((system) => system.file)
@@ -76,7 +75,16 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
   for (const name of actualPackNames) {
     const system = systemsByFile.get(name);
     if (!system) return false;
-    if (system.source !== "opengood" && system.source !== "hasheous") return false;
+    if (system.source !== "opengood" && system.source !== "redump") return false;
+  }
+
+  if (options.redumpAll) {
+    const redumpSlugs = new Set(
+      index.systems.filter((system) => system.source === "redump").map((system) => system.slug),
+    );
+    if (Object.keys(REDUMP_PLATFORMS).some((platform) => !redumpSlugs.has(slugifyPlatform(platform)))) {
+      return false;
+    }
   }
 
   const verifyPack = (system) => {
@@ -89,14 +97,20 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
 };
 
 export const main = async (argv = process.argv.slice(2), dataDir = defaultDataDir) => {
-  if (!argv.includes("--force") && hasCurrentData(dataDir)) {
-    log("info", `OpenGood ${OPENGOOD_REVISION} identify data is ready`);
+  const redumpAll = argv.includes("--redump-all");
+  if (!argv.includes("--force") && hasCurrentData(dataDir, { redumpAll })) {
+    log("info", `OpenGood ${OPENGOOD_REVISION}${redumpAll ? " and Redump" : ""} identify data is ready`);
     return;
   }
 
   rmSync(dataDir, { recursive: true, force: true });
   log("info", `building OpenGood ${OPENGOOD_REVISION} identify data`);
-  await buildIdentifyData(["--opengood-only", "--no-brotli", "--out", dataDir]);
+  await buildIdentifyData([
+    redumpAll ? "--redump-all" : "--opengood-only",
+    "--no-brotli",
+    "--out",
+    dataDir,
+  ]);
 };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

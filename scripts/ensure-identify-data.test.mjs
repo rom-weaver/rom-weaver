@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { main as buildIdentifyData, OPENGOOD_PLATFORMS, OPENGOOD_REVISION } from "./build-hasheous-identify-index.mjs";
+import { main as buildIdentifyData, OPENGOOD_PLATFORMS, OPENGOOD_REVISION } from "./build-identify-index.mjs";
 import { hasCurrentData } from "./ensure-identify-data.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -30,20 +29,6 @@ async function buildCurrentDataDir(extraArgs = ["--opengood-only"]) {
   seedOpenGoodCache(cacheDir);
   await buildIdentifyData(["--no-brotli", "--cache-dir", cacheDir, "--out", dataDir, ...extraArgs]);
   return { dataDir, work };
-}
-
-// A combined OpenGood + Hasheous build, from the fixture dump so no test
-// touches the network.
-async function buildCombinedDataDir() {
-  const dumpWork = mkdtempSync(join(os.tmpdir(), "rw-ensure-dump-"));
-  const zipPath = join(dumpWork, "MetadataMap.zip");
-  const zipResult = spawnSync("zip", ["-q", "-r", "-X", zipPath, "."], {
-    cwd: join(fixtureDir, "hasheous-dump"),
-  });
-  assert.equal(zipResult.status, 0, String(zipResult.stderr));
-  const built = await buildCurrentDataDir(["--dump", zipPath]);
-  rmSync(dumpWork, { recursive: true, force: true });
-  return built;
 }
 
 test("hasCurrentData accepts a freshly built data dir", async () => {
@@ -98,28 +83,6 @@ test("hasCurrentData rejects a catalog from another OpenGood revision", async ()
     const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
     catalog.generated.opengoodRevision = "0000000000000000000000000000000000000000";
     writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
-    assert.equal(hasCurrentData(dataDir), false);
-  } finally {
-    rmSync(work, { recursive: true, force: true });
-  }
-});
-
-test("hasCurrentData accepts locally built Hasheous packs next to OpenGood", async () => {
-  const { dataDir, work } = await buildCombinedDataDir();
-  try {
-    assert.equal(hasCurrentData(dataDir), true);
-  } finally {
-    rmSync(work, { recursive: true, force: true });
-  }
-});
-
-test("hasCurrentData rejects a tampered Hasheous pack", async () => {
-  const { dataDir, work } = await buildCombinedDataDir();
-  try {
-    const index = JSON.parse(readFileSync(join(dataDir, "index.json"), "utf8"));
-    const hasheous = index.systems.find((system) => system.source === "hasheous");
-    assert.ok(hasheous, "fixture dump built no hasheous system");
-    writeFileSync(join(dataDir, hasheous.file), Buffer.from("tampered"));
     assert.equal(hasCurrentData(dataDir), false);
   } finally {
     rmSync(work, { recursive: true, force: true });

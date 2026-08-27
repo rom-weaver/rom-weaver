@@ -400,7 +400,7 @@ struct SelectedPack {
 fn source_label(source: IdentifySource) -> &'static str {
     match source {
         IdentifySource::OpenGood => "opengood",
-        IdentifySource::Hasheous => "hasheous",
+        IdentifySource::Redump => "redump",
     }
 }
 
@@ -711,7 +711,7 @@ impl CliApp {
                 hint = Some(format!(
                     "no identify pack is installed for {platform}; run `rom-weaver identify \
                      database install \"{platform}\" --from MetadataMap.zip`, or \
-                     `rom-weaver identify database import-hasheous <MetadataMap.zip>`"
+                     `rom-weaver identify database import-redump <DAT.zip>`"
                 ));
             } else if let Some(selected) = selected.iter().find(|selected| {
                 let profile = match &selected.pack.file {

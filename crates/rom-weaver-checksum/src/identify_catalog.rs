@@ -15,13 +15,13 @@ use tracing::trace;
 const CATALOG_FORMAT: &str = "rom-weaver-identify-catalog-v1";
 
 /// Which database a platform's pack was built from. Sources never mix inside
-/// one platform: an OpenGood miss never falls through to Hasheous.
+/// one platform: an OpenGood miss never falls through to Redump.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum IdentifySource {
     #[serde(rename = "opengood")]
     OpenGood,
-    Hasheous,
+    Redump,
 }
 
 /// One platform's entry in the catalog.
@@ -140,11 +140,105 @@ impl IdentifyCatalog {
     /// The built-in OpenGood catalog used when no `catalog.json` is available.
     pub fn builtin() -> &'static IdentifyCatalog {
         static BUILTIN: LazyLock<IdentifyCatalog> = LazyLock::new(|| {
-            IdentifyCatalog::from_entries(builtin_entries())
-                .expect("built-in identify catalog is valid")
+            let mut entries = builtin_entries();
+            entries.extend(redump_entries());
+            IdentifyCatalog::from_entries(entries).expect("built-in identify catalog is valid")
         });
         &BUILTIN
     }
+}
+
+/// Redump systems with downloadable DAT files. The CLI owns the matching
+/// endpoint names because network access is native-only.
+fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
+    fn entry(canonical: &str, aliases: &[&str]) -> IdentifyPlatformCatalogEntry {
+        IdentifyPlatformCatalogEntry {
+            canonical_platform: canonical.to_string(),
+            aliases: aliases.iter().map(|alias| alias.to_string()).collect(),
+            source: IdentifySource::Redump,
+            media_profiles: vec!["redump-disc-track-v1".to_string()],
+            pack_slug: normalize_platform_name(canonical).replace(' ', "-"),
+            pack_format: "RWFP2".to_string(),
+            pack_sha256: None,
+            canonicalization_version: 1,
+        }
+    }
+    vec![
+        entry("Acorn Archimedes", &["archimedes"]),
+        entry("Apple Macintosh", &["macintosh", "mac"]),
+        entry(
+            "Atari Jaguar CD Interactive Multimedia System",
+            &["jaguar cd", "ajcd"],
+        ),
+        entry("Bandai Pippin", &["pippin"]),
+        entry("Bandai Playdia Quick Interactive System", &["playdia"]),
+        entry("Commodore Amiga CD", &["amiga cd"]),
+        entry("Commodore Amiga CD32", &["amiga cd32", "cd32"]),
+        entry("Commodore Amiga CDTV", &["amiga cdtv", "cdtv"]),
+        entry("Fujitsu FM Towns series", &["fm towns"]),
+        entry("funworld Photo Play", &["photo play"]),
+        entry("IBM PC compatible", &["ibm pc", "pc"]),
+        entry("Incredible Technologies Eagle", &["eagle"]),
+        entry("Konami e-Amusement", &["e-amusement"]),
+        entry("Konami FireBeat", &["firebeat"]),
+        entry("Konami System 573", &["system 573"]),
+        entry("Konami System GV", &["system gv"]),
+        entry("Mattel Fisher-Price iXL", &["ixl"]),
+        entry("Mattel HyperScan", &["hyperscan"]),
+        entry("Memorex Visual Information System", &["vis"]),
+        entry("Microsoft Xbox", &["xbox"]),
+        entry("Microsoft Xbox 360", &["xbox 360", "xbox360"]),
+        entry("Namco - Sega - Nintendo Triforce", &["triforce"]),
+        entry("Namco System 246", &["system 246"]),
+        entry(
+            "NEC PC Engine CD & TurboGrafx CD",
+            &["pc engine cd", "turbografx cd", "pce cd"],
+        ),
+        entry("NEC PC-88 series", &["pc-88", "pc88"]),
+        entry("NEC PC-98 series", &["pc-98", "pc98"]),
+        entry("NEC PC-FX & PC-FXGA", &["pc-fx", "pcfx"]),
+        entry("Neo Geo CD", &["ngcd"]),
+        entry("Nintendo GameCube", &["gamecube", "gc", "ngc"]),
+        entry("Nintendo Wii", &["wii"]),
+        entry("Palm OS", &["palm"]),
+        entry("Panasonic 3DO Interactive Multiplayer", &["3do"]),
+        entry("Philips CD-i", &["cd-i", "cdi"]),
+        entry("Photo CD", &["photo cd"]),
+        entry(
+            "PlayStation GameShark Updates",
+            &["playstation gameshark", "psxgs"],
+        ),
+        entry("Pocket PC", &["ppc"]),
+        entry("Sega Chihiro", &["chihiro"]),
+        entry("Sega Dreamcast", &["dreamcast", "dc"]),
+        entry("Sega Lindbergh", &["lindbergh"]),
+        entry("Sega Mega CD & Sega CD", &["mega cd", "sega cd", "mcd"]),
+        entry("Sega Naomi", &["naomi"]),
+        entry("Sega Naomi 2", &["naomi 2", "naomi2"]),
+        entry(
+            "Sega Prologue 21 Multimedia Karaoke System",
+            &["prologue 21"],
+        ),
+        entry("Sega RingEdge", &["ringedge"]),
+        entry("Sega RingEdge 2", &["ringedge 2"]),
+        entry("Sega Saturn", &["saturn"]),
+        entry("Sharp X68000", &["x68000"]),
+        entry("Sony PlayStation", &["playstation", "psx", "ps1"]),
+        entry("Sony PlayStation 2", &["playstation 2", "ps2"]),
+        entry("Sony PlayStation 3", &["playstation 3", "ps3"]),
+        entry(
+            "Sony PlayStation Portable",
+            &["playstation portable", "psp"],
+        ),
+        entry("TAB-Austria Quizard", &["quizard"]),
+        entry("Tomy Kiss-Site", &["kiss-site"]),
+        entry("VM Labs NUON", &["nuon"]),
+        entry("VTech V.Flash & V.Smile Pro", &["v.flash", "v.smile pro"]),
+        entry(
+            "ZAPiT Games Game Wave Family Entertainment System",
+            &["game wave", "gamewave"],
+        ),
+    ]
 }
 
 /// Normalize a platform name for alias matching: lowercase, collapse every
@@ -167,7 +261,7 @@ pub fn normalize_platform_name(name: &str) -> String {
 }
 
 /// The OpenGood platforms (`OPENGOOD_PLATFORMS` in
-/// `scripts/build-hasheous-identify-index.mjs`) with curated aliases.
+/// The compiled OpenGood platforms with curated aliases.
 fn builtin_entries() -> Vec<IdentifyPlatformCatalogEntry> {
     fn entry(canonical: &str, aliases: &[&str], slug: &str) -> IdentifyPlatformCatalogEntry {
         IdentifyPlatformCatalogEntry {

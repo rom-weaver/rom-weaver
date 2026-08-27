@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -12,11 +12,14 @@ import {
   INDEX_FORMAT,
   INDEX_FORMAT_V2,
   main,
+  mediaProfileFor,
   normalizeAlias,
   OPENGOOD_PLATFORMS,
   OPENGOOD_REVISION,
+  REDUMP_PLATFORMS,
+  REDUMP_DEFAULT_MEDIA_PROFILE,
   slugifyPlatform,
-} from "./build-hasheous-identify-index.mjs";
+} from "./build-identify-index.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const fixtureDir = join(scriptDir, "../tests/fixtures/identify");
@@ -37,15 +40,15 @@ function seedOpenGoodCache(cacheDir) {
   }
 }
 
-function makeDumpZip(sourceDir, zipPath) {
-  const result = spawnSync("zip", ["-q", "-r", "-X", zipPath, "."], { cwd: sourceDir });
-  assert.equal(result.status, 0, String(result.stderr));
-}
-
-function fixtureDumpZip(dir) {
-  const zipPath = join(dir, "MetadataMap.zip");
-  makeDumpZip(join(fixtureDir, "hasheous-dump"), zipPath);
-  return zipPath;
+function seedRedumpCache(cacheDir) {
+  const datDir = join(cacheDir, "redump");
+  mkdirSync(datDir, { recursive: true });
+  for (const slug of Object.values(REDUMP_PLATFORMS)) {
+    const result = spawnSync("zip", ["-q", "-X", join(datDir, `${slug}.zip`), "Redump.dat"], {
+      cwd: fixtureDir,
+    });
+    assert.equal(result.status, 0, String(result.stderr));
+  }
 }
 
 // Parse the RWFP1/RWFP2 outer container: magic(8), count u32, directory of
@@ -138,19 +141,17 @@ async function buildFromFixtureDump(only, extraArgs = []) {
   const cacheDir = join(work, "cache");
   const outDir = join(work, "out");
   seedOpenGoodCache(cacheDir);
-  const zipPath = fixtureDumpZip(work);
+  seedRedumpCache(cacheDir);
   await main([
     "--cache-dir",
     cacheDir,
     "--out",
     outDir,
-    "--dump",
-    zipPath,
     "--no-brotli",
     ...(only ? ["--only", only] : []),
     ...extraArgs,
   ]);
-  return { cacheDir, outDir, work, zipPath };
+  return { cacheDir, outDir, work };
 }
 
 test("opengood platforms build RWFP1 packs from the OpenGood source", async () => {
@@ -185,16 +186,26 @@ test("opengood platforms build RWFP1 packs from the OpenGood source", async () =
   ]);
 });
 
-test("hasheous platforms build grouped RWFP2 packs, including dynamically discovered ones", async () => {
-  const { outDir } = await buildFromFixtureDump("Sony PlayStation,Watara Supervision");
+test("the Redump map includes systems outside the original app catalog", () => {
+  assert.equal(REDUMP_PLATFORMS["Atari Jaguar CD Interactive Multimedia System"], "ajcd");
+  assert.equal(REDUMP_PLATFORMS["Panasonic 3DO Interactive Multiplayer"], "3do");
+  assert.equal(REDUMP_PLATFORMS["Microsoft Xbox"], "xbox");
+  assert.equal(REDUMP_PLATFORMS["Sony PlayStation 3"], "ps3");
+  assert.equal(
+    mediaProfileFor("Atari Jaguar CD Interactive Multimedia System", "redump"),
+    REDUMP_DEFAULT_MEDIA_PROFILE,
+  );
+  assert.equal(mediaProfileFor("Sega Dreamcast", "redump"), "redump-gdrom-track-v1");
+});
+
+test("redump DATs build grouped RWFP2 packs", async () => {
+  const { outDir } = await buildFromFixtureDump("Sony PlayStation,Sega Saturn");
 
   const index = JSON.parse(readFileSync(join(outDir, "index.json"), "utf8"));
   const bySlug = new Map(index.systems.map((system) => [system.slug, system]));
   assert.equal(bySlug.get("sony-playstation").packFormat, "RWFP2");
-  // "Watara Supervision" was never in the old static platform list: it builds
-  // purely from dynamic dump discovery.
-  assert.equal(bySlug.get("watara-supervision").packFormat, "RWFP2");
-  assert.equal(bySlug.get("watara-supervision").source, "hasheous");
+  assert.equal(bySlug.get("sega-saturn").packFormat, "RWFP2");
+  assert.equal(bySlug.get("sega-saturn").source, "redump");
 
   const pack = parsePack(readFileSync(join(outDir, "sony-playstation.pack")));
   assert.equal(pack.magic, "RWFP2\0\0\0");
@@ -203,21 +214,19 @@ test("hasheous platforms build grouped RWFP2 packs, including dynamically discov
   const games = JSON.parse(pack.members.get("games.json").toString("utf8"));
   assert.deepEqual(
     games.map((game) => game.name),
-    ["Alpha", "Beta", "Delta"],
+    ["Alpha & Omega", "Beta", "Delta"],
   );
 
   const alpha = games[0];
   assert.equal(alpha.platform, "Sony PlayStation");
-  assert.equal(alpha.source, "hasheous");
+  assert.equal(alpha.source, "redump");
   assert.equal(alpha.upstreamSource, "redump");
-  assert.equal(alpha.gameId, "101");
-  assert.equal(alpha.region, "United States (US)");
   assert.equal(alpha.components.length, 5);
   assert.deepEqual(
     alpha.components.map((component) => component.ordinal),
     [0, 1, 2, 3, 4],
   );
-  assert.equal(alpha.components[0].filename, "Alpha (USA).bin");
+  assert.equal(alpha.components[0].filename, "Alpha (USA) (Track 1).bin");
   assert.equal(alpha.components[0].size, 1000);
   assert.equal(alpha.components[0].crc32, "aaaaaaaa");
   assert.equal(alpha.components[0].md5, "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a");
@@ -232,7 +241,8 @@ test("hasheous platforms build grouped RWFP2 packs, including dynamically discov
   assert.equal(manifest.canonicalizationProfile, "redump-cd-track-v1");
   assert.equal(manifest.canonicalizationVersion, 1);
   assert.equal(manifest.counts.games, 3);
-  assert.ok(manifest.provenance.dump.sha256.match(/^[0-9a-f]{64}$/u));
+  assert.equal(manifest.provenance.dat.url, "http://redump.org/datfile/psx/");
+  assert.ok(manifest.provenance.dat.sha256.match(/^[0-9a-f]{64}$/u));
 });
 
 test("shared components stay in games.json marked non-discriminating and leave route.bin", async () => {
@@ -286,24 +296,13 @@ test("shared components stay in games.json marked non-discriminating and leave r
   assert.equal(new Set(keys).size, keys.length);
 });
 
-test("upstreamSource maps only what the dump states", async () => {
-  const { outDir } = await buildFromFixtureDump("Watara Supervision");
-  const pack = parsePack(readFileSync(join(outDir, "watara-supervision.pack")));
-  const games = JSON.parse(pack.members.get("games.json").toString("utf8"));
-  const byName = new Map(games.map((game) => [game.name, game]));
-  assert.equal(byName.get("Gamma").upstreamSource, "no-intro");
-  assert.equal(byName.get("Gamma").components[0].sha256.length, 64);
-  // ScreenScraper is not in the upstream vocabulary: never inferred, so unknown.
-  assert.equal(byName.get("Epsilon").upstreamSource, "unknown");
-});
-
-test("catalog.json lists every OpenGood platform plus built hasheous platforms", async () => {
-  const { outDir } = await buildFromFixtureDump("Watara Supervision");
+test("catalog.json lists every OpenGood platform plus built redump platforms", async () => {
+  const { outDir } = await buildFromFixtureDump("Sega Saturn");
   const catalog = JSON.parse(readFileSync(join(outDir, "catalog.json"), "utf8"));
   assert.equal(catalog.format, CATALOG_FORMAT);
   assert.equal(catalog.generated.opengoodRevision, OPENGOOD_REVISION);
-  assert.ok(catalog.generated.hasheousDump.sha256.match(/^[0-9a-f]{64}$/u));
-  assert.equal(catalog.generated.hasheousDump.fileName, "MetadataMap.zip");
+  assert.ok(catalog.generated.redumpDats["Sega Saturn"].sha256.match(/^[0-9a-f]{64}$/u));
+  assert.equal(catalog.generated.redumpDats["Sega Saturn"].fileName, "ss.zip");
 
   const byName = new Map(catalog.platforms.map((entry) => [entry.canonicalPlatform, entry]));
   for (const platform of Object.keys(OPENGOOD_PLATFORMS)) {
@@ -316,12 +315,12 @@ test("catalog.json lists every OpenGood platform plus built hasheous platforms",
     assert.equal(entry.canonicalizationVersion, 1);
     assert.ok(entry.aliases.includes(normalizeAlias(platform)));
   }
-  assert.ok(byName.get("Sony PlayStation") === undefined, "unbuilt hasheous platforms stay out");
-  const watara = byName.get("Watara Supervision");
-  assert.equal(watara.source, "hasheous");
-  assert.equal(watara.packFormat, "RWFP2");
-  assert.deepEqual(watara.mediaProfiles, ["nointro-single-image-v1"]);
-  assert.ok(watara.packSha256.match(/^[0-9a-f]{64}$/u));
+  assert.ok(byName.get("Sony PlayStation") === undefined, "unbuilt redump platforms stay out");
+  const saturn = byName.get("Sega Saturn");
+  assert.equal(saturn.source, "redump");
+  assert.equal(saturn.packFormat, "RWFP2");
+  assert.deepEqual(saturn.mediaProfiles, ["redump-cd-track-v1"]);
+  assert.ok(saturn.packSha256.match(/^[0-9a-f]{64}$/u));
 
   const gba = byName.get("Nintendo Game Boy Advance");
   assert.ok(gba.aliases.includes("gba"));
@@ -336,8 +335,8 @@ test("duplicate alias across platforms fails the build", () => {
   assert.throws(
     () =>
       buildCatalogPlatforms([
-        { platform: "Foo Bar", slug: "foo-bar", source: "hasheous", packFormat: "RWFP2" },
-        { platform: "Foo  Bar", slug: "foo--bar", source: "hasheous", packFormat: "RWFP2" },
+        { platform: "Foo Bar", slug: "foo-bar", source: "redump", packFormat: "RWFP2" },
+        { platform: "Foo  Bar", slug: "foo--bar", source: "redump", packFormat: "RWFP2" },
       ]),
     /Duplicate platform alias "foo bar"/u,
   );
@@ -347,8 +346,8 @@ test("duplicate packSlug fails the build", () => {
   assert.throws(
     () =>
       buildCatalogPlatforms([
-        { platform: "Foo:Bar", slug: "foo-bar", source: "hasheous", packFormat: "RWFP2" },
-        { platform: "Foo.Bar", slug: "foo-bar", source: "hasheous", packFormat: "RWFP2" },
+        { platform: "Foo:Bar", slug: "foo-bar", source: "redump", packFormat: "RWFP2" },
+        { platform: "Foo.Bar", slug: "foo-bar", source: "redump", packFormat: "RWFP2" },
       ]),
     /Duplicate packSlug "foo-bar"/u,
   );
@@ -364,7 +363,7 @@ test("a discovered platform's own name beats another platform's curated alias", 
       source: "opengood",
       packFormat: "RWFP1",
     },
-    { platform: "GBA", slug: "gba", source: "hasheous", packFormat: "RWFP2" },
+    { platform: "GBA", slug: "gba", source: "redump", packFormat: "RWFP2" },
   ]);
   const gba = platforms.find((entry) => entry.canonicalPlatform === "Nintendo Game Boy Advance");
   assert.ok(!gba.aliases.includes("gba"));
@@ -373,20 +372,18 @@ test("a discovered platform's own name beats another platform's curated alias", 
 });
 
 test("rebuilding from identical input is byte-identical", async () => {
-  const first = await buildFromFixtureDump("Sony PlayStation,Watara Supervision");
+  const first = await buildFromFixtureDump("Sony PlayStation,Sega Saturn");
   const outDir2 = join(first.work, "out2");
   await main([
     "--cache-dir",
     first.cacheDir,
     "--out",
     outDir2,
-    "--dump",
-    first.zipPath,
     "--no-brotli",
     "--only",
-    "Sony PlayStation,Watara Supervision",
+    "Sony PlayStation,Sega Saturn",
   ]);
-  for (const name of ["sony-playstation.pack", "watara-supervision.pack", "catalog.json"]) {
+  for (const name of ["sony-playstation.pack", "sega-saturn.pack", "catalog.json"]) {
     assert.deepEqual(
       readFileSync(join(first.outDir, name)),
       readFileSync(join(outDir2, name)),
@@ -395,61 +392,40 @@ test("rebuilding from identical input is byte-identical", async () => {
   }
 });
 
-test("--max-objects limits parsed game objects for hasheous platforms", async () => {
+test("--max-objects limits parsed game objects for redump platforms", async () => {
   const { outDir } = await buildFromFixtureDump("Sony PlayStation", ["--max-objects", "2"]);
   const pack = parsePack(readFileSync(join(outDir, "sony-playstation.pack")));
   const games = JSON.parse(pack.members.get("games.json").toString("utf8"));
   assert.ok(games.length >= 1 && games.length <= 2, `expected 1-2 games, got ${games.length}`);
 });
 
-test("malformed platform directory names in the dump are rejected", async () => {
-  const work = tempDir("malformed");
-  const staging = join(work, "staging");
-  mkdirSync(join(staging, "Good Platform"), { recursive: true });
-  cpSync(
-    join(fixtureDir, "hasheous-dump", "Watara Supervision", "Gamma (104).json"),
-    join(staging, "Good Platform", "Gamma (104).json"),
-  );
-  mkdirSync(join(staging, "evil..name"), { recursive: true });
-  writeFileSync(join(staging, "evil..name", "x.json"), "{}\n");
-  const zipPath = join(work, "MetadataMap.zip");
-  makeDumpZip(staging, zipPath);
-
-  const cacheDir = join(work, "cache");
-  seedOpenGoodCache(cacheDir);
-  await assert.rejects(
-    main([
-      "--cache-dir",
-      cacheDir,
-      "--out",
-      join(work, "out"),
-      "--dump",
-      zipPath,
-      "--no-brotli",
-      "--only",
-      "Good Platform",
-    ]),
-    /Unsafe platform directory name/u,
-  );
-});
-
-test("--only with a platform missing from the dump fails without --allow-missing-platforms", async () => {
+test("--only rejects an optical platform without a Redump mapping", async () => {
   const work = tempDir("missing");
   const cacheDir = join(work, "cache");
   seedOpenGoodCache(cacheDir);
-  const zipPath = fixtureDumpZip(work);
   await assert.rejects(
     main([
       "--cache-dir",
       cacheDir,
       "--out",
       join(work, "out"),
-      "--dump",
-      zipPath,
       "--no-brotli",
       "--only",
       "No Such Platform",
     ]),
-    /not found in dump/u,
+    /not configured/u,
+  );
+});
+
+test("--redump-all builds every configured optical platform", async () => {
+  const work = tempDir("redump-all");
+  const cacheDir = join(work, "cache");
+  seedOpenGoodCache(cacheDir);
+  seedRedumpCache(cacheDir);
+  await main(["--cache-dir", cacheDir, "--out", join(work, "out"), "--no-brotli", "--redump-all"]);
+  const index = JSON.parse(readFileSync(join(work, "out", "index.json"), "utf8"));
+  assert.equal(
+    index.systems.filter((system) => system.source === "redump").length,
+    Object.keys(REDUMP_PLATFORMS).length,
   );
 });

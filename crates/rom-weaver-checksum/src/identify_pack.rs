@@ -1,5 +1,5 @@
 //! Reader for the per-system identify packs produced by
-//! `scripts/build-hasheous-identify-index.mjs`.
+//! the identify pack builders.
 //!
 //! It parses one decompressed RWFP1 pack. Each pack has crc32, md5, and sha1
 //! maps plus name and platform tables. Native and WASM commands use this same

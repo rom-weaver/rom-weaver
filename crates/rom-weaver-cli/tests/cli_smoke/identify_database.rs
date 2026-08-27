@@ -131,7 +131,7 @@ fn pack_v2(platform: &str, profile: &str, games: &[(&str, Vec<Value>)]) -> Vec<u
                 serde_json::json!({
                     "name": name,
                     "platform": platform,
-                    "source": "hasheous",
+                    "source": "redump",
                     "upstreamSource": "redump",
                     "components": components,
                 })
@@ -142,7 +142,7 @@ fn pack_v2(platform: &str, profile: &str, games: &[(&str, Vec<Value>)]) -> Vec<u
     let manifest = serde_json::to_vec(&serde_json::json!({
         "format": "rom-weaver-identify-system-pack-v2",
         "platform": platform,
-        "source": "hasheous",
+        "source": "redump",
         "canonicalizationProfile": profile,
         "canonicalizationVersion": 1,
         "counts": { "games": games.len(), "components": 0, "routedKeys": route.len() },
@@ -163,7 +163,7 @@ fn catalog_json(platforms: &[(&str, &[&str], &str, &str)]) -> Vec<u8> {
             serde_json::json!({
                 "canonicalPlatform": canonical,
                 "aliases": aliases,
-                "source": "hasheous",
+                "source": "redump",
                 "mediaProfiles": [profile],
                 "packSlug": slug,
                 "packFormat": "RWFP2",
@@ -179,7 +179,7 @@ fn catalog_json(platforms: &[(&str, &[&str], &str, &str)]) -> Vec<u8> {
 }
 
 // ---------------------------------------------------------------------------
-// Minimal STORE-only zip writer for the Hasheous dump fixture
+// Minimal STORE-only zip writer for Redump DAT fixtures.
 // ---------------------------------------------------------------------------
 
 fn store_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
@@ -362,6 +362,7 @@ fn identify_matches_a_v2_pack_passed_via_database() {
 }
 
 #[test]
+#[cfg(not(feature = "bundled-identify-data"))]
 fn identify_reports_database_required_for_an_uninstalled_platform() {
     let temp = setup_temp_dir();
     let payload = b"unmatched payload".to_vec();
@@ -667,11 +668,14 @@ fn database_list_status_path_remove_round_trip() {
         .find(|entry| entry["platform"] == "Sony PlayStation")
         .cloned()
         .expect("PlayStation entry");
-    assert_eq!(playstation["installed"], false);
+    assert_eq!(
+        playstation["installed"],
+        serde_json::json!(cfg!(feature = "bundled-identify-data"))
+    );
 }
 
 #[test]
-fn install_without_from_names_the_offline_path() {
+fn install_rejects_an_opengood_system() {
     let temp = setup_temp_dir();
     let dir = temp.child("identify-db").path().to_path_buf();
     fs::create_dir_all(&dir).expect("database dir");
@@ -680,7 +684,7 @@ fn install_without_from_names_the_offline_path() {
             "identify",
             "database",
             "install",
-            "Sony PlayStation",
+            "Atari 2600",
             "--database-dir",
             dir.to_str().expect("dir path"),
             "--json",
@@ -690,45 +694,75 @@ fn install_without_from_names_the_offline_path() {
     let json = parse_single_json_line(&output);
     assert_eq!(json["status"], "failed");
     let label = json["label"].as_str().expect("label");
-    assert!(label.contains("network download is not yet enabled"));
-    assert!(label.contains("--from"));
+    assert!(label.contains("OpenGood platform"));
 }
 
-fn hasheous_game_json(name: &str, id: u32, payload: &[u8]) -> Vec<u8> {
-    serde_json::to_vec(&serde_json::json!({
-        "Id": id,
-        "Name": name,
-        "ObjectType": "Game",
-        "Attributes": [
-            {
-                "attributeName": "ROMs",
-                "Value": [
-                    {
-                        "Name": format!("{name}.bin"),
-                        "Size": payload.len(),
-                        "Crc": format!("{:08x}", crc32_of(payload)),
-                        "SignatureSource": "Redump",
-                    }
-                ]
-            },
-            { "attributeName": "Country", "Value": "USA" }
-        ]
-    }))
-    .unwrap()
+fn redump_dat_for(platform: &str, games: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut xml =
+        format!("<?xml version=\"1.0\"?><datafile><header><name>{platform}</name></header>");
+    for (name, payload) in games {
+        xml.push_str(&format!(
+            "<game name=\"{name}\"><rom name=\"{name}.bin\" size=\"{}\" crc=\"{:08x}\"/></game>",
+            payload.len(),
+            crc32_of(payload)
+        ));
+    }
+    xml.push_str("</datafile>");
+    xml.into_bytes()
+}
+
+fn redump_dat(games: &[(&str, &[u8])]) -> Vec<u8> {
+    redump_dat_for("Sony - PlayStation", games)
+}
+
+#[test]
+fn install_from_imports_only_the_requested_redump_system() {
+    let temp = setup_temp_dir();
+    let playstation = redump_dat(&[("PlayStation Game", b"playstation")]);
+    let saturn = redump_dat_for("Sega - Saturn", &[("Saturn Game", b"saturn")]);
+    let zip = store_zip(&[
+        ("Sony - PlayStation.dat", &playstation),
+        ("Sega - Saturn.dat", &saturn),
+    ]);
+    fs::write(temp.child("redump.zip").path(), zip).expect("dump fixture");
+    let dir = temp.child("identify-db").path().to_path_buf();
+    fs::create_dir_all(&dir).expect("database dir");
+
+    let install = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "install",
+            "Sony PlayStation",
+            "--from",
+            temp.child("redump.zip").path().to_str().expect("zip path"),
+            "--database-dir",
+            dir.to_str().expect("dir path"),
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(
+        install["details"]["imported"]
+            .as_array()
+            .expect("imported")
+            .len(),
+        1
+    );
+    assert!(dir.join("sony-playstation.pack").is_file());
+    assert!(!dir.join("sega-saturn.pack").is_file());
 }
 
 #[test]
 fn import_skips_records_over_pack_caps_and_reports_the_count() {
     let temp = setup_temp_dir();
-    let good = hasheous_game_json("Good Game (USA)", 1, b"good payload");
-    // A game name past the reader's 4096-byte string cap would make the whole
-    // pack unreadable, so the importer must drop it and keep the platform.
-    let oversized = hasheous_game_json(&"A".repeat(5000), 2, b"oversized payload");
-    let zip = store_zip(&[
-        ("Sony PlayStation/Good Game (USA) (1).json", &good),
-        ("Sony PlayStation/Oversized (2).json", &oversized),
+    let oversized_name = "A".repeat(5000);
+    let dat = redump_dat(&[
+        ("Good Game (USA)", b"good payload"),
+        (&oversized_name, b"oversized payload"),
     ]);
-    fs::write(temp.child("MetadataMap.zip").path(), zip).expect("dump fixture");
+    let zip = store_zip(&[("Sony - PlayStation.dat", &dat)]);
+    fs::write(temp.child("redump.zip").path(), zip).expect("dump fixture");
     let dir = temp.child("identify-db").path().to_path_buf();
     fs::create_dir_all(&dir).expect("database dir");
 
@@ -736,11 +770,8 @@ fn import_skips_records_over_pack_caps_and_reports_the_count() {
         &[
             "identify",
             "database",
-            "import-hasheous",
-            temp.child("MetadataMap.zip")
-                .path()
-                .to_str()
-                .expect("zip path"),
+            "import-redump",
+            temp.child("redump.zip").path().to_str().expect("zip path"),
             "--database-dir",
             dir.to_str().expect("dir path"),
             "--json",
@@ -755,17 +786,12 @@ fn import_skips_records_over_pack_caps_and_reports_the_count() {
 }
 
 #[test]
-fn import_hasheous_builds_packs_and_identify_uses_them() {
+fn import_redump_builds_packs_and_identify_uses_them() {
     let temp = setup_temp_dir();
-    let payload = b"imported hasheous payload".to_vec();
-    let game_json = hasheous_game_json("Imported Game (USA)", 7, &payload);
-    let opengood_json = hasheous_game_json("Should Be Skipped", 8, b"skip");
-    let zip = store_zip(&[
-        ("Sony PlayStation/Imported Game (USA) (7).json", &game_json),
-        // OpenGood-covered platforms stay built-in and MUST be skipped.
-        ("Atari 2600/Should Be Skipped (8).json", &opengood_json),
-    ]);
-    fs::write(temp.child("MetadataMap.zip").path(), zip).expect("dump fixture");
+    let payload = b"imported redump payload".to_vec();
+    let dat = redump_dat(&[("Imported Game (USA)", &payload)]);
+    let zip = store_zip(&[("Sony - PlayStation.dat", &dat)]);
+    fs::write(temp.child("redump.zip").path(), zip).expect("dump fixture");
     let dir = temp.child("identify-db").path().to_path_buf();
     fs::create_dir_all(&dir).expect("database dir");
     let dir_arg = dir.to_str().expect("dir path");
@@ -774,11 +800,8 @@ fn import_hasheous_builds_packs_and_identify_uses_them() {
         &[
             "identify",
             "database",
-            "import-hasheous",
-            temp.child("MetadataMap.zip")
-                .path()
-                .to_str()
-                .expect("zip path"),
+            "import-redump",
+            temp.child("redump.zip").path().to_str().expect("zip path"),
             "--database-dir",
             dir_arg,
             "--json",
@@ -790,13 +813,9 @@ fn import_hasheous_builds_packs_and_identify_uses_them() {
     assert_eq!(imported.len(), 1);
     assert_eq!(imported[0]["platform"], "Sony PlayStation");
     assert_eq!(imported[0]["slug"], "sony-playstation");
-    assert_eq!(
-        import["details"]["skipped_opengood"],
-        serde_json::json!(["Atari 2600"])
-    );
+    assert_eq!(import["details"]["skipped_opengood"], serde_json::json!([]));
     assert!(dir.join("sony-playstation.pack").is_file());
     assert!(dir.join("catalog.json").is_file());
-    assert!(!dir.join("atari-2600.pack").is_file());
 
     // The imported pack identifies the payload through the catalog alias.
     fs::write(temp.child("game.bin").path(), &payload).expect("ROM fixture");
@@ -817,7 +836,7 @@ fn import_hasheous_builds_packs_and_identify_uses_them() {
     let identify = &json["details"]["identify"];
     assert_eq!(identify["status"], "matched");
     assert_eq!(identify["matches"][0]["name"], "Imported Game (USA)");
-    assert_eq!(identify["database"]["source"], "hasheous");
+    assert_eq!(identify["database"]["source"], "redump");
     assert_eq!(identify["database"]["pack_format"], "RWFP2");
     // The imported game's SignatureSource is Redump.
     assert_eq!(
