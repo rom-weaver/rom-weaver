@@ -9,7 +9,6 @@ import type {
   getCreatePatchFormatCandidates,
 } from "../../platform/browser/browser-api.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
-import { identifySourceMismatch, identifySourceMismatchMessage } from "../../presentation/identify-agreement.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
@@ -1119,7 +1118,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
 
-  const sourceMismatch = identifySourceMismatch(originalState?.identification, modifiedState?.identification);
   // Switching the naming source discards any hand-typed name: the toggle picks
   // which automatic name is used, and a manual name would hide the result.
   const setUseIdentifiedOutputName = (on: boolean) => {
@@ -1196,11 +1194,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       onFiles: handleUnifiedDrop,
       supported: CREATE_SUPPORTED_FILES,
     },
-    mismatchNotice: sourceMismatch ? (
-      <Notice id="patch-builder-identify-mismatch" level="warn">
-        {identifySourceMismatchMessage(sourceMismatch)}
-      </Notice>
-    ) : null,
     modifiedStep: renderSourceStep({
       checksumProgress: getSourceChecksumProgress("modified"),
       file: modified,
