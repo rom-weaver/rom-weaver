@@ -234,10 +234,14 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           releaseScripts();
         }
         await navigation;
+        // More-menu views (trim, ppf-undo) have no rail tab, so no tab is
+        // selected once they hydrate; their visible panel names the view.
         await page.waitForFunction((expectedView) => {
           const root = document.getElementById("webapp-root");
+          if (root?.hasAttribute("aria-busy")) return false;
           const active = document.querySelector('[role="tab"][aria-selected="true"]');
-          return !root?.hasAttribute("aria-busy") && active?.getAttribute("data-mode") === expectedView;
+          if (active) return active.getAttribute("data-mode") === expectedView;
+          return !!document.querySelector(`#panel-${expectedView}:not([hidden])`);
         }, testCase.finalView);
         if (testCase.replayClick) await page.getByRole("dialog").waitFor({ state: "visible" });
         await page.evaluate(
@@ -252,7 +256,10 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
           return {
             finalTheme: document.documentElement.dataset.theme || "",
-            finalView: document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") || "",
+            finalView:
+              document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") ||
+              document.querySelector('[id^="panel-"]:not([hidden])')?.id.replace(/^panel-/, "") ||
+              "",
             initialTheme: audit.initialTheme,
             initialView: audit.initialView,
             runtimeRetained: document.querySelector(".sub-status") === audit.runtime,
