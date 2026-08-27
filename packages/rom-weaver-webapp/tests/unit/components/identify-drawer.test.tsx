@@ -6,7 +6,8 @@ import { navigatorWith } from "../navigator-test-utils.ts";
 
 const gbaMatch = (name: string) => ({
   algorithm: "crc32",
-  database: "OpenGood",
+  // The pack-file shape the backend really reports; the drawer renders it as "OpenGood".
+  database: "nintendo-game-boy-advance.pack",
   name,
   // Upper case on purpose: identify databases report platforms in upper case,
   // and the drawer must still abbreviate them ("GBA").

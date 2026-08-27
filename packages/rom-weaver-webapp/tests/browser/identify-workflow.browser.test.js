@@ -114,7 +114,9 @@ test("a matched ROM shows its title, its evidence, and a colour-free identified 
   expect(evidence).toContain("GBA");
   expect(evidence).toContain("CRC32");
   expect(evidence).toContain("raw");
-  expect(evidence).toContain("nintendo-game-boy-advance.pack");
+  // The pack file name renders as its provenance, not its platform-shaped stem.
+  expect(evidence).toContain("OpenGood");
+  expect(evidence).not.toContain(".pack");
   expect(host.textContent).toContain("abcd1234");
 });
 

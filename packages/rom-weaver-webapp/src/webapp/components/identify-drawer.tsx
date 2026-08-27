@@ -1,7 +1,11 @@
 import { ScanSearch } from "lucide-react";
 import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
-import { IDENTIFY_STATUS_MARK, identifyMatchCountLabel } from "../../presentation/identify-status.ts";
+import {
+  formatIdentifySource,
+  IDENTIFY_STATUS_MARK,
+  identifyMatchCountLabel,
+} from "../../presentation/identify-status.ts";
 import { ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import type { ParsedIdentifyLookupResult, ParsedIdentifyTitleMatch } from "../../types/identify.ts";
 import { Drawer, DrawerReadout } from "../../public/react/components/ds/drawer.tsx";
@@ -44,7 +48,7 @@ const IdentifyDrawer = ({
   const platforms = unique(matches.map((match) => match.platform));
   const algorithms = unique(matches.map((match) => match.algorithm.toUpperCase()));
   const variants = unique(matches.map((match) => match.variant));
-  const databases = unique(matches.map((match) => match.database));
+  const databases = unique(matches.map((match) => formatIdentifySource(match.database)));
   const mark = IDENTIFY_STATUS_MARK[status];
 
   return (

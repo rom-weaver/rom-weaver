@@ -287,10 +287,12 @@
   color: var(--thread-text);
 }
 
+/* The drawer inner already pads the body like every other checks drawer;
+   only the block spacing above the first group head is local. */
 .rw-app .identify-drawer-body {
   display: grid;
   gap: var(--sp-s);
-  padding: var(--sp-s) var(--sp-m);
+  padding-block-start: 6px;
 }
 .rw-app .identify-drawer-group {
   min-width: 0;
