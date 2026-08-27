@@ -23,7 +23,7 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl unzip zstd \
     && rm -rf /var/lib/apt/lists/*
 COPY scripts /src/scripts
-RUN node scripts/ensure-identify-data.mjs --redump-all \
+RUN node scripts/ensure-identify-data.mjs \
     && node scripts/build-identify-release-data.mjs \
     && cp -a target/identify-release/share /share
 

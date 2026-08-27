@@ -7,16 +7,16 @@ import {
 
 const CATALOG = {
   format: "rom-weaver-identify-catalog-v1",
-  generated: { opengoodRevision: "abc123" },
+  generated: { libretroRevision: "def456", opengoodRevision: "abc123" },
   platforms: [
     {
       aliases: ["playstation", "psx", "ps1", "sony playstation"],
       canonicalPlatform: "Sony PlayStation",
-      mediaProfiles: ["redump-cd-track-v1"],
+      mediaProfiles: ["optical-single-image-v1"],
       packFormat: "RWFP2",
       packSha256: "f".repeat(64),
       packSlug: "sony-playstation",
-      source: "redump",
+      source: "libretro",
     },
     {
       aliases: ["sega mega drive genesis", "genesis", "mega drive"],
@@ -41,7 +41,7 @@ describe("parseIdentifyCatalog", () => {
   it("parses a v1 catalog", () => {
     const catalog = parseIdentifyCatalog(CATALOG);
     expect(catalog?.platforms).toHaveLength(2);
-    expect(catalog?.platforms[0]?.source).toBe("redump");
+    expect(catalog?.platforms[0]?.source).toBe("libretro");
   });
 
   it("rejects an unknown format and malformed platform entries", () => {
@@ -53,17 +53,17 @@ describe("parseIdentifyCatalog", () => {
     expect(catalog?.platforms).toHaveLength(1);
   });
 
-  it("fails closed on a Redump entry without a verifiable packSha256", () => {
-    const redump = { ...CATALOG.platforms[0] };
+  it("fails closed on any catalog-only entry without a verifiable packSha256", () => {
+    const libretro = { ...CATALOG.platforms[0] };
     const catalog = parseIdentifyCatalog({
       format: "rom-weaver-identify-catalog-v1",
       platforms: [
-        { ...redump, packSha256: "" },
-        { ...redump, packSlug: "other", packSha256: "not-hex" },
+        { ...libretro, packSha256: "" },
+        { ...libretro, packSlug: "other", packSha256: "not-hex" },
         CATALOG.platforms[1],
       ],
     });
-    // Only the OpenGood entry survives. The app must not fetch unverifiable Redump packs.
+    // Only the valid entry survives. The app must not read unverifiable packs.
     expect(catalog?.platforms.map((platform) => platform.packSlug)).toEqual(["sega-mega-drive-genesis"]);
   });
 });

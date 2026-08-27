@@ -573,6 +573,7 @@ fn redump_game_record(game: RedumpGame, platform: &str) -> Option<PackGame> {
         .map(|(ordinal, rom)| PackComponent {
             role: PackComponentRole::PrimaryPayload,
             ordinal: ordinal as u32,
+            hash_scope: "full_file".to_string(),
             filename: rom.name.filter(|name| !name.trim().is_empty()),
             size: rom.size,
             crc32: normalize_hash(rom.crc32, 8),
@@ -590,6 +591,9 @@ fn redump_game_record(game: RedumpGame, platform: &str) -> Option<PackGame> {
         platform: platform.to_string(),
         source: IdentifySource::Redump,
         upstream_source: UpstreamSource::Redump,
+        provenance: Vec::new(),
+        legacy_variant: false,
+        dump_tags: Vec::new(),
         game_id: None,
         region: None,
         language: None,
@@ -1245,6 +1249,9 @@ impl CliApp {
 /// Resolve an install or update target to a downloadable Redump platform.
 #[cfg(not(target_arch = "wasm32"))]
 fn resolve_install_platform(provider: &IdentifyPackProvider, system: &str) -> Result<String> {
+    if let Some(platform) = canonical_redump_platform(system) {
+        return Ok(platform.to_string());
+    }
     if let Some(entry) = provider.resolve_entry(system) {
         if entry.source == IdentifySource::OpenGood {
             return Err(RomWeaverError::Validation(format!(
@@ -1349,6 +1356,7 @@ mod tests {
         let component = |md5: &str| PackComponent {
             role: PackComponentRole::PrimaryPayload,
             ordinal: 0,
+            hash_scope: "full_file".to_string(),
             filename: None,
             size: 10,
             crc32: Some("aabbccdd".to_string()),
@@ -1365,6 +1373,9 @@ mod tests {
             platform: "P".to_string(),
             source: IdentifySource::Redump,
             upstream_source: UpstreamSource::Unknown,
+            provenance: Vec::new(),
+            legacy_variant: false,
+            dump_tags: Vec::new(),
             game_id: None,
             region: None,
             language: None,
@@ -1384,15 +1395,5 @@ mod tests {
         assert!(!games[0].components[0].discriminating);
         assert!(!games[1].components[0].discriminating);
         assert!(games[2].components[0].discriminating);
-    }
-
-    #[test]
-    fn every_redump_endpoint_has_a_builtin_catalog_entry() {
-        for (platform, _) in REDUMP_SYSTEMS {
-            let entry = IdentifyCatalog::builtin()
-                .resolve_platform(platform)
-                .expect("Redump platform in built-in catalog");
-            assert_eq!(entry.source, IdentifySource::Redump);
-        }
     }
 }

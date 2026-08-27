@@ -11,13 +11,14 @@ use rom_weaver_core::{ComponentRole, Result};
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
-use crate::identify_pack_v2::{ArtifactPack, PackComponent, PackGame};
+use crate::identify_pack_v2::{ArtifactPack, PackComponent, PackGame, PackProvenance};
 
 /// One hashed component of the artifact being identified.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FingerprintComponent {
     pub role: ComponentRole,
     pub ordinal: u32,
+    pub hash_scope: String,
     pub size: u64,
     pub crc32: Option<String>,
     pub md5: Option<String>,
@@ -44,6 +45,7 @@ impl ArtifactFingerprint {
             components: vec![FingerprintComponent {
                 role: ComponentRole::PrimaryPayload,
                 ordinal: 0,
+                hash_scope: "full_file".to_string(),
                 size,
                 crc32: crc32.map(str::to_string),
                 md5: md5.map(str::to_string),
@@ -89,6 +91,9 @@ pub struct MatchEvidence {
 pub struct ArtifactGameMatch {
     pub name: String,
     pub platform: String,
+    pub provenance: Vec<PackProvenance>,
+    pub legacy_variant: bool,
+    pub dump_tags: Vec<String>,
     pub evidence: MatchEvidence,
 }
 
@@ -112,6 +117,9 @@ fn unknown_outcome() -> ArtifactMatchOutcome {
 /// component's. A disagreeing strong hash (md5/sha1/sha256) rejects a (size,
 /// crc32) coincidence; at least one shared hash must agree.
 fn component_matches(artifact: &FingerprintComponent, pack: &PackComponent) -> bool {
+    if artifact.hash_scope != pack.hash_scope {
+        return false;
+    }
     // A pack size of 0 means the size is unknown upstream and cannot gate.
     if pack.size != 0 && artifact.size != pack.size {
         return false;
@@ -272,6 +280,9 @@ pub fn match_artifact(
                 ArtifactGameMatch {
                     name: game.name.clone(),
                     platform: game.platform.clone(),
+                    provenance: game.provenance.clone(),
+                    legacy_variant: game.legacy_variant,
+                    dump_tags: game.dump_tags.clone(),
                     evidence: result.evidence,
                 },
             ));
@@ -372,6 +383,7 @@ mod tests {
                 .map(|(index, (size, crc32, sha1))| FingerprintComponent {
                     role: ComponentRole::DataTrack,
                     ordinal: index as u32,
+                    hash_scope: "full_file".to_string(),
                     size,
                     crc32: Some(crc32.to_string()),
                     md5: None,
@@ -534,6 +546,22 @@ mod tests {
         .unwrap();
         assert_eq!(agreeing.status, ArtifactMatchStatus::Matched);
         assert_eq!(agreeing.quality, Some(ArtifactMatchQuality::Exact));
+    }
+
+    #[test]
+    fn hash_scope_mismatch_rejects_a_routed_candidate() {
+        let mut component =
+            component_json("primary_payload", 0, 4, Some("aabbccdd"), None, true, true);
+        component["hashScope"] = serde_json::json!("headerless");
+        let pack = pack_from_games(vec![("Headerless", vec![component])]);
+
+        let outcome = match_artifact(
+            &pack,
+            &ArtifactFingerprint::from_single_blob(4, Some("aabbccdd"), None, None),
+        )
+        .unwrap();
+
+        assert_eq!(outcome.status, ArtifactMatchStatus::Unknown);
     }
 
     #[test]

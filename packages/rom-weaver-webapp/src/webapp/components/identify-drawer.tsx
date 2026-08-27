@@ -64,6 +64,13 @@ const IdentifyDrawer = ({
   const algorithms = unique(matches.map((match) => match.algorithm.toUpperCase()));
   const variants = unique(matches.map((match) => match.variant));
   const databases = unique(matches.map((match) => formatIdentifySource(match.database)));
+  const provenance = unique(
+    matches.flatMap(
+      (match) => match.provenance?.map((item) => identifySourceLabel(item.sourceName || item.source)) ?? [],
+    ),
+  );
+  const dumpTags = unique(matches.flatMap((match) => match.dumpTags ?? []));
+  const legacyVariant = matches.some((match) => match.legacyVariant);
   const mark = IDENTIFY_STATUS_MARK[status];
 
   return (
@@ -138,6 +145,9 @@ const IdentifyDrawer = ({
             <EvidenceRow label="Variant" values={variants} />
             <EvidenceRow label="Platform" values={platforms.map(abbreviatePlatform)} />
             <EvidenceRow label="Source" values={databases} />
+            {provenance.length ? <EvidenceRow label="Provenance" values={provenance} /> : null}
+            {legacyVariant ? <EvidenceRow label="Variant class" values={["Legacy variant"]} /> : null}
+            {dumpTags.length ? <EvidenceRow label="Dump status" values={dumpTags} /> : null}
             {memberPath ? <EvidenceRow label="Archive member" values={[memberPath]} /> : null}
             {status === "ambiguous" ? (
               <EvidenceRow label="Candidates" values={[identifyMatchCountLabel(matches.length)]} />

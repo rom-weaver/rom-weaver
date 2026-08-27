@@ -46,12 +46,33 @@ pub enum PackComponentRole {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum UpstreamSource {
+    Libretro,
     Redump,
     NoIntro,
     Tosec,
     Mame,
     Fbneo,
+    OpenGood,
     Unknown,
+}
+
+/// One upstream source that contributed metadata to a merged lookup record.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub struct PackProvenance {
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+}
+
+fn default_hash_scope() -> String {
+    "full_file".to_string()
 }
 
 /// One hashed component of a pack game.
@@ -60,6 +81,9 @@ pub enum UpstreamSource {
 pub struct PackComponent {
     pub role: PackComponentRole,
     pub ordinal: u32,
+    /// The byte range or normalized representation covered by these hashes.
+    #[serde(default = "default_hash_scope")]
+    pub hash_scope: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filename: Option<String>,
     /// Decoded payload size in bytes; 0 when unknown upstream.
@@ -88,6 +112,15 @@ pub struct PackGame {
     pub platform: String,
     pub source: IdentifySource,
     pub upstream_source: UpstreamSource,
+    /// All sources that contributed this lookup record, in priority order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provenance: Vec<PackProvenance>,
+    /// True only when this hash exists solely in the legacy fallback source.
+    #[serde(default)]
+    pub legacy_variant: bool,
+    /// Parsed GoodTools status tags such as `!`, `b`, `o`, `h`, and `t`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dump_tags: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -111,6 +144,11 @@ struct PackManifest {
     source: IdentifySource,
     canonicalization_profile: String,
     canonicalization_version: u32,
+    /// Source metadata stays schemaless so old Redump manifests remain valid.
+    #[serde(default)]
+    provenance: serde_json::Value,
+    #[serde(default)]
+    generation_date: Option<String>,
 }
 
 /// The RWR2 routing index: sorted (crc32 bytes, size) keys to ref ids.
@@ -364,6 +402,14 @@ impl ArtifactPack {
         &self.manifest.canonicalization_profile
     }
 
+    pub fn provenance(&self) -> &serde_json::Value {
+        &self.manifest.provenance
+    }
+
+    pub fn generation_date(&self) -> Option<&str> {
+        self.manifest.generation_date.as_deref()
+    }
+
     pub fn games(&self) -> &[PackGame] {
         &self.games
     }
@@ -436,7 +482,22 @@ fn validate_game(game: &PackGame) -> Result<()> {
     ] {
         check_string(field.as_deref(), "game field")?;
     }
+    for provenance in &game.provenance {
+        check_string(Some(&provenance.source), "provenance source")?;
+        for field in [
+            &provenance.source_name,
+            &provenance.source_url,
+            &provenance.source_commit,
+            &provenance.license,
+        ] {
+            check_string(field.as_deref(), "provenance field")?;
+        }
+    }
+    for tag in &game.dump_tags {
+        check_string(Some(tag), "dump tag")?;
+    }
     for component in &game.components {
+        check_string(Some(&component.hash_scope), "component hash scope")?;
         check_string(component.filename.as_deref(), "component filename")?;
         check_hex(component.crc32.as_deref(), 8, "component crc32")?;
         check_hex(component.md5.as_deref(), 32, "component md5")?;
@@ -619,11 +680,63 @@ pub(crate) mod tests {
         assert_eq!(pack.platform(), "Nintendo Entertainment System");
         assert_eq!(pack.source(), IdentifySource::OpenGood);
         assert_eq!(pack.canonicalization_profile(), "opengood-cartridge-v1");
+        assert!(pack.provenance().is_null());
+        assert_eq!(pack.generation_date(), None);
         assert_eq!(pack.games().len(), 1);
         assert_eq!(pack.games()[0].upstream_source, UpstreamSource::NoIntro);
+        assert_eq!(pack.games()[0].components[0].hash_scope, "full_file");
+        assert!(pack.games()[0].provenance.is_empty());
+        assert!(!pack.games()[0].legacy_variant);
+        assert!(pack.games()[0].dump_tags.is_empty());
         assert_eq!(pack.route("AABBCCDD", 4).unwrap(), vec![(0, 0)]);
         assert!(pack.route("aabbccdd", 5).unwrap().is_empty());
         assert!(pack.route("00000000", 4).unwrap().is_empty());
+    }
+
+    #[test]
+    fn parses_merged_provenance_and_legacy_metadata() {
+        let mut game = game_json(
+            "Legacy Game [b]",
+            "Test Platform",
+            vec![component_json(
+                "primary_payload",
+                0,
+                4,
+                Some("aabbccdd"),
+                None,
+                true,
+                true,
+            )],
+        );
+        game["provenance"] = serde_json::json!([{
+            "source": "opengood",
+            "sourceName": "OpenGood",
+            "sourceUrl": "https://github.com/SnowflakePowered/opengood",
+            "sourceCommit": "abc123",
+            "license": "CC0-1.0"
+        }]);
+        game["legacyVariant"] = serde_json::json!(true);
+        game["dumpTags"] = serde_json::json!(["b"]);
+        game["components"][0]["hashScope"] = serde_json::json!("headerless");
+        let bytes = build_pack_container(&[
+            (
+                "games.json",
+                serde_json::to_vec(&serde_json::json!([game])).unwrap(),
+            ),
+            (
+                "route.bin",
+                build_route(vec![(([0xaa, 0xbb, 0xcc, 0xdd], 4), vec![0])]),
+            ),
+            ("refs.bin", build_refs(&[(0, 0)])),
+            ("manifest.json", manifest_json("Test Platform")),
+        ]);
+
+        let pack = ArtifactPack::parse(&bytes).expect("merged pack parses");
+        let game = &pack.games()[0];
+        assert!(game.legacy_variant);
+        assert_eq!(game.dump_tags, ["b"]);
+        assert_eq!(game.provenance[0].source, "opengood");
+        assert_eq!(game.components[0].hash_scope, "headerless");
     }
 
     #[test]

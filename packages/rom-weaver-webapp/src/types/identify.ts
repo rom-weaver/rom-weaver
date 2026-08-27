@@ -55,6 +55,17 @@ type ParsedIdentifyTitleMatch = {
   name: string;
   platform: string;
   variant: string;
+  provenance?: ParsedIdentifyProvenance[];
+  legacyVariant?: boolean;
+  dumpTags?: string[];
+};
+
+type ParsedIdentifyProvenance = {
+  license?: string;
+  source: string;
+  sourceCommit?: string;
+  sourceName?: string;
+  sourceUrl?: string;
 };
 
 /** Compact title lookup attached to an ingest asset or patch descriptor. */
@@ -138,6 +149,7 @@ export type {
   ParsedIdentifyEvidence,
   ParsedIdentifyLookupResult,
   ParsedIdentifyPlatformCandidate,
+  ParsedIdentifyProvenance,
   ParsedIdentifyResolution,
   ParsedIdentifyResult,
   ParsedIdentifyTitleMatch,

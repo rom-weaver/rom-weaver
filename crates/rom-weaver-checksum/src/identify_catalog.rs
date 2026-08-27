@@ -14,11 +14,11 @@ use tracing::trace;
 
 const CATALOG_FORMAT: &str = "rom-weaver-identify-catalog-v1";
 
-/// Which database a platform's pack was built from. Sources never mix inside
-/// one platform: an OpenGood miss never falls through to Redump.
+/// The primary metadata source for a platform pack.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum IdentifySource {
+    Libretro,
     #[serde(rename = "opengood")]
     OpenGood,
     Redump,
@@ -140,9 +140,8 @@ impl IdentifyCatalog {
     /// The built-in OpenGood catalog used when no `catalog.json` is available.
     pub fn builtin() -> &'static IdentifyCatalog {
         static BUILTIN: LazyLock<IdentifyCatalog> = LazyLock::new(|| {
-            let mut entries = builtin_entries();
-            entries.extend(redump_entries());
-            IdentifyCatalog::from_entries(entries).expect("built-in identify catalog is valid")
+            IdentifyCatalog::from_entries(builtin_entries())
+                .expect("built-in identify catalog is valid")
         });
         &BUILTIN
     }
@@ -150,6 +149,7 @@ impl IdentifyCatalog {
 
 /// Redump systems with downloadable DAT files. The CLI owns the matching
 /// endpoint names because network access is native-only.
+#[allow(dead_code)]
 fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
     fn entry(canonical: &str, aliases: &[&str]) -> IdentifyPlatformCatalogEntry {
         IdentifyPlatformCatalogEntry {

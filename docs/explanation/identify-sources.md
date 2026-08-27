@@ -1,74 +1,52 @@
 # Where identify data comes from
 
-`identify` matches a file's checksums against title databases. This page explains which database answers for which system, what each result status and quality means, and why some data ships with the tool while other data must stay on your machine. Nothing here is a procedure; the recipes are in [Identify and hash ROMs from the CLI](../how-to/identify-and-hash-files.md).
+`identify` matches local checksums against packs that ship with ROMWeaver. It never sends a checksum, file name, platform, or title to a lookup service.
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Two sources, one per system](#two-sources-one-per-system)
-- [What a result means](#what-a-result-means)
-- [Why a matched disc can still be "partial"](#why-a-matched-disc-can-still-be-partial)
-- [Shared audio tracks](#shared-audio-tracks)
+- [Primary and fallback data](#primary-and-fallback-data)
+- [Source precedence](#source-precedence)
+- [Legacy variants](#legacy-variants)
 - [Licensing](#licensing)
-- [Nothing leaves your machine](#nothing-leaves-your-machine)
+- [Local operation](#local-operation)
 - [Related](#related)
 
 <!-- END doctoc -->
 
-## Two sources, one per system
+## Primary and fallback data
 
-Identify data comes from exactly two places, and every system belongs to exactly one of them:
+[Libretro Database](https://github.com/libretro/libretro-database) supplies the primary metadata. ROMWeaver builds from an exact repository commit.
 
-- [OpenGood](https://github.com/SnowflakePowered/opengood) covers 17 cartridge systems. It is CC0, so its packs ship with native release packages and work offline.
-- [Redump](http://redump.org/) covers 56 optical-media systems. Its public DAT files become set-aware packs that the browser can download and cache.
+[OpenGood](https://github.com/SnowflakePowered/opengood) supplies historical GoodTools variants that Libretro does not know. ROMWeaver also pins this source to an exact commit.
 
-The sources never mix inside one system. An OpenGood system that returns no match stays unmatched; it never falls through to Redump. This keeps each answer traceable to one dataset. A "no match" means that the selected dataset does not know the file.
+## Source precedence
 
-## What a result means
+ROMWeaver compares records by the hash algorithm, normalized hash, file size, and hash scope. Libretro owns the title, region, and revision when both sources contain the same record.
 
-The `status` field says how many titles matched:
+An overlap has one lookup record. Its provenance lists both sources. OpenGood adds a record only when its hash key is absent from Libretro.
 
-- **matched** - exactly one title.
-- **ambiguous** - more than one title fits the same evidence.
-- **unknown** - none.
+## Legacy variants
 
-For set-aware databases, `quality` says how completely the match was proven:
+An OpenGood-only record has `legacy_variant: true`. It keeps its GoodTools tags, such as verified dumps, bad dumps, overdumps, hacks, and trainers.
 
-- **exact** - every required component of the title matched, and nothing unexpected was left over.
-- **partial** - at least one discriminating component matched, but some required components are missing or unexpected extras exist.
-- **metadata_only** - the database describes the title but carries no hashes strong enough to prove it from your file.
-
-An `unknown` status can carry a `condition` that explains itself:
-
-- **database_required** - the detected platform needs a pack that is not installed. The result's `hint` names the pack to install; this is an actionable gap, not a failed lookup.
-- **unsupported_media_profile** - the platform's database stores canonical per-track hashes, but the input was hashed as one payload the tool cannot map onto them. Today this means a whole-disc single-blob image checked against a redump-style CD or GD-ROM track database.
-
-`platform_candidates` lists the platforms detection considered, each with a confidence and the evidence behind it - a header magic, a disc serial, a file-name hint, or your own override.
-
-## Why a matched disc can still be "partial"
-
-A CD or GD-ROM title is a set of tracks, and the database knows the whole set. rom-weaver currently identifies CUE, GDI, and CHD inputs per selected payload track, not as a complete set. One matched data track proves a lot - data tracks are almost always unique to a title - but it does not prove the audio tracks are present and correct. So a single matched data track reports quality `partial`, and the result's evidence counts how many required components went unverified. Full set verification is the direction, not the current state.
-
-## Shared audio tracks
-
-Many CDs share byte-identical audio tracks: silence, standard pre-gaps, licensed jingles. The databases keep these tracks, but mark them non-discriminating. A non-discriminating track can support a match that a data track established, but it can never identify a title alone - otherwise every disc containing two seconds of silence would "match" hundreds of games. A file that matches only non-discriminating tracks reports `unknown`.
+The tags describe the historical dump. They do not replace the title or change source precedence.
 
 ## Licensing
 
-Both sources allow redistribution:
+Libretro Database uses CC-BY-SA-4.0. OpenGood uses CC0-1.0. The generated identify artifacts remain separate from the application license.
 
-- OpenGood data is CC0-1.0. It can be bundled, redistributed, and shipped in releases, so it is.
-- Redump states that its contributed metadata is public information. rom-weaver distributes derived packs and records their exact DAT source.
+Each RWFP2 manifest records each source name, URL, commit, license, and generation date. Each match also keeps the provenance that contributed its lookup record.
 
-Every built pack records where it came from: its source, the upstream revision, and the SHA-256 of the dump it was built from. [ROM identify data](../development/identify-data.md) documents the build details.
+## Local operation
 
-## Nothing leaves your machine
+Release packages install the complete pack set. The webapp precaches every pack during service-worker installation.
 
-Native identify downloads a Redump DAT only when you run a database install or update command. Identification reads local packs and sends no ROM data. The browser downloads packs from rom-weaver's own site and verifies each SHA-256 value. Your files stay on the device.
+Identification reads only installed application assets. A missing local pack makes identification unavailable. It does not start a network lookup.
 
 ## Related
 
-- [Identify and hash ROMs from the CLI](../how-to/identify-and-hash-files.md): the recipes.
-- [CLI reference](../reference/cli.md#identify): every flag, subcommand, and result field.
-- [ROM identify data](../development/identify-data.md): how the packs are built.
-- [Why your files stay on your device](local-first.md): the local-first model.
+- [Identify and hash ROMs from the CLI](../how-to/identify-and-hash-files.md)
+- [CLI reference](../reference/cli.md#identify)
+- [ROM identify data](../development/identify-data.md)
+- [Why your files stay on your device](local-first.md)

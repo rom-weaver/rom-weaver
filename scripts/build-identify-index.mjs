@@ -12,8 +12,7 @@ import zlib from "node:zlib";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, "..");
-const REDUMP_DAT_BASE = "http://redump.org/datfile/";
-const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), "rom-weaver-redump-dats");
+const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), "rom-weaver-identify-dats");
 const DEFAULT_OUT = path.join(ROOT_DIR, "target/identify");
 
 const PACK_MAGIC = Buffer.from("RWFP1\0\0\0", "binary");
@@ -29,101 +28,294 @@ export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
 export const INDEX_FORMAT_V2 = "rom-weaver-identify-system-pack-v2";
 export const CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
 
-// OpenGood (https://github.com/SnowflakePowered/opengood) publishes the
-// GoodTools cartridge sets as CC0 Logiqx XML DATs. We prefer it for the
-// cartridge platforms it covers: it carries the full GoodTools dump variety
-// (verified [!], bad [b], overdump [o], alternate [a], hacks, translations,
-// PRG revisions) that No-Intro/Redump deliberately omit, and is license-clean.
-// Disc systems and modern handhelds are not in OpenGood, so those fall back to
-// the Redump dump (No-Intro/Redump-derived). Each supported platform draws
-// from exactly ONE source, so per-system packs never mix sources / hashes.
+// OpenGood publishes GoodTools cartridge sets as CC0 Logiqx XML DATs. It adds
+// historical dump variants to matching Libretro packs and owns its standalone packs.
 export const OPENGOOD_REPOSITORY = "https://github.com/SnowflakePowered/opengood";
 export const OPENGOOD_REVISION = "5cbd95ef3f5904b9e067042ae8dd08a35c39c89a";
-const OPENGOOD_RAW_REPOSITORY = OPENGOOD_REPOSITORY.replace(
-  "https://github.com/",
-  "https://raw.githubusercontent.com/",
+export const OPENGOOD_LICENSE = "CC0-1.0";
+export const LIBRETRO_REPOSITORY = "https://github.com/libretro/libretro-database";
+export const LIBRETRO_REVISION = "69ea62a2823823820d4f121c2b53bf20fd088ab4";
+export const LIBRETRO_LICENSE = "CC-BY-SA-4.0";
+export const IDENTIFY_GENERATION_DATE = "2026-08-27";
+// This is the complete pinned source manifest: the 52 root DATs, 92 No-Intro
+// DATs, and 22 Redump DATs. Do not replace it with a live directory listing.
+export const LIBRETRO_DAT_PATHS = Object.freeze([
+  "dat/Amstrad - CPC.dat",
+  "dat/Arduboy Inc - Arduboy.dat",
+  "dat/Atomiswave.dat",
+  "dat/CHIP-8.dat",
+  "dat/Cannonball.dat",
+  "dat/Cave Story.dat",
+  "dat/ChaiLove.dat",
+  "dat/Commodore - Amiga.dat",
+  "dat/Commodore - CD32.dat",
+  "dat/DICE.dat",
+  "dat/DOOM.dat",
+  "dat/DOS.dat",
+  "dat/Dinothawr.dat",
+  "dat/Enterprise - 128.dat",
+  "dat/Flashback.dat",
+  "dat/HBMAME.dat",
+  "dat/Handheld Electronic Game.dat",
+  "dat/Infocom - Z-Machine.dat",
+  "dat/Jump 'n Bump.dat",
+  "dat/LowRes NX.dat",
+  "dat/Lutro.dat",
+  "dat/MicroW8.dat",
+  "dat/Mobile - J2ME.dat",
+  "dat/MrBoom.dat",
+  "dat/NEC - PC-98.dat",
+  "dat/Nintendo - GameCube.dat",
+  "dat/Nintendo - Nintendo Entertainment System.dat",
+  "dat/Nintendo - Super Nintendo Entertainment System.dat",
+  "dat/Nintendo - Wii U.dat",
+  "dat/Nintendo - Wii.dat",
+  "dat/PICO-8.dat",
+  "dat/PuzzleScript.dat",
+  "dat/Quake II.dat",
+  "dat/Quake III.dat",
+  "dat/Quake.dat",
+  "dat/RPG Maker.dat",
+  "dat/Rick Dangerous.dat",
+  "dat/SNK - Neo Geo.dat",
+  "dat/ScummVM.dat",
+  "dat/Sega - Saturn.dat",
+  "dat/Sinclair - ZX 81.dat",
+  "dat/Sinclair - ZX Spectrum.dat",
+  "dat/Sony - PlayStation 3.dat",
+  "dat/Sony - PlayStation Minis.dat",
+  "dat/System.dat",
+  "dat/TIC-80.dat",
+  "dat/Tomb Raider.dat",
+  "dat/Uzebox.dat",
+  "dat/Videoton - TV-Computer.dat",
+  "dat/Vircon32.dat",
+  "dat/WASM-4.dat",
+  "dat/Wolfenstein 3D.dat",
+  "metadat/no-intro/Arduboy Inc - Arduboy.dat",
+  "metadat/no-intro/Atari - 2600.dat",
+  "metadat/no-intro/Atari - 5200.dat",
+  "metadat/no-intro/Atari - 7800.dat",
+  "metadat/no-intro/Atari - 8-bit Family.dat",
+  "metadat/no-intro/Atari - Jaguar.dat",
+  "metadat/no-intro/Atari - Lynx.dat",
+  "metadat/no-intro/Atari - ST.dat",
+  "metadat/no-intro/Bandai - WonderSwan Color.dat",
+  "metadat/no-intro/Bandai - WonderSwan.dat",
+  "metadat/no-intro/Benesse - Pocket Challenge V2.dat",
+  "metadat/no-intro/Casio - Loopy.dat",
+  "metadat/no-intro/Casio - PV-1000.dat",
+  "metadat/no-intro/Coleco - ColecoVision.dat",
+  "metadat/no-intro/Commodore - 64.dat",
+  "metadat/no-intro/Commodore - Amiga.dat",
+  "metadat/no-intro/Commodore - Plus-4.dat",
+  "metadat/no-intro/Commodore - VIC-20.dat",
+  "metadat/no-intro/Emerson - Arcadia 2001.dat",
+  "metadat/no-intro/Entex - Adventure Vision.dat",
+  "metadat/no-intro/Epoch - Super Cassette Vision.dat",
+  "metadat/no-intro/Fairchild - Channel F.dat",
+  "metadat/no-intro/Funtech - Super Acan.dat",
+  "metadat/no-intro/GCE - Vectrex.dat",
+  "metadat/no-intro/GamePark - GP32.dat",
+  "metadat/no-intro/Hartung - Game Master.dat",
+  "metadat/no-intro/Interton - VC 4000.dat",
+  "metadat/no-intro/Konami - Picno.dat",
+  "metadat/no-intro/LeapFrog - LeapPad.dat",
+  "metadat/no-intro/LeapFrog - Leapster Learning Game System.dat",
+  "metadat/no-intro/Magnavox - Odyssey2.dat",
+  "metadat/no-intro/Mattel - Intellivision.dat",
+  "metadat/no-intro/Microsoft - MSX.dat",
+  "metadat/no-intro/Microsoft - MSX2.dat",
+  "metadat/no-intro/Microsoft - XBOX 360 (Games on Demand).dat",
+  "metadat/no-intro/Microsoft - XBOX 360 (Title Updates).dat",
+  "metadat/no-intro/Microsoft - Xbox 360 (Digital).dat",
+  "metadat/no-intro/Microsoft - Xbox 360.dat",
+  "metadat/no-intro/Mobile - J2ME.dat",
+  "metadat/no-intro/Mobile - Palm OS.dat",
+  "metadat/no-intro/Mobile - Symbian.dat",
+  "metadat/no-intro/Mobile - Zeebo.dat",
+  "metadat/no-intro/NEC - PC Engine - TurboGrafx 16.dat",
+  "metadat/no-intro/NEC - PC Engine SuperGrafx.dat",
+  "metadat/no-intro/Nintendo - Family Computer Disk System.dat",
+  "metadat/no-intro/Nintendo - Game Boy Advance.dat",
+  "metadat/no-intro/Nintendo - Game Boy Color.dat",
+  "metadat/no-intro/Nintendo - Game Boy.dat",
+  "metadat/no-intro/Nintendo - New Nintendo 3DS (Digital).dat",
+  "metadat/no-intro/Nintendo - New Nintendo 3DS.dat",
+  "metadat/no-intro/Nintendo - Nintendo 3DS (Digital).dat",
+  "metadat/no-intro/Nintendo - Nintendo 3DS.dat",
+  "metadat/no-intro/Nintendo - Nintendo 64.dat",
+  "metadat/no-intro/Nintendo - Nintendo 64DD.dat",
+  "metadat/no-intro/Nintendo - Nintendo DS (Download Play).dat",
+  "metadat/no-intro/Nintendo - Nintendo DS.dat",
+  "metadat/no-intro/Nintendo - Nintendo DSi.dat",
+  "metadat/no-intro/Nintendo - Nintendo Entertainment System.dat",
+  "metadat/no-intro/Nintendo - Pokemon Mini.dat",
+  "metadat/no-intro/Nintendo - Satellaview.dat",
+  "metadat/no-intro/Nintendo - Sufami Turbo.dat",
+  "metadat/no-intro/Nintendo - Super Nintendo Entertainment System.dat",
+  "metadat/no-intro/Nintendo - Virtual Boy.dat",
+  "metadat/no-intro/Nintendo - Wii (Digital).dat",
+  "metadat/no-intro/Nintendo - Wii U (Digital).dat",
+  "metadat/no-intro/Nintendo - e-Reader.dat",
+  "metadat/no-intro/Philips - Videopac+.dat",
+  "metadat/no-intro/RCA - Studio II.dat",
+  "metadat/no-intro/SNK - Neo Geo Pocket Color.dat",
+  "metadat/no-intro/SNK - Neo Geo Pocket.dat",
+  "metadat/no-intro/Sega - 32X.dat",
+  "metadat/no-intro/Sega - Beena.dat",
+  "metadat/no-intro/Sega - Game Gear.dat",
+  "metadat/no-intro/Sega - Master System - Mark III.dat",
+  "metadat/no-intro/Sega - Mega Drive - Genesis.dat",
+  "metadat/no-intro/Sega - PICO.dat",
+  "metadat/no-intro/Sega - SG-1000.dat",
+  "metadat/no-intro/Sharp - X1.dat",
+  "metadat/no-intro/Sharp - X68000.dat",
+  "metadat/no-intro/Sinclair - ZX Spectrum +3.dat",
+  "metadat/no-intro/Sony - PlayStation 3 (PSN).dat",
+  "metadat/no-intro/Sony - PlayStation Portable (PSN).dat",
+  "metadat/no-intro/Sony - PlayStation Portable (PSX2PSP).dat",
+  "metadat/no-intro/Sony - PlayStation Portable (UMD Music).dat",
+  "metadat/no-intro/Sony - PlayStation Portable.dat",
+  "metadat/no-intro/Sony - PlayStation Vita (PSN).dat",
+  "metadat/no-intro/Sony - PlayStation Vita.dat",
+  "metadat/no-intro/Tiger - Game.com.dat",
+  "metadat/no-intro/VTech - CreatiVision.dat",
+  "metadat/no-intro/VTech - V.Smile.dat",
+  "metadat/no-intro/Watara - Supervision.dat",
+  "metadat/no-intro/Sony - PlayStation Portable (UMD Video).dat",
+  "metadat/redump/Atari - Jaguar CD.dat",
+  "metadat/redump/Commodore - CD32.dat",
+  "metadat/redump/Commodore - CDTV.dat",
+  "metadat/redump/Microsoft - Xbox 360.dat",
+  "metadat/redump/Microsoft - Xbox.dat",
+  "metadat/redump/NEC - PC Engine CD - TurboGrafx-CD.dat",
+  "metadat/redump/NEC - PC-98.dat",
+  "metadat/redump/NEC - PC-FX.dat",
+  "metadat/redump/Nintendo - GameCube.dat",
+  "metadat/redump/Nintendo - Wii.dat",
+  "metadat/redump/Philips - CD-i.dat",
+  "metadat/redump/SNK - Neo Geo CD.dat",
+  "metadat/redump/Sega - Dreamcast.dat",
+  "metadat/redump/Sega - Mega-CD - Sega CD.dat",
+  "metadat/redump/Sega - Naomi 2.dat",
+  "metadat/redump/Sega - Naomi.dat",
+  "metadat/redump/Sega - Saturn.dat",
+  "metadat/redump/Sony - PlayStation 2.dat",
+  "metadat/redump/Sony - PlayStation 3.dat",
+  "metadat/redump/Sony - PlayStation Portable.dat",
+  "metadat/redump/Sony - PlayStation.dat",
+  "metadat/redump/The 3DO Company - 3DO.dat",
+]);
+
+export const LIBRETRO_PLATFORM_PATHS = Object.freeze(
+  Object.fromEntries(
+    [...new Set(LIBRETRO_DAT_PATHS.map((sourcePath) => path.basename(sourcePath, ".dat")))]
+      .sort()
+      .map((platform) => [
+        platform,
+        LIBRETRO_DAT_PATHS.filter(
+          (sourcePath) => path.basename(sourcePath, ".dat") === platform,
+        ).sort(
+          (left, right) =>
+            Number(left.startsWith("dat/")) - Number(right.startsWith("dat/")) ||
+            (left < right ? -1 : left > right ? 1 : 0),
+        ),
+      ]),
+  ),
 );
-const OPENGOOD_RAW_BASE = `${OPENGOOD_RAW_REPOSITORY}/${OPENGOOD_REVISION}/dats/`;
-export const OPENGOOD_PLATFORMS = Object.freeze({
-  "Atari 2600": ["Open2600.dat"],
-  "Atari 5200": ["Open5200.dat"],
-  "Atari 7800": ["Open7800.dat"],
-  "Atari Lynx": ["OpenLynx.dat"],
-  "Neo Geo Pocket": ["OpenNGPx.NGP.dat"],
-  "Neo Geo Pocket Color": ["OpenNGPx.NGC.dat"],
-  "Nintendo 64": ["OpenN64.N64.dat"],
-  "Nintendo Entertainment System": ["OpenNES.dat"],
-  "Nintendo Game Boy": ["OpenGBx.GB.dat"],
-  "Nintendo Game Boy Advance": ["OpenGBA.GBA.dat"],
-  "Nintendo Game Boy Color": ["OpenGBx.GBC.dat"],
-  "Nintendo Super Nintendo Entertainment System": ["OpenSNES.SNES.dat"],
-  "Sega 32X": ["OpenGen.32X.dat"],
-  "Sega Game Gear": ["OpenGG.dat"],
-  "Sega Master System": ["OpenSMS.dat"],
-  "Sega Mega Drive _ Genesis": ["OpenGen.Gen.dat"],
-  "TurboGrafx-16_PC Engine": ["OpenPCE.dat"],
+
+// OpenGood names its historical sets differently. A fallback is only merged
+// into its listed Libretro platform; no OpenGood DAT builds a duplicate pack.
+export const OPENGOOD_FALLBACKS = Object.freeze({
+  "Amstrad - CPC": ["OpenCPC.dat"],
+  "Nintendo - Nintendo Entertainment System": ["OpenNES.dat"],
+  "Nintendo - Super Nintendo Entertainment System": ["OpenSNES.SNES.dat"],
 });
 
-// Redump uses these short system identifiers in its public DAT download URLs.
-// Keep this list explicit. The site has no machine-readable system DAT index.
-export const REDUMP_PLATFORMS = Object.freeze({
-  "Acorn Archimedes": "arch",
-  "Apple Macintosh": "mac",
-  "Atari Jaguar CD Interactive Multimedia System": "ajcd",
-  "Bandai Pippin": "pippin",
-  "Bandai Playdia Quick Interactive System": "qis",
-  "Commodore Amiga CD": "acd",
-  "Commodore Amiga CD32": "cd32",
-  "Commodore Amiga CDTV": "cdtv",
-  "Fujitsu FM Towns series": "fmt",
-  "funworld Photo Play": "fpp",
-  "IBM PC compatible": "pc",
-  "Incredible Technologies Eagle": "ite",
-  "Konami e-Amusement": "kea",
-  "Konami FireBeat": "kfb",
-  "Konami System 573": "ks573",
-  "Konami System GV": "ksgv",
-  "Mattel Fisher-Price iXL": "ixl",
-  "Mattel HyperScan": "hs",
-  "Memorex Visual Information System": "vis",
-  "Microsoft Xbox": "xbox",
-  "Microsoft Xbox 360": "xbox360",
-  "Namco - Sega - Nintendo Triforce": "trf",
-  "Namco System 246": "ns246",
-  "NEC PC Engine CD & TurboGrafx CD": "pce",
-  "NEC PC-88 series": "pc-88",
-  "NEC PC-98 series": "pc-98",
-  "NEC PC-FX & PC-FXGA": "pc-fx",
-  "Neo Geo CD": "ngcd",
-  "Nintendo GameCube": "gc",
-  "Nintendo Wii": "wii",
-  "Palm OS": "palm",
-  "Panasonic 3DO Interactive Multiplayer": "3do",
-  "Philips CD-i": "cdi",
-  "Photo CD": "photo-cd",
-  "PlayStation GameShark Updates": "psxgs",
-  "Pocket PC": "ppc",
-  "Sega Chihiro": "chihiro",
-  "Sega Dreamcast": "dc",
-  "Sega Lindbergh": "lindbergh",
-  "Sega Mega CD & Sega CD": "mcd",
-  "Sega Naomi": "naomi",
-  "Sega Naomi 2": "naomi2",
-  "Sega Prologue 21 Multimedia Karaoke System": "sp21",
-  "Sega RingEdge": "sre",
-  "Sega RingEdge 2": "sre2",
-  "Sega Saturn": "ss",
-  "Sharp X68000": "x68k",
-  "Sony PlayStation": "psx",
-  "Sony PlayStation 2": "ps2",
-  "Sony PlayStation 3": "ps3",
-  "Sony PlayStation Portable": "psp",
-  "TAB-Austria Quizard": "quizard",
-  "Tomy Kiss-Site": "ksite",
-  "VM Labs NUON": "nuon",
-  "VTech V.Flash & V.Smile Pro": "vflash",
-  "ZAPiT Games Game Wave Family Entertainment System": "gamewave",
+// Original OpenGood aggregate DATs. Keep these separate from their split DATs
+// so a complete fallback never duplicates one component in two platform packs.
+export const OPENGOOD_ONLY_PLATFORMS = Object.freeze({
+  "Atari - 2600": ["Open2600.dat"],
+  "Atari - 5200": ["Open5200.dat"],
+  "Atari - 7800": ["Open7800.dat"],
+  "Fairchild - Channel F": ["OpenChaF.dat"],
+  "Tandy - Color Computer": ["OpenCoCo.dat"],
+  "Coleco - ColecoVision": ["OpenCol.dat"],
+  "Commodore - 64": ["OpenGB64.dat"],
+  "Nintendo - Game Boy Advance": ["OpenGBA.GBA.dat"],
+  "Nintendo - Game Boy Advance Multiboot": ["OpenGBA.MB.dat"],
+  "Nintendo - e-Reader": ["OpenGBA.E+.dat"],
+  "Nintendo - Game Boy": ["OpenGBx.GB.dat"],
+  "Nintendo - Game Boy Color": ["OpenGBx.GBC.dat"],
+  "Tiger - Game.com": ["OpenGCOM.dat"],
+  "Sega - Game Gear": ["OpenGG.dat"],
+  "Sega - Mega Drive and Genesis": ["OpenGen.Gen.dat"],
+  "Sega - 32X": ["OpenGen.32X.dat"],
+  "Mattel - Intellivision": ["OpenINTV.dat"],
+  "Atari - Jaguar": ["OpenJag.dat"],
+  "Atari - Lynx": ["OpenLynx.dat"],
+  "Thomson - MO5": ["OpenMO5.dat"],
+  "Microsoft - MSX": ["OpenMSX1.dat"],
+  "Microsoft - MSX2": ["OpenMSX2.dat"],
+  "Memotech - MTX": ["OpenMTX.dat"],
+  "Nintendo - Nintendo 64": ["OpenN64.N64.dat"],
+  "Nintendo - Nintendo 64DD": ["OpenN64.64DD.dat"],
+  "SNK - Neo Geo Pocket": ["OpenNGPx.NGP.dat"],
+  "SNK - Neo Geo Pocket Color": ["OpenNGPx.NGC.dat"],
+  "Tangerine - Oric": ["OpenOric.dat"],
+  "NEC - PC Engine and TurboGrafx-16": ["OpenPCE.dat"],
+  "Commodore - PSID": ["OpenPSID.dat"],
+  "Sega - Pico": ["OpenPico.dat"],
+  "SAM Coupé": ["OpenSAMC.dat"],
+  "Sega - Master System": ["OpenSMS.dat"],
+  "Super Nintendo Entertainment System - SPC Music": ["OpenSPC.dat"],
+  "Watara - Supervision": ["OpenSV.dat"],
+  "Nintendo - Virtual Boy": ["OpenVBoy.dat"],
+  "GCE - Vectrex": ["OpenVECT.dat"],
+  "Nintendo - Satellaview": ["OpenSNES.BS.dat"],
+  "Nintendo - Sufami Turbo": ["OpenSNES.ST.dat"],
+  "Bandai - WonderSwan": ["OpenWSx.WS.dat"],
+  "Bandai - WonderSwan Color": ["OpenWSx.WSC.dat"],
 });
+
+const OPENGOOD_LIBRETRO_TARGETS = Object.freeze({
+  "NEC - PC Engine and TurboGrafx-16": "NEC - PC Engine - TurboGrafx 16",
+  "Sega - Master System": "Sega - Master System - Mark III",
+  "Sega - Mega Drive and Genesis": "Sega - Mega Drive - Genesis",
+  "Sega - Pico": "Sega - PICO",
+  "Nintendo - Game Boy Advance Multiboot": "Nintendo - Game Boy Advance",
+  "Nintendo - Nintendo 64DD": "Nintendo - Nintendo 64DD",
+});
+
+function openGoodTarget(platform) {
+  const target = OPENGOOD_LIBRETRO_TARGETS[platform] ?? platform;
+  return LIBRETRO_PLATFORM_PATHS[target] ? target : undefined;
+}
+
+const GENERATED_OPENGOOD_FALLBACKS = Object.entries(OPENGOOD_ONLY_PLATFORMS).reduce(
+  (fallbacks, [platform, files]) => {
+    const target = openGoodTarget(platform);
+    if (target) fallbacks[target] = [...(fallbacks[target] ?? []), ...files];
+    return fallbacks;
+  },
+  { ...OPENGOOD_FALLBACKS },
+);
+
+export const COMPLETE_OPENGOOD_FALLBACKS = Object.freeze(
+  Object.fromEntries(
+    Object.entries(GENERATED_OPENGOOD_FALLBACKS).map(([platform, files]) => [
+      platform,
+      [...files].sort(),
+    ]),
+  ),
+);
+
+export const OPENGOOD_STANDALONE_PLATFORMS = Object.freeze(
+  Object.fromEntries(
+    Object.entries(OPENGOOD_ONLY_PLATFORMS).filter(([platform]) => !openGoodTarget(platform)),
+  ),
+);
 
 export function slugifyPlatform(platform) {
   return platform
@@ -134,22 +326,10 @@ export function slugifyPlatform(platform) {
 
 // Curated media-profile hints for known platform names. This map MUST NOT gate
 // which platforms build. Unknown platforms get the default profile below.
-export const DEFAULT_MEDIA_PROFILE = "nointro-single-image-v1";
-export const REDUMP_DEFAULT_MEDIA_PROFILE = "redump-optical-single-image-v1";
+export const DEFAULT_MEDIA_PROFILE = "libretro-clrmamepro-v1";
 export const KNOWN_PLATFORM_PROFILES = Object.freeze({
-  "NEC PC Engine CD & TurboGrafx CD": "redump-cd-track-v1",
-  "Neo Geo CD": "redump-cd-track-v1",
-  "Nintendo 3DS": "3ds-decoded-card-v1",
-  "Nintendo GameCube": "gamecube-decoded-iso-v1",
-  "Nintendo New 3DS": "3ds-decoded-card-v1",
-  "Nintendo Wii": "wii-decoded-iso-v1",
-  "Playstation minis": "psp-decoded-iso-v1",
-  "Sega Dreamcast": "redump-gdrom-track-v1",
-  "Sega Mega CD & Sega CD": "redump-cd-track-v1",
-  "Sega Saturn": "redump-cd-track-v1",
-  "Sony PlayStation": "redump-cd-track-v1",
-  "Sony PlayStation 2": "redump-cd-track-v1",
-  "Sony PlayStation Portable": "psp-decoded-iso-v1",
+  "Nintendo - GameCube": "gamecube-decoded-iso-v1",
+  "Nintendo - Wii": "wii-decoded-iso-v1",
 });
 
 // Curated alias table, keyed by canonical platform name. Alias matching is
@@ -158,32 +338,46 @@ export const KNOWN_PLATFORM_PROFILES = Object.freeze({
 // platform's curated alias (e.g. a discovered "GBA" dump directory claims
 // "gba"); a collision between two platforms' own names is a build error.
 export const CURATED_ALIASES = Object.freeze({
-  "Family Computer Disk System": ["fds", "famicom disk system"],
-  "Neo Geo Pocket": ["ngp"],
-  "Neo Geo Pocket Color": ["ngpc"],
-  "Nintendo 3DS": ["3ds"],
-  "Nintendo DS": ["nds", "ds"],
-  "Nintendo Entertainment System": ["nes", "famicom", "family computer"],
-  "Nintendo Famicom Disk System": ["nintendo fds"],
-  "Nintendo Game Boy": ["game boy", "gb"],
-  "Nintendo Game Boy Advance": ["game boy advance", "gba"],
-  "Nintendo Game Boy Color": ["game boy color", "gbc"],
-  "Nintendo GameCube": ["gamecube", "gc", "ngc"],
-  "Nintendo Super Nintendo Entertainment System": ["snes", "super famicom", "super nintendo"],
-  "Nintendo Wii": ["wii"],
-  "Sega Game Gear": ["game gear", "gg"],
-  "Sega Master System": ["master system", "sms"],
-  "Sega Mega Drive _ Genesis": [
+  "Nintendo - Family Computer Disk System": ["fds", "famicom disk system", "nintendo fds"],
+  "SNK - Neo Geo Pocket": ["neo geo pocket", "ngp"],
+  "SNK - Neo Geo Pocket Color": ["neo geo pocket color", "ngpc"],
+  "Nintendo - Nintendo 3DS": ["nintendo 3ds", "3ds"],
+  "Nintendo - Nintendo DS": ["nintendo ds", "nds", "ds"],
+  "Nintendo - Nintendo Entertainment System": [
+    "nintendo entertainment system",
+    "nes",
+    "famicom",
+    "family computer",
+  ],
+  "Nintendo - Game Boy": ["nintendo game boy", "game boy", "gb"],
+  "Nintendo - Game Boy Advance": ["nintendo game boy advance", "game boy advance", "gba"],
+  "Nintendo - Game Boy Color": ["nintendo game boy color", "game boy color", "gbc"],
+  "Nintendo - GameCube": ["nintendo gamecube", "gamecube", "gc", "ngc"],
+  "Nintendo - Super Nintendo Entertainment System": [
+    "nintendo super nintendo entertainment system",
+    "snes",
+    "super famicom",
+    "super nintendo",
+  ],
+  "Nintendo - Wii": ["nintendo wii", "wii"],
+  "Sega - Game Gear": ["sega game gear", "game gear", "gg"],
+  "Sega - Master System - Mark III": ["sega master system", "master system", "sms"],
+  "Sega - Mega Drive - Genesis": [
     "genesis",
     "mega drive",
     "megadrive",
     "sega genesis",
     "sega mega drive",
   ],
-  "Sony PlayStation": ["playstation", "psx", "ps1"],
-  "Sony PlayStation 2": ["ps2", "playstation 2"],
-  "Sony PlayStation Portable": ["psp", "playstation portable"],
-  "TurboGrafx-16_PC Engine": ["turbografx", "turbografx 16", "pc engine"],
+  "Sony - PlayStation": ["sony playstation", "playstation", "psx", "ps1"],
+  "Sony - PlayStation 2": ["sony playstation 2", "ps2", "playstation 2"],
+  "Sony - PlayStation Portable": ["sony playstation portable", "psp", "playstation portable"],
+  "NEC - PC Engine - TurboGrafx 16": [
+    "turbografx-16 pc engine",
+    "turbografx",
+    "turbografx 16",
+    "pc engine",
+  ],
 });
 
 export function normalizeAlias(value) {
@@ -199,27 +393,19 @@ const ALGORITHMS = Object.freeze({
   sha1: { code: 2, hashBytes: 20 },
 });
 
-const usage = () => `Build per-system ROM-identify packs from OpenGood (CC0 cartridge DATs) and
-Redump (optical-disc DATs). OpenGood platforms emit RWFP1 packs. Redump
-platforms emit grouped RWFP2 packs. index.json and catalog.json are written
-next to the packs.
+const usage = () => `Build per-system RWFP2 ROM-identify packs from pinned Libretro DATs.
+Mapped OpenGood records add legacy variants. index.json and catalog.json are
+written next to the packs.
 
 Usage:
   node scripts/build-identify-index.mjs
-  node scripts/build-identify-index.mjs --only "Nintendo Entertainment System"
+  node scripts/build-identify-index.mjs --only "Nintendo - Nintendo Entertainment System"
 
 Options:
   --out <dir>              Output directory for per-system packs. Defaults to ${DEFAULT_OUT}
   --only <platforms>       Comma-separated platform name(s) to build (repeatable).
-                          OpenGood-only selections skip Redump downloads.
-  --opengood-only          Build every license-clear OpenGood platform.
-  --redump-all             Build all configured Redump optical platforms too.
-  --cache-dir <path>       Download and row-cache directory. Defaults to ${DEFAULT_CACHE_DIR}
-  --refresh-dump           Redownload cached Redump DAT ZIP files.
-  --force-row-cache        Rebuild the per-system row cache even if it matches.
-  --keep-shared            RWFP1 only: keep ROMs that are byte-identical across
-                          >1 game (shared CD audio tracks); default drops them.
-                          RWFP2 always keeps them, marked non-discriminating.
+  --cache-dir <path>       Download and game-cache directory. Defaults to ${DEFAULT_CACHE_DIR}
+  --force-row-cache        Rebuild the per-system game cache even if it matches.
   --download-only          Download/resolve sources, then stop.
   --no-brotli              Do not emit <pack>.br files.
   --brotli-quality <n>     Brotli quality 0-11. Defaults to 11.
@@ -235,17 +421,13 @@ function parseArgs(argv) {
     allowMissingPlatforms: false,
     brotli: true,
     brotliQuality: 11,
-    cacheDir: process.env.ROM_WEAVER_REDUMP_CACHE_DIR || DEFAULT_CACHE_DIR,
+    cacheDir: process.env.ROM_WEAVER_IDENTIFY_CACHE_DIR || DEFAULT_CACHE_DIR,
     downloadOnly: false,
     forceRowCache: false,
-    keepShared: false,
     maxObjects: undefined,
     only: [],
-    openGoodOnly: false,
     outPath: DEFAULT_OUT,
     printPlatforms: false,
-    refreshDump: false,
-    redumpAll: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -264,11 +446,7 @@ function parseArgs(argv) {
         const trimmed = name.trim();
         if (trimmed) options.only.push(trimmed);
       }
-    } else if (arg === "--keep-shared") options.keepShared = true;
-    else if (arg === "--opengood-only") options.openGoodOnly = true;
-    else if (arg === "--redump-all") options.redumpAll = true;
-    else if (arg === "--refresh-dump") options.refreshDump = true;
-    else if (arg === "--force-row-cache") options.forceRowCache = true;
+    } else if (arg === "--force-row-cache") options.forceRowCache = true;
     else if (arg === "--download-only") options.downloadOnly = true;
     else if (arg === "--no-brotli") options.brotli = false;
     else if (arg === "--allow-missing-platforms") options.allowMissingPlatforms = true;
@@ -282,10 +460,6 @@ function parseArgs(argv) {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
-  if (options.openGoodOnly && options.redumpAll) {
-    throw new Error("--opengood-only cannot be combined with --redump-all");
-  }
-
   if (
     !Number.isInteger(options.brotliQuality) ||
     options.brotliQuality < 0 ||
@@ -379,29 +553,79 @@ async function runCommandText(command, args) {
   return stdout;
 }
 
-async function downloadRedumpDat(platform, cacheDir, refresh) {
-  const systemSlug = REDUMP_PLATFORMS[platform];
-  if (!systemSlug) throw new Error(`Redump platform is not configured: ${platform}`);
-  const dir = path.join(cacheDir, "redump");
-  const destination = path.join(dir, `${systemSlug}.zip`);
-  await mkdir(dir, { recursive: true });
-  const existing = await fileStat(destination);
-  if (existing?.isFile() && existing.size > 0 && !refresh) return destination;
-
-  const temporary = `${destination}.part`;
-  console.error(`[identify] downloading Redump DAT: ${platform} (${systemSlug})`);
-  await runCurl(`${REDUMP_DAT_BASE}${systemSlug}/`, temporary, undefined);
-  const downloaded = await fileStat(temporary);
-  if (!downloaded?.isFile() || downloaded.size === 0) {
-    throw new Error(`Redump download produced no data: ${platform}`);
+async function ensureArchiveFiles({
+  archiveUrl,
+  cacheDir,
+  label,
+  prefix,
+  requestedPaths,
+  revision,
+}) {
+  const sourceRoot = path.join(cacheDir, label, revision);
+  const expected = requestedPaths.map((sourcePath) => ({
+    sourcePath,
+    target: path.join(sourceRoot, sourcePath),
+  }));
+  const missing = [];
+  for (const entry of expected) {
+    const info = await fileStat(entry.target);
+    if (!info?.isFile() || info.size === 0) missing.push(entry);
   }
-  const listing = await runCommandText("unzip", ["-Z1", temporary]);
-  if (!listing.trim()) throw new Error(`Redump download is not a DAT ZIP: ${platform}`);
-  await rename(temporary, destination);
-  return destination;
+  if (missing.length) {
+    const archiveDir = path.join(cacheDir, label);
+    const archive = path.join(archiveDir, `${revision}.tar.gz`);
+    await mkdir(archiveDir, { recursive: true });
+    const archiveInfo = await fileStat(archive);
+    if (!archiveInfo?.isFile() || archiveInfo.size === 0) {
+      await runCurl(archiveUrl, `${archive}.part`, undefined);
+      await rename(`${archive}.part`, archive);
+    }
+    await mkdir(sourceRoot, { recursive: true });
+    await runCommandText("tar", [
+      "-xzf",
+      archive,
+      "-C",
+      sourceRoot,
+      "--strip-components=1",
+      ...missing.map((entry) => `${prefix}/${entry.sourcePath}`),
+    ]);
+  }
+  const result = new Map();
+  for (const entry of expected) {
+    const info = await fileStat(entry.target);
+    if (!info?.isFile() || info.size === 0) {
+      throw new Error(`${label} archive is missing expected DAT: ${entry.sourcePath}`);
+    }
+    result.set(entry.sourcePath, entry.target);
+  }
+  return result;
 }
 
-async function sha256File(filePath) {
+async function ensureLibretroDats(sourcePaths, cacheDir) {
+  return ensureArchiveFiles({
+    archiveUrl: `${LIBRETRO_REPOSITORY}/archive/${LIBRETRO_REVISION}.tar.gz`,
+    cacheDir,
+    label: "libretro",
+    prefix: `libretro-database-${LIBRETRO_REVISION}`,
+    requestedPaths: sourcePaths,
+    revision: LIBRETRO_REVISION,
+  });
+}
+
+async function ensureOpenGoodDats(datFiles, cacheDir) {
+  const sourcePaths = datFiles.map((datFile) => `dats/${datFile}`);
+  const paths = await ensureArchiveFiles({
+    archiveUrl: `${OPENGOOD_REPOSITORY}/archive/${OPENGOOD_REVISION}.tar.gz`,
+    cacheDir,
+    label: "opengood",
+    prefix: `opengood-${OPENGOOD_REVISION}`,
+    requestedPaths: sourcePaths,
+    revision: OPENGOOD_REVISION,
+  });
+  return new Map(datFiles.map((datFile) => [datFile, paths.get(`dats/${datFile}`)]));
+}
+
+export async function sha256File(filePath) {
   const hash = crypto.createHash("sha256");
   for await (const chunk of createReadStream(filePath)) hash.update(chunk);
   return hash.digest("hex");
@@ -503,23 +727,275 @@ async function parseOpenGoodDat(text, platform, state) {
   }
 }
 
-async function downloadOpenGoodDat(datFile, cacheDir) {
-  const dir = path.join(cacheDir, "opengood", OPENGOOD_REVISION);
-  await mkdir(dir, { recursive: true });
-  const destination = path.join(dir, datFile);
-  const existing = await fileStat(destination);
-  if (existing?.isFile() && existing.size > 0) {
-    return destination;
+function unescapeClrMamePro(value) {
+  return value.replace(/\\(.)/gu, "$1");
+}
+
+// ClrMamePro DATs are a small parenthesized language. Tokenizing instead of
+// splitting on `game (` preserves quoted parentheses and nested `rom` blocks.
+export function parseClrMameProDat(text) {
+  const tokens = [];
+  const token = /\s+|;[^\r\n]*|\(|\)|"(?:\\.|[^"\\])*"|[^\s()]+/gu;
+  let match = token.exec(text);
+  while (match) {
+    const value = match[0];
+    if (!/^\s+$/u.test(value) && !value.startsWith(";")) tokens.push(value);
+    match = token.exec(text);
   }
-  const temporary = `${destination}.part`;
-  console.error(`[identify] downloading OpenGood DAT: ${datFile}`);
-  await runCurl(`${OPENGOOD_RAW_BASE}${datFile}`, temporary, undefined);
-  const downloaded = await fileStat(temporary);
-  if (!downloaded?.isFile() || downloaded.size === 0) {
-    throw new Error(`OpenGood download produced no data: ${datFile}`);
+
+  let index = 0;
+  const scalar = (value) =>
+    value?.startsWith('"') ? unescapeClrMamePro(value.slice(1, -1)) : value;
+  const parseBlock = (kind) => {
+    const fields = {};
+    const children = [];
+    while (index < tokens.length && tokens[index] !== ")") {
+      const key = tokens[index++];
+      if (tokens[index] === "(") {
+        index += 1;
+        children.push({ kind: key, ...parseBlock(key) });
+        continue;
+      }
+      const value = scalar(tokens[index++]);
+      if (value !== undefined) fields[key] = value;
+    }
+    if (tokens[index] === ")") index += 1;
+    return { children, fields, kind };
+  };
+
+  const blocks = [];
+  while (index < tokens.length) {
+    const kind = tokens[index++];
+    if (tokens[index] !== "(") continue;
+    index += 1;
+    blocks.push(parseBlock(kind));
   }
-  await rename(temporary, destination);
-  return destination;
+  const header = blocks.find((block) => block.kind === "clrmamepro")?.fields ?? {};
+  const games = blocks
+    .filter((block) => block.kind === "game" || block.kind === "machine")
+    .map((block) => ({
+      metadata: block.fields,
+      name: String(block.fields.name ?? "").trim(),
+      roms: block.children.filter((child) => child.kind === "rom").map((child) => child.fields),
+    }))
+    .filter((game) => game.name && game.roms.length > 0);
+  return { games, header };
+}
+
+export function extractGoodToolsDumpTags(name) {
+  return [...String(name).matchAll(/\[([^\]]+)\]/gu)].map((match) => match[1]);
+}
+
+function hashScopeFor(_rom) {
+  return "full_file";
+}
+
+function componentFromRom(rom, ordinal, source = "libretro") {
+  const component = {
+    hashScope: source === "redump" ? "track_file" : hashScopeFor(rom),
+    ordinal,
+    size: /^\d+$/u.test(String(rom.size ?? "")) ? Number.parseInt(rom.size, 10) : 0,
+  };
+  if (source === "redump") {
+    component.role = "data_track";
+    component.track = ordinal + 1;
+  }
+  const filename = String(rom.name ?? "").trim();
+  if (filename) component.filename = filename;
+  for (const [field, length] of Object.entries({ crc32: 8, md5: 32, sha1: 40 })) {
+    const hash = normalizeHex(rom[field === "crc32" ? "crc" : field], length);
+    if (hash) component[field] = hash;
+  }
+  return component;
+}
+
+function sourceProvenance(name, url, commit, license, generationDate) {
+  const provenance = {
+    license,
+    source: name,
+    sourceCommit: commit,
+    sourceName: name,
+    sourceUrl: url,
+  };
+  if (generationDate) provenance.generationDate = generationDate;
+  return provenance;
+}
+
+function innerLibretroSource(sourcePath) {
+  if (sourcePath.startsWith("metadat/no-intro/")) return "no-intro";
+  if (sourcePath.startsWith("metadat/redump/")) return "redump";
+  return "libretro";
+}
+
+export function parseLibretroGames(text, platform, sourcePath) {
+  const parsed = parseClrMameProDat(text);
+  const innerSource = innerLibretroSource(sourcePath);
+  const componentSource =
+    innerSource === "redump" && !KNOWN_PLATFORM_PROFILES[platform] ? "redump" : innerSource;
+  const provenance = sourceProvenance(
+    innerSource,
+    `${LIBRETRO_REPOSITORY}/blob/${LIBRETRO_REVISION}/${sourcePath.split("/").map(encodeURIComponent).join("/")}`,
+    LIBRETRO_REVISION,
+    LIBRETRO_LICENSE,
+    parsed.header.date,
+  );
+  return {
+    header: parsed.header,
+    games: parsed.games
+      .map((game) => ({
+        components: game.roms
+          .map((rom, ordinal) => componentFromRom(rom, ordinal, componentSource))
+          .filter((component) => component.crc32 || component.md5 || component.sha1),
+        description: game.metadata.description,
+        dumpTags: [],
+        legacyVariant: false,
+        metadata: game.metadata,
+        name: game.name,
+        platform,
+        provenance: [provenance],
+        region: game.metadata.region,
+        source: "libretro",
+        upstreamSource: innerSource,
+      }))
+      .filter((game) => game.components.length > 0),
+  };
+}
+
+export function parseOpenGoodGames(text, platform, datFile) {
+  const headerMatch = text.match(/<header>([\s\S]*?)<\/header>/u);
+  const header = {};
+  if (headerMatch) {
+    for (const match of headerMatch[1].matchAll(/<([\w-]+)>([^<]*)<\/\1>/gu)) {
+      header[match[1]] = xmlUnescape(match[2]).trim();
+    }
+  }
+  const provenance = sourceProvenance(
+    "SnowflakePowered/opengood",
+    `${OPENGOOD_REPOSITORY}/blob/${OPENGOOD_REVISION}/dats/${encodeURIComponent(datFile)}`,
+    OPENGOOD_REVISION,
+    OPENGOOD_LICENSE,
+    header.date,
+  );
+  const games = [];
+  for (const chunk of text.split(/<game\b/gu).slice(1)) {
+    const end = chunk.indexOf(">");
+    if (end < 0) continue;
+    const game = parseAttributes(chunk.slice(0, end));
+    const name = String(game.name ?? "").trim();
+    if (!name) continue;
+    const components = [];
+    for (const match of chunk.matchAll(/<rom\b([^>]*?)\/?>/gu)) {
+      const component = componentFromRom(parseAttributes(match[1]), components.length);
+      if (component.crc32 || component.md5 || component.sha1) components.push(component);
+    }
+    if (components.length) {
+      games.push({
+        components,
+        dumpTags: extractGoodToolsDumpTags(name),
+        legacyVariant: true,
+        name,
+        platform,
+        provenance: [provenance],
+        source: "opengood",
+        upstreamSource: "open-good",
+      });
+    }
+  }
+  return { games, header };
+}
+
+function componentKeys(component) {
+  const scope = component.hashScope ?? "full_file";
+  return ["crc32", "md5", "sha1"]
+    .filter((algorithm) => component[algorithm])
+    .map((algorithm) => `${algorithm}\0${component[algorithm]}\0${component.size}\0${scope}`);
+}
+
+function mergeProvenance(left, right) {
+  const values = [...left, ...right];
+  const seen = new Set();
+  return values.filter((value) => {
+    const key = JSON.stringify(value);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// A matching hash under the same algorithm, byte size, and hash scope proves
+// that an OpenGood component is already represented by the Libretro record.
+export function mergeLegacyFallbackGames(libretroGames, openGoodGames) {
+  const merged = libretroGames.map((game) => ({ ...game, components: [...game.components] }));
+  const owners = new Map();
+  const addOwner = (game, component) => {
+    for (const key of componentKeys(component)) owners.set(key, game);
+  };
+  for (const game of merged) for (const component of game.components) addOwner(game, component);
+
+  for (const fallback of openGoodGames) {
+    const owner = fallback.components
+      .flatMap(componentKeys)
+      .map((key) => owners.get(key))
+      .find(Boolean);
+    if (!owner) {
+      const copy = { ...fallback, components: [...fallback.components] };
+      merged.push(copy);
+      for (const component of copy.components) addOwner(copy, component);
+      continue;
+    }
+    owner.provenance = mergeProvenance(owner.provenance, fallback.provenance);
+    owner.dumpTags = [...new Set([...owner.dumpTags, ...fallback.dumpTags])].sort();
+    for (const component of fallback.components) {
+      if (componentKeys(component).some((key) => owners.has(key))) continue;
+      owner.components.push({ ...component, ordinal: owner.components.length });
+      addOwner(owner, owner.components.at(-1));
+    }
+  }
+  return merged;
+}
+
+// Libretro's root `dat/` files have precedence over metadata DATs. A root
+// component that matches by the same scoped hash replaces the lower-priority
+// record's descriptive fields while retaining any non-overlapping components.
+export function mergeLibretroGames(lowerPriorityGames, higherPriorityGames) {
+  const merged = lowerPriorityGames.map((game) => ({ ...game, components: [...game.components] }));
+  const owners = new Map();
+  for (const game of merged) {
+    for (const component of game.components)
+      for (const key of componentKeys(component)) owners.set(key, game);
+  }
+  for (const game of higherPriorityGames) {
+    const owner = game.components
+      .flatMap(componentKeys)
+      .map((key) => owners.get(key))
+      .find(Boolean);
+    if (!owner) {
+      const copy = { ...game, components: [...game.components] };
+      merged.push(copy);
+      for (const component of copy.components)
+        for (const key of componentKeys(component)) owners.set(key, copy);
+      continue;
+    }
+    const retained = owner.components.filter(
+      (component) =>
+        !componentKeys(component).some((key) =>
+          game.components.flatMap(componentKeys).includes(key),
+        ),
+    );
+    Object.assign(owner, game, {
+      components: [
+        ...game.components.map((component, ordinal) => ({ ...component, ordinal })),
+        ...retained.map((component, ordinal) => ({
+          ...component,
+          ordinal: game.components.length + ordinal,
+        })),
+      ],
+      provenance: mergeProvenance(game.provenance, owner.provenance),
+    });
+    for (const component of owner.components)
+      for (const key of componentKeys(component)) owners.set(key, owner);
+  }
+  return merged;
 }
 
 function redumpGameRecord(chunk, platform) {
@@ -636,7 +1112,7 @@ async function produceRedumpGames(platform, state, ctx) {
 
 // Build (or reuse a cached) normalized rows.tsv for a single OpenGood platform.
 // Each platform is cached independently so re-runs only rebuild what changed.
-async function buildPlatformRows(platform, ctx) {
+export async function buildPlatformRows(platform, ctx) {
   const source = "opengood";
   const slug = slugifyPlatform(platform);
   const paths = platformRowPaths(ctx.cacheDir, slug);
@@ -700,7 +1176,7 @@ async function buildPlatformRows(platform, ctx) {
 
 // Build (or reuse a cached) grouped games.jsonl for a single Redump platform:
 // one JSON game record per line, components preserved with their dump order.
-async function buildPlatformGames(platform, ctx) {
+export async function buildPlatformGames(platform, ctx) {
   const slug = slugifyPlatform(platform);
   const paths = platformGamePaths(ctx.cacheDir, slug);
   const fingerprint = await datFingerprint(ctx.redumpPaths.get(platform));
@@ -1101,43 +1577,20 @@ async function brotliCompress(buffer, quality) {
   });
 }
 
-// Split the requested platform names into the OpenGood half (static list) and
-// the Redump half. A plain build stays OpenGood-only. Release builds opt in to
-// every configured optical platform with --redump-all.
 function resolveSelection(options) {
-  const openGoodAll = Object.keys(OPENGOOD_PLATFORMS);
-  if (options.openGoodOnly) {
-    if (options.only.length > 0) throw new Error("--opengood-only cannot be combined with --only");
-    return { openGoodSelected: openGoodAll, redumpRequested: [], redumpAll: false };
-  }
-  if (!options.only || options.only.length === 0) {
-    return {
-      openGoodSelected: openGoodAll,
-      redumpRequested: [],
-      redumpAll: options.redumpAll,
-    };
-  }
-  const openGoodSet = new Set(openGoodAll);
-  return {
-    openGoodSelected: options.only.filter((platform) => openGoodSet.has(platform)),
-    redumpRequested: options.only.filter((platform) => !openGoodSet.has(platform)),
-    redumpAll: false,
-  };
-}
-
-function discoverRedumpPlatforms(selection, options) {
-  const configured = new Set(Object.keys(REDUMP_PLATFORMS));
-  if (selection.redumpAll) return [...configured].sort();
-  const missing = selection.redumpRequested.filter((platform) => !configured.has(platform));
-  if (missing.length > 0 && !options.allowMissingPlatforms) {
+  const configured = new Set([
+    ...Object.keys(LIBRETRO_PLATFORM_PATHS),
+    ...Object.keys(OPENGOOD_STANDALONE_PLATFORMS),
+  ]);
+  const selected = options.only.length ? options.only : [...configured];
+  const missing = selected.filter((platform) => !configured.has(platform));
+  if (missing.length && !options.allowMissingPlatforms) {
     throw new Error(
-      `Redump platform(s) are not configured: ${missing.join(", ")}. Use --print-platforms to list valid names.`,
+      `Platform(s) are not configured: ${missing.join(", ")}. Use --print-platforms.`,
     );
   }
-  if (missing.length > 0) {
-    console.error(`[identify] skipping ${missing.length} unknown Redump platform(s)`);
-  }
-  return selection.redumpRequested.filter((platform) => configured.has(platform)).sort();
+  if (missing.length) console.error(`[identify] skipping ${missing.length} unknown platform(s)`);
+  return selected.filter((platform) => configured.has(platform)).sort();
 }
 
 // Assemble one RWFP1 pack for a single platform from its built index parts.
@@ -1191,7 +1644,7 @@ function buildSystemPack(platform, source, parts) {
   ]);
 }
 
-async function writeSystemPack(platform, rows, options) {
+export async function writeSystemPack(platform, rows, options) {
   console.error(`[identify] ${platform}: building per-system pack`);
   const parts = await buildIndexParts(rows.rowsPath, [platform], !options.keepShared);
   const pack = buildSystemPack(platform, rows.source, parts);
@@ -1263,7 +1716,7 @@ function gameWithinPackCaps(game) {
   );
 }
 
-async function loadSortedGames(gamesPath) {
+export async function loadSortedGames(gamesPath) {
   const games = [];
   let skippedOverCaps = 0;
   for await (const game of readGames(gamesPath)) {
@@ -1329,14 +1782,20 @@ function gamesJsonBytes(games) {
     const out = {
       name: game.name,
       platform: game.platform,
-      source: "redump",
+      source: game.source,
       upstreamSource: game.upstreamSource || "unknown",
     };
+    if (game.provenance?.length) out.provenance = game.provenance;
+    if (game.legacyVariant) out.legacyVariant = true;
+    if (game.dumpTags?.length) out.dumpTags = game.dumpTags;
+    if (game.description !== undefined) out.description = game.description;
+    if (game.metadata !== undefined) out.metadata = game.metadata;
     if (game.gameId !== undefined) out.gameId = game.gameId;
     if (game.region !== undefined) out.region = game.region;
     if (game.language !== undefined) out.language = game.language;
     out.components = game.components.map((component) => {
-      const entry = { role: "primary_payload", ordinal: component.ordinal };
+      const entry = { role: component.role ?? "primary_payload", ordinal: component.ordinal };
+      if (component.hashScope !== undefined) entry.hashScope = component.hashScope;
       if (component.filename !== undefined) entry.filename = component.filename;
       entry.size = component.size;
       if (component.crc32 !== undefined) entry.crc32 = component.crc32;
@@ -1345,6 +1804,7 @@ function gamesJsonBytes(games) {
       if (component.sha256 !== undefined) entry.sha256 = component.sha256;
       entry.required = true;
       entry.discriminating = component.discriminating;
+      if (component.track !== undefined) entry.track = component.track;
       return entry;
     });
     return out;
@@ -1443,16 +1903,25 @@ function buildRouteAndRefs(games) {
 }
 
 export function mediaProfileFor(platform, source) {
-  if (source === "opengood") return "opengood-cartridge-v1";
-  if (source === "redump") {
-    return KNOWN_PLATFORM_PROFILES[platform] ?? REDUMP_DEFAULT_MEDIA_PROFILE;
+  if (source === "libretro" && KNOWN_PLATFORM_PROFILES[platform]) {
+    return KNOWN_PLATFORM_PROFILES[platform];
   }
+  if (
+    source === "libretro" &&
+    LIBRETRO_PLATFORM_PATHS[platform]?.some((sourcePath) =>
+      sourcePath.startsWith("metadat/redump/"),
+    )
+  ) {
+    return platform === "Sega - Dreamcast" ? "redump-gdrom-track-v1" : "redump-cd-track-v1";
+  }
+  if (source === "libretro") return DEFAULT_MEDIA_PROFILE;
+  if (source === "opengood") return "opengood-cartridge-v1";
   return KNOWN_PLATFORM_PROFILES[platform] ?? DEFAULT_MEDIA_PROFILE;
 }
 
-// Assemble one RWFP2 pack for a single Redump platform. Same outer container
-// layout as RWFP1 with magic RWFP2, members in this exact directory order.
-export function buildSystemPackV2(platform, games, provenance) {
+// Assemble one RWFP2 pack for a Libretro platform. Same outer container layout
+// as RWFP1 with magic RWFP2, members in this exact directory order.
+export function buildSystemPackV2(platform, games, provenance, source = "libretro") {
   const sharedComponents = markSharedComponents(games);
   const gamesBytes = gamesJsonBytes(games);
   const { refsBuffer, refsCount, route, routedKeys } = buildRouteAndRefs(games);
@@ -1460,8 +1929,9 @@ export function buildSystemPackV2(platform, games, provenance) {
   const manifest = {
     format: INDEX_FORMAT_V2,
     platform,
-    source: "redump",
-    canonicalizationProfile: mediaProfileFor(platform, "redump"),
+    source,
+    generationDate: IDENTIFY_GENERATION_DATE,
+    canonicalizationProfile: mediaProfileFor(platform, source),
     canonicalizationVersion: 1,
     provenance,
     counts: {
@@ -1484,13 +1954,82 @@ export function buildSystemPackV2(platform, games, provenance) {
   return { componentCount, pack, routedKeys, sharedComponents };
 }
 
+function sortGames(games) {
+  const compare = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
+  return games
+    .map((game, inputIndex) => ({ ...game, inputIndex }))
+    .sort(
+      (left, right) =>
+        compare(left.platform, right.platform) ||
+        compare(left.name, right.name) ||
+        compare(String(left.gameId ?? ""), String(right.gameId ?? "")) ||
+        left.inputIndex - right.inputIndex,
+    )
+    .map(({ inputIndex: _inputIndex, ...game }) => game);
+}
+
+async function readPlatformGames(platform, options, paths) {
+  const sourcePaths = LIBRETRO_PLATFORM_PATHS[platform] ?? [];
+  const fallbackFiles =
+    COMPLETE_OPENGOOD_FALLBACKS[platform] ?? OPENGOOD_STANDALONE_PLATFORMS[platform] ?? [];
+  let libretro = [];
+  const libretroHeaders = [];
+  for (const sourcePath of sourcePaths) {
+    const parsed = parseLibretroGames(
+      await readFile(paths.libretro.get(sourcePath), "utf8"),
+      platform,
+      sourcePath,
+    );
+    libretro = mergeLibretroGames(libretro, parsed.games);
+    libretroHeaders.push({ sourcePath, ...parsed.header });
+  }
+  const fallback = [];
+  const openGoodHeaders = [];
+  for (const fallbackFile of fallbackFiles) {
+    const parsed = parseOpenGoodGames(
+      await readFile(paths.opengood.get(fallbackFile), "utf8"),
+      platform,
+      fallbackFile,
+    );
+    fallback.push(...parsed.games);
+    openGoodHeaders.push({ datFile: fallbackFile, ...parsed.header });
+  }
+  const games = sortGames(mergeLegacyFallbackGames(libretro, fallback));
+  return {
+    slug: slugifyPlatform(platform),
+    games: options.maxObjects === undefined ? games : games.slice(0, options.maxObjects),
+    provenance: {
+      libretro: libretroHeaders.length
+        ? libretroHeaders.map((header) => ({
+            commit: LIBRETRO_REVISION,
+            generationDate: header.date ?? null,
+            license: LIBRETRO_LICENSE,
+            name: innerLibretroSource(header.sourcePath),
+            path: header.sourcePath,
+            url: `${LIBRETRO_REPOSITORY}/blob/${LIBRETRO_REVISION}/${header.sourcePath.split("/").map(encodeURIComponent).join("/")}`,
+          }))
+        : null,
+      opengood: openGoodHeaders.map((header) => ({
+        commit: OPENGOOD_REVISION,
+        generationDate: header.date ?? null,
+        license: OPENGOOD_LICENSE,
+        name: "SnowflakePowered/opengood",
+        path: `dats/${header.datFile}`,
+        url: `${OPENGOOD_REPOSITORY}/blob/${OPENGOOD_REVISION}/dats/${encodeURIComponent(header.datFile)}`,
+      })),
+    },
+    source: sourcePaths.length ? "libretro" : "opengood",
+  };
+}
+
 async function writeSystemPackV2(platform, gamesInfo, options, provenance) {
   console.error(`[identify] ${platform}: building RWFP2 pack`);
-  const games = await loadSortedGames(gamesInfo.gamesPath);
+  const games = gamesInfo.games;
   const { componentCount, pack, routedKeys, sharedComponents } = buildSystemPackV2(
     platform,
     games,
     provenance,
+    gamesInfo.source,
   );
   const fileName = `${gamesInfo.slug}.pack`;
   const outPath = path.join(options.outPath, fileName);
@@ -1499,7 +2038,7 @@ async function writeSystemPackV2(platform, gamesInfo, options, provenance) {
   const system = {
     platform,
     slug: gamesInfo.slug,
-    source: "redump",
+    source: gamesInfo.source,
     packFormat: "RWFP2",
     file: fileName,
     rawBytes: pack.length,
@@ -1585,108 +2124,80 @@ export function buildCatalogPlatforms(systems) {
 export async function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   if (options.printPlatforms) {
-    for (const platform of Object.keys(OPENGOOD_PLATFORMS).sort())
-      console.log(`opengood\t${platform}`);
-    for (const [platform, slug] of Object.entries(REDUMP_PLATFORMS).sort())
-      console.log(`redump\t${platform}\t${REDUMP_DAT_BASE}${slug}/`);
+    for (const [platform, sourcePaths] of Object.entries(LIBRETRO_PLATFORM_PATHS).sort()) {
+      console.log(`libretro\t${platform}\t${sourcePaths.join(",")}`);
+    }
+    for (const platform of Object.keys(OPENGOOD_STANDALONE_PLATFORMS).sort()) {
+      console.log(`opengood-fallback\t${platform}`);
+    }
     return;
   }
 
   requireExecutable("curl");
-  const selection = resolveSelection(options);
-  const openGoodSelected = [...selection.openGoodSelected].sort();
-  let redumpSelected = [];
-
-  // Pre-download (cache) every OpenGood DAT the selected platforms need.
-  const neededDats = new Set();
-  for (const platform of openGoodSelected) {
-    for (const datFile of OPENGOOD_PLATFORMS[platform]) neededDats.add(datFile);
-  }
-  const openGoodPaths = new Map();
-  for (const datFile of neededDats) {
-    openGoodPaths.set(datFile, await downloadOpenGoodDat(datFile, options.cacheDir));
-  }
-
-  const redumpPaths = new Map();
-  const redumpSources = new Map();
-  if (selection.redumpAll || selection.redumpRequested.length > 0) {
-    requireExecutable("unzip");
-    redumpSelected = discoverRedumpPlatforms(selection, options);
-    for (const platform of redumpSelected) {
-      const datPath = await downloadRedumpDat(platform, options.cacheDir, options.refreshDump);
-      redumpPaths.set(platform, datPath);
-      const info = await stat(datPath);
-      redumpSources.set(platform, {
-        fileName: path.basename(datPath),
-        sha256: await sha256File(datPath),
-        sizeBytes: info.size,
-        url: `${REDUMP_DAT_BASE}${REDUMP_PLATFORMS[platform]}/`,
-      });
-    }
-    if (options.downloadOnly) {
-      console.log(
-        JSON.stringify(
-          { openGood: [...neededDats], redump: Object.fromEntries(redumpSources) },
-          null,
-          2,
-        ),
-      );
-      return;
-    }
-  } else if (options.downloadOnly) {
-    console.log(JSON.stringify({ openGood: [...neededDats] }, null, 2));
-    return;
-  }
-
-  if (openGoodSelected.length + redumpSelected.length === 0) {
+  requireExecutable("tar");
+  const selected = resolveSelection(options);
+  if (!selected.length) {
     throw new Error("No platforms selected to build");
   }
 
-  const ctx = {
-    cacheDir: options.cacheDir,
-    forceRowCache: options.forceRowCache,
-    generatedAt: new Date().toISOString(),
-    maxObjects: options.maxObjects,
-    openGoodPaths,
-    redumpPaths,
+  const neededLibretro = new Set();
+  const neededOpenGood = new Set();
+  for (const platform of selected) {
+    for (const sourcePath of LIBRETRO_PLATFORM_PATHS[platform] ?? [])
+      neededLibretro.add(sourcePath);
+    for (const datFile of COMPLETE_OPENGOOD_FALLBACKS[platform] ??
+      OPENGOOD_STANDALONE_PLATFORMS[platform] ??
+      []) {
+      neededOpenGood.add(datFile);
+    }
+  }
+  const paths = {
+    libretro: await ensureLibretroDats([...neededLibretro].sort(), options.cacheDir),
+    opengood: await ensureOpenGoodDats([...neededOpenGood].sort(), options.cacheDir),
   };
+  if (options.downloadOnly) {
+    console.log(
+      JSON.stringify(
+        { libretro: [...neededLibretro].sort(), opengood: [...neededOpenGood].sort() },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
 
   await mkdir(options.outPath, { recursive: true });
   const systems = [];
-  for (const platform of openGoodSelected) {
-    const rows = await buildPlatformRows(platform, ctx);
-    systems.push({ ...(await writeSystemPack(platform, rows, options)), packFormat: "RWFP1" });
-  }
-  for (const platform of redumpSelected) {
-    const games = await buildPlatformGames(platform, ctx);
-    systems.push(
-      await writeSystemPackV2(platform, games, options, {
-        dat: redumpSources.get(platform),
-        url: "http://redump.org/",
-      }),
-    );
+  for (const platform of selected) {
+    const games = await readPlatformGames(platform, options, paths);
+    systems.push(await writeSystemPackV2(platform, games, options, games.provenance));
   }
 
-  // catalog.json always lists every OpenGood platform (with aliases) plus each
-  // built Redump platform, so a reader can resolve any known alias even when
-  // only a subset of packs was built.
+  // The catalog always lists every configured platform. The pack itself may be
+  // absent when this invocation built a subset, so clients can still resolve a
+  // useful alias before they fetch the matching pack.
   const builtBySlug = new Map(systems.map((system) => [system.slug, system]));
   const catalogSystems = [];
-  for (const platform of Object.keys(OPENGOOD_PLATFORMS).sort()) {
+  for (const platform of [
+    ...Object.keys(LIBRETRO_PLATFORM_PATHS),
+    ...Object.keys(OPENGOOD_STANDALONE_PLATFORMS),
+  ].sort()) {
     const slug = slugifyPlatform(platform);
     const built = builtBySlug.get(slug);
-    catalogSystems.push(built ?? { platform, slug, source: "opengood", packFormat: "RWFP1" });
-  }
-  for (const system of systems) {
-    if (system.source === "redump") catalogSystems.push(system);
+    catalogSystems.push(
+      built ?? {
+        platform,
+        slug,
+        source: LIBRETRO_PLATFORM_PATHS[platform] ? "libretro" : "opengood",
+        packFormat: "RWFP2",
+      },
+    );
   }
   const catalog = {
     format: CATALOG_FORMAT,
     generated: {
       opengoodRevision: OPENGOOD_REVISION,
-      ...(redumpSources.size > 0
-        ? { redumpDats: Object.fromEntries([...redumpSources].sort()) }
-        : {}),
+      libretroRevision: LIBRETRO_REVISION,
     },
     platforms: buildCatalogPlatforms(catalogSystems),
   };
@@ -1702,12 +2213,13 @@ export async function main(argv = process.argv.slice(2)) {
     sources: {
       opengood: {
         url: OPENGOOD_REPOSITORY,
-        license: "CC0-1.0",
+        license: OPENGOOD_LICENSE,
         revision: OPENGOOD_REVISION,
       },
-      redump: {
-        url: "http://redump.org/",
-        note: "Redump permits redistribution of its DAT files and derived metadata.",
+      libretro: {
+        url: LIBRETRO_REPOSITORY,
+        license: LIBRETRO_LICENSE,
+        revision: LIBRETRO_REVISION,
       },
     },
     systems,

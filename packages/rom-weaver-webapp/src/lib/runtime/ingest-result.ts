@@ -10,6 +10,7 @@ import type {
   ParsedIdentifyEvidence,
   ParsedIdentifyLookupResult,
   ParsedIdentifyPlatformCandidate,
+  ParsedIdentifyProvenance,
   ParsedIdentifyTitleMatch,
 } from "../../types/identify.ts";
 import type { ParsedIngestResult, ParsedIngestRomAsset, ParsedPatchDescriptor } from "../../types/ingest.ts";
@@ -53,12 +54,37 @@ const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefine
   const name = toStringValue(match.name);
   const platform = toStringValue(match.platform);
   if (!(name && platform)) return undefined;
+  const record = match as Record<string, unknown>;
+  const provenance = Array.isArray(record.provenance)
+    ? record.provenance
+        .map((value): ParsedIdentifyProvenance | undefined => {
+          const item = asRecord(value);
+          const source = toStringValue(item?.source);
+          if (!source) return undefined;
+          const license = toStringValue(item?.license);
+          const sourceCommit = toStringValue(item?.source_commit);
+          const sourceName = toStringValue(item?.source_name);
+          const sourceUrl = toStringValue(item?.source_url);
+          return {
+            ...(license ? { license } : {}),
+            source,
+            ...(sourceCommit ? { sourceCommit } : {}),
+            ...(sourceName ? { sourceName } : {}),
+            ...(sourceUrl ? { sourceUrl } : {}),
+          };
+        })
+        .filter((item): item is ParsedIdentifyProvenance => item !== undefined)
+    : [];
+  const dumpTags = toStringList(record.dump_tags);
   return {
     algorithm: toStringValue(match.algorithm) || "",
     database: toStringValue(match.database) || "",
     name,
     platform,
     variant: toStringValue(match.variant) || "raw",
+    ...(provenance.length ? { provenance } : {}),
+    ...(record.legacy_variant === true ? { legacyVariant: true } : {}),
+    ...(dumpTags ? { dumpTags } : {}),
   };
 };
 

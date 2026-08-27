@@ -11,7 +11,7 @@ const system = (slug: string, platform: string) => ({
   brotliFile: `${slug}.pack.br`,
   sha256: SHA256_ABC,
   slug,
-  source: "opengood",
+  source: "libretro",
 });
 
 const INDEX_SYSTEMS = [
@@ -48,6 +48,9 @@ describe("selectIdentifySlugs", () => {
   it("maps a ROM extension to its own pack", async () => {
     const { selectIdentifySlugs } = await import("../../src/platform/browser/identify-packs.ts");
     expect(selectIdentifySlugs({ fileName: "game.gba" })).toEqual(["nintendo-game-boy-advance"]);
+    expect(selectIdentifySlugs({ fileName: "game.nes" })).toEqual(["nintendo-nintendo-entertainment-system"]);
+    expect(selectIdentifySlugs({ fileName: "game.z64" })).toEqual(["nintendo-nintendo-64"]);
+    expect(selectIdentifySlugs({ fileName: "game.sms" })).toEqual(["sega-master-system-mark-iii", "sega-game-gear"]);
   });
 
   it("widens a header-detected platform to its indistinguishable siblings", async () => {

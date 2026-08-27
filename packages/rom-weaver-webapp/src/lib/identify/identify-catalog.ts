@@ -1,10 +1,9 @@
 /**
  * Parses `catalog.json` (format `rom-weaver-identify-catalog-v1`) and routes a
  * detected platform name through its aliases to the pack that owns it. The
- * catalog is the authority on which source (OpenGood or Redump) serves each
- * platform; sources never mix inside one platform pack.
+ * catalog is the authority on which locally shipped pack serves each platform.
  */
-type IdentifyCatalogSource = "opengood" | "redump";
+type IdentifyCatalogSource = "libretro" | "opengood";
 
 type IdentifyCatalogPlatform = {
   aliases: string[];
@@ -19,6 +18,7 @@ type IdentifyCatalogPlatform = {
 type IdentifyCatalog = {
   format: string;
   generated?: {
+    libretroRevision?: string;
     opengoodRevision?: string;
   };
   platforms: IdentifyCatalogPlatform[];
@@ -33,7 +33,8 @@ const normalizePlatformAlias = (value: string): string =>
     .replace(/[^a-z0-9]+/gu, " ")
     .trim();
 
-const isCatalogSource = (value: unknown): value is IdentifyCatalogSource => value === "opengood" || value === "redump";
+const isCatalogSource = (value: unknown): value is IdentifyCatalogSource =>
+  value === "libretro" || value === "opengood";
 
 const parseCatalogPlatform = (value: unknown): IdentifyCatalogPlatform | undefined => {
   if (typeof value !== "object" || value === null) return undefined;
@@ -44,8 +45,8 @@ const parseCatalogPlatform = (value: unknown): IdentifyCatalogPlatform | undefin
   // The slug becomes a fetch path (`<origin>/<slug>.pack`) and a store key, so
   // it MUST NOT carry separators or dots. Mirrors the Rust catalog parser.
   if (!/^[a-z0-9-]+$/u.test(packSlug)) return undefined;
-  // Catalog-only Redump packs MUST include a checksum before the app fetches them.
-  if (record.source === "redump" && !/^[0-9a-f]{64}$/u.test(String(record.packSha256 ?? ""))) {
+  // A catalog-only pack MUST carry its content hash before the app reads it.
+  if (!/^[0-9a-f]{64}$/u.test(String(record.packSha256 ?? ""))) {
     return undefined;
   }
   return {

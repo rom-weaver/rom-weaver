@@ -8,7 +8,7 @@ Use `probe` to inspect the file type. Use `checksum` to prove which bytes it hol
 ## Table of contents
 
 - [Identify a ROM title](#identify-a-rom-title)
-- [Identify a disc or other non-cartridge system](#identify-a-disc-or-other-non-cartridge-system)
+- [Install all identify data](#install-all-identify-data)
 - [Force a system](#force-a-system)
 - [Inspect a file](#inspect-a-file)
 - [Hash a file](#hash-a-file)
@@ -44,24 +44,12 @@ rom-weaver identify --input game.iso --database playstation.pack
 
 Repeat `--database` to search more packs. `--database` accepts RWFP1 and RWFP2 packs.
 
-## Identify a disc or other non-cartridge system
+## Install all identify data
 
-Native release packages include Redump data for 56 optical systems. After a Cargo or binary-only install, install the complete offline database:
+Release packages include the full local database. After a Cargo or binary-only install, install the same versioned archive:
 
 ```bash
 rom-weaver identify database install-all
-```
-
-Install one Redump pack instead:
-
-```bash
-rom-weaver identify database install "Sony PlayStation"
-```
-
-Import a downloaded Redump DAT ZIP instead:
-
-```bash
-rom-weaver identify database import-redump redump-playstation.zip
 ```
 
 Then identify as usual; the command finds the installed pack on its own:

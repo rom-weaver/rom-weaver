@@ -35,6 +35,38 @@ pub struct IdentifyTitleMatch {
     pub algorithm: String,
     pub variant: String,
     pub database: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub provenance: Vec<IdentifyProvenance>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub legacy_variant: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub dump_tags: Vec<String>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+/// One upstream database that contributed metadata to an identify record.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyProvenance {
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub source_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub source_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub source_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub license: Option<String>,
 }
 
 /// The compact title lookup attached to ingest assets and patch source hints.
@@ -183,6 +215,9 @@ fn resolve_query_in_pack(
             algorithm: algorithm.to_string(),
             variant: variant.to_string(),
             database: database_name.to_string(),
+            provenance: Vec::new(),
+            legacy_variant: false,
+            dump_tags: Vec::new(),
         });
     }
     Ok(())
@@ -407,6 +442,7 @@ struct SelectedPack {
 
 fn source_label(source: IdentifySource) -> &'static str {
     match source {
+        IdentifySource::Libretro => "libretro",
         IdentifySource::OpenGood => "opengood",
         IdentifySource::Redump => "redump",
     }
@@ -458,11 +494,13 @@ fn matched_upstream_sources(
             continue;
         }
         let label = match game.upstream_source {
+            UpstreamSource::Libretro => "libretro",
             UpstreamSource::Redump => "redump",
             UpstreamSource::NoIntro => "no-intro",
             UpstreamSource::Tosec => "tosec",
             UpstreamSource::Mame => "mame",
             UpstreamSource::Fbneo => "fbneo",
+            UpstreamSource::OpenGood => "opengood",
             UpstreamSource::Unknown => continue,
         };
         sources.insert(label);
@@ -718,8 +756,7 @@ impl CliApp {
                 condition = Some("database_required".to_string());
                 hint = Some(format!(
                     "no identify pack is installed for {platform}; run `rom-weaver identify \
-                     database install-all`, install that system from Redump, or pass \
-                     `--database-dir` with an existing user database"
+                     database install-all` or pass `--database-dir` with an existing user database"
                 ));
             } else if let Some(selected) = selected.iter().find(|selected| {
                 let profile = match &selected.pack.file {
@@ -1020,6 +1057,32 @@ impl MergedMatches {
         for game_match in outcome.matches {
             let key = (game_match.name.clone(), game_match.platform.clone());
             if !self.seen.insert(key.clone()) {
+                if let Some(existing) = self
+                    .matches
+                    .iter_mut()
+                    .find(|item| item.name == key.0 && item.platform == key.1)
+                {
+                    for item in game_match.provenance {
+                        let item = IdentifyProvenance {
+                            source: item.source,
+                            source_name: item.source_name,
+                            source_url: item.source_url,
+                            source_commit: item.source_commit,
+                            license: item.license,
+                        };
+                        if !existing.provenance.contains(&item) {
+                            existing.provenance.push(item);
+                        }
+                    }
+                    existing.provenance.sort();
+                    for tag in game_match.dump_tags {
+                        if !existing.dump_tags.contains(&tag) {
+                            existing.dump_tags.push(tag);
+                        }
+                    }
+                    existing.dump_tags.sort();
+                    existing.legacy_variant &= game_match.legacy_variant;
+                }
                 continue;
             }
             added.push(key);
@@ -1042,6 +1105,19 @@ impl MergedMatches {
                 algorithm: "components".to_string(),
                 variant: "raw".to_string(),
                 database: pack.name.clone(),
+                provenance: game_match
+                    .provenance
+                    .into_iter()
+                    .map(|item| IdentifyProvenance {
+                        source: item.source,
+                        source_name: item.source_name,
+                        source_url: item.source_url,
+                        source_commit: item.source_commit,
+                        license: item.license,
+                    })
+                    .collect(),
+                legacy_variant: game_match.legacy_variant,
+                dump_tags: game_match.dump_tags,
             });
         }
         if self.database.is_none() && !added.is_empty() {

@@ -322,7 +322,9 @@ export type ChecksumCommand = { input: string, algo?: Array<string>, select?: Ar
 
 export type IdentifyStatus = "matched" | "ambiguous" | "unknown";
 
-export type IdentifyTitleMatch = { name: string, platform: string, algorithm: string, variant: string, database: string, };
+export type IdentifyTitleMatch = { name: string, platform: string, algorithm: string, variant: string, database: string, provenance?: Array<IdentifyProvenance>, legacy_variant?: boolean, dump_tags?: Array<string>, };
+
+export type IdentifyProvenance = { source: string, source_name?: string, source_url?: string, source_commit?: string, license?: string, };
 
 export type IdentifyLookupResult = { status: IdentifyStatus, matches: Array<IdentifyTitleMatch>, };
 

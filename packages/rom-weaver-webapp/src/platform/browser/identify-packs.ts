@@ -5,9 +5,9 @@
  * 1. A pack that cannot be fetched, sized, or hashed is an UNAVAILABLE database,
  *    never a silent "no match". Callers get {@link IdentifyDataUnavailableError}
  *    so the UI can say so and offer a retry.
- * 2. Only the packs a ROM could plausibly match are downloaded. Loading every
- *    pack for a generic `.bin` would add a large transfer and memory cost.
- * 3. OpenGood and Redump packs ship with the app and use same-origin URLs.
+ * 2. The service worker installs every pack before use. This module reads only
+ *    the packs a ROM could plausibly match into memory.
+ * 3. Libretro and OpenGood data ships with the app and uses same-origin URLs.
  */
 import {
   findCatalogPlatformBySlug,
@@ -78,22 +78,24 @@ const PLATFORM_BY_EXTENSION: Record<string, string[]> = {
   gg: ["sega-game-gear"],
   lnx: ["atari-lynx"],
   md: ["sega-mega-drive-genesis"],
-  n64: ["nintendo-64"],
-  nes: ["nintendo-entertainment-system"],
-  ngc: ["neo-geo-pocket-color"],
-  ngp: ["neo-geo-pocket"],
-  pce: ["turbografx-16-pc-engine"],
+  n64: ["nintendo-nintendo-64"],
+  nes: ["nintendo-nintendo-entertainment-system"],
+  ngc: ["snk-neo-geo-pocket-color"],
+  ngp: ["snk-neo-geo-pocket"],
+  pce: ["nec-pc-engine-turbografx-16"],
   sfc: ["nintendo-super-nintendo-entertainment-system"],
-  sgx: ["turbografx-16-pc-engine"],
+  sgx: ["nec-pc-engine-turbografx-16"],
   smc: ["nintendo-super-nintendo-entertainment-system"],
   smd: ["sega-mega-drive-genesis"],
-  sms: ["sega-master-system"],
+  sms: ["sega-master-system-mark-iii"],
   swc: ["nintendo-super-nintendo-entertainment-system"],
-  unf: ["nintendo-entertainment-system"],
-  unif: ["nintendo-entertainment-system"],
-  v64: ["nintendo-64"],
-  z64: ["nintendo-64"],
+  unf: ["nintendo-nintendo-entertainment-system"],
+  unif: ["nintendo-nintendo-entertainment-system"],
+  v64: ["nintendo-nintendo-64"],
+  z64: ["nintendo-nintendo-64"],
 };
+
+const CARTRIDGE_FALLBACK_SLUGS = new Set(Object.values(PLATFORM_BY_EXTENSION).flat());
 
 /**
  * Header detection cannot separate these siblings - a Game Boy Color cartridge
@@ -103,13 +105,13 @@ const PLATFORM_BY_EXTENSION: Record<string, string[]> = {
  * yields no CRC32 hit.
  */
 const SIBLING_SLUGS: Record<string, string[]> = {
-  "neo-geo-pocket": ["neo-geo-pocket-color"],
-  "neo-geo-pocket-color": ["neo-geo-pocket"],
+  "snk-neo-geo-pocket": ["snk-neo-geo-pocket-color"],
+  "snk-neo-geo-pocket-color": ["snk-neo-geo-pocket"],
   "nintendo-game-boy": ["nintendo-game-boy-color"],
   "nintendo-game-boy-color": ["nintendo-game-boy"],
   "sega-32x": ["sega-mega-drive-genesis"],
-  "sega-game-gear": ["sega-master-system"],
-  "sega-master-system": ["sega-game-gear"],
+  "sega-game-gear": ["sega-master-system-mark-iii"],
+  "sega-master-system-mark-iii": ["sega-game-gear"],
   "sega-mega-drive-genesis": ["sega-32x"],
 };
 
@@ -137,10 +139,9 @@ const withSiblings = (slugs: Iterable<string>): string[] => {
 
 /**
  * Candidate pack slugs for an input, from the cheapest evidence available. An
- * empty result means "cannot be narrowed". The caller falls back to OpenGood
- * packs because an unknown raw file cannot provide a usable optical-media
- * profile. When a catalog is supplied, a detected platform name also routes
- * through its aliases, which reaches the Redump platforms.
+ * empty result means "cannot be narrowed". The caller falls back to cartridge
+ * packs because an unknown raw file cannot provide a usable optical
+ * media profile. A detected platform name also routes through catalog aliases.
  */
 const selectIdentifySlugs = (
   { entryNames, fileName, platform }: IdentifyPackHints,
@@ -164,7 +165,7 @@ let indexPromise: Promise<IdentifyIndex> | undefined;
 let catalogPromise: Promise<IdentifyCatalog | undefined> | undefined;
 const packPromises = new Map<string, Promise<BrowserIdentifyPack>>();
 
-/** Drop every cached index/catalog/pack promise so a retry refetches from the network. */
+/** Drop every cached index, catalog, and pack promise so a retry rereads local assets. */
 const resetIdentifyPackCache = () => {
   indexPromise = undefined;
   catalogPromise = undefined;
@@ -195,7 +196,7 @@ const loadIndex = async (): Promise<IdentifyIndex> => {
 
 /**
  * Load catalog.json when the deployment ships one. A missing or invalid
- * catalog degrades to index-only routing (OpenGood packs keep working), so
+ * catalog degrades to index-only routing, so
  * every failure resolves to `undefined` instead of throwing.
  */
 const loadCatalog = async (): Promise<IdentifyCatalog | undefined> => {
@@ -232,9 +233,8 @@ const toBrowserPack = (system: IdentifySystem, bytes: ArrayBuffer): BrowserIdent
 });
 
 const verifyPackBytes = async (system: IdentifySystem, bytes: ArrayBuffer): Promise<void> => {
-  // Size and SHA-256 both gate the pack: a truncated or substituted database
-  // MUST NOT reach the parser. Size is skipped when the index never listed it
-  // (catalog-only Redump packs).
+  // Size and SHA-256 both gate the pack. A truncated or substituted database
+  // MUST NOT reach the parser. A catalog-only pack has no indexed size.
   if (system.rawBytes > 0 && bytes.byteLength !== system.rawBytes) {
     throw new IdentifyDataUnavailableError(`ROM identify database size is invalid: ${system.file}`);
   }
@@ -318,8 +318,8 @@ const loadIdentifyPackSelection = async (
     }
   } else {
     // Generic cartridge files often have no useful extension or header. Keep
-    // their bounded OpenGood fallback, but never download every optical pack.
-    systems = index.systems.filter((system) => system.source === "opengood");
+    // the bounded cartridge fallback, but do not load every optical pack.
+    systems = index.systems.filter((system) => CARTRIDGE_FALLBACK_SLUGS.has(system.slug));
   }
   if (!systems.length) {
     throw new IdentifyDataUnavailableError("The ROM identify index lists no usable database");

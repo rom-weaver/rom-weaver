@@ -1,60 +1,60 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import {
-  buildCatalogPlatforms,
-  CATALOG_FORMAT,
-  INDEX_FORMAT,
-  INDEX_FORMAT_V2,
+  IDENTIFY_GENERATION_DATE,
+  LIBRETRO_DAT_PATHS,
+  LIBRETRO_PLATFORM_PATHS,
+  LIBRETRO_REVISION,
+  OPENGOOD_ONLY_PLATFORMS,
+  OPENGOOD_REVISION,
+  extractGoodToolsDumpTags,
   main,
   mediaProfileFor,
-  normalizeAlias,
-  OPENGOOD_PLATFORMS,
-  OPENGOOD_REVISION,
-  REDUMP_PLATFORMS,
-  REDUMP_DEFAULT_MEDIA_PROFILE,
-  slugifyPlatform,
+  mergeLegacyFallbackGames,
+  parseClrMameProDat,
+  parseLibretroGames,
+  parseOpenGoodGames,
 } from "./build-identify-index.mjs";
 
-const scriptDir = dirname(fileURLToPath(import.meta.url));
-const fixtureDir = join(scriptDir, "../tests/fixtures/identify");
-const CONFLICT_VALUE_FLAG = 0x80000000;
+const NES = "Nintendo - Nintendo Entertainment System";
+const LIBRETRO_DAT = `clrmamepro (
+ name "Nintendo - Nintendo Entertainment System"
+ description "Pinned Libretro NES DAT"
+ date "2026-08-27"
+)
+game (
+ name "Alpha Quest (USA)"
+ description "The Libretro title"
+ region "USA"
+ rom ( name "alpha.nes" size 16 crc AABBCCDD md5 00112233445566778899AABBCCDDEEFF sha1 00112233445566778899AABBCCDDEEFF00112233 )
+)`;
+const OPENGOOD_DAT = `<?xml version="1.0"?><datafile><header><date>2021-12-27</date></header>
+<game name="Alpha Quest (U) [!]"><rom name="alpha.nes" size="16" crc="aabbccdd" md5="00112233445566778899aabbccddeeff" sha1="00112233445566778899aabbccddeeff00112233"/></game>
+<game name="Legacy Quest (U) [b1][T-Eng]"><rom name="legacy.nes" size="32" crc="deadbeef"/></game></datafile>`;
+const REDUMP_DAT = `clrmamepro ( name "Sony - PlayStation" )
+game ( name "Disc" rom ( name "Disc (Track 1).bin" size 16 crc AABBCCDD ) )`;
 
 function tempDir(prefix) {
   return mkdtempSync(join(os.tmpdir(), `rw-identify-${prefix}-`));
 }
 
-// Every OpenGood platform maps to fixture DATs so no test touches the network.
-// The cache is pre-seeded at the exact path downloadOpenGoodDat would use.
-function seedOpenGoodCache(cacheDir) {
-  const datDir = join(cacheDir, "opengood", OPENGOOD_REVISION);
-  mkdirSync(datDir, { recursive: true });
-  const fixture = readFileSync(join(fixtureDir, "OpenNES.dat"));
-  for (const datFiles of Object.values(OPENGOOD_PLATFORMS)) {
-    for (const datFile of datFiles) writeFileSync(join(datDir, datFile), fixture);
-  }
+function writeCachedDat(cacheDir, source, revision, datFile, bytes) {
+  const relativePath = datFile.includes("/")
+    ? datFile
+    : source === "libretro"
+      ? `dat/${datFile}`
+      : `dats/${datFile}`;
+  const target = join(cacheDir, source, revision, relativePath);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, bytes);
 }
 
-function seedRedumpCache(cacheDir) {
-  const datDir = join(cacheDir, "redump");
-  mkdirSync(datDir, { recursive: true });
-  for (const slug of Object.values(REDUMP_PLATFORMS)) {
-    const result = spawnSync("zip", ["-q", "-X", join(datDir, `${slug}.zip`), "Redump.dat"], {
-      cwd: fixtureDir,
-    });
-    assert.equal(result.status, 0, String(result.stderr));
-  }
-}
-
-// Parse the RWFP1/RWFP2 outer container: magic(8), count u32, directory of
-// (nameLen u16, size u64, name), then payloads in directory order.
 function parsePack(bytes) {
-  const magic = bytes.subarray(0, 8).toString("binary");
+  assert.equal(bytes.subarray(0, 8).toString("binary"), "RWFP2\0\0\0");
   const count = bytes.readUInt32LE(8);
   let cursor = 12;
   const directory = [];
@@ -72,93 +72,99 @@ function parsePack(bytes) {
     members.set(entry.name, bytes.subarray(cursor, cursor + entry.size));
     cursor += entry.size;
   }
-  assert.equal(cursor, bytes.length, "trailing bytes after pack payloads");
-  return { magic, memberOrder: directory.map((entry) => entry.name), members };
+  return members;
 }
 
-function parseRoute(bytes) {
-  assert.equal(bytes.subarray(0, 4).toString("binary"), "RWR2");
-  assert.equal(bytes.readUInt16LE(4), 1);
-  assert.equal(bytes.readUInt16LE(6), 0);
-  const keyCount = bytes.readUInt32LE(8);
-  const conflictEntries = bytes.readUInt32LE(12);
-  const conflictValueCount = bytes.readUInt32LE(16);
-  let cursor = 20;
-  const records = [];
-  for (let index = 0; index < keyCount; index += 1) {
-    const crc32 = bytes.subarray(cursor, cursor + 4).toString("hex");
-    cursor += 4;
-    const size = Number(bytes.readBigUInt64LE(cursor));
-    cursor += 8;
-    const value = bytes.readUInt32LE(cursor);
-    cursor += 4;
-    records.push({ crc32, size, value });
-  }
-  const conflictOffsets = [];
-  for (let index = 0; index <= conflictEntries; index += 1) {
-    conflictOffsets.push(bytes.readUInt32LE(cursor));
-    cursor += 4;
-  }
-  const conflictValues = [];
-  for (let index = 0; index < conflictValueCount; index += 1) {
-    conflictValues.push(bytes.readUInt32LE(cursor));
-    cursor += 4;
-  }
-  assert.equal(cursor, bytes.length, "trailing bytes after route.bin");
-  return { conflictOffsets, conflictValues, records };
-}
-
-function parseRefs(bytes) {
-  assert.equal(bytes.subarray(0, 4).toString("binary"), "RWX2");
-  assert.equal(bytes.readUInt16LE(4), 1);
-  assert.equal(bytes.readUInt16LE(6), 6);
-  const refs = [];
-  for (let cursor = 8; cursor < bytes.length; cursor += 6) {
-    refs.push({
-      gameIndex: bytes.readUInt32LE(cursor),
-      componentIndex: bytes.readUInt16LE(cursor + 4),
-    });
-  }
-  return refs;
-}
-
-// Resolve one (crc32, size) key against a parsed route + refs pair, mirroring
-// what the Rust RWFP2 reader will do.
-function routeLookup(route, refs, crc32, size) {
-  const record = route.records.find(
-    (candidate) => candidate.crc32 === crc32 && candidate.size === size,
+test("the Libretro manifest contains all pinned root and metadata DAT files", () => {
+  assert.equal(LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("dat/")).length, 52);
+  assert.equal(
+    LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("metadat/no-intro/")).length,
+    92,
   );
-  if (!record) return [];
-  if (record.value < CONFLICT_VALUE_FLAG) return [refs[record.value]];
-  const conflictIndex = record.value - CONFLICT_VALUE_FLAG;
-  const start = route.conflictOffsets[conflictIndex];
-  const end = route.conflictOffsets[conflictIndex + 1];
-  return route.conflictValues.slice(start, end).map((refId) => refs[refId]);
-}
-
-async function buildFromFixtureDump(only, extraArgs = []) {
-  const work = tempDir("build");
-  const cacheDir = join(work, "cache");
-  const outDir = join(work, "out");
-  seedOpenGoodCache(cacheDir);
-  seedRedumpCache(cacheDir);
-  await main([
-    "--cache-dir",
-    cacheDir,
-    "--out",
-    outDir,
-    "--no-brotli",
-    ...(only ? ["--only", only] : []),
-    ...extraArgs,
+  assert.equal(
+    LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("metadat/redump/")).length,
+    22,
+  );
+  assert.deepEqual(LIBRETRO_PLATFORM_PATHS[NES], [
+    "metadat/no-intro/Nintendo - Nintendo Entertainment System.dat",
+    "dat/Nintendo - Nintendo Entertainment System.dat",
   ]);
-  return { cacheDir, outDir, work };
-}
+});
 
-test("opengood platforms build RWFP1 packs from the OpenGood source", async () => {
-  const work = tempDir("opengood");
+test("the OpenGood manifest uses split DATs, never aggregate siblings", () => {
+  const files = Object.values(OPENGOOD_ONLY_PLATFORMS).flat();
+  for (const aggregate of [
+    "OpenGBA.dat",
+    "OpenGBx.dat",
+    "OpenGen.dat",
+    "OpenN64.dat",
+    "OpenNGPx.dat",
+    "OpenSNES.dat",
+    "OpenWSx.dat",
+  ]) {
+    assert.ok(!files.includes(aggregate), aggregate);
+  }
+  assert.ok(files.includes("OpenGBA.GBA.dat"));
+  assert.ok(files.includes("OpenWSx.WSC.dat"));
+});
+
+test("the ClrMamePro parser preserves upstream metadata", () => {
+  const parsed = parseClrMameProDat(LIBRETRO_DAT);
+  assert.equal(parsed.header.date, "2026-08-27");
+  assert.equal(parsed.games[0].metadata.description, "The Libretro title");
+  assert.equal(parsed.games[0].roms[0].crc, "AABBCCDD");
+});
+
+test("Redump metadata uses track fingerprints and a track media profile", () => {
+  const parsed = parseLibretroGames(
+    REDUMP_DAT,
+    "Sony - PlayStation",
+    "metadat/redump/Sony - PlayStation.dat",
+  );
+  assert.equal(parsed.games[0].components[0].hashScope, "track_file");
+  assert.equal(parsed.games[0].components[0].role, "data_track");
+  assert.equal(parsed.games[0].components[0].track, 1);
+  assert.equal(mediaProfileFor("Sony - PlayStation", "libretro"), "redump-cd-track-v1");
+});
+
+test("merge dedupes identical scoped hashes and retains legacy GoodTools data", () => {
+  const primary = parseLibretroGames(
+    LIBRETRO_DAT,
+    NES,
+    "Nintendo - Nintendo Entertainment System.dat",
+  );
+  const fallback = parseOpenGoodGames(OPENGOOD_DAT, NES, "OpenNES.dat");
+  const games = mergeLegacyFallbackGames(primary.games, fallback.games);
+  assert.equal(games.length, 2);
+  assert.equal(games[0].components.length, 1);
+  assert.deepEqual(games[0].dumpTags, ["!"]);
+  assert.equal(games[0].provenance.length, 2);
+  const legacy = games.find((game) => game.name.startsWith("Legacy Quest"));
+  assert.equal(legacy.legacyVariant, true);
+  assert.deepEqual(legacy.dumpTags, ["b1", "T-Eng"]);
+  assert.deepEqual(extractGoodToolsDumpTags("Title [!][b1]"), ["!", "b1"]);
+});
+
+test("the builder emits deterministic mixed and fallback-only RWFP2 packs", async () => {
+  const work = tempDir("mixed");
   const cacheDir = join(work, "cache");
   const outDir = join(work, "out");
-  seedOpenGoodCache(cacheDir);
+  writeCachedDat(
+    cacheDir,
+    "libretro",
+    LIBRETRO_REVISION,
+    "dat/Nintendo - Nintendo Entertainment System.dat",
+    LIBRETRO_DAT,
+  );
+  writeCachedDat(
+    cacheDir,
+    "libretro",
+    LIBRETRO_REVISION,
+    "metadat/no-intro/Nintendo - Nintendo Entertainment System.dat",
+    LIBRETRO_DAT,
+  );
+  writeCachedDat(cacheDir, "opengood", OPENGOOD_REVISION, "OpenNES.dat", OPENGOOD_DAT);
+  writeCachedDat(cacheDir, "opengood", OPENGOOD_REVISION, "OpenCoCo.dat", OPENGOOD_DAT);
   await main([
     "--cache-dir",
     cacheDir,
@@ -166,266 +172,46 @@ test("opengood platforms build RWFP1 packs from the OpenGood source", async () =
     outDir,
     "--no-brotli",
     "--only",
-    "Nintendo Entertainment System",
+    `${NES},Tandy - Color Computer`,
   ]);
 
-  const index = JSON.parse(readFileSync(join(outDir, "index.json"), "utf8"));
-  assert.equal(index.format, INDEX_FORMAT);
-  assert.equal(index.catalog, "catalog.json");
-  assert.equal(index.systems.length, 1);
-  assert.equal(index.systems[0].source, "opengood");
-  assert.equal(index.systems[0].packFormat, "RWFP1");
+  const nes = parsePack(readFileSync(join(outDir, "nintendo-nintendo-entertainment-system.pack")));
+  const manifest = JSON.parse(nes.get("manifest.json").toString("utf8"));
+  const games = JSON.parse(nes.get("games.json").toString("utf8"));
+  assert.equal(manifest.source, "libretro");
+  assert.equal(manifest.generationDate, IDENTIFY_GENERATION_DATE);
+  assert.equal(games[0].description, "The Libretro title");
+  assert.equal(games[1].legacyVariant, true);
 
-  const pack = parsePack(readFileSync(join(outDir, "nintendo-entertainment-system.pack")));
-  assert.equal(pack.magic, "RWFP1\0\0\0");
-  const manifest = JSON.parse(pack.members.get("manifest.json").toString("utf8"));
-  assert.equal(manifest.format, INDEX_FORMAT);
-  assert.deepEqual(JSON.parse(pack.members.get("names.json").toString("utf8")), [
-    "Alpha Quest (U) [!]",
-    "Beta Blaster (U) (PRG1) [!]",
-  ]);
-});
+  const tandy = parsePack(readFileSync(join(outDir, "tandy-color-computer.pack")));
+  const tandyManifest = JSON.parse(tandy.get("manifest.json").toString("utf8"));
+  const tandyGames = JSON.parse(tandy.get("games.json").toString("utf8"));
+  assert.equal(tandyManifest.source, "opengood");
+  assert.equal(tandyManifest.provenance.libretro, null);
+  assert.equal(tandyGames[0].source, "opengood");
+  assert.equal(tandyGames[0].upstreamSource, "open-good");
 
-test("the Redump map includes systems outside the original app catalog", () => {
-  assert.equal(REDUMP_PLATFORMS["Atari Jaguar CD Interactive Multimedia System"], "ajcd");
-  assert.equal(REDUMP_PLATFORMS["Panasonic 3DO Interactive Multiplayer"], "3do");
-  assert.equal(REDUMP_PLATFORMS["Microsoft Xbox"], "xbox");
-  assert.equal(REDUMP_PLATFORMS["Sony PlayStation 3"], "ps3");
-  assert.equal(
-    mediaProfileFor("Atari Jaguar CD Interactive Multimedia System", "redump"),
-    REDUMP_DEFAULT_MEDIA_PROFILE,
-  );
-  assert.equal(mediaProfileFor("Sega Dreamcast", "redump"), "redump-gdrom-track-v1");
-});
-
-test("redump DATs build grouped RWFP2 packs", async () => {
-  const { outDir } = await buildFromFixtureDump("Sony PlayStation,Sega Saturn");
-
-  const index = JSON.parse(readFileSync(join(outDir, "index.json"), "utf8"));
-  const bySlug = new Map(index.systems.map((system) => [system.slug, system]));
-  assert.equal(bySlug.get("sony-playstation").packFormat, "RWFP2");
-  assert.equal(bySlug.get("sega-saturn").packFormat, "RWFP2");
-  assert.equal(bySlug.get("sega-saturn").source, "redump");
-
-  const pack = parsePack(readFileSync(join(outDir, "sony-playstation.pack")));
-  assert.equal(pack.magic, "RWFP2\0\0\0");
-  assert.deepEqual(pack.memberOrder, ["games.json", "route.bin", "refs.bin", "manifest.json"]);
-
-  const games = JSON.parse(pack.members.get("games.json").toString("utf8"));
-  assert.deepEqual(
-    games.map((game) => game.name),
-    ["Alpha & Omega", "Beta", "Delta"],
-  );
-
-  const alpha = games[0];
-  assert.equal(alpha.platform, "Sony PlayStation");
-  assert.equal(alpha.source, "redump");
-  assert.equal(alpha.upstreamSource, "redump");
-  assert.equal(alpha.components.length, 5);
-  assert.deepEqual(
-    alpha.components.map((component) => component.ordinal),
-    [0, 1, 2, 3, 4],
-  );
-  assert.equal(alpha.components[0].filename, "Alpha (USA) (Track 1).bin");
-  assert.equal(alpha.components[0].size, 1000);
-  assert.equal(alpha.components[0].crc32, "aaaaaaaa");
-  assert.equal(alpha.components[0].md5, "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a");
-  assert.equal(alpha.components[0].sha1, "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a");
-  assert.equal(alpha.components[0].required, true);
-  assert.equal(alpha.components[0].discriminating, true);
-  assert.ok(!("crc32" in alpha.components[3]), "chd component has no crc32 key");
-  assert.equal(alpha.components[3].sha1, "1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c");
-
-  const manifest = JSON.parse(pack.members.get("manifest.json").toString("utf8"));
-  assert.equal(manifest.format, INDEX_FORMAT_V2);
-  assert.equal(manifest.canonicalizationProfile, "redump-cd-track-v1");
-  assert.equal(manifest.canonicalizationVersion, 1);
-  assert.equal(manifest.counts.games, 3);
-  assert.equal(manifest.provenance.dat.url, "http://redump.org/datfile/psx/");
-  assert.ok(manifest.provenance.dat.sha256.match(/^[0-9a-f]{64}$/u));
-});
-
-test("shared components stay in games.json marked non-discriminating and leave route.bin", async () => {
-  const { outDir } = await buildFromFixtureDump("Sony PlayStation");
-  const pack = parsePack(readFileSync(join(outDir, "sony-playstation.pack")));
-  const games = JSON.parse(pack.members.get("games.json").toString("utf8"));
-  const route = parseRoute(pack.members.get("route.bin"));
-  const refs = parseRefs(pack.members.get("refs.bin"));
-
-  // The track shared by Alpha and Beta (size 500, identical md5) is kept in
-  // both games but must not be routable.
-  const alphaShared = games[0].components[2];
-  const betaShared = games[1].components[1];
-  assert.equal(alphaShared.discriminating, false);
-  assert.equal(betaShared.discriminating, false);
-  assert.deepEqual(routeLookup(route, refs, "cccccccc", 500), []);
-
-  // A unique component routes to exactly its (game, component) slot.
-  assert.deepEqual(routeLookup(route, refs, "aaaaaaaa", 1000), [
-    { gameIndex: 0, componentIndex: 0 },
-  ]);
-
-  // The same crc at a different, unique size stays routable on its own key:
-  // size disambiguates within one crc, ordered numerically (60 before 500).
-  assert.deepEqual(routeLookup(route, refs, "cccccccc", 60), [{ gameIndex: 0, componentIndex: 4 }]);
-
-  // Same (crc32, size) with different md5 in Beta and Delta stays
-  // discriminating and produces a conflict list of both refs.
-  const conflict = routeLookup(route, refs, "eeeeeeee", 300);
-  assert.deepEqual(conflict, [
-    { gameIndex: 1, componentIndex: 2 },
-    { gameIndex: 2, componentIndex: 0 },
-  ]);
-
-  // The chd component (size 0, sha1-only) must not be routed.
-  assert.equal(
-    refs.some((ref) => ref.gameIndex === 0 && ref.componentIndex === 3),
-    false,
-  );
-
-  // route.bin records are sorted by (crc32 bytes, numeric size) with unique
-  // keys. Sizes MUST compare numerically: string order would pass a broken
-  // writer and fail a correct one once sizes of different digit counts share
-  // one crc.
-  const parsed = route.records.map((record) => ({ crc32: record.crc32, size: record.size }));
-  const expected = [...parsed].sort((a, b) =>
-    a.crc32 < b.crc32 ? -1 : a.crc32 > b.crc32 ? 1 : Number(a.size) - Number(b.size),
-  );
-  assert.deepEqual(parsed, expected);
-  const keys = parsed.map((record) => `${record.crc32}|${record.size}`);
-  assert.equal(new Set(keys).size, keys.length);
-});
-
-test("catalog.json lists every OpenGood platform plus built redump platforms", async () => {
-  const { outDir } = await buildFromFixtureDump("Sega Saturn");
   const catalog = JSON.parse(readFileSync(join(outDir, "catalog.json"), "utf8"));
-  assert.equal(catalog.format, CATALOG_FORMAT);
-  assert.equal(catalog.generated.opengoodRevision, OPENGOOD_REVISION);
-  assert.ok(catalog.generated.redumpDats["Sega Saturn"].sha256.match(/^[0-9a-f]{64}$/u));
-  assert.equal(catalog.generated.redumpDats["Sega Saturn"].fileName, "ss.zip");
+  const nesCatalog = catalog.platforms.find((entry) => entry.canonicalPlatform === NES);
+  assert.ok(nesCatalog.aliases.includes("nintendo entertainment system"));
+  assert.ok(nesCatalog.aliases.includes("nes"));
 
-  const byName = new Map(catalog.platforms.map((entry) => [entry.canonicalPlatform, entry]));
-  for (const platform of Object.keys(OPENGOOD_PLATFORMS)) {
-    const entry = byName.get(platform);
-    assert.ok(entry, `catalog is missing OpenGood platform ${platform}`);
-    assert.equal(entry.source, "opengood");
-    assert.equal(entry.packFormat, "RWFP1");
-    assert.deepEqual(entry.mediaProfiles, ["opengood-cartridge-v1"]);
-    assert.equal(entry.packSlug, slugifyPlatform(platform));
-    assert.equal(entry.canonicalizationVersion, 1);
-    assert.ok(entry.aliases.includes(normalizeAlias(platform)));
-  }
-  assert.ok(byName.get("Sony PlayStation") === undefined, "unbuilt redump platforms stay out");
-  const saturn = byName.get("Sega Saturn");
-  assert.equal(saturn.source, "redump");
-  assert.equal(saturn.packFormat, "RWFP2");
-  assert.deepEqual(saturn.mediaProfiles, ["redump-cd-track-v1"]);
-  assert.ok(saturn.packSha256.match(/^[0-9a-f]{64}$/u));
-
-  const gba = byName.get("Nintendo Game Boy Advance");
-  assert.ok(gba.aliases.includes("gba"));
-  assert.ok(byName.get("Nintendo Entertainment System").aliases.includes("famicom"));
-
-  // No alias appears under two platforms.
-  const all = catalog.platforms.flatMap((entry) => entry.aliases);
-  assert.equal(new Set(all).size, all.length);
-});
-
-test("duplicate alias across platforms fails the build", () => {
-  assert.throws(
-    () =>
-      buildCatalogPlatforms([
-        { platform: "Foo Bar", slug: "foo-bar", source: "redump", packFormat: "RWFP2" },
-        { platform: "Foo  Bar", slug: "foo--bar", source: "redump", packFormat: "RWFP2" },
-      ]),
-    /Duplicate platform alias "foo bar"/u,
-  );
-});
-
-test("duplicate packSlug fails the build", () => {
-  assert.throws(
-    () =>
-      buildCatalogPlatforms([
-        { platform: "Foo:Bar", slug: "foo-bar", source: "redump", packFormat: "RWFP2" },
-        { platform: "Foo.Bar", slug: "foo-bar", source: "redump", packFormat: "RWFP2" },
-      ]),
-    /Duplicate packSlug "foo-bar"/u,
-  );
-});
-
-test("a discovered platform's own name beats another platform's curated alias", () => {
-  // The real dump contains a "GBA" directory; its own normalized name claims
-  // "gba" and the curated Game Boy Advance alias is dropped, not fatal.
-  const platforms = buildCatalogPlatforms([
-    {
-      platform: "Nintendo Game Boy Advance",
-      slug: "nintendo-game-boy-advance",
-      source: "opengood",
-      packFormat: "RWFP1",
-    },
-    { platform: "GBA", slug: "gba", source: "redump", packFormat: "RWFP2" },
-  ]);
-  const gba = platforms.find((entry) => entry.canonicalPlatform === "Nintendo Game Boy Advance");
-  assert.ok(!gba.aliases.includes("gba"));
-  const dumpGba = platforms.find((entry) => entry.canonicalPlatform === "GBA");
-  assert.deepEqual(dumpGba.aliases, ["gba"]);
-});
-
-test("rebuilding from identical input is byte-identical", async () => {
-  const first = await buildFromFixtureDump("Sony PlayStation,Sega Saturn");
-  const outDir2 = join(first.work, "out2");
+  const outDir2 = join(work, "out2");
   await main([
     "--cache-dir",
-    first.cacheDir,
+    cacheDir,
     "--out",
     outDir2,
     "--no-brotli",
     "--only",
-    "Sony PlayStation,Sega Saturn",
+    `${NES},Tandy - Color Computer`,
   ]);
-  for (const name of ["sony-playstation.pack", "sega-saturn.pack", "catalog.json"]) {
-    assert.deepEqual(
-      readFileSync(join(first.outDir, name)),
-      readFileSync(join(outDir2, name)),
-      name,
-    );
+  for (const file of [
+    "nintendo-nintendo-entertainment-system.pack",
+    "tandy-color-computer.pack",
+    "catalog.json",
+    "index.json",
+  ]) {
+    assert.deepEqual(readFileSync(join(outDir, file)), readFileSync(join(outDir2, file)), file);
   }
-});
-
-test("--max-objects limits parsed game objects for redump platforms", async () => {
-  const { outDir } = await buildFromFixtureDump("Sony PlayStation", ["--max-objects", "2"]);
-  const pack = parsePack(readFileSync(join(outDir, "sony-playstation.pack")));
-  const games = JSON.parse(pack.members.get("games.json").toString("utf8"));
-  assert.ok(games.length >= 1 && games.length <= 2, `expected 1-2 games, got ${games.length}`);
-});
-
-test("--only rejects an optical platform without a Redump mapping", async () => {
-  const work = tempDir("missing");
-  const cacheDir = join(work, "cache");
-  seedOpenGoodCache(cacheDir);
-  await assert.rejects(
-    main([
-      "--cache-dir",
-      cacheDir,
-      "--out",
-      join(work, "out"),
-      "--no-brotli",
-      "--only",
-      "No Such Platform",
-    ]),
-    /not configured/u,
-  );
-});
-
-test("--redump-all builds every configured optical platform", async () => {
-  const work = tempDir("redump-all");
-  const cacheDir = join(work, "cache");
-  seedOpenGoodCache(cacheDir);
-  seedRedumpCache(cacheDir);
-  await main(["--cache-dir", cacheDir, "--out", join(work, "out"), "--no-brotli", "--redump-all"]);
-  const index = JSON.parse(readFileSync(join(work, "out", "index.json"), "utf8"));
-  assert.equal(
-    index.systems.filter((system) => system.source === "redump").length,
-    Object.keys(REDUMP_PLATFORMS).length,
-  );
 });

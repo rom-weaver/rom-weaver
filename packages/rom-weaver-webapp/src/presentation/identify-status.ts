@@ -59,7 +59,7 @@ const IDENTIFY_CONDITION_LABEL: Readonly<Record<IdentifyCondition, string>> = {
 
 /** Reader-facing source names for the machine source ids the packs carry. */
 const identifySourceLabel = (source: string): string =>
-  source === "opengood" ? "OpenGood" : source === "redump" ? "Redump" : source;
+  source === "libretro" ? "Libretro" : source === "opengood" ? "OpenGood" : source === "redump" ? "Redump" : source;
 
 /** "3 of 4 required components matched" - the denominator must stay visible. */
 const identifyComponentEvidenceLabel = (matched: number, total: number): string =>
@@ -69,10 +69,8 @@ const identifyComponentEvidenceLabel = (matched: number, total: number): string 
 const identifyMatchCountLabel = (count: number): string => `${count} possible ${count === 1 ? "match" : "matches"}`;
 
 /**
- * The backend reports a match's database as the pack file name, which encodes
- * the platform, not the provenance. Every shipped pack is built from OpenGood
- * (scripts/build-hasheous-identify-index.mjs), so a `.pack` name reads as that;
- * synthetic databases ("patch requirement") pass through.
+ * Old results only report a pack file name. New results carry structured
+ * provenance, while synthetic database names pass through.
  */
 const formatIdentifySource = (database: string): string => (database.endsWith(".pack") ? "OpenGood" : database);
 

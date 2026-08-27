@@ -29,6 +29,11 @@ const identifyDataSources = Object.fromEntries(
     .filter((name) => !name.endsWith(".pack"))
     .map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
 );
+const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
+const identifyPackPrecacheEntries = identifyDataIndex.systems.map((system) => ({
+  revision: system.sha256,
+  url: `assets/identify-${system.file}?sha256=${system.sha256}`,
+}));
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
@@ -1205,9 +1210,9 @@ export default defineConfig(({ command, mode }) => {
         },
         filename: "cache-service-worker.ts",
         injectManifest: {
-          // Identify packs MUST stay out of the precache because a session
-          // usually needs one system. The service worker runtime-caches each
-          // compressed pack on first use, so that system works offline later.
+          // Logical pack URLs resolve to Brotli sidecars at install time. The
+          // fixed full set prevents a ROM-dependent request from reaching the network.
+          additionalManifestEntries: identifyPackPrecacheEntries,
           globIgnores: ["**/*.map", "assets/identify-*.pack.br"],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:

@@ -1336,7 +1336,7 @@ mod checksum_command;
 mod identify_command;
 pub use identify_command::{
     IdentifyComponent, IdentifyDatabaseInfo, IdentifyEvidence, IdentifyLookupResult, IdentifyMedia,
-    IdentifyResult, IdentifyStatus, IdentifyTitleMatch,
+    IdentifyProvenance, IdentifyResult, IdentifyStatus, IdentifyTitleMatch,
 };
 
 #[path = "identify_builtin.rs"]

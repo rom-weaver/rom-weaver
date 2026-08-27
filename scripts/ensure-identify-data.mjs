@@ -7,18 +7,22 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   CATALOG_FORMAT,
   INDEX_FORMAT,
+  LIBRETRO_PLATFORM_PATHS,
+  LIBRETRO_REPOSITORY,
+  LIBRETRO_REVISION,
   main as buildIdentifyData,
-  OPENGOOD_PLATFORMS,
+  OPENGOOD_STANDALONE_PLATFORMS,
   OPENGOOD_REPOSITORY,
   OPENGOOD_REVISION,
-  REDUMP_PLATFORMS,
   slugifyPlatform,
 } from "./build-identify-index.mjs";
 
 const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const rootDir = resolve(scriptDir, "..");
 const defaultDataDir = join(rootDir, "crates", "rom-weaver-cli", "data", "identify", "v1");
-const expectedPackNames = Object.keys(OPENGOOD_PLATFORMS).map((platform) => `${slugifyPlatform(platform)}.pack`);
+const expectedPackNames = [...Object.keys(LIBRETRO_PLATFORM_PATHS), ...Object.keys(OPENGOOD_STANDALONE_PLATFORMS)].map(
+  (platform) => `${slugifyPlatform(platform)}.pack`,
+);
 const sortedExpectedPackNames = [...expectedPackNames].sort();
 
 const log = (level, message) => console.log(`[ensure-identify-data] ${level}: ${message}`);
@@ -36,13 +40,17 @@ const hasCurrentCatalog = (dataDir) => {
     return false;
   }
   if (catalog.format !== CATALOG_FORMAT) return false;
-  if (catalog.generated?.opengoodRevision !== OPENGOOD_REVISION) return false;
+  if (
+    catalog.generated?.libretroRevision !== LIBRETRO_REVISION ||
+    catalog.generated?.opengoodRevision !== OPENGOOD_REVISION
+  )
+    return false;
   if (!Array.isArray(catalog.platforms)) return false;
   const slugs = new Set(catalog.platforms.map((platform) => platform.packSlug));
-  return Object.keys(OPENGOOD_PLATFORMS).every((platform) => slugs.has(slugifyPlatform(platform)));
+  return expectedPackNames.every((name) => slugs.has(name.slice(0, -".pack".length)));
 };
 
-export const hasCurrentData = (dataDir = defaultDataDir, options = {}) => {
+export const hasCurrentData = (dataDir = defaultDataDir) => {
   const indexPath = join(dataDir, "index.json");
   if (!existsSync(indexPath)) return false;
   let index;
@@ -54,6 +62,8 @@ export const hasCurrentData = (dataDir = defaultDataDir, options = {}) => {
   if (
     index.format !== INDEX_FORMAT ||
     index.catalog !== "catalog.json" ||
+    index.sources?.libretro?.url !== LIBRETRO_REPOSITORY ||
+    index.sources?.libretro?.revision !== LIBRETRO_REVISION ||
     index.sources?.opengood?.url !== OPENGOOD_REPOSITORY ||
     index.sources?.opengood?.revision !== OPENGOOD_REVISION
   ) {
@@ -62,29 +72,16 @@ export const hasCurrentData = (dataDir = defaultDataDir, options = {}) => {
   if (!hasCurrentCatalog(dataDir)) return false;
   if (!Array.isArray(index.systems)) return false;
 
-  // The OpenGood set must be exactly the 17 expected packs.
-  const opengoodPackNames = index.systems
-    .filter((system) => system.source === "opengood")
-    .map((system) => system.file)
-    .sort();
-  if (opengoodPackNames.length !== sortedExpectedPackNames.length) return false;
-  if (opengoodPackNames.some((name, position) => name !== sortedExpectedPackNames[position])) return false;
+  const packNames = index.systems.map((system) => system.file).sort();
+  if (packNames.length !== sortedExpectedPackNames.length) return false;
+  if (packNames.some((name, position) => name !== sortedExpectedPackNames[position])) return false;
 
   const systemsByFile = new Map(index.systems.map((system) => [system.file, system]));
   const actualPackNames = readdirSync(dataDir).filter((name) => name.endsWith(".pack"));
   for (const name of actualPackNames) {
     const system = systemsByFile.get(name);
     if (!system) return false;
-    if (system.source !== "opengood" && system.source !== "redump") return false;
-  }
-
-  if (options.redumpAll) {
-    const redumpSlugs = new Set(
-      index.systems.filter((system) => system.source === "redump").map((system) => system.slug),
-    );
-    if (Object.keys(REDUMP_PLATFORMS).some((platform) => !redumpSlugs.has(slugifyPlatform(platform)))) {
-      return false;
-    }
+    if (system.source !== "libretro" && system.source !== "opengood") return false;
   }
 
   const verifyPack = (system) => {
@@ -100,19 +97,14 @@ export const hasCurrentData = (dataDir = defaultDataDir, options = {}) => {
 };
 
 export const main = async (argv = process.argv.slice(2), dataDir = defaultDataDir) => {
-  const redumpAll = argv.includes("--redump-all");
-  if (!argv.includes("--force") && hasCurrentData(dataDir, { redumpAll })) {
-    log("info", `OpenGood ${OPENGOOD_REVISION}${redumpAll ? " and Redump" : ""} identify data is ready`);
+  if (!argv.includes("--force") && hasCurrentData(dataDir)) {
+    log("info", `Libretro ${LIBRETRO_REVISION} and OpenGood ${OPENGOOD_REVISION} identify data is ready`);
     return;
   }
 
   rmSync(dataDir, { recursive: true, force: true });
-  log("info", `building OpenGood ${OPENGOOD_REVISION} identify data`);
-  await buildIdentifyData([
-    redumpAll ? "--redump-all" : "--opengood-only",
-    "--out",
-    dataDir,
-  ]);
+  log("info", `building Libretro ${LIBRETRO_REVISION} and OpenGood ${OPENGOOD_REVISION} identify data`);
+  await buildIdentifyData(["--out", dataDir]);
 };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

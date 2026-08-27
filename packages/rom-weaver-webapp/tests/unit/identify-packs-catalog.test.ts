@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sha256Hex } from "../../src/lib/identify/sha256-hex.ts";
 
-const PACK_BODY = "redump-pack";
+const PACK_BODY = "libretro-pack";
 const OPENGOOD_SHA = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 const INDEX = {
   format: "rom-weaver-identify-system-pack-v1",
@@ -25,11 +25,11 @@ const catalogWith = (packSha: string) => ({
     {
       aliases: ["psx", "sony playstation"],
       canonicalPlatform: "Sony PlayStation",
-      mediaProfiles: ["redump-cd-track-v1"],
+      mediaProfiles: ["optical-single-image-v1"],
       packFormat: "RWFP2",
       packSha256: packSha,
       packSlug: "sony-playstation",
-      source: "redump",
+      source: "libretro",
     },
   ],
 });
@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 describe("catalog-aware pack routing", () => {
-  it("routes aliases to a same-origin Redump pack", async () => {
+  it("routes aliases to a same-origin Libretro pack", async () => {
     const packSha = await sha256Hex(new TextEncoder().encode(PACK_BODY).buffer as ArrayBuffer);
     const fetchMock = stubFetch(packSha);
     const packs = await import("../../src/platform/browser/identify-packs.ts");

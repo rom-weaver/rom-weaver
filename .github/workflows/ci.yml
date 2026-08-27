@@ -612,7 +612,7 @@ jobs:
 
       - name: Build identify data archive
         run: |
-          node scripts/ensure-identify-data.mjs --redump-all
+          node scripts/ensure-identify-data.mjs
           node scripts/build-identify-release-data.mjs
 
       - name: Upload identify data

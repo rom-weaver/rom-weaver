@@ -120,7 +120,7 @@ Not every command takes all four. `extract` has no `--no-extract`, since unpacki
 
 `identify` computes CRC32, MD5, and SHA-1. It searches the raw ROM and common checksum variants.
 
-Native release packages include OpenGood data for 17 cartridge systems and Redump data for 56 optical systems. The default `bundled-identify-data` feature enables lookup of packaged Zstandard packs. Builds without it ignore packaged packs. [Where identify data comes from](../explanation/identify-sources.md) explains the split.
+Native release packages include pinned Libretro packs plus OpenGood legacy fallbacks. The default `bundled-identify-data` feature enables packaged Zstandard lookup. Builds without it ignore packaged packs.
 
 Native identify performs no network access.
 
@@ -162,6 +162,9 @@ The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON re
 - `platform_candidates`: detected platforms with `confidence` and `evidence`.
 - `media`, `components`: the input's media kind and hashed components.
 - `database`: the pack that answered - `source`, `pack_format` (`RWFP1`/`RWFP2`), and `canonicalization_profile`.
+- `matches[].provenance`: every source that contributed the matched hash record.
+- `matches[].legacy_variant`: true for an OpenGood-only record.
+- `matches[].dump_tags`: preserved GoodTools status tags for a legacy variant.
 - `evidence`: `required_components_matched`, `required_components_total`, and `layout_matched`.
 
 CUE/GDI/CHD inputs are identified per selected payload track, not yet as complete track sets. A single matched data track reports `quality: "partial"`, with `evidence` counting the required components that did not match.

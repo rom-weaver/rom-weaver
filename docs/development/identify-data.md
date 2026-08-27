@@ -1,132 +1,74 @@
 # ROM identify data
 
-The `identify` and `ingest` commands use compact title packs. RWFP1 stores OpenGood data. RWFP2 stores set-aware Redump data. Native release packages install all packs as external Zstandard files.
-
-The browser downloads only the packs a given input could match. It caches each pack after its first use. The packs are self-hosted Brotli assets.
-
-Ingest resolves ROM assets from their computed checksum variants. It also resolves a patch's expected source from embedded or file-name checksums. It does not hash the ROM or patch twice.
+ROMWeaver builds deterministic RWFP2 packs from pinned Libretro and OpenGood data. Native packages use Zstandard assets. The webapp uses Brotli assets.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Build-time data](#build-time-data)
-- [Browser pack selection](#browser-pack-selection)
-- [Browser caching](#browser-caching)
 - [Source policy](#source-policy)
-- [Catalog](#catalog)
-- [RWFP2 packs](#rwfp2-packs)
-- [Shared tracks](#shared-tracks)
-- [Determinism](#determinism)
-- [Provenance](#provenance)
-- [Redump data](#redump-data)
+- [RWFP2 records](#rwfp2-records)
+- [Browser installation](#browser-installation)
+- [Native installation](#native-installation)
+- [Determinism and provenance](#determinism-and-provenance)
 - [Pack integrity](#pack-integrity)
 
 <!-- END doctoc -->
 
 ## Build-time data
 
-The repository does not commit identify packs. Build tasks fetch data from [OpenGood](https://github.com/SnowflakePowered/opengood) and [Redump](http://redump.org/) to create the packs.
+The repository does not commit generated packs. `scripts/build-identify-index.mjs` pins both source commits and fetches only files from those commits.
 
-OpenGood publishes its data under CC0-1.0. The source revision is pinned in `scripts/build-identify-index.mjs`.
-
-The current source is the upstream repository because `rom-weaver/open-good` does not exist. The source URL and revision are kept together so a maintained fork can replace it later.
-
-Run the build step directly:
+Build the data:
 
 ```bash
 mise run identify-data
 ```
 
-The standard webapp and release tasks run this step automatically. The generated files live under `crates/rom-weaver-cli/data/identify/v1`, which Git ignores.
-
-Rebuild the packs after changing the source revision:
+Force a source refresh:
 
 ```bash
 node scripts/ensure-identify-data.mjs --force
 ```
 
-The generated index records the source revision. The browser build ships only the self-hosted Brotli packs. It does not deploy the raw packs.
-
-The CLI crate excludes generated data so its crates.io archive stays below the upload limit. `scripts/build-identify-release-data.mjs` creates `rom-weaver-identify-data.tar.zst` for release packages.
-
-## Browser pack selection
-
-The browser picks packs in two stages, so a drop never downloads the whole set when one system will do.
-
-1. The file name decides first. A `.gba` drop selects the Game Boy Advance pack and nothing else.
-2. A name that decides nothing (`.zip`, `.7z`, `.bin`, `.rom`) triggers a decompression-free `probe`. The probe returns the archive's member list and the ROM header's platform, and those select the packs.
-
-A detected platform widens to its siblings, because a header cannot separate Game Boy from Game Boy Color, Master System from Game Gear, or Neo Geo Pocket from its Color model. A wrong sibling costs one extra pack; a missing sibling would report a wrong "no match".
-
-When neither stage narrows the input, the browser loads the 17 OpenGood packs. An unknown raw file has no optical-media profile for a Redump match.
-
-## Browser caching
-
-The full pack set is about 137 MB raw and 24 MB after Brotli. Precaching it would add that transfer to every service-worker install and update. A session usually needs one system.
-
-The service worker therefore precaches only `assets/identify-index.json` and runtime-caches each pack on first use, in a dedicated `identify` cache. Offline identification works for every system whose pack has been fetched once.
-
-Each pack URL carries its own `sha256` query, so a rebuilt pack is a new cache key. The runtime handler deletes the superseded entry for the same file after it stores the new one.
+The raw output lives under `crates/rom-weaver-cli/data/identify/v1`. Git ignores this directory.
 
 ## Source policy
 
-`scripts/build-identify-index.mjs` builds from exactly two sources, one per platform:
+Libretro is the primary source. OpenGood supplies only hash keys that Libretro does not contain.
 
-- `OPENGOOD_PLATFORMS` names the 17 cartridge platforms OpenGood covers exclusively. These build RWFP1 packs and ship with the tool.
-- `REDUMP_PLATFORMS` names the 56 systems with public Redump DAT files. These systems build grouped RWFP2 packs and ship as browser assets.
+The deduplication key contains the hash algorithm, normalized hash, file size, and hash scope. An overlap keeps one lookup record, Libretro metadata, and both provenance entries.
 
-The sources never mix inside one platform. The reasoning lives in [Where identify data comes from](../explanation/identify-sources.md).
+OpenGood-only records use `legacyVariant: true`. Their `dumpTags` preserve the GoodTools status tokens.
 
-## Catalog
+## RWFP2 records
 
-The builder writes `catalog.json` (format `rom-weaver-identify-catalog-v1`) next to the packs. Each platform entry records the canonical name, aliases, source, media profiles, pack slug, pack format, pack SHA-256, and canonicalization version. `generated` records the OpenGood revision and each Redump DAT source.
+Every built-in pack uses RWFP2. RWFP1 remains readable for existing user packs.
 
-Aliases match case-insensitively after normalizing: lowercase, collapse non-alphanumerics to one space, trim. A platform's own normalized name beats another platform's curated alias; a duplicate alias or pack slug across two platforms is a build error.
+`games.json` stores the selected metadata, components, hash scopes, provenance, legacy status, and dump tags. `route.bin` maps CRC32 and size to component references. `refs.bin` maps those references to games. `manifest.json` stores the source and generation metadata.
 
-## RWFP2 packs
+## Browser installation
 
-RWFP2 reuses RWFP1's outer container layout with magic `RWFP2\0\0\0`. Members, in directory order: `games.json` (game records with per-component hashes, sizes, roles, and track numbers), `route.bin` (a CRC32+size routing index over discriminating components), `refs.bin` (routed key to game/component references), and `manifest.json` (format, platform, source, canonicalization profile, provenance, and counts). Only components that are discriminating, have a CRC32, and have a nonzero size get routed. The Rust reader dispatches on magic, so RWFP1 parsing is untouched; both `--database` and installed packs accept either format.
+The web build emits each pack as a Brotli static asset. The service worker precaches every logical pack URL during installation.
 
-## Shared tracks
+Identify requests use the precache only. A cache miss returns a local error. It does not fetch a pack in response to ROM data.
 
-Byte-identical components that appear under more than one game - overwhelmingly shared CD audio tracks such as silence and standard pre-gaps - are handled per format. RWFP1 drops them by default (`--keep-shared` keeps them). RWFP2 always keeps them in `games.json`, marked `discriminating: false`, and excludes them from `route.bin`: they can support a match but never pick a game alone.
+## Native installation
 
-## Determinism
+`scripts/build-identify-release-data.mjs` writes each pack as Zstandard and creates `rom-weaver-identify-data.tar.zst`.
 
-The same inputs produce byte-identical packs. Games sort by (platform, name), components by ordinal, routing records by (CRC32 bytes, size), and discovered platforms alphabetically. Duplicate routing keys are a build error.
+Release archives, npm platform packages, Homebrew, Scoop, and container images install the same static tree under `share/rom-weaver/identify/v1`. The CLI decompresses only the packs it reads.
 
-## Provenance
+The default `bundled-identify-data` feature enables this packaged-data lookup. Builds without it ignore packaged packs.
 
-Every output records where it came from. `catalog.json` pins the OpenGood revision and each Redump DAT ZIP checksum. Each RWFP2 manifest carries its platform's provenance. `index.json` records each pack's size and SHA-256. The CLI's `identify database import-redump` command writes the same shape into the user's database directory.
+## Determinism and provenance
 
-## Redump data
+Inputs, games, components, provenance, tags, routes, and output files use stable sorting. The source refresh date is pinned with the source revisions.
 
-Redump provides one Logiqx DAT ZIP per system. The builder keeps each game and its disc components together in RWFP2.
-
-Build one Redump pack directly:
-
-```bash
-script=scripts/build-identify-index.mjs
-node "$script" --only "Sony PlayStation" --out target/identify
-```
-
-Pass the generated pack to the CLI:
-
-```bash
-database=target/identify/sony-playstation.pack
-rom-weaver identify --input game.bin --database "$database"
-```
-
-Build every distributable browser pack:
-
-```bash
-node scripts/ensure-identify-data.mjs --redump-all --force
-```
-
-The default `bundled-identify-data` Cargo feature enables packaged-data lookup in native builds. Release packages install Zstandard packs under `share/rom-weaver/identify/v1`. The CLI decompresses only the packs it uses. `identify database install-all` installs the same checked archive into the user database for Cargo and other binary-only installs. The WASM build disables default features and requests Brotli packs from the webapp when it needs them.
+Each manifest records the source name, URL, commit, license, input path, and generation date. `index.json` records each pack size and SHA-256.
 
 ## Pack integrity
 
-`index.json` records the byte length and SHA-256 checksum for each pack. The browser verifies both values before it stages a pack. A pack that fails either check, or an index that cannot be fetched or parsed, makes identification **unavailable** - a state the UI reports separately from a genuine "no title matched".
+The browser and native CLI check each pack size and SHA-256 before use. The reader also checks every member, table length, offset, hash width, and reference.
 
-The pack reader also validates all offsets, table sizes, and member types. Invalid packs fail before a lookup starts.
+An invalid or absent pack reports identification as unavailable. It does not become a false no-match result.
