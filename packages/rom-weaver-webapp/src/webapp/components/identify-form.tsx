@@ -137,6 +137,8 @@ const CandidateCard = ({
         identification={{
           matches: candidate.matches,
           status: candidate.status,
+          ...(candidate.condition ? { condition: candidate.condition } : {}),
+          ...(candidate.hint ? { hint: candidate.hint } : {}),
           ...(candidate.quality ? { quality: candidate.quality } : {}),
           ...(candidate.platformCandidates ? { platformCandidates: candidate.platformCandidates } : {}),
           ...(candidate.evidence ? { evidence: candidate.evidence } : {}),

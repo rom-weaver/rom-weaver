@@ -77,6 +77,8 @@ test("database_required renders as a distinct state", async () => {
   });
   await waitForText("Database required");
   await waitForText("needs the Sony PlayStation database");
+  expect(host.querySelector(".identify-drawer")?.textContent).toContain("Database required");
+  expect(host.querySelector(".identify-drawer")?.textContent).toContain("needs the Sony PlayStation database");
   expect(host.textContent.includes("Open the database manager")).toBe(false);
   // The plain no-match copy must NOT show for the structured condition.
   expect(host.textContent.includes("No exact title match found")).toBe(false);
