@@ -100,14 +100,16 @@ const generatePatchedFileName = (
   romFileName: string,
   patchSources: ParsedPatchNameLike[],
   settings: OutputNameSettings,
+  identifiedBase?: string | null,
 ) => {
   if (settings.outputName) return settings.outputName;
+  const baseName = identifiedBase || getFileNameWithoutExtension(romFileName);
   if (settings.suffix) {
-    const romName = sanitizeFileNamePart(getFileNameWithoutExtension(romFileName), "patched");
+    const romName = sanitizeFileNamePart(baseName, "patched");
     return `${romName} (patched)`;
   }
 
-  const romName = sanitizeFileNamePart(getFileNameWithoutExtension(romFileName), "patched");
+  const romName = sanitizeFileNamePart(baseName, "patched");
   const patchNames = patchSources
     .map((patchSource) => {
       const generatedName = patchSource._generatedPatchName;
@@ -122,6 +124,7 @@ const getGeneratedOutputName = (
   inputSource: GeneratedOutputSource,
   patchSources: GeneratedOutputSource[],
   settings: OutputNameSettings,
+  identifiedBase?: string | null,
 ) => {
   if (settings.outputName) return settings.outputName;
 
@@ -134,6 +137,7 @@ const getGeneratedOutputName = (
       normalizePatchSourceForGeneratedFileName(patchSource, `patch ${index + 1}`),
     ),
     settings,
+    identifiedBase,
   );
 };
 

@@ -1,4 +1,5 @@
 import type { ChecksumRomProbe } from "../../types/checksum.ts";
+import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { TrimResult } from "../../types/public.ts";
 import type { SelectionCandidate } from "../../types/selection.ts";
 import type { CompressionFormat, CreateSettings } from "../../types/settings.ts";
@@ -12,13 +13,25 @@ import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { CreateWorkflowOptions, ProgressEvent, TrimInput } from "../../types/workflow-runtime-types.ts";
 import { getCompressionOutputExtension, isCompressionFormat } from "../compression/container-format-registry.ts";
 import { RomWeaverError, withAbortSignal } from "../errors.ts";
-import { getPrimaryInputAsset } from "../input/input-assets.ts";
+import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
+import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
 import { runTrimWorkflow } from "../trim/workflow.ts";
 import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
 import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
 import type { SharedRomStagedSource, StagedRomSourceController } from "./staged-rom-source.ts";
+import {
+  calculateStandardInputChecksumsForFile,
+  cloneIdentification,
+  getAssetDecompressionTimeMs,
+  getAssetParentCompressions,
+  getAssetSourceSize,
+  getInputAssetChecksums,
+  getPatchFilePrecomputedChecksumMs,
+  getPatchFilePrecomputedChecksums,
+  getPatchFilePrecomputedIdentification,
+} from "./staged-source-checksums.ts";
 
 type SourceStatus = TrimWorkflowSourceState["status"];
 type SourceRole = "input";
@@ -33,6 +46,7 @@ type InternalSourceState = {
   chdMode?: string;
   checksums?: TrimWorkflowChecksums;
   checksumTimeMs?: number;
+  identification?: ParsedIdentifyResolution;
   decompressionTimeMs?: number;
   parentCompressions: TrimWorkflowParentCompression[];
   romProbe?: ChecksumRomProbe;
@@ -55,6 +69,7 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
         decompressionTimeMs: state.decompressionTimeMs,
         fileName: state.fileName,
         id: state.id,
+        identification: cloneIdentification(state.identification),
         parentCompressions: state.parentCompressions.map((entry) => ({ ...entry })),
         romProbe: state.romProbe
           ? {
@@ -155,6 +170,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
         )) as StagedSource<TSource>;
         this.inputStage = stage;
         await this.inputStages.maybeResolveBlockingStageSelection(stage);
+        await this.finalizeInputStableState(stage);
         if (!this.manualOutputName) this.outputName = this.buildAutomaticOutputName();
       } catch (error) {
         await this.releaseInputStage();
@@ -257,6 +273,58 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     });
   }
 
+  /**
+   * Hash and identify the resolved ROM once staging settles, so the input card
+   * can show its checksums and title. Mirrors the create workflow's pass; trim
+   * never ran one before, which left its checksum panel permanently empty.
+   */
+  private async finalizeInputStableState(stage: StagedSource<TSource>) {
+    if (stage.state.status !== "ready") return;
+    const assets = stage.preparedInputAssets || [];
+    for (let index = 0; index < assets.length; index += 1) {
+      const asset = assets[index];
+      if (!(asset?.file && isChecksummableInputAsset(asset))) continue;
+      if (asset.checksums) continue;
+      const precomputed = getPatchFilePrecomputedChecksums(asset.file);
+      if (precomputed) {
+        asset.checksums = precomputed;
+        asset.identification = getPatchFilePrecomputedIdentification(asset.file);
+        asset.checksumTimeMs = getPatchFilePrecomputedChecksumMs(asset.file) ?? 0;
+        continue;
+      }
+      const checksumStartedAt = Date.now();
+      const checksumResult = await calculateStandardInputChecksumsForFile({
+        emitProgress: (event) => this.emitProgress(event),
+        file: asset.file,
+        logLevel: this.settings.logging?.level,
+        onLog: this.settings.logging?.sink,
+        progressId: `${this.id}:${stage.state.id}:${index}`,
+        role: TRIM_INPUT_ROLE,
+        runtime: this.runtime,
+        state: {
+          decompressionTimeMs: getAssetDecompressionTimeMs(asset, stage.state.decompressionTimeMs),
+          fileName: asset.fileName || stage.state.fileName || stage.state.id,
+          id: stage.state.id,
+          order: index,
+          parentCompressions: getAssetParentCompressions(asset, stage.parentCompressions),
+          size: asset.size,
+          sourceSize: getAssetSourceSize(asset, stage.state.sourceSize),
+          wasDecompressed: asset.preparation?.wasDecompressed ?? stage.state.wasDecompressed,
+        },
+        workflow: "trim",
+      });
+      asset.checksums = checksumResult.checksums;
+      asset.identification = checksumResult.identification;
+      asset.checksumTimeMs = Date.now() - checksumStartedAt;
+    }
+    const primaryAsset = getPrimaryInputAsset(assets);
+    const primaryChecksums = getInputAssetChecksums(primaryAsset);
+    if (!primaryChecksums) return;
+    stage.state.checksums = primaryChecksums;
+    stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
+    stage.state.identification = cloneIdentification(primaryAsset?.identification);
+  }
+
   private getPreparedTrimSource(stage: StagedSource<TSource>): unknown | undefined {
     return getPrimaryInputAsset(stage.preparedInputAssets || [])?.file;
   }
@@ -269,7 +337,9 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   private buildAutomaticOutputName() {
     const input = this.getInput();
     if (!input?.fileName) return this.outputName;
-    const baseName = appendTrimmedMarker(getFileNameWithoutExtension(input.fileName) || "trimmed");
+    const identifiedBase =
+      this.settings.output?.identifiedName === false ? null : identifiedOutputBaseName(input.identification);
+    const baseName = appendTrimmedMarker(identifiedBase || getFileNameWithoutExtension(input.fileName) || "trimmed");
     if (this.outputExtension) {
       return `${baseName}.${this.outputExtension}`;
     }

@@ -215,6 +215,16 @@ describe("serializeSettingsForStorage", () => {
     expect(loadSettings(makeStorage(serializeSettingsForStorage(settings))).emulatorSaveStorageEnabled).toBe(false);
   });
 
+  it("stores the identified-name default under both workflow output groups and loads it back", () => {
+    const settings = { ...getDefaultSettings(), identifiedOutputName: false };
+    const json = serializeSettingsForStorage(settings);
+    const parsed = JSON.parse(json as string);
+    expect(parsed.apply.output.identifiedName).toBe(false);
+    // Trim consumes the create group, so the setting must land there too.
+    expect(parsed.create.output.identifiedName).toBe(false);
+    expect(loadSettings(makeStorage(json)).identifiedOutputName).toBe(false);
+  });
+
   it("serializes a changed boolean field under apply.patch with the storage version", () => {
     const settings = { ...getDefaultSettings(), fixChecksum: true };
     const json = serializeSettingsForStorage(settings);

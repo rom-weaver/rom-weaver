@@ -201,6 +201,23 @@
 .rw-app .outname-ext-warn code {
   font-family: var(--mono);
 }
+/* Lives inside the options grid, so the grid gap owns the spacing. */
+.rw-app .opts-name-source > .checkrow {
+  grid-column: 1 / -1;
+  margin-block: 0;
+}
+.rw-app .outname-source svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--thread-text);
+}
+.rw-app .outname-source-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--thread-text);
+  white-space: nowrap;
+}
 
 .rw-app .cks .opts-lab {
   display: inline-flex;

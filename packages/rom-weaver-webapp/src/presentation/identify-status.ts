@@ -33,6 +33,12 @@ const IDENTIFY_STATUS_MARK: Readonly<Record<IdentifyStatus, IdentifyStatusMark>>
 /** "1 possible match" / "3 possible matches" - the count must be visible, not implied. */
 const identifyMatchCountLabel = (count: number): string => `${count} possible ${count === 1 ? "match" : "matches"}`;
 
-const identifyNameHeading = (count: number): string => (count === 1 ? "Standard name" : "Standard names");
+/**
+ * The backend reports a match's database as the pack file name, which encodes
+ * the platform, not the provenance. Every shipped pack is built from OpenGood
+ * (scripts/build-hasheous-identify-index.mjs), so a `.pack` name reads as that;
+ * synthetic databases ("patch requirement") pass through.
+ */
+const formatIdentifySource = (database: string): string => (database.endsWith(".pack") ? "OpenGood" : database);
 
-export { IDENTIFY_STATUS_LABEL, IDENTIFY_STATUS_MARK, identifyMatchCountLabel, identifyNameHeading };
+export { formatIdentifySource, IDENTIFY_STATUS_LABEL, IDENTIFY_STATUS_MARK, identifyMatchCountLabel };

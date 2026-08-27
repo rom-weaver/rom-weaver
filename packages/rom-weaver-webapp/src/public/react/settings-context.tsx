@@ -230,6 +230,7 @@ const getNormalizedWorkflowSettings = (
     output: {
       ...output,
       bundlePackage: readFirstDefined(output.bundlePackage, source.bundlePackage),
+      identifiedName: readFirstDefined(output.identifiedName, source.identifiedOutputName) as boolean | undefined,
       compression: readFirstDefined(output.compression, "auto"),
       container: {
         chdCreateCdCodecs: chdCreateCdCodecs as OutputContainerSettings["chdCreateCdCodecs"],

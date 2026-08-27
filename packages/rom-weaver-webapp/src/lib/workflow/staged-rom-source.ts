@@ -47,6 +47,7 @@ const SELECTED_OWNER_IDENTITY_KEYS = [
   "checksums",
   "checksumVariants",
   "checksumTimeMs",
+  "identification",
   "romProbe",
   "romType",
 ] as const;
@@ -473,6 +474,9 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     stage.state.checksumTimeMs = undefined;
     stage.state.chdMode = undefined;
     stage.state.decompressionTimeMs = undefined;
+    // The title belongs to the candidate that was selected, so it MUST go with
+    // the checksums - otherwise the card keeps naming the previous ROM.
+    stage.state.identification = undefined;
     stage.state.parentCompressions = [];
     stage.state.romProbe = undefined;
     stage.state.romType = undefined;

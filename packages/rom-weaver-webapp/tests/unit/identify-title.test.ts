@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatIdentifyTitle, uniqueIdentifyTitles } from "../../src/presentation/identify-title.ts";
+import {
+  formatIdentifyTitle,
+  identifiedOutputBaseName,
+  uniqueIdentifyTitles,
+} from "../../src/presentation/identify-title.ts";
+import type { ParsedIdentifyResolution } from "../../src/types/identify.ts";
 
 describe("formatIdentifyTitle", () => {
   it("expands GoodTools regions and keeps the source name available as an alias", () => {
@@ -27,5 +32,34 @@ describe("formatIdentifyTitle", () => {
     expect(formatIdentifyTitle("Game (T) [!]")).toBe("Game (Taiwan)");
     expect(formatIdentifyTitle("Game (1) [!]")).toBe("Game (Japan, Korea)");
     expect(formatIdentifyTitle("Game (4) [!]")).toBe("Game (USA, Brazil)");
+  });
+});
+
+const resolution = (status: ParsedIdentifyResolution["status"], ...names: string[]): ParsedIdentifyResolution => ({
+  matches: names.map((name) => ({
+    algorithm: "crc32",
+    database: "No-Intro",
+    name,
+    platform: "Nintendo Game Boy",
+    variant: "raw",
+  })),
+  status,
+});
+
+describe("identifiedOutputBaseName", () => {
+  it("formats the title of a single confident match", () => {
+    expect(identifiedOutputBaseName(resolution("matched", "Tetris (JUE) [!]"))).toBe("Tetris (Japan, USA, Europe)");
+  });
+
+  it("removes the characters a filename cannot hold and keeps GoodTools tags", () => {
+    expect(identifiedOutputBaseName(resolution("matched", "Game: Part 1/2 [T+Eng]"))).toBe("Game Part 1 2 [T+Eng]");
+  });
+
+  it("names nothing without one confident answer", () => {
+    expect(identifiedOutputBaseName(resolution("ambiguous", "Tetris (USA)"))).toBeNull();
+    expect(identifiedOutputBaseName(resolution("unknown"))).toBeNull();
+    expect(identifiedOutputBaseName(resolution("unavailable"))).toBeNull();
+    expect(identifiedOutputBaseName(undefined)).toBeNull();
+    expect(identifiedOutputBaseName(resolution("matched", "Tetris (USA)", "Alleyway (USA)"))).toBeNull();
   });
 });

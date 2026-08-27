@@ -96,6 +96,8 @@ const getDisplaySourceInfo = (source: CreateDisplaySourceState | null | undefine
 const getDisplaySourceChecksums = (source: CreateDisplaySourceState | null | undefined) =>
   (source as (CreateDisplaySourceState & { checksums?: Record<string, string> }) | null | undefined)?.checksums;
 
+const getDisplaySourceIdentification = (source: CreateDisplaySourceState | null | undefined) => source?.identification;
+
 const getDisplaySourceChecksumTiming = (source: CreateDisplaySourceState | null | undefined) =>
   formatChecksumTiming(
     (source as (CreateDisplaySourceState & { checksumTimeMs?: number }) | null | undefined)?.checksumTimeMs,
@@ -121,6 +123,7 @@ export {
   getCompletedDownloadMeta,
   getDisplaySourceChecksums,
   getDisplaySourceChecksumTiming,
+  getDisplaySourceIdentification,
   getDisplaySourceInfo,
   isChecksumProgress,
   resolveCreateExecutionOutputName,

@@ -62,6 +62,7 @@ const inertOutputController: PatcherOutputController = {
   setOutputCompression: () => undefined,
   setOutputCompressOption: () => undefined,
   setOutputHeader: () => undefined,
+  setUseIdentifiedName: () => undefined,
 };
 
 export { inertOutputController, inertStackController, useLiveStoreController };

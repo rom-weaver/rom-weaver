@@ -90,6 +90,11 @@ type OutputSettings = {
    * headers, drop junk copier headers), keep, or strip (headerless output). */
   header?: "auto" | "keep" | "strip";
   bundlePackage?: BundlePackage;
+  /**
+   * Name the output after the ROM's identified title instead of its file name.
+   * Absent means on - a confident title is a better name than `rom_final_v2`.
+   */
+  identifiedName?: boolean;
   outputName?: string;
   suffix?: boolean;
 };
@@ -102,7 +107,7 @@ type ApplySettings = CommonSettings & {
 
 type CreateSettings = CommonSettings & {
   format?: PatchFormat;
-  output?: Pick<OutputSettings, "container" | "compression" | "outputName">;
+  output?: Pick<OutputSettings, "container" | "compression" | "identifiedName" | "outputName">;
   patch?: {
     metadata?: Record<string, unknown>;
   };

@@ -1,5 +1,6 @@
 import type { ChecksumVariant } from "../../types/checksum.ts";
 import type { CreateWorkflowParentCompression, CreateWorkflowSourceState } from "../../types/create-workflow.ts";
+import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { CreateResult } from "../../types/public.ts";
 import type { SelectionCandidate } from "../../types/selection.ts";
 import type { CreateSettings, PatchFormat } from "../../types/settings.ts";
@@ -20,12 +21,14 @@ import type { SharedRomSourceSession, SharedRomStagedSource, StagedRomSourceCont
 import {
   calculateStandardInputChecksumsForFile,
   cloneChecksumVariants,
+  cloneIdentification,
   getAssetDecompressionTimeMs,
   getAssetParentCompressions,
   getAssetSourceSize,
   getInputAssetChecksums,
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
+  getPatchFilePrecomputedIdentification,
   type StandardWorkflowChecksums,
 } from "./staged-source-checksums.ts";
 
@@ -47,6 +50,7 @@ type InternalSourceState = {
   checksumTimeMs?: number;
   checksumVariants?: ChecksumVariant[];
   decompressionTimeMs?: number;
+  identification?: ParsedIdentifyResolution;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
   role: SourceRole;
@@ -83,6 +87,7 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
         decompressionTimeMs: state.decompressionTimeMs,
         fileName: state.fileName,
         id: state.id,
+        identification: cloneIdentification(state.identification),
         parentCompressions: state.parentCompressions.map((entry) => ({ ...entry })),
         selectedCandidateId: state.selectedCandidateId,
         size: state.size,
@@ -314,6 +319,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
         if (precomputed) {
           asset.checksums = precomputed;
           asset.checksumVariants = getPatchFilePrecomputedChecksumVariants(asset.file);
+          asset.identification = getPatchFilePrecomputedIdentification(asset.file);
           asset.checksumTimeMs = 0;
           continue;
         }
@@ -343,6 +349,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
         });
         asset.checksums = checksumResult.checksums;
         asset.checksumVariants = checksumResult.variants;
+        asset.identification = checksumResult.identification;
         asset.romProbe = checksumResult.romProbe;
         asset.romType = checksumResult.romType;
         asset.checksumTimeMs = Date.now() - checksumStartedAt;
@@ -353,6 +360,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
         stage.state.checksums = primaryChecksums;
         stage.state.checksumVariants = cloneChecksumVariants(primaryAsset?.checksumVariants);
         stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
+        stage.state.identification = cloneIdentification(primaryAsset?.identification);
       }
     }
     if (session.synthetic) this.syncSourceSessionView(session);

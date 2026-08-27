@@ -1,4 +1,5 @@
 import type { ChecksumRomProbe } from "./checksum.ts";
+import type { ParsedIdentifyResolution } from "./identify.ts";
 import type { SelectionCandidate } from "./selection.ts";
 import type { WorkflowWarning } from "./workflow-controller.ts";
 
@@ -22,6 +23,7 @@ type TrimWorkflowSourceState = {
   candidates: SelectionCandidate[];
   checksums?: TrimWorkflowChecksums;
   checksumTimeMs?: number;
+  identification?: ParsedIdentifyResolution;
   parentCompressions: TrimWorkflowParentCompression[];
   romProbe?: ChecksumRomProbe;
   selectedCandidateId?: string;

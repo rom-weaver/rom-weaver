@@ -48,6 +48,7 @@ type SettingsState = {
   emulatorSaveStorageEnabled: boolean;
   onboardingEnabled: boolean;
   fixChecksum: boolean;
+  identifiedOutputName: boolean;
   requireInputChecksumMatch: boolean;
   compressionProfile: string;
   chdCreateCdCodecs: string;
@@ -164,6 +165,7 @@ const SETTINGS_FIELD_ORDER = [
   "emulatorSaveStorageEnabled",
   "onboardingEnabled",
   "fixChecksum",
+  "identifiedOutputName",
   "requireInputChecksumMatch",
   "bundlePackage",
   "postApplyDownloadBehavior",
@@ -372,6 +374,15 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getSettingsLabel("fixChecksum"),
     labelDataLocalize: "Fix ROM header",
     layout: "large",
+  },
+  identifiedOutputName: {
+    defaultValue: true,
+    id: "settings-identified-output-name",
+    key: "identifiedOutputName",
+    kind: "checkbox",
+    label: "Name outputs after the identified title",
+    layout: "large",
+    suggestion: "When off, output names derive from the input file name instead.",
   },
   accent: {
     defaultValue: getDefaultAccent,

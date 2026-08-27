@@ -31,6 +31,8 @@ type OutputApplyButtonState = {
 
 type PatcherOutputState = {
   displayFileName: string;
+  /** Identified-title naming toggle, or null when the ROM has no single confident title. */
+  identifiedName?: { name: string; on: boolean } | null;
   resolvedOutputName: string;
   compressionFormat: string;
   applyTiming: string;

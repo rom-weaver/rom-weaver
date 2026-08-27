@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { OutputCard } from "../../../src/public/react/components/ds/output-card.tsx";
 
@@ -41,5 +41,30 @@ describe("OutputCard double-extension warning", () => {
     expect(
       render(<OutputCard {...baseProps} fileName="game.sfc" />).container.querySelector(".outname-ext-warn"),
     ).toBeNull();
+  });
+});
+
+describe("OutputCard identified-name toggle", () => {
+  it("reports the switch back through onChange", () => {
+    const changes: boolean[] = [];
+    const { container } = render(
+      <OutputCard
+        {...baseProps}
+        fileName="Tetris (USA)"
+        nameSource={{ identifiedName: "Tetris (USA)", on: true, onChange: (on) => changes.push(on) }}
+      />,
+    );
+    const toggle = container.querySelector<HTMLInputElement>('.outname-source input[type="checkbox"]');
+    if (!toggle) throw new Error("The naming toggle did not render.");
+    expect(toggle.checked).toBe(true);
+    expect(container.querySelector(".outname-source")?.textContent).toContain("Tetris (USA)");
+
+    fireEvent.click(toggle);
+    expect(changes).toEqual([false]);
+  });
+
+  it("renders nothing when the ROM has no identified title", () => {
+    const { container } = render(<OutputCard {...baseProps} fileName="rom_final" nameSource={null} />);
+    expect(container.querySelector(".outname-source")).toBeNull();
   });
 });

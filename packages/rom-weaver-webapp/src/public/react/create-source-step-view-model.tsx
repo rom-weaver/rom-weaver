@@ -7,6 +7,7 @@ import {
   getChecksumTimingLabel,
   getDisplaySourceChecksums,
   getDisplaySourceChecksumTiming,
+  getDisplaySourceIdentification,
   getDisplaySourceInfo,
   isChecksumProgress,
 } from "./create-patch-output-model.ts";
@@ -68,6 +69,7 @@ const buildCreateSourceStep = ({
 }: CreateSourceStepOptions): CreatePatchFormViewModel["originalStep"] => {
   const { message, messagePlacement, errorCode, messageDismissible, clearWorkflowMessage } = runtimeNotice;
   const displayInfo = getDisplaySourceInfo(sourceState, fileName);
+  const identification = getDisplaySourceIdentification(sourceState);
   const sourceChecksumProgress = isChecksumProgress(checksumProgress) ? checksumProgress : null;
   // Staging treatment shared with the apply form: the resolved card stays mounted
   // and a slim determinate bar on its top edge + a status on the meta line carry
@@ -117,6 +119,7 @@ const buildCreateSourceStep = ({
               ) : undefined,
               onRemove: onClear,
               panels: {
+                ...(identification ? { identification } : {}),
                 info: {
                   bytes: stageBytes,
                   checksums: getDisplaySourceChecksums(sourceState),
