@@ -25,11 +25,43 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test?guid
 
 You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, then opens a supported ROM from the archive.
 
-The Test page recognizes local ROMs for Atari 7800 and Lynx. It also recognizes Nintendo NES, Famicom Disk System, Game Boy and Game Boy Color, Game Boy Advance, Nintendo 64, Nintendo DS, and Super Nintendo. It recognizes Sega Game Gear, Master System, and Mega Drive or Genesis.
+The Test page recognizes local ROMs for these platforms:
+
+- Atari
+  - 7800
+  - Lynx
+- Nintendo
+  - NES
+  - Famicom Disk System
+  - Game Boy and Game Boy Color
+  - Game Boy Advance
+  - Nintendo 64
+  - Nintendo DS
+  - Super Nintendo
+- Sega
+  - Game Gear
+  - Master System
+  - Mega Drive or Genesis
 
 Apply can also send a detected Sega Saturn or Sony PlayStation result to Test.
 
-rom-weaver does not bundle EmulatorJS cores for Nintendo GameCube, Wii, or 3DS. It also omits Sega CD and Dreamcast; Sony PlayStation 2 and PSP; PC Engine and PC Engine CD; and Neo Geo Pocket.
+rom-weaver does not bundle EmulatorJS cores for these platforms:
+
+- Nintendo
+  - GameCube
+  - Wii
+  - 3DS
+- Sega
+  - CD
+  - Dreamcast
+- Sony
+  - PlayStation 2
+  - PSP
+- NEC
+  - PC Engine
+  - PC Engine CD
+- SNK
+  - Neo Geo Pocket
 
 ## Test an Apply result
 
