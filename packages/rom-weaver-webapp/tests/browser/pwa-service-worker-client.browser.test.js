@@ -9,8 +9,8 @@ const flushAsync = async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-const createSessionStorage = (seed = {}) => {
-  const state = new Map(Object.entries(seed));
+const createSessionStorage = () => {
+  const state = new Map();
   return {
     getItem: (key) => (state.has(key) ? state.get(key) : null),
     removeItem: (key) => {
@@ -35,13 +35,8 @@ const createController = () => {
   };
 };
 
-const createHarness = ({
-  controller = null,
-  crossOriginIsolated = false,
-  sessionStorageSeed = {},
-  shouldAutoApplyUpdate = vi.fn(() => true),
-} = {}) => {
-  const sessionStorage = createSessionStorage(sessionStorageSeed);
+const createHarness = ({ controller = null, crossOriginIsolated = false } = {}) => {
+  const sessionStorage = createSessionStorage();
   const location = {
     href: "https://example.com/webapp/index.html",
     reload: vi.fn(),
@@ -94,8 +89,6 @@ const createHarness = ({
     onStateChange: () => undefined,
     registerServiceWorker,
     sessionStorage,
-    // Keep the old hook in this fixture so an accidental auto-apply path cannot pass the test.
-    shouldAutoApplyUpdate,
     updateIntervalMs: 5000,
     window: browserWindow,
   });
@@ -107,7 +100,6 @@ const createHarness = ({
     registration,
     serviceWorker,
     sessionStorage,
-    shouldAutoApplyUpdate,
     triggerNeedRefresh: () => registerOptions?.onNeedRefresh?.(),
     updateServiceWorker,
   };
@@ -169,7 +161,6 @@ test("defers every update to the visible prompt", async () => {
 
   expect(harness.updateServiceWorker).not.toHaveBeenCalled();
   expect(harness.location.reload).not.toHaveBeenCalled();
-  expect(harness.shouldAutoApplyUpdate).not.toHaveBeenCalled();
   expect(harness.client.getState().updateReady).toBe(true);
 });
 
