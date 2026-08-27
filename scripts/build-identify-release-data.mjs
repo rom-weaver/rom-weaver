@@ -46,6 +46,7 @@ export const buildIdentifyReleaseData = (options) => {
   const input = resolve(options.input);
   const out = resolve(options.out);
   const archive = resolve(options.archive);
+  const archiveDir = dirname(archive);
   const indexPath = join(input, "index.json");
   const catalogPath = join(input, "catalog.json");
   const index = JSON.parse(readFileSync(indexPath, "utf8"));
@@ -84,9 +85,10 @@ export const buildIdentifyReleaseData = (options) => {
       ];
 
   rmSync(out, { force: true, recursive: true });
-  for (const name of readdirSync(dirname(archive))) {
+  mkdirSync(archiveDir, { recursive: true });
+  for (const name of readdirSync(archiveDir)) {
     if (/^rom-weaver-identify-data-.+\.tar\.zst$/u.test(name)) {
-      rmSync(join(dirname(archive), name), { force: true });
+      rmSync(join(archiveDir, name), { force: true });
     }
   }
   const buildArchive = (group, archivePath, treeRoot) => {
@@ -174,7 +176,7 @@ export const buildIdentifyReleaseData = (options) => {
     .map((group) =>
       buildArchive(
         group,
-        join(dirname(archive), `rom-weaver-identify-data-${group.id}.tar.zst`),
+        join(archiveDir, `rom-weaver-identify-data-${group.id}.tar.zst`),
         join(out, `optional-${group.id}`),
       ),
     );

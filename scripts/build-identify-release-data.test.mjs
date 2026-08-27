@@ -72,6 +72,18 @@ test("builds deterministic Zstandard packs and a stable release archive", () => 
   }
 });
 
+test("creates a missing release archive directory", () => {
+  const { input, root } = fixture();
+  const archive = join(root, "target", "rom-weaver-identify-data.tar.zst");
+  const result = buildIdentifyReleaseData({
+    archive,
+    input,
+    out: join(root, "release"),
+  });
+  assert.equal(result.archive, archive);
+  assert.ok(readFileSync(archive).length > 0);
+});
+
 test("separates default packs from complete optional group archives", () => {
   const { input, root } = fixture({ grouped: true });
   const result = buildIdentifyReleaseData({
