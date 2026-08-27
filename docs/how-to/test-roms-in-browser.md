@@ -25,7 +25,7 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test?guid
 
 You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, then opens a supported ROM from the archive.
 
-The Test page recognizes local ROMs for these platforms:
+The Test page supports these platforms:
 
 - Atari 7800
 - Atari Lynx
@@ -40,8 +40,8 @@ The Test page recognizes local ROMs for these platforms:
 - Sega Game Gear
 - Sega Master System
 - Sega Mega Drive or Genesis
-
-Apply can also send a detected Sega Saturn or Sony PlayStation result to Test.
+- Sega Saturn
+- Sony PlayStation
 
 rom-weaver does not bundle EmulatorJS cores for these platforms:
 
