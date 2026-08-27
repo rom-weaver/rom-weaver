@@ -24,7 +24,10 @@ const SHARED_CHUNK_MIN_SIZE = 30_000;
 const repoRoot = path.resolve(rootDir, "../..");
 const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
 const identifyDataSources = Object.fromEntries(
-  fs.readdirSync(identifyDataDir).map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
+  fs
+    .readdirSync(identifyDataDir)
+    .filter((name) => !name.endsWith(".pack"))
+    .map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
 );
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
@@ -654,9 +657,12 @@ const writeBrotliSidecars = () => {
     closeBundle() {
       const distDir = path.resolve(rootDir, outDir);
       const assetsDir = path.join(distDir, "assets");
-      const wasmNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".wasm"));
+      const allWasmNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".wasm"));
+      const wasmNames = allWasmNames.filter((name) => name.startsWith("rom-weaver-app-"));
       if (wasmNames.length !== 1) {
-        throw new Error(`expected exactly one .wasm asset in ${assetsDir}, found: ${wasmNames.join(", ") || "none"}`);
+        throw new Error(
+          `expected exactly one rom-weaver app WASM asset in ${assetsDir}, found: ${wasmNames.join(", ") || "none"}`,
+        );
       }
       const sourceWasm = path.join(rootDir, "src", "wasm", "rom-weaver-app.wasm");
       const sourceSidecar = `${sourceWasm}.br`;
@@ -677,6 +683,9 @@ const writeBrotliSidecars = () => {
       };
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
       assertSidecarTypeIsKnown(sidecarUrls[0]);
+      if (fs.readdirSync(assetsDir).some((name) => name.startsWith("identify-") && name.endsWith(".pack.br"))) {
+        sidecarUrls.push("/assets/identify-*");
+      }
       for (const name of fs.readdirSync(assetsDir)) {
         // The identify index is mutable so a deployment can advertise a new
         // pack set without an immutable sidecar masking the update.
@@ -1196,12 +1205,10 @@ export default defineConfig(({ command, mode }) => {
         },
         filename: "cache-service-worker.ts",
         injectManifest: {
-          // Identify packs stay OUT of the precache: 6.7 MB raw (~1.6 MB brotli)
-          // for the full set would land on every install and every update, and a
-          // session usually needs one system. The service worker runtime-caches
-          // them on first use instead, so offline identification still works once
-          // a pack has been fetched. Only `identify-index.json` is precached.
-          globIgnores: ["**/*.map", "assets/identify-*.pack"],
+          // Identify packs MUST stay out of the precache because a session
+          // usually needs one system. The service worker runtime-caches each
+          // compressed pack on first use, so that system works offline later.
+          globIgnores: ["**/*.map", "assets/identify-*.pack.br"],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:
             // offline, a route the user has not visited yet has nothing in the runtime

@@ -10,14 +10,20 @@
 
 import { sidecarContentType } from "./content-types.js";
 
-const ACCEPTS_BR = /(^|[\s,])br($|[\s,;])/;
+const acceptsBrotli = (value) =>
+  value.split(",").some((item) => {
+    const [encoding, ...parameters] = item.trim().toLowerCase().split(";");
+    if (encoding !== "br") return false;
+    const quality = parameters.find((parameter) => parameter.trim().startsWith("q="));
+    return quality === undefined || Number.parseFloat(quality.trim().slice(2)) > 0;
+  });
 
 // Missing assets are errors now that the build publishes a top-level 404.html;
 // keep the HTML check for hosts that still apply an SPA fallback.
 const isSpaFallback = (response) => !response.ok || (response.headers.get("Content-Type") ?? "").includes("text/html");
 
 export const onRequestGet = async ({ request, env, next }) => {
-  if (!ACCEPTS_BR.test(request.headers.get("Accept-Encoding") ?? "")) return next();
+  if (!acceptsBrotli(request.headers.get("Accept-Encoding") ?? "")) return next();
   const url = new URL(request.url);
   // The type comes from the build-verified table rather than a HEAD probe of the
   // static asset. The probe was a second subrequest that had to resolve before the

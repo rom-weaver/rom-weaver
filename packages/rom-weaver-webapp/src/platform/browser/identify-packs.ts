@@ -5,8 +5,8 @@
  * 1. A pack that cannot be fetched, sized, or hashed is an UNAVAILABLE database,
  *    never a silent "no match". Callers get {@link IdentifyDataUnavailableError}
  *    so the UI can say so and offer a retry.
- * 2. Only the packs a ROM could plausibly match are downloaded. The whole set is
- *    6.7 MB raw, so loading it for every generic `.bin` would dwarf the work.
+ * 2. Only the packs a ROM could plausibly match are downloaded. Loading every
+ *    pack for a generic `.bin` would add a large transfer and memory cost.
  * 3. OpenGood and Redump packs ship with the app and use same-origin URLs.
  */
 import {
@@ -18,6 +18,8 @@ import type { IdentifyCatalog } from "../../lib/identify/identify-catalog.ts";
 import { sha256Hex } from "../../lib/identify/sha256-hex.ts";
 
 type IdentifySystem = {
+  brotliBytes?: number;
+  brotliFile?: string;
   file: string;
   packFormat?: string;
   platform: string;
@@ -135,10 +137,10 @@ const withSiblings = (slugs: Iterable<string>): string[] => {
 
 /**
  * Candidate pack slugs for an input, from the cheapest evidence available. An
- * empty result means "cannot be narrowed" and the caller MUST fall back to the
- * full set rather than skip a pack a ROM could have matched. When a catalog is
- * supplied, a detected platform name also routes through its catalog aliases,
- * which is what reaches the dynamically discovered Redump platforms.
+ * empty result means "cannot be narrowed". The caller falls back to OpenGood
+ * packs because an unknown raw file cannot provide a usable optical-media
+ * profile. When a catalog is supplied, a detected platform name also routes
+ * through its aliases, which reaches the Redump platforms.
  */
 const selectIdentifySlugs = (
   { entryNames, fileName, platform }: IdentifyPackHints,
@@ -284,6 +286,7 @@ const systemForSlug = (index: IdentifyIndex, catalog: IdentifyCatalog | undefine
   const entry = findCatalogPlatformBySlug(catalog, slug);
   if (!entry) return undefined;
   return {
+    brotliFile: `${entry.packSlug}.pack.br`,
     file: `${entry.packSlug}.pack`,
     packFormat: entry.packFormat,
     platform: entry.canonicalPlatform,

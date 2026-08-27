@@ -9,6 +9,8 @@ const INDEX = {
   systems: [
     {
       file: "nintendo-game-boy.pack",
+      brotliBytes: 3,
+      brotliFile: "nintendo-game-boy.pack.br",
       platform: "Nintendo Game Boy",
       rawBytes: 3,
       sha256: OPENGOOD_SHA,

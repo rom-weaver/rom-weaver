@@ -271,12 +271,11 @@ const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
 
 registerRoute(({ request, url }) => isEmulatorJsAssetRequest(request, url), serveEmulatorJsAsset);
 
-/* Identify packs are runtime-cached, not precached: the full set is 6.7 MB raw
-   (~1.6 MB brotli) and most sessions need one system. Only the index is
-   precached, so a first identify costs one pack and every later one - including
-   offline - is served from this cache. Each pack URL carries its own `sha256`
-   query, so a rebuilt pack is a different key and the stale entry is dropped
-   by the activate sweep below. */
+/* Identify packs are runtime-cached, not precached. Most sessions need one
+   system, so a first identify fetches only its compressed pack. Later requests,
+   including offline requests, use this cache. Each pack URL carries its own
+   `sha256` query, so a rebuilt pack is a different key and the activate sweep
+   below drops the stale entry. */
 const isIdentifyPackRequest = (url: URL) =>
   url.origin === self.location.origin && /\/assets\/identify-.*\.pack$/u.test(url.pathname);
 

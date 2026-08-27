@@ -7,6 +7,8 @@ const system = (slug: string, platform: string) => ({
   file: `${slug}.pack`,
   platform,
   rawBytes: 3,
+  brotliBytes: 3,
+  brotliFile: `${slug}.pack.br`,
   sha256: SHA256_ABC,
   slug,
   source: "opengood",
@@ -84,6 +86,7 @@ describe("loadIdentifyPacks", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
     const packCall = fetchMock.mock.calls.find((call) => String(call[0]).includes(".pack"));
     const packUrl = new URL(String(packCall?.[0]));
+    expect(packUrl.pathname).toContain(".pack");
     expect(packUrl.searchParams.get("sha256")).toBe(SHA256_ABC);
   });
 

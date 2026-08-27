@@ -354,10 +354,15 @@ assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
 // sessions use for one system. Offline identification still works once a pack
 // has been fetched. See docs/development/identify-data.md.
 assertIncludes(precacheManifest, '"assets/identify-index.json"', "identify index precache entry");
-const routesJson = read("_routes.json");
-assertIncludes(routesJson, `"/assets/identify-*"`, "identify pack Brotli route");
 for (const system of identifyDataIndex.systems) {
   assertExcludes(precacheManifest, `assets/identify-${system.file}`, `${system.file} precache entry`);
+  if (!system.brotliFile) throw new Error(`${system.file} has no Brotli asset in the identify index`);
+  if (!fs.existsSync(path.join(distDir, "assets", `identify-${system.brotliFile}`))) {
+    throw new Error(`${system.brotliFile} was not staged`);
+  }
+  if (fs.existsSync(path.join(distDir, "assets", `identify-${system.file}`))) {
+    throw new Error(`${system.file} exceeds the deployment limit and must not be staged`);
+  }
 }
 for (const slug of [...DOC_ROUTES.map((route) => route.slug), "apply", "create", "identify", "tools", "trim"]) {
   assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);

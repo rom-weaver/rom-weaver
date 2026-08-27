@@ -145,8 +145,8 @@ type IngestRunInput = Parameters<NonNullable<NonNullable<WorkflowRuntime["ingest
  * Stage 2 is a decompression-free probe, run when the name says nothing
  * (`.zip`, `.bin`, `.rom`) or when the caller wants every ROM member. The probe
  * returns the container's member list and the ROM header's platform, and both
- * narrow the pack set the same way. Loading all 6.7 MB stays the last resort,
- * because skipping a pack a ROM could match would report a wrong "no match".
+ * narrow the pack set the same way. The OpenGood fallback stays the last
+ * resort after these cheap signals fail.
  */
 const prepareIngestIdentify = async ({
   fileName,
