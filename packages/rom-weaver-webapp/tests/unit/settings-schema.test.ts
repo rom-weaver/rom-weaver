@@ -66,14 +66,14 @@ describe("getDefaultSettings", () => {
     expect(downloadField.kind).toBe("select");
     expect(downloadField.options?.map((option) => option.value)).toEqual(["auto-show", "show"]);
     expect(downloadField.options?.map((option) => option.label)).toEqual([
-      "Automatic & Show Button (Default)",
-      "Show Button",
+      "Auto Start & DL Again Button (Default)",
+      "DL Again Button",
     ]);
     expect(testField.kind).toBe("select");
     expect(testField.options?.map((option) => option.value)).toEqual(["show", "auto-show", "hide"]);
     expect(testField.options?.map((option) => option.label)).toEqual([
-      "Show Button (Default)",
-      "Automatic & Show Button",
+      "Show After Apply (Default)",
+      "Auto Test & Show After Apply",
       "Hide Button",
     ]);
     expect(SETTINGS_FIELD_ORDER.indexOf("postApplyDownloadBehavior")).toBeGreaterThan(

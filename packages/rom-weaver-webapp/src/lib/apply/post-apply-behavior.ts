@@ -14,14 +14,14 @@ type PostApplyBehaviorSettings = {
 
 const DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
   automatic: true,
-  label: "Automatic & Show Button (Default)",
+  label: "Auto Start & DL Again Button (Default)",
   value: "auto-show",
   visible: true,
 };
 
 const DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
   automatic: false,
-  label: "Show Button (Default)",
+  label: "Show After Apply (Default)",
   value: "show",
   visible: true,
 };
@@ -34,7 +34,7 @@ const POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS: readonly PostApplyActionBehaviorOpti
   DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION,
   {
     automatic: false,
-    label: "Show Button",
+    label: "DL Again Button",
     value: "show",
     visible: true,
   },
@@ -44,7 +44,7 @@ const POST_APPLY_TEST_BEHAVIOR_OPTIONS: readonly PostApplyActionBehaviorOption[]
   DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION,
   {
     automatic: true,
-    label: "Automatic & Show Button",
+    label: "Auto Test & Show After Apply",
     value: "auto-show",
     visible: true,
   },
