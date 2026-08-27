@@ -43,6 +43,12 @@ const candidateFromRecognition = (recognition?: SaveRecognition): SaveCandidate 
 };
 
 const formatAssignment = (field: SaveField, value: string) => `${field.id}=${value}`;
+// A wrapped save (.sps/.xps/.gsv) stays wrapped on output, so the edited file
+// keeps the source extension instead of forcing .sav.
+const editedSaveName = (name: string) => {
+  const extension = /\.([^.]+)$/.exec(name)?.[1] ?? "sav";
+  return `${name.replace(/\.[^.]+$/, "")}-edited.${extension}`;
+};
 const loadSaveApi = () => import("../../platform/browser/browser-save-api.ts");
 
 const SaveFieldControl = ({
@@ -325,7 +331,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
         assignments,
         fileName: source.name,
         game: document?.identity.id,
-        outputName: `${source.name.replace(/\.[^.]+$/, "")}-edited.sav`,
+        outputName: editedSaveName(source.name),
         romSha1: sourceRomSha1,
         signal,
         source,
@@ -432,7 +438,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
       <StepSection num="0x01" title="Save file">
         <input
           aria-label="Save file"
-          accept=".sav,.srm,.eep,.fla,application/octet-stream"
+          accept=".sav,.srm,.eep,.fla,.sps,.xps,.gsv,application/octet-stream"
           hidden
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
@@ -448,7 +454,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
           onClick={() => inputRef.current?.click()}
           type="button"
         >
-          <SaveIcon aria-hidden="true" /> Choose .sav, .srm, .eep, or .fla
+          <SaveIcon aria-hidden="true" /> Choose .sav, .srm, .eep, .fla, .sps, or .gsv
         </button>
         <p className="save-editor-hint">You can also choose SRAM from the saved emulator list below.</p>
         {source ? (
