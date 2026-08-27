@@ -93,8 +93,8 @@ const CandidateCard = ({
       ) : null}
       {candidate.status === "unknown" ? (
         <p className="pdesc identify-unknown-lead">
-          No exact title match found. The ROM may be modified, an unlisted revision, or from a system that is not in the
-          local identification data. Its checksums are below so you can look it up elsewhere.
+          No matching checksum found in the identification data. The ROM may be modified, an unlisted revision, or from
+          a system that is not in the local data.
         </p>
       ) : null}
       <IdentifyDrawer
@@ -132,11 +132,8 @@ const CandidateResult = ({
         in the Identify drawer below.
       </p>
     ) : null}
-    {candidate.status === "unknown" ? (
-      <p className="pdesc identify-unknown-lead">
-        No exact title match found. The ROM may be modified, an unlisted revision, or from a system that is not in the
-        local identification data. Its checksums are below so you can look it up elsewhere.
-      </p>
+    {candidate.status === "unknown" && showMemberPath ? (
+      <p className="pdesc identify-unknown-lead">No matching checksum for this ROM in the identification data.</p>
     ) : null}
     <RomInputPanels
       identification={{ matches: candidate.matches, status: candidate.status }}
@@ -428,6 +425,15 @@ const IdentifyForm = ({
       />
       {file ? (
         <WorkflowRomInputStep
+          beforeItems={
+            result && !unavailable && result.status === "unknown" ? (
+              <Notice level="error">
+                No matching checksum found in the identification data. The ROM may be modified, an unlisted revision, or
+                from a system that is not in the local data. Its checksums are on the card below so you can look them up
+                elsewhere.
+              </Notice>
+            ) : null
+          }
           afterItems={
             <>
               {errorBlock}
@@ -437,7 +443,7 @@ const IdentifyForm = ({
               ) : null}
             </>
           }
-          fault={!!error}
+          fault={!!error || result?.status === "unknown"}
           items={[
             busy
               ? {
@@ -484,7 +490,7 @@ const IdentifyForm = ({
           ]}
           num="0x02"
           title={localizer.message("ui.step.rom")}
-          woven={!!result && !unavailable}
+          woven={!!result && !unavailable && result.status !== "unknown"}
         />
       ) : hashMode ? (
         <StepSection
