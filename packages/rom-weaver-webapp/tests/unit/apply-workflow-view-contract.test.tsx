@@ -335,7 +335,7 @@ describe("apply workflow view - staged bench", () => {
     await vi.waitFor(() => expect(document.activeElement).toBe(button));
   });
 
-  it("shows the emulator action only when the input resolves to a supported core", () => {
+  it("disables the emulator action when the input does not resolve to a supported core", () => {
     const output = {
       fileName: "game.nes",
       getBlob: async () => new Blob(["rom"]),
@@ -354,7 +354,11 @@ describe("apply workflow view - staged bench", () => {
       outputOverrides: { pendingDownloadFileName: "game.bin" },
       ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
     });
-    expect(unsupported.container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+    const unsupportedButton = unsupported.container.querySelector(
+      "#rom-weaver-button-test-emulator",
+    ) as HTMLButtonElement;
+    expect(unsupportedButton.disabled).toBe(true);
+    expect(unsupportedButton.textContent).toContain("Cannot test this ROM with EmulatorJS");
   });
 
   it("keeps likely drawers visible while ROMs and patches are still staging", () => {
@@ -619,6 +623,16 @@ describe("apply workflow view - post-apply behavior selects", () => {
     expect(secondDownload.value).toBe("show");
     expect(secondTest.value).toBe("hide");
   });
+
+  it("does not put emulator support warnings beside the setting", () => {
+    const rom = romRow("game.iso");
+    rom.info.romType = { platform: "Nintendo Wii" };
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
+    const { container } = renderView({ settings: { postApplyTestBehavior: "show" }, ui });
+    const test = container.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
+    expect(test.getAttribute("aria-describedby")).toBeNull();
+    expect(container.querySelector("#rom-weaver-select-post-apply-test-warning")).toBeNull();
+  });
 });
 
 describe("apply workflow view - output options notice", () => {
@@ -662,16 +676,37 @@ describe("apply workflow view - completed output actions", () => {
     expect(container.querySelector("#rom-weaver-checkbox-play-button")).toBeNull();
   });
 
-  it("keeps Download available when automatic Test is unsupported", () => {
-    const { container } = completedOutputView("show", "auto-show", "game.bin");
+  it.each(["show", "auto-show"] as const)(
+    "shows why Test is disabled when the %s setting would use it",
+    (testBehavior) => {
+      const { container } = completedOutputView("show", testBehavior, "game.bin");
+      const button = container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement;
+
+      expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
+      expect(button.disabled).toBe(true);
+      expect(button.textContent).toContain("Cannot test this ROM with EmulatorJS");
+    },
+  );
+
+  it("hides an unsupported Test action when the setting hides it", () => {
+    const { container } = completedOutputView("show", "hide", "game.bin");
     expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });
 
-  it("keeps Download available when visible Test is unsupported", () => {
-    const { container } = completedOutputView("show", "show", "game.bin");
-    expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
-    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+  it("names the unsupported platform on the disabled Test button", () => {
+    const rom = romRow("game.nes");
+    rom.info.romType = { platform: "Nintendo Wii" };
+    const { container } = renderView({
+      emulatorOutput: { fileName: "game.nes", getBlob: async () => new Blob(["rom"]), id: "output-1" },
+      outputOverrides: { disabled: false, pendingDownloadFileName: "game.nes" },
+      settings: { postApplyDownloadBehavior: "show", postApplyTestBehavior: "show" },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [rom] },
+    });
+    const button = container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain("Cannot test Nintendo Wii with EmulatorJS");
+    expect(button.querySelector(".play-core")).toBeNull();
   });
 
   it("retires the Test action when Apply retires the completed output", () => {

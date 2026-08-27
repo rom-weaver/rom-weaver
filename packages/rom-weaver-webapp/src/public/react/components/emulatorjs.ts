@@ -56,8 +56,8 @@ const getEmulatorJsAspectRatio = (core?: string): string =>
   (core ? CORE_ASPECT_RATIOS[core] : undefined) ?? DEFAULT_ASPECT_RATIO;
 
 const getEmulatorJsCore = (platform?: string, fileName?: string): string | undefined => {
-  const platformCore = platform ? PLATFORM_CORES[platform.trim()] : undefined;
-  if (platformCore) return platformCore;
+  const normalizedPlatform = platform?.trim();
+  if (normalizedPlatform) return PLATFORM_CORES[normalizedPlatform];
   const match = fileName
     ?.trim()
     .toLowerCase()
