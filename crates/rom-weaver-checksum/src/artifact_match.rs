@@ -1,4 +1,4 @@
-//! Set-aware matching of a hashed artifact against one RWFP2 pack.
+//! Set-aware matching of a hashed artifact against one artifact pack.
 //!
 //! An artifact fingerprint carries every hashed component of one input (a
 //! single blob, a track set, a partition set, ...). The matcher routes each
@@ -11,7 +11,33 @@ use rom_weaver_core::{ComponentRole, Result};
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
-use crate::identify_pack_v2::{ArtifactPack, PackComponent, PackGame, PackProvenance};
+use crate::identify_pack_v2::{PackComponent, PackGame, PackProvenance};
+
+/// The read-only pack operations needed by the artifact matcher.
+pub trait ArtifactPackReader {
+    fn game(&self, index: u32) -> Option<&PackGame>;
+    fn route(&self, crc32_hex: &str, size: u64) -> Result<Vec<(u32, u16)>>;
+}
+
+impl ArtifactPackReader for crate::identify_pack_v2::ArtifactPack {
+    fn game(&self, index: u32) -> Option<&PackGame> {
+        self.game(index)
+    }
+
+    fn route(&self, crc32_hex: &str, size: u64) -> Result<Vec<(u32, u16)>> {
+        self.route(crc32_hex, size)
+    }
+}
+
+impl ArtifactPackReader for crate::identify_pack_v3::ArtifactPack {
+    fn game(&self, index: u32) -> Option<&PackGame> {
+        self.game(index)
+    }
+
+    fn route(&self, crc32_hex: &str, size: u64) -> Result<Vec<(u32, u16)>> {
+        self.route(crc32_hex, size)
+    }
+}
 
 /// One hashed component of the artifact being identified.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -241,8 +267,8 @@ fn verify_candidate(
 
 /// Match an artifact fingerprint against one pack. Deterministic: candidates
 /// come from an ordered set and the result is sorted by (platform, name).
-pub fn match_artifact(
-    pack: &ArtifactPack,
+pub fn match_artifact<P: ArtifactPackReader + ?Sized>(
+    pack: &P,
     fingerprint: &ArtifactFingerprint,
 ) -> Result<ArtifactMatchOutcome> {
     let mut candidates: BTreeSet<u32> = BTreeSet::new();
@@ -320,6 +346,7 @@ pub fn match_artifact(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identify_pack_v2::ArtifactPack;
     use crate::identify_pack_v2::tests::{
         build_pack_container, build_refs, build_route, component_json, game_json, manifest_json,
     };

@@ -360,7 +360,7 @@ unexpected_components?: Array<string>, };
 
 export type IdentifyResult = { status: IdentifyStatus, input: string, detected_platform?: string | null, checksums: { [key in string]: string }, checksum_variants: Array<JsonValue>, matches: Array<IdentifyTitleMatch>,
 /**
- * Match quality of a set-aware (RWFP2) match: exact/partial/metadata_only.
+ * Match quality of a set-aware RWFP2 or RWFP3 match.
  */
 quality?: string, platform_candidates?: Array<PlatformCandidate>, media?: IdentifyMedia, components?: Array<IdentifyComponent>, database?: IdentifyDatabaseInfo, evidence?: IdentifyEvidence,
 /**
@@ -375,11 +375,13 @@ export type IdentifyDatabaseSystemCommand = { system: string, database_dir?: str
 
 export type IdentifyDatabaseImportCommand = { input: string, database_dir?: string, };
 
+export type IdentifyDatabaseGroupCommand = { group: string, from?: string, database_dir?: string, };
+
 export type IdentifyDatabaseInstallCommand = { system?: string, all?: boolean, from?: string, database_dir?: string, };
 
 export type IdentifyDatabaseUpdateCommand = { system?: string, from?: string, database_dir?: string, };
 
-export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabaseDirCommand } | { "type": "status", "args": IdentifyDatabaseDirCommand } | { "type": "path", "args": IdentifyDatabaseDirCommand } | { "type": "remove", "args": IdentifyDatabaseSystemCommand } | { "type": "import-redump", "args": IdentifyDatabaseImportCommand } | { "type": "install-all", "args": IdentifyDatabaseDirCommand } | { "type": "install", "args": IdentifyDatabaseInstallCommand } | { "type": "update", "args": IdentifyDatabaseUpdateCommand };
+export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabaseDirCommand } | { "type": "status", "args": IdentifyDatabaseDirCommand } | { "type": "path", "args": IdentifyDatabaseDirCommand } | { "type": "remove", "args": IdentifyDatabaseSystemCommand } | { "type": "import-redump", "args": IdentifyDatabaseImportCommand } | { "type": "install-all", "args": IdentifyDatabaseDirCommand } | { "type": "install-group", "args": IdentifyDatabaseGroupCommand } | { "type": "install", "args": IdentifyDatabaseInstallCommand } | { "type": "update", "args": IdentifyDatabaseUpdateCommand };
 
 export type IdentifySubcommands = { "type": "database", "args": IdentifyDatabaseCommands };
 

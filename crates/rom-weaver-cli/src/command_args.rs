@@ -2999,6 +2999,11 @@ pub enum IdentifyDatabaseCommands {
     InstallAll(Box<IdentifyDatabaseDirCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
+        command(about = "Download and install one optional identify pack group")
+    )]
+    InstallGroup(Box<IdentifyDatabaseGroupCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
         command(about = "Download and install one Redump system pack (or --all)")
     )]
     Install(Box<IdentifyDatabaseInstallCommand>),
@@ -3098,6 +3103,39 @@ pub struct IdentifyDatabaseInstallCommand {
             long = "from",
             value_name = "ZIP",
             help = "Local Redump DAT ZIP file; omit to download from Redump"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub from: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Identify database directory. Defaults to the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyDatabaseGroupCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "GROUP", help = "Optional identify pack group to install")
+    )]
+    pub group: String,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "from",
+            value_name = "ARCHIVE",
+            help = "Local group archive; omit to download the archive for this version"
         )
     )]
     #[serde(default)]

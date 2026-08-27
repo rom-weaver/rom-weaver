@@ -11,6 +11,7 @@ import {
   LIBRETRO_REVISION,
   OPENGOOD_ONLY_PLATFORMS,
   OPENGOOD_REVISION,
+  buildCatalogPlatforms,
   extractGoodToolsDumpTags,
   main,
   mediaProfileFor,
@@ -54,7 +55,7 @@ function writeCachedDat(cacheDir, source, revision, datFile, bytes) {
 }
 
 function parsePack(bytes) {
-  assert.equal(bytes.subarray(0, 8).toString("binary"), "RWFP2\0\0\0");
+  assert.equal(bytes.subarray(0, 8).toString("binary"), "RWFP3\0\0\0");
   const count = bytes.readUInt32LE(8);
   let cursor = 12;
   const directory = [];
@@ -145,7 +146,19 @@ test("merge dedupes identical scoped hashes and retains legacy GoodTools data", 
   assert.deepEqual(extractGoodToolsDumpTags("Title [!][b1]"), ["!", "b1"]);
 });
 
-test("the builder emits deterministic mixed and fallback-only RWFP2 packs", async () => {
+test("family variants resolve to their shared pack", () => {
+  const [entry] = buildCatalogPlatforms([
+    {
+      platform: "Nintendo - Nintendo 64",
+      slug: "nintendo-nintendo-64",
+      source: "libretro",
+      packFormat: "RWFP3",
+    },
+  ]);
+  assert.ok(entry.aliases.includes("nintendo nintendo 64dd"));
+});
+
+test("the builder emits deterministic mixed and fallback-only RWFP3 packs", async () => {
   const work = tempDir("mixed");
   const cacheDir = join(work, "cache");
   const outDir = join(work, "out");
@@ -177,19 +190,21 @@ test("the builder emits deterministic mixed and fallback-only RWFP2 packs", asyn
 
   const nes = parsePack(readFileSync(join(outDir, "nintendo-nintendo-entertainment-system.pack")));
   const manifest = JSON.parse(nes.get("manifest.json").toString("utf8"));
-  const games = JSON.parse(nes.get("games.json").toString("utf8"));
+  const games = nes.get("games.bin");
   assert.equal(manifest.source, "libretro");
   assert.equal(manifest.generationDate, IDENTIFY_GENERATION_DATE);
-  assert.equal(games[0].description, "The Libretro title");
-  assert.equal(games[1].legacyVariant, true);
+  assert.equal(games.readUInt16LE(6), 52);
+  assert.equal(games.readUInt8(12 + 52 + 50), 1);
 
   const tandy = parsePack(readFileSync(join(outDir, "tandy-color-computer.pack")));
   const tandyManifest = JSON.parse(tandy.get("manifest.json").toString("utf8"));
-  const tandyGames = JSON.parse(tandy.get("games.json").toString("utf8"));
+  const tandyGames = tandy.get("games.bin");
   assert.equal(tandyManifest.source, "opengood");
-  assert.equal(tandyManifest.provenance.libretro, null);
-  assert.equal(tandyGames[0].source, "opengood");
-  assert.equal(tandyGames[0].upstreamSource, "open-good");
+  assert.ok(
+    tandyManifest.provenance.every((entry) => entry.source === "SnowflakePowered/opengood"),
+  );
+  assert.equal(tandyGames.readUInt8(12 + 48), 1);
+  assert.equal(tandyGames.readUInt8(12 + 49), 6);
 
   const catalog = JSON.parse(readFileSync(join(outDir, "catalog.json"), "utf8"));
   const nesCatalog = catalog.platforms.find((entry) => entry.canonicalPlatform === NES);

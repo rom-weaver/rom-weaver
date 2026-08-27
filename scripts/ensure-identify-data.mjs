@@ -20,9 +20,13 @@ import {
 const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const rootDir = resolve(scriptDir, "..");
 const defaultDataDir = join(rootDir, "crates", "rom-weaver-cli", "data", "identify", "v1");
-const expectedPackNames = [...Object.keys(LIBRETRO_PLATFORM_PATHS), ...Object.keys(OPENGOOD_STANDALONE_PLATFORMS)].map(
-  (platform) => `${slugifyPlatform(platform)}.pack`,
-);
+const expectedPackNames = [
+  ...new Set(
+    [...Object.keys(LIBRETRO_PLATFORM_PATHS), ...Object.keys(OPENGOOD_STANDALONE_PLATFORMS)].map(
+      (platform) => `${slugifyPlatform(platform)}.pack`,
+    ),
+  ),
+];
 const sortedExpectedPackNames = [...expectedPackNames].sort();
 
 const log = (level, message) => console.log(`[ensure-identify-data] ${level}: ${message}`);

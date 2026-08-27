@@ -14,6 +14,11 @@ import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.t
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 
 declare const __EMULATORJS_VERSION__: string;
+declare const __IDENTIFY_OPTIONAL_PACK_GROUPS__: Array<{
+  id: string;
+  label: string;
+  packs: Array<{ sha256: string; url: string }>;
+}>;
 
 declare let self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<string | { revision?: string | null; url: string }>;
@@ -49,6 +54,7 @@ const PRECACHE_NAME = cacheNames.precache;
 const RUNTIME_CACHE_NAME = cacheNames.runtime;
 const EMULATORJS_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
+const IDENTIFY_OPTIONAL_CACHE_NAME = `${cacheNames.prefix}-${PRECACHE_ID}-identify-optional`;
 const SW_LOG_PREFIX = "[rom-weaver-sw]";
 // In-memory COEP mode. Volatile: resets to the credentialless default whenever the worker thread is
 // terminated and respawned (notably on mobile Safari). The durable copy below survives that so a page
@@ -269,17 +275,54 @@ const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
 
 registerRoute(({ request, url }) => isEmulatorJsAssetRequest(request, url), serveEmulatorJsAsset);
 
-/* Every identify pack enters the precache during service-worker installation.
-   A missing entry MUST fail locally. A ROM-dependent request must never reach
-   the network and reveal the selected platform. */
+/* Default packs enter the precache. Optional packs enter their own cache only
+   after the user installs a complete group. Identify requests MUST stay local. */
 const isIdentifyPackRequest = (url: URL) =>
   url.origin === self.location.origin && /\/assets\/identify-.*\.pack$/u.test(url.pathname);
 
+const optionalGroupMarkerUrl = (groupId: string) =>
+  new URL(`/__rom-weaver-identify-group__/${groupId}`, self.location.origin).href;
+
+const optionalGroupRevision = (group: (typeof __IDENTIFY_OPTIONAL_PACK_GROUPS__)[number]) =>
+  group.packs.map((pack) => `${pack.url}:${pack.sha256}`).join("\n");
+
+const isOptionalGroupInstalled = async (cache: Cache, group: (typeof __IDENTIFY_OPTIONAL_PACK_GROUPS__)[number]) =>
+  (await (await cache.match(optionalGroupMarkerUrl(group.id)))?.text()) === optionalGroupRevision(group);
+
 const serveIdentifyPack = async ({ request }: { request: Request }) => {
-  return (await matchPrecache(request.url)) || Response.error();
+  const precached = await matchPrecache(request.url);
+  if (precached) return precached;
+  const requestUrl = new URL(request.url);
+  const group = __IDENTIFY_OPTIONAL_PACK_GROUPS__.find((candidate) =>
+    candidate.packs.some((pack) => new URL(pack.url, self.registration.scope).pathname === requestUrl.pathname),
+  );
+  if (!group) return Response.error();
+  const cache = await caches.open(IDENTIFY_OPTIONAL_CACHE_NAME);
+  if (!(await isOptionalGroupInstalled(cache, group))) return Response.error();
+  return (await cache.match(request.url)) || Response.error();
 };
 
 registerRoute(({ url }) => isIdentifyPackRequest(url), serveIdentifyPack);
+
+const installOptionalIdentifyGroup = async (groupId: string) => {
+  const group = __IDENTIFY_OPTIONAL_PACK_GROUPS__.find((candidate) => candidate.id === groupId);
+  if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
+  const downloaded = await Promise.all(
+    group.packs.map(async (pack) => {
+      const request = new Request(new URL(pack.url, self.registration.scope));
+      const response = await fetch(request);
+      if (!response.ok) throw new Error(`ROM identify pack download failed with HTTP ${response.status}`);
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await response.clone().arrayBuffer()));
+      const actualSha256 = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+      if (actualSha256 !== pack.sha256) throw new Error(`ROM identify pack checksum failed: ${pack.url}`);
+      return { request, response };
+    }),
+  );
+  const cache = await caches.open(IDENTIFY_OPTIONAL_CACHE_NAME);
+  await Promise.all(downloaded.map(({ request, response }) => cache.put(request, response)));
+  await cache.put(optionalGroupMarkerUrl(group.id), new Response(optionalGroupRevision(group)));
+  return { id: group.id, installed: true, label: group.label, packs: group.packs.length };
+};
 
 logServiceWorker("script initialized", {
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
@@ -358,6 +401,24 @@ self.addEventListener("message", (event) => {
     logServiceWorker("message received; updating COEP mode", { coepCredentialless: credentialless });
     // Persist durably (and keep the worker alive until written) so the choice survives a restart.
     event.waitUntil(persistCoepMode(credentialless));
+    return;
+  }
+
+  if (event.data.action === "install-identify-pack-group") {
+    const groupId = typeof event.data.groupId === "string" ? event.data.groupId : "";
+    const install = installOptionalIdentifyGroup(groupId)
+      .then((result) => ({ action: "identify-pack-group-installed", ...result }))
+      .catch((error) => ({
+        action: "identify-pack-group-install-failed",
+        error: formatError(error),
+        id: groupId,
+      }));
+    event.waitUntil(
+      install.then((response) => {
+        if (event.ports?.[0]) event.ports[0].postMessage(response);
+        else if (event.source && "postMessage" in event.source) event.source.postMessage(response);
+      }),
+    );
     return;
   }
 

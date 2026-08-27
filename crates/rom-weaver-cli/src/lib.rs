@@ -1436,11 +1436,11 @@ mod command_args;
 pub use command_args::{
     BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, ChecksumCommand,
     CompressCommand, ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands,
-    IdentifyDatabaseDirCommand, IdentifyDatabaseImportCommand, IdentifyDatabaseInstallCommand,
-    IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand, IdentifySubcommands,
-    IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT,
-    PatchApplyCommand, PatchCreateCommand, PatchValidateCommand, PlanExtractBatchCommand,
-    PpfUndoCommand, ProbeCommand, TrimCommand,
+    IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand,
+    IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
+    IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
+    PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
+    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,
 };
 
 mod expect_tokens;

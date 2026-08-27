@@ -7,6 +7,7 @@ import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
+import { resolveIdentifyPackGroups } from "../../scripts/identify-pack-groups.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
 import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
@@ -30,10 +31,25 @@ const identifyDataSources = Object.fromEntries(
     .map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
 );
 const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
-const identifyPackPrecacheEntries = identifyDataIndex.systems.map((system) => ({
+const identifyPackGroups = resolveIdentifyPackGroups(identifyDataIndex);
+const identifyPackPrecacheEntries = identifyPackGroups.defaultSystems.map((system) => ({
   revision: system.sha256,
   url: `assets/identify-${system.file}?sha256=${system.sha256}`,
 }));
+const identifyOptionalPackGroups = identifyPackGroups.groups
+  .filter((group) => !group.default)
+  .map((group) => ({
+    id: group.id,
+    label: group.label,
+    packs: group.systems.map((slug) => {
+      const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
+      if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
+      return {
+        sha256: system.sha256,
+        url: `assets/identify-${system.file}?sha256=${system.sha256}`,
+      };
+    }),
+  }));
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
@@ -1168,6 +1184,7 @@ export default defineConfig(({ command, mode }) => {
       __COMMITS_SINCE_VERSION__: JSON.stringify(commitsSinceVersion),
       __DIRTY_HASH__: JSON.stringify(dirtyHash),
       __EMULATORJS_VERSION__: JSON.stringify(emulatorJsLock.version),
+      __IDENTIFY_OPTIONAL_PACK_GROUPS__: JSON.stringify(identifyOptionalPackGroups),
       __GIT_BRANCH__: JSON.stringify(gitBranch),
       __VERSION_BRANCH__: JSON.stringify(versionBranch),
       __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
@@ -1210,8 +1227,8 @@ export default defineConfig(({ command, mode }) => {
         },
         filename: "cache-service-worker.ts",
         injectManifest: {
-          // Logical pack URLs resolve to Brotli sidecars at install time. The
-          // fixed full set prevents a ROM-dependent request from reaching the network.
+          // Logical default-pack URLs resolve to Brotli sidecars at install time.
+          // Optional groups enter a separate local cache only after an explicit install.
           additionalManifestEntries: identifyPackPrecacheEntries,
           globIgnores: ["**/*.map", "assets/identify-*.pack.br"],
           globPatterns: [

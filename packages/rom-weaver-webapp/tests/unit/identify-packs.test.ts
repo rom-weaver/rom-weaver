@@ -135,3 +135,30 @@ describe("loadIdentifyPacks", () => {
     expect(await loadIdentifyPacks({ fileName: "game.gba" })).toHaveLength(1);
   });
 });
+
+describe("optional identify pack groups", () => {
+  it("asks the service worker to install one complete named group", async () => {
+    stubFetch({
+      index: {
+        format: "rom-weaver-identify-system-pack-v1",
+        groups: [{ default: false, id: "computers", label: "Computers", systems: ["nintendo-game-boy"] }],
+        systems: INDEX_SYSTEMS,
+      },
+    });
+    const postMessage = vi.fn((message: unknown, ports: MessagePort[]) => {
+      ports[0].postMessage({ action: "identify-pack-group-installed" });
+    });
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: { controller: { postMessage } },
+    });
+    const { installIdentifyPackGroup, listOptionalIdentifyPackGroups } =
+      await import("../../src/platform/browser/identify-packs.ts");
+    expect((await listOptionalIdentifyPackGroups()).map(({ id }) => id)).toEqual(["computers"]);
+    await installIdentifyPackGroup("computers");
+    expect(postMessage).toHaveBeenCalledWith(
+      { action: "install-identify-pack-group", groupId: "computers" },
+      expect.any(Array),
+    );
+  });
+});

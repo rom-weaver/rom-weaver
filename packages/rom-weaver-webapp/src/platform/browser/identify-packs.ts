@@ -27,11 +27,21 @@ type IdentifySystem = {
   sha256: string;
   slug: string;
   source: string;
+  group?: string;
+};
+
+type IdentifyPackGroup = {
+  default: boolean;
+  id: string;
+  label: string;
+  systems: string[];
 };
 
 type IdentifyIndex = {
   catalog?: string;
   format: string;
+  groups?: IdentifyPackGroup[];
+  packGroups?: IdentifyPackGroup[];
   systems: IdentifySystem[];
 };
 
@@ -224,6 +234,37 @@ const getCatalog = (): Promise<IdentifyCatalog | undefined> => {
   return catalogPromise;
 };
 
+const identifyPackGroups = (index: IdentifyIndex): IdentifyPackGroup[] => {
+  const groups = index.groups ?? index.packGroups ?? [];
+  return groups.filter(
+    (group) =>
+      typeof group?.id === "string" &&
+      Array.isArray(group.systems) &&
+      group.systems.every((slug) => typeof slug === "string"),
+  );
+};
+
+const listOptionalIdentifyPackGroups = async (): Promise<IdentifyPackGroup[]> =>
+  identifyPackGroups(await getIndex()).filter((group) => !group.default);
+
+const installIdentifyPackGroup = async (groupId: string): Promise<void> => {
+  const group = (await listOptionalIdentifyPackGroups()).find((candidate) => candidate.id === groupId);
+  if (!group) throw new IdentifyDataUnavailableError(`Unknown ROM identify pack group: ${groupId}`);
+  const controller = navigator.serviceWorker?.controller;
+  if (!controller || typeof MessageChannel !== "function") {
+    throw new IdentifyDataUnavailableError("The service worker cannot install ROM identify packs");
+  }
+  await new Promise<void>((resolve, reject) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = (event) => {
+      channel.port1.close();
+      if (event.data?.action === "identify-pack-group-installed") resolve();
+      else reject(new IdentifyDataUnavailableError(event.data?.error || `Could not install ${group.label}`));
+    };
+    controller.postMessage({ action: "install-identify-pack-group", groupId }, [channel.port2]);
+  });
+};
+
 /** Verified pack bytes -> the staged blob shape the wasm runtime consumes. */
 const toBrowserPack = (system: IdentifySystem, bytes: ArrayBuffer): BrowserIdentifyPack => ({
   blob: new Blob([bytes], { type: "application/octet-stream" }),
@@ -337,6 +378,8 @@ const loadIdentifyPacks = async (
 
 export {
   IdentifyDataUnavailableError,
+  installIdentifyPackGroup,
+  listOptionalIdentifyPackGroups,
   loadIdentifyPacks,
   loadIdentifyPackSelection,
   resetIdentifyPackCache,

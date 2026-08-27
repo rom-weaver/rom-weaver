@@ -17,6 +17,7 @@ const DEFAULT_OUT = path.join(ROOT_DIR, "target/identify");
 
 const PACK_MAGIC = Buffer.from("RWFP1\0\0\0", "binary");
 const PACK_MAGIC_V2 = Buffer.from("RWFP2\0\0\0", "binary");
+const PACK_MAGIC_V3 = Buffer.from("RWFP3\0\0\0", "binary");
 const HASH_MAGIC = Buffer.from("RWH1", "binary");
 const PAIR_MAGIC = Buffer.from("RWHP", "binary");
 const ROUTE_MAGIC = Buffer.from("RWR2", "binary");
@@ -26,6 +27,7 @@ const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v2";
 const GAME_CACHE_FORMAT = "rom-weaver-identify-games-v1";
 export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
 export const INDEX_FORMAT_V2 = "rom-weaver-identify-system-pack-v2";
+export const INDEX_FORMAT_V3 = "rom-weaver-identify-system-pack-v3";
 export const CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
 
 // OpenGood publishes GoodTools cartridge sets as CC0 Logiqx XML DATs. It adds
@@ -208,7 +210,7 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "metadat/redump/The 3DO Company - 3DO.dat",
 ]);
 
-export const LIBRETRO_PLATFORM_PATHS = Object.freeze(
+const SOURCE_PLATFORM_PATHS = Object.freeze(
   Object.fromEntries(
     [...new Set(LIBRETRO_DAT_PATHS.map((sourcePath) => path.basename(sourcePath, ".dat")))]
       .sort()
@@ -222,6 +224,37 @@ export const LIBRETRO_PLATFORM_PATHS = Object.freeze(
             (left < right ? -1 : left > right ? 1 : 0),
         ),
       ]),
+  ),
+);
+
+export const PACK_FAMILY_TARGETS = Object.freeze({
+  "NEC - PC Engine SuperGrafx": "NEC - PC Engine - TurboGrafx 16",
+  "Nintendo - New Nintendo 3DS": "Nintendo - Nintendo 3DS",
+  "Nintendo - New Nintendo 3DS (Digital)": "Nintendo - Nintendo 3DS",
+  "Nintendo - Nintendo 3DS (Digital)": "Nintendo - Nintendo 3DS",
+  "Nintendo - Nintendo 64DD": "Nintendo - Nintendo 64",
+  "Nintendo - Nintendo DS (Download Play)": "Nintendo - Nintendo DS",
+  "Nintendo - Nintendo DSi": "Nintendo - Nintendo DS",
+  "Nintendo - Satellaview": "Nintendo - Super Nintendo Entertainment System",
+  "Nintendo - Sufami Turbo": "Nintendo - Super Nintendo Entertainment System",
+  "Nintendo - Wii (Digital)": "Nintendo - Wii",
+  "Nintendo - e-Reader": "Nintendo - Game Boy Advance",
+  "Sony - PlayStation Minis": "Sony - PlayStation Portable",
+  "Sony - PlayStation Portable (PSN)": "Sony - PlayStation Portable",
+  "Sony - PlayStation Portable (PSX2PSP)": "Sony - PlayStation Portable",
+  "Sony - PlayStation Portable (UMD Music)": "Sony - PlayStation Portable",
+  "Sony - PlayStation Portable (UMD Video)": "Sony - PlayStation Portable",
+});
+
+export const LIBRETRO_PLATFORM_PATHS = Object.freeze(
+  Object.fromEntries(
+    Object.entries(SOURCE_PLATFORM_PATHS).reduce((entries, [platform, sourcePaths]) => {
+      const target = PACK_FAMILY_TARGETS[platform] ?? platform;
+      const existing = entries.get(target) ?? [];
+      existing.push(...sourcePaths);
+      entries.set(target, existing);
+      return entries;
+    }, new Map()),
   ),
 );
 
@@ -289,7 +322,7 @@ const OPENGOOD_LIBRETRO_TARGETS = Object.freeze({
 });
 
 function openGoodTarget(platform) {
-  const target = OPENGOOD_LIBRETRO_TARGETS[platform] ?? platform;
+  const target = PACK_FAMILY_TARGETS[platform] ?? OPENGOOD_LIBRETRO_TARGETS[platform] ?? platform;
   return LIBRETRO_PLATFORM_PATHS[target] ? target : undefined;
 }
 
@@ -380,6 +413,79 @@ export const CURATED_ALIASES = Object.freeze({
   ],
 });
 
+export const DEFAULT_PACK_PLATFORMS = Object.freeze([
+  "Amstrad - CPC",
+  "Atari - 2600",
+  "Atari - 5200",
+  "Atari - 7800",
+  "Atari - 8-bit Family",
+  "Atari - Lynx",
+  "Atari - ST",
+  "Commodore - 64",
+  "Commodore - Amiga",
+  "Commodore - Plus-4",
+  "Commodore - VIC-20",
+  "DOS",
+  "Enterprise - 128",
+  "LowRes NX",
+  "Memotech - MTX",
+  "MicroW8",
+  "Microsoft - MSX",
+  "Microsoft - MSX2",
+  "NEC - PC Engine - TurboGrafx 16",
+  "NEC - PC Engine CD - TurboGrafx-CD",
+  "Nintendo - Family Computer Disk System",
+  "Nintendo - Game Boy",
+  "Nintendo - Game Boy Advance",
+  "Nintendo - Game Boy Color",
+  "Nintendo - GameCube",
+  "Nintendo - Nintendo 3DS",
+  "Nintendo - Nintendo 64",
+  "Nintendo - Nintendo DS",
+  "Nintendo - Nintendo Entertainment System",
+  "Nintendo - Super Nintendo Entertainment System",
+  "Nintendo - Wii",
+  "PICO-8",
+  "SAM Coupé",
+  "SNK - Neo Geo Pocket",
+  "SNK - Neo Geo Pocket Color",
+  "Sega - 32X",
+  "Sega - Dreamcast",
+  "Sega - Game Gear",
+  "Sega - Master System - Mark III",
+  "Sega - Mega Drive - Genesis",
+  "Sega - Mega-CD - Sega CD",
+  "Sega - Saturn",
+  "Sharp - X1",
+  "Sharp - X68000",
+  "Sinclair - ZX 81",
+  "Sinclair - ZX Spectrum",
+  "Sinclair - ZX Spectrum +3",
+  "Sony - PlayStation",
+  "Sony - PlayStation 2",
+  "Sony - PlayStation Portable",
+  "TIC-80",
+  "Tandy - Color Computer",
+  "Tangerine - Oric",
+  "Thomson - MO5",
+  "Videoton - TV-Computer",
+  "WASM-4",
+]);
+
+const DEFAULT_PACK_SET = new Set(DEFAULT_PACK_PLATFORMS);
+const packGroupFor = (platform) => {
+  if (DEFAULT_PACK_SET.has(platform)) return "default";
+  if (/Mobile|Palm OS|J2ME|Symbian|Zeebo/u.test(platform)) return "optional-mobile";
+  if (/HBMAME|Atomiswave|Naomi|Arcade|Neo Geo$/u.test(platform)) return "optional-arcade";
+  if (
+    /DOOM|Quake|ScummVM|Cave Story|Cannonball|Dinothawr|Flashback|Lutro|MrBoom|PuzzleScript|RPG Maker|Rick Dangerous|Tomb Raider|Wolfenstein/u.test(
+      platform,
+    )
+  )
+    return "optional-engines";
+  return "optional-extended";
+};
+
 export function normalizeAlias(value) {
   return String(value)
     .toLowerCase()
@@ -393,7 +499,7 @@ const ALGORITHMS = Object.freeze({
   sha1: { code: 2, hashBytes: 20 },
 });
 
-const usage = () => `Build per-system RWFP2 ROM-identify packs from pinned Libretro DATs.
+const usage = () => `Build per-system RWFP3 ROM-identify packs from pinned Libretro DATs.
 Mapped OpenGood records add legacy variants. index.json and catalog.json are
 written next to the packs.
 
@@ -849,11 +955,14 @@ export function parseLibretroGames(text, platform, sourcePath) {
         description: game.metadata.description,
         dumpTags: [],
         legacyVariant: false,
+        language: game.metadata.language,
         metadata: game.metadata,
         name: game.name,
+        parent: game.metadata.cloneof ?? game.metadata.romof,
         platform,
         provenance: [provenance],
         region: game.metadata.region,
+        revision: game.metadata.version ?? game.metadata.release,
         source: "libretro",
         upstreamSource: innerSource,
       }))
@@ -1954,6 +2063,329 @@ export function buildSystemPackV2(platform, games, provenance, source = "libretr
   return { componentCount, pack, routedKeys, sharedComponents };
 }
 
+const ABSENT_U32 = 0xffffffff;
+const ROLE_CODES = Object.freeze({
+  primary_payload: 0,
+  data_track: 1,
+  audio_track: 2,
+  arcade_rom: 3,
+  partition: 4,
+  content_file: 5,
+  disk_side: 6,
+  child_disc: 7,
+});
+const SOURCE_CODES = Object.freeze({ libretro: 0, opengood: 1, redump: 2 });
+const UPSTREAM_CODES = Object.freeze({
+  libretro: 0,
+  redump: 1,
+  "no-intro": 2,
+  tosec: 3,
+  mame: 4,
+  fbneo: 5,
+  "open-good": 6,
+  unknown: 7,
+});
+
+const tableHeader = (magic, width, count, extraBytes = 0) => {
+  const buffer = Buffer.alloc(12 + extraBytes);
+  buffer.write(magic, 0, 4, "ascii");
+  buffer.writeUInt16LE(1, 4);
+  buffer.writeUInt16LE(width, 6);
+  buffer.writeUInt32LE(count, 8);
+  return buffer;
+};
+
+function buildStringTable(values) {
+  const strings = [...new Set(values.filter((value) => value !== undefined).map(String))].sort(
+    (left, right) => Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8")),
+  );
+  const ids = new Map(strings.map((value, index) => [value, index]));
+  const encoded = strings.map((value) => Buffer.from(value, "utf8"));
+  const byteCount = encoded.reduce((sum, value) => sum + value.length, 0);
+  const header = tableHeader("RWS3", 0, strings.length, 4);
+  header.writeUInt32LE(byteCount, 12);
+  const offsets = Buffer.alloc((strings.length + 1) * 4);
+  let cursor = 0;
+  encoded.forEach((value, index) => {
+    offsets.writeUInt32LE(cursor, index * 4);
+    cursor += value.length;
+  });
+  offsets.writeUInt32LE(cursor, strings.length * 4);
+  return { bytes: Buffer.concat([header, offsets, ...encoded]), ids };
+}
+
+function internOrderedSets(sets) {
+  const unique = [[]];
+  const ids = new Map([["[]", 0]]);
+  const mapped = sets.map((values) => {
+    const key = JSON.stringify(values);
+    let id = ids.get(key);
+    if (id === undefined) {
+      id = unique.length;
+      ids.set(key, id);
+      unique.push(values);
+    }
+    return id;
+  });
+  const offsets = [0];
+  const flattened = [];
+  for (const values of unique) {
+    flattened.push(...values);
+    offsets.push(flattened.length);
+  }
+  return { flattened, mapped, offsets, sets: unique };
+}
+
+function buildRwfp3Tables(games) {
+  const provenance = [];
+  const provenanceIds = new Map();
+  const provenanceSets = games.map((game) =>
+    (game.provenance ?? []).map((value) => {
+      const key = JSON.stringify(value);
+      let id = provenanceIds.get(key);
+      if (id === undefined) {
+        id = provenance.length;
+        provenanceIds.set(key, id);
+        provenance.push(value);
+      }
+      return id;
+    }),
+  );
+
+  const stringValues = [];
+  for (const game of games) {
+    stringValues.push(
+      game.name,
+      game.platform,
+      game.gameId,
+      game.region,
+      game.language,
+      game.revision,
+      game.parent,
+      ...(game.dumpTags ?? []),
+    );
+    for (const component of game.components) {
+      stringValues.push(component.filename, component.hashScope ?? "full_file");
+    }
+  }
+  const strings = buildStringTable(stringValues);
+  const stringId = (value) => {
+    if (value === undefined) return ABSENT_U32;
+    const id = strings.ids.get(String(value));
+    if (id === undefined) throw new Error(`RWFP3 string was not interned: ${String(value)}`);
+    return id;
+  };
+
+  const hashByKey = new Map();
+  const hashes = [];
+  const componentHashKeys = [];
+  for (const game of games) {
+    for (const component of game.components) {
+      const scope = component.hashScope ?? "full_file";
+      const key = JSON.stringify([
+        component.size,
+        scope,
+        component.crc32 ?? "",
+        component.md5 ?? "",
+        component.sha1 ?? "",
+        component.sha256 ?? "",
+      ]);
+      if (!hashByKey.has(key)) {
+        hashByKey.set(key, hashes.length);
+        hashes.push({ ...component, scope, key });
+      }
+      componentHashKeys.push(key);
+    }
+  }
+  const compareBuffers = (left, right) => Buffer.compare(left, right);
+  hashes.sort((left, right) => {
+    const size = BigInt(left.size) - BigInt(right.size);
+    if (size !== 0n) return size < 0n ? -1 : 1;
+    const scope = compareBuffers(Buffer.from(left.scope), Buffer.from(right.scope));
+    if (scope) return scope;
+    return compareBuffers(Buffer.from(left.key), Buffer.from(right.key));
+  });
+  hashByKey.clear();
+  hashes.forEach((hash, index) => hashByKey.set(hash.key, index));
+
+  const hashesHeader = tableHeader("RWH3", 92, hashes.length);
+  const hashesRecords = Buffer.alloc(hashes.length * 92);
+  hashes.forEach((hash, index) => {
+    let cursor = index * 92;
+    hashesRecords.writeBigUInt64LE(BigInt(hash.size), cursor);
+    cursor += 8;
+    hashesRecords.writeUInt32LE(stringId(hash.scope), cursor);
+    cursor += 4;
+    let mask = 0;
+    if (hash.crc32) mask |= 1;
+    if (hash.md5) mask |= 2;
+    if (hash.sha1) mask |= 4;
+    if (hash.sha256) mask |= 8;
+    hashesRecords.writeUInt8(mask, cursor);
+    cursor += 4;
+    for (const [field, width] of [
+      ["crc32", 4],
+      ["md5", 16],
+      ["sha1", 20],
+      ["sha256", 32],
+    ]) {
+      if (hash[field]) Buffer.from(hash[field], "hex").copy(hashesRecords, cursor);
+      cursor += width;
+    }
+  });
+
+  const provenanceSetTable = internOrderedSets(provenanceSets);
+  const tagValueSets = games.map((game) => (game.dumpTags ?? []).map(stringId));
+  const tagSetTable = internOrderedSets(tagValueSets);
+  const setsHeader = tableHeader("RWSX", 0, provenanceSetTable.sets.length, 12);
+  setsHeader.writeUInt32LE(provenanceSetTable.flattened.length, 12);
+  setsHeader.writeUInt32LE(tagSetTable.sets.length, 16);
+  setsHeader.writeUInt32LE(tagSetTable.flattened.length, 20);
+  const u32s = (values) => {
+    const buffer = Buffer.alloc(values.length * 4);
+    values.forEach((value, index) => buffer.writeUInt32LE(value, index * 4));
+    return buffer;
+  };
+  const setsBytes = Buffer.concat([
+    setsHeader,
+    u32s(provenanceSetTable.offsets),
+    u32s(provenanceSetTable.flattened),
+    u32s(tagSetTable.offsets),
+    u32s(tagSetTable.flattened),
+  ]);
+
+  const components = [];
+  const gameRanges = [];
+  let flatIndex = 0;
+  games.forEach((game) => {
+    const first = components.length;
+    game.components.forEach((component) => {
+      components.push({ component, hashId: hashByKey.get(componentHashKeys[flatIndex]) });
+      flatIndex += 1;
+    });
+    gameRanges.push({ count: components.length - first, first });
+  });
+  const componentsHeader = tableHeader("RWC3", 28, components.length);
+  const componentRecords = Buffer.alloc(components.length * 28);
+  components.forEach(({ component, hashId }, index) => {
+    const cursor = index * 28;
+    componentRecords.writeUInt32LE(hashId, cursor);
+    componentRecords.writeUInt32LE(stringId(component.filename), cursor + 4);
+    componentRecords.writeUInt32LE(component.ordinal, cursor + 8);
+    componentRecords.writeUInt32LE(component.track ?? ABSENT_U32, cursor + 12);
+    componentRecords.writeUInt32LE(component.session ?? ABSENT_U32, cursor + 16);
+    componentRecords.writeUInt8(ROLE_CODES[component.role ?? "primary_payload"], cursor + 20);
+    componentRecords.writeUInt8(
+      (component.required === false ? 0 : 1) | (component.discriminating ? 2 : 0),
+      cursor + 21,
+    );
+  });
+
+  const gamesHeader = tableHeader("RWG3", 52, games.length);
+  const gameRecords = Buffer.alloc(games.length * 52);
+  games.forEach((game, index) => {
+    const cursor = index * 52;
+    [
+      game.name,
+      game.platform,
+      game.gameId,
+      game.region,
+      game.language,
+      game.revision,
+      game.parent,
+    ].forEach((value, field) => gameRecords.writeUInt32LE(stringId(value), cursor + field * 4));
+    gameRecords.writeUInt32LE(gameRanges[index].first, cursor + 28);
+    gameRecords.writeUInt32LE(gameRanges[index].count, cursor + 32);
+    gameRecords.writeUInt32LE(provenanceSetTable.mapped[index], cursor + 36);
+    gameRecords.writeUInt32LE(tagSetTable.mapped[index], cursor + 40);
+    gameRecords.writeUInt32LE(game.discNumber ?? ABSENT_U32, cursor + 44);
+    gameRecords.writeUInt8(SOURCE_CODES[game.source], cursor + 48);
+    gameRecords.writeUInt8(UPSTREAM_CODES[game.upstreamSource ?? "unknown"], cursor + 49);
+    gameRecords.writeUInt8(game.legacyVariant ? 1 : 0, cursor + 50);
+  });
+
+  const owners = Array.from({ length: hashes.length }, () => []);
+  components.forEach(({ hashId }, componentId) => owners[hashId].push(componentId));
+  const ownerOffsets = [0];
+  const ownerValues = [];
+  for (const values of owners) {
+    ownerValues.push(...values);
+    ownerOffsets.push(ownerValues.length);
+  }
+  const ownersHeader = tableHeader("RWO3", 0, hashes.length, 4);
+  ownersHeader.writeUInt32LE(ownerValues.length, 12);
+  const ownersBytes = Buffer.concat([ownersHeader, u32s(ownerOffsets), u32s(ownerValues)]);
+
+  const routeIds = hashes
+    .map((hash, id) => ({ hash, id }))
+    .filter(
+      ({ hash, id }) =>
+        hash.crc32 &&
+        hash.size > 0 &&
+        owners[id].some((componentId) => components[componentId].component.discriminating),
+    )
+    .sort((left, right) => {
+      const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+      return (
+        compare(left.hash.crc32, right.hash.crc32) ||
+        Number(left.hash.size) - Number(right.hash.size) ||
+        compare(left.hash.scope, right.hash.scope) ||
+        left.id - right.id
+      );
+    })
+    .map(({ id }) => id);
+  const routesBytes = Buffer.concat([tableHeader("RWR3", 4, routeIds.length), u32s(routeIds)]);
+
+  return {
+    componentCount: components.length,
+    members: [
+      { name: "strings.bin", bytes: strings.bytes },
+      { name: "hashes.bin", bytes: Buffer.concat([hashesHeader, hashesRecords]) },
+      { name: "components.bin", bytes: Buffer.concat([componentsHeader, componentRecords]) },
+      { name: "games.bin", bytes: Buffer.concat([gamesHeader, gameRecords]) },
+      { name: "owners.bin", bytes: ownersBytes },
+      { name: "routes.bin", bytes: routesBytes },
+      { name: "sets.bin", bytes: setsBytes },
+    ],
+    provenance,
+    routedKeys: routeIds.length,
+  };
+}
+
+export function buildSystemPackV3(platform, games, source = "libretro") {
+  const sharedComponents = markSharedComponents(games);
+  const tables = buildRwfp3Tables(games);
+  const manifest = {
+    format: INDEX_FORMAT_V3,
+    platform,
+    source,
+    generationDate: IDENTIFY_GENERATION_DATE,
+    canonicalizationProfile: mediaProfileFor(platform, source),
+    canonicalizationVersion: 1,
+    provenance: tables.provenance,
+    counts: {
+      games: games.length,
+      components: tables.componentCount,
+      hashes: tables.members[1].bytes.readUInt32LE(8),
+      routedKeys: tables.routedKeys,
+      sharedComponents,
+    },
+  };
+  const pack = writePack(
+    [
+      ...tables.members,
+      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest), "utf8") },
+    ],
+    PACK_MAGIC_V3,
+  );
+  return {
+    componentCount: tables.componentCount,
+    pack,
+    routedKeys: tables.routedKeys,
+    sharedComponents,
+  };
+}
+
 function sortGames(games) {
   const compare = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
   return games
@@ -2022,13 +2454,12 @@ async function readPlatformGames(platform, options, paths) {
   };
 }
 
-async function writeSystemPackV2(platform, gamesInfo, options, provenance) {
-  console.error(`[identify] ${platform}: building RWFP2 pack`);
+async function writeSystemPackV3(platform, gamesInfo, options) {
+  console.error(`[identify] ${platform}: building RWFP3 pack`);
   const games = gamesInfo.games;
-  const { componentCount, pack, routedKeys, sharedComponents } = buildSystemPackV2(
+  const { componentCount, pack, routedKeys, sharedComponents } = buildSystemPackV3(
     platform,
     games,
-    provenance,
     gamesInfo.source,
   );
   const fileName = `${gamesInfo.slug}.pack`;
@@ -2039,7 +2470,7 @@ async function writeSystemPackV2(platform, gamesInfo, options, provenance) {
     platform,
     slug: gamesInfo.slug,
     source: gamesInfo.source,
-    packFormat: "RWFP2",
+    packFormat: "RWFP3",
     file: fileName,
     rawBytes: pack.length,
     sha256: crypto.createHash("sha256").update(pack).digest("hex"),
@@ -2092,7 +2523,10 @@ export function buildCatalogPlatforms(systems) {
   const aliasOwners = new Map(ownNames);
   const platforms = systems.map((system) => {
     const aliases = new Set([normalizeAlias(system.platform)]);
-    for (const alias of CURATED_ALIASES[system.platform] ?? []) {
+    const familyAliases = Object.entries(PACK_FAMILY_TARGETS)
+      .filter(([, target]) => target === system.platform)
+      .map(([source]) => source);
+    for (const alias of [...(CURATED_ALIASES[system.platform] ?? []), ...familyAliases]) {
       const normalized = normalizeAlias(alias);
       const ownOwner = ownNames.get(normalized);
       // Another platform's own name wins over this curated alias.
@@ -2170,7 +2604,7 @@ export async function main(argv = process.argv.slice(2)) {
   const systems = [];
   for (const platform of selected) {
     const games = await readPlatformGames(platform, options, paths);
-    systems.push(await writeSystemPackV2(platform, games, options, games.provenance));
+    systems.push(await writeSystemPackV3(platform, games, options));
   }
 
   // The catalog always lists every configured platform. The pack itself may be
@@ -2189,7 +2623,7 @@ export async function main(argv = process.argv.slice(2)) {
         platform,
         slug,
         source: LIBRETRO_PLATFORM_PATHS[platform] ? "libretro" : "opengood",
-        packFormat: "RWFP2",
+        packFormat: "RWFP3",
       },
     );
   }
@@ -2222,7 +2656,23 @@ export async function main(argv = process.argv.slice(2)) {
         revision: LIBRETRO_REVISION,
       },
     },
-    systems,
+    groups: [
+      { id: "default", label: "Default", default: true },
+      { id: "optional-arcade", label: "Arcade", default: false },
+      { id: "optional-engines", label: "Game engines", default: false },
+      { id: "optional-mobile", label: "Mobile", default: false },
+      { id: "optional-extended", label: "Extended systems", default: false },
+    ].map((group) => ({
+      ...group,
+      systems: systems
+        .filter((system) => packGroupFor(system.platform) === group.id)
+        .map((system) => system.slug),
+    })),
+    systems: systems.map((system) => ({
+      ...system,
+      group: packGroupFor(system.platform),
+      defaultPack: DEFAULT_PACK_SET.has(system.platform),
+    })),
   };
   await writeFile(path.join(options.outPath, "index.json"), `${JSON.stringify(index, null, 2)}\n`);
 

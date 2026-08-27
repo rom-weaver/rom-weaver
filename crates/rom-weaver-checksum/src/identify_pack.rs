@@ -476,6 +476,7 @@ pub(crate) fn read_u64(bytes: &[u8], offset: usize) -> Result<u64> {
 pub enum IdentifyPackFile {
     V1(SystemPack),
     V2(crate::identify_pack_v2::ArtifactPack),
+    V3(crate::identify_pack_v3::ArtifactPack),
 }
 
 impl IdentifyPackFile {
@@ -492,8 +493,16 @@ impl IdentifyPackFile {
                 bytes,
             )?));
         }
+        if bytes.len() >= crate::identify_pack_v3::PACK_V3_MAGIC.len()
+            && &bytes[..crate::identify_pack_v3::PACK_V3_MAGIC.len()]
+                == crate::identify_pack_v3::PACK_V3_MAGIC
+        {
+            return Ok(Self::V3(crate::identify_pack_v3::ArtifactPack::parse(
+                bytes,
+            )?));
+        }
         Err(invalid_pack(
-            "pack magic is not a supported version (expected RWFP1 or RWFP2)",
+            "pack magic is not a supported version (expected RWFP1, RWFP2, or RWFP3)",
         ))
     }
 }

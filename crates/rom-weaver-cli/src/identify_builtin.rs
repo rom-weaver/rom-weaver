@@ -139,17 +139,31 @@ pub(super) fn decompress(path: &Path) -> Result<Vec<u8>> {
 #[serde(rename_all = "camelCase")]
 struct PackIndex {
     systems: Vec<PackIndexEntry>,
+    #[serde(default)]
+    groups: Vec<PackGroup>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PackIndexEntry {
+    #[serde(default)]
+    slug: String,
     file: String,
     raw_bytes: u64,
     sha256: String,
     zstd_file: String,
     zstd_sha256: String,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PackGroup {
+    id: String,
+    #[serde(default)]
+    default: bool,
+    systems: Vec<String>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -356,6 +370,412 @@ fn archive_relative_path(path: &Path) -> Result<PathBuf> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn validate_group_id(group: &str) -> Result<()> {
+    if group.is_empty()
+        || !group
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+    {
+        return Err(RomWeaverError::Validation(format!(
+            "invalid identify pack group `{group}`; use lowercase letters, digits, and hyphens"
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_json_object(path: &Path) -> Result<serde_json::Map<String, serde_json::Value>> {
+    let value: serde_json::Value = serde_json::from_slice(&fs::read(path).map_err(|error| {
+        RomWeaverError::Validation(format!("failed to read `{}`: {error}", path.display()))
+    })?)
+    .map_err(|error| {
+        RomWeaverError::Validation(format!("invalid `{}`: {error}", path.display()))
+    })?;
+    value.as_object().cloned().ok_or_else(|| {
+        RomWeaverError::Validation(format!(
+            "invalid `{}`: expected a JSON object",
+            path.display()
+        ))
+    })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn merge_json_records(
+    destination: &mut serde_json::Map<String, serde_json::Value>,
+    incoming: &serde_json::Map<String, serde_json::Value>,
+    field: &str,
+    key: &str,
+) -> Result<()> {
+    let records = incoming
+        .get(field)
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| {
+            RomWeaverError::Validation(format!("identify metadata has no `{field}` array"))
+        })?;
+    let destination_records = destination
+        .entry(field.to_string())
+        .or_insert_with(|| serde_json::Value::Array(Vec::new()))
+        .as_array_mut()
+        .ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "installed identify metadata has no `{field}` array"
+            ))
+        })?;
+    for record in records {
+        let value = record
+            .as_object()
+            .and_then(|record| record.get(key))
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                RomWeaverError::Validation(format!("identify `{field}` record has no `{key}`"))
+            })?;
+        destination_records.retain(|existing| {
+            existing
+                .as_object()
+                .and_then(|record| record.get(key))
+                .and_then(serde_json::Value::as_str)
+                != Some(value)
+        });
+        destination_records.push(record.clone());
+    }
+    destination_records.sort_by(|left, right| {
+        let left = left
+            .as_object()
+            .and_then(|record| record.get(key))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let right = right
+            .as_object()
+            .and_then(|record| record.get(key))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        left.cmp(right)
+    });
+    Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn merged_metadata(
+    installed_path: &Path,
+    archive_path: &Path,
+    fields: &[(&str, &str)],
+) -> Result<Vec<u8>> {
+    let archive = read_json_object(archive_path)?;
+    let mut installed = if installed_path.is_file() {
+        read_json_object(installed_path)?
+    } else {
+        archive.clone()
+    };
+    for (field, key) in fields {
+        merge_json_records(&mut installed, &archive, field, key)?;
+    }
+    serde_json::to_vec_pretty(&installed).map_err(|error| {
+        RomWeaverError::Validation(format!("failed to serialize identify metadata: {error}"))
+    })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn write_group_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    let part = path.with_extension("part");
+    fs::write(&part, bytes).map_err(|error| {
+        RomWeaverError::Validation(format!("failed to write `{}`: {error}", part.display()))
+    })?;
+    fs::rename(&part, path).map_err(|error| {
+        RomWeaverError::Validation(format!("failed to finalize `{}`: {error}", path.display()))
+    })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn group_archive_entries(stage: &Path, group: &str) -> Result<Vec<PackIndexEntry>> {
+    let index_path = stage.join("index.json");
+    let index: PackIndex = serde_json::from_slice(&fs::read(&index_path).map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "failed to read `{}`: {error}",
+            index_path.display()
+        ))
+    })?)
+    .map_err(|error| RomWeaverError::Validation(format!("invalid identify index: {error}")))?;
+    let archive_group = index
+        .groups
+        .iter()
+        .find(|candidate| candidate.id == group)
+        .ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "identify data archive does not contain group `{group}`"
+            ))
+        })?;
+    if index.groups.len() != 1 {
+        return Err(RomWeaverError::Validation(format!(
+            "identify group archive for `{group}` lists more than one group"
+        )));
+    }
+    if archive_group.default {
+        return Err(RomWeaverError::Validation(format!(
+            "identify pack group `{group}` is included by install-all"
+        )));
+    }
+    let expected: std::collections::BTreeSet<_> =
+        archive_group.systems.iter().map(String::as_str).collect();
+    let actual: std::collections::BTreeSet<_> = index
+        .systems
+        .iter()
+        .map(|entry| entry.slug.as_str())
+        .collect();
+    if expected.is_empty() || expected != actual {
+        return Err(RomWeaverError::Validation(format!(
+            "identify pack group `{group}` does not match its archive systems"
+        )));
+    }
+    for entry in &index.systems {
+        validate_group_id(&entry.slug)?;
+        if entry.zstd_file != format!("packs/{}.pack.zst", entry.slug) {
+            return Err(RomWeaverError::Validation(format!(
+                "identify pack `{}` has an invalid archive path",
+                entry.slug
+            )));
+        }
+    }
+    let catalog = read_json_object(&stage.join("catalog.json"))?;
+    let catalog_slugs: std::collections::BTreeSet<_> = catalog
+        .get("platforms")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| {
+            RomWeaverError::Validation("identify catalog has no `platforms` array".to_string())
+        })?
+        .iter()
+        .map(|platform| {
+            platform
+                .as_object()
+                .and_then(|platform| platform.get("packSlug"))
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| {
+                    RomWeaverError::Validation(
+                        "identify catalog platform has no `packSlug`".to_string(),
+                    )
+                })
+        })
+        .collect::<Result<_>>()?;
+    if catalog_slugs != expected {
+        return Err(RomWeaverError::Validation(format!(
+            "identify pack group `{group}` does not match its catalog platforms"
+        )));
+    }
+    let archive_packs: std::collections::BTreeSet<_> = fs::read_dir(stage.join("packs"))?
+        .map(|entry| {
+            entry
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "failed to read staged identify pack: {error}"
+                    ))
+                })
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        })
+        .collect::<Result<_>>()?;
+    let expected_packs: std::collections::BTreeSet<_> = index
+        .systems
+        .iter()
+        .map(|entry| format!("{}.pack.zst", entry.slug))
+        .collect();
+    if archive_packs != expected_packs {
+        return Err(RomWeaverError::Validation(format!(
+            "identify pack group `{group}` contains unexpected pack files"
+        )));
+    }
+    Ok(index.systems)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn install_group_archive(database_dir: &Path, group: &str, archive: &[u8]) -> Result<usize> {
+    validate_group_id(group)?;
+    let parent = database_dir.parent().unwrap_or(database_dir);
+    fs::create_dir_all(parent)?;
+    let stage = parent.join(format!(
+        ".identify-group-{group}-{}.part",
+        std::process::id()
+    ));
+    if stage.exists() {
+        fs::remove_dir_all(&stage)?;
+    }
+    fs::create_dir_all(&stage)?;
+    if let Err(error) = extract_archive(archive, &stage) {
+        let _ = fs::remove_dir_all(&stage);
+        return Err(error);
+    }
+    let entries = match group_archive_entries(&stage, group) {
+        Ok(entries) => entries,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&stage);
+            return Err(error);
+        }
+    };
+    let index_bytes = match merged_metadata(
+        &database_dir.join("index.json"),
+        &stage.join("index.json"),
+        &[("systems", "slug"), ("groups", "id")],
+    ) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&stage);
+            return Err(error);
+        }
+    };
+    let catalog_bytes = match merged_metadata(
+        &database_dir.join("catalog.json"),
+        &stage.join("catalog.json"),
+        &[("platforms", "packSlug")],
+    ) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&stage);
+            return Err(error);
+        }
+    };
+    rom_weaver_checksum::identify_catalog::IdentifyCatalog::parse(&catalog_bytes)?;
+
+    let packs = entries
+        .iter()
+        .map(|entry| {
+            decompress(&stage.join(&entry.zstd_file)).map(|bytes| (entry.slug.as_str(), bytes))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let install = parent.join(format!(
+        ".identify-group-{group}-{}.install",
+        std::process::id()
+    ));
+    let backup = parent.join(format!(
+        ".identify-group-{group}-{}.backup",
+        std::process::id()
+    ));
+    if install.exists() {
+        fs::remove_dir_all(&install)?;
+    }
+    if backup.exists() {
+        fs::remove_dir_all(&backup)?;
+    }
+    let prepare = (|| -> Result<()> {
+        if database_dir.exists() {
+            copy_directory(database_dir, &install)?;
+        } else {
+            fs::create_dir_all(&install)?;
+        }
+        for (slug, pack) in &packs {
+            write_group_atomic(&install.join(format!("{slug}.pack")), pack)?;
+        }
+        write_group_atomic(&install.join("index.json"), &index_bytes)?;
+        write_group_atomic(&install.join("catalog.json"), &catalog_bytes)?;
+        Ok(())
+    })();
+    if let Err(error) = prepare {
+        let _ = fs::remove_dir_all(&install);
+        let _ = fs::remove_dir_all(&stage);
+        return Err(error);
+    }
+    if database_dir.exists() {
+        fs::rename(database_dir, &backup)?;
+    }
+    if let Err(error) = fs::rename(&install, database_dir) {
+        if backup.exists() {
+            let _ = fs::rename(&backup, database_dir);
+        }
+        let _ = fs::remove_dir_all(&stage);
+        return Err(error.into());
+    }
+    if backup.exists()
+        && let Err(error) = fs::remove_dir_all(&backup)
+    {
+        tracing::warn!(path = %backup.display(), %error, "failed to remove identify group backup");
+    }
+    fs::remove_dir_all(&stage)?;
+    Ok(packs.len())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn copy_directory(source: &Path, target: &Path) -> Result<()> {
+    fs::create_dir_all(target)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let destination = target.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_directory(&entry.path(), &destination)?;
+        } else if file_type.is_file() {
+            fs::copy(entry.path(), destination)?;
+        } else {
+            return Err(RomWeaverError::Validation(format!(
+                "identify database contains an unsupported entry `{}`",
+                entry.path().display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn install_group(
+    database_dir: &Path,
+    group: &str,
+    from: Option<&Path>,
+) -> Result<usize> {
+    use std::io::Read;
+    const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
+    validate_group_id(group)?;
+    let bytes = if let Some(path) = from {
+        let size = fs::metadata(path)
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to inspect identify group archive `{}`: {error}",
+                    path.display()
+                ))
+            })?
+            .len();
+        if size > MAX_ARCHIVE_BYTES {
+            return Err(RomWeaverError::Validation(format!(
+                "identify group archive `{}` exceeds the {} byte limit",
+                path.display(),
+                MAX_ARCHIVE_BYTES
+            )));
+        }
+        fs::read(path).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to read identify group archive `{}`: {error}",
+                path.display()
+            ))
+        })?
+    } else {
+        let version = env!("CARGO_PKG_VERSION");
+        let url = format!(
+            "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data-{group}.tar.zst"
+        );
+        tracing::debug!(
+            url,
+            version,
+            group,
+            "downloading identify pack group archive"
+        );
+        let mut response = ureq::get(&url).call().map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "identify data download failed for `{url}`: {error}"
+            ))
+        })?;
+        let mut bytes = Vec::new();
+        response
+            .body_mut()
+            .with_config()
+            .limit(MAX_ARCHIVE_BYTES)
+            .reader()
+            .read_to_end(&mut bytes)
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "identify data download failed for `{url}`: {error}"
+                ))
+            })?;
+        bytes
+    };
+    install_group_archive(database_dir, group, &bytes)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn install_all(database_dir: &Path) -> Result<usize> {
     use std::io::Read;
     const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
@@ -441,7 +861,14 @@ mod tests {
         let raw = b"pack bytes";
         let compressed = zstd::bulk::compress(raw, 1).expect("compressed pack");
         let index = serde_json::to_vec(&serde_json::json!({
+            "groups": [{
+                "id": "optional",
+                "label": "Optional systems",
+                "default": false,
+                "systems": ["test"],
+            }],
             "systems": [{
+                "slug": "test",
                 "file": "test.pack",
                 "rawBytes": raw.len(),
                 "sha256": sha256(raw),
@@ -616,6 +1043,86 @@ mod tests {
         let error = check_archive_entry_size(MAX_PACK_BYTES + 1, &mut total)
             .expect_err("oversized entry rejected");
         assert!(error.to_string().contains("archive entry size"));
+    }
+
+    #[test]
+    fn optional_group_install_merges_packs_and_metadata_by_slug() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let database = temp.path().join("identify");
+        fs::create_dir_all(&database).expect("database directory");
+        fs::write(
+            database.join("index.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "format": "rom-weaver-identify-index-v1",
+                "groups": [{"id": "default", "default": true, "systems": ["base"]}],
+                "systems": [{"slug": "base", "file": "base.pack"}],
+            }))
+            .expect("existing index"),
+        )
+        .expect("write existing index");
+        fs::write(
+            database.join("catalog.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "format": "rom-weaver-identify-catalog-v1",
+                "platforms": [{
+                    "canonicalPlatform": "Base System",
+                    "aliases": ["base"],
+                    "source": "libretro",
+                    "mediaProfiles": ["libretro-clrmamepro-v1"],
+                    "packSlug": "base",
+                    "packFormat": "RWFP2",
+                    "canonicalizationVersion": 1,
+                }],
+            }))
+            .expect("existing catalog"),
+        )
+        .expect("write existing catalog");
+        fs::write(database.join("base.pack"), b"existing pack").expect("write existing pack");
+
+        let archive = builder_style_archive(true);
+        assert_eq!(
+            install_group_archive(&database, "optional", &archive).expect("install"),
+            1
+        );
+        assert_eq!(
+            fs::read(database.join("base.pack")).expect("base pack"),
+            b"existing pack"
+        );
+        assert_eq!(
+            fs::read(database.join("test.pack")).expect("group pack"),
+            b"pack bytes"
+        );
+
+        let index: serde_json::Value =
+            serde_json::from_slice(&fs::read(database.join("index.json")).expect("merged index"))
+                .expect("index JSON");
+        assert_eq!(index["systems"].as_array().expect("systems").len(), 2);
+        assert_eq!(index["groups"].as_array().expect("groups").len(), 2);
+        let catalog = fs::read(database.join("catalog.json")).expect("merged catalog");
+        assert_eq!(
+            rom_weaver_checksum::identify_catalog::IdentifyCatalog::parse(&catalog)
+                .expect("catalog")
+                .entries()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn optional_group_install_rejects_an_oversized_local_archive() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let archive = temp.path().join("oversized.tar.zst");
+        fs::File::create(&archive)
+            .expect("archive fixture")
+            .set_len(512 * 1024 * 1024 + 1)
+            .expect("sparse archive size");
+        let error = install_group(temp.path(), "optional", Some(&archive))
+            .expect_err("oversized archive rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("exceeds the 536870912 byte limit")
+        );
     }
 
     #[test]

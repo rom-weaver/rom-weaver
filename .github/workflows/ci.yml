@@ -621,7 +621,7 @@ jobs:
           name: ci-identify-release-data
           path: |
             target/identify-release/share
-            target/rom-weaver-identify-data.tar.zst
+            target/rom-weaver-identify-data*.tar.zst
           if-no-files-found: error
           retention-days: 1
 

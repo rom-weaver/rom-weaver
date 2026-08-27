@@ -1045,6 +1045,7 @@ impl CliApp {
                         let format = match IdentifyPackFile::parse(&bytes) {
                             Ok(IdentifyPackFile::V1(_)) => "RWFP1",
                             Ok(IdentifyPackFile::V2(_)) => "RWFP2",
+                            Ok(IdentifyPackFile::V3(_)) => "RWFP3",
                             Err(_) => "invalid",
                         };
                         packs.push(json!({
@@ -1145,6 +1146,32 @@ impl CliApp {
                 );
                 report.details = Some(json!({
                     "database_dir": provider.database_dir().to_string_lossy(),
+                    "packs": count,
+                    "version": env!("CARGO_PKG_VERSION"),
+                }));
+                Ok(report)
+            }
+            IdentifyDatabaseCommands::InstallGroup(args) => {
+                let provider = IdentifyPackProvider::new(args.database_dir)?;
+                let count = super::identify_builtin::install_group(
+                    provider.database_dir(),
+                    &args.group,
+                    args.from.as_deref(),
+                )?;
+                let mut report = OperationReport::succeeded(
+                    OperationFamily::Command,
+                    Some("identify-database".to_string()),
+                    "install-group",
+                    format!(
+                        "installed {count} identify pack(s) from group `{}`",
+                        args.group
+                    ),
+                    Some(100.0),
+                    None,
+                );
+                report.details = Some(json!({
+                    "database_dir": provider.database_dir().to_string_lossy(),
+                    "group": args.group,
                     "packs": count,
                     "version": env!("CARGO_PKG_VERSION"),
                 }));

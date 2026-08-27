@@ -8,7 +8,7 @@ import { buildIdentifyReleaseData } from "./build-identify-release-data.mjs";
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-const fixture = () => {
+const fixture = ({ grouped = false } = {}) => {
   const root = mkdtempSync(join(os.tmpdir(), "rw-identify-release-"));
   const input = join(root, "input");
   mkdirSync(input);
@@ -28,8 +28,20 @@ const fixture = () => {
       source: "fixture",
     };
   });
-  writeFileSync(join(input, "index.json"), `${JSON.stringify({ format: "fixture", systems })}\n`);
-  writeFileSync(join(input, "catalog.json"), '{"format":"fixture-catalog"}\n');
+  const groups = grouped
+    ? [
+        { default: true, id: "core", label: "Core", systems: ["alpha"] },
+        { default: false, id: "computers", label: "Computers", systems: ["zeta"] },
+      ]
+    : undefined;
+  writeFileSync(
+    join(input, "index.json"),
+    `${JSON.stringify({ format: "fixture", groups, systems })}\n`,
+  );
+  writeFileSync(
+    join(input, "catalog.json"),
+    `${JSON.stringify({ format: "fixture-catalog", platforms: systems.map((entry) => ({ packSlug: entry.slug })) })}\n`,
+  );
   return { input, root };
 };
 
@@ -58,6 +70,28 @@ test("builds deterministic Zstandard packs and a stable release archive", () => 
     assert.equal(system.zstdBytes, compressed.length);
     assert.equal(system.zstdSha256, sha256(compressed));
   }
+});
+
+test("separates default packs from complete optional group archives", () => {
+  const { input, root } = fixture({ grouped: true });
+  const result = buildIdentifyReleaseData({
+    archive: join(root, "rom-weaver-identify-data.tar.zst"),
+    input,
+    out: join(root, "release"),
+  });
+  assert.deepEqual(
+    JSON.parse(readFileSync(join(result.dataDir, "index.json"), "utf8")).systems.map(
+      ({ slug }) => slug,
+    ),
+    ["alpha"],
+  );
+  assert.equal(result.optional.length, 1);
+  assert.equal(result.optional[0].group, "computers");
+  const optionalIndex = JSON.parse(
+    readFileSync(join(result.optional[0].dataDir, "index.json"), "utf8"),
+  );
+  assert.deepEqual(optionalIndex.systems.map(({ slug }) => slug), ["zeta"]);
+  assert.deepEqual(optionalIndex.groups.map(({ id }) => id), ["computers"]);
 });
 
 test("rejects a raw pack that does not match its index integrity fields", () => {
