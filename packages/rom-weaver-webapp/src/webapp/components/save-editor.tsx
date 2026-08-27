@@ -76,9 +76,11 @@ const candidateFromRecognition = (recognition?: SaveRecognition): SaveCandidate 
 };
 
 const formatAssignment = (field: SaveField, value: string) => `${field.id}=${value}`;
+// A wrapped save (.sps/.xps/.gsv) stays wrapped on output, so the edited file
+// keeps the source extension instead of forcing .sav.
 const editedSaveName = (name: string) => {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? `${name.slice(0, dot)}-edited${name.slice(dot)}` : `${name}-edited.sav`;
+  const extension = /\.([^.]+)$/.exec(name)?.[1] ?? "sav";
+  return `${name.replace(/\.[^.]+$/, "")}-edited.${extension}`;
 };
 const loadSaveApi = () => import("../../platform/browser/browser-save-api.ts");
 const titleFor = (segment: string) =>
