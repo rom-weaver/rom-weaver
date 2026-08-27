@@ -42,6 +42,7 @@ The Test page supports these platforms:
 - Sega Mega Drive or Genesis
 - Sega Saturn
 - Sony PlayStation
+- Sony PSP
 
 rom-weaver does not bundle EmulatorJS cores for these platforms:
 
@@ -51,7 +52,6 @@ rom-weaver does not bundle EmulatorJS cores for these platforms:
 - Sega CD
 - Sega Dreamcast
 - Sony PlayStation 2
-- Sony PSP
 - NEC PC Engine
 - NEC PC Engine CD
 - SNK Neo Geo Pocket
