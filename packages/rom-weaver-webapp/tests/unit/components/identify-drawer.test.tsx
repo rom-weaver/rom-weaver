@@ -8,7 +8,9 @@ const gbaMatch = (name: string) => ({
   algorithm: "crc32",
   database: "OpenGood",
   name,
-  platform: "Nintendo Game Boy Advance",
+  // Upper case on purpose: identify databases report platforms in upper case,
+  // and the drawer must still abbreviate them ("GBA").
+  platform: "NINTENDO GAME BOY ADVANCE",
   variant: "raw",
 });
 

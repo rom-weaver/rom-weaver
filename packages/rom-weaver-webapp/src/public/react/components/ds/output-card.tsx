@@ -2,14 +2,14 @@ import { ScanSearch, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
 import { join } from "./cx.ts";
-import { Drawer } from "./drawer.tsx";
+import { Drawer, DrawerReadout } from "./drawer.tsx";
 import { DropdownSelect } from "./dropdown-select.tsx";
 
 /**
  * Output section: the filename field grouped with a format selector, an
- * optional collapsible "Options" drawer (codec/level/archive overrides), and a
- * caller-supplied action (run button or inline progress). Shared by apply,
- * create, and trim outputs.
+ * optional collapsible "Options" drawer (naming source plus codec/level/archive
+ * overrides), and a caller-supplied action (run button or inline progress).
+ * Shared by apply, create, and trim outputs.
  *
  * The drawer header carries every option as an accessible labelled chip, so the
  * values stay readable while the drawer is shut.
@@ -154,26 +154,18 @@ const OutputCard = ({
           </DropdownSelect>
         </div>
       </div>
-      {nameSource ? (
-        <label className="checkrow outname-source">
-          <input
-            checked={nameSource.on}
-            disabled={disabled}
-            onChange={(event) => nameSource.onChange(event.currentTarget.checked)}
-            type="checkbox"
-          />
-          <ScanSearch aria-hidden="true" />
-          <span>Name from identified title</span>
-          <span className="mono outname-source-name">{nameSource.identifiedName}</span>
-        </label>
-      ) : null}
-      {compress ? (
+      {compress || nameSource ? (
         <Drawer
           bodyClassName="optsbody"
           className="optsblock outopts"
           label="Options"
           labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
-          readouts={compress.readouts}
+          readouts={
+            <>
+              {nameSource ? <DrawerReadout label="Name">{nameSource.on ? "Ident" : "File"}</DrawerReadout> : null}
+              {compress?.readouts}
+            </>
+          }
         >
           {/* None of these controls writes back - the public form reads settings
               only. Phrased as "not saved" rather than "overrides your defaults"
@@ -181,13 +173,28 @@ const OutputCard = ({
               all. Said once at the top, since it holds for every option below. */}
           <p className="optsnote">These choices are not saved. Change your defaults in Settings.</p>
           <div className="optsgrid">
-            {compressionFields || compress.children ? (
+            {nameSource ? (
+              <div className="optsgroup opts-name-source">
+                <label className="checkrow outname-source">
+                  <input
+                    checked={nameSource.on}
+                    disabled={disabled}
+                    onChange={(event) => nameSource.onChange(event.currentTarget.checked)}
+                    type="checkbox"
+                  />
+                  <ScanSearch aria-hidden="true" />
+                  <span>Name from identified title</span>
+                  <span className="mono outname-source-name">{nameSource.identifiedName}</span>
+                </label>
+              </div>
+            ) : null}
+            {compress && (compressionFields || compress.children) ? (
               <div className="optsgroup opts-compression-fields">
                 {compressionFields}
                 {compress.children}
               </div>
             ) : null}
-            {compress.extraChildren ? (
+            {compress?.extraChildren ? (
               <div className="optsgroup opts-extra-fields">{compress.extraChildren}</div>
             ) : null}
           </div>
