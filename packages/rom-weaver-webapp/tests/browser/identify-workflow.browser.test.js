@@ -10,8 +10,8 @@ import "../../src/webapp/design-system/deferred.css";
 /* The wasm ingest is exercised end to end in tests/wasm/rom-identify.test.mjs
    against synthetic packs. This file drives the four RESULT STATES through the
    real DOM and the real stylesheets, which is where the reporting bugs were. */
-const { identifyRom } = vi.hoisted(() => ({ identifyRom: vi.fn() }));
-vi.mock("../../src/platform/browser/browser-api.ts", () => ({ identifyRom }));
+const { identifyHash, identifyRom } = vi.hoisted(() => ({ identifyHash: vi.fn(), identifyRom: vi.fn() }));
+vi.mock("../../src/platform/browser/browser-api.ts", () => ({ identifyHash, identifyRom }));
 
 const { IdentifyForm } = await import("../../src/webapp/components/identify-form.tsx");
 
@@ -84,6 +84,7 @@ const openDrawers = async () => {
 beforeEach(async () => {
   await page.viewport(1280, 900);
   document.body.innerHTML = "";
+  identifyHash.mockReset();
   identifyRom.mockReset();
 });
 
@@ -270,3 +271,64 @@ for (const [width, height] of [
     expect(runButton.disabled).toBe(false);
   });
 }
+
+const setHashInput = (value) => {
+  const input = host.querySelector(".identify-hash-input");
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value");
+  descriptor?.set?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+};
+
+test("an empty form shows the ghost steps next to the checksum search", async () => {
+  await mountIdentifyForm();
+  expect(host.querySelector(".ghost-steps")).not.toBeNull();
+  expect(host.querySelector(".identify-hash-input")).not.toBeNull();
+  expect(host.textContent).toContain("Or identify by checksum");
+});
+
+test("a pasted checksum identifies without a file", async () => {
+  const hash = "3610A686";
+  identifyHash.mockResolvedValue({
+    candidates: [candidate(hash.toLowerCase(), "matched", [gbaMatch("Metroid Fusion (USA)")])],
+    input: hash.toLowerCase(),
+    status: "matched",
+  });
+  await mountIdentifyForm();
+  setHashInput(hash);
+  buttonMatching(/Search by checksum/).click();
+  await waitForText("Metroid Fusion (USA)");
+
+  expect(identifyHash).toHaveBeenCalledWith("3610a686", expect.anything());
+  expect(host.querySelector(".identify-state").textContent).toContain("Identified");
+  // The file steps stay out of the way: no ROM card and no ghost steps remain.
+  expect(host.querySelector(".ghost-steps")).toBeNull();
+});
+
+test("an invalid checksum shows the inline error and never runs", async () => {
+  await mountIdentifyForm();
+  setHashInput("not-a-hash");
+  buttonMatching(/Search by checksum/).click();
+  await waitForText("hex characters");
+
+  expect(identifyHash).not.toHaveBeenCalled();
+  expect(host.querySelector(".identify-hash-error")).not.toBeNull();
+  // The ghost steps stay: nothing ran, so nothing is staged.
+  expect(host.querySelector(".ghost-steps")).not.toBeNull();
+});
+
+test("staging a file clears the checksum result", async () => {
+  identifyHash.mockResolvedValue({
+    candidates: [candidate("3610a686", "matched", [gbaMatch("Metroid Fusion (USA)")])],
+    input: "3610a686",
+    status: "matched",
+  });
+  await mountIdentifyForm();
+  setHashInput("3610a686");
+  buttonMatching(/Search by checksum/).click();
+  await waitForText("Metroid Fusion (USA)");
+
+  await selectRom("other.gba");
+  expect(host.textContent).not.toContain("Metroid Fusion (USA)");
+  expect(host.querySelector(".identify-hash-input")).toBeNull();
+  expect(buttonMatching(/^Identify ROM$/)).toBeTruthy();
+});

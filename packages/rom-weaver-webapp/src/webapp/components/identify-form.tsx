@@ -11,10 +11,14 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { ChecksumList, ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../public/react/components/ds/file-card.tsx";
-import { NeedsInput, StepSection } from "../../public/react/components/ds/layout.tsx";
+import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
+import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
+import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-rom-input-step.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
+import { useUiLocalizer } from "../../public/react/settings-context.tsx";
+import { identifyHashAlgorithm } from "../../types/identify.ts";
 import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
 import { IdentifyDrawer } from "./identify-drawer.tsx";
 
@@ -112,7 +116,10 @@ const IdentifyForm = ({
   inputId = "identify-input-picker",
   pageDrop,
 }: IdentifyFormProps) => {
+  const localizer = useUiLocalizer();
   const [file, setFile] = useState<File | null>(null);
+  const [hashText, setHashText] = useState("");
+  const [hashError, setHashError] = useState("");
   const [result, setResult] = useState<ParsedIdentifyResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -135,6 +142,8 @@ const IdentifyForm = ({
     (next: File) => {
       cancelRun();
       setFile(next);
+      setHashText("");
+      setHashError("");
       setResult(null);
       setError("");
     },
@@ -169,8 +178,13 @@ const IdentifyForm = ({
     [],
   );
 
-  const run = async () => {
-    if (!(file && !busy)) return;
+  /** Run one identify operation, gated on the run token like every state write. */
+  const runOperation = async (
+    operation: (context: {
+      onProgress: (message: string) => void;
+      signal: AbortSignal;
+    }) => Promise<ParsedIdentifyResult>,
+  ) => {
     runTokenRef.current += 1;
     const token = runTokenRef.current;
     const abort = new AbortController();
@@ -180,11 +194,9 @@ const IdentifyForm = ({
     setError("");
     setResult(null);
     try {
-      const { identifyRom } = await import("../../platform/browser/browser-api.ts");
-      const identified = await identifyRom(file, file.name, {
-        onProgress: (progress) => {
+      const identified = await operation({
+        onProgress: (message) => {
           if (runTokenRef.current !== token) return;
-          const message = progress.message || progress.label || "";
           if (message) setStage(message);
         },
         signal: abort.signal,
@@ -203,10 +215,143 @@ const IdentifyForm = ({
     }
   };
 
+  const run = async () => {
+    if (!(file && !busy)) return;
+    await runOperation(async ({ onProgress, signal }) => {
+      const { identifyRom } = await import("../../platform/browser/browser-api.ts");
+      return identifyRom(file, file.name, {
+        onProgress: (progress) => onProgress(progress.message || progress.label || ""),
+        signal,
+      });
+    });
+  };
+
+  const runHash = async (value: string) => {
+    if (busy) return;
+    const normalized = value.trim().toLowerCase();
+    if (!identifyHashAlgorithm(normalized)) {
+      setHashError(localizer.message("ui.identify.hashInvalid"));
+      return;
+    }
+    setHashError("");
+    cancelRun();
+    setFile(null);
+    await runOperation(async ({ onProgress, signal }) => {
+      const { identifyHash } = await import("../../platform/browser/browser-api.ts");
+      return identifyHash(normalized, {
+        onProgress: (progress) => onProgress(progress.message || progress.label || ""),
+        signal,
+      });
+    });
+  };
+
+  /* Hash search and file identify are alternatives; the retry replays whichever
+     one produced the current (unavailable) result. */
+  const retry = () => {
+    if (file) void run();
+    else if (hashText) void runHash(hashText);
+  };
+
+  const removeFile = () => {
+    cancelRun();
+    setFile(null);
+    setResult(null);
+    setError("");
+  };
+
   const unavailable = result?.status === "unavailable";
   const archiveName = result?.archiveName;
   const candidates = result?.candidates || [];
   const showMemberPaths = !!archiveName;
+  const hashMode = !file && (busy || !!result || !!error);
+
+  const hashInputId = `${containerId}-hash`;
+  const hashSearchBlock = (
+    <form
+      className="identify-hash"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void runHash(hashText);
+      }}
+    >
+      <label className="identify-hash-label" htmlFor={hashInputId}>
+        {localizer.message("ui.identify.hashLabel")}
+      </label>
+      <p className="pdesc identify-hash-hint">{localizer.message("ui.identify.hashHint")}</p>
+      <div className="identify-hash-row">
+        <input
+          aria-invalid={hashError ? "true" : undefined}
+          autoComplete="off"
+          className="input mono identify-hash-input"
+          disabled={busy}
+          id={hashInputId}
+          onChange={(event) => {
+            setHashText(event.currentTarget.value);
+            setHashError("");
+          }}
+          placeholder="crc32 / md5 / sha1"
+          spellCheck={false}
+          type="text"
+          value={hashText}
+        />
+        <RunButton disabled={busy || !hashText.trim()} icon={<Search aria-hidden="true" />} type="submit">
+          {busy && hashMode
+            ? stage || localizer.message("ui.identify.hashSearching")
+            : localizer.message("ui.identify.hashSearch")}
+        </RunButton>
+      </div>
+      {hashError ? (
+        <p className="identify-hash-error" role="alert">
+          {hashError}
+        </p>
+      ) : null}
+    </form>
+  );
+
+  const resultsBlock =
+    result && !unavailable ? (
+      <div className="cards">
+        {archiveName ? (
+          <p className="pdesc identify-archive-lead">
+            <span className="mono">Archive: {archiveName}</span>
+            {candidates.length > 1 ? (
+              <>
+                {" "}
+                <span>{candidates.length} ROMs found in this archive. Each one is identified on its own below.</span>
+              </>
+            ) : null}
+          </p>
+        ) : null}
+        {candidates.length ? (
+          candidates.map((candidate) => (
+            <CandidateCard candidate={candidate} key={candidate.path} showMemberPath={showMemberPaths} />
+          ))
+        ) : (
+          <Notice level="warn">No ROM was found in this input, so nothing could be identified.</Notice>
+        )}
+      </div>
+    ) : null;
+
+  /* A database that never loaded is not a ROM verdict: say so, keep the
+     technical cause in the log, and offer the retry. */
+  const unavailableBlock = unavailable ? (
+    <div className="cards">
+      <Notice level="warn">
+        Identification data could not be loaded. Your ROM was not classified. Check your connection and try again.
+      </Notice>
+      {/* Retry replays the file or the still-entered hash; with neither there is
+          nothing to replay, so the button MUST NOT look actionable. */}
+      <RunButton disabled={busy || !(file || hashText.trim())} icon={<RotateCcw aria-hidden="true" />} onClick={retry}>
+        Retry identification
+      </RunButton>
+    </div>
+  ) : null;
+
+  const errorBlock = error ? (
+    <Notice level="error" onDismiss={() => setError("")}>
+      {error}
+    </Notice>
+  ) : null;
 
   return (
     <section className="panel" id={containerId}>
@@ -226,73 +371,63 @@ const IdentifyForm = ({
         }}
         supported={IDENTIFY_SUPPORTED_FILES}
       />
-      <StepSection num="0x02" title="ROM">
-        {file ? (
-          <div className="cards">
-            <FileCard
-              meta={<span className="fsize mono">{formatByteSize(file.size)}</span>}
-              name={<span className="nm mono">{file.name}</span>}
-              onRemove={() => {
-                cancelRun();
-                setFile(null);
-                setResult(null);
-                setError("");
-              }}
-              removeLabel={busy ? "Cancel and remove ROM" : "Remove ROM"}
-            />
-          </div>
-        ) : (
-          <NeedsInput onClick={() => document.getElementById(inputId)?.click()}>
-            Add a ROM in the <b className="hexref mono">0x01</b> drop zone.
-          </NeedsInput>
-        )}
-      </StepSection>
-      <StepSection fault={!!error} num="0x03" title="Identify" woven={!!result && !unavailable}>
-        {error ? (
-          <Notice level="error" onDismiss={() => setError("")}>
-            {error}
-          </Notice>
-        ) : null}
-        <RunButton disabled={!file || busy} icon={<Search aria-hidden="true" />} onClick={() => void run()}>
-          {busy ? stage || "Identifying ROM…" : "Identify ROM"}
-        </RunButton>
-        {/* A database that never loaded is not a ROM verdict: say so, keep the
-            technical cause in the log, and offer the retry. */}
-        {unavailable ? (
-          <div className="cards">
-            <Notice level="warn">
-              Identification data could not be loaded. Your ROM was not classified. Check your connection and try again.
-            </Notice>
-            <RunButton disabled={busy} icon={<RotateCcw aria-hidden="true" />} onClick={() => void run()}>
-              Retry identification
+      {file ? (
+        <>
+          <WorkflowRomInputStep
+            items={[
+              {
+                card: {
+                  displayName: file.name,
+                  extract: { fileName: file.name, fileSize: file.size },
+                  meta: <span className="fsize mono">{formatByteSize(file.size)}</span>,
+                  onRemove: removeFile,
+                  removeLabel: busy ? "Cancel and remove ROM" : "Remove ROM",
+                },
+                id: "identify-rom",
+              },
+            ]}
+            num="0x02"
+            title={localizer.message("ui.step.rom")}
+          />
+          <StepSection
+            fault={!!error}
+            num="0x03"
+            title={localizer.message("ui.step.identify")}
+            woven={!!result && !unavailable}
+          >
+            {errorBlock}
+            <RunButton disabled={busy} icon={<Search aria-hidden="true" />} onClick={() => void run()}>
+              {busy ? stage || "Identifying ROM…" : "Identify ROM"}
             </RunButton>
-          </div>
-        ) : null}
-        {result && !unavailable ? (
-          <div className="cards">
-            {archiveName ? (
-              <p className="pdesc identify-archive-lead">
-                <span className="mono">Archive: {archiveName}</span>
-                {candidates.length > 1 ? (
-                  <>
-                    {" "}
-                    <span>
-                      {candidates.length} ROMs found in this archive. Each one is identified on its own below.
-                    </span>
-                  </>
-                ) : null}
-              </p>
-            ) : null}
-            {candidates.length ? (
-              candidates.map((candidate) => (
-                <CandidateCard candidate={candidate} key={candidate.path} showMemberPath={showMemberPaths} />
-              ))
-            ) : (
-              <Notice level="warn">No ROM was found in this input, so nothing could be identified.</Notice>
-            )}
-          </div>
-        ) : null}
-      </StepSection>
+            {unavailableBlock}
+            {resultsBlock}
+          </StepSection>
+        </>
+      ) : hashMode ? (
+        <>
+          {hashSearchBlock}
+          <StepSection
+            fault={!!error}
+            num="0x02"
+            title={localizer.message("ui.step.identify")}
+            woven={!!result && !unavailable}
+          >
+            {errorBlock}
+            {unavailableBlock}
+            {resultsBlock}
+          </StepSection>
+        </>
+      ) : (
+        <>
+          {hashSearchBlock}
+          <GhostSteps
+            steps={[
+              { num: "0x02", title: localizer.message("ui.step.rom") },
+              { num: "0x03", title: localizer.message("ui.step.identify") },
+            ]}
+          />
+        </>
+      )}
     </section>
   );
 };

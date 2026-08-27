@@ -640,3 +640,29 @@
   gap: 2px;
   min-width: 0;
 }
+/* Manual checksum search: the file-free alternative to the drop zone. */
+.rw-app .identify-hash {
+  display: grid;
+  gap: var(--sp-xs);
+  padding: var(--sp-m);
+}
+.rw-app .identify-hash-label {
+  font-weight: 650;
+}
+.rw-app .identify-hash-hint {
+  margin: 0;
+}
+.rw-app .identify-hash-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+  align-items: center;
+}
+.rw-app .identify-hash-input {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.rw-app .identify-hash-error {
+  margin: 0;
+  color: var(--fault);
+}

@@ -296,7 +296,12 @@ msgstr "Códecs DVD"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Identificar, Recortar y Herramientas)"
+msgstr "Activar herramientas beta (Identificar, Recortar y Deshacer PPF)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalid"
+msgstr "Introduce 8 (CRC32), 32 (MD5) o 40 (SHA-1) caracteres hexadecimales."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -337,6 +342,11 @@ msgstr "Corregir orden"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Corregir cabecera ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.identify"
+msgstr "Identificar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -455,6 +465,11 @@ msgstr "No se encontró un parche compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashHint"
+msgstr "No hace falta un archivo: pega una suma de verificación CRC32, MD5 o SHA-1 en hexadecimal."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "Ninguna línea coincide con «{q}»"
 
@@ -497,6 +512,11 @@ msgstr "Incluye una ROM solo si tienes derecho a distribuirla. Compartir ROMs co
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "opcional"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashLabel"
+msgstr "O identifica por suma de verificación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -672,6 +692,16 @@ msgstr "Códec RVZ"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.save"
 msgstr "Guardar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashSearch"
+msgstr "Buscar por suma de verificación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashSearching"
+msgstr "Buscando…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

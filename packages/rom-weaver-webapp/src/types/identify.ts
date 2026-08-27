@@ -58,6 +58,22 @@ type ParsedIdentifyResult = {
   unavailableReason?: string;
 };
 
+type IdentifyHashAlgorithm = "crc32" | "md5" | "sha1";
+
+/**
+ * Algorithm for a manually entered checksum, decided by hex length exactly as
+ * the CLI's `identify --hash` does (8 = crc32, 32 = md5, 40 = sha1). Returns
+ * `undefined` for anything that is not one of those three hex shapes.
+ */
+const identifyHashAlgorithm = (value: string): IdentifyHashAlgorithm | undefined => {
+  const hash = value.trim().toLowerCase();
+  if (!/^[0-9a-f]+$/u.test(hash)) return undefined;
+  if (hash.length === 8) return "crc32";
+  if (hash.length === 32) return "md5";
+  if (hash.length === 40) return "sha1";
+  return undefined;
+};
+
 const isIdentifyLookupStatus = (value: unknown): value is IdentifyLookupStatus =>
   value === "matched" || value === "ambiguous" || value === "unknown";
 
@@ -72,7 +88,7 @@ const aggregateIdentifyStatus = (statuses: readonly IdentifyStatus[]): IdentifyS
   return statuses.includes("matched") ? "matched" : "unknown";
 };
 
-export { aggregateIdentifyStatus, isIdentifyLookupStatus };
+export { aggregateIdentifyStatus, identifyHashAlgorithm, isIdentifyLookupStatus };
 export type {
   IdentifyStatus,
   ParsedIdentifyCandidate,
