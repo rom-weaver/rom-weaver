@@ -620,7 +620,20 @@ pub struct IdentifyCommand {
             help = "ROM to identify. Use - to read from stdin"
         )
     )]
-    pub input: PathBuf,
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub input: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "hash",
+            value_name = "HEX",
+            help = "Identify by a checksum instead of a file; accepts crc32/md5/sha1 hex"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub hash: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
