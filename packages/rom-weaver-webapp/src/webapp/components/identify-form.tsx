@@ -14,6 +14,7 @@ import { FileCard } from "../../public/react/components/ds/file-card.tsx";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
+import { RomInputPanels } from "../../public/react/components/ds/rom-input-panels.tsx";
 import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-rom-input-step.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
@@ -111,6 +112,44 @@ const CandidateCard = ({
   );
 };
 
+/**
+ * One candidate's verdict rendered inside the staged ROM card, apply-style:
+ * the Identify and Checks drawers attach to the card instead of separate
+ * result cards, both open on arrival.
+ */
+const CandidateResult = ({
+  candidate,
+  showMemberPath,
+}: {
+  candidate: ParsedIdentifyCandidate;
+  showMemberPath: boolean;
+}) => (
+  <>
+    {showMemberPath ? <p className="pdesc mono identify-member">ROM: {candidate.path}</p> : null}
+    {candidate.status === "ambiguous" ? (
+      <p className="pdesc identify-ambiguous-lead">
+        {identifyMatchCountLabel(candidate.matches.length)} share this ROM&rsquo;s checksums. Every candidate is listed
+        in the Identify drawer below.
+      </p>
+    ) : null}
+    {candidate.status === "unknown" ? (
+      <p className="pdesc identify-unknown-lead">
+        No exact title match found. The ROM may be modified, an unlisted revision, or from a system that is not in the
+        local identification data. Its checksums are below so you can look it up elsewhere.
+      </p>
+    ) : null}
+    <RomInputPanels
+      identification={{ matches: candidate.matches, status: candidate.status }}
+      identifyDefaultOpen
+      info={{
+        checksums: candidate.checksums,
+        checksumVariants: candidate.checksumVariants,
+        defaultOpen: true,
+      }}
+    />
+  </>
+);
+
 const IdentifyForm = ({
   containerId = "identify-container",
   inputId = "identify-input-picker",
@@ -124,6 +163,7 @@ const IdentifyForm = ({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
+  const [percent, setPercent] = useState<number | null>(null);
   const handledDropRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   /* Every state write is gated on this token. A run that was replaced, removed,
@@ -136,13 +176,14 @@ const IdentifyForm = ({
     abortRef.current = null;
     setBusy(false);
     setStage("");
+    setPercent(null);
   }, []);
 
   /** Run one identify operation, gated on the run token like every state write. */
   const runOperation = useCallback(
     async (
       operation: (context: {
-        onProgress: (message: string) => void;
+        onProgress: (message: string, percent: number | null) => void;
         signal: AbortSignal;
       }) => Promise<ParsedIdentifyResult>,
     ) => {
@@ -152,13 +193,15 @@ const IdentifyForm = ({
       abortRef.current = abort;
       setBusy(true);
       setStage("");
+      setPercent(null);
       setError("");
       setResult(null);
       try {
         const identified = await operation({
-          onProgress: (message) => {
+          onProgress: (message, progressPercent) => {
             if (runTokenRef.current !== token) return;
             if (message) setStage(message);
+            setPercent(progressPercent);
           },
           signal: abort.signal,
         });
@@ -172,6 +215,7 @@ const IdentifyForm = ({
           abortRef.current = null;
           setBusy(false);
           setStage("");
+          setPercent(null);
         }
       }
     },
@@ -183,7 +227,7 @@ const IdentifyForm = ({
       await runOperation(async ({ onProgress, signal }) => {
         const { identifyRom } = await import("../../platform/browser/browser-api.ts");
         return identifyRom(next, next.name, {
-          onProgress: (progress) => onProgress(progress.message || progress.label || ""),
+          onProgress: (progress) => onProgress(progress.message || progress.label || "", progress.percent ?? null),
           signal,
         });
       });
@@ -248,7 +292,7 @@ const IdentifyForm = ({
     await runOperation(async ({ onProgress, signal }) => {
       const { identifyHash } = await import("../../platform/browser/browser-api.ts");
       return identifyHash(normalized, {
-        onProgress: (progress) => onProgress(progress.message || progress.label || ""),
+        onProgress: (progress) => onProgress(progress.message || progress.label || "", progress.percent ?? null),
         signal,
       });
     });
@@ -386,28 +430,57 @@ const IdentifyForm = ({
         <WorkflowRomInputStep
           afterItems={
             <>
-              {busy ? (
-                <p className="pdesc identify-progress" role="status">
-                  {stage || "Identifying ROM…"}
-                </p>
-              ) : null}
               {errorBlock}
               {unavailableBlock}
-              {resultsBlock}
+              {result && !unavailable && !candidates.length ? (
+                <Notice level="warn">No ROM was found in this input, so nothing could be identified.</Notice>
+              ) : null}
             </>
           }
           fault={!!error}
           items={[
-            {
-              card: {
-                displayName: file.name,
-                extract: { fileName: file.name, fileSize: file.size },
-                meta: <span className="fsize mono">{formatByteSize(file.size)}</span>,
-                onRemove: removeFile,
-                removeLabel: busy ? "Cancel and remove ROM" : "Remove ROM",
-              },
-              id: "identify-rom",
-            },
+            busy
+              ? {
+                  id: "identify-rom",
+                  progress: {
+                    cancelLabel: "Cancel identification",
+                    indeterminate: percent == null,
+                    label: stage || `Identifying ${file.name}…`,
+                    onCancel: cancelRun,
+                    percent: percent ?? undefined,
+                    value: percent == null ? undefined : `${Math.round(percent)}%`,
+                  },
+                }
+              : {
+                  card: {
+                    children:
+                      result && !unavailable ? (
+                        <>
+                          {candidates.map((candidate) => (
+                            <CandidateResult
+                              candidate={candidate}
+                              key={candidate.path}
+                              showMemberPath={showMemberPaths}
+                            />
+                          ))}
+                        </>
+                      ) : undefined,
+                    displayName: file.name,
+                    extract: { fileName: file.name, fileSize: file.size },
+                    meta: (
+                      <>
+                        <span className="fsize mono">{formatByteSize(file.size)}</span>
+                        {result && !unavailable && candidates.length ? (
+                          <CandidateStatusChip status={result.status} />
+                        ) : null}
+                      </>
+                    ),
+                    onRemove: removeFile,
+                    removeLabel: "Remove ROM",
+                    state: result && !unavailable ? IDENTIFY_STATUS_MARK[result.status].tone : undefined,
+                  },
+                  id: "identify-rom",
+                },
           ]}
           num="0x02"
           title={localizer.message("ui.step.rom")}
