@@ -61,6 +61,7 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
       "postApplyTestBehavior",
       "emulatorSaveStorageEnabled",
       "fixChecksum",
+      "identifiedOutputName",
       "requireInputChecksumMatch",
     ],
     title: "Behavior",

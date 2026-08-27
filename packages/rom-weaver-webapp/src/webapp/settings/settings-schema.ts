@@ -85,6 +85,7 @@ const BOOLEAN_SETTINGS_FIELDS = [
   "onboardingEnabled",
   "emulatorSaveStorageEnabled",
   "fixChecksum",
+  "identifiedOutputName",
 ] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
@@ -420,6 +421,11 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     compressionProfile: compression.profile,
     defaultCompression: commonSettings.defaultCompression,
     fixChecksum: patch.fixChecksum,
+    identifiedOutputName: isRecord(applySettings.output)
+      ? applySettings.output.identifiedName
+      : isRecord(createSettings.output)
+        ? createSettings.output.identifiedName
+        : undefined,
     language: commonSettings.language,
     logLevel: commonSettings.logLevel,
     requireInputChecksumMatch: validation.requireInputChecksumMatch,
@@ -518,6 +524,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
+
+    const identifiedOutputName = readStoredField(storedBooleanSchema, loadedSettings.identifiedOutputName);
+    if (identifiedOutputName !== undefined) settings.identifiedOutputName = identifiedOutputName;
 
     const onboardingEnabled = readStoredField(storedBooleanSchema, loadedSettings.onboardingEnabled);
     if (onboardingEnabled !== undefined) settings.onboardingEnabled = onboardingEnabled;
@@ -641,6 +650,18 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       storedSettings.apply = {
         ...storedSettings.apply,
         validation: { ...storedSettings.apply?.validation, [fieldKey]: value },
+      };
+      return;
+    }
+    if (fieldKey === "identifiedOutputName") {
+      // Every workflow reads it (trim consumes the create group), so store it in both.
+      storedSettings.apply = {
+        ...storedSettings.apply,
+        output: { ...storedSettings.apply?.output, identifiedName: value },
+      };
+      storedSettings.create = {
+        ...storedSettings.create,
+        output: { ...storedSettings.create?.output, identifiedName: value },
       };
       return;
     }
