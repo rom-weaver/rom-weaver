@@ -230,13 +230,21 @@ impl IdentifyDatabaseSet {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn from_builtin_packs() -> Result<Self> {
-        let mut packs = Vec::with_capacity(super::identify_builtin::PACKS.len());
-        for &(database_name, bytes) in super::identify_builtin::PACKS {
+        let database_dir = super::identify_database::default_database_dir()?;
+        let slugs = super::identify_builtin::pack_slugs(&database_dir)?;
+        let mut packs = Vec::with_capacity(slugs.len());
+        for slug in slugs {
+            let Some(path) = super::identify_builtin::pack_path(&database_dir, &slug) else {
+                continue;
+            };
+            let database_name = format!("{slug}.pack");
             trace!(
                 database = database_name,
-                "loading built-in ROM identify pack"
+                path = %path.display(),
+                "loading packaged ROM identify pack"
             );
-            packs.push((database_name.to_string(), IdentifyPackFile::parse(bytes)?));
+            let bytes = super::identify_builtin::decompress(&path)?;
+            packs.push((database_name, IdentifyPackFile::parse(&bytes)?));
         }
         Ok(Self { packs })
     }
@@ -710,8 +718,8 @@ impl CliApp {
                 condition = Some("database_required".to_string());
                 hint = Some(format!(
                     "no identify pack is installed for {platform}; run `rom-weaver identify \
-                     database install \"{platform}\" --from MetadataMap.zip`, or \
-                     `rom-weaver identify database import-redump <DAT.zip>`"
+                     database install-all`, install that system from Redump, or pass \
+                     `--database-dir` with an existing user database"
                 ));
             } else if let Some(selected) = selected.iter().find(|selected| {
                 let profile = match &selected.pack.file {

@@ -668,10 +668,7 @@ fn database_list_status_path_remove_round_trip() {
         .find(|entry| entry["platform"] == "Sony PlayStation")
         .cloned()
         .expect("PlayStation entry");
-    assert_eq!(
-        playstation["installed"],
-        serde_json::json!(cfg!(feature = "bundled-identify-data"))
-    );
+    assert_eq!(playstation["installed"], false);
 }
 
 #[test]

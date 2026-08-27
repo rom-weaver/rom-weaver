@@ -2994,6 +2994,11 @@ pub enum IdentifyDatabaseCommands {
     ImportRedump(Box<IdentifyDatabaseImportCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
+        command(about = "Install the full identify database for this rom-weaver version")
+    )]
+    InstallAll(Box<IdentifyDatabaseDirCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
         command(about = "Download and install one Redump system pack (or --all)")
     )]
     Install(Box<IdentifyDatabaseInstallCommand>),

@@ -377,7 +377,7 @@ export type IdentifyDatabaseInstallCommand = { system?: string, all?: boolean, f
 
 export type IdentifyDatabaseUpdateCommand = { system?: string, from?: string, database_dir?: string, };
 
-export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabaseDirCommand } | { "type": "status", "args": IdentifyDatabaseDirCommand } | { "type": "path", "args": IdentifyDatabaseDirCommand } | { "type": "remove", "args": IdentifyDatabaseSystemCommand } | { "type": "import-redump", "args": IdentifyDatabaseImportCommand } | { "type": "install", "args": IdentifyDatabaseInstallCommand } | { "type": "update", "args": IdentifyDatabaseUpdateCommand };
+export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabaseDirCommand } | { "type": "status", "args": IdentifyDatabaseDirCommand } | { "type": "path", "args": IdentifyDatabaseDirCommand } | { "type": "remove", "args": IdentifyDatabaseSystemCommand } | { "type": "import-redump", "args": IdentifyDatabaseImportCommand } | { "type": "install-all", "args": IdentifyDatabaseDirCommand } | { "type": "install", "args": IdentifyDatabaseInstallCommand } | { "type": "update", "args": IdentifyDatabaseUpdateCommand };
 
 export type IdentifySubcommands = { "type": "database", "args": IdentifyDatabaseCommands };
 

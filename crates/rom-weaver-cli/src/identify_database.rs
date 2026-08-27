@@ -262,27 +262,11 @@ impl IdentifyPackProvider {
         entries
     }
 
-    fn builtin_pack_bytes(slug: &str) -> Option<&'static [u8]> {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let file = format!("{slug}.pack");
-            super::identify_builtin::PACKS
-                .iter()
-                .find(|(name, _)| *name == file)
-                .map(|(_, bytes)| *bytes)
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            let _ = slug;
-            None
-        }
-    }
-
     /// Whether the slug's pack is available (installed in the dir, or builtin).
     #[cfg(not(target_arch = "wasm32"))]
     pub(super) fn pack_installed(&self, slug: &str) -> bool {
         self.database_dir.join(format!("{slug}.pack")).is_file()
-            || Self::builtin_pack_bytes(slug).is_some()
+            || super::identify_builtin::pack_path(&self.database_dir, slug).is_some()
     }
 
     /// Load one slug's pack, cached. `Ok(None)` when no such pack exists; a
@@ -321,9 +305,13 @@ impl IdentifyPackProvider {
                 }
             }
             (format!("{slug}.pack"), bytes)
-        } else if let Some(builtin) = Self::builtin_pack_bytes(slug) {
-            trace!(slug, "identify pack cache miss; loading builtin pack");
-            (format!("{slug}.pack"), builtin.to_vec())
+        } else if let Some(packaged) = super::identify_builtin::pack_path(&self.database_dir, slug)
+        {
+            trace!(slug, path = %packaged.display(), "identify pack cache miss; decompressing packaged pack");
+            (
+                format!("{slug}.pack"),
+                super::identify_builtin::decompress(&packaged)?,
+            )
         } else {
             trace!(slug, "identify pack not installed");
             return Ok(None);
@@ -361,11 +349,9 @@ impl IdentifyPackProvider {
                 }
             }
         }
-        #[cfg(not(target_arch = "wasm32"))]
-        for (name, _) in super::identify_builtin::PACKS {
-            let slug = name.trim_end_matches(".pack");
-            if !slugs.iter().any(|existing| existing == slug) {
-                slugs.push(slug.to_string());
+        for slug in super::identify_builtin::pack_slugs(&self.database_dir)? {
+            if !slugs.iter().any(|existing| existing == &slug) {
+                slugs.push(slug);
             }
         }
         slugs.sort();
@@ -1141,6 +1127,24 @@ impl CliApp {
                     &skipped,
                     over_caps,
                 ))
+            }
+            IdentifyDatabaseCommands::InstallAll(args) => {
+                let provider = IdentifyPackProvider::new(args.database_dir)?;
+                let count = super::identify_builtin::install_all(provider.database_dir())?;
+                let mut report = OperationReport::succeeded(
+                    OperationFamily::Command,
+                    Some("identify-database".to_string()),
+                    "install-all",
+                    format!("installed {count} identify pack(s)"),
+                    Some(100.0),
+                    None,
+                );
+                report.details = Some(json!({
+                    "database_dir": provider.database_dir().to_string_lossy(),
+                    "packs": count,
+                    "version": env!("CARGO_PKG_VERSION"),
+                }));
+                Ok(report)
             }
             IdentifyDatabaseCommands::Install(args) => {
                 let provider = IdentifyPackProvider::new(args.database_dir)?;
