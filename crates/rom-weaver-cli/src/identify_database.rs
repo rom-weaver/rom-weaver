@@ -1046,6 +1046,7 @@ impl CliApp {
                             Ok(IdentifyPackFile::V1(_)) => "RWFP1",
                             Ok(IdentifyPackFile::V2(_)) => "RWFP2",
                             Ok(IdentifyPackFile::V3(_)) => "RWFP3",
+                            Ok(IdentifyPackFile::V4(_)) => "RWFP4",
                             Err(_) => "invalid",
                         };
                         packs.push(json!({

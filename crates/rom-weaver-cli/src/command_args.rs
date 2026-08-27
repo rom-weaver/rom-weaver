@@ -629,7 +629,7 @@ pub struct IdentifyCommand {
             short = 'd',
             long = "database",
             value_name = "PACK",
-            help = "RWFP1/RWFP2 identify pack to search instead of the built-in OpenGood data (repeatable)"
+            help = "RWFP1-RWFP4 identify pack to search instead of the built-in data (repeatable)"
         )
     )]
     #[serde(default)]

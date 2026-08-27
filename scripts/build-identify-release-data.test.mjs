@@ -31,7 +31,12 @@ const fixture = ({ grouped = false } = {}) => {
   const groups = grouped
     ? [
         { default: true, id: "core", label: "Core", systems: ["alpha"] },
-        { default: false, id: "computers", label: "Computers", systems: ["zeta"] },
+        {
+          default: false,
+          id: "optional-computers",
+          label: "Computers",
+          systems: ["zeta"],
+        },
       ]
     : undefined;
   writeFileSync(
@@ -98,12 +103,12 @@ test("separates default packs from complete optional group archives", () => {
     ["alpha"],
   );
   assert.equal(result.optional.length, 1);
-  assert.equal(result.optional[0].group, "computers");
+  assert.equal(result.optional[0].group, "optional-computers");
   const optionalIndex = JSON.parse(
     readFileSync(join(result.optional[0].dataDir, "index.json"), "utf8"),
   );
   assert.deepEqual(optionalIndex.systems.map(({ slug }) => slug), ["zeta"]);
-  assert.deepEqual(optionalIndex.groups.map(({ id }) => id), ["computers"]);
+  assert.deepEqual(optionalIndex.groups.map(({ id }) => id), ["optional-computers"]);
 });
 
 test("rejects a raw pack that does not match its index integrity fields", () => {

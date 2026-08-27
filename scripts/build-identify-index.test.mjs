@@ -32,6 +32,12 @@ game (
  description "The Libretro title"
  region "USA"
  rom ( name "alpha.nes" size 16 crc AABBCCDD md5 00112233445566778899AABBCCDDEEFF sha1 00112233445566778899AABBCCDDEEFF00112233 )
+)
+game (
+ name "Beta Quest (USA)"
+ description "Libretro only"
+ region "USA"
+ rom ( name "beta.nes" size 8 crc 11223344 )
 )`;
 const OPENGOOD_DAT = `<?xml version="1.0"?><datafile><header><date>2021-12-27</date></header>
 <game name="Alpha Quest (U) [!]"><rom name="alpha.nes" size="16" crc="aabbccdd" md5="00112233445566778899aabbccddeeff" sha1="00112233445566778899aabbccddeeff00112233"/></game>
@@ -55,7 +61,7 @@ function writeCachedDat(cacheDir, source, revision, datFile, bytes) {
 }
 
 function parsePack(bytes) {
-  assert.equal(bytes.subarray(0, 8).toString("binary"), "RWFP3\0\0\0");
+  assert.equal(bytes.subarray(0, 8).toString("binary"), "RWFP4\0\0\0");
   const count = bytes.readUInt32LE(8);
   let cursor = 12;
   const directory = [];
@@ -136,7 +142,7 @@ test("merge dedupes identical scoped hashes and retains legacy GoodTools data", 
   );
   const fallback = parseOpenGoodGames(OPENGOOD_DAT, NES, "OpenNES.dat");
   const games = mergeLegacyFallbackGames(primary.games, fallback.games);
-  assert.equal(games.length, 2);
+  assert.equal(games.length, 3);
   assert.equal(games[0].components.length, 1);
   assert.deepEqual(games[0].dumpTags, ["!"]);
   assert.equal(games[0].provenance.length, 2);
@@ -158,7 +164,7 @@ test("family variants resolve to their shared pack", () => {
   assert.ok(entry.aliases.includes("nintendo nintendo 64dd"));
 });
 
-test("the builder emits deterministic mixed and fallback-only RWFP3 packs", async () => {
+test("the builder emits deterministic mixed and fallback-only RWFP4 packs", async () => {
   const work = tempDir("mixed");
   const cacheDir = join(work, "cache");
   const outDir = join(work, "out");
@@ -190,26 +196,28 @@ test("the builder emits deterministic mixed and fallback-only RWFP3 packs", asyn
 
   const nes = parsePack(readFileSync(join(outDir, "nintendo-nintendo-entertainment-system.pack")));
   const manifest = JSON.parse(nes.get("manifest.json").toString("utf8"));
-  const games = nes.get("games.bin");
   assert.equal(manifest.source, "libretro");
+  assert.equal(manifest.format, "rom-weaver-identify-system-pack-v4");
   assert.equal(manifest.generationDate, IDENTIFY_GENERATION_DATE);
-  assert.equal(games.readUInt16LE(6), 52);
-  assert.equal(games.readUInt8(12 + 52 + 50), 1);
 
   const tandy = parsePack(readFileSync(join(outDir, "tandy-color-computer.pack")));
   const tandyManifest = JSON.parse(tandy.get("manifest.json").toString("utf8"));
-  const tandyGames = tandy.get("games.bin");
   assert.equal(tandyManifest.source, "opengood");
   assert.ok(
     tandyManifest.provenance.every((entry) => entry.source === "SnowflakePowered/opengood"),
   );
-  assert.equal(tandyGames.readUInt8(12 + 48), 1);
-  assert.equal(tandyGames.readUInt8(12 + 49), 6);
 
   const catalog = JSON.parse(readFileSync(join(outDir, "catalog.json"), "utf8"));
   const nesCatalog = catalog.platforms.find((entry) => entry.canonicalPlatform === NES);
   assert.ok(nesCatalog.aliases.includes("nintendo entertainment system"));
   assert.ok(nesCatalog.aliases.includes("nes"));
+  const index = JSON.parse(readFileSync(join(outDir, "index.json"), "utf8"));
+  assert.deepEqual(index.groups.find(({ id }) => id === "default").systems, [
+    "nintendo-nintendo-entertainment-system",
+  ]);
+  assert.deepEqual(index.groups.find(({ id }) => id === "optional-computers").systems, [
+    "tandy-color-computer",
+  ]);
 
   const outDir2 = join(work, "out2");
   await main([

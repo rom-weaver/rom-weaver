@@ -39,6 +39,16 @@ impl ArtifactPackReader for crate::identify_pack_v3::ArtifactPack {
     }
 }
 
+impl ArtifactPackReader for crate::identify_pack_v4::ArtifactPack {
+    fn game(&self, index: u32) -> Option<&PackGame> {
+        self.game(index)
+    }
+
+    fn route(&self, crc32_hex: &str, size: u64) -> Result<Vec<(u32, u16)>> {
+        self.route(crc32_hex, size)
+    }
+}
+
 /// One hashed component of the artifact being identified.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FingerprintComponent {

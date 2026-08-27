@@ -477,6 +477,7 @@ pub enum IdentifyPackFile {
     V1(SystemPack),
     V2(crate::identify_pack_v2::ArtifactPack),
     V3(crate::identify_pack_v3::ArtifactPack),
+    V4(crate::identify_pack_v4::ArtifactPack),
 }
 
 impl IdentifyPackFile {
@@ -501,8 +502,16 @@ impl IdentifyPackFile {
                 bytes,
             )?));
         }
+        if bytes.len() >= crate::identify_pack_v4::PACK_V4_MAGIC.len()
+            && &bytes[..crate::identify_pack_v4::PACK_V4_MAGIC.len()]
+                == crate::identify_pack_v4::PACK_V4_MAGIC
+        {
+            return Ok(Self::V4(crate::identify_pack_v4::ArtifactPack::parse(
+                bytes,
+            )?));
+        }
         Err(invalid_pack(
-            "pack magic is not a supported version (expected RWFP1, RWFP2, or RWFP3)",
+            "pack magic is not a supported version (expected RWFP1, RWFP2, RWFP3, or RWFP4)",
         ))
     }
 }

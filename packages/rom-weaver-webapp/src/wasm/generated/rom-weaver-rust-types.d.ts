@@ -360,7 +360,7 @@ unexpected_components?: Array<string>, };
 
 export type IdentifyResult = { status: IdentifyStatus, input: string, detected_platform?: string | null, checksums: { [key in string]: string }, checksum_variants: Array<JsonValue>, matches: Array<IdentifyTitleMatch>,
 /**
- * Match quality of a set-aware RWFP2 or RWFP3 match.
+ * Match quality of a set-aware artifact-pack match.
  */
 quality?: string, platform_candidates?: Array<PlatformCandidate>, media?: IdentifyMedia, components?: Array<IdentifyComponent>, database?: IdentifyDatabaseInfo, evidence?: IdentifyEvidence,
 /**

@@ -857,22 +857,27 @@ pub(super) fn decompress(_path: &std::path::Path) -> rom_weaver_core::Result<Vec
 mod tests {
     use super::*;
 
-    fn builder_style_archive(include_pack: bool) -> Vec<u8> {
+    fn builder_style_archive_for_group(
+        include_pack: bool,
+        group: &str,
+        slug: &str,
+        platform: &str,
+    ) -> Vec<u8> {
         let raw = b"pack bytes";
         let compressed = zstd::bulk::compress(raw, 1).expect("compressed pack");
         let index = serde_json::to_vec(&serde_json::json!({
             "groups": [{
-                "id": "optional",
+                "id": group,
                 "label": "Optional systems",
                 "default": false,
-                "systems": ["test"],
+                "systems": [slug],
             }],
             "systems": [{
-                "slug": "test",
-                "file": "test.pack",
+                "slug": slug,
+                "file": format!("{slug}.pack"),
                 "rawBytes": raw.len(),
                 "sha256": sha256(raw),
-                "zstdFile": "packs/test.pack.zst",
+                "zstdFile": format!("packs/{slug}.pack.zst"),
                 "zstdSha256": sha256(&compressed),
             }]
         }))
@@ -880,11 +885,11 @@ mod tests {
         let catalog = serde_json::to_vec(&serde_json::json!({
             "format": "rom-weaver-identify-catalog-v1",
             "platforms": [{
-                "canonicalPlatform": "Test System",
-                "aliases": ["test"],
+                "canonicalPlatform": platform,
+                "aliases": [slug],
                 "source": "redump",
                 "mediaProfiles": ["redump-cd-track-v1"],
-                "packSlug": "test",
+                "packSlug": slug,
                 "packFormat": "RWFP2",
                 "canonicalizationVersion": 1
             }]
@@ -932,7 +937,7 @@ mod tests {
                 builder
                     .append_data(
                         &mut header,
-                        "share/rom-weaver/identify/v1/packs/test.pack.zst",
+                        format!("share/rom-weaver/identify/v1/packs/{slug}.pack.zst"),
                         compressed.as_slice(),
                     )
                     .expect("pack entry");
@@ -940,6 +945,10 @@ mod tests {
             builder.finish().expect("tar archive");
         }
         zstd::bulk::compress(&tar_bytes, 1).expect("compressed archive")
+    }
+
+    fn builder_style_archive(include_pack: bool) -> Vec<u8> {
+        builder_style_archive_for_group(include_pack, "optional", "test", "Test System")
     }
 
     #[test]
@@ -1106,6 +1115,42 @@ mod tests {
                 .len(),
             2
         );
+    }
+
+    #[test]
+    fn optional_computer_group_install_adds_its_pack_and_metadata() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let database = temp.path().join("identify");
+        let archive = builder_style_archive_for_group(
+            true,
+            "optional-computers",
+            "commodore-64",
+            "Commodore 64",
+        );
+
+        assert_eq!(
+            install_group_archive(&database, "optional-computers", &archive).expect("install"),
+            1
+        );
+        assert_eq!(
+            fs::read(database.join("commodore-64.pack")).expect("computer pack"),
+            b"pack bytes"
+        );
+
+        let index: PackIndex = serde_json::from_slice(
+            &fs::read(database.join("index.json")).expect("installed index"),
+        )
+        .expect("index JSON");
+        assert_eq!(index.groups.len(), 1);
+        assert_eq!(index.groups[0].id, "optional-computers");
+        assert!(!index.groups[0].default);
+        assert_eq!(index.groups[0].systems, ["commodore-64"]);
+
+        let catalog = fs::read(database.join("catalog.json")).expect("installed catalog");
+        let catalog = rom_weaver_checksum::identify_catalog::IdentifyCatalog::parse(&catalog)
+            .expect("catalog");
+        assert_eq!(catalog.entries().len(), 1);
+        assert_eq!(catalog.entries()[0].canonical_platform, "Commodore 64");
     }
 
     #[test]

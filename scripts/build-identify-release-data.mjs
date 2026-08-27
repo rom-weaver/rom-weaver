@@ -103,7 +103,7 @@ export const buildIdentifyReleaseData = (options) => {
         const outputPack = join(dataDir, system.zstdFile);
         run("zstd", [
           "--compress",
-          "-19",
+          "-22",
           "--threads=1",
           "--force",
           "--quiet",
@@ -145,7 +145,7 @@ export const buildIdentifyReleaseData = (options) => {
     ]);
     run("zstd", [
       "--compress",
-      "-19",
+      "-22",
       "--threads=1",
       "--force",
       "--quiet",

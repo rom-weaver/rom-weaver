@@ -127,7 +127,7 @@ pub struct IdentifyDatabaseInfo {
     pub canonicalization_profile: Option<String>,
 }
 
-/// Component-level evidence behind a set-aware RWFP2 or RWFP3 match.
+/// Component-level evidence behind a set-aware artifact-pack match.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct IdentifyEvidence {
@@ -155,7 +155,7 @@ pub struct IdentifyResult {
     pub checksums: BTreeMap<String, String>,
     pub checksum_variants: Vec<Value>,
     pub matches: Vec<IdentifyTitleMatch>,
-    /// Match quality of a set-aware RWFP2 or RWFP3 match.
+    /// Match quality of a set-aware artifact-pack match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub quality: Option<String>,
@@ -370,7 +370,7 @@ impl IdentifyDatabaseSet {
                 IdentifyPackFile::V1(pack) => {
                     resolve_query_in_pack(database_name, pack, query, variant, seen, output)?;
                 }
-                IdentifyPackFile::V2(_) | IdentifyPackFile::V3(_) => {
+                IdentifyPackFile::V2(_) | IdentifyPackFile::V3(_) | IdentifyPackFile::V4(_) => {
                     // Artifact packs route by (crc32, size); this hash-only
                     // query has no size, so they cannot answer it.
                     trace!(
@@ -473,6 +473,13 @@ fn database_info_for(
             upstream_sources: Vec::new(),
             revision: None,
             pack_format: "RWFP3".to_string(),
+            canonicalization_profile: Some(artifact.canonicalization_profile().to_string()),
+        },
+        IdentifyPackFile::V4(artifact) => IdentifyDatabaseInfo {
+            source: Some(source_label(artifact.source()).to_string()),
+            upstream_sources: Vec::new(),
+            revision: None,
+            pack_format: "RWFP4".to_string(),
             canonicalization_profile: Some(artifact.canonicalization_profile().to_string()),
         },
         IdentifyPackFile::V1(_) => IdentifyDatabaseInfo {
@@ -786,6 +793,7 @@ impl CliApp {
                 let profile = match &selected.pack.file {
                     IdentifyPackFile::V2(pack) => Some(pack.canonicalization_profile().to_string()),
                     IdentifyPackFile::V3(pack) => Some(pack.canonicalization_profile().to_string()),
+                    IdentifyPackFile::V4(pack) => Some(pack.canonicalization_profile().to_string()),
                     IdentifyPackFile::V1(_) => selected
                         .entry
                         .as_ref()
@@ -796,6 +804,7 @@ impl CliApp {
                 let profile = match &selected.pack.file {
                     IdentifyPackFile::V2(pack) => pack.canonicalization_profile().to_string(),
                     IdentifyPackFile::V3(pack) => pack.canonicalization_profile().to_string(),
+                    IdentifyPackFile::V4(pack) => pack.canonicalization_profile().to_string(),
                     IdentifyPackFile::V1(_) => selected
                         .entry
                         .as_ref()
@@ -1035,6 +1044,20 @@ impl CliApp {
                         outcome,
                     );
                 }
+                IdentifyPackFile::V4(pack) => {
+                    let Some(outcome) = match_single_blob(pack, raw_size, raw_checksums)? else {
+                        trace!(
+                            database = %selected_pack.pack.name,
+                            "skipping RWFP4 pack: the raw payload size is unknown"
+                        );
+                        continue;
+                    };
+                    merged.merge_artifact_outcome(
+                        &selected_pack.pack,
+                        selected_pack.entry.as_ref(),
+                        outcome,
+                    );
+                }
             }
         }
         let MergedMatches {
@@ -1160,6 +1183,9 @@ impl MergedMatches {
                     matched_upstream_sources(artifact.games(), &added)
                 }
                 IdentifyPackFile::V3(artifact) => {
+                    matched_upstream_sources(artifact.games(), &added)
+                }
+                IdentifyPackFile::V4(artifact) => {
                     matched_upstream_sources(artifact.games(), &added)
                 }
                 IdentifyPackFile::V1(_) => Vec::new(),

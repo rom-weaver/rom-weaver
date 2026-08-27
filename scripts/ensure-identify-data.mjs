@@ -89,9 +89,11 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
   }
 
   const verifyPack = (system) => {
+    if (system.packFormat !== "RWFP4") return false;
     const packPath = join(dataDir, system.file);
     if (!existsSync(packPath)) return false;
     const bytes = readFileSync(packPath);
+    if (bytes.subarray(0, 8).toString("binary") !== "RWFP4\0\0\0") return false;
     if (bytes.length !== system.rawBytes || sha256(bytes) !== system.sha256) return false;
     if (!system.brotliFile || !Number.isSafeInteger(system.brotliBytes)) return false;
     const brotliPath = join(dataDir, system.brotliFile);

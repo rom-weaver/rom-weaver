@@ -1,13 +1,13 @@
 # ROM identify data
 
-ROMWeaver builds deterministic RWFP3 packs from pinned Libretro and OpenGood data. Native packages use Zstandard assets. The webapp uses Brotli assets.
+ROMWeaver builds deterministic RWFP4 packs from pinned Libretro and OpenGood data. Native packages use Zstandard assets. The webapp uses Brotli assets.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Build-time data](#build-time-data)
 - [Source policy](#source-policy)
-- [RWFP3 records](#rwfp3-records)
+- [RWFP4 records](#rwfp4-records)
 - [Browser installation](#browser-installation)
 - [Native installation](#native-installation)
 - [Determinism and provenance](#determinism-and-provenance)
@@ -41,11 +41,11 @@ The deduplication key contains the hash algorithm, normalized hash, file size, a
 
 OpenGood-only records use `legacyVariant: true`. Their `dumpTags` preserve the GoodTools status tokens.
 
-## RWFP3 records
+## RWFP4 records
 
-Every built-in pack uses RWFP3. RWFP1 and RWFP2 remain readable for existing user packs.
+Every built-in pack uses RWFP4. RWFP1, RWFP2, and RWFP3 remain readable for imported user packs.
 
-RWFP3 stores strings, hashes, components, games, owners, routes, and sets in binary tables. Components and routes refer to one shared hash record. Provenance exists once per pack and each game refers to a provenance set.
+RWFP4 stores strings, hashes, components, games, owners, routes, and sets in binary tables. Components and routes refer to one shared hash record. Provenance exists once per pack and each game refers to a provenance set.
 
 `manifest.json` stores the source, license, commit, URL, and generation metadata.
 
@@ -54,6 +54,8 @@ RWFP3 stores strings, hashes, components, games, owners, routes, and sets in bin
 The web build emits each pack as a Brotli static asset. The service worker precaches only the default groups during installation.
 
 The Settings page can install a complete optional group. The service worker checks every pack before it marks the group as installed.
+
+Computer systems and DOS use the `optional-computers` group. PICO-8, TIC-80, WASM-4, LowRes NX, and MicroW8 remain in the default group.
 
 Identify requests use the local caches only. A cache miss returns a local error. It does not fetch a pack in response to ROM data.
 
@@ -78,3 +80,5 @@ Each manifest records the source name, URL, commit, license, input path, and gen
 The browser and native CLI check each pack size and SHA-256 before use. The reader also checks every member, table length, offset, hash width, and reference.
 
 An invalid or absent pack reports identification as unavailable. It does not become a false no-match result.
+
+Imported RWFP1, RWFP2, and RWFP3 packs remain readable.

@@ -137,12 +137,19 @@ describe("loadIdentifyPacks", () => {
 });
 
 describe("optional identify pack groups", () => {
-  it("asks the service worker to install one complete named group", async () => {
+  it("asks the service worker to install the complete optional computer group", async () => {
     stubFetch({
       index: {
         format: "rom-weaver-identify-system-pack-v1",
-        groups: [{ default: false, id: "computers", label: "Computers", systems: ["nintendo-game-boy"] }],
-        systems: INDEX_SYSTEMS,
+        groups: [
+          {
+            default: false,
+            id: "optional-computers",
+            label: "Computers and DOS",
+            systems: ["microsoft-ms-dos"],
+          },
+        ],
+        systems: [...INDEX_SYSTEMS, system("microsoft-ms-dos", "Microsoft MS-DOS")],
       },
     });
     const postMessage = vi.fn((message: unknown, ports: MessagePort[]) => {
@@ -154,10 +161,10 @@ describe("optional identify pack groups", () => {
     });
     const { installIdentifyPackGroup, listOptionalIdentifyPackGroups } =
       await import("../../src/platform/browser/identify-packs.ts");
-    expect((await listOptionalIdentifyPackGroups()).map(({ id }) => id)).toEqual(["computers"]);
-    await installIdentifyPackGroup("computers");
+    expect((await listOptionalIdentifyPackGroups()).map(({ id }) => id)).toEqual(["optional-computers"]);
+    await installIdentifyPackGroup("optional-computers");
     expect(postMessage).toHaveBeenCalledWith(
-      { action: "install-identify-pack-group", groupId: "computers" },
+      { action: "install-identify-pack-group", groupId: "optional-computers" },
       expect.any(Array),
     );
   });

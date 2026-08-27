@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { resolveIdentifyPackGroups } from "../../../scripts/identify-pack-groups.mjs";
 import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
 import { isLegalDocRoute } from "../src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
@@ -17,6 +18,7 @@ const distDir = path.join(packageDir, "dist");
 const identifyDataIndex = JSON.parse(
   fs.readFileSync(path.resolve(packageDir, "../../crates/rom-weaver-cli/data/identify/v1/index.json"), "utf8"),
 );
+const identifyPackGroups = resolveIdentifyPackGroups(identifyDataIndex);
 const channel = process.env.ROM_WEAVER_CHANNEL || "prod";
 const production = channel === "prod";
 const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
@@ -344,12 +346,25 @@ if (production) {
 // route - the one case no test navigates through. Assert it here instead, where the
 // generated manifest is on disk.
 const precacheManifest = read("cache-service-worker.js");
+const identifyPrecacheEntry = (system) =>
+  `"revision":"${system.sha256}","url":"assets/identify-${system.file}?sha256=${system.sha256}"`;
 assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
-// Every pack is installed before identification. This prevents a selected ROM
-// from causing a platform-specific network request.
+// Every default pack is installed before identification. Optional packs MUST
+// enter their local cache only after the user installs their complete group.
 assertIncludes(precacheManifest, '"assets/identify-index.json"', "identify index precache entry");
+for (const system of identifyPackGroups.defaultSystems) {
+  assertIncludes(precacheManifest, identifyPrecacheEntry(system), `${system.file} precache entry`);
+}
+for (const group of identifyPackGroups.groups.filter((candidate) => !candidate.default)) {
+  for (const slug of group.systems) {
+    const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
+    if (!system) throw new Error(`${group.id} names unknown identify system ${slug}`);
+    if (precacheManifest.includes(identifyPrecacheEntry(system))) {
+      throw new Error(`${system.file} from ${group.id} must not enter the default precache`);
+    }
+  }
+}
 for (const system of identifyDataIndex.systems) {
-  assertIncludes(precacheManifest, `assets/identify-${system.file}`, `${system.file} precache entry`);
   if (!system.brotliFile) throw new Error(`${system.file} has no Brotli asset in the identify index`);
   if (!fs.existsSync(path.join(distDir, "assets", `identify-${system.brotliFile}`))) {
     throw new Error(`${system.brotliFile} was not staged`);

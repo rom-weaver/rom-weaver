@@ -63,12 +63,14 @@ Check what is installed with `rom-weaver identify database list`. A result with 
 
 ## Install an optional group
 
-Choose `optional-arcade`, `optional-engines`, `optional-mobile`, or `optional-extended`.
+Choose `optional-arcade`, `optional-computers`, `optional-engines`, `optional-mobile`, or `optional-extended`.
+
+The `optional-computers` group contains computer systems and DOS. PICO-8, TIC-80, WASM-4, LowRes NX, and MicroW8 stay installed by default.
 
 Install one group:
 
 ```bash
-rom-weaver identify database install-group optional-extended
+rom-weaver identify database install-group optional-computers
 ```
 
 Use `--from ARCHIVE` to import a downloaded group archive without network access.
