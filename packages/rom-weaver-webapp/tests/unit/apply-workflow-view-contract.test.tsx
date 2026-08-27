@@ -622,38 +622,14 @@ describe("apply workflow view - post-apply behavior selects", () => {
     expect(secondTest.value).toBe("hide");
   });
 
-  it("warns for a settled unsupported platform unless Test is hidden", () => {
+  it("does not put emulator support warnings beside the setting", () => {
     const rom = romRow("game.iso");
     rom.info.romType = { platform: "Nintendo Wii" };
     const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
     const { container } = renderView({ settings: { postApplyTestBehavior: "show" }, ui });
     const test = container.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
-    const warning = () => container.querySelector("#rom-weaver-select-post-apply-test-warning");
-
-    expect(warning()?.textContent).toBe("Nintendo Wii cannot be tested with EmulatorJS.");
-    expect(test.getAttribute("aria-describedby")).toBe("rom-weaver-select-post-apply-test-warning");
-    fireEvent.change(test, { target: { value: "hide" } });
-    expect(warning()).toBeNull();
-    fireEvent.change(test, { target: { value: "auto-show" } });
-    expect(warning()?.textContent).toBe("Nintendo Wii cannot be tested with EmulatorJS.");
-  });
-
-  it("does not warn before support is known or for a supported platform", () => {
-    const stagingRom = romRow("game.iso");
-    stagingRom.info.romType = { platform: "Nintendo Wii" };
-    stagingRom.info.validationPhase = "extract";
-    const staging = renderView({
-      ui: { ...createEmptyPatcherUiState(), romInputs: [stagingRom] },
-    });
-    expect(staging.container.querySelector("#rom-weaver-select-post-apply-test-warning")).toBeNull();
-    staging.unmount();
-
-    const supportedRom = romRow("game.nes");
-    supportedRom.info.romType = { platform: "Nintendo Entertainment System" };
-    const supported = renderView({
-      ui: { ...createEmptyPatcherUiState(), romInputs: [supportedRom] },
-    });
-    expect(supported.container.querySelector("#rom-weaver-select-post-apply-test-warning")).toBeNull();
+    expect(test.getAttribute("aria-describedby")).toBeNull();
+    expect(container.querySelector("#rom-weaver-select-post-apply-test-warning")).toBeNull();
   });
 });
 
@@ -698,16 +674,22 @@ describe("apply workflow view - completed output actions", () => {
     expect(container.querySelector("#rom-weaver-checkbox-play-button")).toBeNull();
   });
 
-  it("keeps Download available when automatic Test is unsupported", () => {
-    const { container } = completedOutputView("show", "auto-show", "game.bin");
-    expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
-    expect((container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement).disabled).toBe(true);
-  });
+  it.each(["show", "auto-show"] as const)(
+    "shows why Test is disabled when the %s setting would use it",
+    (testBehavior) => {
+      const { container } = completedOutputView("show", testBehavior, "game.bin");
+      const button = container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement;
 
-  it("keeps Download available when visible Test is unsupported", () => {
-    const { container } = completedOutputView("show", "show", "game.bin");
+      expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
+      expect(button.disabled).toBe(true);
+      expect(button.textContent).toContain("Cannot test this ROM with EmulatorJS");
+    },
+  );
+
+  it("hides an unsupported Test action when the setting hides it", () => {
+    const { container } = completedOutputView("show", "hide", "game.bin");
     expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
-    expect((container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement).disabled).toBe(true);
+    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
   });
 
   it("names the unsupported platform on the disabled Test button", () => {

@@ -1324,7 +1324,6 @@ const PostApplyActionField = ({
   onChange,
   options,
   value,
-  warning,
 }: {
   disabled: boolean;
   id: string;
@@ -1332,14 +1331,11 @@ const PostApplyActionField = ({
   onChange: (value: PostApplyActionBehavior) => void;
   options: readonly { label: string; value: PostApplyActionBehavior }[];
   value: PostApplyActionBehavior;
-  warning?: string;
 }) => {
-  const warningId = `${id}-warning`;
   return (
     <OutputField label={label}>
       <DropdownSelect
         aria-label={label}
-        aria-describedby={warning ? warningId : undefined}
         className="select"
         disabled={disabled}
         id={id}
@@ -1352,12 +1348,6 @@ const PostApplyActionField = ({
           </option>
         ))}
       </DropdownSelect>
-      {warning ? (
-        <p aria-live="polite" className="post-apply-test-warning" id={warningId}>
-          <TriangleAlert aria-hidden="true" />
-          <span>{warning}</span>
-        </p>
-      ) : null}
     </OutputField>
   );
 };
@@ -1366,27 +1356,14 @@ const PostApplyActionField = ({
 const PostApplyBehaviorFields = ({
   disabled,
   downloadSetting,
-  emulatorCore,
-  emulatorPlatform,
-  emulatorSupportKnown,
   testSetting,
 }: {
   disabled: boolean;
   downloadSetting: unknown;
-  emulatorCore?: string;
-  emulatorPlatform?: string;
-  emulatorSupportKnown: boolean;
   testSetting: unknown;
 }) => {
   const downloadValue = usePostApplyDownloadBehaviorValue(downloadSetting);
   const testValue = usePostApplyTestBehaviorValue(testSetting);
-  const testOption = postApplyTestBehaviorOption(testValue);
-  const unsupportedWarning =
-    emulatorSupportKnown && !emulatorCore && (testOption.visible || testOption.automatic)
-      ? emulatorPlatform
-        ? `${emulatorPlatform} cannot be tested with EmulatorJS.`
-        : "This ROM cannot be tested with EmulatorJS."
-      : undefined;
   return (
     <>
       <PostApplyActionField
@@ -1404,7 +1381,6 @@ const PostApplyBehaviorFields = ({
         onChange={setPostApplyTestBehaviorOverride}
         options={POST_APPLY_TEST_BEHAVIOR_OPTIONS}
         value={testValue}
-        warning={unsupportedWarning}
       />
     </>
   );
@@ -1982,11 +1958,6 @@ function ApplyWorkflowFormView({
   const emulatorFileName =
     emulatorInput?.info.fileName || emulatorInput?.info.archiveName || outputState.pendingDownloadFileName || undefined;
   const emulatorCore = getEmulatorJsCore(emulatorPlatform, emulatorFileName);
-  const emulatorSupportKnown =
-    !!emulatorInput &&
-    !emulatorInput.loading &&
-    !emulatorInput.progress &&
-    emulatorInput.info.validationPhase === "idle";
   // "Share bundle" until an export exists, then "Download ...".
   const bundleCreateLabel = getBundleActionLabel(bundleExport, localizer, false);
   const bundleActionLabel = bundleExport?.downloadable
@@ -1998,9 +1969,6 @@ function ApplyWorkflowFormView({
       <PostApplyBehaviorFields
         disabled={outputState.disabled}
         downloadSetting={settings.postApplyDownloadBehavior}
-        emulatorCore={emulatorCore}
-        emulatorPlatform={emulatorPlatform}
-        emulatorSupportKnown={emulatorSupportKnown}
         testSetting={settings.postApplyTestBehavior}
       />
     </>
