@@ -181,21 +181,21 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.hash).toBe("");
   });
 
-  it("routes and tracks the tools workflow", () => {
+  it("routes and tracks the PPF undo workflow", () => {
     const controller = createController();
     controller.updateDraftSetting("betaToolsEnabled", true);
     expect(controller.saveDraftSettings()).toBe(true);
-    expect(controller.selectView("tools")).toBe("tools");
-    expect(window.location.pathname).toBe("/tools");
-    controller.setToolsSessionState(true);
-    expect(controller.getState().toolsSession.active).toBe(true);
+    expect(controller.selectView("ppf-undo")).toBe("ppf-undo");
+    expect(window.location.pathname).toBe("/ppf-undo");
+    controller.setPpfUndoSessionState(true);
+    expect(controller.getState().ppfUndoSession.active).toBe(true);
   });
 
-  it("does not notify subscribers when the tools session state is unchanged", () => {
+  it("does not notify subscribers when the PPF undo session state is unchanged", () => {
     const controller = createController();
     const listener = vi.fn();
     controller.subscribe(listener);
-    controller.setToolsSessionState(false);
+    controller.setPpfUndoSessionState(false);
     expect(listener).not.toHaveBeenCalled();
   });
 
@@ -277,7 +277,7 @@ describe("createWebappRootController over the vanilla store", () => {
     controller.setCreatorModifiedState({});
     controller.setPatcherInputState([{}]);
     controller.setPatcherPatchState([{}]);
-    controller.setToolsSessionState(true);
+    controller.setPpfUndoSessionState(true);
     controller.setTrimSourceState({});
     controller.setStartupState("error", "failed");
     controller.openSettings();
@@ -298,7 +298,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(state.settingsDialogOpen).toBe(false);
     expect(state.draftSettings).toEqual(state.settings);
     expect(state.startup).toEqual({ message: "", status: "ready" });
-    expect(state.toolsSession.active).toBe(false);
+    expect(state.ppfUndoSession.active).toBe(false);
     expect(state.trimSession.sourceFilePresent).toBe(false);
     expect(state.validation).toEqual({ invalidFields: [], messages: [] });
   });

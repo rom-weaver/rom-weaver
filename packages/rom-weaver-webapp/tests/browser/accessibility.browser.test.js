@@ -944,13 +944,13 @@ describe("webapp keyboard navigation", () => {
     press("ArrowRight");
     expect(document.activeElement).toBe(tabAt("creator"));
     press("End");
-    expect(document.activeElement).toBe(tabAt("trim"));
+    expect(document.activeElement).toBe(tabAt("test"));
     press("Home");
     expect(document.activeElement).toBe(tabAt("patcher"));
     press("ArrowLeft"); // wraps to the last tab
-    expect(document.activeElement).toBe(tabAt("trim"));
+    expect(document.activeElement).toBe(tabAt("test"));
 
-    expect(selected).toEqual(["creator", "trim", "patcher", "trim"]);
+    expect(selected).toEqual(["creator", "test", "patcher", "test"]);
   });
 
   test("modal wraps Tab focus, restores the opener, and isolates the page", async () => {
@@ -1105,7 +1105,7 @@ describe("webapp responsive navigation", () => {
   const ALL_TABS = [
     ...PAGE_TABS,
     { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
-    { href: "tools", icon: createElement("span", { "aria-hidden": "true" }), id: "tools", label: "Tools" },
+    { href: "ppf-undo", icon: createElement("span", { "aria-hidden": "true" }), id: "ppf-undo", label: "PPF undo" },
   ];
 
   const renderMastheadOnly = async (tabs) =>

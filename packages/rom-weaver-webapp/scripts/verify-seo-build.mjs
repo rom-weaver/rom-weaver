@@ -58,7 +58,7 @@ const redirects = read("_redirects");
 const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
 
-for (const route of ["apply", "create", "identify", "test", "trim", "tools"]) {
+for (const route of ["apply", "create", "identify", "test", "trim", "ppf-undo", "tools"]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
 assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
@@ -310,7 +310,7 @@ for (const script of bundledScripts) {
     throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
 }
 
-for (const beta of ["trim", "tools"]) {
+for (const beta of ["trim", "ppf-undo"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
     read(`${beta}/index.html`),
@@ -318,6 +318,13 @@ for (const beta of ["trim", "tools"]) {
     `${beta} self canonical`,
   );
 }
+// The retired /tools/ slug serves the PPF undo page and canonicalizes to it.
+assertIncludes(read("tools/index.html"), 'name="robots" content="noindex, nofollow"', "tools alias noindex");
+assertIncludes(
+  read("tools/index.html"),
+  'rel="canonical" href="https://rom-weaver.com/ppf-undo"',
+  "tools alias canonical",
+);
 
 if (production) {
   if (applyHtml.includes("<html data-accent=")) throw new Error("production must use the default madder accent");
@@ -359,7 +366,15 @@ for (const system of identifyDataIndex.systems) {
   assertExcludes(precacheManifest, `assets/identify-${system.file}`, `${system.file} precache entry`);
   assertIncludes(routesJson, `"/assets/identify-${system.file}"`, `${system.file} Brotli route`);
 }
-for (const slug of [...DOC_ROUTES.map((route) => route.slug), "apply", "create", "identify", "tools", "trim"]) {
+for (const slug of [
+  ...DOC_ROUTES.map((route) => route.slug),
+  "apply",
+  "create",
+  "identify",
+  "ppf-undo",
+  "tools",
+  "trim",
+]) {
   assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);
 }
 

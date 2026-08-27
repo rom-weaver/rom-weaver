@@ -1,16 +1,15 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ToolsForm } from "../../../src/webapp/components/tools-form.tsx";
+import { PpfUndoForm } from "../../../src/webapp/components/ppf-undo-form.tsx";
 
 vi.mock("../../../src/platform/browser/browser-api.ts", () => ({ undoPpf: vi.fn() }));
 
-describe("ToolsForm", () => {
+describe("PpfUndoForm", () => {
   it("stages the PPF undo inputs and derives a restored ROM name", () => {
     const onSessionChange = vi.fn();
-    render(<ToolsForm onSessionChange={onSessionChange} />);
+    render(<PpfUndoForm onSessionChange={onSessionChange} />);
 
-    expect(screen.getByRole("tab", { name: "PPF undo" }).getAttribute("aria-selected")).toBe("true");
     const run = screen.getByRole("button", { name: "Restore original ROM" });
     expect((run as HTMLButtonElement).disabled).toBe(true);
 

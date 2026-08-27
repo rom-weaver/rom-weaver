@@ -10,7 +10,7 @@ import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-z
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 
-const TOOLS_ACTIVITY_KEY = "tools";
+const PPF_UNDO_ACTIVITY_KEY = "ppf-undo";
 
 const restoredFileName = (name: string) => {
   const dot = name.lastIndexOf(".");
@@ -57,12 +57,12 @@ const StagedInputStep = ({
   </StepSection>
 );
 
-type ToolsFormProps = {
+type PpfUndoFormProps = {
   onSessionChange: (active: boolean) => void;
   pageDrop?: PageFileDrop | null;
 };
 
-const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
+const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
   const [rom, setRom] = useState<File | null>(null);
   const [patch, setPatch] = useState<File | null>(null);
   const [outputName, setOutputName] = useState("restored-rom.bin");
@@ -81,7 +81,7 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
     () => () => {
       abortRef.current?.abort();
       void outputRef.current?.dispose();
-      setWorkbenchActivity(TOOLS_ACTIVITY_KEY, { state: "idle" });
+      setWorkbenchActivity(PPF_UNDO_ACTIVITY_KEY, { state: "idle" });
     },
     [],
   );
@@ -89,11 +89,11 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
     onSessionChange(!!(rom || patch || output));
   }, [onSessionChange, output, patch, rom]);
   useEffect(() => {
-    if (busy) setWorkbenchActivity(TOOLS_ACTIVITY_KEY, { stage: "Restore original ROM", state: "running" });
-    else if (error) setWorkbenchActivity(TOOLS_ACTIVITY_KEY, { state: "failed" });
-    else if (output) setWorkbenchActivity(TOOLS_ACTIVITY_KEY, { stage: "Original ROM restored", state: "done" });
-    else if (rom || patch) setWorkbenchActivity(TOOLS_ACTIVITY_KEY, { state: "ready" });
-    else setWorkbenchActivity(TOOLS_ACTIVITY_KEY, { state: "idle" });
+    if (busy) setWorkbenchActivity(PPF_UNDO_ACTIVITY_KEY, { stage: "Restore original ROM", state: "running" });
+    else if (error) setWorkbenchActivity(PPF_UNDO_ACTIVITY_KEY, { state: "failed" });
+    else if (output) setWorkbenchActivity(PPF_UNDO_ACTIVITY_KEY, { stage: "Original ROM restored", state: "done" });
+    else if (rom || patch) setWorkbenchActivity(PPF_UNDO_ACTIVITY_KEY, { state: "ready" });
+    else setWorkbenchActivity(PPF_UNDO_ACTIVITY_KEY, { state: "idle" });
   }, [busy, error, output, patch, rom]);
 
   const clearOutput = useCallback(() => {
@@ -169,115 +169,98 @@ const ToolsForm = ({ onSessionChange, pageDrop }: ToolsFormProps) => {
   };
 
   return (
-    <section className="panel" id="tools-container">
-      <nav aria-label="Tool commands" className="tools-subnav">
-        <div aria-orientation="horizontal" className="tools-subnav-rail" role="tablist">
-          <button
-            aria-controls="panel-tools-ppf-undo"
-            aria-selected="true"
-            className="tools-subnav-tab"
-            id="tab-tools-ppf-undo"
-            role="tab"
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" />
-            <span>PPF undo</span>
-          </button>
-        </div>
-      </nav>
-      <div aria-labelledby="tab-tools-ppf-undo" id="panel-tools-ppf-undo" role="tabpanel">
-        <UnifiedDropZone
-          addLabel="Replace the patched ROM or PPF patch"
-          big={workflowEmpty}
-          disabled={busy}
-          heroLabel="Drop a patched ROM and PPF patch"
-          heroLabelCoarse="Tap to add a patched ROM and PPF patch"
-          info={<p>A PPF3 patch must include undo data to restore the original ROM.</p>}
-          inputId="tools-input-picker"
-          lead={{ line1: "ui.hero.toolsThesis", line2: "ui.hero.toolsThesis2" }}
-          onFiles={stageFiles}
-          supported={[
-            { extensions: ["rom"], label: "Patched ROMs" },
-            { extensions: ["ppf3"], label: "PPF3 patches" },
-          ]}
-        />
-        <StagedInputStep
-          file={rom}
-          label="patched ROM"
-          noun="a patched ROM"
-          num="0x02"
-          onAddInput={() => document.getElementById("tools-input-picker")?.click()}
-          onRemove={() => {
-            clearOutput();
-            setRom(null);
-          }}
-          title="Patched ROM"
-        />
-        <StagedInputStep
-          file={patch}
-          label="PPF3"
-          noun="a PPF patch"
-          num="0x03"
-          onAddInput={() => document.getElementById("tools-input-picker")?.click()}
-          onRemove={() => {
-            clearOutput();
-            setPatch(null);
-          }}
-          title="PPF patch"
-        />
-        <StepSection fault={!!error} num="0x04" title="Restore" woven={!!output}>
-          <div className="card outcard">
-            <div className="outbar">
-              <div className="fname fname-group">
-                <textarea
-                  aria-label="Output filename"
-                  className="input mono outname"
-                  disabled={busy}
-                  onChange={(event) => {
-                    clearOutput();
-                    setOutputName(event.currentTarget.value.replace(/[\r\n]/g, ""));
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.preventDefault();
-                  }}
-                  placeholder="Restored ROM filename"
-                  rows={1}
-                  spellCheck={false}
-                  value={outputName}
-                />
-              </div>
-            </div>
-            {busy ? (
-              <RunButton disabled icon={<RotateCcw aria-hidden="true" />}>
-                Restoring ROM…
-              </RunButton>
-            ) : output ? (
-              <RunButton
-                ariaLabel={`Download ${output.fileName}`}
-                download={{ format: "ROM", name: output.fileName, size: formatByteSize(output.size) }}
-                icon={<Download aria-hidden="true" />}
-                onClick={() => void download()}
+    <section className="panel" id="ppf-undo-container">
+      <UnifiedDropZone
+        addLabel="Replace the patched ROM or PPF patch"
+        big={workflowEmpty}
+        disabled={busy}
+        heroLabel="Drop a patched ROM and PPF patch"
+        heroLabelCoarse="Tap to add a patched ROM and PPF patch"
+        info={<p>A PPF3 patch must include undo data to restore the original ROM.</p>}
+        inputId="ppf-undo-input-picker"
+        lead={{ line1: "ui.hero.toolsThesis", line2: "ui.hero.toolsThesis2" }}
+        onFiles={stageFiles}
+        supported={[
+          { extensions: ["rom"], label: "Patched ROMs" },
+          { extensions: ["ppf3"], label: "PPF3 patches" },
+        ]}
+      />
+      <StagedInputStep
+        file={rom}
+        label="patched ROM"
+        noun="a patched ROM"
+        num="0x02"
+        onAddInput={() => document.getElementById("ppf-undo-input-picker")?.click()}
+        onRemove={() => {
+          clearOutput();
+          setRom(null);
+        }}
+        title="Patched ROM"
+      />
+      <StagedInputStep
+        file={patch}
+        label="PPF3"
+        noun="a PPF patch"
+        num="0x03"
+        onAddInput={() => document.getElementById("ppf-undo-input-picker")?.click()}
+        onRemove={() => {
+          clearOutput();
+          setPatch(null);
+        }}
+        title="PPF patch"
+      />
+      <StepSection fault={!!error} num="0x04" title="Restore" woven={!!output}>
+        <div className="card outcard">
+          <div className="outbar">
+            <div className="fname fname-group">
+              <textarea
+                aria-label="Output filename"
+                className="input mono outname"
+                disabled={busy}
+                onChange={(event) => {
+                  clearOutput();
+                  setOutputName(event.currentTarget.value.replace(/[\r\n]/g, ""));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.preventDefault();
+                }}
+                placeholder="Restored ROM filename"
+                rows={1}
+                spellCheck={false}
+                value={outputName}
               />
-            ) : (
-              <RunButton
-                disabled={!(rom && patch && outputName.trim())}
-                icon={<Wrench aria-hidden="true" />}
-                onClick={() => void run()}
-              >
-                Restore original ROM
-              </RunButton>
-            )}
+            </div>
           </div>
-          {error ? (
-            <Notice level="error" onDismiss={() => setError("")}>
-              {error}
-            </Notice>
-          ) : null}
-        </StepSection>
-      </div>
+          {busy ? (
+            <RunButton disabled icon={<RotateCcw aria-hidden="true" />}>
+              Restoring ROM…
+            </RunButton>
+          ) : output ? (
+            <RunButton
+              ariaLabel={`Download ${output.fileName}`}
+              download={{ format: "ROM", name: output.fileName, size: formatByteSize(output.size) }}
+              icon={<Download aria-hidden="true" />}
+              onClick={() => void download()}
+            />
+          ) : (
+            <RunButton
+              disabled={!(rom && patch && outputName.trim())}
+              icon={<Wrench aria-hidden="true" />}
+              onClick={() => void run()}
+            >
+              Restore original ROM
+            </RunButton>
+          )}
+        </div>
+        {error ? (
+          <Notice level="error" onDismiss={() => setError("")}>
+            {error}
+          </Notice>
+        ) : null}
+      </StepSection>
     </section>
   );
 };
 
-export { ToolsForm };
-export type { ToolsFormProps };
+export { PpfUndoForm };
+export type { PpfUndoFormProps };

@@ -1,4 +1,4 @@
-import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, ScanSearch, Scissors, Settings, Wrench } from "lucide-react";
+import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, ScanSearch, Scissors, Settings } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -42,7 +42,7 @@ import {
   EmulatorTestRoute,
   IdentifyRouteForm,
   preloadWorkflowRoute,
-  ToolsRouteForm,
+  PpfUndoRouteForm,
   TrimPatchRoute,
 } from "./workflow-routes.tsx";
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
@@ -59,7 +59,7 @@ const WORKFLOW_TABS = [
   // exposes them from More when the beta-tools setting is enabled.
   { href: "identify", icon: <ScanSearch aria-hidden="true" />, id: "identify", label: "Identify" },
   { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
-  { href: "tools", icon: <Wrench aria-hidden="true" />, id: "tools", label: "Tools" },
+  { href: "ppf-undo", icon: <RotateCcw aria-hidden="true" />, id: "ppf-undo", label: "PPF undo" },
 ];
 
 // Keep the trace inspector out of the initial bundle, but share its loader so
@@ -565,7 +565,7 @@ function WebappRoot({
     patchStackState: { items: Array.from({ length: state.patcherSession.patchCount }) },
     patcherFormEdited: !!(state.patcherSession.outputName.trim() || state.patcherSession.outputCompression !== "none"),
     romFilePresent: state.patcherSession.romFilePresent,
-    toolsActive: state.toolsSession?.active ?? false,
+    ppfUndoActive: state.ppfUndoSession?.active ?? false,
     trimState: state.trimSession,
     webappState: state,
   });
@@ -702,8 +702,11 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel(
-                  "tools",
-                  <ToolsRouteForm onSessionChange={actions.onToolsSessionChange} pageDrop={pageDropFor("tools")} />,
+                  "ppf-undo",
+                  <PpfUndoRouteForm
+                    onSessionChange={actions.onPpfUndoSessionChange}
+                    pageDrop={pageDropFor("ppf-undo")}
+                  />,
                 )}
                 {state.currentView === "docs" ? null : <DropVeil />}
               </>

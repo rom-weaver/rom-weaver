@@ -175,7 +175,7 @@
   position: absolute;
   /* the step column runs edge to edge inside a workflow panel (webapp-modals.css
      zeroes the head's gutter), so the control's right edge is the panel's */
-  inset-block-start: calc(var(--step-lead, 0px) + var(--tools-rail-h, 0px) + var(--step-pt));
+  inset-block-start: calc(var(--step-lead, 0px) + var(--step-pt));
   inset-inline-end: 0;
   z-index: 5;
   display: flex;
@@ -271,11 +271,4 @@
 }
 .rw-app .panel-settings-btn:active {
   color: var(--thread-ink);
-}
-/* Tools puts its command rail above the first step, so `0x01` starts one rail
-   lower. The rail is a fixed box: 34px tab + 10px padding either side + 1px seam
-   (masthead.css `.tools-subnav`); phone-dock.css restates both of these for the
-   phone rail and the margin the steps grow there. */
-.rw-app .panel.workflow:has(.tools-subnav) {
-  --tools-rail-h: 55px;
 }

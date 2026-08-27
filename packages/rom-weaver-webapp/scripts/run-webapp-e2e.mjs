@@ -554,7 +554,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         if (!(await betaTools.isChecked())) await betaTools.check();
         await page.getByRole("button", { exact: true, name: "Save" }).click();
       }
-      for (const tab of ["patcher", "creator", "trim"]) {
+      for (const tab of ["patcher", "creator"]) {
         await page.locator(`[role="tab"][data-mode="${tab}"]:visible`).first().click();
         await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
         for (const theme of ["light", "dark"]) {
@@ -562,12 +562,18 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           await scanLiveApp(page, `${tab} (${viewport.label}, ${theme})`);
         }
       }
-      await page.getByRole("button", { name: "More", exact: true }).click();
-      await page.getByRole("menuitem", { name: "Tools", exact: true }).click();
-      await page.locator("#panel-tools:not([hidden])").waitFor({ state: "visible" });
-      for (const theme of ["light", "dark"]) {
-        await setTheme(theme);
-        await scanLiveApp(page, `tools (${viewport.label}, ${theme})`);
+      // Trim and PPF undo live in the More menu, not the mode rail.
+      for (const [label, panelId] of [
+        ["Trim", "panel-trim"],
+        ["PPF undo", "panel-ppf-undo"],
+      ]) {
+        await page.getByRole("button", { name: "More", exact: true }).click();
+        await page.getByRole("menuitem", { name: label, exact: true }).click();
+        await page.locator(`#${panelId}:not([hidden])`).waitFor({ state: "visible" });
+        for (const theme of ["light", "dark"]) {
+          await setTheme(theme);
+          await scanLiveApp(page, `${label} (${viewport.label}, ${theme})`);
+        }
       }
     }
 

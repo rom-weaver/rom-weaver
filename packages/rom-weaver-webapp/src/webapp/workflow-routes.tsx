@@ -1,7 +1,7 @@
 import { type ComponentType, lazy } from "react";
 import { createLogger } from "../lib/logging.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
-import type { ToolsFormProps } from "./components/tools-form.tsx";
+import type { PpfUndoFormProps } from "./components/ppf-undo-form.tsx";
 import type { IdentifyFormProps } from "./components/identify-form.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
 
@@ -32,7 +32,7 @@ type WorkflowRouteProps = {
   test: {
     active?: boolean;
   };
-  tools: ToolsFormProps;
+  "ppf-undo": PpfUndoFormProps;
   trim: TrimPatchFormProps;
 };
 
@@ -102,8 +102,8 @@ const IdentifyRoute = createWorkflowRoute("identify", () =>
 const TestRoute = createWorkflowRoute("test", () =>
   import("../public/react/emulator-test-view.tsx").then((module) => ({ default: module.EmulatorTestView })),
 );
-const ToolsRoute = createWorkflowRoute("tools", () =>
-  import("./components/tools-form.tsx").then((module) => ({ default: module.ToolsForm })),
+const PpfUndoRoute = createWorkflowRoute("ppf-undo", () =>
+  import("./components/ppf-undo-form.tsx").then((module) => ({ default: module.PpfUndoForm })),
 );
 const TrimRoute = createWorkflowRoute("trim", () =>
   import("../public/react/trim-form.tsx").then((module) => ({ default: module.TrimPatchForm })),
@@ -115,7 +115,7 @@ const WORKFLOW_ROUTES = {
   identify: IdentifyRoute,
   patcher: PatcherRoute,
   test: TestRoute,
-  tools: ToolsRoute,
+  "ppf-undo": PpfUndoRoute,
   trim: TrimRoute,
 } as const;
 
@@ -124,7 +124,7 @@ const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
 const EmulatorTestRoute = TestRoute.Component;
 const IdentifyRouteForm = IdentifyRoute.Component;
-const ToolsRouteForm = ToolsRoute.Component;
+const PpfUndoRouteForm = PpfUndoRoute.Component;
 const TrimPatchRoute = TrimRoute.Component;
 
 /** Resolve one route's chunk. Awaited before the first mount so the landing tab never suspends. */
@@ -146,6 +146,6 @@ export {
   IdentifyRouteForm,
   preloadDocsRouteHtml,
   preloadWorkflowRoute,
-  ToolsRouteForm,
+  PpfUndoRouteForm,
   TrimPatchRoute,
 };

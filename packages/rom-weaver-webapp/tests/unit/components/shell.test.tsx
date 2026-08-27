@@ -25,7 +25,7 @@ const TABS = [
   { href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
   { href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
-  { href: "tools", icon: <svg aria-hidden="true" />, id: "tools", label: "Tools" },
+  { href: "ppf-undo", icon: <svg aria-hidden="true" />, id: "ppf-undo", label: "PPF undo" },
 ];
 
 const mastheadProps = {
@@ -62,12 +62,13 @@ describe("Masthead", () => {
     expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
 
     for (const [list, selectedClass, labels] of [
-      [rail, "mode", ["Apply", "Create", "Docs", "Test", "Trim"]],
-      [dock, "dock-tab", ["Apply", "Create", "Docs", "Test", "Trim"]],
+      [rail, "mode", ["Apply", "Create", "Docs", "Test"]],
+      [dock, "dock-tab", ["Apply", "Create", "Docs", "Test"]],
     ] as const) {
       const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);
       expect(tabs.map((tab) => tab.textContent)).toEqual(labels);
-      expect(list?.querySelector('[data-mode="tools"]')).toBeNull();
+      expect(list?.querySelector('[data-mode="trim"]')).toBeNull();
+      expect(list?.querySelector('[data-mode="ppf-undo"]')).toBeNull();
       expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
       expect(tabs[0]?.classList.contains(selectedClass)).toBe(true);
       // roving tabindex: exactly one reachable tab per list
@@ -127,7 +128,8 @@ describe("Masthead", () => {
     expect(menuStatus.getAttribute("data-sw")).toBe("active");
     expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
     expect(queryByRole("menuitem", { name: "Docs" })).toBeNull();
-    expect(getByRole("menuitem", { name: "Tools" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "Trim" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "PPF undo" })).toBeTruthy();
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
     expect(onOpenStorage).toHaveBeenCalledTimes(1);
     expect(more.getAttribute("aria-expanded")).toBe("false");

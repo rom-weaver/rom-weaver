@@ -290,7 +290,7 @@ const getNavigationGuardState = () => {
       items: Array.from({ length: state.patcherSession.patchCount }),
     },
     romFilePresent: state.patcherSession.romFilePresent,
-    toolsActive: state.toolsSession.active,
+    ppfUndoActive: state.ppfUndoSession.active,
     trimState: {
       outputName: state.trimSession.outputName,
       sourceFilePresent: state.trimSession.sourceFilePresent,
@@ -483,7 +483,7 @@ const renderWebappRoot = (): undefined => {
         window.history.replaceState(window.history.state, "", url);
         requestGuidedSampleStart(guide);
       },
-      onToolsSessionChange: (active) => webappController.setToolsSessionState(active),
+      onPpfUndoSessionChange: (active) => webappController.setPpfUndoSessionState(active),
       onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),
       onTrimSettingsChange: (settings) => webappController.setTrimSettingsState(settings),
       onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
