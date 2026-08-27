@@ -18,6 +18,10 @@ describe("getEmulatorJsCore", () => {
     expect(getEmulatorJsCore("Sony Playstation Portable", "game.iso")).toBeUndefined();
   });
 
+  it("does not override a detected unsupported platform with the file extension", () => {
+    expect(getEmulatorJsCore("Nintendo Wii", "game.nes")).toBeUndefined();
+  });
+
   it("returns undefined for unknown files", () => {
     expect(getEmulatorJsCore(undefined, "patched.bin")).toBeUndefined();
   });

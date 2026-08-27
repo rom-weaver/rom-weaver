@@ -112,8 +112,14 @@ describe("runPostApplyActions", () => {
 
   it("does not test when the platform has no core", async () => {
     const { calls, outcome } = await runBehavior("show", "auto-show");
-    expect(calls).toEqual(["fallback:test"]);
+    expect(calls).toEqual([]);
     expect(outcome).toEqual({ downloaded: false, tested: false });
+  });
+
+  it("keeps automatic Download when the platform has no core", async () => {
+    const { calls, outcome } = await runBehavior("auto-show", "auto-show");
+    expect(calls).toEqual(["download"]);
+    expect(outcome).toEqual({ downloaded: true, tested: false });
   });
 
   it("focuses the pending download when automatic download fails", async () => {

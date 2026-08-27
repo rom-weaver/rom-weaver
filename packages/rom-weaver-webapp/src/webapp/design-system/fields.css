@@ -226,6 +226,23 @@
   line-height: 1.35;
   color: var(--ink-3);
 }
+.rw-app .post-apply-test-warning {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--care);
+}
+.rw-app .post-apply-test-warning svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+:root[data-theme="light"] .post-apply-test-warning {
+  color: #7a5300;
+}
 .rw-app .optsgrid {
   display: flex;
   flex-direction: column;

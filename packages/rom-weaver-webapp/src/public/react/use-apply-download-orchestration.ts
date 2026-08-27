@@ -390,10 +390,7 @@ const runPostApplyActions = async ({
   }
 
   if (!shouldTest) return { downloaded, tested: false };
-  if (!core) {
-    onAutomaticActionFailed?.("test");
-    return { downloaded, tested: false };
-  }
+  if (!core) return { downloaded, tested: false };
 
   let entry = retainedEntry || null;
   if (!entry) {

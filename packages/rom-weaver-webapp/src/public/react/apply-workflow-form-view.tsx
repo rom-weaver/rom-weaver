@@ -96,7 +96,20 @@ const EmulatorJsAction = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  if (!(core && output && shown)) return null;
+  if (!(output && shown)) return null;
+  if (!core) {
+    const unavailableLabel = platform?.trim()
+      ? `Cannot test ${platform.trim()} with EmulatorJS`
+      : "Cannot test this ROM with EmulatorJS";
+    return (
+      <div className="emulatorjs-test">
+        <button className="btn play" disabled id="rom-weaver-button-test-emulator" type="button">
+          <Gamepad2 aria-hidden="true" />
+          <span className="play-label">{unavailableLabel}</span>
+        </button>
+      </div>
+    );
+  }
   const openInEmulator = async () => {
     setLoading(true);
     setError("");
@@ -1311,6 +1324,7 @@ const PostApplyActionField = ({
   onChange,
   options,
   value,
+  warning,
 }: {
   disabled: boolean;
   id: string;
@@ -1318,11 +1332,14 @@ const PostApplyActionField = ({
   onChange: (value: PostApplyActionBehavior) => void;
   options: readonly { label: string; value: PostApplyActionBehavior }[];
   value: PostApplyActionBehavior;
+  warning?: string;
 }) => {
+  const warningId = `${id}-warning`;
   return (
     <OutputField label={label}>
       <DropdownSelect
         aria-label={label}
+        aria-describedby={warning ? warningId : undefined}
         className="select"
         disabled={disabled}
         id={id}
@@ -1335,6 +1352,12 @@ const PostApplyActionField = ({
           </option>
         ))}
       </DropdownSelect>
+      {warning ? (
+        <p aria-live="polite" className="post-apply-test-warning" id={warningId}>
+          <TriangleAlert aria-hidden="true" />
+          <span>{warning}</span>
+        </p>
+      ) : null}
     </OutputField>
   );
 };
@@ -1343,14 +1366,27 @@ const PostApplyActionField = ({
 const PostApplyBehaviorFields = ({
   disabled,
   downloadSetting,
+  emulatorCore,
+  emulatorPlatform,
+  emulatorSupportKnown,
   testSetting,
 }: {
   disabled: boolean;
   downloadSetting: unknown;
+  emulatorCore?: string;
+  emulatorPlatform?: string;
+  emulatorSupportKnown: boolean;
   testSetting: unknown;
 }) => {
   const downloadValue = usePostApplyDownloadBehaviorValue(downloadSetting);
   const testValue = usePostApplyTestBehaviorValue(testSetting);
+  const testOption = postApplyTestBehaviorOption(testValue);
+  const unsupportedWarning =
+    emulatorSupportKnown && !emulatorCore && (testOption.visible || testOption.automatic)
+      ? emulatorPlatform
+        ? `${emulatorPlatform} cannot be tested with EmulatorJS.`
+        : "This ROM cannot be tested with EmulatorJS."
+      : undefined;
   return (
     <>
       <PostApplyActionField
@@ -1368,6 +1404,7 @@ const PostApplyBehaviorFields = ({
         onChange={setPostApplyTestBehaviorOverride}
         options={POST_APPLY_TEST_BEHAVIOR_OPTIONS}
         value={testValue}
+        warning={unsupportedWarning}
       />
     </>
   );
@@ -1458,6 +1495,9 @@ const ApplyOutputAction = ({
   controllers,
   disabledPatchCount,
   enabledPatchCount,
+  emulatorCore,
+  emulatorFileName,
+  emulatorPlatform,
   emulatorOutput,
   errorNotice,
   localizer,
@@ -1465,7 +1505,6 @@ const ApplyOutputAction = ({
   onSelectView,
   outputState,
   patches,
-  romInputs,
   uiController,
   uiState,
 }: {
@@ -1475,6 +1514,9 @@ const ApplyOutputAction = ({
   controllers: { output: PatcherOutputController };
   disabledPatchCount: number;
   enabledPatchCount: number;
+  emulatorCore?: string;
+  emulatorFileName?: string;
+  emulatorPlatform?: string;
   emulatorOutput?: BrowserApplyResult["output"] | null;
   onSelectView?: (view: "test") => void;
   errorNotice: NoticeState | null;
@@ -1482,7 +1524,6 @@ const ApplyOutputAction = ({
   noticeController?: NoticeController;
   outputState: PatcherOutputState;
   patches: PatchStackItemState[];
-  romInputs: RomInputRowState[];
   uiController: PatcherUiController;
   uiState: ReturnType<PatcherUiController["getState"]>;
 }) => {
@@ -1491,11 +1532,7 @@ const ApplyOutputAction = ({
   const postApplyTestBehavior = usePostApplyTestBehaviorValue(settings.postApplyTestBehavior);
   const postApplyDownloadOption = postApplyDownloadBehaviorOption(postApplyDownloadBehavior);
   const postApplyTestOption = postApplyTestBehaviorOption(postApplyTestBehavior);
-  const core = getEmulatorJsCore(
-    romInputs[0]?.info.romType?.platform,
-    romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || outputState.pendingDownloadFileName || undefined,
-  );
-  const showDownloadFallback = !core && (postApplyTestOption.visible || postApplyTestOption.automatic);
+  const showDownloadFallback = !emulatorCore && (postApplyTestOption.visible || postApplyTestOption.automatic);
   return (
     <>
       <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
@@ -1513,17 +1550,11 @@ const ApplyOutputAction = ({
         totalTime={applyTotalTime || undefined}
       />
       <EmulatorJsAction
-        core={getEmulatorJsCore(
-          romInputs[0]?.info.romType?.platform,
-          romInputs[0]?.info.fileName ||
-            romInputs[0]?.info.archiveName ||
-            outputState.pendingDownloadFileName ||
-            undefined,
-        )}
-        fileName={romInputs[0]?.info.fileName || romInputs[0]?.info.archiveName || undefined}
+        core={emulatorCore}
+        fileName={emulatorFileName}
         onSelectView={onSelectView}
         output={outputState.pendingDownloadFileName ? emulatorOutput : null}
-        platform={romInputs[0]?.info.romType?.platform}
+        platform={emulatorPlatform}
         shown={postApplyTestOption.visible}
       />
       {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
@@ -1946,6 +1977,16 @@ function ApplyWorkflowFormView({
       visible={header.visible}
     />
   );
+  const emulatorInput = romInputs[0];
+  const emulatorPlatform = emulatorInput?.info.romType?.platform?.trim() || undefined;
+  const emulatorFileName =
+    emulatorInput?.info.fileName || emulatorInput?.info.archiveName || outputState.pendingDownloadFileName || undefined;
+  const emulatorCore = getEmulatorJsCore(emulatorPlatform, emulatorFileName);
+  const emulatorSupportKnown =
+    !!emulatorInput &&
+    !emulatorInput.loading &&
+    !emulatorInput.progress &&
+    emulatorInput.info.validationPhase === "idle";
   // "Share bundle" until an export exists, then "Download ...".
   const bundleCreateLabel = getBundleActionLabel(bundleExport, localizer, false);
   const bundleActionLabel = bundleExport?.downloadable
@@ -1957,6 +1998,9 @@ function ApplyWorkflowFormView({
       <PostApplyBehaviorFields
         disabled={outputState.disabled}
         downloadSetting={settings.postApplyDownloadBehavior}
+        emulatorCore={emulatorCore}
+        emulatorPlatform={emulatorPlatform}
+        emulatorSupportKnown={emulatorSupportKnown}
         testSetting={settings.postApplyTestBehavior}
       />
     </>
@@ -2018,6 +2062,9 @@ function ApplyWorkflowFormView({
       controllers={{ output: controllers.output }}
       disabledPatchCount={disabledPatchCount}
       enabledPatchCount={enabledPatchCount}
+      emulatorCore={emulatorCore}
+      emulatorFileName={emulatorFileName}
+      emulatorPlatform={emulatorPlatform}
       emulatorOutput={emulatorOutput}
       errorNotice={errorNotice}
       localizer={localizer}
@@ -2025,7 +2072,6 @@ function ApplyWorkflowFormView({
       onSelectView={onSelectView}
       outputState={outputState}
       patches={patches}
-      romInputs={romInputs}
       uiController={uiController}
       uiState={uiState}
     />

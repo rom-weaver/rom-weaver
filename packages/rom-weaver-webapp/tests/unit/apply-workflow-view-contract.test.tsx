@@ -335,7 +335,7 @@ describe("apply workflow view - staged bench", () => {
     await vi.waitFor(() => expect(document.activeElement).toBe(button));
   });
 
-  it("shows the emulator action only when the input resolves to a supported core", () => {
+  it("disables the emulator action when the input does not resolve to a supported core", () => {
     const output = {
       fileName: "game.nes",
       getBlob: async () => new Blob(["rom"]),
@@ -354,7 +354,11 @@ describe("apply workflow view - staged bench", () => {
       outputOverrides: { pendingDownloadFileName: "game.bin" },
       ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
     });
-    expect(unsupported.container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+    const unsupportedButton = unsupported.container.querySelector(
+      "#rom-weaver-button-test-emulator",
+    ) as HTMLButtonElement;
+    expect(unsupportedButton.disabled).toBe(true);
+    expect(unsupportedButton.textContent).toContain("Cannot test this ROM with EmulatorJS");
   });
 
   it("keeps likely drawers visible while ROMs and patches are still staging", () => {
@@ -617,6 +621,40 @@ describe("apply workflow view - post-apply behavior selects", () => {
     expect(secondDownload.value).toBe("show");
     expect(secondTest.value).toBe("hide");
   });
+
+  it("warns for a settled unsupported platform unless Test is hidden", () => {
+    const rom = romRow("game.iso");
+    rom.info.romType = { platform: "Nintendo Wii" };
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
+    const { container } = renderView({ settings: { postApplyTestBehavior: "show" }, ui });
+    const test = container.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
+    const warning = () => container.querySelector("#rom-weaver-select-post-apply-test-warning");
+
+    expect(warning()?.textContent).toBe("Nintendo Wii cannot be tested with EmulatorJS.");
+    expect(test.getAttribute("aria-describedby")).toBe("rom-weaver-select-post-apply-test-warning");
+    fireEvent.change(test, { target: { value: "hide" } });
+    expect(warning()).toBeNull();
+    fireEvent.change(test, { target: { value: "auto-show" } });
+    expect(warning()?.textContent).toBe("Nintendo Wii cannot be tested with EmulatorJS.");
+  });
+
+  it("does not warn before support is known or for a supported platform", () => {
+    const stagingRom = romRow("game.iso");
+    stagingRom.info.romType = { platform: "Nintendo Wii" };
+    stagingRom.info.validationPhase = "extract";
+    const staging = renderView({
+      ui: { ...createEmptyPatcherUiState(), romInputs: [stagingRom] },
+    });
+    expect(staging.container.querySelector("#rom-weaver-select-post-apply-test-warning")).toBeNull();
+    staging.unmount();
+
+    const supportedRom = romRow("game.nes");
+    supportedRom.info.romType = { platform: "Nintendo Entertainment System" };
+    const supported = renderView({
+      ui: { ...createEmptyPatcherUiState(), romInputs: [supportedRom] },
+    });
+    expect(supported.container.querySelector("#rom-weaver-select-post-apply-test-warning")).toBeNull();
+  });
 });
 
 describe("apply workflow view - output options notice", () => {
@@ -663,13 +701,28 @@ describe("apply workflow view - completed output actions", () => {
   it("keeps Download available when automatic Test is unsupported", () => {
     const { container } = completedOutputView("show", "auto-show", "game.bin");
     expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
-    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+    expect((container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("keeps Download available when visible Test is unsupported", () => {
     const { container } = completedOutputView("show", "show", "game.bin");
     expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
-    expect(container.querySelector("#rom-weaver-button-test-emulator")).toBeNull();
+    expect((container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("names the unsupported platform on the disabled Test button", () => {
+    const rom = romRow("game.nes");
+    rom.info.romType = { platform: "Nintendo Wii" };
+    const { container } = renderView({
+      emulatorOutput: { fileName: "game.nes", getBlob: async () => new Blob(["rom"]), id: "output-1" },
+      outputOverrides: { disabled: false, pendingDownloadFileName: "game.nes" },
+      settings: { postApplyDownloadBehavior: "show", postApplyTestBehavior: "show" },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [rom] },
+    });
+    const button = container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain("Cannot test Nintendo Wii with EmulatorJS");
+    expect(button.querySelector(".play-core")).toBeNull();
   });
 
   it("retires the Test action when Apply retires the completed output", () => {
