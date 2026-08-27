@@ -13,6 +13,7 @@ import {
   OPENGOOD_STANDALONE_PLATFORMS,
   OPENGOOD_REPOSITORY,
   OPENGOOD_REVISION,
+  packGroupFor,
   slugifyPlatform,
 } from "./build-identify-index.mjs";
 import { hasCurrentData } from "./ensure-identify-data.mjs";
@@ -30,7 +31,9 @@ function buildCurrentDataDir() {
     const bytes = Buffer.from(`RWFP4\0\0\0pack:${slug}`, "binary");
     writeFileSync(join(dataDir, `${slug}.pack`), bytes);
     writeFileSync(join(dataDir, `${slug}.pack.br`), bytes);
+    const group = packGroupFor(platform);
     return {
+      platform,
       file: `${slug}.pack`,
       brotliFile: `${slug}.pack.br`,
       brotliBytes: bytes.length,
@@ -38,6 +41,8 @@ function buildCurrentDataDir() {
       packFormat: "RWFP4",
       sha256: createHash("sha256").update(bytes).digest("hex"),
       source,
+      group,
+      defaultPack: group === "default",
     };
   });
   const catalog = {
@@ -69,6 +74,20 @@ test("hasCurrentData accepts a freshly built data dir", async () => {
   const { dataDir, work } = buildCurrentDataDir();
   try {
     assert.equal(hasCurrentData(dataDir), true);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects stale pack group assignments", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    const indexPath = join(dataDir, "index.json");
+    const index = JSON.parse(readFileSync(indexPath, "utf8"));
+    index.systems[0].group = "optional-extended";
+    index.systems[0].defaultPack = false;
+    writeFileSync(indexPath, JSON.stringify(index, null, 2));
+    assert.equal(hasCurrentData(dataDir), false);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

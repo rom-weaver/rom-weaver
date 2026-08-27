@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
+  DEFAULT_PACK_PLATFORMS,
   IDENTIFY_GENERATION_DATE,
   LIBRETRO_DAT_PATHS,
   LIBRETRO_PLATFORM_PATHS,
@@ -22,6 +23,13 @@ import {
 } from "./build-identify-index.mjs";
 
 const NES = "Nintendo - Nintendo Entertainment System";
+
+test("fantasy console packs are optional except LowRes NX", () => {
+  assert.ok(DEFAULT_PACK_PLATFORMS.includes("LowRes NX"));
+  for (const platform of ["MicroW8", "PICO-8", "TIC-80", "WASM-4"]) {
+    assert.ok(!DEFAULT_PACK_PLATFORMS.includes(platform), platform);
+  }
+});
 const LIBRETRO_DAT = `clrmamepro (
  name "Nintendo - Nintendo Entertainment System"
  description "Pinned Libretro NES DAT"

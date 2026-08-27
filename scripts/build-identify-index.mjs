@@ -421,7 +421,6 @@ export const DEFAULT_PACK_PLATFORMS = Object.freeze([
   "Atari - 7800",
   "Atari - Lynx",
   "LowRes NX",
-  "MicroW8",
   "NEC - PC Engine - TurboGrafx 16",
   "NEC - PC Engine CD - TurboGrafx-CD",
   "Nintendo - Family Computer Disk System",
@@ -435,7 +434,6 @@ export const DEFAULT_PACK_PLATFORMS = Object.freeze([
   "Nintendo - Nintendo Entertainment System",
   "Nintendo - Super Nintendo Entertainment System",
   "Nintendo - Wii",
-  "PICO-8",
   "SNK - Neo Geo Pocket",
   "SNK - Neo Geo Pocket Color",
   "Sega - 32X",
@@ -448,16 +446,15 @@ export const DEFAULT_PACK_PLATFORMS = Object.freeze([
   "Sony - PlayStation",
   "Sony - PlayStation 2",
   "Sony - PlayStation Portable",
-  "TIC-80",
-  "WASM-4",
 ]);
 
 const DEFAULT_PACK_SET = new Set(DEFAULT_PACK_PLATFORMS);
 const COMPUTER_PACK_PATTERN =
   /^(?:Amstrad|Commodore|DOS$|Enterprise|Memotech|Microsoft - MSX|SAM Coupé|Sharp|Sinclair|Tandy|Tangerine|Thomson|Videoton)|^Atari - (?:8-bit Family|ST$)/u;
-const packGroupFor = (platform) => {
+export const packGroupFor = (platform) => {
   if (DEFAULT_PACK_SET.has(platform)) return "default";
   if (COMPUTER_PACK_PATTERN.test(platform)) return "optional-computers";
+  if (/^(?:MicroW8|PICO-8|TIC-80|WASM-4)$/u.test(platform)) return "optional-fantasy";
   if (/Mobile|Palm OS|J2ME|Symbian|Zeebo/u.test(platform)) return "optional-mobile";
   if (/HBMAME|Atomiswave|Naomi|Arcade|Neo Geo$/u.test(platform)) return "optional-arcade";
   if (
@@ -2813,6 +2810,7 @@ export async function main(argv = process.argv.slice(2)) {
       { id: "optional-arcade", label: "Arcade", default: false },
       { id: "optional-computers", label: "Computers", default: false },
       { id: "optional-engines", label: "Game engines", default: false },
+      { id: "optional-fantasy", label: "Fantasy consoles", default: false },
       { id: "optional-mobile", label: "Mobile", default: false },
       { id: "optional-extended", label: "Extended systems", default: false },
     ].map((group) => ({

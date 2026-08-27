@@ -159,7 +159,7 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 - Amstrad, Atari computers, Commodore, DOS, Enterprise, Memotech, MSX, and SAM Coupé.
 - Sharp, Sinclair, Tandy, Tangerine, Thomson, and Videoton.
 
-PICO-8, TIC-80, WASM-4, LowRes NX, and MicroW8 remain built in.
+`optional-fantasy` contains MicroW8, PICO-8, TIC-80, and WASM-4. LowRes NX remains built in.
 
 ### Identify result
 

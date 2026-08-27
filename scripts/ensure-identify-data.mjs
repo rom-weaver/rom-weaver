@@ -14,6 +14,7 @@ import {
   OPENGOOD_STANDALONE_PLATFORMS,
   OPENGOOD_REPOSITORY,
   OPENGOOD_REVISION,
+  packGroupFor,
   slugifyPlatform,
 } from "./build-identify-index.mjs";
 
@@ -75,6 +76,13 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
   }
   if (!hasCurrentCatalog(dataDir)) return false;
   if (!Array.isArray(index.systems)) return false;
+  if (
+    index.systems.some((system) => {
+      const expectedGroup = packGroupFor(system.platform);
+      return system.group !== expectedGroup || system.defaultPack !== (expectedGroup === "default");
+    })
+  )
+    return false;
 
   const packNames = index.systems.map((system) => system.file).sort();
   if (packNames.length !== sortedExpectedPackNames.length) return false;
